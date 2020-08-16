@@ -1,1 +1,19 @@
-package
+package /x/y/z
+
+struct TestStruct {
+	i: /a/b/c/Int
+	f: Float
+	...AnotherStruct
+	.../x/y/z/AnotherStruct2
+}
+
+struct AnotherTestStruct {
+	i_1: /a/b/c/Int
+	f_2: Float
+}
+
+def xyz(i: Int, f: Float): TestStruct {
+	a = i^f
+	return h
+}
+

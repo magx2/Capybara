@@ -3,23 +3,18 @@ from antlr4 import *
 from grammar.CapybaraLexer import *
 from grammar.CapybaraParser import *
 from grammar.CapybaraListener import *
-
-
-class CapybaraListenerImpl(CapybaraListener):
-    pass
-
+from compile_unit import *
+import json
 
 def main(argv):
     print("Start...")
-    input_stream = FileStream(argv[1])
-    lexer = CapybaraLexer(input_stream)
-    stream = CommonTokenStream(lexer)
-    parser = CapybaraParser(stream)
-    tree = parser.compileUnit()
 
-    walker = ParseTreeWalker()
-    listener = CapybaraListenerImpl()
-    walker.walk(listener, tree)
+    compile_units = list(map(parse, argv[1:]))
+
+    print('---')
+    print('Parsed compile units:')
+    for unit in compile_units:
+        print(json.dumps(unit, indent=4))
 
     print("End.")
 
