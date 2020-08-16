@@ -15,26 +15,25 @@ code
 	;
 
 struct
-	: 'struct ' ALPH_NUM_STARTING_WITH_CAPITAL ' {' NEWLINE field* '}'
+	: 'struct ' name=ALPH_NUM_STARTING_WITH_CAPITAL ' {' NEWLINE field* '}'
 	;
 
 field
-	: INDENT SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL ': ' fullyQualifiedType NEWLINE
-	| INDENT '...' fullyQualifiedType NEWLINE
+	: INDENT name=SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL ': ' type=fullyQualifiedType NEWLINE
+	| INDENT '...' type=fullyQualifiedType NEWLINE
 	;
 
 def_
-	: 'def ' SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL '(' listOfParameters? ')' (': ' fullyQualifiedType)? ' {' NEWLINE defBody+ '}'
+	: 'def ' name=SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL '(' listOfParameters? ')' (': ' returnType=fullyQualifiedType)? ' {' NEWLINE defBody+ '}'
 	;
 
 listOfParameters
-	: parameter
-	| parameter ', ' listOfParameters
+	: parameter (', ' parameter)*
 	;
 
 parameter
-	: SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL ': ' fullyQualifiedType
-	| fullyQualifiedType
+	: name=SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL ': ' type=fullyQualifiedType
+	| type=fullyQualifiedType
 	;
 
 defBody

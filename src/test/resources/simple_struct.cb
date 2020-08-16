@@ -12,7 +12,7 @@ struct AnotherTestStruct {
 	f_2: Float
 }
 
-def xyz(i: Int, f: Float): TestStruct {
+def xyz(i: Int, f: Float, Double): TestStruct {
 	a = i^f
 	return h
 }
