@@ -1,0 +1,6 @@
+# ignore idea
+.idea/
+*.iml
+
+# ignore local generated grammar
+src/main/capybara/grammar/
