@@ -4,12 +4,17 @@ struct TestStruct {
 	i: /a/b/c/Int
 	f: Float
 	...AnotherTestStruct
-	.../x/y/z/AnotherStruct2
 }
 
 struct AnotherTestStruct {
 	i_1: /a/b/c/Int
 	f_2: Float
+	...AnotherTestStruct2
+}
+
+struct AnotherTestStruct2 {
+	foo: X
+	boo: Y
 }
 
 def xyz(i: Int, f: Float, Double): TestStruct {

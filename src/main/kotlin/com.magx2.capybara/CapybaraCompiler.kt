@@ -26,8 +26,11 @@ interface CapybaraCompiler {
 data class CompileUnit(val packageName: String, val structs: List<Struct>, val functions: List<Function>)
 
 data class Struct(val packageName: String, val name: String, val fields: LinkedList<Field>)
+data class FlatStruct(val packageName: String, val name: String, val fields: List<BasicField>)
 
-data class Field(val name: String?, val type: String)
+sealed class Field
+data class BasicField(val name: String, val type: String) : Field()
+data class SpreadField(val spreadType: String) : Field()
 
 data class Function(val name: String,
                     val returnType: String?,
@@ -71,7 +74,12 @@ private class Listener : CapybaraBaseListener() {
     }
 
     override fun enterField(ctx: CapybaraParser.FieldContext) {
-        structs.last().fields.add(Field(ctx.name?.text, ctx.type.text))
+        val field = if (ctx.name != null) {
+            BasicField(ctx.name.text, ctx.type.text)
+        } else {
+            SpreadField(ctx.spread_type.text)
+        }
+        structs.last().fields.add(field)
     }
 
     override fun enterDef_(ctx: CapybaraParser.Def_Context) {

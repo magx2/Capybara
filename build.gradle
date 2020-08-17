@@ -22,6 +22,7 @@ dependencies {
 	compile "org.jetbrains.kotlin:kotlin-stdlib-jdk8:$kotlin_version"
 	compile group: 'org.slf4j', name: 'slf4j-api', version: slf4j_version
 	compile group: 'org.slf4j', name: 'slf4j-simple', version: slf4j_version
+	compile 'com.google.code.gson:gson:2.8.5'
 }
 compileKotlin {
 	kotlinOptions {

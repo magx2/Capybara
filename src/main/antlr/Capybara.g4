@@ -20,7 +20,7 @@ struct
 
 field
 	: name=SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL ': ' type=fullyQualifiedType NEWLINE
-	| '...' type=fullyQualifiedType NEWLINE
+	| '...' spread_type=fullyQualifiedType NEWLINE
 	;
 
 def_
