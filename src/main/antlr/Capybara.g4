@@ -19,8 +19,8 @@ struct
 	;
 
 field
-	: INDENT name=SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL ': ' type=fullyQualifiedType NEWLINE
-	| INDENT '...' type=fullyQualifiedType NEWLINE
+	: name=SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL ': ' type=fullyQualifiedType NEWLINE
+	| '...' type=fullyQualifiedType NEWLINE
 	;
 
 def_
@@ -37,28 +37,63 @@ parameter
 	;
 
 defBody
-	: INDENT SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL ' = ' expression (';'|NEWLINE)
-	| INDENT 'return ' expression (';'|NEWLINE)
+	: assign_to=SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL ' = ' expression (';'|NEWLINE)
+	| 'return ' return_expression=expression (';'|NEWLINE)
 	;
 
 expression
-	: SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL
-	| expression op='^' expression
-	| expression op=('*'|'/') expression
-	| expression op=('+'|'-') expression
-	| '(' expression ')'
+	: '(' in_parenthisis_expression=expression ')'
+	| value=SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL
+	| constant
+	| function_name=SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL '(' parameters? ')'
+	| left=expression ' ' infix_operation ' ' right=expression
+//	| 'if ' condition=expression ' {' NEWLINE true_expression=expression NEWLINE '} else {' NEWLINE false_expression=expression NEWLINE '}'
+//	| condition=expression ' ? ' true_expression=expression ' : ' false_expression=expression
+//	| argument_to_function=expression ' -> ' apply_to_function_name=SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL
+	;
+
+constant
+	: INTEGER
+	| BOOLEAN
+	| '\'' string_value=.+? '\''
+	;
+
+parameters
+	: name=SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL (', ' rest=parameters)?
+	| expression (', ' rest=parameters)?
+	;
+
+infix_operation
+	: '^'
+	| '*'
+	| '/'
+	| '+'
+	| '-'
+	| '>'
+	| '<'
+	| '>='
+	| '<='
+	| '~='
+	| '=='
 	;
 
 fullyQualifiedType
 	: (PACKAGE '/')? ALPH_NUM_STARTING_WITH_CAPITAL
 	;
 
+// Types
+INTEGER : ('-')?[0-9_]+ ;
+BOOLEAN
+	: 'true'
+	| 'false'
+	;
+
 PACKAGE : ('/' SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL)+ ;
-SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL : [a-z_][a-z_0-9]* ;
+SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL : [a-z][a-z_0-9]* ;
 ALPH_NUM_STARTING_WITH_CAPITAL : [A-Z][a-zA-Z0-9]* ;
 //NEXT_EXPRESSION : (';'|NEWLINE) ;
 TODO : '~TODO~' ;
-NEWLINE : '\r'? '\n' ;
+NEWLINE : '\r'? '\n' INDENT* ;
 INDENT : [ \t]+ ;
 //WS : [ \t\r\n]+ ;
 COMMENT : ('#'|'//') .+? NEWLINE -> skip ;

@@ -29,7 +29,10 @@ data class Struct(val packageName: String, val name: String, val fields: LinkedL
 
 data class Field(val name: String?, val type: String)
 
-data class Function(val name: String, val returnType: String?, val parameters: List<Parameter>)
+data class Function(val name: String,
+                    val returnType: String?,
+                    val parameters: List<Parameter>,
+                    val body: List<Expression>)
 
 data class Parameter(val name: String?, val type: String)
 
@@ -57,6 +60,7 @@ private class Listener : CapybaraBaseListener() {
     val functions = ArrayList<Function>()
 
     val parameters = ArrayList<Parameter>()
+    lateinit var expressionQueue: ArrayDeque<Expression>
 
     override fun enterPackageDeclaration(ctx: CapybaraParser.PackageDeclarationContext) {
         packageName = ctx.PACKAGE().text
@@ -74,8 +78,9 @@ private class Listener : CapybaraBaseListener() {
         functions.add(Function(
                 ctx.name.text,
                 ctx.returnType?.text,
-                listOf()
-        ))
+                listOf(),
+                listOf()))
+        expressionQueue = ArrayDeque()
     }
 
     override fun exitListOfParameters(ctx: CapybaraParser.ListOfParametersContext?) {
@@ -88,4 +93,76 @@ private class Listener : CapybaraBaseListener() {
     override fun enterParameter(ctx: CapybaraParser.ParameterContext) {
         parameters.add(Parameter(ctx.name?.text, ctx.type.text))
     }
+
+    override fun enterDefBody(ctx: CapybaraParser.DefBodyContext) {
+        if (ctx.return_expression != null) {
+            expressionQueue.add(ReturnExpression)
+        }
+    }
+
+    override fun exitDefBody(ctx: CapybaraParser.DefBodyContext) {
+        if (ctx.return_expression != null) {
+            val last = functions.removeLast()
+            functions.add(last.copy(body = expressionQueue.toList()))
+        }
+    }
+
+    override fun enterExpression(ctx: CapybaraParser.ExpressionContext) {
+        val expression = when {
+            ctx.in_parenthisis_expression != null -> {
+                ParenthesisExpression
+            }
+            ctx.value != null -> {
+                ValueExpression(ctx.value.text)
+            }
+            ctx.constant() != null -> {
+                val expression = when {
+                    ctx.constant().BOOLEAN() != null -> BooleanExpression(ctx.constant().BOOLEAN().text)
+                    ctx.constant().INTEGER() != null -> IntegerExpression(ctx.constant().INTEGER().text)
+                    ctx.constant().string_value != null -> StringExpression(ctx.constant().string_value.text)
+                    else -> throw IllegalStateException("I don't know how to handle it!")
+                }
+                expression
+            }
+            ctx.function_name != null -> {
+                val parameters = ArrayList<String>()
+                var tmp = ctx.parameters()
+                while (tmp != null) {
+                    parameters.add(tmp.name.text)
+                    tmp = tmp.rest
+                }
+                FunctionInvocationExpression(
+                        ctx.function_name.text,
+                        parameters)
+            }
+            ctx.infix_operation() != null -> {
+                InfixExpression(ctx.infix_operation().text)
+            }
+            else -> throw IllegalStateException("I don't know how to handle it!")
+        }
+        expressionQueue.add(expression)
+    }
+
+}
+
+sealed class Expression
+object ParenthesisExpression : Expression() {
+    override fun toString(): String = "ParenthesisExpression"
+}
+
+data class ValueExpression(val valueName: String) : Expression()
+abstract class ConstantExpression : Expression()
+data class IntegerExpression(val value: Long) : ConstantExpression() {
+    constructor(value: String) : this(value.toLong())
+}
+
+data class BooleanExpression(val value: Boolean) : ConstantExpression() {
+    constructor(value: String) : this(value.toBoolean())
+}
+
+data class StringExpression(val value: String) : ConstantExpression()
+data class FunctionInvocationExpression(val functionName: String, val parameters: List<String>) : Expression()
+data class InfixExpression(val operation: String) : Expression()
+object ReturnExpression : Expression() {
+    override fun toString(): String = "ReturnExpression"
 }
