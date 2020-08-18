@@ -160,7 +160,7 @@ private class Listener : CapybaraBaseListener() {
                 when {
                     ctx.constant().BOOLEAN() != null -> BooleanExpression(ctx.constant().BOOLEAN().text)
                     ctx.constant().INTEGER() != null -> IntegerExpression(ctx.constant().INTEGER().text)
-                    ctx.constant().string_value != null -> StringExpression(ctx.constant().string_value.text)
+                    ctx.constant().string != null -> StringExpression(ctx.constant().string.text)
                     else -> throw IllegalStateException("I don't know how to handle it!")
                 }
             }
@@ -178,13 +178,21 @@ private class Listener : CapybaraBaseListener() {
             ctx.infix_operation() != null -> {
                 InfixExpression(ctx.infix_operation().text, parseExpression(ctx.left), parseExpression(ctx.right))
             }
+            ctx.condition != null -> {
+                IfExpression(
+                        parseExpression(ctx.condition),
+                        parseExpression(ctx.true_expression),
+                        parseExpression(ctx.false_expression))
+            }
+            ctx.argument_to_function != null -> {
+                ArrowExpression(parseExpression(ctx.argument_to_function), ctx.apply_to_function_name.text)
+            }
             else -> throw IllegalStateException("I don't know how to handle it!")
         }
     }
 }
 
 sealed class Expression
-data class AssigmentExpression(val assignTo: String) : Expression()
 data class ParenthesisExpression(val expression: Expression) : Expression()
 data class ValueExpression(val valueName: String) : Expression()
 abstract class ConstantExpression : Expression()
@@ -199,3 +207,5 @@ data class BooleanExpression(val value: Boolean) : ConstantExpression() {
 data class StringExpression(val value: String) : ConstantExpression()
 data class FunctionInvocationExpression(val functionName: String, val parameters: List<String>) : Expression()
 data class InfixExpression(val operation: String, val left: Expression, val right: Expression) : Expression()
+data class IfExpression(val condition: Expression, val trueBranch: Expression, val falseBranch: Expression) : Expression()
+data class ArrowExpression(val argument: Expression, val functionName: String) : Expression()

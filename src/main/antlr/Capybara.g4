@@ -44,19 +44,20 @@ funBody
 
 expression
 	: '(' in_parenthisis_expression=expression ')'
-	| value=SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL
 	| constant
+	| value=SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL
 	| function_name=SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL '(' parameters? ')'
 	| left=expression ' ' infix_operation ' ' right=expression
-//	| 'if ' condition=expression ' {' NEWLINE true_expression=expression NEWLINE '} else {' NEWLINE false_expression=expression NEWLINE '}'
-//	| condition=expression ' ? ' true_expression=expression ' : ' false_expression=expression
-//	| argument_to_function=expression ' -> ' apply_to_function_name=SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL
+	| 'if ' condition=expression ' {' NEWLINE true_expression=expression NEWLINE '} else {' NEWLINE false_expression=expression NEWLINE '}'
+	| condition=expression ' ? ' true_expression=expression ' : ' false_expression=expression
+	| argument_to_function=expression ' -> ' apply_to_function_name=SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL
 	;
 
 constant
 	: INTEGER
 	| BOOLEAN
-	| '\'' string_value=.+? '\''
+	| string=STRING_DOUBLE_QUOTES
+	| string=STRING_SINGLE_QUOTES
 	;
 
 parameters
@@ -75,6 +76,7 @@ infix_operation
 	| '>='
 	| '<='
 	| '~='
+	| '!='
 	| '=='
 	;
 
@@ -84,10 +86,9 @@ fullyQualifiedType
 
 // Types
 INTEGER : ('-')?[0-9_]+ ;
-BOOLEAN
-	: 'true'
-	| 'false'
-	;
+BOOLEAN : ('true'|'false') ;
+STRING_SINGLE_QUOTES : '"' .+? '"' ;
+STRING_DOUBLE_QUOTES : '\'' .+? '\'' ;
 
 PACKAGE : ('/' SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL)+ ;
 SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL : [a-z][a-z_0-9]* ;
