@@ -11,7 +11,10 @@ import org.antlr.v4.runtime.tree.ParseTreeWalker
 import org.slf4j.LoggerFactory
 import java.io.FileInputStream
 import java.util.*
+import java.util.stream.Collectors
 import kotlin.collections.ArrayList
+import kotlin.collections.HashMap
+import kotlin.streams.toList
 
 private val log = LoggerFactory.getLogger(CapybaraCompiler::class.java)
 
@@ -35,9 +38,13 @@ data class SpreadField(val spreadType: String) : Field()
 data class Function(val name: String,
                     val returnType: String?,
                     val parameters: List<Parameter>,
-                    val body: List<Expression>)
+                    val returnExpression: Expression)
 
-data class Parameter(val name: String?, val type: String)
+sealed class FunctionBody
+data class AssigmentBody(val assignTo: String, val expression: Expression)
+data class ReturnBody(val expression: Expression)
+
+data class Parameter(val name: String, val type: String)
 
 private class CapybaraCompilerImpl : CapybaraCompiler {
     override fun compile(fileName: String): CompileUnit {
@@ -62,8 +69,9 @@ private class Listener : CapybaraBaseListener() {
     val structs = ArrayList<Struct>()
     val functions = ArrayList<Function>()
 
-    val parameters = ArrayList<Parameter>()
-    lateinit var expressionQueue: ArrayDeque<Expression>
+    var parameters: Set<String> = setOf()
+    val values: HashMap<String, Expression> = HashMap()
+    var returnExpression: Expression? = null
 
     override fun enterPackageDeclaration(ctx: CapybaraParser.PackageDeclarationContext) {
         packageName = ctx.PACKAGE().text
@@ -82,55 +90,79 @@ private class Listener : CapybaraBaseListener() {
         structs.last().fields.add(field)
     }
 
-    override fun enterDef_(ctx: CapybaraParser.Def_Context) {
+    override fun enterFun_(ctx: CapybaraParser.Fun_Context) {
+        this.parameters = ctx.listOfParameters()
+                .parameter()
+                .stream()
+                .map { newParameter(it) }
+                .map { it.name }
+                .collect(Collectors.toSet())
+    }
+
+    override fun exitFun_(ctx: CapybaraParser.Fun_Context) {
+        val parameters = ctx.listOfParameters()
+                .parameter()
+                .stream()
+                .map { newParameter(it) }
+                .toList()
+        this.parameters = parameters.stream()
+                .map { it.name }
+                .collect(Collectors.toSet())
         functions.add(Function(
                 ctx.name.text,
                 ctx.returnType?.text,
-                listOf(),
-                listOf()))
-        expressionQueue = ArrayDeque()
+                parameters,
+                returnExpression!!))
+        values.clear()
+        returnExpression = null
     }
 
-    override fun exitListOfParameters(ctx: CapybaraParser.ListOfParametersContext?) {
-        val function = functions.last().copy(parameters = ArrayList(parameters))
-        functions.removeLast()
-        functions.add(function)
-        parameters.clear()
-    }
-
-    override fun enterParameter(ctx: CapybaraParser.ParameterContext) {
-        parameters.add(Parameter(ctx.name?.text, ctx.type.text))
-    }
-
-    override fun enterDefBody(ctx: CapybaraParser.DefBodyContext) {
-        if (ctx.return_expression != null) {
-            expressionQueue.add(ReturnExpression)
+    private fun newParameter(it: CapybaraParser.ParameterContext): Parameter {
+        val type = it.type.text
+        return if (it.name != null) {
+            Parameter(it.name.text, type)
+        } else {
+            // TODO
+            Parameter(type.decapitalize(), type)
         }
     }
 
-    override fun exitDefBody(ctx: CapybaraParser.DefBodyContext) {
-        if (ctx.return_expression != null) {
-            val last = functions.removeLast()
-            functions.add(last.copy(body = expressionQueue.toList()))
+    override fun enterFunBody(ctx: CapybaraParser.FunBodyContext) {
+        println(" > ${ctx.assign_to?.text}")
+        val expression = parseExpression(ctx.expression())
+        if (ctx.assign_to != null) {
+            values[ctx.assign_to.text] = expression
+        } else {
+            returnExpression = expression
         }
     }
 
-    override fun enterExpression(ctx: CapybaraParser.ExpressionContext) {
-        val expression = when {
+    private fun parseExpression(ctx: CapybaraParser.ExpressionContext): Expression {
+        return when {
             ctx.in_parenthisis_expression != null -> {
-                ParenthesisExpression
+                ParenthesisExpression(parseExpression(ctx.in_parenthisis_expression))
             }
             ctx.value != null -> {
-                ValueExpression(ctx.value.text)
+                val valueName = ctx.value.text
+                when {
+                    parameters.contains(valueName) -> {
+                        ValueExpression(valueName)
+                    }
+                    values.containsKey(valueName) -> {
+                        values[valueName]!!
+                    }
+                    else -> {
+                        throw java.lang.IllegalStateException("cant find `${valueName}`")
+                    }
+                }
             }
             ctx.constant() != null -> {
-                val expression = when {
+                when {
                     ctx.constant().BOOLEAN() != null -> BooleanExpression(ctx.constant().BOOLEAN().text)
                     ctx.constant().INTEGER() != null -> IntegerExpression(ctx.constant().INTEGER().text)
                     ctx.constant().string_value != null -> StringExpression(ctx.constant().string_value.text)
                     else -> throw IllegalStateException("I don't know how to handle it!")
                 }
-                expression
             }
             ctx.function_name != null -> {
                 val parameters = ArrayList<String>()
@@ -144,20 +176,16 @@ private class Listener : CapybaraBaseListener() {
                         parameters)
             }
             ctx.infix_operation() != null -> {
-                InfixExpression(ctx.infix_operation().text)
+                InfixExpression(ctx.infix_operation().text, parseExpression(ctx.left), parseExpression(ctx.right))
             }
             else -> throw IllegalStateException("I don't know how to handle it!")
         }
-        expressionQueue.add(expression)
     }
-
 }
 
 sealed class Expression
-object ParenthesisExpression : Expression() {
-    override fun toString(): String = "ParenthesisExpression"
-}
-
+data class AssigmentExpression(val assignTo: String) : Expression()
+data class ParenthesisExpression(val expression: Expression) : Expression()
 data class ValueExpression(val valueName: String) : Expression()
 abstract class ConstantExpression : Expression()
 data class IntegerExpression(val value: Long) : ConstantExpression() {
@@ -170,7 +198,4 @@ data class BooleanExpression(val value: Boolean) : ConstantExpression() {
 
 data class StringExpression(val value: String) : ConstantExpression()
 data class FunctionInvocationExpression(val functionName: String, val parameters: List<String>) : Expression()
-data class InfixExpression(val operation: String) : Expression()
-object ReturnExpression : Expression() {
-    override fun toString(): String = "ReturnExpression"
-}
+data class InfixExpression(val operation: String, val left: Expression, val right: Expression) : Expression()

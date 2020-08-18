@@ -11,7 +11,7 @@ packageDeclaration
 
 code
 	: struct
-	| def_
+	| fun_
 	;
 
 struct
@@ -23,8 +23,9 @@ field
 	| '...' spread_type=fullyQualifiedType NEWLINE
 	;
 
-def_
-	: 'def ' name=SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL '(' listOfParameters? ')' (': ' returnType=fullyQualifiedType)? ' {' NEWLINE defBody+ '}'
+fun_
+	: 'fun ' name=SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL '(' listOfParameters? ')'
+		(': ' returnType=fullyQualifiedType)? ' {' NEWLINE funBody+ '}'
 	;
 
 listOfParameters
@@ -36,9 +37,9 @@ parameter
 	| type=fullyQualifiedType
 	;
 
-defBody
-	: assign_to=SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL ' = ' expression (';'|NEWLINE)
-	| 'return ' return_expression=expression (';'|NEWLINE)
+funBody
+	: assign_to=SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL ' = ' expression (';'|NEWLINE) funBody
+	| 'return ' expression (';'|NEWLINE)
 	;
 
 expression

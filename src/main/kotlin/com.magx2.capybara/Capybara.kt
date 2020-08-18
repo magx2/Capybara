@@ -32,7 +32,14 @@ fun main(args: Array<String>) {
             .toList()
 
     printlnAny("Unrolled structs:", flatStructs)
+
+    //
+    // FUNCTIONS
+    //
+    val functions = compileUnits.stream().flatMap { it.functions.stream() }.toList()
+    printlnAny("Functions:", functions)
 }
+
 
 private fun printlnAny(header: String?, any: Any) {
     val gson = GsonBuilder().setPrettyPrinting().create()
