@@ -60,10 +60,7 @@ constant
 	| string=STRING_SINGLE_QUOTES
 	;
 
-parameters
-	: name=SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL (', ' rest=parameters)?
-	| expression (', ' rest=parameters)?
-	;
+parameters : expression (', ' expression)* ;
 
 infix_operation
 	: '^'

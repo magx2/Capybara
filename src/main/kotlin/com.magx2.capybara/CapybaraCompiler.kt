@@ -128,7 +128,6 @@ private class Listener : CapybaraBaseListener() {
     }
 
     override fun enterFunBody(ctx: CapybaraParser.FunBodyContext) {
-        println(" > ${ctx.assign_to?.text}")
         val expression = parseExpression(ctx.expression())
         if (ctx.assign_to != null) {
             values[ctx.assign_to.text] = expression
@@ -165,12 +164,11 @@ private class Listener : CapybaraBaseListener() {
                 }
             }
             ctx.function_name != null -> {
-                val parameters = ArrayList<String>()
-                var tmp = ctx.parameters()
-                while (tmp != null) {
-                    parameters.add(tmp.name.text)
-                    tmp = tmp.rest
-                }
+                val parameters = ctx.parameters()
+                        .expression()
+                        .stream()
+                        .map { parseExpression(it) }
+                        .toList()
                 FunctionInvocationExpression(
                         ctx.function_name.text,
                         parameters)
@@ -205,7 +203,7 @@ data class BooleanExpression(val value: Boolean) : ConstantExpression() {
 }
 
 data class StringExpression(val value: String) : ConstantExpression()
-data class FunctionInvocationExpression(val functionName: String, val parameters: List<String>) : Expression()
+data class FunctionInvocationExpression(val functionName: String, val parameters: List<Expression>) : Expression()
 data class InfixExpression(val operation: String, val left: Expression, val right: Expression) : Expression()
 data class IfExpression(val condition: Expression, val trueBranch: Expression, val falseBranch: Expression) : Expression()
 data class ArrowExpression(val argument: Expression, val functionName: String) : Expression()

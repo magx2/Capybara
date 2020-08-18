@@ -29,3 +29,15 @@ fun xyz(i1: Int, i2: Int, i3: Int, i4: Int, f1: Float, f2: Float, f3: Float, f4:
 	return a1 + a2 + a3 + a4 + a5 + a6 + a7 + a8
 }
 
+fun f(Int, Float, Double): Int {
+	return int
+}
+
+fun f(Int): Int {
+	return int == 0 ? 1 : int * f(int - 1)
+}
+
+fun f(Float): Float {
+	return float
+}
+
