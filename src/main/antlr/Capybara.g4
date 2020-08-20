@@ -47,6 +47,7 @@ funBody
 expression
 	: '(' in_parenthisis_expression=expression ')'
 	| constant
+	| '!' negate_expression=expression
 	| value=SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL
 	| function_name=SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL '(' parameters? ')'
 	| left=expression ' ' infix_operation ' ' right=expression

@@ -194,6 +194,7 @@ private class Listener : CapybaraBaseListener() {
                         ctx.apply_to_function_name.text,
                         listOf(parseExpression(ctx.argument_to_function)))
             }
+            ctx.negate_expression != null -> NegateExpression(parseExpression(ctx.negate_expression))
             else -> throw IllegalStateException("I don't know how to handle it!")
         }
     }
@@ -215,3 +216,4 @@ data class StringExpression(val value: String) : ConstantExpression()
 data class FunctionInvocationExpression(val functionName: String, val parameters: List<Expression>) : Expression()
 data class InfixExpression(val operation: String, val left: Expression, val right: Expression) : Expression()
 data class IfExpression(val condition: Expression, val trueBranch: Expression, val falseBranch: Expression) : Expression()
+data class NegateExpression(val negateExpression: Expression) : Expression()

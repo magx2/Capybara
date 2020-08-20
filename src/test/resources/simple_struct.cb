@@ -49,4 +49,4 @@ fun x() = 5 < 6 ? -1 : 1
 
 fun s(/capybara/type/String) = string + " x"
 
-fun b(/capybara/type/Boolean) = boolean
+fun b(/capybara/type/Boolean) = !boolean

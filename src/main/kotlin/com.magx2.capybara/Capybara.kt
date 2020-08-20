@@ -94,6 +94,13 @@ private fun findReturnType(expression: Expression, functions: List<com.magx2.cap
                 }
                 findReturnTypeFromBranchExpression(expression.trueBranch, expression.falseBranch, functions)
             }
+            is NegateExpression -> {
+                val returnType = findReturnType(expression.negateExpression, functions)
+                if (returnType != booleanType) {
+                    throw CompilationException("You can only negate boolean expressions. Type `$returnType` cannot be negated.")
+                }
+                returnType
+            }
         }
 
 private fun findReturnType(expression: InfixExpression, functions: List<com.magx2.capybara.Function>): String =
