@@ -26,6 +26,8 @@ field
 fun_
 	: 'fun ' name=SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL '(' listOfParameters? ')'
 		(': ' returnType=fullyQualifiedType)? ' {' NEWLINE funBody+ '}'
+	| 'fun ' name=SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL '(' listOfParameters? ')'
+		(': ' returnType=fullyQualifiedType)? ' = ' returnExpression=expression
 	;
 
 listOfParameters

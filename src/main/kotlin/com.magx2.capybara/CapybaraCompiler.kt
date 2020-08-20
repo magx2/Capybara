@@ -95,6 +95,9 @@ private class Listener : CapybaraBaseListener() {
                 .stream()
                 .map { it.name }
                 .collect(Collectors.toSet())
+        if (ctx.returnExpression != null) {
+            returnExpression = parseExpression(ctx.returnExpression)
+        }
     }
 
     override fun exitFun_(ctx: CapybaraParser.Fun_Context) {
