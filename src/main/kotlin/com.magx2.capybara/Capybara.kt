@@ -105,7 +105,7 @@ private fun findReturnType(expression: Expression, functions: List<com.magx2.cap
 
 private fun findReturnType(expression: InfixExpression, functions: List<com.magx2.capybara.Function>): String =
         when (expression.operation) {
-            ">", "<", ">=", "<=", "!=", "==" -> booleanType
+            ">", "<", ">=", "<=", "!=", "==", "&&", "||" -> booleanType
             "^", "*", "+", "-" -> findReturnTypeFromBranchExpression(expression.left, expression.right, functions)
             else -> throw CompilationException("Do not know this `${expression.operation}` infix expression!")
         }
