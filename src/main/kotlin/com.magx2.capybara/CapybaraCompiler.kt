@@ -91,23 +91,14 @@ private class Listener : CapybaraBaseListener() {
     }
 
     override fun enterFun_(ctx: CapybaraParser.Fun_Context) {
-        this.parameters = ctx.listOfParameters()
-                .parameter()
+        this.parameters = findListOfParametersInFun(ctx)
                 .stream()
-                .map { newParameter(it) }
                 .map { it.name }
                 .collect(Collectors.toSet())
     }
 
     override fun exitFun_(ctx: CapybaraParser.Fun_Context) {
-        val parameters = ctx.listOfParameters()
-                .parameter()
-                .stream()
-                .map { newParameter(it) }
-                .toList()
-        this.parameters = parameters.stream()
-                .map { it.name }
-                .collect(Collectors.toSet())
+        val parameters = findListOfParametersInFun(ctx)
         functions.add(Function(
                 ctx.name.text,
                 ctx.returnType?.text,
@@ -116,6 +107,13 @@ private class Listener : CapybaraBaseListener() {
         values.clear()
         returnExpression = null
     }
+
+    private fun findListOfParametersInFun(ctx: CapybaraParser.Fun_Context): List<Parameter> =
+            ctx.listOfParameters()
+                    ?.parameter()
+                    ?.stream()
+                    ?.map { newParameter(it) }
+                    ?.toList() ?: listOf()
 
     private fun newParameter(it: CapybaraParser.ParameterContext): Parameter {
         val type = it.type.text
