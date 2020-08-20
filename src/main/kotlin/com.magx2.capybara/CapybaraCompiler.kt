@@ -40,9 +40,10 @@ data class Function(val name: String,
                     val parameters: List<Parameter>,
                     val returnExpression: Expression)
 
-sealed class FunctionBody
-data class AssigmentBody(val assignTo: String, val expression: Expression)
-data class ReturnBody(val expression: Expression)
+data class FunctionWithReturnType(val name: String,
+                                  val returnType: String,
+                                  val parameters: List<Parameter>,
+                                  val returnExpression: Expression)
 
 data class Parameter(val name: String, val type: String)
 
@@ -69,7 +70,7 @@ private class Listener : CapybaraBaseListener() {
     val structs = ArrayList<Struct>()
     val functions = ArrayList<Function>()
 
-    var parameters: Set<String> = setOf()
+    var parameters: Map<String, String> = mapOf()
     val values: HashMap<String, Expression> = HashMap()
     var returnExpression: Expression? = null
 
@@ -93,8 +94,9 @@ private class Listener : CapybaraBaseListener() {
     override fun enterFun_(ctx: CapybaraParser.Fun_Context) {
         this.parameters = findListOfParametersInFun(ctx)
                 .stream()
-                .map { it.name }
-                .collect(Collectors.toSet())
+                .collect(Collectors.toMap(
+                        (java.util.function.Function<Parameter, String> { it.name }),
+                        (java.util.function.Function<Parameter, String> { it.type })))
         if (ctx.returnExpression != null) {
             returnExpression = parseExpression(ctx.returnExpression)
         }
@@ -123,8 +125,9 @@ private class Listener : CapybaraBaseListener() {
         return if (it.name != null) {
             Parameter(it.name.text, type)
         } else {
-            // TODO
-            Parameter(type.decapitalize(), type)
+            val regex = "(?:/[a-z][a-z_0-9]*)*/?([A-Z][a-zA-Z0-9]*)".toRegex()
+            val rawType = regex.find(type)?.groupValues?.get(1) ?: error("")
+            Parameter(rawType.decapitalize(), type)
         }
     }
 
@@ -145,8 +148,11 @@ private class Listener : CapybaraBaseListener() {
             ctx.value != null -> {
                 val valueName = ctx.value.text
                 when {
-                    parameters.contains(valueName) -> {
-                        ValueExpression(valueName)
+                    parameters.containsKey(valueName) -> {
+                        ParameterExpression(
+                                valueName,
+                                parameters[valueName]!!
+                        )
                     }
                     values.containsKey(valueName) -> {
                         values[valueName]!!
@@ -184,7 +190,9 @@ private class Listener : CapybaraBaseListener() {
                         parseExpression(ctx.false_expression))
             }
             ctx.argument_to_function != null -> {
-                ArrowExpression(parseExpression(ctx.argument_to_function), ctx.apply_to_function_name.text)
+                FunctionInvocationExpression(
+                        ctx.apply_to_function_name.text,
+                        listOf(parseExpression(ctx.argument_to_function)))
             }
             else -> throw IllegalStateException("I don't know how to handle it!")
         }
@@ -193,8 +201,8 @@ private class Listener : CapybaraBaseListener() {
 
 sealed class Expression
 data class ParenthesisExpression(val expression: Expression) : Expression()
-data class ValueExpression(val valueName: String) : Expression()
-abstract class ConstantExpression : Expression()
+data class ParameterExpression(val valueName: String, val type: String) : Expression()
+sealed class ConstantExpression : Expression()
 data class IntegerExpression(val value: Long) : ConstantExpression() {
     constructor(value: String) : this(value.toLong())
 }
@@ -207,4 +215,3 @@ data class StringExpression(val value: String) : ConstantExpression()
 data class FunctionInvocationExpression(val functionName: String, val parameters: List<Expression>) : Expression()
 data class InfixExpression(val operation: String, val left: Expression, val right: Expression) : Expression()
 data class IfExpression(val condition: Expression, val trueBranch: Expression, val falseBranch: Expression) : Expression()
-data class ArrowExpression(val argument: Expression, val functionName: String) : Expression()
