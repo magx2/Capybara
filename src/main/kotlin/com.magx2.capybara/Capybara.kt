@@ -57,6 +57,7 @@ fun main(args: Array<String>) {
             }
             .map { pair ->
                 FunctionWithReturnType(
+                        pair.first.packageName,
                         pair.first.name,
                         pair.second,
                         pair.first.parameters,
@@ -83,7 +84,7 @@ private fun findReturnType(expression: Expression, functions: List<com.magx2.cap
                             .stream()
                             .collect(Collectors.joining(", "))
                     throw CompilationException("Cant find method with signature: " +
-                            "`${expression.functionName}($parameters)`")
+                            "`${expression.packageName}:${expression.functionName}($parameters)`")
                 }
             }
             is InfixExpression -> findReturnType(expression, functions)
@@ -116,6 +117,7 @@ private fun findFunctionForGivenFunctionInvocation(
     val parameters = findFunctionParametersValues(function, functions)
     return functions.stream()
             .filter { it.name == function.functionName }
+            .filter { it.packageName == function.packageName }
             .filter { it.parameters.size == parameters.size }
             .filter { f ->
                 var i = 0

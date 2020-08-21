@@ -35,12 +35,14 @@ sealed class Field
 data class BasicField(val name: String, val type: String) : Field()
 data class SpreadField(val spreadType: String) : Field()
 
-data class Function(val name: String,
+data class Function(val packageName: String,
+                    val name: String,
                     val returnType: String?,
                     val parameters: List<Parameter>,
                     val returnExpression: Expression)
 
-data class FunctionWithReturnType(val name: String,
+data class FunctionWithReturnType(val packageName: String,
+                                  val name: String,
                                   val returnType: String,
                                   val parameters: List<Parameter>,
                                   val returnExpression: Expression)
@@ -105,6 +107,7 @@ private class Listener : CapybaraBaseListener() {
     override fun exitFun_(ctx: CapybaraParser.Fun_Context) {
         val parameters = findListOfParametersInFun(ctx)
         functions.add(Function(
+                packageName,
                 ctx.name.text,
                 ctx.returnType?.text,
                 parameters,
@@ -170,14 +173,15 @@ private class Listener : CapybaraBaseListener() {
                     else -> throw IllegalStateException("I don't know how to handle it!")
                 }
             }
-            ctx.function_name != null -> {
+            ctx.function_qualified_name != null -> {
                 val parameters = ctx.parameters()
                         .expression()
                         .stream()
                         .map { parseExpression(it) }
                         .toList()
                 FunctionInvocationExpression(
-                        ctx.function_name.text,
+                        ctx.function_qualified_name.package_?.text ?: packageName,
+                        ctx.function_qualified_name.function_name.text,
                         parameters)
             }
             ctx.infix_operation() != null -> {
@@ -191,7 +195,8 @@ private class Listener : CapybaraBaseListener() {
             }
             ctx.argument_to_function != null -> {
                 FunctionInvocationExpression(
-                        ctx.apply_to_function_name.text,
+                        ctx.apply_to_function_qualified_name.package_?.text ?: packageName,
+                        ctx.apply_to_function_qualified_name.function_name.text,
                         listOf(parseExpression(ctx.argument_to_function)))
             }
             ctx.negate_expression != null -> NegateExpression(parseExpression(ctx.negate_expression))
@@ -213,7 +218,7 @@ data class BooleanExpression(val value: Boolean) : ConstantExpression() {
 }
 
 data class StringExpression(val value: String) : ConstantExpression()
-data class FunctionInvocationExpression(val functionName: String, val parameters: List<Expression>) : Expression()
+data class FunctionInvocationExpression(val packageName: String, val functionName: String, val parameters: List<Expression>) : Expression()
 data class InfixExpression(val operation: String, val left: Expression, val right: Expression) : Expression()
 data class IfExpression(val condition: Expression, val trueBranch: Expression, val falseBranch: Expression) : Expression()
 data class NegateExpression(val negateExpression: Expression) : Expression()

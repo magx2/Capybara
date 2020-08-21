@@ -2,11 +2,21 @@ grammar Capybara;
 
 compileUnit
 	: packageDeclaration NEWLINE NEWLINE (code NEWLINE NEWLINE)* EOF
+	| packageDeclaration NEWLINE NEWLINE (imports NEWLINE)+ NEWLINE (code NEWLINE NEWLINE)* EOF
 //	: packageDeclaration NEWLINE NEWLINE EOF
 	;
 
 packageDeclaration
 	: 'package ' PACKAGE
+	;
+
+imports
+	: 'import ' package_=PACKAGE (' { ' sub_import ( ', ' sub_import  )* ' }')?
+	;
+
+sub_import
+	: struct_name=ALPH_NUM_STARTING_WITH_CAPITAL
+	| fun_name=SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL
 	;
 
 code
@@ -49,11 +59,11 @@ expression
 	| constant
 	| '!' negate_expression=expression
 	| value=SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL
-	| function_name=SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL '(' parameters? ')'
+	| function_qualified_name=fully_qualified_function '(' parameters? ')'
 	| left=expression ' ' infix_operation ' ' right=expression
 	| 'if ' condition=expression ' {' NEWLINE true_expression=expression NEWLINE '} else {' NEWLINE false_expression=expression NEWLINE '}'
 	| condition=expression ' ? ' true_expression=expression ' : ' false_expression=expression
-	| argument_to_function=expression ' -> ' apply_to_function_name=SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL
+	| argument_to_function=expression ' -> ' apply_to_function_qualified_name=fully_qualified_function
 	;
 
 constant
@@ -61,6 +71,10 @@ constant
 	| BOOLEAN
 	| string=STRING_DOUBLE_QUOTES
 	| string=STRING_SINGLE_QUOTES
+	;
+
+fully_qualified_function
+	: (package_=PACKAGE ':')? function_name=SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL
 	;
 
 parameters : expression (', ' expression)* ;
