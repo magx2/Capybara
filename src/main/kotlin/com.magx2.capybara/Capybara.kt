@@ -38,7 +38,9 @@ fun main(args: Array<String>) {
                         unit,
                         unit.structs
                                 .stream()
-                                .map { struct -> addUnrollSpreadFieldsInStruct(struct, fullyQualifiedStructNames) }
+                                .map { struct ->
+                                    addUnrollSpreadFieldsInStruct(unit.packageName, struct, fullyQualifiedStructNames)
+                                }
                                 .toList()
                 )
             }
@@ -155,18 +157,24 @@ fun main(args: Array<String>) {
                 Pair(function, findReturnType(compilationContext, compileUnit, function.returnExpression))
             }
             .map { pair ->
-                if (pair.first.returnType != null && pair.first.returnType != pair.second) {
+                val returnType = pair.first.returnType
+                if (returnType != null && parseType(returnType, pair.first.packageName) != pair.second) {
                     throw CompilationException("Declared return type of function do not corresponds what it really return. " +
-                            "You declared `${pair.first.returnType}` and computed was `${pair.second}`.")
+                            "You declared `$returnType` and computed was `${pair.second}`.")
                 }
                 pair
             }
             .map { pair ->
+                val defaultPackage = pair.first.packageName
+                val parameters = pair.first.parameters
+                        .stream()
+                        .map { TypedParameter(it.name, parseType(it.type, defaultPackage)) }
+                        .toList()
                 FunctionWithReturnType(
                         pair.first.packageName,
                         pair.first.name,
                         pair.second,
-                        pair.first.parameters,
+                        parameters,
                         pair.first.returnExpression)
             }
             .toList()
@@ -178,10 +186,10 @@ data class CompilationContext(val structs: Set<FlatStruct>, val functions: Set<c
 private fun findReturnType(
         compilationContext: CompilationContext,
         compileUnit: CompileUnitWithImports,
-        expression: Expression): String =
+        expression: Expression): Type =
         when (expression) {
             is ParenthesisExpression -> findReturnType(compilationContext, compileUnit, expression.expression)
-            is ParameterExpression -> expression.type
+            is ParameterExpression -> parseType(expression.type, compileUnit.packageName)
             is IntegerExpression -> intType
             is BooleanExpression -> booleanType
             is StringExpression -> stringType
@@ -189,10 +197,15 @@ private fun findReturnType(
                 val function = findFunctionForGivenFunctionInvocation(compilationContext, compileUnit, expression)
                 if (function.isPresent) {
                     val f = function.get()
-                    f.returnType ?: findReturnType(compilationContext, compileUnit, f.returnExpression)
+                    if (f.returnType != null) {
+                        parseType(f.returnType, compileUnit.packageName)
+                    } else {
+                        findReturnType(compilationContext, compileUnit, f.returnExpression)
+                    }
                 } else {
                     val parameters = findFunctionParametersValues(compilationContext, compileUnit, expression)
                             .stream()
+                            .map { "${it.packageName}/${it.name}" }
                             .collect(Collectors.joining(", "))
                     throw CompilationException("Cant find method with signature: " +
                             "`${expression.packageName ?: compileUnit.packageName}:${expression.functionName}($parameters)`")
@@ -228,7 +241,7 @@ private fun findReturnType(
 
                 if (struct.isPresent) {
                     // TODO add checking if every filed in stuct is set to correct type
-                    struct.get().packageName + "/" + struct.get().name
+                    Type(struct.get().packageName, struct.get().name)
                 } else {
                     throw CompilationException("Cannot find struct `${expression.packageName ?: compileUnit.packageName}:${expression.structName}`")
                 }
@@ -238,11 +251,18 @@ private fun findReturnType(
 private fun findReturnType(
         compilationContext: CompilationContext,
         compileUnit: CompileUnitWithImports,
-        expression: InfixExpression): String =
+        expression: InfixExpression): Type =
         when (expression.operation) {
             ">", "<", ">=", "<=", "!=", "==", "&&", "||" -> booleanType
             "^", "*", "+", "-" -> findReturnTypeFromBranchExpression(compilationContext, compileUnit, expression.left, expression.right)
             else -> throw CompilationException("Do not know this `${expression.operation}` infix expression!")
+        }
+
+private fun parseType(type: String, defaultPackage: String? = null): Type =
+        if (type.contains("/")) {
+            Type(type.substringBeforeLast("/"), type.substringAfterLast("/"))
+        } else {
+            Type(defaultPackage ?: error("You need to pass default package for type `$type`"), type)
         }
 
 private fun findFunctionForGivenFunctionInvocation(
@@ -259,7 +279,7 @@ private fun findFunctionForGivenFunctionInvocation(
                 var i = 0
                 var equals = true
                 while (i < parameters.size && equals) {
-                    equals = f.parameters[i].type == parameters[i]
+                    equals = parseType(f.parameters[i].type, compileUnit.packageName) == parameters[i]
                     i++
                 }
                 equals
@@ -274,7 +294,7 @@ private fun findFunctionForGivenFunctionInvocation(
                             var i = 0
                             var equals = true
                             while (i < parameters.size && equals) {
-                                equals = f.parameters[i].type == parameters[i]
+                                equals = parseType(f.parameters[i].type, compileUnit.packageName) == parameters[i]
                                 i++
                             }
                             equals
@@ -286,17 +306,17 @@ private fun findFunctionForGivenFunctionInvocation(
 private fun findFunctionParametersValues(
         compilationContext: CompilationContext,
         compileUnit: CompileUnitWithImports,
-        function: FunctionInvocationExpression): List<String> =
+        function: FunctionInvocationExpression): List<Type> =
         function.parameters
                 .stream()
                 .map { findReturnType(compilationContext, compileUnit, it) }
-                .toList<String>()
+                .toList<Type>()
 
 private fun findReturnTypeFromBranchExpression(
         compilationContext: CompilationContext,
         compileUnit: CompileUnitWithImports,
         left: Expression,
-        right: Expression): String {
+        right: Expression): Type {
     val leftType = findReturnType(compilationContext, compileUnit, left)
     val rightType = findReturnType(compilationContext, compileUnit, right)
     return if (leftType == rightType) {
@@ -317,9 +337,9 @@ private fun findReturnTypeFromBranchExpression(
     }
 }
 
-const val intType = "/capybara/type/Int"
-const val booleanType = "/capybara/type/Boolean"
-const val stringType = "/capybara/type/String"
+val intType = Type("/capybara/type", "Int")
+val booleanType = Type("/capybara/type", "Boolean")
+val stringType = Type("/capybara/type", "String")
 
 class CompilationException(msg: String) : RuntimeException(msg)
 
@@ -332,10 +352,11 @@ private fun printlnAny(header: String?, any: Any) {
     println(json)
 }
 
-private fun addUnrollSpreadFieldsInStruct(struct: Struct, fullyQualifiedStructNames: Map<String, Struct>): FlatStruct {
+private fun addUnrollSpreadFieldsInStruct(defaultPackage: String, struct: Struct, fullyQualifiedStructNames: Map<String, Struct>): FlatStruct {
     val newFields = struct.fields
             .stream()
             .flatMap { x(it, struct, fullyQualifiedStructNames) }
+            .map { TypedField(it.name, parseType(it.type, defaultPackage)) }
             .toList()
     return FlatStruct(
             struct.packageName,

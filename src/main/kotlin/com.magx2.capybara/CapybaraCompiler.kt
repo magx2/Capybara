@@ -51,11 +51,14 @@ data class Export(val packageName: String, val structs: Set<FlatStruct>, val fun
 data class Import(val importPackage: String, val subImport: Set<String>)
 
 data class Struct(val packageName: String, val name: String, val fields: LinkedList<Field>)
-data class FlatStruct(val packageName: String, val name: String, val fields: List<BasicField>)
+data class FlatStruct(val packageName: String, val name: String, val fields: List<TypedField>)
 
 sealed class Field
 data class BasicField(val name: String, val type: String) : Field()
 data class SpreadField(val spreadType: String) : Field()
+
+data class TypedField(val name: String, val type: Type)
+data class Type(val packageName: String, val name: String)
 
 data class Function(val packageName: String,
                     val name: String,
@@ -65,11 +68,12 @@ data class Function(val packageName: String,
 
 data class FunctionWithReturnType(val packageName: String,
                                   val name: String,
-                                  val returnType: String,
-                                  val parameters: List<Parameter>,
+                                  val returnType: Type,
+                                  val parameters: List<TypedParameter>,
                                   val returnExpression: Expression)
 
 data class Parameter(val name: String, val type: String)
+data class TypedParameter(val name: String, val type: Type)
 
 private class CapybaraCompilerImpl : CapybaraCompiler {
     override fun compile(fileName: String): CompileUnit {
