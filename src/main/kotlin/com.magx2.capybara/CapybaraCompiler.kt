@@ -171,11 +171,10 @@ private class Listener : CapybaraBaseListener() {
     }
 
     override fun enterFunBody(ctx: CapybaraParser.FunBodyContext) {
-        val expression = parseExpression(ctx.expression())
-        if (ctx.assign_to != null) {
-            values[ctx.assign_to.text] = expression
+        if (ctx.assigment()?.assign_to != null) {
+            values[ctx.assigment().assign_to.text] = parseExpression(ctx.assigment().expression())
         } else {
-            returnExpression = expression
+            returnExpression = parseExpression(ctx.expression())
         }
     }
 

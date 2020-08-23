@@ -22,6 +22,7 @@ sub_import
 code
 	: struct
 	| fun_
+	| def_
 	;
 
 struct
@@ -50,7 +51,7 @@ parameter
 	;
 
 funBody
-	: assign_to=SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL '=' expression (';'|NEWLINE) funBody
+	: assigment (';'|NEWLINE) funBody
 	| 'return' expression (';'|NEWLINE)
 	;
 
@@ -103,6 +104,30 @@ infix_operation
 	| '=='
 	;
 
+def_
+	: 'def' name=SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL '(' listOfParameters? ')'
+      		(':' returnType=fullyQualifiedType)? '{' NEWLINE defBody+ '}'
+	;
+
+defBody
+	: statement next defBody
+	| 'return' expression
+	;
+
+statement
+	: assigment
+	| 'while(' while_=expression ')' '{' while_body=statement* '}'
+	| 'for(' for_loop_expression ')' '{' for_body=statement* '}'
+	;
+
+for_loop_expression
+	: assigment ';' while_=expression ';' each_iteration=statement
+	;
+
+assigment
+	: assign_to=SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL '=' expression
+	;
+
 fullyQualifiedType
 	: (type_package=PACKAGE '/')? name=ALPH_NUM_STARTING_WITH_CAPITAL
 	;
@@ -110,6 +135,7 @@ fullyQualifiedType
 next
 	: ';'
 	| NEWLINE
+	| ';' NEWLINE
 	;
 
 // Types
