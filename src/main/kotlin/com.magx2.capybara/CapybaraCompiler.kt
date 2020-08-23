@@ -12,6 +12,7 @@ import org.slf4j.LoggerFactory
 import java.io.FileInputStream
 import java.util.*
 import java.util.stream.Collectors
+import java.util.stream.Collectors.toSet
 import kotlin.collections.ArrayList
 import kotlin.collections.HashMap
 import kotlin.streams.toList
@@ -26,7 +27,20 @@ interface CapybaraCompiler {
     fun compile(fileName: String): CompileUnit
 }
 
-data class CompileUnit(val packageName: String, val structs: List<Struct>, val functions: List<Function>)
+data class CompileUnit(
+        val packageName: String,
+        val imports: List<Import>,
+        val structs: List<Struct>,
+        val functions: List<Function>)
+
+data class CompileUnitWithImports(
+        val compileUnit: CompileUnit,
+        val importStructs: Set<Struct>,
+        val importFunctions: Set<Function>)
+
+data class Export(val packageName: String, val structs: Set<Struct>, val functions: Set<Function>)
+
+data class Import(val importPackage: String, val subImport: Set<String>)
 
 data class Struct(val packageName: String, val name: String, val fields: LinkedList<Field>)
 data class FlatStruct(val packageName: String, val name: String, val fields: List<BasicField>)
@@ -63,12 +77,13 @@ private class CapybaraCompilerImpl : CapybaraCompiler {
         val listener = Listener()
         walker.walk(listener, tree)
 
-        return CompileUnit(listener.packageName, listener.structs, listener.functions)
+        return CompileUnit(listener.packageName, listener.imports, listener.structs, listener.functions)
     }
 }
 
 private class Listener : CapybaraBaseListener() {
     lateinit var packageName: String
+    val imports = ArrayList<Import>()
     val structs = ArrayList<Struct>()
     val functions = ArrayList<Function>()
 
@@ -78,6 +93,15 @@ private class Listener : CapybaraBaseListener() {
 
     override fun enterPackageDeclaration(ctx: CapybaraParser.PackageDeclarationContext) {
         packageName = ctx.PACKAGE().text
+    }
+
+    override fun enterImports(ctx: CapybaraParser.ImportsContext) {
+        val subImport = (ctx.sub_import() ?: listOf())
+                .stream()
+                .map { it.struct_name ?: it.fun_name }
+                .map { it.text }
+                .collect(toSet())
+        imports.add(Import(ctx.package_.text, subImport))
     }
 
     override fun enterStruct(ctx: CapybaraParser.StructContext) {
@@ -180,7 +204,7 @@ private class Listener : CapybaraBaseListener() {
                         .map { parseExpression(it) }
                         .toList()
                 FunctionInvocationExpression(
-                        ctx.function_qualified_name.package_?.text ?: packageName,
+                        ctx.function_qualified_name.package_?.text,
                         ctx.function_qualified_name.function_name.text,
                         parameters)
             }
@@ -195,7 +219,7 @@ private class Listener : CapybaraBaseListener() {
             }
             ctx.argument_to_function != null -> {
                 FunctionInvocationExpression(
-                        ctx.apply_to_function_qualified_name.package_?.text ?: packageName,
+                        ctx.apply_to_function_qualified_name.package_?.text,
                         ctx.apply_to_function_qualified_name.function_name.text,
                         listOf(parseExpression(ctx.argument_to_function)))
             }
@@ -218,7 +242,7 @@ data class BooleanExpression(val value: Boolean) : ConstantExpression() {
 }
 
 data class StringExpression(val value: String) : ConstantExpression()
-data class FunctionInvocationExpression(val packageName: String, val functionName: String, val parameters: List<Expression>) : Expression()
+data class FunctionInvocationExpression(val packageName: String?, val functionName: String, val parameters: List<Expression>) : Expression()
 data class InfixExpression(val operation: String, val left: Expression, val right: Expression) : Expression()
 data class IfExpression(val condition: Expression, val trueBranch: Expression, val falseBranch: Expression) : Expression()
 data class NegateExpression(val negateExpression: Expression) : Expression()

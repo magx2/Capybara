@@ -2,9 +2,15 @@ package com.magx2.capybara
 
 import com.google.gson.GsonBuilder
 import java.util.*
+import java.util.function.BiConsumer
+import java.util.function.BinaryOperator
 import java.util.function.Function
+import java.util.function.Supplier
+import java.util.stream.Collector
+import java.util.stream.Collector.Characteristics.UNORDERED
 import java.util.stream.Collectors
 import java.util.stream.Stream
+import kotlin.collections.HashMap
 import kotlin.streams.toList
 
 fun main(args: Array<String>) {
@@ -35,11 +41,85 @@ fun main(args: Array<String>) {
     printlnAny("Unrolled structs:", flatStructs)
 
     //
+    // EXPORTS/IMPORTS
+    //
+    val exports = compileUnits.stream()
+            .map { Export(it.packageName, it.structs.toSet(), it.functions.toSet()) }
+            .collect(object : Collector<Export, MutableMap<String, Export>, Map<String, Export>> {
+                override fun characteristics(): MutableSet<Collector.Characteristics> = setOf(UNORDERED).toMutableSet()
+
+                override fun supplier(): Supplier<MutableMap<String, Export>> =
+                        Supplier { HashMap<String, Export>() }
+
+                override fun accumulator(): BiConsumer<MutableMap<String, Export>, Export> =
+                        BiConsumer { map, export ->
+                            val exportFromMap = map[export.packageName]
+                            if (exportFromMap == null) {
+                                map[export.packageName] = export
+                            } else {
+                                Export(
+                                        export.packageName,
+                                        export.structs + exportFromMap.structs,
+                                        export.functions + exportFromMap.functions)
+                            }
+                        }
+
+                override fun combiner(): BinaryOperator<MutableMap<String, Export>> =
+                        BinaryOperator { map1, map2 ->
+                            (map1 + map2).toMutableMap()
+                        }
+
+                override fun finisher(): Function<MutableMap<String, Export>, Map<String, Export>> = Function { it.toMap() }
+            })
+    val compileUnitsWithImports = compileUnits.stream()
+            .map { compileUnit ->
+                val imports = compileUnit.imports.stream()
+                        .map { import ->
+                            val export = (exports[import.importPackage]
+                                    ?: throw CompilationException("Package `${import.importPackage}` exports nothing so you can't import it."))
+                            Pair(import, export)
+                        }
+                        .toList()
+                CompileUnitWithImports(
+                        compileUnit,
+                        imports.stream()
+                                .flatMap { (import, exportForPackage) ->
+                                    if (import.subImport.isEmpty()) {
+                                        exportForPackage.structs.stream()
+                                    } else {
+                                        exportForPackage.structs
+                                                .stream()
+                                                .filter { import.subImport.contains(it.name) }
+                                    }
+                                }
+                                .toList()
+                                .toSet(),
+                        imports.stream()
+                                .flatMap { (import, exportForPackage) ->
+                                    if (import.subImport.isEmpty()) {
+                                        exportForPackage.functions.stream()
+                                    } else {
+                                        exportForPackage.functions
+                                                .stream()
+                                                .filter { import.subImport.contains(it.name) }
+                                    }
+                                }
+                                .toList()
+                                .toSet()
+                )
+            }
+            .toList()
+
+    //
     // FUNCTIONS
     //
-    val functions = compileUnits.stream()
-            .flatMap { it.functions.stream() }
+    val functions = compileUnitsWithImports.stream()
+            .flatMap { compileUnit ->
+                compileUnit.compileUnit.functions.stream()
+                        .map { function -> Pair(compileUnit, function) }
+            }
             .toList()
+
 
     //
     // COMPILATION
@@ -47,7 +127,9 @@ fun main(args: Array<String>) {
 
     // find return types for functions
     val functionsWithReturnType = functions.stream()
-            .map { Pair(it, findReturnType(it.returnExpression, functions)) }
+            .map { (compileUnit, function) ->
+                Pair(function, findReturnType(compileUnit, function.returnExpression))
+            }
             .map { pair ->
                 if (pair.first.returnType != null && pair.first.returnType != pair.second) {
                     throw CompilationException("Declared return type of function do not corresponds what it really return. " +
@@ -67,36 +149,38 @@ fun main(args: Array<String>) {
     printlnAny("Functions:", functionsWithReturnType)
 }
 
-private fun findReturnType(expression: Expression, functions: List<com.magx2.capybara.Function>): String =
+private fun findReturnType(
+        compileUnit: CompileUnitWithImports,
+        expression: Expression): String =
         when (expression) {
-            is ParenthesisExpression -> findReturnType(expression.expression, functions)
+            is ParenthesisExpression -> findReturnType(compileUnit, expression.expression)
             is ParameterExpression -> expression.type
             is IntegerExpression -> intType
             is BooleanExpression -> booleanType
             is StringExpression -> stringType
             is FunctionInvocationExpression -> {
-                val function = findFunctionForGivenFunctionInvocation(expression, functions)
+                val function = findFunctionForGivenFunctionInvocation(compileUnit, expression)
                 if (function.isPresent) {
                     val f = function.get()
-                    f.returnType ?: findReturnType(f.returnExpression, functions)
+                    f.returnType ?: findReturnType(compileUnit, f.returnExpression)
                 } else {
-                    val parameters = findFunctionParametersValues(expression, functions)
+                    val parameters = findFunctionParametersValues(compileUnit, expression)
                             .stream()
                             .collect(Collectors.joining(", "))
                     throw CompilationException("Cant find method with signature: " +
-                            "`${expression.packageName}:${expression.functionName}($parameters)`")
+                            "`${expression.packageName ?: compileUnit.compileUnit.packageName}:${expression.functionName}($parameters)`")
                 }
             }
-            is InfixExpression -> findReturnType(expression, functions)
+            is InfixExpression -> findReturnType(compileUnit, expression)
             is IfExpression -> {
-                val ifReturnType = findReturnType(expression.condition, functions)
+                val ifReturnType = findReturnType(compileUnit, expression.condition)
                 if (ifReturnType != booleanType) {
                     throw CompilationException("Expression in `if` should return `$booleanType` not `$ifReturnType`")
                 }
-                findReturnTypeFromBranchExpression(expression.trueBranch, expression.falseBranch, functions)
+                findReturnTypeFromBranchExpression(compileUnit, expression.trueBranch, expression.falseBranch)
             }
             is NegateExpression -> {
-                val returnType = findReturnType(expression.negateExpression, functions)
+                val returnType = findReturnType(compileUnit, expression.negateExpression)
                 if (returnType != booleanType) {
                     throw CompilationException("You can only negate boolean expressions. Type `$returnType` cannot be negated.")
                 }
@@ -104,20 +188,22 @@ private fun findReturnType(expression: Expression, functions: List<com.magx2.cap
             }
         }
 
-private fun findReturnType(expression: InfixExpression, functions: List<com.magx2.capybara.Function>): String =
+private fun findReturnType(
+        compileUnit: CompileUnitWithImports,
+        expression: InfixExpression): String =
         when (expression.operation) {
             ">", "<", ">=", "<=", "!=", "==", "&&", "||" -> booleanType
-            "^", "*", "+", "-" -> findReturnTypeFromBranchExpression(expression.left, expression.right, functions)
+            "^", "*", "+", "-" -> findReturnTypeFromBranchExpression(compileUnit, expression.left, expression.right)
             else -> throw CompilationException("Do not know this `${expression.operation}` infix expression!")
         }
 
 private fun findFunctionForGivenFunctionInvocation(
-        function: FunctionInvocationExpression,
-        functions: List<com.magx2.capybara.Function>): Optional<com.magx2.capybara.Function> {
-    val parameters = findFunctionParametersValues(function, functions)
+        compileUnit: CompileUnitWithImports,
+        function: FunctionInvocationExpression): Optional<com.magx2.capybara.Function> {
+    val functions = compileUnit.compileUnit.functions + compileUnit.importFunctions
+    val parameters = findFunctionParametersValues(compileUnit, function)
     return functions.stream()
             .filter { it.name == function.functionName }
-            .filter { it.packageName == function.packageName }
             .filter { it.parameters.size == parameters.size }
             .filter { f ->
                 var i = 0
@@ -128,18 +214,23 @@ private fun findFunctionForGivenFunctionInvocation(
                 }
                 equals
             }
-            .findAny()
+            .findFirst()
 }
 
-private fun findFunctionParametersValues(function: FunctionInvocationExpression, functions: List<com.magx2.capybara.Function>): List<String> =
+private fun findFunctionParametersValues(
+        compileUnit: CompileUnitWithImports,
+        function: FunctionInvocationExpression): List<String> =
         function.parameters
                 .stream()
-                .map { findReturnType(it, functions) }
+                .map { findReturnType(compileUnit, it) }
                 .toList<String>()
 
-private fun findReturnTypeFromBranchExpression(left: Expression, right: Expression, functions: List<com.magx2.capybara.Function>): String {
-    val leftType = findReturnType(left, functions)
-    val rightType = findReturnType(right, functions)
+private fun findReturnTypeFromBranchExpression(
+        compileUnit: CompileUnitWithImports,
+        left: Expression,
+        right: Expression): String {
+    val leftType = findReturnType(compileUnit, left)
+    val rightType = findReturnType(compileUnit, right)
     return if (leftType == rightType) {
         leftType
     } else {
