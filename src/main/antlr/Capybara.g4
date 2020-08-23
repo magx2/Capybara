@@ -64,6 +64,14 @@ expression
 	| 'if ' condition=expression ' {' NEWLINE true_expression=expression NEWLINE '} else {' NEWLINE false_expression=expression NEWLINE '}'
 	| condition=expression ' ? ' true_expression=expression ' : ' false_expression=expression
 	| argument_to_function=expression ' -> ' apply_to_function_qualified_name=fully_qualified_function
+	| struct_name=fullyQualifiedType ' { ' struct_field_initializations ' }'
+	;
+struct_field_initializations
+	: struct_field_initialization (', ' struct_field_initialization)*
+	;
+
+struct_field_initialization
+	: field_name=SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL ': ' field_value=expression
 	;
 
 constant
@@ -96,7 +104,12 @@ infix_operation
 	;
 
 fullyQualifiedType
-	: (PACKAGE '/')? ALPH_NUM_STARTING_WITH_CAPITAL
+	: (type_package=PACKAGE '/')? name=ALPH_NUM_STARTING_WITH_CAPITAL
+	;
+
+next
+	: ';'
+	| NEWLINE
 	;
 
 // Types

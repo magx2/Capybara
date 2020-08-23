@@ -32,18 +32,31 @@ fun main(args: Array<String>) {
                     (Function<Pair<String, Struct>, Struct> { it.second })
             ))
 
-    val flatStructs = structs.stream()
-            .map { struct ->
-                addUnrollSpreadFieldsInStruct(struct, fullyQualifiedStructNames)
+    val compileUnitsWithFlatStructs = compileUnits.stream()
+            .map { unit ->
+                Pair(
+                        unit,
+                        unit.structs
+                                .stream()
+                                .map { struct -> addUnrollSpreadFieldsInStruct(struct, fullyQualifiedStructNames) }
+                                .toList()
+                )
+            }
+            .map { (unit, flatStructs) ->
+                CompileUnitWithFlatStructs(
+                        unit.packageName,
+                        unit.imports,
+                        flatStructs,
+                        unit.functions)
             }
             .toList()
 
-    printlnAny("Unrolled structs:", flatStructs)
+    printlnAny("Unrolled structs:", compileUnitsWithFlatStructs.stream().flatMap { it.structs.stream() }.toList())
 
     //
     // EXPORTS/IMPORTS
     //
-    val exports = compileUnits.stream()
+    val exports = compileUnitsWithFlatStructs.stream()
             .map { Export(it.packageName, it.structs.toSet(), it.functions.toSet()) }
             .collect(object : Collector<Export, MutableMap<String, Export>, Map<String, Export>> {
                 override fun characteristics(): MutableSet<Collector.Characteristics> = setOf(UNORDERED).toMutableSet()
@@ -71,7 +84,7 @@ fun main(args: Array<String>) {
 
                 override fun finisher(): Function<MutableMap<String, Export>, Map<String, Export>> = Function { it.toMap() }
             })
-    val compileUnitsWithImports = compileUnits.stream()
+    val compileUnitsWithImports = compileUnitsWithFlatStructs.stream()
             .map { compileUnit ->
                 val imports = compileUnit.imports.stream()
                         .map { import ->
@@ -81,7 +94,9 @@ fun main(args: Array<String>) {
                         }
                         .toList()
                 CompileUnitWithImports(
-                        compileUnit,
+                        compileUnit.packageName,
+                        compileUnit.structs,
+                        compileUnit.functions,
                         imports.stream()
                                 .flatMap { (import, exportForPackage) ->
                                     if (import.subImport.isEmpty()) {
@@ -115,7 +130,7 @@ fun main(args: Array<String>) {
     //
     val functions = compileUnitsWithImports.stream()
             .flatMap { compileUnit ->
-                compileUnit.compileUnit.functions.stream()
+                compileUnit.functions.stream()
                         .map { function -> Pair(compileUnit, function) }
             }
             .toList()
@@ -124,11 +139,20 @@ fun main(args: Array<String>) {
     //
     // COMPILATION
     //
+    val compilationContext = CompilationContext(
+            compileUnitsWithFlatStructs.stream()
+                    .flatMap { it.structs.stream() }
+                    .toList()
+                    .toSet(),
+            functions.stream()
+                    .map { it.second }
+                    .toList()
+                    .toSet())
 
     // find return types for functions
     val functionsWithReturnType = functions.stream()
             .map { (compileUnit, function) ->
-                Pair(function, findReturnType(compileUnit, function.returnExpression))
+                Pair(function, findReturnType(compilationContext, compileUnit, function.returnExpression))
             }
             .map { pair ->
                 if (pair.first.returnType != null && pair.first.returnType != pair.second) {
@@ -149,61 +173,87 @@ fun main(args: Array<String>) {
     printlnAny("Functions:", functionsWithReturnType)
 }
 
+data class CompilationContext(val structs: Set<FlatStruct>, val functions: Set<com.magx2.capybara.Function>)
+
 private fun findReturnType(
+        compilationContext: CompilationContext,
         compileUnit: CompileUnitWithImports,
         expression: Expression): String =
         when (expression) {
-            is ParenthesisExpression -> findReturnType(compileUnit, expression.expression)
+            is ParenthesisExpression -> findReturnType(compilationContext, compileUnit, expression.expression)
             is ParameterExpression -> expression.type
             is IntegerExpression -> intType
             is BooleanExpression -> booleanType
             is StringExpression -> stringType
             is FunctionInvocationExpression -> {
-                val function = findFunctionForGivenFunctionInvocation(compileUnit, expression)
+                val function = findFunctionForGivenFunctionInvocation(compilationContext, compileUnit, expression)
                 if (function.isPresent) {
                     val f = function.get()
-                    f.returnType ?: findReturnType(compileUnit, f.returnExpression)
+                    f.returnType ?: findReturnType(compilationContext, compileUnit, f.returnExpression)
                 } else {
-                    val parameters = findFunctionParametersValues(compileUnit, expression)
+                    val parameters = findFunctionParametersValues(compilationContext, compileUnit, expression)
                             .stream()
                             .collect(Collectors.joining(", "))
                     throw CompilationException("Cant find method with signature: " +
-                            "`${expression.packageName ?: compileUnit.compileUnit.packageName}:${expression.functionName}($parameters)`")
+                            "`${expression.packageName ?: compileUnit.packageName}:${expression.functionName}($parameters)`")
                 }
             }
-            is InfixExpression -> findReturnType(compileUnit, expression)
+            is InfixExpression -> findReturnType(compilationContext, compileUnit, expression)
             is IfExpression -> {
-                val ifReturnType = findReturnType(compileUnit, expression.condition)
+                val ifReturnType = findReturnType(compilationContext, compileUnit, expression.condition)
                 if (ifReturnType != booleanType) {
                     throw CompilationException("Expression in `if` should return `$booleanType` not `$ifReturnType`")
                 }
-                findReturnTypeFromBranchExpression(compileUnit, expression.trueBranch, expression.falseBranch)
+                findReturnTypeFromBranchExpression(compilationContext, compileUnit, expression.trueBranch, expression.falseBranch)
             }
             is NegateExpression -> {
-                val returnType = findReturnType(compileUnit, expression.negateExpression)
+                val returnType = findReturnType(compilationContext, compileUnit, expression.negateExpression)
                 if (returnType != booleanType) {
                     throw CompilationException("You can only negate boolean expressions. Type `$returnType` cannot be negated.")
                 }
                 returnType
             }
+            is NewStruct -> {
+                val structPackageName = expression.packageName ?: compileUnit.packageName
+                val structs = if (expression.packageName == null) {
+                    compileUnit.structs + compileUnit.importStructs
+                } else {
+                    compilationContext.structs
+                }
+
+                val struct = structs.stream()
+                        .filter { it.name == expression.structName }
+                        .filter { it.packageName == structPackageName }
+                        .findFirst()
+
+                if (struct.isPresent) {
+                    // TODO add checking if every filed in stuct is set to correct type
+                    struct.get().packageName + "/" + struct.get().name
+                } else {
+                    throw CompilationException("Cannot find struct `${expression.packageName ?: compileUnit.packageName}:${expression.structName}`")
+                }
+            }
         }
 
 private fun findReturnType(
+        compilationContext: CompilationContext,
         compileUnit: CompileUnitWithImports,
         expression: InfixExpression): String =
         when (expression.operation) {
             ">", "<", ">=", "<=", "!=", "==", "&&", "||" -> booleanType
-            "^", "*", "+", "-" -> findReturnTypeFromBranchExpression(compileUnit, expression.left, expression.right)
+            "^", "*", "+", "-" -> findReturnTypeFromBranchExpression(compilationContext, compileUnit, expression.left, expression.right)
             else -> throw CompilationException("Do not know this `${expression.operation}` infix expression!")
         }
 
 private fun findFunctionForGivenFunctionInvocation(
+        compilationContext: CompilationContext,
         compileUnit: CompileUnitWithImports,
         function: FunctionInvocationExpression): Optional<com.magx2.capybara.Function> {
-    val functions = compileUnit.compileUnit.functions + compileUnit.importFunctions
-    val parameters = findFunctionParametersValues(compileUnit, function)
+    val functions = compileUnit.functions + compileUnit.importFunctions
+    val parameters = findFunctionParametersValues(compilationContext, compileUnit, function)
     return functions.stream()
             .filter { it.name == function.functionName }
+            .filter { function.packageName == null }
             .filter { it.parameters.size == parameters.size }
             .filter { f ->
                 var i = 0
@@ -215,22 +265,40 @@ private fun findFunctionForGivenFunctionInvocation(
                 equals
             }
             .findFirst()
+            .or {
+                compilationContext.functions
+                        .stream()
+                        .filter { it.name == function.functionName }
+                        .filter { it.packageName == function.packageName }
+                        .filter { f ->
+                            var i = 0
+                            var equals = true
+                            while (i < parameters.size && equals) {
+                                equals = f.parameters[i].type == parameters[i]
+                                i++
+                            }
+                            equals
+                        }
+                        .findFirst()
+            }
 }
 
 private fun findFunctionParametersValues(
+        compilationContext: CompilationContext,
         compileUnit: CompileUnitWithImports,
         function: FunctionInvocationExpression): List<String> =
         function.parameters
                 .stream()
-                .map { findReturnType(compileUnit, it) }
+                .map { findReturnType(compilationContext, compileUnit, it) }
                 .toList<String>()
 
 private fun findReturnTypeFromBranchExpression(
+        compilationContext: CompilationContext,
         compileUnit: CompileUnitWithImports,
         left: Expression,
         right: Expression): String {
-    val leftType = findReturnType(compileUnit, left)
-    val rightType = findReturnType(compileUnit, right)
+    val leftType = findReturnType(compilationContext, compileUnit, left)
+    val rightType = findReturnType(compilationContext, compileUnit, right)
     return if (leftType == rightType) {
         leftType
     } else {

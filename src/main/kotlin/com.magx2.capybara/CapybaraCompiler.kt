@@ -33,12 +33,20 @@ data class CompileUnit(
         val structs: List<Struct>,
         val functions: List<Function>)
 
+data class CompileUnitWithFlatStructs(
+        val packageName: String,
+        val imports: List<Import>,
+        val structs: List<FlatStruct>,
+        val functions: List<Function>)
+
 data class CompileUnitWithImports(
-        val compileUnit: CompileUnit,
-        val importStructs: Set<Struct>,
+        val packageName: String,
+        val structs: List<FlatStruct>,
+        val functions: List<Function>,
+        val importStructs: Set<FlatStruct>,
         val importFunctions: Set<Function>)
 
-data class Export(val packageName: String, val structs: Set<Struct>, val functions: Set<Function>)
+data class Export(val packageName: String, val structs: Set<FlatStruct>, val functions: Set<Function>)
 
 data class Import(val importPackage: String, val subImport: Set<String>)
 
@@ -198,8 +206,8 @@ private class Listener : CapybaraBaseListener() {
                 }
             }
             ctx.function_qualified_name != null -> {
-                val parameters = ctx.parameters()
-                        .expression()
+                val parameters = (ctx.parameters()
+                        ?.expression() ?: listOf())
                         .stream()
                         .map { parseExpression(it) }
                         .toList()
@@ -224,6 +232,16 @@ private class Listener : CapybaraBaseListener() {
                         listOf(parseExpression(ctx.argument_to_function)))
             }
             ctx.negate_expression != null -> NegateExpression(parseExpression(ctx.negate_expression))
+            ctx.struct_name != null ->
+                NewStruct(
+                        ctx.struct_name.type_package?.text,
+                        ctx.struct_name.name.text,
+                        ctx.struct_field_initializations()
+                                .struct_field_initialization()
+                                .stream()
+                                .map { StructField(it.field_name.text, parseExpression(it.field_value)) }
+                                .toList()
+                )
             else -> throw IllegalStateException("I don't know how to handle it!")
         }
     }
@@ -246,3 +264,5 @@ data class FunctionInvocationExpression(val packageName: String?, val functionNa
 data class InfixExpression(val operation: String, val left: Expression, val right: Expression) : Expression()
 data class IfExpression(val condition: Expression, val trueBranch: Expression, val falseBranch: Expression) : Expression()
 data class NegateExpression(val negateExpression: Expression) : Expression()
+data class NewStruct(val packageName: String?, val structName: String, val fields: List<StructField>) : Expression()
+data class StructField(val name: String, val value: Expression)

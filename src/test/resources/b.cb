@@ -11,5 +11,5 @@ struct SecondStruct {
 	i8: /capybara/type/Int
 }
 
-fun test(/capybara/type/Int) = int > 0
+fun test() = false
 

@@ -13,8 +13,8 @@ struct AnotherTestStruct {
 }
 
 struct AnotherTestStruct2 {
-	foo: X
-	boo: Y
+	age: /capybara/type/Int
+	is_adult: /capybara/type/Boolean
 }
 
 fun xyz(i1: /capybara/type/Int, i2: /capybara/type/Int, i3: /capybara/type/Int, i4: /capybara/type/Int, f1: /capybara/type/Int, f2: /capybara/type/Int, f3: /capybara/type/Int, f4: /capybara/type/Int, Double): /capybara/type/String {
@@ -50,4 +50,6 @@ fun x() = 5 < 6 ? -1 : 1
 fun s(/capybara/type/String) = string + " x"
 
 fun b(/capybara/type/Boolean) = !boolean
+
+fun new_struct(/capybara/type/Int, /capybara/type/Boolean) = AnotherTestStruct2 { age: int, is_adult: boolean }
 

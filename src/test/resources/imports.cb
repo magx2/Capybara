@@ -3,5 +3,5 @@ package /imports
 import /imports/a { FirstStruct, test }
 import /imports/b { SecondStruct }
 
-fun import1(i1: /capybara/type/Int, i2: /capybara/type/Int) = test(i1) ? /imports/b:test(i2) : false
+fun import1(i1: /capybara/type/Int, i2: /capybara/type/Int) = test(i1) ? /imports/b:test() : false
 
