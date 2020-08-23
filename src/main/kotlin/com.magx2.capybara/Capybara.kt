@@ -234,19 +234,70 @@ private fun findReturnType(
                     compilationContext.structs
                 }
 
-                val struct = structs.stream()
+                val optional = structs.stream()
                         .filter { it.name == expression.structName }
                         .filter { it.packageName == structPackageName }
                         .findFirst()
 
-                if (struct.isPresent) {
-                    // TODO add checking if every filed in stuct is set to correct type
-                    Type(struct.get().packageName, struct.get().name)
+                if (optional.isPresent) {
+                    val struct = optional.get()
+                    val fieldsInExpression = expression.fields
+                            .stream()
+                            .map { it.name }
+                            .toList()
+                            .toSet()
+                    val missingFields = struct.fields
+                            .stream()
+                            .filter { fieldsInExpression.contains(it.name).not() }
+                            .toList()
+                    if (missingFields.isNotEmpty()) {
+                        val fields = missingFields.stream()
+                                .map { it.name }
+                                .collect(Collectors.joining(", "))
+                        throw CompilationException("You are missing [$fields] fields when creating new " +
+                                "`${expression.packageName ?: compileUnit.packageName}/${expression.structName}`")
+                    }
+                    val nameStructFields = struct.fields
+                            .stream()
+                            .map { it.name }
+                            .toList()
+                            .toSet()
+                    val additionalFields = fieldsInExpression.stream()
+                            .filter { nameStructFields.contains(it).not() }
+                            .toList()
+                    if (additionalFields.isNotEmpty()) {
+                        val notRecognizedFields = additionalFields.joinToString(", ")
+                        throw CompilationException("I do not recognize those fields [$notRecognizedFields] in struct " +
+                                "`${expression.packageName ?: compileUnit.packageName}/${expression.structName}`")
+                    }
+                    val declaredTypes = expression.fields
+                            .stream()
+                            .map { Pair(it.name, findReturnType(compilationContext, compileUnit, it.value)) }
+                            .collect(Collectors.toMap(
+                                    (Function<Pair<String, Type>, String> { it.first }),
+                                    (Function<Pair<String, Type>, Type> { it.second })
+                            ))
+                    val wrongTypes = struct.fields
+                            .stream()
+                            .filter { declaredTypes[it.name]!! != it.type }
+                            .map { Triple(it.name, it.type, declaredTypes[it.name]!!) }
+                            .map {
+                                "field name: `${it.first}`, " +
+                                        "expected type: `${typeToString(it.second)}`, " +
+                                        "actual type: `${typeToString(it.third)}`"
+                            }
+                            .collect(Collectors.joining(", "))
+                    if (wrongTypes.isNotBlank()) {
+                        throw CompilationException("Cannot create struct. Given arguments has bad types: [$wrongTypes]")
+                    }
+                    Type(struct.packageName, struct.name)
                 } else {
-                    throw CompilationException("Cannot find struct `${expression.packageName ?: compileUnit.packageName}:${expression.structName}`")
+                    throw CompilationException("Cannot find struct `${expression.packageName ?: compileUnit.packageName}/${expression.structName}`")
                 }
             }
         }
+
+private fun typeToString(type: Type) = "${type.packageName}/${type.name}"
 
 private fun findReturnType(
         compilationContext: CompilationContext,
