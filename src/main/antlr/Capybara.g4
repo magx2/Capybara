@@ -11,7 +11,7 @@ packageDeclaration
 	;
 
 imports
-	: 'import' package_=PACKAGE ('{' sub_import ( ', ' sub_import )* '}')?
+	: 'import' package_=PACKAGE (' {' sub_import ( ', ' sub_import )* '}')?
 	;
 
 sub_import
@@ -26,7 +26,7 @@ code
 	;
 
 struct
-	: 'struct' name=ALPH_NUM_STARTING_WITH_CAPITAL '{' NEWLINE field* '}'
+	: 'struct' name=ALPH_NUM_STARTING_WITH_CAPITAL ' {' NEWLINE field* '}'
 	;
 
 field
@@ -36,7 +36,7 @@ field
 
 fun_
 	: 'fun' name=SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL '(' listOfParameters? ')'
-		(':' returnType=fullyQualifiedType)? '{' NEWLINE funBody+ '}'
+		(':' returnType=fullyQualifiedType)? ' {' NEWLINE funBody+ '}'
 	| 'fun' name=SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL '(' listOfParameters? ')'
 		(':' returnType=fullyQualifiedType)? '=' returnExpression=expression
 	;
@@ -65,7 +65,7 @@ expression
 	| 'if' condition=expression '{' NEWLINE true_expression=expression NEWLINE '}' 'else' '{' NEWLINE false_expression=expression NEWLINE '}'
 	| condition=expression '?' true_expression=expression ':' false_expression=expression
 	| argument_to_function=expression '->' apply_to_function_qualified_name=fully_qualified_function
-	| struct_name=fullyQualifiedType '{' struct_field_initializations '}'
+	| struct_name=fullyQualifiedType ' {' struct_field_initializations '}'
 	;
 struct_field_initializations
 	: struct_field_initialization (', ' struct_field_initialization)*
@@ -80,6 +80,7 @@ constant
 	| BOOLEAN
 	| string=STRING_DOUBLE_QUOTES
 	| string=STRING_SINGLE_QUOTES
+	| VOID
 	;
 
 fully_qualified_function
@@ -106,26 +107,51 @@ infix_operation
 
 def_
 	: 'def' name=SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL '(' listOfParameters? ')'
-      		(':' returnType=fullyQualifiedType)? '{' NEWLINE defBody+ '}'
+      		(':' returnType=fullyQualifiedType)? ' {' NEWLINE defBody+ '}'
 	;
 
 defBody
-	: statement next defBody
-	| 'return' expression
+	: statement ((';'|NEWLINE) defBody)?
+	| 'return' return_expression=expression (';'|NEWLINE)
 	;
 
 statement
 	: assigment
-	| 'while(' while_=expression ')' '{' while_body=statement* '}'
-	| 'for(' for_loop_expression ')' '{' for_body=statement* '}'
+	| update_assigment
+	| while_loop
+	| for_loop
+	;
+
+while_loop
+	: 'while ' while_=expression     ' {' NEWLINE* loop_body '}'
+	;
+
+loop_body
+	: (statement next)+
+	;
+
+for_loop
+	: 'for ' for_loop_expression ' {' NEWLINE* loop_body '}'
 	;
 
 for_loop_expression
-	: assigment ';' while_=expression ';' each_iteration=statement
+	: assigment? ';' while_=expression ';' each_iteration=statement?
 	;
 
 assigment
 	: assign_to=SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL '=' expression
+	;
+
+update_assigment
+	: assign_to=SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL update_action expression
+	;
+
+update_action
+	: '+='
+	| '-='
+	| '*='
+	| '^='
+	| '/='
 	;
 
 fullyQualifiedType
@@ -134,13 +160,14 @@ fullyQualifiedType
 
 next
 	: ';'
-	| NEWLINE
-	| ';' NEWLINE
+	| NEWLINE+
+	| ';' NEWLINE+
 	;
 
 // Types
 INTEGER : ('-')?[0-9_]+ ;
 BOOLEAN : ('true'|'false') ;
+VOID : 'void' ;
 STRING_SINGLE_QUOTES : '"' .+? '"' ;
 STRING_DOUBLE_QUOTES : '\'' .+? '\'' ;
 

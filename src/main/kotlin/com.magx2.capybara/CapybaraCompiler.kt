@@ -31,7 +31,8 @@ data class CompileUnit(
         val packageName: String,
         val imports: List<Import>,
         val structs: List<Struct>,
-        val functions: List<Function>)
+        val functions: List<Function>,
+        val defs: List<Def>)
 
 data class CompileUnitWithFlatStructs(
         val packageName: String,
@@ -64,13 +65,28 @@ data class Function(val packageName: String,
                     val name: String,
                     val returnType: String?,
                     val parameters: List<Parameter>,
+                    val assignments: Set<AssigmentStatement>,
                     val returnExpression: Expression)
 
 data class FunctionWithReturnType(val packageName: String,
                                   val name: String,
                                   val returnType: Type,
                                   val parameters: List<TypedParameter>,
+                                  val assignments: Set<AssigmentStatement>,
                                   val returnExpression: Expression)
+
+data class Def(val packageName: String,
+               val name: String,
+               val returnType: String?,
+               val parameters: List<Parameter>,
+               val statements: List<Statement>,
+               val returnExpression: Expression?)
+
+data class DefWithReturnType(val packageName: String,
+                             val name: String,
+                             val returnType: Type,
+                             val parameters: List<Parameter>,
+                             val returnExpression: Expression?)
 
 data class Parameter(val name: String, val type: String)
 data class TypedParameter(val name: String, val type: Type)
@@ -89,7 +105,12 @@ private class CapybaraCompilerImpl : CapybaraCompiler {
         val listener = Listener()
         walker.walk(listener, tree)
 
-        return CompileUnit(listener.packageName, listener.imports, listener.structs, listener.functions)
+        return CompileUnit(
+                listener.packageName,
+                listener.imports,
+                listener.structs,
+                listener.functions,
+                listener.defs)
     }
 }
 
@@ -98,10 +119,14 @@ private class Listener : CapybaraBaseListener() {
     val imports = ArrayList<Import>()
     val structs = ArrayList<Struct>()
     val functions = ArrayList<Function>()
+    val defs = ArrayList<Def>()
 
     var parameters: Map<String, String> = mapOf()
+    var defParameters: Map<String, String> = mapOf()
     val values: HashMap<String, Expression> = HashMap()
     var returnExpression: Expression? = null
+    var defReturnExpression: Expression? = null
+    val statements = ArrayList<Statement>()
 
     override fun enterPackageDeclaration(ctx: CapybaraParser.PackageDeclarationContext) {
         packageName = ctx.PACKAGE().text
@@ -130,7 +155,7 @@ private class Listener : CapybaraBaseListener() {
     }
 
     override fun enterFun_(ctx: CapybaraParser.Fun_Context) {
-        this.parameters = findListOfParametersInFun(ctx)
+        this.parameters = findListOfParametersInFun(ctx.listOfParameters())
                 .stream()
                 .collect(Collectors.toMap(
                         (java.util.function.Function<Parameter, String> { it.name }),
@@ -141,20 +166,43 @@ private class Listener : CapybaraBaseListener() {
     }
 
     override fun exitFun_(ctx: CapybaraParser.Fun_Context) {
-        val parameters = findListOfParametersInFun(ctx)
+        val parameters = findListOfParametersInFun(ctx.listOfParameters())
         functions.add(Function(
                 packageName,
                 ctx.name.text,
                 ctx.returnType?.text,
                 parameters,
+                values.entries.stream()
+                        .map { (k, v) -> AssigmentStatement(k, v) }
+                        .toList()
+                        .toSet(),
                 returnExpression!!))
         values.clear()
         returnExpression = null
     }
 
-    private fun findListOfParametersInFun(ctx: CapybaraParser.Fun_Context): List<Parameter> =
-            ctx.listOfParameters()
-                    ?.parameter()
+    override fun enterDef_(ctx: CapybaraParser.Def_Context) {
+        this.defParameters = findListOfParametersInFun(ctx.listOfParameters())
+                .stream()
+                .collect(Collectors.toMap(
+                        (java.util.function.Function<Parameter, String> { it.name }),
+                        (java.util.function.Function<Parameter, String> { it.type })))
+    }
+
+    override fun exitDef_(ctx: CapybaraParser.Def_Context) {
+        val parameters = findListOfParametersInFun(ctx.listOfParameters())
+        defs.add(Def(
+                packageName,
+                ctx.name.text,
+                ctx.returnType?.text,
+                parameters,
+                statements,
+                defReturnExpression))
+        returnExpression = null
+    }
+
+    private fun findListOfParametersInFun(ctx: CapybaraParser.ListOfParametersContext?): List<Parameter> =
+            ctx?.parameter()
                     ?.stream()
                     ?.map { newParameter(it) }
                     ?.toList() ?: listOf()
@@ -192,11 +240,8 @@ private class Listener : CapybaraBaseListener() {
                                 parameters[valueName]!!
                         )
                     }
-                    values.containsKey(valueName) -> {
-                        values[valueName]!!
-                    }
                     else -> {
-                        throw java.lang.IllegalStateException("cant find `${valueName}`")
+                        ValueExpression(valueName)
                     }
                 }
             }
@@ -248,6 +293,58 @@ private class Listener : CapybaraBaseListener() {
             else -> throw IllegalStateException("I don't know how to handle it!")
         }
     }
+
+    override fun enterDefBody(ctx: CapybaraParser.DefBodyContext) {
+        if (ctx.statement() != null) {
+            statements.add(parseStatement(ctx.statement()))
+        } else if (ctx.return_expression != null) {
+            defReturnExpression = parseExpression(ctx.return_expression)
+        }
+    }
+
+    private fun parseStatement(statement: CapybaraParser.StatementContext): Statement =
+            when {
+                statement.assigment() != null -> parseAssigmentStatement(statement.assigment())
+                statement.while_loop() != null ->
+                    WhileLoopStatement(
+                            parseExpression(statement.while_loop().while_),
+                            statement.while_loop()
+                                    .loop_body()
+                                    .statement()
+                                    .stream()
+                                    .map { parseStatement(it) }
+                                    .toList()
+                    )
+                statement.for_loop() != null -> {
+                    val forLoop = statement.for_loop().for_loop_expression()
+                    ForLoopStatement(
+                            if (forLoop.assigment() != null) parseAssigmentStatement(forLoop.assigment()) else null,
+                            parseExpression(forLoop.while_),
+                            if (forLoop.each_iteration != null) parseStatement(forLoop.each_iteration) else null,
+                            statement.for_loop()
+                                    .loop_body()
+                                    .statement()
+                                    .stream()
+                                    .map { parseStatement(it) }
+                                    .toList()
+                    )
+                }
+                statement.update_assigment() != null -> {
+                    val valueName = statement.update_assigment().assign_to.text
+                    AssigmentStatement(
+                            valueName,
+                            InfixExpression(
+                                    findOperation(statement.update_assigment().update_action().text),
+                                    ValueExpression(valueName),
+                                    parseExpression(statement.update_assigment().expression())))
+                }
+                else -> throw IllegalStateException("I don't know how to handle it!")
+            }
+
+    private fun findOperation(text: String): String = text[0].toString()
+
+    private fun parseAssigmentStatement(assigment: CapybaraParser.AssigmentContext) =
+            AssigmentStatement(assigment.assign_to.text, parseExpression(assigment.expression()))
 }
 
 sealed class Expression
@@ -269,3 +366,14 @@ data class IfExpression(val condition: Expression, val trueBranch: Expression, v
 data class NegateExpression(val negateExpression: Expression) : Expression()
 data class NewStruct(val packageName: String?, val structName: String, val fields: List<StructField>) : Expression()
 data class StructField(val name: String, val value: Expression)
+data class ValueExpression(val valueName: String) : Expression()
+
+// Statements
+sealed class Statement
+data class AssigmentStatement(val name: String, val expression: Expression) : Statement()
+sealed class Loop : Statement()
+data class WhileLoopStatement(val whileExpression: Expression, val statements: List<Statement>) : Loop()
+data class ForLoopStatement(val assigment: AssigmentStatement?,
+                            val whileExpression: Expression,
+                            val eachIteration: Statement?,
+                            val statements: List<Statement>) : Loop()
