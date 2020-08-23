@@ -7,11 +7,11 @@ compileUnit
 	;
 
 packageDeclaration
-	: 'package ' PACKAGE
+	: 'package' PACKAGE
 	;
 
 imports
-	: 'import ' package_=PACKAGE (' { ' sub_import ( ', ' sub_import  )* ' }')?
+	: 'import' package_=PACKAGE ('{' sub_import ( ', ' sub_import )* '}')?
 	;
 
 sub_import
@@ -25,19 +25,19 @@ code
 	;
 
 struct
-	: 'struct ' name=ALPH_NUM_STARTING_WITH_CAPITAL ' {' NEWLINE field* '}'
+	: 'struct' name=ALPH_NUM_STARTING_WITH_CAPITAL '{' NEWLINE field* '}'
 	;
 
 field
-	: name=SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL ': ' type=fullyQualifiedType NEWLINE
+	: name=SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL ':' type=fullyQualifiedType NEWLINE
 	| '...' spread_type=fullyQualifiedType NEWLINE
 	;
 
 fun_
-	: 'fun ' name=SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL '(' listOfParameters? ')'
-		(': ' returnType=fullyQualifiedType)? ' {' NEWLINE funBody+ '}'
-	| 'fun ' name=SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL '(' listOfParameters? ')'
-		(': ' returnType=fullyQualifiedType)? ' = ' returnExpression=expression
+	: 'fun' name=SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL '(' listOfParameters? ')'
+		(':' returnType=fullyQualifiedType)? '{' NEWLINE funBody+ '}'
+	| 'fun' name=SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL '(' listOfParameters? ')'
+		(':' returnType=fullyQualifiedType)? '=' returnExpression=expression
 	;
 
 listOfParameters
@@ -45,33 +45,33 @@ listOfParameters
 	;
 
 parameter
-	: name=SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL ': ' type=fullyQualifiedType
+	: name=SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL ':' type=fullyQualifiedType
 	| type=fullyQualifiedType
 	;
 
 funBody
-	: assign_to=SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL ' = ' expression (';'|NEWLINE) funBody
-	| 'return ' expression (';'|NEWLINE)
+	: assign_to=SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL '=' expression (';'|NEWLINE) funBody
+	| 'return' expression (';'|NEWLINE)
 	;
 
 expression
 	: '(' in_parenthisis_expression=expression ')'
 	| constant
-	| '!' negate_expression=expression
 	| value=SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL
+	| '!' negate_expression=expression
 	| function_qualified_name=fully_qualified_function '(' parameters? ')'
-	| left=expression ' ' infix_operation ' ' right=expression
-	| 'if ' condition=expression ' {' NEWLINE true_expression=expression NEWLINE '} else {' NEWLINE false_expression=expression NEWLINE '}'
-	| condition=expression ' ? ' true_expression=expression ' : ' false_expression=expression
-	| argument_to_function=expression ' -> ' apply_to_function_qualified_name=fully_qualified_function
-	| struct_name=fullyQualifiedType ' { ' struct_field_initializations ' }'
+	| left=expression infix_operation right=expression
+	| 'if' condition=expression '{' NEWLINE true_expression=expression NEWLINE '}' 'else' '{' NEWLINE false_expression=expression NEWLINE '}'
+	| condition=expression '?' true_expression=expression ':' false_expression=expression
+	| argument_to_function=expression '->' apply_to_function_qualified_name=fully_qualified_function
+	| struct_name=fullyQualifiedType '{' struct_field_initializations '}'
 	;
 struct_field_initializations
 	: struct_field_initialization (', ' struct_field_initialization)*
 	;
 
 struct_field_initialization
-	: field_name=SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL ': ' field_value=expression
+	: field_name=SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL ':' field_value=expression
 	;
 
 constant
@@ -121,9 +121,8 @@ STRING_DOUBLE_QUOTES : '\'' .+? '\'' ;
 PACKAGE : ('/' SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL)+ ;
 SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL : [a-z][a-z_0-9]* ;
 ALPH_NUM_STARTING_WITH_CAPITAL : [A-Z][a-zA-Z0-9]* ;
-//NEXT_EXPRESSION : (';'|NEWLINE) ;
-TODO : '~TODO~' ;
-NEWLINE : '\r'? '\n' INDENT* ;
-INDENT : [ \t]+ ;
-//WS : [ \t\r\n]+ ;
+NEWLINE : '\r'? '\n';
+//WS : [ \t\r]+ -> channel(HIDDEN);
+//WS : [ \t]+ -> skip ;
+WS : (' '|'\t') -> skip ;
 COMMENT : ('#'|'//') .+? NEWLINE -> skip ;
