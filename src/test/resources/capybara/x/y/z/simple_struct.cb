@@ -25,7 +25,7 @@ fun xyz(i1: /capybara/type/Int, i2: /capybara/type/Int, i3: /capybara/type/Int, 
 	a5 = i1 + i2 -> f -> f2
 	a6 = 61 -> f2 -> f
 	a7 = 'abc 71 xyz' -> s -> s
-	a8 = true -> b -> b
+	a8 = true -> b -> b -> b2
 	return a1 + a2 + a3 + a4 + a5 + a6 + a7 + a8
 }
 
@@ -50,6 +50,8 @@ fun x() = 5 < 6 ? -1 : 1
 fun s(/capybara/type/String) = string + " x"
 
 fun b(/capybara/type/Boolean) = !boolean
+
+fun b2(/capybara/type/Boolean) = boolean ? 1 : 0
 
 fun new_struct(/capybara/type/Int, /capybara/type/Boolean) = AnotherTestStruct2 { age: int, is_adult: boolean }
 
