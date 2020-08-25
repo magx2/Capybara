@@ -225,7 +225,9 @@ fun findReturnType(
         assignments: Set<AssigmentStatement>,
         expression: InfixExpression): Type =
         when (expression.operation) {
-            ">", "<", ">=", "<=", "!=", "==", "&&", "||" -> booleanType
+            ">", "<", ">=", "<=", "!=", "==", "&&", "||" -> booleanType // FIXME check if left and right are correct types!
+            // FIXME only + can be applied like this ; rest needs to have strict types
+            // FIXME and you cannot add booleans...
             "^", "*", "+", "-" -> findReturnTypeFromBranchExpression(compilationContext, compileUnit, assignments, expression.left, expression.right)
             else -> throw CompilationException("Do not know this `${expression.operation}` infix expression!")
         }
