@@ -51,29 +51,10 @@ data class Export(val packageName: String, val structs: Set<FlatStruct>, val fun
 
 data class Import(val importPackage: String, val subImport: Set<String>)
 
-data class Struct(val packageName: String, val name: String, val fields: LinkedList<Field>)
-data class FlatStruct(val packageName: String, val name: String, val fields: List<TypedField>)
-
 sealed class Field
 data class BasicField(val name: String, val type: String) : Field()
 data class SpreadField(val spreadType: String) : Field()
 
-data class TypedField(val name: String, val type: Type)
-data class Type(val packageName: String, val name: String)
-
-data class Function(val packageName: String,
-                    val name: String,
-                    val returnType: String?,
-                    val parameters: List<Parameter>,
-                    val assignments: Set<AssigmentStatement>,
-                    val returnExpression: Expression)
-
-data class FunctionWithReturnType(val packageName: String,
-                                  val name: String,
-                                  val returnType: Type,
-                                  val parameters: List<TypedParameter>,
-                                  val assignments: Set<AssigmentStatement>,
-                                  val returnExpression: Expression)
 
 data class Def(val packageName: String,
                val name: String,
@@ -347,26 +328,7 @@ private class Listener : CapybaraBaseListener() {
             AssigmentStatement(assigment.assign_to.text, parseExpression(assigment.expression()))
 }
 
-sealed class Expression
-data class ParenthesisExpression(val expression: Expression) : Expression()
-data class ParameterExpression(val valueName: String, val type: String) : Expression()
-sealed class ConstantExpression : Expression()
-data class IntegerExpression(val value: Long) : ConstantExpression() {
-    constructor(value: String) : this(value.toLong())
-}
 
-data class BooleanExpression(val value: Boolean) : ConstantExpression() {
-    constructor(value: String) : this(value.toBoolean())
-}
-
-data class StringExpression(val value: String) : ConstantExpression()
-data class FunctionInvocationExpression(val packageName: String?, val functionName: String, val parameters: List<Expression>) : Expression()
-data class InfixExpression(val operation: String, val left: Expression, val right: Expression) : Expression()
-data class IfExpression(val condition: Expression, val trueBranch: Expression, val falseBranch: Expression) : Expression()
-data class NegateExpression(val negateExpression: Expression) : Expression()
-data class NewStruct(val packageName: String?, val structName: String, val fields: List<StructField>) : Expression()
-data class StructField(val name: String, val value: Expression)
-data class ValueExpression(val valueName: String) : Expression()
 
 // Statements
 sealed class Statement
