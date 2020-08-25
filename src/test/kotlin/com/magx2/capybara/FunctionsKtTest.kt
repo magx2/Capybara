@@ -178,4 +178,42 @@ internal class FunctionsKtTest {
         // then
         assertThatThrownBy(`when`).isInstanceOf(CompilationException::class.java)
     }
+
+    @Test
+    fun `should find return type for value expression`() {
+        // given
+        val valueName = "foo"
+        val expression = ValueExpression(valueName)
+        val assigmentStatement = AssigmentStatement(valueName, integerExpression())
+
+        // when
+        val returnType = findReturnType(
+                compilationContext,
+                compileUnit,
+                setOf(assigmentStatement),
+                expression)
+
+        // then
+        assertThat(returnType).isEqualTo(intType)
+    }
+
+    @Test
+    fun `should throw exception if cannot find assigment for given value`() {
+        // given
+        val expression = ValueExpression("foo")
+        val assigmentStatement = AssigmentStatement("boo", integerExpression())
+
+        // when
+        val `when` = ThrowableAssert.ThrowingCallable {
+            findReturnType(
+                    compilationContext,
+                    compileUnit,
+                    setOf(assigmentStatement),
+                    expression)
+        }
+
+        // then
+        assertThatThrownBy(`when`).isInstanceOf(CompilationException::class.java)
+    }
+
 }
