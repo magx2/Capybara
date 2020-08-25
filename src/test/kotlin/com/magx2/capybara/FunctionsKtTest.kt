@@ -142,4 +142,40 @@ internal class FunctionsKtTest {
         // then
         assertThatThrownBy(`when`).isInstanceOf(CompilationException::class.java)
     }
+
+    @Test
+    fun `should throw exception for condition in if expression not being boolean type`() {
+        // given
+        val expression = IfExpression(ParameterExpression("x", "/foo/Boo"), stringExpression(), stringExpression())
+
+        // when
+        val `when` = ThrowableAssert.ThrowingCallable {
+            findReturnType(
+                    compilationContext,
+                    compileUnit,
+                    assignments,
+                    expression)
+        }
+
+        // then
+        assertThatThrownBy(`when`).isInstanceOf(CompilationException::class.java)
+    }
+
+    @Test
+    fun `should throw exception for condition in negate expression not being boolean type`() {
+        // given
+        val expression = NegateExpression(ParameterExpression("x", "/foo/Boo"))
+
+        // when
+        val `when` = ThrowableAssert.ThrowingCallable {
+            findReturnType(
+                    compilationContext,
+                    compileUnit,
+                    assignments,
+                    expression)
+        }
+
+        // then
+        assertThatThrownBy(`when`).isInstanceOf(CompilationException::class.java)
+    }
 }
