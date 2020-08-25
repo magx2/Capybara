@@ -333,4 +333,32 @@ internal class FunctionsKtTest {
         // then
         assertThat(returnType).isEqualTo(stringType)
     }
+
+    @Test
+    fun `should find return type for local function invocation expression even if there is imported function with same name`() {
+        // given
+        val functionName = "f"
+        val expression = FunctionInvocationExpression(
+                null,
+                functionName,
+                listOf())
+        val localFunction = Function("pkg_name", functionName, null, listOf(), setOf(), stringExpression())
+        val importedFunction = Function("pkg_name", functionName, null, listOf(), setOf(), integerExpression())
+        val compileUnit = CompileUnitWithImports(
+                "pkg_name",
+                listOf(),
+                listOf(localFunction),
+                setOf(),
+                setOf(importedFunction))
+
+        // when
+        val returnType = findReturnType(
+                compilationContext,
+                compileUnit,
+                assignments,
+                expression)
+
+        // then
+        assertThat(returnType).isEqualTo(stringType)
+    }
 }
