@@ -193,7 +193,33 @@ fun findFunctionParametersValues(
                 .map { findReturnType(compilationContext, compileUnit, assignments, it) }
                 .toList<Type>()
 
-fun findReturnTypeFromBranchExpression(
+private fun findReturnTypeFromBranchExpression(
+        compilationContext: CompilationContext,
+        compileUnit: CompileUnitWithImports,
+        assignments: Set<AssigmentStatement>,
+        left: Expression,
+        right: Expression): Type {
+    val leftType = findReturnType(compilationContext, compileUnit, assignments, left)
+    val rightType = findReturnType(compilationContext, compileUnit, assignments, right)
+    return if (leftType == rightType) {
+        leftType
+    } else {
+        if (leftType == stringType || rightType == stringType) {
+            val notStringType = if (leftType == stringType) rightType else leftType
+            if (notStringType == intType || notStringType == booleanType) {
+                stringType
+            } else {
+                throw CompilationException("Cannot convert type `$notStringType` to `$stringType` automatically.")
+            }
+        } else {
+            throw CompilationException("You need to return same types from infix expression. " +
+                    "Left expression returns `$leftType`, " +
+                    "right expression returns `$rightType`")
+        }
+    }
+}
+
+private fun findReturnTypeFromBranchExpressionWithoutTypeCasting(
         compilationContext: CompilationContext,
         compileUnit: CompileUnitWithImports,
         assignments: Set<AssigmentStatement>,
@@ -223,11 +249,34 @@ fun findReturnType(
         compilationContext: CompilationContext,
         compileUnit: CompileUnitWithImports,
         assignments: Set<AssigmentStatement>,
-        expression: InfixExpression): Type =
-        when (expression.operation) {
-            ">", "<", ">=", "<=", "!=", "==", "&&", "||" -> booleanType // FIXME check if left and right are correct types!
-            // FIXME only + can be applied like this ; rest needs to have strict types
-            // FIXME and you cannot add booleans...
-            "^", "*", "+", "-" -> findReturnTypeFromBranchExpression(compilationContext, compileUnit, assignments, expression.left, expression.right)
-            else -> throw CompilationException("Do not know this `${expression.operation}` infix expression!")
-        }
+        expression: InfixExpression): Type {
+    val leftType = findReturnType(compilationContext, compileUnit, assignments, expression.left)
+    val rightType = findReturnType(compilationContext, compileUnit, assignments, expression.right)
+    when (expression.operation) {
+        "^", "*", "-" ->
+            if (isOneOfGivenType(stringType, leftType, rightType)) {
+                throw CompilationException("String type cannot be applied to `${expression.operation}` infix expression")
+            } else if (isOneOfGivenType(booleanType, leftType, rightType)) {
+                throw CompilationException("Boolean type cannot be applied to `${expression.operation}` infix expression")
+            }
+        "&&", "||" ->
+            if (isOneOfGivenType(stringType, leftType, rightType)) {
+                throw CompilationException("String type cannot be applied to `${expression.operation}` infix expression")
+            }
+        "+", ">", "<", ">=", "<=" ->
+            if (isOneOfGivenType(booleanType, leftType, rightType)) {
+                throw CompilationException("Boolean type cannot be applied to `${expression.operation}` infix expression")
+            }
+    }
+    return when (expression.operation) {
+        ">", "<", ">=", "<=", "!=", "==", "&&", "||" -> booleanType // FIXME check if left and right are correct types!
+        // FIXME only + can be applied like this ; rest needs to have strict types
+        // FIXME and you cannot add booleans...
+        "+" -> findReturnTypeFromBranchExpression(compilationContext, compileUnit, assignments, expression.left, expression.right)
+        "^", "*", "-" -> findReturnTypeFromBranchExpressionWithoutTypeCasting(compilationContext, compileUnit, assignments, expression.left, expression.right)
+        else -> throw CompilationException("Do not know this `${expression.operation}` infix expression!")
+    }
+}
+
+private fun isOneOfGivenType(givenType: Type, vararg types: Type) =
+        types.toList().stream().anyMatch { it == givenType }
