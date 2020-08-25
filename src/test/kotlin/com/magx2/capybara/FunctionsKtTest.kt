@@ -361,4 +361,68 @@ internal class FunctionsKtTest {
         // then
         assertThat(returnType).isEqualTo(stringType)
     }
+
+    @Test
+    fun `should find return type for function invocation expression with no parameters from compilation context`() {
+        // given
+        val packageName = "function_package"
+        val functionName = "f"
+        val expression = FunctionInvocationExpression(
+                packageName,
+                functionName,
+                listOf())
+        val function = Function(
+                packageName,
+                functionName,
+                null,
+                listOf(),
+                setOf(),
+                stringExpression())
+        val compilationContext = CompilationContext(
+                setOf(),
+                setOf(function))
+        // when
+        val returnType = findReturnType(
+                compilationContext,
+                compileUnit,
+                assignments,
+                expression)
+
+        // then
+        assertThat(returnType).isEqualTo(stringType)
+    }
+
+    @Test
+    fun `should find return type for function invocation expression with parameters from compilation context`() {
+        // given
+        val packageName = "function_package"
+        val functionName = "f"
+        val expression = FunctionInvocationExpression(
+                packageName,
+                functionName,
+                listOf(stringExpression(), integerExpression(), booleanExpression()))
+        val parameters = listOf(
+                Parameter("foo", typeToString(stringType)),
+                Parameter("boo", typeToString(intType)),
+                Parameter("bar", typeToString(booleanType)))
+        val function = Function(
+                packageName,
+                functionName,
+                null,
+                parameters,
+                setOf(),
+                stringExpression())
+        val compilationContext = CompilationContext(
+                setOf(),
+                setOf(function))
+        // when
+        val returnType = findReturnType(
+                compilationContext,
+                compileUnit,
+                assignments,
+                expression)
+
+        // then
+        assertThat(returnType).isEqualTo(stringType)
+    }
 }
