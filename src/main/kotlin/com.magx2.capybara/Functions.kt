@@ -144,7 +144,7 @@ fun findReturnType(
             }
         }
 
-fun findFunctionForGivenFunctionInvocation(
+private fun findFunctionForGivenFunctionInvocation(
         compilationContext: CompilationContext,
         compileUnit: CompileUnitWithImports,
         assignments: Set<AssigmentStatement>,
@@ -184,7 +184,7 @@ fun findFunctionForGivenFunctionInvocation(
             }
 }
 
-fun findFunctionParametersValues(
+private fun findFunctionParametersValues(
         compilationContext: CompilationContext,
         compileUnit: CompileUnitWithImports,
         assignments: Set<AssigmentStatement>,
@@ -246,7 +246,7 @@ private fun findReturnTypeFromBranchExpressionWithoutTypeCasting(
     }
 }
 
-fun findReturnType(
+private fun findReturnType(
         compilationContext: CompilationContext,
         compileUnit: CompileUnitWithImports,
         assignments: Set<AssigmentStatement>,
