@@ -28,6 +28,7 @@ interface CapybaraCompiler {
 }
 
 data class CompileUnit(
+        val originFile: String,
         val packageName: String,
         val imports: List<Import>,
         val structs: List<Struct>,
@@ -87,6 +88,7 @@ private class CapybaraCompilerImpl : CapybaraCompiler {
         walker.walk(listener, tree)
 
         return CompileUnit(
+                fileName,
                 listener.packageName,
                 listener.imports,
                 listener.structs,
