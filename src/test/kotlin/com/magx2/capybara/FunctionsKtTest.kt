@@ -245,6 +245,40 @@ internal class FunctionsKtTest {
     }
 
     @Test
+    fun `should find return type from function invocation if function has return type`() {
+        // given
+        val functionName = "f"
+        val expression = FunctionInvocationExpression(
+                null,
+                functionName,
+                listOf())
+
+        val function = Function(
+                "pkg_name",
+                functionName,
+                typeToString(intType),
+                listOf(),
+                setOf(),
+                stringExpression())
+        val compileUnit = CompileUnitWithImports(
+                "pkg_name",
+                listOf(),
+                listOf(function),
+                setOf(),
+                setOf())
+
+        // when
+        val returnType = findReturnType(
+                compilationContext,
+                compileUnit,
+                assignments,
+                expression)
+
+        // then
+        assertThat(returnType).isEqualTo(intType)
+    }
+
+    @Test
     fun `should find return type for local function invocation expression with parameters`() {
         // given
         val functionName = "f"
@@ -415,6 +449,7 @@ internal class FunctionsKtTest {
         val compilationContext = CompilationContext(
                 setOf(),
                 setOf(function))
+
         // when
         val returnType = findReturnType(
                 compilationContext,
@@ -424,5 +459,180 @@ internal class FunctionsKtTest {
 
         // then
         assertThat(returnType).isEqualTo(stringType)
+    }
+
+    @Test
+    fun `should throw exception if there is not function that matches function invocation`() {
+        // given
+        val packageName = "function_package"
+        val functionName = "f"
+        val expression = FunctionInvocationExpression(
+                packageName,
+                functionName,
+                listOf(stringExpression(), integerExpression(), booleanExpression()))
+
+        // when
+        val `when` = ThrowableAssert.ThrowingCallable {
+            findReturnType(
+                    compilationContext,
+                    compileUnit,
+                    assignments,
+                    expression)
+        }
+
+        // then
+        assertThatThrownBy(`when`).isInstanceOf(CompilationException::class.java)
+    }
+
+    @Test
+    fun `should throw exception if there bad number parameters in function invocations (CompilationContext)`() {
+        // given
+        val packageName = "function_package"
+        val functionName = "f"
+        val expression = FunctionInvocationExpression(
+                packageName,
+                functionName,
+                listOf(stringExpression(), integerExpression()))
+        val parameters = listOf(
+                Parameter("foo", typeToString(stringType)),
+                Parameter("boo", typeToString(intType)),
+                Parameter("bar", typeToString(booleanType)))
+        val function = Function(
+                packageName,
+                functionName,
+                null,
+                parameters,
+                setOf(),
+                stringExpression())
+        val compilationContext = CompilationContext(
+                setOf(),
+                setOf(function))
+
+        // when
+        val `when` = ThrowableAssert.ThrowingCallable {
+            findReturnType(
+                    compilationContext,
+                    compileUnit,
+                    assignments,
+                    expression)
+        }
+
+        // then
+        assertThatThrownBy(`when`).isInstanceOf(CompilationException::class.java)
+    }
+
+    @Test
+    fun `should throw exception if there bad number parameters in function invocations (CompileUnit)`() {
+        // given
+        val functionName = "f"
+        val expression = FunctionInvocationExpression(
+                null,
+                functionName,
+                listOf(stringExpression(), integerExpression()))
+        val parameters = listOf(
+                Parameter("foo", typeToString(stringType)),
+                Parameter("boo", typeToString(intType)),
+                Parameter("bar", typeToString(booleanType)))
+        val function = Function(
+                "packageName",
+                functionName,
+                null,
+                parameters,
+                setOf(),
+                stringExpression())
+        val compileUnit = CompileUnitWithImports(
+                "packageName",
+                listOf(),
+                listOf(function),
+                setOf(),
+                setOf())
+
+        // when
+        val `when` = ThrowableAssert.ThrowingCallable {
+            findReturnType(
+                    compilationContext,
+                    compileUnit,
+                    assignments,
+                    expression)
+        }
+
+        // then
+        assertThatThrownBy(`when`).isInstanceOf(CompilationException::class.java)
+    }
+
+    @Test
+    fun `should throw exception if there bad type of parameters in function invocations (CompilationContext)`() {
+        // given
+        val packageName = "function_package"
+        val functionName = "f"
+        val expression = FunctionInvocationExpression(
+                packageName,
+                functionName,
+                listOf(stringExpression(), integerExpression(), integerExpression()))
+        val parameters = listOf(
+                Parameter("foo", typeToString(stringType)),
+                Parameter("boo", typeToString(intType)),
+                Parameter("bar", typeToString(booleanType)))
+        val function = Function(
+                packageName,
+                functionName,
+                null,
+                parameters,
+                setOf(),
+                stringExpression())
+        val compilationContext = CompilationContext(
+                setOf(),
+                setOf(function))
+
+        // when
+        val `when` = ThrowableAssert.ThrowingCallable {
+            findReturnType(
+                    compilationContext,
+                    compileUnit,
+                    assignments,
+                    expression)
+        }
+
+        // then
+        assertThatThrownBy(`when`).isInstanceOf(CompilationException::class.java)
+    }
+
+    @Test
+    fun `should throw exception if there bad type of parameters in function invocations (CompileUnit)`() {
+        // given
+        val functionName = "f"
+        val expression = FunctionInvocationExpression(
+                null,
+                functionName,
+                listOf(stringExpression(), integerExpression(), integerExpression()))
+        val parameters = listOf(
+                Parameter("foo", typeToString(stringType)),
+                Parameter("boo", typeToString(intType)),
+                Parameter("bar", typeToString(booleanType)))
+        val function = Function(
+                "/package/name",
+                functionName,
+                null,
+                parameters,
+                setOf(),
+                stringExpression())
+        val compileUnit = CompileUnitWithImports(
+                "/package/name",
+                listOf(),
+                listOf(function),
+                setOf(),
+                setOf())
+
+        // when
+        val `when` = ThrowableAssert.ThrowingCallable {
+            findReturnType(
+                    compilationContext,
+                    compileUnit,
+                    assignments,
+                    expression)
+        }
+
+        // then
+        assertThatThrownBy(`when`).isInstanceOf(CompilationException::class.java)
     }
 }

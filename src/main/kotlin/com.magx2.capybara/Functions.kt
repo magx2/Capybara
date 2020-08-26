@@ -170,6 +170,7 @@ fun findFunctionForGivenFunctionInvocation(
                         .stream()
                         .filter { it.name == function.functionName }
                         .filter { it.packageName == function.packageName }
+                        .filter { it.parameters.size == parameters.size }
                         .filter { f ->
                             var i = 0
                             var equals = true
