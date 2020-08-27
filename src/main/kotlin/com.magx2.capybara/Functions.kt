@@ -25,7 +25,8 @@ fun findReturnType(
         compilationContext: CompilationContext,
         compileUnit: CompileUnitWithImports,
         assignments: Set<AssigmentStatement>,
-        expression: Expression): Type =
+        expression: Expression,
+        callStack: List<FunctionInvocationExpression> = listOf()): Type =
         when (expression) {
             is ParenthesisExpression -> findReturnType(compilationContext, compileUnit, assignments, expression.expression)
             is ParameterExpression -> parseType(expression.type, compileUnit.packageName)
@@ -39,7 +40,14 @@ fun findReturnType(
                     if (f.returnType != null) {
                         parseType(f.returnType, compileUnit.packageName)
                     } else {
-                        findReturnType(compilationContext, compileUnit, assignments, f.returnExpression)
+                        if (callStack.contains(f.returnExpression)) {
+                            throw CompilationException("There is recursive invocation of functions. Please specify return type explicity.")
+                        }
+                        findReturnType(compilationContext,
+                                compileUnit,
+                                assignments,
+                                f.returnExpression,
+                                callStack + expression)
                     }
                 } else {
                     val parameters = findFunctionParametersValues(compilationContext, compileUnit, assignments, expression)

@@ -7,6 +7,7 @@ import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.assertj.core.api.ThrowableAssert
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.Timeout
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.Arguments
 import org.junit.jupiter.params.provider.MethodSource
@@ -630,6 +631,54 @@ internal class FunctionsKtTest {
                     compileUnit,
                     assignments,
                     expression)
+        }
+
+        // then
+        assertThatThrownBy(`when`).isInstanceOf(CompilationException::class.java)
+    }
+
+    @Timeout(100)
+    @Test
+    fun `should throw exception if there will be recursion problem`() {
+        // given
+        val function1Name = "f1"
+        val function2Name = "f2"
+        val expression1 = FunctionInvocationExpression(
+                null,
+                function1Name,
+                listOf())
+        val expression2 = FunctionInvocationExpression(
+                null,
+                function2Name,
+                listOf())
+        val function1 = Function(
+                "/package/name",
+                function1Name,
+                null,
+                listOf(),
+                setOf(),
+                expression2)
+        val function2 = Function(
+                "/package/name",
+                function2Name,
+                null,
+                listOf(),
+                setOf(),
+                expression1)
+        val compileUnit = CompileUnitWithImports(
+                "/package/name",
+                listOf(),
+                listOf(function1, function2),
+                setOf(),
+                setOf())
+
+        // when
+        val `when` = ThrowableAssert.ThrowingCallable {
+            findReturnType(
+                    compilationContext,
+                    compileUnit,
+                    assignments,
+                    expression1)
         }
 
         // then
