@@ -146,7 +146,7 @@ fun main(args: Array<String>) {
                 val returnType = pair.first.returnType
                 if (returnType != null && parseType(returnType, pair.first.packageName) != pair.second) {
                     throw CompilationException("Declared return type of function do not corresponds what it really return. " +
-                            "You declared `$returnType` and computed was `${pair.second}`.")
+                            "You declared `$returnType` and computed was `${typeToString(pair.second)}`.")
                 }
                 pair
             }
@@ -181,7 +181,7 @@ fun printlnAny(header: String?, any: Any) {
     val gson = GsonBuilder().setPrettyPrinting().create()
     val json = gson.toJson(any)
     if (header != null) {
-        println(header)
+//        println(header)
     }
-    println(json)
+//    println(json)
 }

@@ -1,7 +1,10 @@
 package com.magx2.capybara
 
+import com.magx2.capybara.BasicTypes.anyType
 import com.magx2.capybara.BasicTypes.booleanType
 import com.magx2.capybara.BasicTypes.intType
+import com.magx2.capybara.BasicTypes.listType
+import com.magx2.capybara.BasicTypes.nothingType
 import com.magx2.capybara.BasicTypes.stringType
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
@@ -683,5 +686,61 @@ internal class FunctionsKtTest {
 
         // then
         assertThatThrownBy(`when`).isInstanceOf(CompilationException::class.java)
+    }
+
+    @Test
+    fun `should find return type from empty list`() {
+        // given
+        val expression = NewListExpression()
+
+        // when
+        val returnType = findReturnType(
+                compilationContext,
+                compileUnit,
+                assignments,
+                expression)
+
+        // then
+        assertThat(returnType).isEqualTo(addGenericType(listType, nothingType))
+    }
+
+    @Test
+    fun `should find return type from list of ints`() {
+        // given
+        val expression = NewListExpression(listOf(
+                IntegerExpression(1),
+                IntegerExpression(2),
+                IntegerExpression(3),
+        ))
+
+        // when
+        val returnType = findReturnType(
+                compilationContext,
+                compileUnit,
+                assignments,
+                expression)
+
+        // then
+        assertThat(returnType).isEqualTo(addGenericType(listType, intType))
+    }
+
+    @Test
+    fun `should find return type from list of somethings`() {
+        // given
+        val expression = NewListExpression(listOf(
+                IntegerExpression(1),
+                StringExpression("2"),
+                BooleanExpression(true),
+        ))
+
+        // when
+        val returnType = findReturnType(
+                compilationContext,
+                compileUnit,
+                assignments,
+                expression)
+
+        // then
+        assertThat(returnType).isEqualTo(addGenericType(listType, anyType))
     }
 }

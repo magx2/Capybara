@@ -66,9 +66,16 @@ expression
 	| condition=expression '?' true_expression=expression ':' false_expression=expression
 	| argument_to_function=expression '->' apply_to_function_qualified_name=fully_qualified_function
 	| struct_name=fullyQualifiedType ' {' struct_field_initializations '}'
+	| newListExpression
 	;
+
 struct_field_initializations
 	: struct_field_initialization (', ' struct_field_initialization)*
+	;
+
+newListExpression
+	: '[' expression (', ' expression)*  ']'
+	| '[]'
 	;
 
 struct_field_initialization
@@ -155,7 +162,7 @@ update_action
 	;
 
 fullyQualifiedType
-	: (type_package=PACKAGE '/')? name=ALPH_NUM_STARTING_WITH_CAPITAL
+	: (type_package=PACKAGE '/')? name=ALPH_NUM_STARTING_WITH_CAPITAL ('[' generic_type=fullyQualifiedType']')?
 	;
 
 next

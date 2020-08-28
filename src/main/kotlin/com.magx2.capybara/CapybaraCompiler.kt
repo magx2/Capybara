@@ -209,73 +209,81 @@ private class Listener : CapybaraBaseListener() {
         }
     }
 
-    private fun parseExpression(ctx: CapybaraParser.ExpressionContext): Expression {
-        return when {
-            ctx.in_parenthisis_expression != null -> {
-                ParenthesisExpression(parseExpression(ctx.in_parenthisis_expression))
-            }
-            ctx.value != null -> {
-                val valueName = ctx.value.text
-                when {
-                    parameters.containsKey(valueName) -> {
-                        ParameterExpression(
-                                valueName,
-                                parameters[valueName]!!
-                        )
-                    }
-                    else -> {
-                        ValueExpression(valueName)
+    private fun parseExpression(ctx: CapybaraParser.ExpressionContext): Expression =
+            when {
+                ctx.in_parenthisis_expression != null -> {
+                    ParenthesisExpression(parseExpression(ctx.in_parenthisis_expression))
+                }
+                ctx.value != null -> {
+                    val valueName = ctx.value.text
+                    when {
+                        parameters.containsKey(valueName) -> {
+                            ParameterExpression(
+                                    valueName,
+                                    parameters[valueName]!!
+                            )
+                        }
+                        else -> {
+                            ValueExpression(valueName)
+                        }
                     }
                 }
-            }
-            ctx.constant() != null -> {
-                when {
-                    ctx.constant().BOOLEAN() != null -> BooleanExpression(ctx.constant().BOOLEAN().text)
-                    ctx.constant().INTEGER() != null -> IntegerExpression(ctx.constant().INTEGER().text)
-                    ctx.constant().string != null -> StringExpression(ctx.constant().string.text)
-                    else -> throw IllegalStateException("I don't know how to handle it!")
+                ctx.constant() != null -> {
+                    when {
+                        ctx.constant().BOOLEAN() != null -> BooleanExpression(ctx.constant().BOOLEAN().text)
+                        ctx.constant().INTEGER() != null -> IntegerExpression(ctx.constant().INTEGER().text)
+                        ctx.constant().string != null -> StringExpression(ctx.constant().string.text)
+                        else -> throw IllegalStateException("I don't know how to handle it!")
+                    }
                 }
+                ctx.function_qualified_name != null -> {
+                    val parameters = (ctx.parameters()
+                            ?.expression() ?: listOf())
+                            .stream()
+                            .map { parseExpression(it) }
+                            .toList()
+                    FunctionInvocationExpression(
+                            ctx.function_qualified_name.package_?.text,
+                            ctx.function_qualified_name.function_name.text,
+                            parameters)
+                }
+                ctx.infix_operation() != null -> {
+                    InfixExpression(ctx.infix_operation().text, parseExpression(ctx.left), parseExpression(ctx.right))
+                }
+                ctx.condition != null -> {
+                    IfExpression(
+                            parseExpression(ctx.condition),
+                            parseExpression(ctx.true_expression),
+                            parseExpression(ctx.false_expression))
+                }
+                ctx.argument_to_function != null -> {
+                    FunctionInvocationExpression(
+                            ctx.apply_to_function_qualified_name.package_?.text,
+                            ctx.apply_to_function_qualified_name.function_name.text,
+                            listOf(parseExpression(ctx.argument_to_function)))
+                }
+                ctx.negate_expression != null -> NegateExpression(parseExpression(ctx.negate_expression))
+                ctx.struct_name != null ->
+                    NewStruct(
+                            ctx.struct_name.type_package?.text,
+                            ctx.struct_name.name.text,
+                            ctx.struct_field_initializations()
+                                    .struct_field_initialization()
+                                    .stream()
+                                    .map { StructField(it.field_name.text, parseExpression(it.field_value)) }
+                                    .toList()
+                    )
+                ctx.newListExpression() != null -> {
+                    NewListExpression(
+                            ctx.newListExpression()
+                                    .expression()
+                                    .stream()
+                                    .map { parseExpression(it) }
+                                    .toList()
+                    )
+                }
+                else -> throw IllegalStateException("I don't know how to handle it!")
             }
-            ctx.function_qualified_name != null -> {
-                val parameters = (ctx.parameters()
-                        ?.expression() ?: listOf())
-                        .stream()
-                        .map { parseExpression(it) }
-                        .toList()
-                FunctionInvocationExpression(
-                        ctx.function_qualified_name.package_?.text,
-                        ctx.function_qualified_name.function_name.text,
-                        parameters)
-            }
-            ctx.infix_operation() != null -> {
-                InfixExpression(ctx.infix_operation().text, parseExpression(ctx.left), parseExpression(ctx.right))
-            }
-            ctx.condition != null -> {
-                IfExpression(
-                        parseExpression(ctx.condition),
-                        parseExpression(ctx.true_expression),
-                        parseExpression(ctx.false_expression))
-            }
-            ctx.argument_to_function != null -> {
-                FunctionInvocationExpression(
-                        ctx.apply_to_function_qualified_name.package_?.text,
-                        ctx.apply_to_function_qualified_name.function_name.text,
-                        listOf(parseExpression(ctx.argument_to_function)))
-            }
-            ctx.negate_expression != null -> NegateExpression(parseExpression(ctx.negate_expression))
-            ctx.struct_name != null ->
-                NewStruct(
-                        ctx.struct_name.type_package?.text,
-                        ctx.struct_name.name.text,
-                        ctx.struct_field_initializations()
-                                .struct_field_initialization()
-                                .stream()
-                                .map { StructField(it.field_name.text, parseExpression(it.field_value)) }
-                                .toList()
-                )
-            else -> throw IllegalStateException("I don't know how to handle it!")
-        }
-    }
 
     override fun enterDefBody(ctx: CapybaraParser.DefBodyContext) {
         if (ctx.statement() != null) {
@@ -329,7 +337,6 @@ private class Listener : CapybaraBaseListener() {
     private fun parseAssigmentStatement(assigment: CapybaraParser.AssigmentContext) =
             AssigmentStatement(assigment.assign_to.text, parseExpression(assigment.expression()))
 }
-
 
 
 // Statements

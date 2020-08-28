@@ -1,7 +1,10 @@
 package com.magx2.capybara
 
+import com.magx2.capybara.BasicTypes.anyType
 import com.magx2.capybara.BasicTypes.booleanType
 import com.magx2.capybara.BasicTypes.intType
+import com.magx2.capybara.BasicTypes.listType
+import com.magx2.capybara.BasicTypes.nothingType
 import com.magx2.capybara.BasicTypes.stringType
 import java.util.*
 import java.util.stream.Collectors
@@ -150,6 +153,21 @@ fun findReturnType(
                     throw CompilationException("Cannot find struct `${expression.packageName ?: compileUnit.packageName}/${expression.structName}`")
                 }
             }
+            is NewListExpression -> {
+                val elementTypes = expression.elements
+                        .stream()
+                        .map { findReturnType(compilationContext, compileUnit, assignments, it) }
+                        .toList()
+                val genericType = findCommonType(elementTypes)
+                addGenericType(listType, genericType)
+            }
+        }
+
+private fun findCommonType(types: Collection<Type>): Type =
+        when {
+            types.isEmpty() -> nothingType
+            types.toSet().size == 1 -> types.first()
+            else -> anyType
         }
 
 private fun findFunctionForGivenFunctionInvocation(
