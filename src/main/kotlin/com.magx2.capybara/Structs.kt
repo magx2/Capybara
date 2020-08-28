@@ -12,7 +12,7 @@ fun addUnrollSpreadFieldsInStruct(defaultPackage: String, struct: Struct, fullyQ
     val newFields = struct.fields
             .stream()
             .flatMap { x(it, struct, fullyQualifiedStructNames) }
-            .map { TypedField(it.name, parseType(it.type, defaultPackage)) }
+            .map { TypedField(it.name, parseType(it.line, it.type, defaultPackage)) }
             .toList()
     return FlatStruct(
             struct.packageName,

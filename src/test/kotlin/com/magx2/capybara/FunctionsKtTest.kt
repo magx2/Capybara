@@ -19,48 +19,47 @@ import java.util.stream.Stream
 
 @Suppress("MemberVisibilityCanBePrivate")
 internal class FunctionsKtTest {
+
     companion object {
-        private fun integerExpression() = IntegerExpression(Random().nextLong())
-
-        private fun booleanExpression() = BooleanExpression(Random().nextBoolean())
-
-        private fun stringExpression() = StringExpression((Random().nextDouble() * Random().nextInt()).toString())
+        private fun integerExpression() = IntegerExpression(Line(1, 2), Random().nextLong())
+        private fun booleanExpression() = BooleanExpression(Line(1, 2), Random().nextBoolean())
+        private fun stringExpression() = StringExpression(Line(1, 2), (Random().nextDouble() * Random().nextInt()).toString())
 
         @JvmStatic
         @Suppress("unused") // it is used in parametrized test
         fun expressionReturnType(): Stream<Arguments> =
                 Stream.of(
                         // parenthesis expression
-                        Arguments.of(ParenthesisExpression(integerExpression()), intType),
-                        Arguments.of(ParenthesisExpression(booleanExpression()), booleanType),
-                        Arguments.of(ParenthesisExpression(stringExpression()), stringType),
+                        Arguments.of(ParenthesisExpression(Line(1, 2), integerExpression()), intType),
+                        Arguments.of(ParenthesisExpression(Line(1, 2), booleanExpression()), booleanType),
+                        Arguments.of(ParenthesisExpression(Line(1, 2), stringExpression()), stringType),
                         // basic expressions
                         Arguments.of(integerExpression(), intType),
                         Arguments.of(booleanExpression(), booleanType),
                         Arguments.of(stringExpression(), stringType),
                         // infix expressions - boolean
-                        Arguments.of(InfixExpression("!=", booleanExpression(), booleanExpression()), booleanType),
-                        Arguments.of(InfixExpression("==", booleanExpression(), booleanExpression()), booleanType),
-                        Arguments.of(InfixExpression("&&", booleanExpression(), booleanExpression()), booleanType),
-                        Arguments.of(InfixExpression("||", booleanExpression(), booleanExpression()), booleanType),
+                        Arguments.of(InfixExpression(Line(1, 2), "!=", booleanExpression(), booleanExpression()), booleanType),
+                        Arguments.of(InfixExpression(Line(1, 2), "==", booleanExpression(), booleanExpression()), booleanType),
+                        Arguments.of(InfixExpression(Line(1, 2), "&&", booleanExpression(), booleanExpression()), booleanType),
+                        Arguments.of(InfixExpression(Line(1, 2), "||", booleanExpression(), booleanExpression()), booleanType),
                         // infix expressions - int
-                        Arguments.of(InfixExpression("^", integerExpression(), integerExpression()), intType),
-                        Arguments.of(InfixExpression("*", integerExpression(), integerExpression()), intType),
-                        Arguments.of(InfixExpression("+", integerExpression(), integerExpression()), intType),
-                        Arguments.of(InfixExpression("-", integerExpression(), integerExpression()), intType),
+                        Arguments.of(InfixExpression(Line(1, 2), "^", integerExpression(), integerExpression()), intType),
+                        Arguments.of(InfixExpression(Line(1, 2), "*", integerExpression(), integerExpression()), intType),
+                        Arguments.of(InfixExpression(Line(1, 2), "+", integerExpression(), integerExpression()), intType),
+                        Arguments.of(InfixExpression(Line(1, 2), "-", integerExpression(), integerExpression()), intType),
                         // infix expressions - int
-                        Arguments.of(InfixExpression("+", stringExpression(), stringExpression()), stringType),
+                        Arguments.of(InfixExpression(Line(1, 2), "+", stringExpression(), stringExpression()), stringType),
                         // if expression
-                        Arguments.of(IfExpression(booleanExpression(), integerExpression(), integerExpression()), intType),
-                        Arguments.of(IfExpression(booleanExpression(), stringExpression(), stringExpression()), stringType),
-                        Arguments.of(IfExpression(booleanExpression(), booleanExpression(), booleanExpression()), booleanType),
+                        Arguments.of(IfExpression(Line(1, 2), booleanExpression(), integerExpression(), integerExpression()), intType),
+                        Arguments.of(IfExpression(Line(1, 2), booleanExpression(), stringExpression(), stringExpression()), stringType),
+                        Arguments.of(IfExpression(Line(1, 2), booleanExpression(), booleanExpression(), booleanExpression()), booleanType),
                         // if expression with smart casting to string
-                        Arguments.of(IfExpression(booleanExpression(), stringExpression(), integerExpression()), stringType),
-                        Arguments.of(IfExpression(booleanExpression(), integerExpression(), stringExpression()), stringType),
-                        Arguments.of(IfExpression(booleanExpression(), stringExpression(), booleanExpression()), stringType),
-                        Arguments.of(IfExpression(booleanExpression(), booleanExpression(), stringExpression()), stringType),
+                        Arguments.of(IfExpression(Line(1, 2), booleanExpression(), stringExpression(), integerExpression()), stringType),
+                        Arguments.of(IfExpression(Line(1, 2), booleanExpression(), integerExpression(), stringExpression()), stringType),
+                        Arguments.of(IfExpression(Line(1, 2), booleanExpression(), stringExpression(), booleanExpression()), stringType),
+                        Arguments.of(IfExpression(Line(1, 2), booleanExpression(), booleanExpression(), stringExpression()), stringType),
                         // negate expression
-                        Arguments.of(NegateExpression(booleanExpression()), booleanType),
+                        Arguments.of(NegateExpression(Line(1, 2), booleanExpression()), booleanType),
                 )
 
         @Suppress("unused")
@@ -94,7 +93,7 @@ internal class FunctionsKtTest {
     fun `should throw exception for unknown infix operator`() {
         // given
         val unknownInfixOperator = "foo"
-        val expression = InfixExpression(unknownInfixOperator, booleanExpression(), booleanExpression())
+        val expression = InfixExpression(Line(1, 2), unknownInfixOperator, booleanExpression(), booleanExpression())
 
         // when
         val `when` = ThrowableAssert.ThrowingCallable {
@@ -113,7 +112,7 @@ internal class FunctionsKtTest {
     @MethodSource(value = ["stringInfixOperator"])
     fun `should throw exception for infix operator that cannot be applied to string type`(infixOperator: String) {
         // given
-        val expression = InfixExpression(infixOperator, stringExpression(), stringExpression())
+        val expression = InfixExpression(Line(1, 2), infixOperator, stringExpression(), stringExpression())
 
         // when
         val `when` = ThrowableAssert.ThrowingCallable {
@@ -132,7 +131,7 @@ internal class FunctionsKtTest {
     @MethodSource(value = ["booleanInfixOperator"])
     fun `should throw exception for infix operator that cannot be applied to boolean type`(infixOperator: String) {
         // given
-        val expression = InfixExpression(infixOperator, booleanExpression(), booleanExpression())
+        val expression = InfixExpression(Line(1, 2), infixOperator, booleanExpression(), booleanExpression())
 
         // when
         val `when` = ThrowableAssert.ThrowingCallable {
@@ -150,7 +149,7 @@ internal class FunctionsKtTest {
     @Test
     fun `should throw exception for condition in if expression not being boolean type`() {
         // given
-        val expression = IfExpression(ParameterExpression("x", "/foo/Boo"), stringExpression(), stringExpression())
+        val expression = IfExpression(Line(1, 2), ParameterExpression(Line(1, 2), "x", "/foo/Boo"), stringExpression(), stringExpression())
 
         // when
         val `when` = ThrowableAssert.ThrowingCallable {
@@ -168,7 +167,7 @@ internal class FunctionsKtTest {
     @Test
     fun `should throw exception for condition in negate expression not being boolean type`() {
         // given
-        val expression = NegateExpression(ParameterExpression("x", "/foo/Boo"))
+        val expression = NegateExpression(Line(1, 2), ParameterExpression(Line(1, 2), "x", "/foo/Boo"))
 
         // when
         val `when` = ThrowableAssert.ThrowingCallable {
@@ -187,7 +186,7 @@ internal class FunctionsKtTest {
     fun `should find return type for value expression`() {
         // given
         val valueName = "foo"
-        val expression = ValueExpression(valueName)
+        val expression = ValueExpression(Line(1, 2), valueName)
         val assigmentStatement = AssigmentStatement(valueName, integerExpression())
 
         // when
@@ -204,7 +203,7 @@ internal class FunctionsKtTest {
     @Test
     fun `should throw exception if cannot find assigment for given value`() {
         // given
-        val expression = ValueExpression("foo")
+        val expression = ValueExpression(Line(1, 2), "foo")
         val assigmentStatement = AssigmentStatement("boo", integerExpression())
 
         // when
@@ -225,11 +224,12 @@ internal class FunctionsKtTest {
         // given
         val functionName = "f"
         val expression = FunctionInvocationExpression(
+                Line(1, 2),
                 null,
                 functionName,
                 listOf())
 
-        val function = Function("pkg_name", functionName, null, listOf(), setOf(), stringExpression())
+        val function = Function(Line(1, 2), "pkg_name", functionName, null, listOf(), setOf(), stringExpression())
         val compileUnit = CompileUnitWithImports(
                 "pkg_name",
                 listOf(),
@@ -253,11 +253,13 @@ internal class FunctionsKtTest {
         // given
         val functionName = "f"
         val expression = FunctionInvocationExpression(
+                Line(1, 2),
                 null,
                 functionName,
                 listOf())
 
         val function = Function(
+                Line(1, 2),
                 "pkg_name",
                 functionName,
                 typeToString(intType),
@@ -287,6 +289,7 @@ internal class FunctionsKtTest {
         // given
         val functionName = "f"
         val expression = FunctionInvocationExpression(
+                Line(1, 2),
                 null,
                 functionName,
                 listOf(stringExpression(), integerExpression(), booleanExpression()))
@@ -294,7 +297,7 @@ internal class FunctionsKtTest {
                 Parameter("foo", typeToString(stringType)),
                 Parameter("boo", typeToString(intType)),
                 Parameter("bar", typeToString(booleanType)))
-        val function = Function("pkg_name", functionName, null, parameters, setOf(), stringExpression())
+        val function = Function(Line(1, 2), "pkg_name", functionName, null, parameters, setOf(), stringExpression())
         val compileUnit = CompileUnitWithImports(
                 "pkg_name",
                 listOf(),
@@ -318,11 +321,12 @@ internal class FunctionsKtTest {
         // given
         val functionName = "f"
         val expression = FunctionInvocationExpression(
+                Line(1, 2),
                 null,
                 functionName,
                 listOf())
 
-        val function = Function("pkg_name", functionName, null, listOf(), setOf(), stringExpression())
+        val function = Function(Line(1, 2), "pkg_name", functionName, null, listOf(), setOf(), stringExpression())
         val compileUnit = CompileUnitWithImports(
                 "pkg_name",
                 listOf(),
@@ -346,6 +350,7 @@ internal class FunctionsKtTest {
         // given
         val functionName = "f"
         val expression = FunctionInvocationExpression(
+                Line(1, 2),
                 null,
                 functionName,
                 listOf(stringExpression(), integerExpression(), booleanExpression()))
@@ -353,7 +358,7 @@ internal class FunctionsKtTest {
                 Parameter("foo", typeToString(stringType)),
                 Parameter("boo", typeToString(intType)),
                 Parameter("bar", typeToString(booleanType)))
-        val function = Function("pkg_name", functionName, null, parameters, setOf(), stringExpression())
+        val function = Function(Line(1, 2), "pkg_name", functionName, null, parameters, setOf(), stringExpression())
         val compileUnit = CompileUnitWithImports(
                 "pkg_name",
                 listOf(),
@@ -377,11 +382,12 @@ internal class FunctionsKtTest {
         // given
         val functionName = "f"
         val expression = FunctionInvocationExpression(
+                Line(1, 2),
                 null,
                 functionName,
                 listOf())
-        val localFunction = Function("pkg_name", functionName, null, listOf(), setOf(), stringExpression())
-        val importedFunction = Function("pkg_name", functionName, null, listOf(), setOf(), integerExpression())
+        val localFunction = Function(Line(1, 2), "pkg_name", functionName, null, listOf(), setOf(), stringExpression())
+        val importedFunction = Function(Line(1, 2), "pkg_name", functionName, null, listOf(), setOf(), integerExpression())
         val compileUnit = CompileUnitWithImports(
                 "pkg_name",
                 listOf(),
@@ -406,10 +412,12 @@ internal class FunctionsKtTest {
         val packageName = "function_package"
         val functionName = "f"
         val expression = FunctionInvocationExpression(
+                Line(1, 2),
                 packageName,
                 functionName,
                 listOf())
         val function = Function(
+                Line(1, 2),
                 packageName,
                 functionName,
                 null,
@@ -436,6 +444,7 @@ internal class FunctionsKtTest {
         val packageName = "function_package"
         val functionName = "f"
         val expression = FunctionInvocationExpression(
+                Line(1, 2),
                 packageName,
                 functionName,
                 listOf(stringExpression(), integerExpression(), booleanExpression()))
@@ -444,6 +453,7 @@ internal class FunctionsKtTest {
                 Parameter("boo", typeToString(intType)),
                 Parameter("bar", typeToString(booleanType)))
         val function = Function(
+                Line(1, 2),
                 packageName,
                 functionName,
                 null,
@@ -471,6 +481,7 @@ internal class FunctionsKtTest {
         val packageName = "function_package"
         val functionName = "f"
         val expression = FunctionInvocationExpression(
+                Line(1, 2),
                 packageName,
                 functionName,
                 listOf(stringExpression(), integerExpression(), booleanExpression()))
@@ -494,6 +505,7 @@ internal class FunctionsKtTest {
         val packageName = "function_package"
         val functionName = "f"
         val expression = FunctionInvocationExpression(
+                Line(1, 2),
                 packageName,
                 functionName,
                 listOf(stringExpression(), integerExpression()))
@@ -502,6 +514,7 @@ internal class FunctionsKtTest {
                 Parameter("boo", typeToString(intType)),
                 Parameter("bar", typeToString(booleanType)))
         val function = Function(
+                Line(1, 2),
                 packageName,
                 functionName,
                 null,
@@ -530,6 +543,7 @@ internal class FunctionsKtTest {
         // given
         val functionName = "f"
         val expression = FunctionInvocationExpression(
+                Line(1, 2),
                 null,
                 functionName,
                 listOf(stringExpression(), integerExpression()))
@@ -538,6 +552,7 @@ internal class FunctionsKtTest {
                 Parameter("boo", typeToString(intType)),
                 Parameter("bar", typeToString(booleanType)))
         val function = Function(
+                Line(1, 2),
                 "packageName",
                 functionName,
                 null,
@@ -570,6 +585,7 @@ internal class FunctionsKtTest {
         val packageName = "function_package"
         val functionName = "f"
         val expression = FunctionInvocationExpression(
+                Line(1, 2),
                 packageName,
                 functionName,
                 listOf(stringExpression(), integerExpression(), integerExpression()))
@@ -578,6 +594,7 @@ internal class FunctionsKtTest {
                 Parameter("boo", typeToString(intType)),
                 Parameter("bar", typeToString(booleanType)))
         val function = Function(
+                Line(1, 2),
                 packageName,
                 functionName,
                 null,
@@ -606,6 +623,7 @@ internal class FunctionsKtTest {
         // given
         val functionName = "f"
         val expression = FunctionInvocationExpression(
+                Line(1, 2),
                 null,
                 functionName,
                 listOf(stringExpression(), integerExpression(), integerExpression()))
@@ -614,6 +632,7 @@ internal class FunctionsKtTest {
                 Parameter("boo", typeToString(intType)),
                 Parameter("bar", typeToString(booleanType)))
         val function = Function(
+                Line(1, 2),
                 "/package/name",
                 functionName,
                 null,
@@ -647,14 +666,17 @@ internal class FunctionsKtTest {
         val function1Name = "f1"
         val function2Name = "f2"
         val expression1 = FunctionInvocationExpression(
+                Line(1, 2),
                 null,
                 function1Name,
                 listOf())
         val expression2 = FunctionInvocationExpression(
+                Line(1, 2),
                 null,
                 function2Name,
                 listOf())
         val function1 = Function(
+                Line(1, 2),
                 "/package/name",
                 function1Name,
                 null,
@@ -662,6 +684,7 @@ internal class FunctionsKtTest {
                 setOf(),
                 expression2)
         val function2 = Function(
+                Line(1, 2),
                 "/package/name",
                 function2Name,
                 null,
@@ -691,7 +714,7 @@ internal class FunctionsKtTest {
     @Test
     fun `should find return type from empty list`() {
         // given
-        val expression = NewListExpression()
+        val expression = NewListExpression(Line(1, 2))
 
         // when
         val returnType = findReturnType(
@@ -707,11 +730,13 @@ internal class FunctionsKtTest {
     @Test
     fun `should find return type from list of ints`() {
         // given
-        val expression = NewListExpression(listOf(
-                IntegerExpression(1),
-                IntegerExpression(2),
-                IntegerExpression(3),
-        ))
+        val expression = NewListExpression(
+                Line(1, 2),
+                listOf(
+                        IntegerExpression(Line(1, 2), 1),
+                        IntegerExpression(Line(1, 2), 2),
+                        IntegerExpression(Line(1, 2), 3),
+                ))
 
         // when
         val returnType = findReturnType(
@@ -727,11 +752,13 @@ internal class FunctionsKtTest {
     @Test
     fun `should find return type from list of somethings`() {
         // given
-        val expression = NewListExpression(listOf(
-                IntegerExpression(1),
-                StringExpression("2"),
-                BooleanExpression(true),
-        ))
+        val expression = NewListExpression(
+                Line(1, 2),
+                listOf(
+                        IntegerExpression(Line(1, 2), 1),
+                        StringExpression(Line(1, 2), "2"),
+                        BooleanExpression(Line(1, 2), true),
+                ))
 
         // when
         val returnType = findReturnType(

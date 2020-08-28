@@ -1,23 +1,23 @@
 package com.magx2.capybara
 
-sealed class Expression
-data class ParenthesisExpression(val expression: Expression) : Expression()
-data class ParameterExpression(val valueName: String, val type: String) : Expression()
-sealed class ConstantExpression : Expression()
-data class IntegerExpression(val value: Long) : ConstantExpression() {
-    constructor(value: String) : this(value.toLong())
+sealed class Expression(open val line: Line)
+data class ParenthesisExpression(override val line: Line, val expression: Expression) : Expression(line)
+data class ParameterExpression(override val line: Line, val valueName: String, val type: String) : Expression(line)
+sealed class ConstantExpression(line: Line) : Expression(line)
+data class IntegerExpression(override val line: Line, val value: Long) : ConstantExpression(line) {
+    constructor(line: Line, value: String) : this(line, value.toLong())
 }
 
-data class BooleanExpression(val value: Boolean) : ConstantExpression() {
-    constructor(value: String) : this(value.toBoolean())
+data class BooleanExpression(override val line: Line, val value: Boolean) : ConstantExpression(line) {
+    constructor(line: Line, value: String) : this(line, value.toBoolean())
 }
 
-data class StringExpression(val value: String) : ConstantExpression()
-data class FunctionInvocationExpression(val packageName: String?, val functionName: String, val parameters: List<Expression>) : Expression()
-data class InfixExpression(val operation: String, val left: Expression, val right: Expression) : Expression()
-data class IfExpression(val condition: Expression, val trueBranch: Expression, val falseBranch: Expression) : Expression()
-data class NegateExpression(val negateExpression: Expression) : Expression()
-data class NewStruct(val packageName: String?, val structName: String, val fields: List<StructField>) : Expression()
-data class StructField(val name: String, val value: Expression)
-data class ValueExpression(val valueName: String) : Expression()
-data class NewListExpression(val elements: List<Expression> = listOf()) : Expression()
+data class StringExpression(override val line: Line, val value: String) : ConstantExpression(line)
+data class FunctionInvocationExpression(override val line: Line, val packageName: String?, val functionName: String, val parameters: List<Expression>) : Expression(line)
+data class InfixExpression(override val line: Line, val operation: String, val left: Expression, val right: Expression) : Expression(line)
+data class IfExpression(override val line: Line, val condition: Expression, val trueBranch: Expression, val falseBranch: Expression) : Expression(line)
+data class NegateExpression(override val line: Line, val negateExpression: Expression) : Expression(line)
+data class NewStruct(override val line: Line, val packageName: String?, val structName: String, val fields: List<StructField>) : Expression(line)
+data class StructField(val line: Line, val name: String, val value: Expression)
+data class ValueExpression(override val line: Line, val valueName: String) : Expression(line)
+data class NewListExpression(override val line: Line, val elements: List<Expression> = listOf()) : Expression(line)

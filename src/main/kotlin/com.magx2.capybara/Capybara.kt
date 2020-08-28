@@ -1,6 +1,7 @@
 package com.magx2.capybara
 
 import com.google.gson.GsonBuilder
+import org.antlr.v4.runtime.Token
 import java.util.function.BiConsumer
 import java.util.function.BinaryOperator
 import java.util.function.Function
@@ -77,7 +78,7 @@ fun main(args: Array<String>) {
                 val imports = compileUnit.imports.stream()
                         .map { import ->
                             val export = (exports[import.importPackage]
-                                    ?: throw CompilationException("Package `${import.importPackage}` exports nothing so you can't import it."))
+                                    ?: throw CompilationException(import.line, "Package `${import.importPackage}` exports nothing so you can't import it."))
                             Pair(import, export)
                         }
                         .toList()
@@ -144,8 +145,8 @@ fun main(args: Array<String>) {
             }
             .map { pair ->
                 val returnType = pair.first.returnType
-                if (returnType != null && parseType(returnType, pair.first.packageName) != pair.second) {
-                    throw CompilationException("Declared return type of function do not corresponds what it really return. " +
+                if (returnType != null && parseType(pair.first.line, returnType, pair.first.packageName) != pair.second) {
+                    throw CompilationException(pair.first.line, "Declared return type of function do not corresponds what it really return. " +
                             "You declared `$returnType` and computed was `${typeToString(pair.second)}`.")
                 }
                 pair
@@ -154,7 +155,7 @@ fun main(args: Array<String>) {
                 val defaultPackage = pair.first.packageName
                 val parameters = pair.first.parameters
                         .stream()
-                        .map { TypedParameter(it.name, parseType(it.type, defaultPackage)) }
+                        .map { TypedParameter(it.name, parseType(pair.first.line, it.type, defaultPackage)) }
                         .toList()
                 FunctionWithReturnType(
                         pair.first.packageName,
@@ -175,11 +176,15 @@ fun main(args: Array<String>) {
 
 data class CompilationContext(val structs: Set<FlatStruct>, val functions: Set<com.magx2.capybara.Function>)
 
-class CompilationException(msg: String) : RuntimeException(msg)
+class CompilationException(line: Line, msg: String) : RuntimeException("[${line.line}:${line.charInLine}] $msg")
+
+data class Line(val line: Int, val charInLine: Int)
+
+fun parseLine(token: Token) = Line(token.line, token.charPositionInLine)
 
 fun printlnAny(header: String?, any: Any) {
     val gson = GsonBuilder().setPrettyPrinting().create()
-    val json = gson.toJson(any)
+//    val json = gson.toJson(any)
     if (header != null) {
 //        println(header)
     }

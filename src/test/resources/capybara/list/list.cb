@@ -4,5 +4,5 @@ fun empty_list(): /capybara/type/List[/capybara/type/Nothing] = []
 
 fun non_empty_list(): /capybara/type/List[/capybara/type/Int] = [1, 2, 3]
 
-fun non_empty_list_any(): /capybara/type/List[/capybara/type/Any] = [1, "2", true]
+fun non_empty_list_any(): /capybara/type/List[/capybara/type/Int] = [1, "2", true]
 

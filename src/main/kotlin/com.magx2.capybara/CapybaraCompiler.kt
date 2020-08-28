@@ -50,11 +50,11 @@ data class CompileUnitWithImports(
 
 data class Export(val packageName: String, val structs: Set<FlatStruct>, val functions: Set<Function>)
 
-data class Import(val importPackage: String, val subImport: Set<String>)
+data class Import(val line: Line, val importPackage: String, val subImport: Set<String>)
 
 sealed class Field
-data class BasicField(val name: String, val type: String) : Field()
-data class SpreadField(val spreadType: String) : Field()
+data class BasicField(val line: Line, val name: String, val type: String) : Field()
+data class SpreadField(val line: Line, val spreadType: String) : Field()
 
 
 data class Def(val packageName: String,
@@ -121,7 +121,7 @@ private class Listener : CapybaraBaseListener() {
                 .map { it.struct_name ?: it.fun_name }
                 .map { it.text }
                 .collect(toSet())
-        imports.add(Import(ctx.package_.text, subImport))
+        imports.add(Import(parseLine(ctx.start), ctx.package_.text, subImport))
     }
 
     override fun enterStruct(ctx: CapybaraParser.StructContext) {
@@ -130,9 +130,9 @@ private class Listener : CapybaraBaseListener() {
 
     override fun enterField(ctx: CapybaraParser.FieldContext) {
         val field = if (ctx.name != null) {
-            BasicField(ctx.name.text, ctx.type.text)
+            BasicField(parseLine(ctx.start), ctx.name.text, ctx.type.text)
         } else {
-            SpreadField(ctx.spread_type.text)
+            SpreadField(parseLine(ctx.start), ctx.spread_type.text)
         }
         structs.last().fields.add(field)
     }
@@ -151,6 +151,7 @@ private class Listener : CapybaraBaseListener() {
     override fun exitFun_(ctx: CapybaraParser.Fun_Context) {
         val parameters = findListOfParametersInFun(ctx.listOfParameters())
         functions.add(Function(
+                Line(ctx.name.line, ctx.name.charPositionInLine), // you want to point to method name not `fun` keyword
                 packageName,
                 ctx.name.text,
                 ctx.returnType?.text,
@@ -212,27 +213,28 @@ private class Listener : CapybaraBaseListener() {
     private fun parseExpression(ctx: CapybaraParser.ExpressionContext): Expression =
             when {
                 ctx.in_parenthisis_expression != null -> {
-                    ParenthesisExpression(parseExpression(ctx.in_parenthisis_expression))
+                    ParenthesisExpression(parseLine(ctx.start), parseExpression(ctx.in_parenthisis_expression))
                 }
                 ctx.value != null -> {
                     val valueName = ctx.value.text
                     when {
                         parameters.containsKey(valueName) -> {
                             ParameterExpression(
+                                    parseLine(ctx.start),
                                     valueName,
                                     parameters[valueName]!!
                             )
                         }
                         else -> {
-                            ValueExpression(valueName)
+                            ValueExpression(parseLine(ctx.start), valueName)
                         }
                     }
                 }
                 ctx.constant() != null -> {
                     when {
-                        ctx.constant().BOOLEAN() != null -> BooleanExpression(ctx.constant().BOOLEAN().text)
-                        ctx.constant().INTEGER() != null -> IntegerExpression(ctx.constant().INTEGER().text)
-                        ctx.constant().string != null -> StringExpression(ctx.constant().string.text)
+                        ctx.constant().BOOLEAN() != null -> BooleanExpression(parseLine(ctx.start), ctx.constant().BOOLEAN().text)
+                        ctx.constant().INTEGER() != null -> IntegerExpression(parseLine(ctx.start), ctx.constant().INTEGER().text)
+                        ctx.constant().string != null -> StringExpression(parseLine(ctx.start), ctx.constant().string.text)
                         else -> throw IllegalStateException("I don't know how to handle it!")
                     }
                 }
@@ -243,38 +245,43 @@ private class Listener : CapybaraBaseListener() {
                             .map { parseExpression(it) }
                             .toList()
                     FunctionInvocationExpression(
+                            parseLine(ctx.start),
                             ctx.function_qualified_name.package_?.text,
                             ctx.function_qualified_name.function_name.text,
                             parameters)
                 }
                 ctx.infix_operation() != null -> {
-                    InfixExpression(ctx.infix_operation().text, parseExpression(ctx.left), parseExpression(ctx.right))
+                    InfixExpression(parseLine(ctx.start), ctx.infix_operation().text, parseExpression(ctx.left), parseExpression(ctx.right))
                 }
                 ctx.condition != null -> {
                     IfExpression(
+                            parseLine(ctx.start),
                             parseExpression(ctx.condition),
                             parseExpression(ctx.true_expression),
                             parseExpression(ctx.false_expression))
                 }
                 ctx.argument_to_function != null -> {
                     FunctionInvocationExpression(
+                            parseLine(ctx.start),
                             ctx.apply_to_function_qualified_name.package_?.text,
                             ctx.apply_to_function_qualified_name.function_name.text,
                             listOf(parseExpression(ctx.argument_to_function)))
                 }
-                ctx.negate_expression != null -> NegateExpression(parseExpression(ctx.negate_expression))
+                ctx.negate_expression != null -> NegateExpression(parseLine(ctx.start), parseExpression(ctx.negate_expression))
                 ctx.struct_name != null ->
                     NewStruct(
+                            parseLine(ctx.start),
                             ctx.struct_name.type_package?.text,
                             ctx.struct_name.name.text,
                             ctx.struct_field_initializations()
                                     .struct_field_initialization()
                                     .stream()
-                                    .map { StructField(it.field_name.text, parseExpression(it.field_value)) }
+                                    .map { StructField(parseLine(ctx.start), it.field_name.text, parseExpression(it.field_value)) }
                                     .toList()
                     )
                 ctx.newListExpression() != null -> {
                     NewListExpression(
+                            parseLine(ctx.start),
                             ctx.newListExpression()
                                     .expression()
                                     .stream()
@@ -325,8 +332,9 @@ private class Listener : CapybaraBaseListener() {
                     AssigmentStatement(
                             valueName,
                             InfixExpression(
+                                    parseLine(statement.update_assigment().start),
                                     findOperation(statement.update_assigment().update_action().text),
-                                    ValueExpression(valueName),
+                                    ValueExpression(parseLine(statement.update_assigment().start), valueName),
                                     parseExpression(statement.update_assigment().expression())))
                 }
                 else -> throw IllegalStateException("I don't know how to handle it!")
