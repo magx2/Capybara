@@ -12,7 +12,7 @@ internal class TypesKtTest {
         val rawType = "/x/y/z/Foo"
 
         // when
-        val type = parseType(Line(1, 2), rawType)
+        val type = parseType(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), rawType)
 
         // then
         assertThat(type.name).isEqualTo("Foo")
@@ -27,7 +27,7 @@ internal class TypesKtTest {
         val rawType = "Foo"
 
         // when
-        val type = parseType(Line(1, 2), rawType, defaultPackage)
+        val type = parseType(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), rawType, defaultPackage)
 
         // then
         assertThat(type.name).isEqualTo("Foo")
@@ -42,7 +42,7 @@ internal class TypesKtTest {
         val rawType = "Foo"
 
         // when
-        val `when` = ThrowableAssert.ThrowingCallable { parseType(Line(1, 2), rawType, defaultPackage) }
+        val `when` = ThrowableAssert.ThrowingCallable { parseType(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), rawType, defaultPackage) }
 
         // then
         assertThatThrownBy(`when`)
@@ -55,7 +55,7 @@ internal class TypesKtTest {
         val rawType = "/x/y/z/Foo[/a/b/c/Boo]"
 
         // when
-        val type = parseType(Line(1, 2), rawType)
+        val type = parseType(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), rawType)
 
         // then
         assertThat(type.name).isEqualTo("Foo")
@@ -71,7 +71,7 @@ internal class TypesKtTest {
         val rawType = "Foo[/a/b/c/Boo]"
 
         // when
-        val type = parseType(Line(1, 2), rawType, defaultPackage)
+        val type = parseType(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), rawType, defaultPackage)
 
         // then
         assertThat(type.name).isEqualTo("Foo")
@@ -87,7 +87,7 @@ internal class TypesKtTest {
         val rawType = "Foo[/a/b/c/Boo[/q/w/e/Bar]]"
 
         // when
-        val type = parseType(Line(1, 2), rawType, defaultPackage)
+        val type = parseType(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), rawType, defaultPackage)
 
         // then
         assertThat(type.name).isEqualTo("Foo")

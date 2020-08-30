@@ -78,7 +78,7 @@ fun main(args: Array<String>) {
                 val imports = compileUnit.imports.stream()
                         .map { import ->
                             val export = (exports[import.importPackage]
-                                    ?: throw CompilationException(import.line, "Package `${import.importPackage}` exports nothing so you can't import it."))
+                                    ?: throw CompilationException(import.codeMetainfo, "Package `${import.importPackage}` exports nothing so you can't import it."))
                             Pair(import, export)
                         }
                         .toList()
@@ -145,8 +145,8 @@ fun main(args: Array<String>) {
             }
             .map { pair ->
                 val returnType = pair.first.returnType
-                if (returnType != null && parseType(pair.first.line, returnType, pair.first.packageName) != pair.second) {
-                    throw CompilationException(pair.first.line, "Declared return type of function `${pair.first.packageName}/${pair.first.name}` do not corresponds what it really return. " +
+                if (returnType != null && parseType(pair.first.codeMetainfo, returnType, pair.first.packageName) != pair.second) {
+                    throw CompilationException(pair.first.codeMetainfo, "Declared return type of function `${pair.first.packageName}/${pair.first.name}` do not corresponds what it really return. " +
                             "You declared `$returnType` and computed was `${typeToString(pair.second)}`.")
                 }
                 pair
@@ -155,7 +155,7 @@ fun main(args: Array<String>) {
                 val defaultPackage = pair.first.packageName
                 val parameters = pair.first.parameters
                         .stream()
-                        .map { TypedParameter(it.name, parseType(pair.first.line, it.type, defaultPackage)) }
+                        .map { TypedParameter(it.name, parseType(pair.first.codeMetainfo, it.type, defaultPackage)) }
                         .toList()
                 FunctionWithReturnType(
                         pair.first.packageName,
@@ -176,11 +176,11 @@ fun main(args: Array<String>) {
 
 data class CompilationContext(val structs: Set<FlatStruct>, val functions: Set<com.magx2.capybara.Function>)
 
-class CompilationException(line: Line, msg: String) : RuntimeException("[${line.line}:${line.charInLine}] $msg")
+class CompilationException(codeMetainfo: CodeMetainfo, msg: String) : RuntimeException("${codeMetainfo.fileName} [${codeMetainfo.line}:${codeMetainfo.charInLine}] $msg")
 
-data class Line(val line: Int, val charInLine: Int)
+data class CodeMetainfo(val fileName: String, val line: Int, val charInLine: Int)
 
-fun parseLine(token: Token) = Line(token.line, token.charPositionInLine)
+fun parseCodeMetainfo(fileName: String, token: Token) = CodeMetainfo(fileName, token.line, token.charPositionInLine)
 
 fun printlnAny(header: String?, any: Any) {
     val gson = GsonBuilder().setPrettyPrinting().create()

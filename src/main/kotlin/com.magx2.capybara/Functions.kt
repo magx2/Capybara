@@ -10,7 +10,7 @@ import java.util.*
 import java.util.stream.Collectors
 import kotlin.streams.toList
 
-data class Function(val line: Line,
+data class Function(val codeMetainfo: CodeMetainfo,
                     val packageName: String,
                     val name: String,
                     val returnType: String?,
@@ -33,7 +33,7 @@ fun findReturnType(
         callStack: List<FunctionInvocationExpression> = listOf()): Type =
         when (expression) {
             is ParenthesisExpression -> findReturnType(compilationContext, compileUnit, assignments, expression.expression)
-            is ParameterExpression -> parseType(expression.line, expression.type, compileUnit.packageName)
+            is ParameterExpression -> parseType(expression.codeMetainfo, expression.type, compileUnit.packageName)
             is IntegerExpression -> intType
             is BooleanExpression -> booleanType
             is StringExpression -> stringType
@@ -42,10 +42,10 @@ fun findReturnType(
                 if (function.isPresent) {
                     val f = function.get()
                     if (f.returnType != null) {
-                        parseType(expression.line, f.returnType, compileUnit.packageName)
+                        parseType(expression.codeMetainfo, f.returnType, compileUnit.packageName)
                     } else {
                         if (callStack.contains(f.returnExpression)) {
-                            throw CompilationException(expression.line, "There is recursive invocation of functions. Please specify return type explicity.")
+                            throw CompilationException(expression.codeMetainfo, "There is recursive invocation of functions. Please specify return type explicity.")
                         }
                         findReturnType(compilationContext,
                                 compileUnit,
@@ -58,7 +58,7 @@ fun findReturnType(
                             .stream()
                             .map { "${it.packageName}/${it.name}" }
                             .collect(Collectors.joining(", "))
-                    throw CompilationException(expression.line, "Cant find method with signature: " +
+                    throw CompilationException(expression.codeMetainfo, "Cant find method with signature: " +
                             "`${expression.packageName ?: compileUnit.packageName}:${expression.functionName}($parameters)`")
                 }
             }
@@ -66,14 +66,14 @@ fun findReturnType(
             is IfExpression -> {
                 val ifReturnType = findReturnType(compilationContext, compileUnit, assignments, expression.condition)
                 if (ifReturnType != booleanType) {
-                    throw CompilationException(expression.line, "Expression in `if` should return `$booleanType` not `$ifReturnType`")
+                    throw CompilationException(expression.codeMetainfo, "Expression in `if` should return `$booleanType` not `$ifReturnType`")
                 }
                 findReturnTypeFromBranchExpression(compilationContext, compileUnit, assignments, expression, expression.trueBranch, expression.falseBranch)
             }
             is NegateExpression -> {
                 val returnType = findReturnType(compilationContext, compileUnit, assignments, expression.negateExpression)
                 if (returnType != booleanType) {
-                    throw CompilationException(expression.line, "You can only negate boolean expressions. Type `$returnType` cannot be negated.")
+                    throw CompilationException(expression.codeMetainfo, "You can only negate boolean expressions. Type `$returnType` cannot be negated.")
                 }
                 returnType
             }
@@ -83,7 +83,7 @@ fun findReturnType(
                         .map { it.expression }
                         .map { findReturnType(compilationContext, compileUnit, assignments, it) }
                         .findAny()
-                        .orElseThrow { CompilationException(expression.line, "There is no value with name `${expression.valueName}`") }
+                        .orElseThrow { CompilationException(expression.codeMetainfo, "There is no value with name `${expression.valueName}`") }
             }
             is NewStruct -> {
                 val structPackageName = expression.packageName ?: compileUnit.packageName
@@ -113,7 +113,7 @@ fun findReturnType(
                         val fields = missingFields.stream()
                                 .map { it.name }
                                 .collect(Collectors.joining(", "))
-                        throw CompilationException(expression.line, "You are missing [$fields] fields when creating new " +
+                        throw CompilationException(expression.codeMetainfo, "You are missing [$fields] fields when creating new " +
                                 "`${expression.packageName ?: compileUnit.packageName}/${expression.structName}`")
                     }
                     val nameStructFields = struct.fields
@@ -126,7 +126,7 @@ fun findReturnType(
                             .toList()
                     if (additionalFields.isNotEmpty()) {
                         val notRecognizedFields = additionalFields.joinToString(", ")
-                        throw CompilationException(expression.line, "I do not recognize those fields [$notRecognizedFields] in struct " +
+                        throw CompilationException(expression.codeMetainfo, "I do not recognize those fields [$notRecognizedFields] in struct " +
                                 "`${expression.packageName ?: compileUnit.packageName}/${expression.structName}`")
                     }
                     val declaredTypes = expression.fields
@@ -147,11 +147,11 @@ fun findReturnType(
                             }
                             .collect(Collectors.joining(", "))
                     if (wrongTypes.isNotBlank()) {
-                        throw CompilationException(expression.line, "Cannot create struct. Given arguments has bad types: [$wrongTypes]")
+                        throw CompilationException(expression.codeMetainfo, "Cannot create struct. Given arguments has bad types: [$wrongTypes]")
                     }
                     Type(struct.packageName, struct.name)
                 } else {
-                    throw CompilationException(expression.line, "Cannot find struct `${expression.packageName ?: compileUnit.packageName}/${expression.structName}`")
+                    throw CompilationException(expression.codeMetainfo, "Cannot find struct `${expression.packageName ?: compileUnit.packageName}/${expression.structName}`")
                 }
             }
             is NewListExpression -> {
@@ -165,14 +165,14 @@ fun findReturnType(
             is StructureAccessExpression -> {
                 @Suppress("ThrowableNotThrown")
                 val elementType = if (expression.structureType != null) {
-                    parseType(expression.line, expression.structureType)
+                    parseType(expression.codeMetainfo, expression.structureType)
                 } else {
                     assignments.stream()
                             .filter { it.name == expression.structureName }
                             .map { it.expression }
                             .map { findReturnType(compilationContext, compileUnit, assignments, it) }
                             .findAny()
-                            .orElseThrow { CompilationException(expression.line, "Cannot find value with name `${expression.structureName}`") }
+                            .orElseThrow { CompilationException(expression.codeMetainfo, "Cannot find value with name `${expression.structureName}`") }
                 }
 
                 when (elementType.name) {
@@ -180,14 +180,14 @@ fun findReturnType(
                         val indexCallType = findReturnType(compilationContext, compileUnit, assignments, expression.structureIndex)
                         if (indexCallType != intType) {
                             throw CompilationException(
-                                    expression.structureIndexLine,
+                                    expression.structureIndexCodeMetainfo,
                                     "List are indexed by `${typeToString(intType)}` not `${typeToString(indexCallType)}`")
                         }
                     }
                 }
 
                 elementType.genericType
-                        ?: throw CompilationException(expression.line, "Type `${typeToString(elementType)}` is not generic.")
+                        ?: throw CompilationException(expression.codeMetainfo, "Type `${typeToString(elementType)}` is not generic.")
             }
         }
 
@@ -213,7 +213,7 @@ private fun findFunctionForGivenFunctionInvocation(
                 var i = 0
                 var equals = true
                 while (i < parameters.size && equals) {
-                    equals = parseType(f.line, f.parameters[i].type, compileUnit.packageName) == parameters[i]
+                    equals = parseType(f.codeMetainfo, f.parameters[i].type, compileUnit.packageName) == parameters[i]
                     i++
                 }
                 equals
@@ -229,7 +229,7 @@ private fun findFunctionForGivenFunctionInvocation(
                             var i = 0
                             var equals = true
                             while (i < parameters.size && equals) {
-                                equals = parseType(f.line, f.parameters[i].type, compileUnit.packageName) == parameters[i]
+                                equals = parseType(f.codeMetainfo, f.parameters[i].type, compileUnit.packageName) == parameters[i]
                                 i++
                             }
                             equals
@@ -265,11 +265,11 @@ private fun findReturnTypeFromBranchExpression(
             if (notStringType.first == intType || notStringType.first == booleanType) {
                 stringType
             } else {
-                throw CompilationException(notStringType.second.line,
+                throw CompilationException(notStringType.second.codeMetainfo,
                         "Cannot convert type `${notStringType.first}` to `$stringType` automatically.")
             }
         } else {
-            throw CompilationException(expression.line, "You need to return same types from infix expression. " +
+            throw CompilationException(expression.codeMetainfo, "You need to return same types from infix expression. " +
                     "Left expression returns `$leftType`, " +
                     "right expression returns `$rightType`")
         }
@@ -293,11 +293,11 @@ private fun findReturnTypeFromBranchExpressionWithoutTypeCasting(
             if (notStringType.first == intType || notStringType.first == booleanType) {
                 stringType
             } else {
-                throw CompilationException(notStringType.second.line,
+                throw CompilationException(notStringType.second.codeMetainfo,
                         "Cannot convert type `${notStringType.first}` to `$stringType` automatically.")
             }
         } else {
-            throw CompilationException(expression.line, "You need to return same types from infix expression. " +
+            throw CompilationException(expression.codeMetainfo, "You need to return same types from infix expression. " +
                     "Left expression returns `$leftType`, " +
                     "right expression returns `$rightType`")
         }
@@ -314,20 +314,20 @@ private fun findReturnType(
     when (expression.operation) {
         "^", "*", "-" ->
             if (isOneOfGivenType(stringType, leftType, rightType)) {
-                throw CompilationException(expression.line,
+                throw CompilationException(expression.codeMetainfo,
                         "String type cannot be applied to `${expression.operation}` infix expression")
             } else if (isOneOfGivenType(booleanType, leftType, rightType)) {
-                throw CompilationException(expression.line,
+                throw CompilationException(expression.codeMetainfo,
                         "Boolean type cannot be applied to `${expression.operation}` infix expression")
             }
         "&&", "||" ->
             if (isOneOfGivenType(stringType, leftType, rightType)) {
-                throw CompilationException(expression.line,
+                throw CompilationException(expression.codeMetainfo,
                         "String type cannot be applied to `${expression.operation}` infix expression")
             }
         "+", ">", "<", ">=", "<=" ->
             if (isOneOfGivenType(booleanType, leftType, rightType)) {
-                throw CompilationException(expression.line,
+                throw CompilationException(expression.codeMetainfo,
                         "Boolean type cannot be applied to `${expression.operation}` infix expression")
             }
     }
@@ -337,7 +337,7 @@ private fun findReturnType(
         // FIXME and you cannot add booleans...
         "+" -> findReturnTypeFromBranchExpression(compilationContext, compileUnit, assignments, expression, expression.left, expression.right)
         "^", "*", "-" -> findReturnTypeFromBranchExpressionWithoutTypeCasting(compilationContext, compileUnit, assignments, expression, expression.left, expression.right)
-        else -> throw CompilationException(expression.line,
+        else -> throw CompilationException(expression.codeMetainfo,
                 "Do not know this `${expression.operation}` infix expression!")
     }
 }

@@ -20,11 +20,11 @@ fun typeToString(type: Type): String =
 
 private val rawTypeRegex = Pattern.compile("(.+?)\\[(.+)]")
 
-fun parseType(line: Line, type: String, defaultPackage: String? = null): Type {
+fun parseType(codeMetainfo: CodeMetainfo, type: String, defaultPackage: String? = null): Type {
     val matcher = rawTypeRegex.matcher(type)
     return if (matcher.find()) {
-        val genericType = parseType(line, matcher.group(2), defaultPackage)
-        addGenericType(parseType(line, matcher.group(1), defaultPackage), genericType)
+        val genericType = parseType(codeMetainfo, matcher.group(2), defaultPackage)
+        addGenericType(parseType(codeMetainfo, matcher.group(1), defaultPackage), genericType)
     } else {
         if (type.contains("/")) {
             Type(type.substringBeforeLast("/"), type.substringAfterLast("/"))
@@ -32,7 +32,7 @@ fun parseType(line: Line, type: String, defaultPackage: String? = null): Type {
             if (defaultPackage != null) {
                 Type(defaultPackage, type)
             } else {
-                throw CompilationException(line, "You need to pass default package for type `$type`")
+                throw CompilationException(codeMetainfo, "You need to pass default package for type `$type`")
             }
         }
     }

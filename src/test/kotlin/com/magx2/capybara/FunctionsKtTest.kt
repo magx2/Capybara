@@ -21,45 +21,45 @@ import java.util.stream.Stream
 internal class FunctionsKtTest {
 
     companion object {
-        private fun integerExpression() = IntegerExpression(Line(1, 2), Random().nextLong())
-        private fun booleanExpression() = BooleanExpression(Line(1, 2), Random().nextBoolean())
-        private fun stringExpression() = StringExpression(Line(1, 2), (Random().nextDouble() * Random().nextInt()).toString())
+        private fun integerExpression() = IntegerExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), Random().nextLong())
+        private fun booleanExpression() = BooleanExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), Random().nextBoolean())
+        private fun stringExpression() = StringExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), (Random().nextDouble() * Random().nextInt()).toString())
 
         @JvmStatic
         @Suppress("unused") // it is used in parametrized test
         fun expressionReturnType(): Stream<Arguments> =
                 Stream.of(
                         // parenthesis expression
-                        Arguments.of(ParenthesisExpression(Line(1, 2), integerExpression()), intType),
-                        Arguments.of(ParenthesisExpression(Line(1, 2), booleanExpression()), booleanType),
-                        Arguments.of(ParenthesisExpression(Line(1, 2), stringExpression()), stringType),
+                        Arguments.of(ParenthesisExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), integerExpression()), intType),
+                        Arguments.of(ParenthesisExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), booleanExpression()), booleanType),
+                        Arguments.of(ParenthesisExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), stringExpression()), stringType),
                         // basic expressions
                         Arguments.of(integerExpression(), intType),
                         Arguments.of(booleanExpression(), booleanType),
                         Arguments.of(stringExpression(), stringType),
                         // infix expressions - boolean
-                        Arguments.of(InfixExpression(Line(1, 2), "!=", booleanExpression(), booleanExpression()), booleanType),
-                        Arguments.of(InfixExpression(Line(1, 2), "==", booleanExpression(), booleanExpression()), booleanType),
-                        Arguments.of(InfixExpression(Line(1, 2), "&&", booleanExpression(), booleanExpression()), booleanType),
-                        Arguments.of(InfixExpression(Line(1, 2), "||", booleanExpression(), booleanExpression()), booleanType),
+                        Arguments.of(InfixExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "!=", booleanExpression(), booleanExpression()), booleanType),
+                        Arguments.of(InfixExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "==", booleanExpression(), booleanExpression()), booleanType),
+                        Arguments.of(InfixExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "&&", booleanExpression(), booleanExpression()), booleanType),
+                        Arguments.of(InfixExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "||", booleanExpression(), booleanExpression()), booleanType),
                         // infix expressions - int
-                        Arguments.of(InfixExpression(Line(1, 2), "^", integerExpression(), integerExpression()), intType),
-                        Arguments.of(InfixExpression(Line(1, 2), "*", integerExpression(), integerExpression()), intType),
-                        Arguments.of(InfixExpression(Line(1, 2), "+", integerExpression(), integerExpression()), intType),
-                        Arguments.of(InfixExpression(Line(1, 2), "-", integerExpression(), integerExpression()), intType),
+                        Arguments.of(InfixExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "^", integerExpression(), integerExpression()), intType),
+                        Arguments.of(InfixExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "*", integerExpression(), integerExpression()), intType),
+                        Arguments.of(InfixExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "+", integerExpression(), integerExpression()), intType),
+                        Arguments.of(InfixExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "-", integerExpression(), integerExpression()), intType),
                         // infix expressions - int
-                        Arguments.of(InfixExpression(Line(1, 2), "+", stringExpression(), stringExpression()), stringType),
+                        Arguments.of(InfixExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "+", stringExpression(), stringExpression()), stringType),
                         // if expression
-                        Arguments.of(IfExpression(Line(1, 2), booleanExpression(), integerExpression(), integerExpression()), intType),
-                        Arguments.of(IfExpression(Line(1, 2), booleanExpression(), stringExpression(), stringExpression()), stringType),
-                        Arguments.of(IfExpression(Line(1, 2), booleanExpression(), booleanExpression(), booleanExpression()), booleanType),
+                        Arguments.of(IfExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), booleanExpression(), integerExpression(), integerExpression()), intType),
+                        Arguments.of(IfExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), booleanExpression(), stringExpression(), stringExpression()), stringType),
+                        Arguments.of(IfExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), booleanExpression(), booleanExpression(), booleanExpression()), booleanType),
                         // if expression with smart casting to string
-                        Arguments.of(IfExpression(Line(1, 2), booleanExpression(), stringExpression(), integerExpression()), stringType),
-                        Arguments.of(IfExpression(Line(1, 2), booleanExpression(), integerExpression(), stringExpression()), stringType),
-                        Arguments.of(IfExpression(Line(1, 2), booleanExpression(), stringExpression(), booleanExpression()), stringType),
-                        Arguments.of(IfExpression(Line(1, 2), booleanExpression(), booleanExpression(), stringExpression()), stringType),
+                        Arguments.of(IfExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), booleanExpression(), stringExpression(), integerExpression()), stringType),
+                        Arguments.of(IfExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), booleanExpression(), integerExpression(), stringExpression()), stringType),
+                        Arguments.of(IfExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), booleanExpression(), stringExpression(), booleanExpression()), stringType),
+                        Arguments.of(IfExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), booleanExpression(), booleanExpression(), stringExpression()), stringType),
                         // negate expression
-                        Arguments.of(NegateExpression(Line(1, 2), booleanExpression()), booleanType),
+                        Arguments.of(NegateExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), booleanExpression()), booleanType),
                 )
 
         @Suppress("unused")
@@ -93,7 +93,7 @@ internal class FunctionsKtTest {
     fun `should throw exception for unknown infix operator`() {
         // given
         val unknownInfixOperator = "foo"
-        val expression = InfixExpression(Line(1, 2), unknownInfixOperator, booleanExpression(), booleanExpression())
+        val expression = InfixExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), unknownInfixOperator, booleanExpression(), booleanExpression())
 
         // when
         val `when` = ThrowableAssert.ThrowingCallable {
@@ -112,7 +112,7 @@ internal class FunctionsKtTest {
     @MethodSource(value = ["stringInfixOperator"])
     fun `should throw exception for infix operator that cannot be applied to string type`(infixOperator: String) {
         // given
-        val expression = InfixExpression(Line(1, 2), infixOperator, stringExpression(), stringExpression())
+        val expression = InfixExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), infixOperator, stringExpression(), stringExpression())
 
         // when
         val `when` = ThrowableAssert.ThrowingCallable {
@@ -131,7 +131,7 @@ internal class FunctionsKtTest {
     @MethodSource(value = ["booleanInfixOperator"])
     fun `should throw exception for infix operator that cannot be applied to boolean type`(infixOperator: String) {
         // given
-        val expression = InfixExpression(Line(1, 2), infixOperator, booleanExpression(), booleanExpression())
+        val expression = InfixExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), infixOperator, booleanExpression(), booleanExpression())
 
         // when
         val `when` = ThrowableAssert.ThrowingCallable {
@@ -149,7 +149,7 @@ internal class FunctionsKtTest {
     @Test
     fun `should throw exception for condition in if expression not being boolean type`() {
         // given
-        val expression = IfExpression(Line(1, 2), ParameterExpression(Line(1, 2), "x", "/foo/Boo"), stringExpression(), stringExpression())
+        val expression = IfExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), ParameterExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "x", "/foo/Boo"), stringExpression(), stringExpression())
 
         // when
         val `when` = ThrowableAssert.ThrowingCallable {
@@ -167,7 +167,7 @@ internal class FunctionsKtTest {
     @Test
     fun `should throw exception for condition in negate expression not being boolean type`() {
         // given
-        val expression = NegateExpression(Line(1, 2), ParameterExpression(Line(1, 2), "x", "/foo/Boo"))
+        val expression = NegateExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), ParameterExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "x", "/foo/Boo"))
 
         // when
         val `when` = ThrowableAssert.ThrowingCallable {
@@ -186,7 +186,7 @@ internal class FunctionsKtTest {
     fun `should find return type for value expression`() {
         // given
         val valueName = "foo"
-        val expression = ValueExpression(Line(1, 2), valueName)
+        val expression = ValueExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), valueName)
         val assigmentStatement = AssigmentStatement(valueName, integerExpression())
 
         // when
@@ -203,7 +203,7 @@ internal class FunctionsKtTest {
     @Test
     fun `should throw exception if cannot find assigment for given value`() {
         // given
-        val expression = ValueExpression(Line(1, 2), "foo")
+        val expression = ValueExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "foo")
         val assigmentStatement = AssigmentStatement("boo", integerExpression())
 
         // when
@@ -224,12 +224,12 @@ internal class FunctionsKtTest {
         // given
         val functionName = "f"
         val expression = FunctionInvocationExpression(
-                Line(1, 2),
+                CodeMetainfo("/home/capybara/xyz.cb", 1, 2),
                 null,
                 functionName,
                 listOf())
 
-        val function = Function(Line(1, 2), "pkg_name", functionName, null, listOf(), setOf(), stringExpression())
+        val function = Function(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "pkg_name", functionName, null, listOf(), setOf(), stringExpression())
         val compileUnit = CompileUnitWithImports(
                 "pkg_name",
                 listOf(),
@@ -253,13 +253,13 @@ internal class FunctionsKtTest {
         // given
         val functionName = "f"
         val expression = FunctionInvocationExpression(
-                Line(1, 2),
+                CodeMetainfo("/home/capybara/xyz.cb", 1, 2),
                 null,
                 functionName,
                 listOf())
 
         val function = Function(
-                Line(1, 2),
+                CodeMetainfo("/home/capybara/xyz.cb", 1, 2),
                 "pkg_name",
                 functionName,
                 typeToString(intType),
@@ -289,7 +289,7 @@ internal class FunctionsKtTest {
         // given
         val functionName = "f"
         val expression = FunctionInvocationExpression(
-                Line(1, 2),
+                CodeMetainfo("/home/capybara/xyz.cb", 1, 2),
                 null,
                 functionName,
                 listOf(stringExpression(), integerExpression(), booleanExpression()))
@@ -297,7 +297,7 @@ internal class FunctionsKtTest {
                 Parameter("foo", typeToString(stringType)),
                 Parameter("boo", typeToString(intType)),
                 Parameter("bar", typeToString(booleanType)))
-        val function = Function(Line(1, 2), "pkg_name", functionName, null, parameters, setOf(), stringExpression())
+        val function = Function(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "pkg_name", functionName, null, parameters, setOf(), stringExpression())
         val compileUnit = CompileUnitWithImports(
                 "pkg_name",
                 listOf(),
@@ -321,12 +321,12 @@ internal class FunctionsKtTest {
         // given
         val functionName = "f"
         val expression = FunctionInvocationExpression(
-                Line(1, 2),
+                CodeMetainfo("/home/capybara/xyz.cb", 1, 2),
                 null,
                 functionName,
                 listOf())
 
-        val function = Function(Line(1, 2), "pkg_name", functionName, null, listOf(), setOf(), stringExpression())
+        val function = Function(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "pkg_name", functionName, null, listOf(), setOf(), stringExpression())
         val compileUnit = CompileUnitWithImports(
                 "pkg_name",
                 listOf(),
@@ -350,7 +350,7 @@ internal class FunctionsKtTest {
         // given
         val functionName = "f"
         val expression = FunctionInvocationExpression(
-                Line(1, 2),
+                CodeMetainfo("/home/capybara/xyz.cb", 1, 2),
                 null,
                 functionName,
                 listOf(stringExpression(), integerExpression(), booleanExpression()))
@@ -358,7 +358,7 @@ internal class FunctionsKtTest {
                 Parameter("foo", typeToString(stringType)),
                 Parameter("boo", typeToString(intType)),
                 Parameter("bar", typeToString(booleanType)))
-        val function = Function(Line(1, 2), "pkg_name", functionName, null, parameters, setOf(), stringExpression())
+        val function = Function(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "pkg_name", functionName, null, parameters, setOf(), stringExpression())
         val compileUnit = CompileUnitWithImports(
                 "pkg_name",
                 listOf(),
@@ -382,12 +382,12 @@ internal class FunctionsKtTest {
         // given
         val functionName = "f"
         val expression = FunctionInvocationExpression(
-                Line(1, 2),
+                CodeMetainfo("/home/capybara/xyz.cb", 1, 2),
                 null,
                 functionName,
                 listOf())
-        val localFunction = Function(Line(1, 2), "pkg_name", functionName, null, listOf(), setOf(), stringExpression())
-        val importedFunction = Function(Line(1, 2), "pkg_name", functionName, null, listOf(), setOf(), integerExpression())
+        val localFunction = Function(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "pkg_name", functionName, null, listOf(), setOf(), stringExpression())
+        val importedFunction = Function(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "pkg_name", functionName, null, listOf(), setOf(), integerExpression())
         val compileUnit = CompileUnitWithImports(
                 "pkg_name",
                 listOf(),
@@ -412,12 +412,12 @@ internal class FunctionsKtTest {
         val packageName = "function_package"
         val functionName = "f"
         val expression = FunctionInvocationExpression(
-                Line(1, 2),
+                CodeMetainfo("/home/capybara/xyz.cb", 1, 2),
                 packageName,
                 functionName,
                 listOf())
         val function = Function(
-                Line(1, 2),
+                CodeMetainfo("/home/capybara/xyz.cb", 1, 2),
                 packageName,
                 functionName,
                 null,
@@ -444,7 +444,7 @@ internal class FunctionsKtTest {
         val packageName = "function_package"
         val functionName = "f"
         val expression = FunctionInvocationExpression(
-                Line(1, 2),
+                CodeMetainfo("/home/capybara/xyz.cb", 1, 2),
                 packageName,
                 functionName,
                 listOf(stringExpression(), integerExpression(), booleanExpression()))
@@ -453,7 +453,7 @@ internal class FunctionsKtTest {
                 Parameter("boo", typeToString(intType)),
                 Parameter("bar", typeToString(booleanType)))
         val function = Function(
-                Line(1, 2),
+                CodeMetainfo("/home/capybara/xyz.cb", 1, 2),
                 packageName,
                 functionName,
                 null,
@@ -481,7 +481,7 @@ internal class FunctionsKtTest {
         val packageName = "function_package"
         val functionName = "f"
         val expression = FunctionInvocationExpression(
-                Line(1, 2),
+                CodeMetainfo("/home/capybara/xyz.cb", 1, 2),
                 packageName,
                 functionName,
                 listOf(stringExpression(), integerExpression(), booleanExpression()))
@@ -505,7 +505,7 @@ internal class FunctionsKtTest {
         val packageName = "function_package"
         val functionName = "f"
         val expression = FunctionInvocationExpression(
-                Line(1, 2),
+                CodeMetainfo("/home/capybara/xyz.cb", 1, 2),
                 packageName,
                 functionName,
                 listOf(stringExpression(), integerExpression()))
@@ -514,7 +514,7 @@ internal class FunctionsKtTest {
                 Parameter("boo", typeToString(intType)),
                 Parameter("bar", typeToString(booleanType)))
         val function = Function(
-                Line(1, 2),
+                CodeMetainfo("/home/capybara/xyz.cb", 1, 2),
                 packageName,
                 functionName,
                 null,
@@ -543,7 +543,7 @@ internal class FunctionsKtTest {
         // given
         val functionName = "f"
         val expression = FunctionInvocationExpression(
-                Line(1, 2),
+                CodeMetainfo("/home/capybara/xyz.cb", 1, 2),
                 null,
                 functionName,
                 listOf(stringExpression(), integerExpression()))
@@ -552,7 +552,7 @@ internal class FunctionsKtTest {
                 Parameter("boo", typeToString(intType)),
                 Parameter("bar", typeToString(booleanType)))
         val function = Function(
-                Line(1, 2),
+                CodeMetainfo("/home/capybara/xyz.cb", 1, 2),
                 "packageName",
                 functionName,
                 null,
@@ -585,7 +585,7 @@ internal class FunctionsKtTest {
         val packageName = "function_package"
         val functionName = "f"
         val expression = FunctionInvocationExpression(
-                Line(1, 2),
+                CodeMetainfo("/home/capybara/xyz.cb", 1, 2),
                 packageName,
                 functionName,
                 listOf(stringExpression(), integerExpression(), integerExpression()))
@@ -594,7 +594,7 @@ internal class FunctionsKtTest {
                 Parameter("boo", typeToString(intType)),
                 Parameter("bar", typeToString(booleanType)))
         val function = Function(
-                Line(1, 2),
+                CodeMetainfo("/home/capybara/xyz.cb", 1, 2),
                 packageName,
                 functionName,
                 null,
@@ -623,7 +623,7 @@ internal class FunctionsKtTest {
         // given
         val functionName = "f"
         val expression = FunctionInvocationExpression(
-                Line(1, 2),
+                CodeMetainfo("/home/capybara/xyz.cb", 1, 2),
                 null,
                 functionName,
                 listOf(stringExpression(), integerExpression(), integerExpression()))
@@ -632,7 +632,7 @@ internal class FunctionsKtTest {
                 Parameter("boo", typeToString(intType)),
                 Parameter("bar", typeToString(booleanType)))
         val function = Function(
-                Line(1, 2),
+                CodeMetainfo("/home/capybara/xyz.cb", 1, 2),
                 "/package/name",
                 functionName,
                 null,
@@ -666,17 +666,17 @@ internal class FunctionsKtTest {
         val function1Name = "f1"
         val function2Name = "f2"
         val expression1 = FunctionInvocationExpression(
-                Line(1, 2),
+                CodeMetainfo("/home/capybara/xyz.cb", 1, 2),
                 null,
                 function1Name,
                 listOf())
         val expression2 = FunctionInvocationExpression(
-                Line(1, 2),
+                CodeMetainfo("/home/capybara/xyz.cb", 1, 2),
                 null,
                 function2Name,
                 listOf())
         val function1 = Function(
-                Line(1, 2),
+                CodeMetainfo("/home/capybara/xyz.cb", 1, 2),
                 "/package/name",
                 function1Name,
                 null,
@@ -684,7 +684,7 @@ internal class FunctionsKtTest {
                 setOf(),
                 expression2)
         val function2 = Function(
-                Line(1, 2),
+                CodeMetainfo("/home/capybara/xyz.cb", 1, 2),
                 "/package/name",
                 function2Name,
                 null,
@@ -714,7 +714,7 @@ internal class FunctionsKtTest {
     @Test
     fun `should find return type from empty list`() {
         // given
-        val expression = NewListExpression(Line(1, 2))
+        val expression = NewListExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2))
 
         // when
         val returnType = findReturnType(
@@ -731,11 +731,11 @@ internal class FunctionsKtTest {
     fun `should find return type from list of ints`() {
         // given
         val expression = NewListExpression(
-                Line(1, 2),
+                CodeMetainfo("/home/capybara/xyz.cb", 1, 2),
                 listOf(
-                        IntegerExpression(Line(1, 2), 1),
-                        IntegerExpression(Line(1, 2), 2),
-                        IntegerExpression(Line(1, 2), 3),
+                        IntegerExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), 1),
+                        IntegerExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), 2),
+                        IntegerExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), 3),
                 ))
 
         // when
@@ -753,11 +753,11 @@ internal class FunctionsKtTest {
     fun `should find return type from list of somethings`() {
         // given
         val expression = NewListExpression(
-                Line(1, 2),
+                CodeMetainfo("/home/capybara/xyz.cb", 1, 2),
                 listOf(
-                        IntegerExpression(Line(1, 2), 1),
-                        StringExpression(Line(1, 2), "2"),
-                        BooleanExpression(Line(1, 2), true),
+                        IntegerExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), 1),
+                        StringExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "2"),
+                        BooleanExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), true),
                 ))
 
         // when
@@ -775,10 +775,10 @@ internal class FunctionsKtTest {
     fun `should find return type from list access with structure type`() {
         // given
         val expression = StructureAccessExpression(
-                Line(1, 1),
+                CodeMetainfo("/home/capybara/xyz.cb", 1, 1),
                 "foo",
                 integerExpression(),
-                Line(2, 3),
+                CodeMetainfo("/home/capybara/xyz.cb", 2, 3),
                 typeToString(addGenericType(listType, stringType)))
 
         // when
@@ -796,21 +796,21 @@ internal class FunctionsKtTest {
     fun `should find return type from list access without structure type`() {
         // given
         val expression = StructureAccessExpression(
-                Line(1, 1),
+                CodeMetainfo("/home/capybara/xyz.cb", 1, 1),
                 "foo",
                 integerExpression(),
-                Line(2, 3),
+                CodeMetainfo("/home/capybara/xyz.cb", 2, 3),
                 typeToString(addGenericType(listType, stringType)))
 
         val assignments = setOf(
                 AssigmentStatement(
                         "foo",
                         NewListExpression(
-                                Line(1, 2),
+                                CodeMetainfo("/home/capybara/xyz.cb", 1, 2),
                                 listOf(
-                                        StringExpression(Line(1, 2), "a"),
-                                        StringExpression(Line(1, 2), "b"),
-                                        StringExpression(Line(1, 2), "c"),
+                                        StringExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "a"),
+                                        StringExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "b"),
+                                        StringExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "c"),
                                 ))
                 )
         )
@@ -830,21 +830,21 @@ internal class FunctionsKtTest {
     fun `should throw exception if there is no assigment with given name`() {
         // given
         val expression = StructureAccessExpression(
-                Line(11, 22),
+                CodeMetainfo("/home/capybara/xyz.cb", 11, 22),
                 "foo",
                 integerExpression(),
-                Line(2, 3),
+                CodeMetainfo("/home/capybara/xyz.cb", 2, 3),
                 null)
 
         val assignments = setOf(
                 AssigmentStatement(
                         "foo2",
                         NewListExpression(
-                                Line(1, 2),
+                                CodeMetainfo("/home/capybara/xyz.cb", 1, 2),
                                 listOf(
-                                        StringExpression(Line(1, 2), "a"),
-                                        StringExpression(Line(1, 2), "b"),
-                                        StringExpression(Line(1, 2), "c"),
+                                        StringExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "a"),
+                                        StringExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "b"),
+                                        StringExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "c"),
                                 ))
                 )
         )
@@ -861,17 +861,17 @@ internal class FunctionsKtTest {
         // then
         assertThatThrownBy(`when`)
                 .isInstanceOf(CompilationException::class.java)
-                .hasMessage("[11:22] Cannot find value with name `foo`")
+                .hasMessage("/home/capybara/xyz.cb [11:22] Cannot find value with name `foo`")
     }
 
     @Test
     fun `should throw exception if list is not indexed by int`() {
         // given
         val expression = StructureAccessExpression(
-                Line(11, 22),
+                CodeMetainfo("/home/capybara/xyz.cb", 11, 22),
                 "foo",
                 stringExpression(),
-                Line(2, 3),
+                CodeMetainfo("/home/capybara/xyz.cb", 2, 3),
                 typeToString(addGenericType(listType, stringType)))
 
         // when
@@ -886,6 +886,6 @@ internal class FunctionsKtTest {
         // then
         assertThatThrownBy(`when`)
                 .isInstanceOf(CompilationException::class.java)
-                .hasMessageStartingWith("[2:3] List are indexed by")
+                .hasMessageStartingWith("/home/capybara/xyz.cb [2:3] List are indexed by")
     }
 }
