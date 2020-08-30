@@ -72,8 +72,9 @@ internal class FunctionsKtTest {
     }
 
     val compilationContext = CompilationContext(setOf(), setOf())
-    val compileUnit = CompileUnitWithImports("", listOf(), listOf(), setOf(), setOf())
+    val compileUnit = CompileUnitWithFlatStructs("", setOf(), setOf(), listOf(), listOf())
     val assignments = setOf<AssigmentStatement>()
+    val fullyQualifiedStructNames = mapOf<String, Struct>()
 
     @ParameterizedTest
     @MethodSource(value = ["expressionReturnType"])
@@ -83,7 +84,8 @@ internal class FunctionsKtTest {
                 compilationContext,
                 compileUnit,
                 assignments,
-                expression)
+                expression,
+                fullyQualifiedStructNames)
 
         // then
         assertThat(returnType).isEqualTo(expectedReturnType)
@@ -101,7 +103,8 @@ internal class FunctionsKtTest {
                     compilationContext,
                     compileUnit,
                     assignments,
-                    expression)
+                    expression,
+                    fullyQualifiedStructNames)
         }
 
         // then
@@ -120,7 +123,8 @@ internal class FunctionsKtTest {
                     compilationContext,
                     compileUnit,
                     assignments,
-                    expression)
+                    expression,
+                    fullyQualifiedStructNames)
         }
 
         // then
@@ -139,7 +143,8 @@ internal class FunctionsKtTest {
                     compilationContext,
                     compileUnit,
                     assignments,
-                    expression)
+                    expression,
+                    fullyQualifiedStructNames)
         }
 
         // then
@@ -157,7 +162,8 @@ internal class FunctionsKtTest {
                     compilationContext,
                     compileUnit,
                     assignments,
-                    expression)
+                    expression,
+                    fullyQualifiedStructNames)
         }
 
         // then
@@ -175,7 +181,8 @@ internal class FunctionsKtTest {
                     compilationContext,
                     compileUnit,
                     assignments,
-                    expression)
+                    expression,
+                    fullyQualifiedStructNames)
         }
 
         // then
@@ -194,7 +201,8 @@ internal class FunctionsKtTest {
                 compilationContext,
                 compileUnit,
                 setOf(assigmentStatement),
-                expression)
+                expression,
+                fullyQualifiedStructNames)
 
         // then
         assertThat(returnType).isEqualTo(intType)
@@ -212,7 +220,8 @@ internal class FunctionsKtTest {
                     compilationContext,
                     compileUnit,
                     setOf(assigmentStatement),
-                    expression)
+                    expression,
+                    fullyQualifiedStructNames)
         }
 
         // then
@@ -230,19 +239,20 @@ internal class FunctionsKtTest {
                 listOf())
 
         val function = Function(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "pkg_name", functionName, null, listOf(), setOf(), stringExpression())
-        val compileUnit = CompileUnitWithImports(
+        val compileUnit = CompileUnitWithFlatStructs(
                 "pkg_name",
-                listOf(),
-                listOf(function),
                 setOf(),
-                setOf())
+                setOf(function),
+                listOf(),
+                listOf())
 
         // when
         val returnType = findReturnType(
                 compilationContext,
                 compileUnit,
                 assignments,
-                expression)
+                expression,
+                fullyQualifiedStructNames)
 
         // then
         assertThat(returnType).isEqualTo(stringType)
@@ -266,19 +276,20 @@ internal class FunctionsKtTest {
                 listOf(),
                 setOf(),
                 stringExpression())
-        val compileUnit = CompileUnitWithImports(
+        val compileUnit = CompileUnitWithFlatStructs(
                 "pkg_name",
-                listOf(),
-                listOf(function),
                 setOf(),
-                setOf())
+                setOf(function),
+                listOf(),
+                listOf())
 
         // when
         val returnType = findReturnType(
                 compilationContext,
                 compileUnit,
                 assignments,
-                expression)
+                expression,
+                fullyQualifiedStructNames)
 
         // then
         assertThat(returnType).isEqualTo(intType)
@@ -298,19 +309,20 @@ internal class FunctionsKtTest {
                 Parameter("boo", typeToString(intType)),
                 Parameter("bar", typeToString(booleanType)))
         val function = Function(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "pkg_name", functionName, null, parameters, setOf(), stringExpression())
-        val compileUnit = CompileUnitWithImports(
+        val compileUnit = CompileUnitWithFlatStructs(
                 "pkg_name",
-                listOf(),
-                listOf(function),
                 setOf(),
-                setOf())
+                setOf(function),
+                listOf(),
+                listOf())
 
         // when
         val returnType = findReturnType(
                 compilationContext,
                 compileUnit,
                 assignments,
-                expression)
+                expression,
+                fullyQualifiedStructNames)
 
         // then
         assertThat(returnType).isEqualTo(stringType)
@@ -327,19 +339,20 @@ internal class FunctionsKtTest {
                 listOf())
 
         val function = Function(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "pkg_name", functionName, null, listOf(), setOf(), stringExpression())
-        val compileUnit = CompileUnitWithImports(
+        val compileUnit = CompileUnitWithFlatStructs(
                 "pkg_name",
-                listOf(),
-                listOf(),
                 setOf(),
-                setOf(function))
+                setOf(),
+                listOf(),
+                listOf(function))
 
         // when
         val returnType = findReturnType(
                 compilationContext,
                 compileUnit,
                 assignments,
-                expression)
+                expression,
+                fullyQualifiedStructNames)
 
         // then
         assertThat(returnType).isEqualTo(stringType)
@@ -359,19 +372,20 @@ internal class FunctionsKtTest {
                 Parameter("boo", typeToString(intType)),
                 Parameter("bar", typeToString(booleanType)))
         val function = Function(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "pkg_name", functionName, null, parameters, setOf(), stringExpression())
-        val compileUnit = CompileUnitWithImports(
+        val compileUnit = CompileUnitWithFlatStructs(
                 "pkg_name",
-                listOf(),
-                listOf(),
                 setOf(),
-                setOf(function))
+                setOf(),
+                listOf(),
+                listOf(function))
 
         // when
         val returnType = findReturnType(
                 compilationContext,
                 compileUnit,
                 assignments,
-                expression)
+                expression,
+                fullyQualifiedStructNames)
 
         // then
         assertThat(returnType).isEqualTo(stringType)
@@ -388,19 +402,20 @@ internal class FunctionsKtTest {
                 listOf())
         val localFunction = Function(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "pkg_name", functionName, null, listOf(), setOf(), stringExpression())
         val importedFunction = Function(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "pkg_name", functionName, null, listOf(), setOf(), integerExpression())
-        val compileUnit = CompileUnitWithImports(
+        val compileUnit = CompileUnitWithFlatStructs(
                 "pkg_name",
-                listOf(),
-                listOf(localFunction),
                 setOf(),
-                setOf(importedFunction))
+                setOf(localFunction),
+                listOf(),
+                listOf(importedFunction))
 
         // when
         val returnType = findReturnType(
                 compilationContext,
                 compileUnit,
                 assignments,
-                expression)
+                expression,
+                fullyQualifiedStructNames)
 
         // then
         assertThat(returnType).isEqualTo(stringType)
@@ -432,7 +447,8 @@ internal class FunctionsKtTest {
                 compilationContext,
                 compileUnit,
                 assignments,
-                expression)
+                expression,
+                fullyQualifiedStructNames)
 
         // then
         assertThat(returnType).isEqualTo(stringType)
@@ -469,7 +485,8 @@ internal class FunctionsKtTest {
                 compilationContext,
                 compileUnit,
                 assignments,
-                expression)
+                expression,
+                fullyQualifiedStructNames)
 
         // then
         assertThat(returnType).isEqualTo(stringType)
@@ -492,7 +509,8 @@ internal class FunctionsKtTest {
                     compilationContext,
                     compileUnit,
                     assignments,
-                    expression)
+                    expression,
+                    fullyQualifiedStructNames)
         }
 
         // then
@@ -531,7 +549,8 @@ internal class FunctionsKtTest {
                     compilationContext,
                     compileUnit,
                     assignments,
-                    expression)
+                    expression,
+                    fullyQualifiedStructNames)
         }
 
         // then
@@ -559,12 +578,12 @@ internal class FunctionsKtTest {
                 parameters,
                 setOf(),
                 stringExpression())
-        val compileUnit = CompileUnitWithImports(
+        val compileUnit = CompileUnitWithFlatStructs(
                 "packageName",
-                listOf(),
-                listOf(function),
                 setOf(),
-                setOf())
+                setOf(function),
+                listOf(),
+                listOf())
 
         // when
         val `when` = ThrowableAssert.ThrowingCallable {
@@ -572,7 +591,8 @@ internal class FunctionsKtTest {
                     compilationContext,
                     compileUnit,
                     assignments,
-                    expression)
+                    expression,
+                    fullyQualifiedStructNames)
         }
 
         // then
@@ -611,7 +631,8 @@ internal class FunctionsKtTest {
                     compilationContext,
                     compileUnit,
                     assignments,
-                    expression)
+                    expression,
+                    fullyQualifiedStructNames)
         }
 
         // then
@@ -639,12 +660,12 @@ internal class FunctionsKtTest {
                 parameters,
                 setOf(),
                 stringExpression())
-        val compileUnit = CompileUnitWithImports(
+        val compileUnit = CompileUnitWithFlatStructs(
                 "/package/name",
-                listOf(),
-                listOf(function),
                 setOf(),
-                setOf())
+                setOf(function),
+                listOf(),
+                listOf())
 
         // when
         val `when` = ThrowableAssert.ThrowingCallable {
@@ -652,7 +673,8 @@ internal class FunctionsKtTest {
                     compilationContext,
                     compileUnit,
                     assignments,
-                    expression)
+                    expression,
+                    fullyQualifiedStructNames)
         }
 
         // then
@@ -691,12 +713,12 @@ internal class FunctionsKtTest {
                 listOf(),
                 setOf(),
                 expression1)
-        val compileUnit = CompileUnitWithImports(
+        val compileUnit = CompileUnitWithFlatStructs(
                 "/package/name",
-                listOf(),
-                listOf(function1, function2),
                 setOf(),
-                setOf())
+                setOf(function1, function2),
+                listOf(),
+                listOf())
 
         // when
         val `when` = ThrowableAssert.ThrowingCallable {
@@ -704,7 +726,8 @@ internal class FunctionsKtTest {
                     compilationContext,
                     compileUnit,
                     assignments,
-                    expression1)
+                    expression1,
+                    fullyQualifiedStructNames)
         }
 
         // then
@@ -721,7 +744,8 @@ internal class FunctionsKtTest {
                 compilationContext,
                 compileUnit,
                 assignments,
-                expression)
+                expression,
+                fullyQualifiedStructNames)
 
         // then
         assertThat(returnType).isEqualTo(addGenericType(listType, nothingType))
@@ -743,7 +767,8 @@ internal class FunctionsKtTest {
                 compilationContext,
                 compileUnit,
                 assignments,
-                expression)
+                expression,
+                fullyQualifiedStructNames)
 
         // then
         assertThat(returnType).isEqualTo(addGenericType(listType, intType))
@@ -765,7 +790,8 @@ internal class FunctionsKtTest {
                 compilationContext,
                 compileUnit,
                 assignments,
-                expression)
+                expression,
+                fullyQualifiedStructNames)
 
         // then
         assertThat(returnType).isEqualTo(addGenericType(listType, anyType))
@@ -786,7 +812,8 @@ internal class FunctionsKtTest {
                 compilationContext,
                 compileUnit,
                 assignments,
-                expression)
+                expression,
+                fullyQualifiedStructNames)
 
         // then
         assertThat(returnType).isEqualTo(stringType)
@@ -820,7 +847,8 @@ internal class FunctionsKtTest {
                 compilationContext,
                 compileUnit,
                 assignments,
-                expression)
+                expression,
+                fullyQualifiedStructNames)
 
         // then
         assertThat(returnType).isEqualTo(stringType)
@@ -855,7 +883,8 @@ internal class FunctionsKtTest {
                     compilationContext,
                     compileUnit,
                     assignments,
-                    expression)
+                    expression,
+                    fullyQualifiedStructNames)
         }
 
         // then
@@ -880,7 +909,8 @@ internal class FunctionsKtTest {
                     compilationContext,
                     compileUnit,
                     assignments,
-                    expression)
+                    expression,
+                    fullyQualifiedStructNames)
         }
 
         // then

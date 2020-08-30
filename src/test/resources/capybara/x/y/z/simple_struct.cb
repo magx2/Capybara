@@ -2,13 +2,13 @@ package /x/y/z
 
 struct TestStruct {
 	i: /capybara/type/Int
-	f: Float
+	f: /capybara/type/Boolean
 	...AnotherTestStruct
 }
 
 struct AnotherTestStruct {
 	i_1: /capybara/type/Int
-	f_2: Float
+	f_2: /capybara/type/Boolean
 	...AnotherTestStruct2
 }
 
@@ -17,7 +17,7 @@ struct AnotherTestStruct2 {
 	is_adult: /capybara/type/Boolean
 }
 
-fun xyz(i1: /capybara/type/Int, i2: /capybara/type/Int, i3: /capybara/type/Int, i4: /capybara/type/Int, f1: /capybara/type/Int, f2: /capybara/type/Int, f3: /capybara/type/Int, f4: /capybara/type/Int, Double): /capybara/type/String {
+fun xyz(i1: /capybara/type/Int, i2: /capybara/type/Int, i3: /capybara/type/Int, i4: /capybara/type/Int, f1: /capybara/type/Int, f2: /capybara/type/Int, f3: /capybara/type/Int, f4: /capybara/type/Int, double: /capybara/type/Int): /capybara/type/String {
 	a1 = i1 * f1
 	a2 = i2 ^ (f2 * 2)
 	a3 = f(i3, f3, double)
@@ -29,7 +29,7 @@ fun xyz(i1: /capybara/type/Int, i2: /capybara/type/Int, i3: /capybara/type/Int, 
 	return a1 + a2 + a3 + a4 + a5 + a6 + a7 + a8
 }
 
-fun f(/capybara/type/Int, i2: /capybara/type/Int, Double) {
+fun f(/capybara/type/Int, i2: /capybara/type/Int, double: /capybara/type/Int) {
 	return int
 }
 

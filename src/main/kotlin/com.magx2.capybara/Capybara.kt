@@ -16,36 +16,10 @@ fun main(args: Array<String>) {
             .map { compiler.compile(it) }
             .toList()
 
-    // roll out spread filed in structs
-    val fullyQualifiedStructNames: Map<String, Struct> = findFullyQualifiedStructNames(compileUnits)
-
-    val compileUnitsWithFlatStructs = compileUnits.stream()
-            .map { unit ->
-                Pair(
-                        unit,
-                        unit.structs
-                                .stream()
-                                .map { struct ->
-                                    addUnrollSpreadFieldsInStruct(unit.packageName, struct, fullyQualifiedStructNames)
-                                }
-                                .toList()
-                )
-            }
-            .map { (unit, flatStructs) ->
-                CompileUnitWithFlatStructs(
-                        unit.packageName,
-                        unit.imports,
-                        flatStructs,
-                        unit.functions)
-            }
-            .toList()
-
-    printlnAny("Unrolled structs:", compileUnitsWithFlatStructs.stream().flatMap { it.structs.stream() }.toList())
-
     //
     // EXPORTS/IMPORTS
     //
-    val exports = compileUnitsWithFlatStructs.stream()
+    val exports = compileUnits.stream()
             .map { Export(it.packageName, it.structs.toSet(), it.functions.toSet()) }
             .collect(object : Collector<Export, MutableMap<String, Export>, Map<String, Export>> {
                 override fun characteristics(): MutableSet<Collector.Characteristics> = setOf(UNORDERED).toMutableSet()
@@ -72,8 +46,8 @@ fun main(args: Array<String>) {
                         }
 
                 override fun finisher(): Function<MutableMap<String, Export>, Map<String, Export>> = Function { it.toMap() }
-            })
-    val compileUnitsWithImports = compileUnitsWithFlatStructs.stream()
+            }) + (basicTypesExport.packageName to basicTypesExport)
+    val compileUnitsWithImports = compileUnits.stream()
             .map { compileUnit ->
                 val imports = compileUnit.imports.stream()
                         .map { import ->
@@ -96,8 +70,7 @@ fun main(args: Array<String>) {
                                                 .filter { import.subImport.contains(it.name) }
                                     }
                                 }
-                                .toList()
-                                .toSet(),
+                                .toList(),
                         imports.stream()
                                 .flatMap { (import, exportForPackage) ->
                                     if (import.subImport.isEmpty()) {
@@ -109,15 +82,51 @@ fun main(args: Array<String>) {
                                     }
                                 }
                                 .toList()
-                                .toSet()
                 )
             }
             .toList()
 
     //
+    // STRUCTS
+    //
+
+    // roll out spread filed in structs
+    val fullyQualifiedStructNames: Map<String, Struct> = findFullyQualifiedStructNames(compileUnits)
+
+    val compileUnitsWithFlatStructs = compileUnitsWithImports.stream()
+            .map { unit ->
+                Pair(
+                        unit,
+                        unit.structs
+                                .stream()
+                                .map { struct ->
+                                    addUnrollSpreadFieldsInStruct(
+                                            unit.structs,
+                                            unit.importStructs,
+                                            struct,
+                                            fullyQualifiedStructNames)
+                                }
+                                .toList()
+                                .toSet()
+                )
+            }
+            .map { (unit, flatStructs) ->
+                CompileUnitWithFlatStructs(
+                        unit.packageName,
+                        flatStructs,
+                        unit.functions,
+                        unit.importStructs,
+                        unit.importFunctions
+                )
+            }
+            .toList()
+
+    printlnAny("Unrolled structs:", compileUnitsWithFlatStructs.stream().flatMap { it.structs.stream() }.toList())
+
+    //
     // FUNCTIONS
     //
-    val functions = compileUnitsWithImports.stream()
+    val functions = compileUnitsWithFlatStructs.stream()
             .flatMap { compileUnit ->
                 compileUnit.functions.stream()
                         .map { function -> Pair(compileUnit, function) }
@@ -141,21 +150,23 @@ fun main(args: Array<String>) {
     // find return types for functions
     val functionsWithReturnType = functions.stream()
             .map { (compileUnit, function) ->
-                Pair(function, findReturnType(compilationContext, compileUnit, function.assignments, function.returnExpression))
+                Triple(
+                        function,
+                        findReturnType(compilationContext, compileUnit, function.assignments, function.returnExpression, fullyQualifiedStructNames),
+                        compileUnit)
             }
-            .map { pair ->
-                val returnType = pair.first.returnType
-                if (returnType != null && parseType(pair.first.codeMetainfo, returnType, pair.first.packageName) != pair.second) {
-                    throw CompilationException(pair.first.codeMetainfo, "Declared return type of function `${pair.first.packageName}/${pair.first.name}` do not corresponds what it really return. " +
-                            "You declared `$returnType` and computed was `${typeToString(pair.second)}`.")
+            .map { triple ->
+                val returnType = triple.first.returnType
+                if (returnType != null && parseType(triple.first.codeMetainfo, returnType, triple.third.structs, triple.third.importStructs) != triple.second) {
+                    throw CompilationException(triple.first.codeMetainfo, "Declared return type of function `${triple.first.packageName}/${triple.first.name}` do not corresponds what it really return. " +
+                            "You declared `$returnType` and computed was `${typeToString(triple.second)}`.")
                 }
-                pair
+                triple
             }
             .map { pair ->
-                val defaultPackage = pair.first.packageName
                 val parameters = pair.first.parameters
                         .stream()
-                        .map { TypedParameter(it.name, parseType(pair.first.codeMetainfo, it.type, defaultPackage)) }
+                        .map { TypedParameter(it.name, parseType(pair.first.codeMetainfo, it.type, pair.third.structs, pair.third.importStructs)) }
                         .toList()
                 FunctionWithReturnType(
                         pair.first.packageName,
@@ -174,6 +185,9 @@ fun main(args: Array<String>) {
     printlnAny("Definitions:", compileUnits.stream().flatMap { it.defs.stream() }.toList())
 }
 
+/*
+    Represents every struct nad every function in compilation context (from all files)
+ */
 data class CompilationContext(val structs: Set<FlatStruct>, val functions: Set<com.magx2.capybara.Function>)
 
 class CompilationException(codeMetainfo: CodeMetainfo, msg: String) : RuntimeException("${codeMetainfo.fileName} [${codeMetainfo.line}:${codeMetainfo.charInLine}] $msg")

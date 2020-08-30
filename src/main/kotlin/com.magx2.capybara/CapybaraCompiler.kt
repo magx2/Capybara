@@ -31,24 +31,25 @@ data class CompileUnit(
         val originFile: String,
         val packageName: String,
         val imports: List<Import>,
-        val structs: List<Struct>,
-        val functions: List<Function>,
-        val defs: List<Def>)
-
-data class CompileUnitWithFlatStructs(
-        val packageName: String,
-        val imports: List<Import>,
-        val structs: List<FlatStruct>,
-        val functions: List<Function>)
+        val structs: Set<Struct>,
+        val functions: Set<Function>,
+        val defs: Set<Def>)
 
 data class CompileUnitWithImports(
         val packageName: String,
-        val structs: List<FlatStruct>,
-        val functions: List<Function>,
-        val importStructs: Set<FlatStruct>,
-        val importFunctions: Set<Function>)
+        val structs: Set<Struct>,
+        val functions: Set<Function>,
+        val importStructs: List<Struct>,
+        val importFunctions: List<Function>)
 
-data class Export(val packageName: String, val structs: Set<FlatStruct>, val functions: Set<Function>)
+data class CompileUnitWithFlatStructs(
+        val packageName: String,
+        val structs: Set<FlatStruct>,
+        val functions: Set<Function>,
+        val importStructs: List<Struct>,
+        val importFunctions: List<Function>)
+
+data class Export(val packageName: String, val structs: Set<Struct>, val functions: Set<Function>)
 
 data class Import(val codeMetainfo: CodeMetainfo, val importPackage: String, val subImport: Set<String>)
 
@@ -91,9 +92,9 @@ private class CapybaraCompilerImpl : CapybaraCompiler {
                 fileName,
                 listener.packageName,
                 listener.imports,
-                listener.structs,
-                listener.functions,
-                listener.defs)
+                listener.structs.toSet(),
+                listener.functions.toSet(),
+                listener.defs.toSet())
     }
 }
 

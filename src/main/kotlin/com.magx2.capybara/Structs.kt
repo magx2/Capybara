@@ -5,14 +5,18 @@ import java.util.stream.Collectors
 import java.util.stream.Stream
 import kotlin.streams.toList
 
-data class Struct(val packageName: String, val name: String, val fields: LinkedList<Field>)
-data class FlatStruct(val packageName: String, val name: String, val fields: List<TypedField>)
+sealed class BaseStruct(open val packageName: String, open val name: String)
+data class Struct(override val packageName: String, override val name: String, val fields: LinkedList<Field>) : BaseStruct(packageName, name)
+data class FlatStruct(override val packageName: String, override val name: String, val fields: List<TypedField>) : BaseStruct(packageName, name)
 
-fun addUnrollSpreadFieldsInStruct(defaultPackage: String, struct: Struct, fullyQualifiedStructNames: Map<String, Struct>): FlatStruct {
+fun addUnrollSpreadFieldsInStruct(localStructs: Set<BaseStruct>,
+                                  importedStructs: List<BaseStruct>,
+                                  struct: Struct,
+                                  fullyQualifiedStructNames: Map<String, Struct>): FlatStruct {
     val newFields = struct.fields
             .stream()
             .flatMap { x(it, struct, fullyQualifiedStructNames) }
-            .map { TypedField(it.name, parseType(it.codeMetainfo, it.type, defaultPackage)) }
+            .map { TypedField(it.name, parseType(it.codeMetainfo, it.type, localStructs, importedStructs)) }
             .toList()
     return FlatStruct(
             struct.packageName,

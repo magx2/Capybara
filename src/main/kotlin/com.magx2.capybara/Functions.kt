@@ -27,22 +27,23 @@ data class FunctionWithReturnType(val packageName: String,
 
 fun findReturnType(
         compilationContext: CompilationContext,
-        compileUnit: CompileUnitWithImports,
+        compileUnit: CompileUnitWithFlatStructs,
         assignments: Set<AssigmentStatement>,
         expression: Expression,
+        fullyQualifiedStructNames: Map<String, Struct>,
         callStack: List<FunctionInvocationExpression> = listOf()): Type =
         when (expression) {
-            is ParenthesisExpression -> findReturnType(compilationContext, compileUnit, assignments, expression.expression)
-            is ParameterExpression -> parseType(expression.codeMetainfo, expression.type, compileUnit.packageName)
+            is ParenthesisExpression -> findReturnType(compilationContext, compileUnit, assignments, expression.expression, fullyQualifiedStructNames)
+            is ParameterExpression -> parseType(expression.codeMetainfo, expression.type, compileUnit.structs, compileUnit.importStructs)
             is IntegerExpression -> intType
             is BooleanExpression -> booleanType
             is StringExpression -> stringType
             is FunctionInvocationExpression -> {
-                val function = findFunctionForGivenFunctionInvocation(compilationContext, compileUnit, assignments, expression)
+                val function = findFunctionForGivenFunctionInvocation(compilationContext, compileUnit, assignments, expression, fullyQualifiedStructNames)
                 if (function.isPresent) {
                     val f = function.get()
                     if (f.returnType != null) {
-                        parseType(expression.codeMetainfo, f.returnType, compileUnit.packageName)
+                        parseType(expression.codeMetainfo, f.returnType, compileUnit.structs, compileUnit.importStructs)
                     } else {
                         if (callStack.contains(f.returnExpression)) {
                             throw CompilationException(expression.codeMetainfo, "There is recursive invocation of functions. Please specify return type explicity.")
@@ -51,10 +52,11 @@ fun findReturnType(
                                 compileUnit,
                                 assignments,
                                 f.returnExpression,
+                                fullyQualifiedStructNames,
                                 callStack + expression)
                     }
                 } else {
-                    val parameters = findFunctionParametersValues(compilationContext, compileUnit, assignments, expression)
+                    val parameters = findFunctionParametersValues(compilationContext, compileUnit, assignments, expression, fullyQualifiedStructNames)
                             .stream()
                             .map { "${it.packageName}/${it.name}" }
                             .collect(Collectors.joining(", "))
@@ -62,16 +64,16 @@ fun findReturnType(
                             "`${expression.packageName ?: compileUnit.packageName}:${expression.functionName}($parameters)`")
                 }
             }
-            is InfixExpression -> findReturnType(compilationContext, compileUnit, assignments, expression)
+            is InfixExpression -> findReturnType(compilationContext, compileUnit, assignments, expression, fullyQualifiedStructNames)
             is IfExpression -> {
-                val ifReturnType = findReturnType(compilationContext, compileUnit, assignments, expression.condition)
+                val ifReturnType = findReturnType(compilationContext, compileUnit, assignments, expression.condition, fullyQualifiedStructNames)
                 if (ifReturnType != booleanType) {
                     throw CompilationException(expression.codeMetainfo, "Expression in `if` should return `$booleanType` not `$ifReturnType`")
                 }
-                findReturnTypeFromBranchExpression(compilationContext, compileUnit, assignments, expression, expression.trueBranch, expression.falseBranch)
+                findReturnTypeFromBranchExpression(compilationContext, compileUnit, assignments, expression, expression.trueBranch, expression.falseBranch, fullyQualifiedStructNames)
             }
             is NegateExpression -> {
-                val returnType = findReturnType(compilationContext, compileUnit, assignments, expression.negateExpression)
+                val returnType = findReturnType(compilationContext, compileUnit, assignments, expression.negateExpression, fullyQualifiedStructNames)
                 if (returnType != booleanType) {
                     throw CompilationException(expression.codeMetainfo, "You can only negate boolean expressions. Type `$returnType` cannot be negated.")
                 }
@@ -81,14 +83,14 @@ fun findReturnType(
                 assignments.stream()
                         .filter { it.name == expression.valueName }
                         .map { it.expression }
-                        .map { findReturnType(compilationContext, compileUnit, assignments, it) }
+                        .map { findReturnType(compilationContext, compileUnit, assignments, it, fullyQualifiedStructNames) }
                         .findAny()
                         .orElseThrow { CompilationException(expression.codeMetainfo, "There is no value with name `${expression.valueName}`") }
             }
             is NewStruct -> {
                 val structPackageName = expression.packageName ?: compileUnit.packageName
                 val structs = if (expression.packageName == null) {
-                    compileUnit.structs + compileUnit.importStructs
+                    compileUnit.structs + importStructsToFlatStructs(compileUnit, fullyQualifiedStructNames)
                 } else {
                     compilationContext.structs
                 }
@@ -131,7 +133,7 @@ fun findReturnType(
                     }
                     val declaredTypes = expression.fields
                             .stream()
-                            .map { Pair(it.name, findReturnType(compilationContext, compileUnit, assignments, it.value)) }
+                            .map { Pair(it.name, findReturnType(compilationContext, compileUnit, assignments, it.value, fullyQualifiedStructNames)) }
                             .collect(Collectors.toMap(
                                     (java.util.function.Function<Pair<String, Type>, String> { it.first }),
                                     (java.util.function.Function<Pair<String, Type>, Type> { it.second })
@@ -157,7 +159,7 @@ fun findReturnType(
             is NewListExpression -> {
                 val elementTypes = expression.elements
                         .stream()
-                        .map { findReturnType(compilationContext, compileUnit, assignments, it) }
+                        .map { findReturnType(compilationContext, compileUnit, assignments, it, fullyQualifiedStructNames) }
                         .toList()
                 val genericType = findCommonType(elementTypes)
                 addGenericType(listType, genericType)
@@ -165,19 +167,19 @@ fun findReturnType(
             is StructureAccessExpression -> {
                 @Suppress("ThrowableNotThrown")
                 val elementType = if (expression.structureType != null) {
-                    parseType(expression.codeMetainfo, expression.structureType)
+                    parseType(expression.codeMetainfo, expression.structureType, compileUnit.structs, compileUnit.importStructs)
                 } else {
                     assignments.stream()
                             .filter { it.name == expression.structureName }
                             .map { it.expression }
-                            .map { findReturnType(compilationContext, compileUnit, assignments, it) }
+                            .map { findReturnType(compilationContext, compileUnit, assignments, it, fullyQualifiedStructNames) }
                             .findAny()
                             .orElseThrow { CompilationException(expression.codeMetainfo, "Cannot find value with name `${expression.structureName}`") }
                 }
 
                 when (elementType.name) {
                     listType.name -> {
-                        val indexCallType = findReturnType(compilationContext, compileUnit, assignments, expression.structureIndex)
+                        val indexCallType = findReturnType(compilationContext, compileUnit, assignments, expression.structureIndex, fullyQualifiedStructNames)
                         if (indexCallType != intType) {
                             throw CompilationException(
                                     expression.structureIndexCodeMetainfo,
@@ -200,11 +202,12 @@ private fun findCommonType(types: Collection<Type>): Type =
 
 private fun findFunctionForGivenFunctionInvocation(
         compilationContext: CompilationContext,
-        compileUnit: CompileUnitWithImports,
+        compileUnit: CompileUnitWithFlatStructs,
         assignments: Set<AssigmentStatement>,
-        function: FunctionInvocationExpression): Optional<Function> {
+        function: FunctionInvocationExpression,
+        fullyQualifiedStructNames: Map<String, Struct>): Optional<Function> {
     val functions = compileUnit.functions + compileUnit.importFunctions
-    val parameters = findFunctionParametersValues(compilationContext, compileUnit, assignments, function)
+    val parameters = findFunctionParametersValues(compilationContext, compileUnit, assignments, function, fullyQualifiedStructNames)
     return functions.stream()
             .filter { it.name == function.functionName }
             .filter { function.packageName == null }
@@ -213,7 +216,7 @@ private fun findFunctionForGivenFunctionInvocation(
                 var i = 0
                 var equals = true
                 while (i < parameters.size && equals) {
-                    equals = parseType(f.codeMetainfo, f.parameters[i].type, compileUnit.packageName) == parameters[i]
+                    equals = parseType(f.codeMetainfo, f.parameters[i].type, compileUnit.structs, compileUnit.importStructs) == parameters[i]
                     i++
                 }
                 equals
@@ -229,7 +232,7 @@ private fun findFunctionForGivenFunctionInvocation(
                             var i = 0
                             var equals = true
                             while (i < parameters.size && equals) {
-                                equals = parseType(f.codeMetainfo, f.parameters[i].type, compileUnit.packageName) == parameters[i]
+                                equals = parseType(f.codeMetainfo, f.parameters[i].type, compileUnit.structs, compileUnit.importStructs) == parameters[i]
                                 i++
                             }
                             equals
@@ -238,25 +241,36 @@ private fun findFunctionForGivenFunctionInvocation(
             }
 }
 
+private fun importStructsToFlatStructs(compileUnit: CompileUnitWithFlatStructs,
+                                       fullyQualifiedStructNames: Map<String, Struct>): List<FlatStruct> =
+        compileUnit.importStructs
+                .stream()
+                .map { struct ->
+                    addUnrollSpreadFieldsInStruct(compileUnit.structs, compileUnit.importStructs, struct, fullyQualifiedStructNames)
+                }
+                .toList()
+
 private fun findFunctionParametersValues(
         compilationContext: CompilationContext,
-        compileUnit: CompileUnitWithImports,
+        compileUnit: CompileUnitWithFlatStructs,
         assignments: Set<AssigmentStatement>,
-        function: FunctionInvocationExpression): List<Type> =
+        function: FunctionInvocationExpression,
+        fullyQualifiedStructNames: Map<String, Struct>): List<Type> =
         function.parameters
                 .stream()
-                .map { findReturnType(compilationContext, compileUnit, assignments, it) }
+                .map { findReturnType(compilationContext, compileUnit, assignments, it, fullyQualifiedStructNames) }
                 .toList<Type>()
 
 private fun findReturnTypeFromBranchExpression(
         compilationContext: CompilationContext,
-        compileUnit: CompileUnitWithImports,
+        compileUnit: CompileUnitWithFlatStructs,
         assignments: Set<AssigmentStatement>,
         expression: Expression,
         left: Expression,
-        right: Expression): Type {
-    val leftType = findReturnType(compilationContext, compileUnit, assignments, left)
-    val rightType = findReturnType(compilationContext, compileUnit, assignments, right)
+        right: Expression,
+        fullyQualifiedStructNames: Map<String, Struct>): Type {
+    val leftType = findReturnType(compilationContext, compileUnit, assignments, left, fullyQualifiedStructNames)
+    val rightType = findReturnType(compilationContext, compileUnit, assignments, right, fullyQualifiedStructNames)
     return if (leftType == rightType) {
         leftType
     } else {
@@ -270,21 +284,22 @@ private fun findReturnTypeFromBranchExpression(
             }
         } else {
             throw CompilationException(expression.codeMetainfo, "You need to return same types from infix expression. " +
-                    "Left expression returns `$leftType`, " +
-                    "right expression returns `$rightType`")
+                    "Left expression returns `${typeToString(leftType)}`, " +
+                    "right expression returns `${typeToString(rightType)}`")
         }
     }
 }
 
 private fun findReturnTypeFromBranchExpressionWithoutTypeCasting(
         compilationContext: CompilationContext,
-        compileUnit: CompileUnitWithImports,
+        compileUnit: CompileUnitWithFlatStructs,
         assignments: Set<AssigmentStatement>,
         expression: Expression,
         left: Expression,
-        right: Expression): Type {
-    val leftType = findReturnType(compilationContext, compileUnit, assignments, left)
-    val rightType = findReturnType(compilationContext, compileUnit, assignments, right)
+        right: Expression,
+        fullyQualifiedStructNames: Map<String, Struct>): Type {
+    val leftType = findReturnType(compilationContext, compileUnit, assignments, left, fullyQualifiedStructNames)
+    val rightType = findReturnType(compilationContext, compileUnit, assignments, right, fullyQualifiedStructNames)
     return if (leftType == rightType) {
         leftType
     } else {
@@ -306,11 +321,12 @@ private fun findReturnTypeFromBranchExpressionWithoutTypeCasting(
 
 private fun findReturnType(
         compilationContext: CompilationContext,
-        compileUnit: CompileUnitWithImports,
+        compileUnit: CompileUnitWithFlatStructs,
         assignments: Set<AssigmentStatement>,
-        expression: InfixExpression): Type {
-    val leftType = findReturnType(compilationContext, compileUnit, assignments, expression.left)
-    val rightType = findReturnType(compilationContext, compileUnit, assignments, expression.right)
+        expression: InfixExpression,
+        fullyQualifiedStructNames: Map<String, Struct>): Type {
+    val leftType = findReturnType(compilationContext, compileUnit, assignments, expression.left, fullyQualifiedStructNames)
+    val rightType = findReturnType(compilationContext, compileUnit, assignments, expression.right, fullyQualifiedStructNames)
     when (expression.operation) {
         "^", "*", "-" ->
             if (isOneOfGivenType(stringType, leftType, rightType)) {
@@ -335,8 +351,8 @@ private fun findReturnType(
         ">", "<", ">=", "<=", "!=", "==", "&&", "||" -> booleanType // FIXME check if left and right are correct types!
         // FIXME only + can be applied like this ; rest needs to have strict types
         // FIXME and you cannot add booleans...
-        "+" -> findReturnTypeFromBranchExpression(compilationContext, compileUnit, assignments, expression, expression.left, expression.right)
-        "^", "*", "-" -> findReturnTypeFromBranchExpressionWithoutTypeCasting(compilationContext, compileUnit, assignments, expression, expression.left, expression.right)
+        "+" -> findReturnTypeFromBranchExpression(compilationContext, compileUnit, assignments, expression, expression.left, expression.right, fullyQualifiedStructNames)
+        "^", "*", "-" -> findReturnTypeFromBranchExpressionWithoutTypeCasting(compilationContext, compileUnit, assignments, expression, expression.left, expression.right, fullyQualifiedStructNames)
         else -> throw CompilationException(expression.codeMetainfo,
                 "Do not know this `${expression.operation}` infix expression!")
     }
