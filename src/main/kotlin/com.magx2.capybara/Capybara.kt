@@ -146,7 +146,7 @@ fun main(args: Array<String>) {
             .map { pair ->
                 val returnType = pair.first.returnType
                 if (returnType != null && parseType(pair.first.line, returnType, pair.first.packageName) != pair.second) {
-                    throw CompilationException(pair.first.line, "Declared return type of function do not corresponds what it really return. " +
+                    throw CompilationException(pair.first.line, "Declared return type of function `${pair.first.packageName}/${pair.first.name}` do not corresponds what it really return. " +
                             "You declared `$returnType` and computed was `${typeToString(pair.second)}`.")
                 }
                 pair
