@@ -67,6 +67,7 @@ expression
 	| argument_to_function=expression '->' apply_to_function_qualified_name=fully_qualified_function
 	| struct_name=fullyQualifiedType ' {' struct_field_initializations '}'
 	| newListExpression
+	| structureAccessExpression
 	;
 
 struct_field_initializations
@@ -76,6 +77,10 @@ struct_field_initializations
 newListExpression
 	: '[' expression (', ' expression)*  ']'
 	| '[]'
+	;
+
+structureAccessExpression
+	:	structure_name=SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL '[' structure_index=expression ']'
 	;
 
 struct_field_initialization

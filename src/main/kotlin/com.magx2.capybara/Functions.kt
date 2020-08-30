@@ -162,6 +162,33 @@ fun findReturnType(
                 val genericType = findCommonType(elementTypes)
                 addGenericType(listType, genericType)
             }
+            is StructureAccessExpression -> {
+                @Suppress("ThrowableNotThrown")
+                val elementType = if (expression.structureType != null) {
+                    parseType(expression.line, expression.structureType)
+                } else {
+                    assignments.stream()
+                            .filter { it.name == expression.structureName }
+                            .map { it.expression }
+                            .map { findReturnType(compilationContext, compileUnit, assignments, it) }
+                            .findAny()
+                            .orElseThrow { CompilationException(expression.line, "Cannot find value with name `${expression.structureName}`") }
+                }
+
+                when (elementType.name) {
+                    listType.name -> {
+                        val indexCallType = findReturnType(compilationContext, compileUnit, assignments, expression.structureIndex)
+                        if (indexCallType != intType) {
+                            throw CompilationException(
+                                    expression.structureIndexLine,
+                                    "List are indexed by `${typeToString(intType)}` not `${typeToString(indexCallType)}`")
+                        }
+                    }
+                }
+
+                elementType.genericType
+                        ?: throw CompilationException(expression.line, "Type `${typeToString(elementType)}` is not generic.")
+            }
         }
 
 private fun findCommonType(types: Collection<Type>): Type =

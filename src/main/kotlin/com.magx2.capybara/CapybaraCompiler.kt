@@ -289,6 +289,24 @@ private class Listener : CapybaraBaseListener() {
                                     .toList()
                     )
                 }
+                ctx.structureAccessExpression() != null -> {
+                    val name = ctx.structureAccessExpression().structure_name.text
+                    if (parameters.containsKey(name)) {
+                        StructureAccessExpression(
+                                parseLine(ctx.start),
+                                name,
+                                parseExpression(ctx.structureAccessExpression().structure_index),
+                                parseLine(ctx.structureAccessExpression().structure_index.start),
+                                parameters[name])
+                    } else {
+                        StructureAccessExpression(
+                                parseLine(ctx.start),
+                                name,
+                                parseExpression(ctx.structureAccessExpression().structure_index),
+                                parseLine(ctx.structureAccessExpression().structure_index.start),
+                                null)
+                    }
+                }
                 else -> throw IllegalStateException("I don't know how to handle it!")
             }
 

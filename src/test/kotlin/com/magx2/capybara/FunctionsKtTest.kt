@@ -770,4 +770,122 @@ internal class FunctionsKtTest {
         // then
         assertThat(returnType).isEqualTo(addGenericType(listType, anyType))
     }
+
+    @Test
+    fun `should find return type from list access with structure type`() {
+        // given
+        val expression = StructureAccessExpression(
+                Line(1, 1),
+                "foo",
+                integerExpression(),
+                Line(2, 3),
+                typeToString(addGenericType(listType, stringType)))
+
+        // when
+        val returnType = findReturnType(
+                compilationContext,
+                compileUnit,
+                assignments,
+                expression)
+
+        // then
+        assertThat(returnType).isEqualTo(stringType)
+    }
+
+    @Test
+    fun `should find return type from list access without structure type`() {
+        // given
+        val expression = StructureAccessExpression(
+                Line(1, 1),
+                "foo",
+                integerExpression(),
+                Line(2, 3),
+                typeToString(addGenericType(listType, stringType)))
+
+        val assignments = setOf(
+                AssigmentStatement(
+                        "foo",
+                        NewListExpression(
+                                Line(1, 2),
+                                listOf(
+                                        StringExpression(Line(1, 2), "a"),
+                                        StringExpression(Line(1, 2), "b"),
+                                        StringExpression(Line(1, 2), "c"),
+                                ))
+                )
+        )
+
+        // when
+        val returnType = findReturnType(
+                compilationContext,
+                compileUnit,
+                assignments,
+                expression)
+
+        // then
+        assertThat(returnType).isEqualTo(stringType)
+    }
+
+    @Test
+    fun `should throw exception if there is no assigment with given name`() {
+        // given
+        val expression = StructureAccessExpression(
+                Line(11, 22),
+                "foo",
+                integerExpression(),
+                Line(2, 3),
+                null)
+
+        val assignments = setOf(
+                AssigmentStatement(
+                        "foo2",
+                        NewListExpression(
+                                Line(1, 2),
+                                listOf(
+                                        StringExpression(Line(1, 2), "a"),
+                                        StringExpression(Line(1, 2), "b"),
+                                        StringExpression(Line(1, 2), "c"),
+                                ))
+                )
+        )
+
+        // when
+        val `when` = ThrowableAssert.ThrowingCallable {
+            findReturnType(
+                    compilationContext,
+                    compileUnit,
+                    assignments,
+                    expression)
+        }
+
+        // then
+        assertThatThrownBy(`when`)
+                .isInstanceOf(CompilationException::class.java)
+                .hasMessage("[11:22] Cannot find value with name `foo`")
+    }
+
+    @Test
+    fun `should throw exception if list is not indexed by int`() {
+        // given
+        val expression = StructureAccessExpression(
+                Line(11, 22),
+                "foo",
+                stringExpression(),
+                Line(2, 3),
+                typeToString(addGenericType(listType, stringType)))
+
+        // when
+        val `when` = ThrowableAssert.ThrowingCallable {
+            findReturnType(
+                    compilationContext,
+                    compileUnit,
+                    assignments,
+                    expression)
+        }
+
+        // then
+        assertThatThrownBy(`when`)
+                .isInstanceOf(CompilationException::class.java)
+                .hasMessageStartingWith("[2:3] List are indexed by")
+    }
 }

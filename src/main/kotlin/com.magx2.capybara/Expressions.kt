@@ -21,3 +21,9 @@ data class NewStruct(override val line: Line, val packageName: String?, val stru
 data class StructField(val line: Line, val name: String, val value: Expression)
 data class ValueExpression(override val line: Line, val valueName: String) : Expression(line)
 data class NewListExpression(override val line: Line, val elements: List<Expression> = listOf()) : Expression(line)
+data class StructureAccessExpression(
+        override val line: Line,
+        val structureName: String,
+        val structureIndex: Expression,
+        val structureIndexLine: Line,
+        val structureType: String?) : Expression(line)

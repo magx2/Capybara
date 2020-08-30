@@ -1,4 +1,4 @@
-package /list
+package /structure
 
 fun empty_list(): /capybara/type/List[/capybara/type/Nothing] = []
 
