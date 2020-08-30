@@ -176,8 +176,8 @@ internal class TypesKtTest {
         val packageName1 = "/x/y/z"
         val packageName2 = "/a/b/c"
         val rawType = "Foo"
-        val importedStructs = listOf(FlatStruct(packageName1, rawType, listOf()))
-        val localStructs = setOf(FlatStruct(packageName2, rawType, listOf()))
+        val localStructs = setOf(FlatStruct(packageName1, rawType, listOf()))
+        val importedStructs = listOf(FlatStruct(packageName2, rawType, listOf()))
 
         // when
         val type = parseType(
@@ -198,8 +198,8 @@ internal class TypesKtTest {
         val packageName1 = "/x/y/z"
         val packageName2 = "/a/b/c"
         val rawType = "Foo"
-        val localStructs = setOf(FlatStruct(packageName2, rawType, listOf()))
-        val importedStructs = listOf(FlatStruct(packageName1, rawType, listOf()))
+        val localStructs = setOf(FlatStruct(packageName1, rawType, listOf()))
+        val importedStructs = listOf(FlatStruct(packageName2, rawType, listOf()))
 
         // when
         val type = parseType(
