@@ -196,6 +196,7 @@ fun main(args: Array<String>) {
                         .map { TypedParameter(it.name, parseType(pair.first.codeMetainfo, it.type, pair.third.structs, pair.third.importStructs)) }
                         .toList()
                 FunctionWithReturnType(
+                        pair.first.codeMetainfo,
                         pair.first.packageName,
                         pair.first.name,
                         pair.second,

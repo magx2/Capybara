@@ -18,7 +18,8 @@ data class Function(val codeMetainfo: CodeMetainfo,
                     val assignments: Set<AssigmentStatement>,
                     val returnExpression: Expression)
 
-data class FunctionWithReturnType(val packageName: String,
+data class FunctionWithReturnType(val codeMetainfo: CodeMetainfo,
+                                  val packageName: String,
                                   val name: String,
                                   val returnType: Type,
                                   val parameters: List<TypedParameter>,
