@@ -45,3 +45,14 @@ tasks['compileKotlin'].dependsOn("generateGrammarSource")
 test {
 	useJUnitPlatform()
 }
+
+jar {
+	manifest {
+		attributes(
+				'Main-Class': 'com.magx2.capybara.CapybaraKt'
+		)
+	}
+	from {
+		configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
+	}
+}
