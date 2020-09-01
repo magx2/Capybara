@@ -2,15 +2,14 @@ package com.magx2.capybara
 
 import com.google.gson.GsonBuilder
 import org.antlr.v4.runtime.Token
+import org.apache.commons.cli.HelpFormatter
 import org.slf4j.LoggerFactory
-import java.io.File
 import java.util.function.BiConsumer
 import java.util.function.BinaryOperator
 import java.util.function.Function
 import java.util.function.Supplier
 import java.util.stream.Collector
 import java.util.stream.Collector.Characteristics.UNORDERED
-import kotlin.streams.asStream
 import kotlin.streams.toList
 
 private val log = LoggerFactory.getLogger(Capybara::class.java)
@@ -18,31 +17,20 @@ private val log = LoggerFactory.getLogger(Capybara::class.java)
 private class Capybara
 
 fun main(args: Array<String>) {
-    if (args.size < 2) {
+    val options = parseCommandLine(args)
+    if (options.filesToCompile.isEmpty()) {
         log.warn("Nothing to compile; exit")
         return
     }
-    val outputDir = args[0]
-    File(outputDir).also {
-        if (it.exists().not()) {
-            throw IllegalArgumentException("Output dir `$outputDir` does not exists")
-        }
-        if (it.isDirectory.not()) {
-            throw IllegalArgumentException("Output dir `$outputDir` is not a directory")
-        }
-        if (it.canWrite().not()) {
-            throw IllegalArgumentException("Output dir `$outputDir` is not writable")
-        }
-        if ((it.list() ?: emptyArray<String>()).isNotEmpty()) {
-            log.warn("Output dir `$outputDir` is not empty")
-        }
-
+    if (args.isEmpty() || options.help) {
+        val formatter = HelpFormatter()
+        formatter.printHelp("capybara", buildOptions())
+        return
     }
-    log.info("Output dir `$outputDir`")
 
     val compiler = CapybaraCompiler.instance()
-    val compileUnits = args.asSequence()
-            .asStream()
+    val compileUnits = options.filesToCompile
+            .stream()
             .skip(1)
             .map { compiler.compile(it) }
             .toList()
