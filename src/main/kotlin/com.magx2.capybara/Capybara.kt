@@ -10,6 +10,7 @@ import java.util.function.Function
 import java.util.function.Supplier
 import java.util.stream.Collector
 import java.util.stream.Collector.Characteristics.UNORDERED
+import java.util.stream.Collectors
 import kotlin.streams.toList
 
 private val log = LoggerFactory.getLogger(Capybara::class.java)
@@ -18,29 +19,39 @@ private class Capybara
 
 fun main(args: Array<String>) {
     val options = parseCommandLine(args)
+    if (options.debug) {
+        log.info("Debug is on")
+        log.info(options.toString())
+    }
     if (options.filesToCompile.isEmpty()) {
         log.warn("Nothing to compile; exit")
+        printHelp()
         return
     }
     if (args.isEmpty() || options.help) {
-        val formatter = HelpFormatter()
-        formatter.printHelp("capybara", buildOptions())
+        printHelp()
         return
     }
     try {
         main(options)
     } catch (e: CompilationException) {
+        if (options.debug) log.error("Compilation exception", e)
         System.err.println("Compilation exception: " + e.message)
     } catch (e: Exception) {
+        if (options.debug) log.error("Generic exception", e)
         System.err.println("Generic exception: " + e.message)
     }
+}
+
+private fun printHelp() {
+    val formatter = HelpFormatter()
+    formatter.printHelp("capybara", buildOptions())
 }
 
 fun main(options: CommandLineOptions) {
     val compiler = CapybaraCompiler.instance()
     val compileUnits = options.filesToCompile
             .stream()
-            .skip(1)
             .map { compiler.compile(it) }
             .toList()
 
@@ -79,8 +90,14 @@ fun main(options: CommandLineOptions) {
             .map { compileUnit ->
                 val imports = compileUnit.imports.stream()
                         .map { import ->
-                            val export = (exports[import.importPackage]
-                                    ?: throw CompilationException(import.codeMetainfo, "Package `${import.importPackage}` exports nothing so you can't import it."))
+                            val export = exports[import.importPackage]
+                            if (export == null) {
+                                val availableImports = exports.keys
+                                        .stream()
+                                        .collect(Collectors.joining(", ", "[", "]"))
+                                throw CompilationException(import.codeMetainfo, "Package `${import.importPackage}` exports nothing so you can't import it. " +
+                                        "Available packages to import: $availableImports")
+                            }
                             Pair(import, export)
                         }
                         .toList()
@@ -226,7 +243,10 @@ fun main(options: CommandLineOptions) {
     // EXPORT TO FILE
     //
     if (options.outputDir != null) {
+        log.info("Exporting files to ${options.outputDir}")
         PythonExport.export(options.outputDir, compilationUnitsToExport)
+    } else {
+        log.info("Not exporting files, because `outputDir` is not set")
     }
 }
 

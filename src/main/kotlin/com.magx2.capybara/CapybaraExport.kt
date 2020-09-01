@@ -73,7 +73,7 @@ private fun structToPython(struct: FlatStruct): String = """
 """.trimIndent()
 
 private fun functionToPython(function: FunctionWithReturnType): String = """
-    def ${function.name}:
+    def ${function.name}():
         pass
 """.trimIndent()
 

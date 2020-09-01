@@ -20,7 +20,7 @@ class SmokeTest {
                 .stream()
                 .collect(Collectors.joining(","))
         main(arrayOf(
-                "-d",
+                "-o",
                 outputDir,
                 "-f",
                 files))
