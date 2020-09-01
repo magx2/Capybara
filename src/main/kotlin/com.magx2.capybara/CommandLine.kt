@@ -7,6 +7,7 @@ import org.apache.commons.cli.Options
 import org.slf4j.LoggerFactory
 import java.io.File
 import java.util.stream.Stream
+import kotlin.streams.asStream
 import kotlin.streams.toList
 
 
@@ -59,7 +60,9 @@ fun parseFilesToCompile(files: String?): Set<String> =
                     .map { File(it) }
                     .flatMap { file ->
                         if (file.isDirectory) {
-                            (file.listFiles() ?: emptyArray<File>()).asList().stream()
+                            file.walkTopDown()
+                                    .filter { it.isFile }
+                                    .asStream()
                         } else {
                             Stream.of(file)
                         }
