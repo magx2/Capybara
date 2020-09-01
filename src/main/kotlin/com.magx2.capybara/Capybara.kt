@@ -18,6 +18,10 @@ private val log = LoggerFactory.getLogger(Capybara::class.java)
 private class Capybara
 
 fun main(args: Array<String>) {
+    if (args.size < 2) {
+        log.warn("Nothing to compile; exit")
+        return
+    }
     val outputDir = args[0]
     File(outputDir).also {
         if (it.exists().not()) {
