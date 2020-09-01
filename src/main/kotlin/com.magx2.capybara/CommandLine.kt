@@ -32,8 +32,8 @@ fun parseCommandLine(args: Array<String>): CommandLineOptions {
 private fun findOutputDir(parse: CommandLine): String? {
     val outputDir = parse.getOptionValue("d")
     if (outputDir != null) {
-        log.info("Output dir `$outputDir`")
         File(outputDir).also {
+            log.info("Output dir `${it.absolutePath}`")
             if (it.exists().not()) {
                 throw IllegalArgumentException("Output dir `$outputDir` does not exists")
             }

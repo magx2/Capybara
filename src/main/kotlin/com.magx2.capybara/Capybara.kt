@@ -37,7 +37,6 @@ fun main(args: Array<String>) {
 }
 
 fun main(options: CommandLineOptions) {
-
     val compiler = CapybaraCompiler.instance()
     val compileUnits = options.filesToCompile
             .stream()
@@ -177,42 +176,58 @@ fun main(options: CommandLineOptions) {
                     .toSet())
 
     // find return types for functions
-    val functionsWithReturnType = functions.stream()
-            .map { (compileUnit, function) ->
-                Triple(
-                        function,
-                        findReturnType(compilationContext, compileUnit, function.assignments, function.returnExpression, fullyQualifiedStructNames),
-                        compileUnit)
-            }
-            .map { triple ->
-                val returnType = triple.first.returnType
-                if (returnType != null && parseType(triple.first.codeMetainfo, returnType, triple.third.structs, triple.third.importStructs) != triple.second) {
-                    throw CompilationException(triple.first.codeMetainfo, "Declared return type of function `${triple.first.packageName}/${triple.first.name}` do not corresponds what it really return. " +
-                            "You declared `$returnType` and computed was `${typeToString(triple.second)}`.")
-                }
-                triple
-            }
-            .map { pair ->
-                val parameters = pair.first.parameters
-                        .stream()
-                        .map { TypedParameter(it.name, parseType(pair.first.codeMetainfo, it.type, pair.third.structs, pair.third.importStructs)) }
+    val compilationUnitsToExport = compileUnitsWithFlatStructs.stream()
+            .map { unit ->
+                val functionsWithReturnType = functions.stream()
+                        .map { (compileUnit, function) ->
+                            Triple(
+                                    function,
+                                    findReturnType(compilationContext, compileUnit, function.assignments, function.returnExpression, fullyQualifiedStructNames),
+                                    compileUnit)
+                        }
+                        .map { triple ->
+                            val returnType = triple.first.returnType
+                            if (returnType != null && parseType(triple.first.codeMetainfo, returnType, triple.third.structs, triple.third.importStructs) != triple.second) {
+                                throw CompilationException(triple.first.codeMetainfo, "Declared return type of function `${triple.first.packageName}/${triple.first.name}` do not corresponds what it really return. " +
+                                        "You declared `$returnType` and computed was `${typeToString(triple.second)}`.")
+                            }
+                            triple
+                        }
+                        .map { pair ->
+                            val parameters = pair.first.parameters
+                                    .stream()
+                                    .map { TypedParameter(it.name, parseType(pair.first.codeMetainfo, it.type, pair.third.structs, pair.third.importStructs)) }
+                                    .toList()
+                            FunctionWithReturnType(
+                                    pair.first.codeMetainfo,
+                                    pair.first.packageName,
+                                    pair.first.name,
+                                    pair.second,
+                                    parameters,
+                                    pair.first.assignments,
+                                    pair.first.returnExpression)
+                        }
                         .toList()
-                FunctionWithReturnType(
-                        pair.first.codeMetainfo,
-                        pair.first.packageName,
-                        pair.first.name,
-                        pair.second,
-                        parameters,
-                        pair.first.assignments,
-                        pair.first.returnExpression)
+                        .toSet()
+                CompileUnitToExport(
+                        unit.packageName,
+                        unit.structs,
+                        functionsWithReturnType)
             }
             .toList()
-    printlnAny("Functions:", functionsWithReturnType)
+            .toSet()
 
     //
     // DEFINITIONS
     //
     printlnAny("Definitions:", compileUnits.stream().flatMap { it.defs.stream() }.toList())
+
+    //
+    // EXPORT TO FILE
+    //
+    if (options.outputDir != null) {
+        PythonExport.export(options.outputDir, compilationUnitsToExport)
+    }
 }
 
 /*

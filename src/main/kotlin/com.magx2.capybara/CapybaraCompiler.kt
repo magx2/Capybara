@@ -49,6 +49,11 @@ data class CompileUnitWithFlatStructs(
         val importStructs: List<Struct>,
         val importFunctions: List<Function>)
 
+data class CompileUnitToExport(
+        val packageName: String,
+        val structs: Set<FlatStruct>,
+        val functions: Set<FunctionWithReturnType>)
+
 data class Export(val packageName: String, val structs: Set<Struct>, val functions: Set<Function>)
 
 data class Import(val codeMetainfo: CodeMetainfo, val importPackage: String, val subImport: Set<String>)
