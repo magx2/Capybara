@@ -68,6 +68,7 @@ fun parseFilesToCompile(files: String?): Set<String> =
                         }
                     }
                     .map { it.absolutePath }
+                    .distinct()
                     .toList()
                     .toSet()
         } else {
