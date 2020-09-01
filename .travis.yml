@@ -10,3 +10,6 @@ branches:
   except:
     - /^v\d/
 dist: trusty
+env:
+  global:
+    - java.io.tmpdir=/tmp
