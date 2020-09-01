@@ -27,6 +27,16 @@ fun main(args: Array<String>) {
         formatter.printHelp("capybara", buildOptions())
         return
     }
+    try {
+        main(options)
+    } catch (e: CompilationException) {
+        System.err.println("Compilation exception: " + e.message)
+    } catch (e: Exception) {
+        System.err.println("Generic exception: " + e.message)
+    }
+}
+
+fun main(options: CommandLineOptions) {
 
     val compiler = CapybaraCompiler.instance()
     val compileUnits = options.filesToCompile
