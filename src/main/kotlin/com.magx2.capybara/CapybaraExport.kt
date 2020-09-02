@@ -1,5 +1,7 @@
 package com.magx2.capybara
 
+import com.magx2.capybara.BasicTypes.listType
+import com.magx2.capybara.BasicTypes.stringType
 import org.slf4j.LoggerFactory
 import java.io.File
 import java.lang.String.join
@@ -152,12 +154,24 @@ private fun functionToPython(function: FunctionWithReturnType): String {
                     .map { Pair(it.name, it.type) }
                     .toList())
 
+    val main = if (function.name == "main"
+            && function.parameters.size == 1
+            && function.parameters[0].type == addGenericType(listType, stringType)) {
+        """
+        |${'\n'}if __name__ == "__main__":
+        |${'\t'}import sys
+        |${'\t'}${function.name}(sys.argv)
+        |${"\n".repeat(2)}""".trimMargin()
+    } else {
+        ""
+    }
+
     return """
     |def ${function.name}($parameters):
     |${'\t'}$methodDoc
     |${'\t'}$assignments
     |${'\t'}return ${expressionToString(function.returnExpression)}
-    |${'\n'}""".trimMargin()
+    |${'\n'}$main""".trimMargin()
 }
 
 private fun expressionToString(expression: Expression): String =
