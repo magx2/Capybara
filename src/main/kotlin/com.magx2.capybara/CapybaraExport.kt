@@ -88,7 +88,7 @@ private fun structToPython(struct: FlatStruct): String {
 
     val strFields = struct.fields
             .stream()
-            .map { """${it.name} = " + self.${it.name} + """" }
+            .map { """${it.name} = " + str(self.${it.name}) + """" }
             .collect(Collectors.joining(", "))
 
     return """
