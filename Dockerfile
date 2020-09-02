@@ -6,12 +6,9 @@ COPY ./build/libs/Capybara.jar .
 COPY ./src/test/resources/capybara test
 
 RUN java -jar Capybara.jar -f ./test -o ./out --debug
-#CMD ["java" ,"-jar", "Capybara.jar", "-f", "./test" , "-o", "out", "--debug"]
-CMD ["sleep" , "3h"]
 
 FROM python:3.8.5
 
 WORKDIR /usr/src/app
 COPY --from=COMPILE_CAPYBARA_FILES  /usr/capybara/out .
 CMD ["python", "-m", "compileall", "."]
-#CMD ["sleep" ,"3h"]
