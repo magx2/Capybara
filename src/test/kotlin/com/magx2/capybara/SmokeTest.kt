@@ -3,7 +3,6 @@ package com.magx2.capybara
 import org.junit.jupiter.api.Test
 import java.io.File
 import java.nio.file.Paths
-import java.util.*
 import java.util.stream.Collectors
 
 
@@ -24,11 +23,12 @@ class SmokeTest {
                 "-o",
                 outputDir,
                 "-f",
-                files))
+                files,
+                "--clear-output"))
     }
 
     private fun outputDir() =
-            Paths.get(System.getProperty("java.io.tmpdir"), "capybara-" + UUID.randomUUID().toString())
+            Paths.get(System.getProperty("java.io.tmpdir"), "capybara")
                     .toAbsolutePath()
                     .toFile()
                     .absolutePath

@@ -19,6 +19,12 @@ fun buildOptions(): Options {
                     .hasArg(false)
                     .desc("Turns on debugging messages")
                     .build())
+    options.addOption(
+            Option.builder()
+                    .longOpt("clear-output")
+                    .hasArg(false)
+                    .desc("Clears output directory before compiling files")
+                    .build())
 //    options.addOption("", "", true, "")
     return options
 }
@@ -30,6 +36,7 @@ fun parseCommandLine(args: Array<String>): CommandLineOptions {
             parse.hasOption("h"),
             findOutputDir(parse),
             parseFilesToCompile(parse.getOptionValue("f")),
+            parse.hasOption("clear-output"),
             parse.hasOption("debug"))
 }
 
@@ -84,5 +91,6 @@ data class CommandLineOptions(
         val help: Boolean,
         val outputDir: String?,
         val filesToCompile: Set<String>,
+        val clearOutput: Boolean,
         val debug: Boolean
 )

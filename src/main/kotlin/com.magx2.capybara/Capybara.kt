@@ -4,6 +4,7 @@ import com.google.gson.GsonBuilder
 import org.antlr.v4.runtime.Token
 import org.apache.commons.cli.HelpFormatter
 import org.slf4j.LoggerFactory
+import java.io.File
 import java.util.function.BiConsumer
 import java.util.function.BinaryOperator
 import java.util.function.Function
@@ -49,6 +50,13 @@ private fun printHelp() {
 }
 
 fun main(options: CommandLineOptions) {
+    if (options.clearOutput && options.outputDir != null) {
+        log.info("Clearing output dir `${options.outputDir}`")
+        (File(options.outputDir).listFiles() ?: arrayOf())
+                .asList()
+                .forEach { it.deleteRecursively() }
+    }
+
     val compiler = CapybaraCompiler.instance()
     val compileUnits = options.filesToCompile
             .stream()
