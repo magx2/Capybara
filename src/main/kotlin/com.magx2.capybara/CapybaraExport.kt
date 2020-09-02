@@ -101,10 +101,51 @@ private fun structToPython(struct: FlatStruct): String {
     |${'\n'}""".trimMargin()
 }
 
-private fun functionToPython(function: FunctionWithReturnType): String = """
-    |def ${function.name}():
-    |${'\t'}pass
+private fun functionToPython(function: FunctionWithReturnType): String {
+    val parameters = function.parameters
+            .stream()
+            .map { it.name }
+            .collect(Collectors.joining(", "))
+    val assignments = function.assignments
+            .stream()
+            .map { "${it.name} = ${expressionToString(it.expression)}" }
+            .collect(Collectors.joining("\n|\t"))
+
+    return """
+    |def ${function.name}($parameters):
+    |${'\t'}$assignments
+    |${'\t'}return ${expressionToString(function.returnExpression)}
     |${'\n'}""".trimMargin()
+}
+
+private fun expressionToString(expression: Expression): String =
+        when (expression) {
+            is ParenthesisExpression -> "(" + expressionToString(expression.expression) + ")"
+            is ParameterExpression -> expression.valueName
+            is IntegerExpression -> expression.value.toString()
+            is BooleanExpression -> if (expression.value) "True" else "False"
+            is StringExpression -> "\"${expression.value}\""
+            is FunctionInvocationExpression -> {
+                val parameters = expression.parameters
+                        .stream()
+                        .map { expressionToString(it) }
+                        .collect(Collectors.joining(", "))
+                "${expression.functionName}($parameters)"
+            }
+            is InfixExpression -> "(${expressionToString(expression.left)}) ${expression.operation} (${expressionToString(expression.right)})"
+            is IfExpression -> "(${expressionToString(expression.trueBranch)}) if (${expressionToString(expression.condition)}) else (${expressionToString(expression.falseBranch)})"
+            is NegateExpression -> "not ${expressionToString(expression.negateExpression)}"
+            is NewStruct -> {
+
+                "${expression.structName}()"
+            }
+            is ValueExpression -> expression.valueName
+            is NewListExpression -> expression.elements
+                    .stream()
+                    .map { expressionToString(it) }
+                    .collect(Collectors.joining(", ", "[", "]"))
+            is StructureAccessExpression -> "\"TODO()\""
+        }
 
 private fun <T> concat(vararg streams: Stream<T>): Stream<T> {
     var stream = Stream.empty<T>()

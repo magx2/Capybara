@@ -1,4 +1,4 @@
 package /structure
 
-fun empty_list(list: /capybara/type/List[/capybara/type/String]): /capybara/type/String = list[0]
+fun access_list(list: /capybara/type/List[/capybara/type/String]): /capybara/type/String = list[0]
 
