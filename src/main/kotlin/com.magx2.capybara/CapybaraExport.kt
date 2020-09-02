@@ -179,14 +179,16 @@ private fun expressionToString(expression: Expression): String =
             is NegateExpression -> "not ${expressionToString(expression.negateExpression)}"
             is NewStruct -> {
 
-                "${expression.structName}()"
+                "${expression.structName}()" // TODO
             }
             is ValueExpression -> expression.valueName
             is NewListExpression -> expression.elements
                     .stream()
                     .map { expressionToString(it) }
                     .collect(Collectors.joining(", ", "[", "]"))
-            is StructureAccessExpression -> "\"TODO()\""
+            is StructureAccessExpression -> {
+                "${expression.structureName}[${expressionToString(expression.structureIndex)}]"
+            }
         }
 
 private fun <T> concat(vararg streams: Stream<T>): Stream<T> {
