@@ -1,6 +1,5 @@
 package com.magx2.capybara
 
-import com.google.gson.GsonBuilder
 import org.antlr.v4.runtime.Token
 import org.apache.commons.cli.HelpFormatter
 import org.slf4j.LoggerFactory
@@ -174,8 +173,6 @@ fun main(options: CommandLineOptions) {
             }
             .toList()
 
-    printlnAny("Unrolled structs:", compileUnitsWithFlatStructs.stream().flatMap { it.structs.stream() }.toList())
-
     //
     // FUNCTIONS
     //
@@ -272,7 +269,6 @@ fun main(options: CommandLineOptions) {
     //
     // DEFINITIONS
     //
-    printlnAny("Definitions:", compileUnits.stream().flatMap { it.defs.stream() }.toList())
 
     //
     // EXPORT TO FILE
@@ -295,12 +291,3 @@ class CompilationException(codeMetainfo: CodeMetainfo, msg: String) : RuntimeExc
 data class CodeMetainfo(val fileName: String, val line: Int, val charInLine: Int)
 
 fun parseCodeMetainfo(fileName: String, token: Token) = CodeMetainfo(fileName, token.line, token.charPositionInLine)
-
-fun printlnAny(header: String?, any: Any) {
-    val gson = GsonBuilder().setPrettyPrinting().create()
-//    val json = gson.toJson(any)
-    if (header != null) {
-//        println(header)
-    }
-//    println(json)
-}
