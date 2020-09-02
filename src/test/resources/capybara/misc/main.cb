@@ -1,0 +1,6 @@
+package /misc
+
+import /capybara/type { List, String }
+
+fun main(List[String]) = list
+

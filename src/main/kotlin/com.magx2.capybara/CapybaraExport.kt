@@ -13,6 +13,28 @@ interface CapybaraExport {
     fun export(outputDir: String, compilationUnits: Set<CompileUnitToExport>)
 }
 
+
+data class CompileUnitToExport(
+        val packageName: String,
+        val structs: Set<StructToExport>,
+        val functions: Set<FunctionToExport>)
+
+data class StructToExport(val packageName: String,
+                          val name: String,
+                          val fields: List<FieldToExport>)
+
+data class FieldToExport(val name: String, val type: Type)
+
+data class FunctionToExport(val packageName: String,
+                            val name: String,
+                            val returnType: Type,
+                            val parameters: List<ParameterToExport>,
+                            val assignments: Set<AssigmentStatement>,
+                            val returnExpression: Expression)
+
+data class ParameterToExport(val name: String, val type: Type)
+
+
 private val log = LoggerFactory.getLogger(PythonExport::class.java)
 
 object PythonExport : CapybaraExport {
@@ -21,7 +43,7 @@ object PythonExport : CapybaraExport {
                 .flatMap { it.structs.stream() }
                 .collect(
                         Collectors.groupingBy(
-                                (java.util.function.Function<FlatStruct, String> { it.packageName })
+                                (java.util.function.Function<StructToExport, String> { it.packageName })
                         )
                 )
                 .toMap()
@@ -29,7 +51,7 @@ object PythonExport : CapybaraExport {
                 .flatMap { it.functions.stream() }
                 .collect(
                         Collectors.groupingBy(
-                                (java.util.function.Function<FunctionWithReturnType, String> { it.packageName })
+                                (java.util.function.Function<FunctionToExport, String> { it.packageName })
                         )
                 )
                 .toMap()
@@ -77,7 +99,7 @@ private fun writeAllToPackageFile(outputDir: String, packageName: String, texts:
     }
 }
 
-private fun structToPython(struct: FlatStruct): String {
+private fun structToPython(struct: StructToExport): String {
     val constructorParameters = struct.fields
             .stream()
             .map { it.name }
@@ -137,7 +159,7 @@ private fun generateDocForDef(defName: String, parameters: List<Pair<String, Typ
         """.trimMargin()
 }
 
-private fun functionToPython(function: FunctionWithReturnType): String {
+private fun functionToPython(function: FunctionToExport): String {
     val parameters = function.parameters
             .stream()
             .map { it.name }

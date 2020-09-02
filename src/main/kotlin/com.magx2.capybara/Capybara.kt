@@ -236,8 +236,35 @@ fun main(options: CommandLineOptions) {
                         .toSet()
                 CompileUnitToExport(
                         unit.packageName,
-                        unit.structs,
-                        functionsWithReturnType)
+                        unit.structs
+                                .stream()
+                                .map {
+                                    StructToExport(
+                                            it.packageName,
+                                            it.name,
+                                            it.fields
+                                                    .stream()
+                                                    .map { FieldToExport(it.name, it.type) }
+                                                    .toList()
+                                    )
+                                }
+                                .toList()
+                                .toSet(),
+                        functionsWithReturnType.stream()
+                                .map {
+                                    FunctionToExport(
+                                            it.packageName,
+                                            it.name,
+                                            it.returnType,
+                                            it.parameters
+                                                    .stream()
+                                                    .map { ParameterToExport(it.name, it.type) }
+                                                    .toList(),
+                                            it.assignments,
+                                            it.returnExpression)
+                                }
+                                .toList()
+                                .toSet())
             }
             .toList()
             .toSet()
