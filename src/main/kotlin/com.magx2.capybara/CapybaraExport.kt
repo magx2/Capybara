@@ -210,11 +210,7 @@ private fun expressionToString(expression: Expression): String =
                         .collect(Collectors.joining(", "))
                 "${expression.functionName}($parameters)"
             }
-            is InfixExpression -> when (expression.operation) {
-                "^" -> "(${expressionToString(expression.left)}) ** (${expressionToString(expression.right)})"
-                // "+"-> TODO if adding string and int then cast int to string
-                else -> "(${expressionToString(expression.left)}) ${expression.operation} (${expressionToString(expression.right)})"
-            }
+            is InfixExpression -> "(${expressionToString(expression.left)}) ${mapInfixOperator(expression)} (${expressionToString(expression.right)})"
             is IfExpression -> "(${expressionToString(expression.trueBranch)}) if (${expressionToString(expression.condition)}) else (${expressionToString(expression.falseBranch)})"
             is NegateExpression -> "not ${expressionToString(expression.negateExpression)}"
             is NewStruct -> {
@@ -230,6 +226,13 @@ private fun expressionToString(expression: Expression): String =
                 "${expression.structureName}[${expressionToString(expression.structureIndex)}]"
             }
         }
+
+private fun mapInfixOperator(expression: InfixExpression) = when (expression.operation) {
+    "^" -> "**"
+    "~/" -> "//"
+    else -> expression.operation
+}
+
 
 private fun <T> concat(vararg streams: Stream<T>): Stream<T> {
     var stream = Stream.empty<T>()

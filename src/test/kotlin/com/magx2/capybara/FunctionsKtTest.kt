@@ -47,6 +47,7 @@ internal class FunctionsKtTest {
                         Arguments.of(InfixExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "*", integerExpression(), integerExpression()), intType),
                         Arguments.of(InfixExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "+", integerExpression(), integerExpression()), intType),
                         Arguments.of(InfixExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "-", integerExpression(), integerExpression()), intType),
+                        Arguments.of(InfixExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "~/", integerExpression(), integerExpression()), intType),
                         // infix expressions - string
                         Arguments.of(InfixExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "+", stringExpression(), stringExpression()), stringType),
                         Arguments.of(InfixExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "*", stringExpression(), integerExpression()), stringType),
@@ -66,11 +67,11 @@ internal class FunctionsKtTest {
 
         @Suppress("unused")
         @JvmStatic
-        fun stringInfixOperator(): Stream<String> = Stream.of("^", "-", "&&", "||")
+        fun stringInfixOperator(): Stream<String> = Stream.of("^", "-", "&&", "||", "~/")
 
         @Suppress("unused")
         @JvmStatic
-        fun booleanInfixOperator(): Stream<String> = Stream.of("+", "^", "*", "-", ">", "<", ">=", "<=")
+        fun booleanInfixOperator(): Stream<String> = Stream.of("+", "^", "*", "-", ">", "<", ">=", "<=", "~/")
     }
 
     val compilationContext = CompilationContext(setOf(), setOf())

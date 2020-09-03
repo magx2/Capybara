@@ -329,7 +329,7 @@ private fun findReturnType(
     val leftType = findReturnType(compilationContext, compileUnit, assignments, expression.left, fullyQualifiedStructNames)
     val rightType = findReturnType(compilationContext, compileUnit, assignments, expression.right, fullyQualifiedStructNames)
     when (expression.operation) {
-        "^", "-" ->
+        "^", "-", "~/" ->
             if (isOneOfGivenType(stringType, leftType, rightType)) {
                 throw CompilationException(expression.codeMetainfo,
                         "String type cannot be applied to `${expression.operation}` infix expression")
@@ -354,6 +354,7 @@ private fun findReturnType(
         // FIXME and you cannot add booleans...
         "+" -> findReturnTypeFromBranchExpression(compilationContext, compileUnit, assignments, expression, expression.left, expression.right, fullyQualifiedStructNames)
         "^", "*", "-" -> findReturnTypeFromBranchExpressionWithoutTypeCasting(compilationContext, compileUnit, assignments, expression, expression.left, expression.right, fullyQualifiedStructNames)
+        "~/" -> intType
         else -> throw CompilationException(expression.codeMetainfo,
                 "Do not know this `${expression.operation}` infix expression!")
     }
