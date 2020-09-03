@@ -4,18 +4,9 @@ sealed class Expression(open val codeMetainfo: CodeMetainfo)
 data class ParenthesisExpression(override val codeMetainfo: CodeMetainfo, val expression: Expression) : Expression(codeMetainfo)
 data class ParameterExpression(override val codeMetainfo: CodeMetainfo, val valueName: String, val type: String) : Expression(codeMetainfo)
 sealed class ConstantExpression(codeMetainfo: CodeMetainfo) : Expression(codeMetainfo)
-data class IntegerExpression(override val codeMetainfo: CodeMetainfo, val value: Long) : ConstantExpression(codeMetainfo) {
-    constructor(codeMetainfo: CodeMetainfo, value: String) : this(codeMetainfo, value.toLong())
-}
-
-data class FloatExpression(override val codeMetainfo: CodeMetainfo, val value: Double) : ConstantExpression(codeMetainfo) {
-    constructor(codeMetainfo: CodeMetainfo, value: String) : this(codeMetainfo, value.toDouble())
-}
-
-data class BooleanExpression(override val codeMetainfo: CodeMetainfo, val value: Boolean) : ConstantExpression(codeMetainfo) {
-    constructor(codeMetainfo: CodeMetainfo, value: String) : this(codeMetainfo, value.toBoolean())
-}
-
+data class IntegerExpression(override val codeMetainfo: CodeMetainfo, val value: Long) : ConstantExpression(codeMetainfo)
+data class FloatExpression(override val codeMetainfo: CodeMetainfo, val value: Double) : ConstantExpression(codeMetainfo)
+data class BooleanExpression(override val codeMetainfo: CodeMetainfo, val value: Boolean) : ConstantExpression(codeMetainfo)
 data class StringExpression(override val codeMetainfo: CodeMetainfo, val value: String) : ConstantExpression(codeMetainfo)
 data class FunctionInvocationExpression(override val codeMetainfo: CodeMetainfo, val packageName: String?, val functionName: String, val parameters: List<Expression>) : Expression(codeMetainfo)
 data class InfixExpression(override val codeMetainfo: CodeMetainfo, val operation: String, val left: Expression, val right: Expression) : Expression(codeMetainfo)
