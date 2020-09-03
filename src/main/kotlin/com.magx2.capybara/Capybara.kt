@@ -200,12 +200,13 @@ fun main(options: CommandLineOptions) {
     // find return types for functions
     val compilationUnitsToExport = compileUnitsWithFlatStructs.stream()
             .map { unit ->
-                val functionsWithReturnType = functions.stream()
-                        .map { (compileUnit, function) ->
+                val functionsWithReturnType = unit.functions
+                        .stream()
+                        .map { function ->
                             Triple(
                                     function,
-                                    findReturnType(compilationContext, compileUnit, function.assignments, function.returnExpression, fullyQualifiedStructNames),
-                                    compileUnit)
+                                    findReturnType(compilationContext, unit, function.assignments, function.returnExpression, fullyQualifiedStructNames),
+                                    unit)
                         }
                         .map { triple ->
                             val returnType = triple.first.returnType

@@ -23,8 +23,7 @@ class SmokeTest {
                 "-o",
                 outputDir,
                 "-f",
-                "D:\\Programowanie\\GitProjects\\Capybara\\src\\test\\resources\\capybara\\misc\\main.cb," +
-                        "D:\\Programowanie\\GitProjects\\Capybara\\src\\test\\resources\\capybara\\x\\y\\z\\simple_struct.cb",
+                files,
                 "--clear-output"))
     }
 
