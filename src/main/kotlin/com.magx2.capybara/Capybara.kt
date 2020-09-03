@@ -12,6 +12,7 @@ import java.util.stream.Collector
 import java.util.stream.Collector.Characteristics.UNORDERED
 import java.util.stream.Collectors
 import kotlin.streams.toList
+import kotlin.system.exitProcess
 
 private val log = LoggerFactory.getLogger(Capybara::class.java)
 
@@ -37,9 +38,11 @@ fun main(args: Array<String>) {
     } catch (e: CompilationException) {
         if (options.debug) log.error("Compilation exception", e)
         System.err.println("Compilation exception: " + e.message)
+        exitProcess(100)
     } catch (e: Exception) {
         if (options.debug) log.error("Generic exception", e)
         System.err.println("Generic exception: " + e.message)
+        exitProcess(1)
     }
 }
 

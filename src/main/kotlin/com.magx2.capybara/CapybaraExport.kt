@@ -210,7 +210,11 @@ private fun expressionToString(expression: Expression): String =
                         .collect(Collectors.joining(", "))
                 "${expression.functionName}($parameters)"
             }
-            is InfixExpression -> "(${expressionToString(expression.left)}) ${expression.operation} (${expressionToString(expression.right)})"
+            is InfixExpression -> when (expression.operation) {
+                "^" -> "(${expressionToString(expression.left)}) ** (${expressionToString(expression.right)})"
+                // "+"-> TODO if adding string and int then cast int to string
+                else -> "(${expressionToString(expression.left)}) ${expression.operation} (${expressionToString(expression.right)})"
+            }
             is IfExpression -> "(${expressionToString(expression.trueBranch)}) if (${expressionToString(expression.condition)}) else (${expressionToString(expression.falseBranch)})"
             is NegateExpression -> "not ${expressionToString(expression.negateExpression)}"
             is NewStruct -> {

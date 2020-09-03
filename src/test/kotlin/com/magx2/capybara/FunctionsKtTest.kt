@@ -47,8 +47,10 @@ internal class FunctionsKtTest {
                         Arguments.of(InfixExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "*", integerExpression(), integerExpression()), intType),
                         Arguments.of(InfixExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "+", integerExpression(), integerExpression()), intType),
                         Arguments.of(InfixExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "-", integerExpression(), integerExpression()), intType),
-                        // infix expressions - int
+                        // infix expressions - string
                         Arguments.of(InfixExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "+", stringExpression(), stringExpression()), stringType),
+                        Arguments.of(InfixExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "*", stringExpression(), integerExpression()), stringType),
+                        Arguments.of(InfixExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "*", integerExpression(), stringExpression()), stringType),
                         // if expression
                         Arguments.of(IfExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), booleanExpression(), integerExpression(), integerExpression()), intType),
                         Arguments.of(IfExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), booleanExpression(), stringExpression(), stringExpression()), stringType),
@@ -64,7 +66,7 @@ internal class FunctionsKtTest {
 
         @Suppress("unused")
         @JvmStatic
-        fun stringInfixOperator(): Stream<String> = Stream.of("^", "*", "-", "&&", "||")
+        fun stringInfixOperator(): Stream<String> = Stream.of("^", "-", "&&", "||")
 
         @Suppress("unused")
         @JvmStatic
