@@ -8,6 +8,10 @@ data class IntegerExpression(override val codeMetainfo: CodeMetainfo, val value:
     constructor(codeMetainfo: CodeMetainfo, value: String) : this(codeMetainfo, value.toLong())
 }
 
+data class FloatExpression(override val codeMetainfo: CodeMetainfo, val value: Double) : ConstantExpression(codeMetainfo) {
+    constructor(codeMetainfo: CodeMetainfo, value: String) : this(codeMetainfo, value.toDouble())
+}
+
 data class BooleanExpression(override val codeMetainfo: CodeMetainfo, val value: Boolean) : ConstantExpression(codeMetainfo) {
     constructor(codeMetainfo: CodeMetainfo, value: String) : this(codeMetainfo, value.toBoolean())
 }

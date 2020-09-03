@@ -8,21 +8,43 @@ fun plus_string(s1: String, s2: String) = s1 + s2
 
 fun plus_string_int(String, Int) = string + int
 
+fun plus_int_string(String, Int) = int + string
+
+fun plus_string_float(String, Float) = string + float
+
+fun plus_float_string(String, Float) = float + string
+
 fun minus_int(i1: Int, i2: Int) = i1 - i2
+
+fun minus_float(f1: Float, f2: Float) = f1 - f2
 
 fun power_int(i1: Int, i2: Int) = i1 ^ i2
 
+fun power_float(f1: Float, f2: Float) = f1 ^ f2
+
 fun multiple_int(i1: Int, i2: Int) = i1 * i2
+
+fun multiple_float(f1: Float, f2: Float) = f1 * f2
 
 fun multiple_string_int(String, Int) = string * int
 
+fun multiple_int_string(String, Int) = int * string
+
 fun bigger_int(i1: Int, i2: Int) = i1 > i2
+
+fun bigger_float(f1: Float, f2: Float) = f1 > f2
 
 fun bigger_eq_int(i1: Int, i2: Int) = i1 >= i2
 
+fun bigger_eq_float(f1: Float, f2: Float) = f1 >= f2
+
 fun smaller_int(i1: Int, i2: Int) = i1 < i2
 
+fun smaller_float(f1: Float, f2: Float) = f1 < f2
+
 fun smaller_eq_int(i1: Int, i2: Int) = i1 <= i2
+
+fun smaller_eq_float(f1: Float, f2: Float) = f1 <= f2
 
 fun and_bool(b1: Boolean, b2: Boolean) = b1 && b2
 
@@ -30,11 +52,21 @@ fun or_bool(b1: Boolean, b2: Boolean) = b1 || b2
 
 fun eq_int(i1: Int, i2: Int) = i1 == i2
 
+fun eq_float(f1: Float, f2: Float) = f1 == f2
+
 fun eq_string(s1: String, s2: String) = s1 == s2
 
 fun not_eq_int(i1: Int, i2: Int) = i1 != i2
 
+fun not_eq_float(f1: Float, f2: Float) = f1 != f2
+
 fun not_eq_string(s1: String, s2: String) = s1 != s2
 
 fun quotient_int(i1: Int, i2: Int) = i1 ~/ i2
+
+fun quotient_int_float(Int, Float) = int ~/ float
+
+fun quotient_float_int(Int, Float) = float ~/ int
+
+fun quotient_float(f1: Float, f2: Float) = f1 ~/ f2
 

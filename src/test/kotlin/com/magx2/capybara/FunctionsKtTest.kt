@@ -2,6 +2,7 @@ package com.magx2.capybara
 
 import com.magx2.capybara.BasicTypes.anyType
 import com.magx2.capybara.BasicTypes.booleanType
+import com.magx2.capybara.BasicTypes.floatType
 import com.magx2.capybara.BasicTypes.intType
 import com.magx2.capybara.BasicTypes.listType
 import com.magx2.capybara.BasicTypes.nothingType
@@ -22,6 +23,7 @@ internal class FunctionsKtTest {
 
     companion object {
         private fun integerExpression() = IntegerExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), Random().nextLong())
+        private fun floatExpression() = FloatExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), Random().nextDouble() * Random().nextLong())
         private fun booleanExpression() = BooleanExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), Random().nextBoolean())
         private fun stringExpression() = StringExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), (Random().nextDouble() * Random().nextInt()).toString())
 
@@ -42,6 +44,22 @@ internal class FunctionsKtTest {
                         Arguments.of(InfixExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "==", booleanExpression(), booleanExpression()), booleanType),
                         Arguments.of(InfixExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "&&", booleanExpression(), booleanExpression()), booleanType),
                         Arguments.of(InfixExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "||", booleanExpression(), booleanExpression()), booleanType),
+                        // infix expressions - float
+                        Arguments.of(InfixExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "^", floatExpression(), floatExpression()), floatType),
+                        Arguments.of(InfixExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "^", integerExpression(), floatExpression()), floatType),
+                        Arguments.of(InfixExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "^", floatExpression(), integerExpression()), floatType),
+                        Arguments.of(InfixExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "*", floatExpression(), floatExpression()), floatType),
+                        Arguments.of(InfixExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "*", integerExpression(), floatExpression()), floatType),
+                        Arguments.of(InfixExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "*", floatExpression(), integerExpression()), floatType),
+                        Arguments.of(InfixExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "+", floatExpression(), floatExpression()), floatType),
+                        Arguments.of(InfixExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "+", integerExpression(), floatExpression()), floatType),
+                        Arguments.of(InfixExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "+", floatExpression(), integerExpression()), floatType),
+                        Arguments.of(InfixExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "-", floatExpression(), floatExpression()), floatType),
+                        Arguments.of(InfixExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "-", integerExpression(), floatExpression()), floatType),
+                        Arguments.of(InfixExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "-", floatExpression(), integerExpression()), floatType),
+                        Arguments.of(InfixExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "~/", floatExpression(), floatExpression()), floatType),
+                        Arguments.of(InfixExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "~/", integerExpression(), floatExpression()), floatType),
+                        Arguments.of(InfixExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "~/", floatExpression(), integerExpression()), floatType),
                         // infix expressions - int
                         Arguments.of(InfixExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "^", integerExpression(), integerExpression()), intType),
                         Arguments.of(InfixExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "*", integerExpression(), integerExpression()), intType),
@@ -50,6 +68,10 @@ internal class FunctionsKtTest {
                         Arguments.of(InfixExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "~/", integerExpression(), integerExpression()), intType),
                         // infix expressions - string
                         Arguments.of(InfixExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "+", stringExpression(), stringExpression()), stringType),
+                        Arguments.of(InfixExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "+", integerExpression(), stringExpression()), stringType),
+                        Arguments.of(InfixExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "+", stringExpression(), integerExpression()), stringType),
+                        Arguments.of(InfixExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "+", floatExpression(), stringExpression()), stringType),
+                        Arguments.of(InfixExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "+", stringExpression(), floatExpression()), stringType),
                         Arguments.of(InfixExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "*", stringExpression(), integerExpression()), stringType),
                         Arguments.of(InfixExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "*", integerExpression(), stringExpression()), stringType),
                         // if expression
@@ -91,7 +113,10 @@ internal class FunctionsKtTest {
                 fullyQualifiedStructNames)
 
         // then
-        assertThat(returnType).isEqualTo(expectedReturnType)
+        assertThat(returnType)
+                .`as`("Expecting type `${typeToString(expectedReturnType)}` " +
+                        "but got `${typeToString(returnType)}`")
+                .isEqualTo(expectedReturnType)
     }
 
     @Test

@@ -201,6 +201,7 @@ private fun expressionToString(expression: Expression): String =
             is ParenthesisExpression -> "(" + expressionToString(expression.expression) + ")"
             is ParameterExpression -> expression.valueName
             is IntegerExpression -> expression.value.toString()
+            is FloatExpression -> expression.value.toString()
             is BooleanExpression -> if (expression.value) "True" else "False"
             is StringExpression -> "\"${expression.value}\""
             is FunctionInvocationExpression -> {

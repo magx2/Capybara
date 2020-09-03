@@ -10,6 +10,7 @@ val basicTypesExport = Export(
         typePackageName,
         setOf(
                 Struct(typePackageName, BasicTypes.intType.name, LinkedList()),
+                Struct(typePackageName, BasicTypes.floatType.name, LinkedList()),
                 Struct(typePackageName, BasicTypes.booleanType.name, LinkedList()),
                 Struct(typePackageName, BasicTypes.stringType.name, LinkedList()),
                 Struct(typePackageName, BasicTypes.listType.name, LinkedList()),
@@ -20,6 +21,7 @@ val basicTypesExport = Export(
 
 object BasicTypes {
     val intType = Type(typePackageName, "Int")
+    val floatType = Type(typePackageName, "Float")
     val booleanType = Type(typePackageName, "Boolean")
     val stringType = Type(typePackageName, "String")
     val listType = Type(typePackageName, "List")

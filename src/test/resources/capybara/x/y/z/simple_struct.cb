@@ -33,6 +33,10 @@ fun xyz(i1: /capybara/type/Int, i2: /capybara/type/Int, i3: /capybara/type/Int, 
 	return a1 + a2 + a3 + a4 + a5 + a6 + a7 + a8
 }
 
+fun float_below_one() = 0.1
+
+fun float() = 123.456
+
 fun f(/capybara/type/Int, i2: /capybara/type/Int, double: /capybara/type/Int) {
 	return int
 }

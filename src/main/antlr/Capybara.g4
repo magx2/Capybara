@@ -89,6 +89,7 @@ struct_field_initialization
 
 constant
 	: INTEGER
+	| FLOAT
 	| BOOLEAN
 	| string=STRING_DOUBLE_QUOTES
 	| string=STRING_SINGLE_QUOTES
@@ -179,6 +180,7 @@ next
 
 // Types
 INTEGER : ('-')?[0-9_]+ ;
+FLOAT : ('-')?[0-9_]+ '.' [0-9_]+ ;
 BOOLEAN : ('true'|'false') ;
 VOID : 'void' ;
 STRING_SINGLE_QUOTES : '"' .+? '"' ;

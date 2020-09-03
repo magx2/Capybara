@@ -2,6 +2,7 @@ package com.magx2.capybara
 
 import com.magx2.capybara.BasicTypes.anyType
 import com.magx2.capybara.BasicTypes.booleanType
+import com.magx2.capybara.BasicTypes.floatType
 import com.magx2.capybara.BasicTypes.intType
 import com.magx2.capybara.BasicTypes.listType
 import com.magx2.capybara.BasicTypes.nothingType
@@ -37,6 +38,7 @@ fun findReturnType(
             is ParenthesisExpression -> findReturnType(compilationContext, compileUnit, assignments, expression.expression, fullyQualifiedStructNames)
             is ParameterExpression -> parseType(expression.codeMetainfo, expression.type, compileUnit.structs, compileUnit.importStructs)
             is IntegerExpression -> intType
+            is FloatExpression -> floatType
             is BooleanExpression -> booleanType
             is StringExpression -> stringType
             is FunctionInvocationExpression -> {
@@ -279,10 +281,20 @@ private fun findReturnTypeFromBranchExpression(
             val notStringType = if (leftType == stringType) Pair(rightType, right) else Pair(leftType, left)
             if (notStringType.first == intType || notStringType.first == booleanType) {
                 stringType
+            } else if (expression is InfixExpression && notStringType.first == floatType) {
+                if (expression.operation != "*") {
+                    stringType
+                } else {
+                    throw CompilationException(expression.codeMetainfo,
+                            "Cannot apply infix operation `${expression.operation}` to types " +
+                                    "`${typeToString(leftType)}` and `${typeToString(rightType)}`")
+                }
             } else {
                 throw CompilationException(notStringType.second.codeMetainfo,
                         "Cannot convert type `${notStringType.first}` to `$stringType` automatically.")
             }
+        } else if (isOneOfGivenType(intType, leftType, rightType) && isOneOfGivenType(floatType, leftType, rightType)) {
+            floatType
         } else {
             throw CompilationException(expression.codeMetainfo, "You need to return same types from infix expression. " +
                     "Left expression returns `${typeToString(leftType)}`, " +
@@ -291,31 +303,32 @@ private fun findReturnTypeFromBranchExpression(
     }
 }
 
-private fun findReturnTypeFromBranchExpressionWithoutTypeCasting(
+private fun findReturnTypeForNumericOperations(
         compilationContext: CompilationContext,
         compileUnit: CompileUnitWithFlatStructs,
         assignments: Set<AssigmentStatement>,
-        expression: Expression,
+        expression: InfixExpression,
         left: Expression,
         right: Expression,
         fullyQualifiedStructNames: Map<String, Struct>): Type {
     val leftType = findReturnType(compilationContext, compileUnit, assignments, left, fullyQualifiedStructNames)
+    if (isOneOfGivenType(leftType, intType, floatType).not()) {
+        throw CompilationException(left.codeMetainfo, "Type `${typeToString(leftType)}` needs to be either `${typeToString(intType)}` or  `${typeToString(floatType)}`")
+    }
     val rightType = findReturnType(compilationContext, compileUnit, assignments, right, fullyQualifiedStructNames)
-    return if (leftType == rightType) {
-        leftType
-    } else {
-        if (leftType == stringType || rightType == stringType) {
-            val notStringType = if (leftType == stringType) Pair(rightType, right) else Pair(leftType, left)
-            if (notStringType.first == intType || notStringType.first == booleanType) {
-                stringType
-            } else {
-                throw CompilationException(notStringType.second.codeMetainfo,
-                        "Cannot convert type `${notStringType.first}` to `$stringType` automatically.")
-            }
-        } else {
-            throw CompilationException(expression.codeMetainfo, "You need to return same types from infix expression. " +
-                    "Left expression returns `$leftType`, " +
-                    "right expression returns `$rightType`")
+    if (isOneOfGivenType(rightType, intType, floatType).not()) {
+        throw CompilationException(right.codeMetainfo, "Type `${typeToString(rightType)}` needs to be either `${typeToString(intType)}` or  `${typeToString(floatType)}`")
+    }
+    return when {
+        isOneOfGivenType(floatType, leftType, rightType) -> {
+            floatType
+        }
+        isOneOfGivenType(intType, leftType, rightType) -> {
+            intType
+        }
+        else -> {
+            throw CompilationException(expression.codeMetainfo, "Do not know what to return from infix expression: " +
+                    "${typeToString(leftType)} ${expression.operation} ${typeToString(rightType)}")
         }
     }
 }
@@ -352,9 +365,8 @@ private fun findReturnType(
         ">", "<", ">=", "<=", "!=", "==", "&&", "||" -> booleanType // FIXME check if left and right are correct types!
         // FIXME only + can be applied like this ; rest needs to have strict types
         // FIXME and you cannot add booleans...
-        "+" -> findReturnTypeFromBranchExpression(compilationContext, compileUnit, assignments, expression, expression.left, expression.right, fullyQualifiedStructNames)
-        "^", "*", "-" -> findReturnTypeFromBranchExpressionWithoutTypeCasting(compilationContext, compileUnit, assignments, expression, expression.left, expression.right, fullyQualifiedStructNames)
-        "~/" -> intType
+        "+", "*" -> findReturnTypeFromBranchExpression(compilationContext, compileUnit, assignments, expression, expression.left, expression.right, fullyQualifiedStructNames)
+        "^", "-", "~/" -> findReturnTypeForNumericOperations(compilationContext, compileUnit, assignments, expression, expression.left, expression.right, fullyQualifiedStructNames)
         else -> throw CompilationException(expression.codeMetainfo,
                 "Do not know this `${expression.operation}` infix expression!")
     }

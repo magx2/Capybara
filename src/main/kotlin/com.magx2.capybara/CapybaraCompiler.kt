@@ -234,6 +234,7 @@ private class Listener(private val fileName: String) : CapybaraBaseListener() {
                 ctx.constant() != null -> {
                     when {
                         ctx.constant().BOOLEAN() != null -> BooleanExpression(parseCodeMetainfo(fileName, ctx.start), ctx.constant().BOOLEAN().text)
+                        ctx.constant().FLOAT() != null -> FloatExpression(parseCodeMetainfo(fileName, ctx.start), ctx.constant().FLOAT().text)
                         ctx.constant().INTEGER() != null -> IntegerExpression(parseCodeMetainfo(fileName, ctx.start), ctx.constant().INTEGER().text)
                         ctx.constant().string != null -> StringExpression(parseCodeMetainfo(fileName, ctx.start), ctx.constant().string.text.substring(1 until (ctx.constant().string.text.length - 1)))
                         else -> throw IllegalStateException("I don't know how to handle it!")
