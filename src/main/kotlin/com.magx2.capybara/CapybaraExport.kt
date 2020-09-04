@@ -219,7 +219,7 @@ private fun expressionToString(expression: ExpressionWithReturnType): String =
             is IfExpressionWithReturnType -> "(${expressionToString(expression.trueBranch)}) if (${expressionToString(expression.condition)}) else (${expressionToString(expression.falseBranch)})"
             is NegateExpressionWithReturnType -> "not ${expressionToString(expression.negateExpression)}"
             is NewStructExpressionWithReturnType -> {
-                "${typeToString(expression.returnType)}()" // TODO
+                "NewStructExpressionWithReturnType()" // TODO
             }
             is ValueExpressionWithReturnType -> expression.valueName
             is NewListExpressionWithReturnType -> expression.elements
