@@ -159,8 +159,7 @@ private class Listener(private val fileName: String) : CapybaraBaseListener() {
                 parameters,
                 values.entries.stream()
                         .map { (k, v) -> AssigmentStatement(k, v) }
-                        .toList()
-                        .toSet(),
+                        .toList(),
                 returnExpression!!))
         values.clear()
         returnExpression = null
@@ -370,6 +369,7 @@ private class Listener(private val fileName: String) : CapybaraBaseListener() {
 // Statements
 sealed class Statement
 data class AssigmentStatement(val name: String, val expression: Expression) : Statement()
+data class AssigmentStatementWithReturnType(val name: String, val expression: ExpressionWithReturnType) : Statement()
 sealed class Loop : Statement()
 data class WhileLoopStatement(val whileExpression: Expression, val statements: List<Statement>) : Loop()
 data class ForLoopStatement(val assigment: AssigmentStatement?,

@@ -27,10 +27,9 @@ data class FieldToExport(val name: String, val type: Type)
 
 data class FunctionToExport(val packageName: String,
                             val name: String,
-                            val returnType: Type,
+                            val returnExpression: ExpressionWithReturnType,
                             val parameters: List<ParameterToExport>,
-                            val assignments: Set<AssigmentStatement>,
-                            val returnExpression: Expression)
+                            val assignments: List<AssigmentStatementWithReturnType>)
 
 data class ParameterToExport(val name: String, val type: Type)
 
@@ -196,39 +195,37 @@ private fun functionToPython(function: FunctionToExport): String {
     |${'\n'}$main""".trimMargin()
 }
 
-private fun expressionToString(expression: Expression): String =
+private fun expressionToString(expression: ExpressionWithReturnType): String =
         when (expression) {
-            is ParenthesisExpression -> "(" + expressionToString(expression.expression) + ")"
-            is ParameterExpression -> expression.valueName
-            is IntegerExpression -> expression.value.toString()
-            is FloatExpression -> expression.value.toString()
-            is BooleanExpression -> if (expression.value) "True" else "False"
-            is StringExpression -> "\"${expression.value}\""
-            is FunctionInvocationExpression -> {
+            is ParameterExpressionWithReturnType -> expression.valueName
+            is IntegerExpressionWithReturnType -> expression.value.toString()
+            is FloatExpressionWithReturnType -> expression.value.toString()
+            is BooleanExpressionWithReturnType -> if (expression.value) "True" else "False"
+            is StringExpressionWithReturnType -> "\"${expression.value}\""
+            is FunctionInvocationExpressionWithReturnType -> {
                 val parameters = expression.parameters
                         .stream()
                         .map { expressionToString(it) }
                         .collect(Collectors.joining(", "))
                 "${expression.functionName}($parameters)"
             }
-            is InfixExpression -> "(${expressionToString(expression.left)}) ${mapInfixOperator(expression)} (${expressionToString(expression.right)})"
-            is IfExpression -> "(${expressionToString(expression.trueBranch)}) if (${expressionToString(expression.condition)}) else (${expressionToString(expression.falseBranch)})"
-            is NegateExpression -> "not ${expressionToString(expression.negateExpression)}"
-            is NewStruct -> {
-
-                "${expression.structName}()" // TODO
+            is InfixExpressionWithReturnType -> "(${expressionToString(expression.left)}) ${mapInfixOperator(expression)} (${expressionToString(expression.right)})"
+            is IfExpressionWithReturnType -> "(${expressionToString(expression.trueBranch)}) if (${expressionToString(expression.condition)}) else (${expressionToString(expression.falseBranch)})"
+            is NegateExpressionWithReturnType -> "not ${expressionToString(expression.negateExpression)}"
+            is NewStructExpressionWithReturnType -> {
+                "${typeToString(expression.returnType)}()" // TODO
             }
-            is ValueExpression -> expression.valueName
-            is NewListExpression -> expression.elements
+            is ValueExpressionWithReturnType -> expression.valueName
+            is NewListExpressionWithReturnType -> expression.elements
                     .stream()
                     .map { expressionToString(it) }
                     .collect(Collectors.joining(", ", "[", "]"))
-            is StructureAccessExpression -> {
+            is StructureAccessExpressionWithReturnType -> {
                 "${expression.structureName}[${expressionToString(expression.structureIndex)}]"
             }
         }
 
-private fun mapInfixOperator(expression: InfixExpression) = when (expression.operation) {
+private fun mapInfixOperator(expression: InfixExpressionWithReturnType) = when (expression.operation) {
     "^" -> "**"
     "~/" -> "//"
     else -> expression.operation

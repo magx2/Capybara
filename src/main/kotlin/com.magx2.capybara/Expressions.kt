@@ -1,5 +1,10 @@
 package com.magx2.capybara
 
+import com.magx2.capybara.BasicTypes.booleanType
+import com.magx2.capybara.BasicTypes.floatType
+import com.magx2.capybara.BasicTypes.intType
+import com.magx2.capybara.BasicTypes.stringType
+
 sealed class Expression(open val codeMetainfo: CodeMetainfo)
 data class ParenthesisExpression(override val codeMetainfo: CodeMetainfo, val expression: Expression) : Expression(codeMetainfo)
 data class ParameterExpression(override val codeMetainfo: CodeMetainfo, val valueName: String, val type: String) : Expression(codeMetainfo)
@@ -22,3 +27,24 @@ data class StructureAccessExpression(
         val structureIndex: Expression,
         val structureIndexCodeMetainfo: CodeMetainfo,
         val structureType: String?) : Expression(codeMetainfo)
+
+sealed class ExpressionWithReturnType(open val returnType: Type)
+data class ParameterExpressionWithReturnType(override val returnType: Type, val valueName: String) : ExpressionWithReturnType(returnType)
+sealed class ConstantExpressionWithReturnType(returnType: Type) : ExpressionWithReturnType(returnType)
+data class IntegerExpressionWithReturnType(val value: Long) : ConstantExpressionWithReturnType(intType)
+data class FloatExpressionWithReturnType(val value: Double) : ConstantExpressionWithReturnType(floatType)
+data class BooleanExpressionWithReturnType(val value: Boolean) : ConstantExpressionWithReturnType(booleanType)
+data class StringExpressionWithReturnType(val value: String) : ConstantExpressionWithReturnType(stringType)
+data class FunctionInvocationExpressionWithReturnType(override val returnType: Type, val packageName: String?, val functionName: String, val parameters: List<ExpressionWithReturnType>) : ExpressionWithReturnType(returnType)
+data class InfixExpressionWithReturnType(override val returnType: Type, val operation: String, val left: ExpressionWithReturnType, val right: ExpressionWithReturnType) : ExpressionWithReturnType(returnType)
+data class IfExpressionWithReturnType(override val returnType: Type, val condition: ExpressionWithReturnType, val trueBranch: ExpressionWithReturnType, val falseBranch: ExpressionWithReturnType) : ExpressionWithReturnType(returnType)
+data class NegateExpressionWithReturnType(val negateExpression: ExpressionWithReturnType) : ExpressionWithReturnType(booleanType)
+data class NewStructExpressionWithReturnType(override val returnType: Type, val fields: List<StructFieldExpressionWithReturnType>) : ExpressionWithReturnType(returnType)
+data class StructFieldExpressionWithReturnType(val name: String, val value: ExpressionWithReturnType)
+data class ValueExpressionWithReturnType(override val returnType: Type, val valueName: String) : ExpressionWithReturnType(returnType)
+data class NewListExpressionWithReturnType(override val returnType: Type, val elements: List<ExpressionWithReturnType>) : ExpressionWithReturnType(returnType)
+data class StructureAccessExpressionWithReturnType(
+        override val returnType: Type,
+        val structureType: Type,
+        val structureName: String,
+        val structureIndex: ExpressionWithReturnType) : ExpressionWithReturnType(returnType)
