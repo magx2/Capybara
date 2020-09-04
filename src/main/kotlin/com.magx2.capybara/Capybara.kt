@@ -241,8 +241,7 @@ fun main(options: CommandLineOptions) {
                                 .stream()
                                 .map {
                                     StructToExport(
-                                            it.packageName,
-                                            it.name,
+                                            Type(it.packageName, it.name),
                                             it.fields
                                                     .stream()
                                                     .map { FieldToExport(it.name, it.type) }
