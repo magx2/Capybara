@@ -142,6 +142,7 @@ fun findReturnType(
                 assignments.stream()
                         .filter { it.name == expression.valueName }
                         .map { it.expression }
+                        .map { ValueExpressionWithReturnType(it.returnType, expression.valueName) }
                         .findAny()
                         .orElseThrow { CompilationException(expression.codeMetainfo, "There is no value with name `${expression.valueName}`") }
             }
