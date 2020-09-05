@@ -78,16 +78,8 @@ fun findReturnType(
                 val function = findFunctionForGivenFunctionInvocation(compilationContext, compileUnit, assignments, expression, fullyQualifiedStructNames)
                 if (function.isPresent) {
                     val f = function.get()
-                    if (f.returnType != null) {
-                        FunctionInvocationExpressionWithReturnType(
-                                parseType(expression.codeMetainfo, f.returnType, compileUnit.structs, compileUnit.importStructs),
-                                f.packageName,
-                                f.name,
-                                expression.parameters
-                                        .stream()
-                                        .map { findReturnType(compilationContext, compileUnit, assignments, it, fullyQualifiedStructNames) }
-                                        .toList()
-                        )
+                    val returnType = if (f.returnType != null) {
+                        parseType(expression.codeMetainfo, f.returnType, compileUnit.structs, compileUnit.importStructs)
                     } else {
                         if (callStack.contains(f.returnExpression)) {
                             throw CompilationException(expression.codeMetainfo, "There is recursive invocation of functions. Please specify return type explicitly.")
@@ -97,8 +89,17 @@ fun findReturnType(
                                 assignments,
                                 f.returnExpression,
                                 fullyQualifiedStructNames,
-                                callStack + expression)
+                                callStack + expression).returnType
                     }
+                    FunctionInvocationExpressionWithReturnType(
+                            returnType,
+                            f.packageName,
+                            f.name,
+                            expression.parameters
+                                    .stream()
+                                    .map { findReturnType(compilationContext, compileUnit, assignments, it, fullyQualifiedStructNames) }
+                                    .toList()
+                    )
                 } else {
                     val parameters = findFunctionParametersValues(compilationContext, compileUnit, assignments, expression, fullyQualifiedStructNames)
                             .stream()

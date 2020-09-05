@@ -35,7 +35,7 @@ data class IntegerExpressionWithReturnType(val value: Long) : ConstantExpression
 data class FloatExpressionWithReturnType(val value: Double) : ConstantExpressionWithReturnType(floatType)
 data class BooleanExpressionWithReturnType(val value: Boolean) : ConstantExpressionWithReturnType(booleanType)
 data class StringExpressionWithReturnType(val value: String) : ConstantExpressionWithReturnType(stringType)
-data class FunctionInvocationExpressionWithReturnType(override val returnType: Type, val packageName: String?, val functionName: String, val parameters: List<ExpressionWithReturnType>) : ExpressionWithReturnType(returnType)
+data class FunctionInvocationExpressionWithReturnType(override val returnType: Type, val packageName: String, val functionName: String, val parameters: List<ExpressionWithReturnType>) : ExpressionWithReturnType(returnType)
 data class InfixExpressionWithReturnType(override val returnType: Type, val operation: String, val left: ExpressionWithReturnType, val right: ExpressionWithReturnType) : ExpressionWithReturnType(returnType)
 data class IfExpressionWithReturnType(override val returnType: Type, val condition: ExpressionWithReturnType, val trueBranch: ExpressionWithReturnType, val falseBranch: ExpressionWithReturnType) : ExpressionWithReturnType(returnType)
 data class NegateExpressionWithReturnType(val negateExpression: ExpressionWithReturnType) : ExpressionWithReturnType(booleanType)
