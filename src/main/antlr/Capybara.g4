@@ -84,7 +84,7 @@ structureAccessExpression
 	;
 
 struct_field_initialization
-	: field_name=SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL ':' field_value=expression
+	: field_name=SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL '=' field_value=expression
 	;
 
 constant

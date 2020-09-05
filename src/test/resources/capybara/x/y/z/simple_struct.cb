@@ -61,5 +61,5 @@ fun b(/capybara/type/Boolean) = !boolean
 
 fun b2(/capybara/type/Boolean) = boolean ? 1 : 0
 
-fun new_struct(/capybara/type/Int, /capybara/type/Boolean) = AnotherTestStruct2 { age: int, is_adult: boolean }
+fun new_struct(/capybara/type/Int, /capybara/type/Boolean) = AnotherTestStruct2 { age = int, is_adult = boolean }
 

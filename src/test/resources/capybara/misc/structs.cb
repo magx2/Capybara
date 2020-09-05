@@ -1,0 +1,20 @@
+package /misc
+
+import /capybara/type
+
+struct SimpleStruct {
+	int: Int
+	float: Float
+	string: String
+}
+
+struct ExtendedStruct {
+	new_int: Int
+	boolean: Boolean
+	...SimpleStruct
+}
+
+fun new_simple_struct() = SimpleStruct {int = 1, float = 1.1, string = "s"}
+
+fun new_extended_struct() = ExtendedStruct {int = 1, float = 1.1, string = "s", new_int = 2, boolean = true}
+
