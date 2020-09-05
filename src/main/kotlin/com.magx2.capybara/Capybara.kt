@@ -206,10 +206,11 @@ fun main(options: CommandLineOptions) {
                 val functionsWithReturnType = unit.functions
                         .stream()
                         .map { function ->
-                            val assignments = findReturnTypeForAssignments(compilationContext, unit, function.assignments, fullyQualifiedStructNames)
+                            val functionCompiler = FunctionCompiler(compilationContext, unit, fullyQualifiedStructNames)
+                            val assignments = functionCompiler.findReturnTypeForAssignments(function.assignments)
                             FunctionOnBuild(
                                     function,
-                                    findReturnType(compilationContext, unit, assignments, function.returnExpression, fullyQualifiedStructNames),
+                                    functionCompiler.findReturnType(assignments, function.returnExpression),
                                     unit,
                                     assignments)
                         }

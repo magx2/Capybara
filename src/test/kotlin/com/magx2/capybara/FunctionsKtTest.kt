@@ -947,4 +947,11 @@ internal class FunctionsKtTest {
                 .isInstanceOf(CompilationException::class.java)
                 .hasMessageStartingWith("/home/capybara/xyz.cb [2:3] List are indexed by")
     }
+
+    private fun findReturnType(compilationContext: CompilationContext,
+                               compileUnit: CompileUnitWithFlatStructs,
+                               assignments: List<AssigmentStatementWithReturnType>,
+                               expression: Expression,
+                               fullyQualifiedStructNames: Map<String, Struct>) =
+            FunctionCompiler(compilationContext, compileUnit, fullyQualifiedStructNames).findReturnType(assignments, expression)
 }
