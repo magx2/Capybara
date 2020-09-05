@@ -174,10 +174,14 @@ private fun functionToPython(function: FunctionToExport): String {
             .stream()
             .map { it.name }
             .collect(Collectors.joining(", "))
-    val assignments = function.assignments
-            .stream()
-            .map { "${it.name} = ${expressionToString(it.expression)}" }
-            .collect(Collectors.joining("\n|\t"))
+    val assignments = if (function.assignments.isNotEmpty()) {
+        "\n\t" + function.assignments
+                .stream()
+                .map { "${it.name} = ${expressionToString(it.expression)}" }
+                .collect(Collectors.joining("\n|\t"))
+    } else {
+        ""
+    }
 
     val methodDoc = generateDocForDef(
             function.name,
@@ -201,8 +205,7 @@ private fun functionToPython(function: FunctionToExport): String {
 
     return """
     |def ${function.name}($parameters):
-    |${'\t'}$methodDoc
-    |${'\t'}$assignments
+    |${'\t'}$methodDoc$assignments
     |${'\t'}return ${expressionToString(function.returnExpression)}
     |${'\n'}$main""".trimMargin()
 }
