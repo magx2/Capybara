@@ -228,7 +228,12 @@ private fun expressionToString(expression: ExpressionWithReturnType): String =
             is IfExpressionWithReturnType -> "(${expressionToString(expression.trueBranch)}) if (${expressionToString(expression.condition)}) else (${expressionToString(expression.falseBranch)})"
             is NegateExpressionWithReturnType -> "not ${expressionToString(expression.negateExpression)}"
             is NewStructExpressionWithReturnType -> {
-                "NewStructExpressionWithReturnType()" // TODO
+                val parameters = expression.fields
+                        .stream()
+                        .map { (name, expression) -> Pair(name, expressionToString(expression)) }
+                        .map { (name, value) -> "${name}=${value}" }
+                        .collect(Collectors.joining(", "))
+                "${expression.returnType.name}($parameters)" // TODO support imports
             }
             is ValueExpressionWithReturnType -> expression.valueName
             is NewListExpressionWithReturnType -> expression.elements
