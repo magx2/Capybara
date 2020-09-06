@@ -243,6 +243,8 @@ private fun expressionToString(expression: ExpressionWithReturnType): String =
 private fun mapInfixOperator(expression: InfixExpressionWithReturnType) = when (expression.operation) {
     "^" -> "**"
     "~/" -> "//"
+    "&&" -> "and"
+    "||" -> "or"
     else -> expression.operation
 }
 
