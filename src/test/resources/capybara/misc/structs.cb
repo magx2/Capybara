@@ -16,5 +16,11 @@ struct ExtendedStruct {
 
 fun new_simple_struct() = SimpleStruct {int = 1, float = 1.1, string = "s"}
 
-fun new_extended_struct() = ExtendedStruct {int = 1, float = 1.1, string = "s", new_int = 2, boolean = true}
+fun new_extended_struct() = ExtendedStruct {
+	int = 1,
+	float = 1.1,
+	string = "s",
+	new_int = 2,
+	boolean = true
+}
 
