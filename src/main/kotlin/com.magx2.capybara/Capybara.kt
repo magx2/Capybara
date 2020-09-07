@@ -97,7 +97,7 @@ fun main(options: CommandLineOptions) {
                         }
 
                 override fun finisher(): Function<MutableMap<String, Export>, Map<String, Export>> = Function { it.toMap() }
-            }) + (basicTypesExport.packageName to basicTypesExport)
+            })
     val compileUnitsWithImports = compileUnits.stream()
             .map { compileUnit ->
                 val imports = compileUnit.imports.stream()

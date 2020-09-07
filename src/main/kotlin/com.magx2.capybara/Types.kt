@@ -1,24 +1,9 @@
 package com.magx2.capybara
 
-import java.util.*
 import java.util.regex.Pattern
 import java.util.stream.Stream
 
 const val typePackageName = "/capybara/type"
-
-val basicTypesExport = Export(
-        typePackageName,
-        setOf(
-                Struct(CodeMetainfo("<native>", -1, -1), BasicTypes.intType, LinkedList()),
-                Struct(CodeMetainfo("<native>", -1, -1), BasicTypes.floatType, LinkedList()),
-                Struct(CodeMetainfo("<native>", -1, -1), BasicTypes.booleanType, LinkedList()),
-                Struct(CodeMetainfo("<native>", -1, -1), BasicTypes.stringType, LinkedList()),
-                Struct(CodeMetainfo("<native>", -1, -1), BasicTypes.listType, LinkedList()),
-                Struct(CodeMetainfo("<native>", -1, -1), BasicTypes.anyType, LinkedList()),
-                Struct(CodeMetainfo("<native>", -1, -1), BasicTypes.nothingType, LinkedList()),
-        ),
-        setOf(),
-        setOf())
 
 object BasicTypes {
     val intType = Type(typePackageName, "Int")

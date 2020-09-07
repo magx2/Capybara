@@ -1,0 +1,16 @@
+package /capybara/type
+
+struct Int {}
+
+struct Float {}
+
+struct Boolean {}
+
+struct String {}
+
+struct List {}
+
+struct Any {}
+
+struct Nothing {}
+
