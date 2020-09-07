@@ -1,0 +1,14 @@
+package /capybara/type
+
+union IntOrNothing { Int, Nothing }
+
+union FloatOrNothing { Float, Nothing }
+
+union BooleanOrNothing { Boolean, Nothing }
+
+union StringOrNothing { String, Nothing }
+
+union ListOrNothing { List, Nothing }
+
+union AnyOrNothing { Any, Nothing }
+

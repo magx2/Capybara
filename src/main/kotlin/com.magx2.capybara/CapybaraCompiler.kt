@@ -55,12 +55,17 @@ data class CompileUnitWithFlatStructs(
         val importUnions: List<Union>,
         val importFunctions: List<Function>)
 
-fun getTypes(unit: CompileUnitWithImports): Set<Type> =
-        Stream.concat(
-                unit.structs.stream().map { it.type },
-                unit.unions.stream().map { it.type })
+fun getTypes(units: Collection<CompileUnitWithImports>, packageName: String): Set<Type> =
+        units.stream()
+                .filter { it.packageName == packageName }
+                .flatMap { unit ->
+                    Stream.concat(
+                            unit.structs.stream().map { it.type },
+                            unit.unions.stream().map { it.type })
+                }
                 .toList()
                 .toSet()
+
 
 fun getTypes(context: CompilationContext, packageName: String): Set<Type> =
         Stream.concat(

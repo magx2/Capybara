@@ -164,13 +164,14 @@ fun main(options: CommandLineOptions) {
 
     val compileUnitsWithFlatStructs = compileUnitsWithImports.stream()
             .map { unit ->
+                val types = getTypes(compileUnitsWithImports, unit.packageName) + importsToTypes(unit)
                 Triple(
                         unit,
                         unit.structs
                                 .stream()
                                 .map { struct ->
                                     addUnrollSpreadFieldsInStruct(
-                                            getTypes(unit) + importsToTypes(unit),
+                                            types,
                                             struct,
                                             fullyQualifiedStructNames)
                                 }
@@ -183,7 +184,7 @@ fun main(options: CommandLineOptions) {
                                             union.type,
                                             union.types
                                                     .stream()
-                                                    .map { parseType(union.codeMetainfo, it, getTypes(unit) + importsToTypes(unit)) }
+                                                    .map { parseType(union.codeMetainfo, it, types) }
                                                     .toList()
                                                     .toSet()
                                     )
