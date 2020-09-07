@@ -11,6 +11,7 @@ import java.util.function.Supplier
 import java.util.stream.Collector
 import java.util.stream.Collector.Characteristics.UNORDERED
 import java.util.stream.Collectors
+import java.util.stream.Stream
 import kotlin.streams.toList
 import kotlin.system.exitProcess
 
@@ -69,7 +70,7 @@ fun main(options: CommandLineOptions) {
     // EXPORTS/IMPORTS
     //
     val exports = compileUnits.stream()
-            .map { Export(it.packageName, it.structs.toSet(), it.functions.toSet()) }
+            .map { Export(it.packageName, it.structs.toSet(), it.unions, it.functions.toSet()) }
             .collect(object : Collector<Export, MutableMap<String, Export>, Map<String, Export>> {
                 override fun characteristics(): MutableSet<Collector.Characteristics> = setOf(UNORDERED).toMutableSet()
 
@@ -85,6 +86,7 @@ fun main(options: CommandLineOptions) {
                                 Export(
                                         export.packageName,
                                         export.structs + exportFromMap.structs,
+                                        export.unions + exportFromMap.unions,
                                         export.functions + exportFromMap.functions)
                             }
                         }
@@ -114,6 +116,7 @@ fun main(options: CommandLineOptions) {
                 CompileUnitWithImports(
                         compileUnit.packageName,
                         compileUnit.structs,
+                        compileUnit.unions,
                         compileUnit.functions,
                         imports.stream()
                                 .flatMap { (import, exportForPackage) ->
@@ -122,7 +125,18 @@ fun main(options: CommandLineOptions) {
                                     } else {
                                         exportForPackage.structs
                                                 .stream()
-                                                .filter { import.subImport.contains(it.name) }
+                                                .filter { import.subImport.contains(it.type.name) }
+                                    }
+                                }
+                                .toList(),
+                        imports.stream()
+                                .flatMap { (import, exportForPackage) ->
+                                    if (import.subImport.isEmpty()) {
+                                        exportForPackage.unions.stream()
+                                    } else {
+                                        exportForPackage.unions
+                                                .stream()
+                                                .filter { import.subImport.contains(it.type.name) }
                                     }
                                 }
                                 .toList(),
@@ -146,31 +160,46 @@ fun main(options: CommandLineOptions) {
     //
 
     // roll out spread filed in structs
-    val fullyQualifiedStructNames: Map<String, Struct> = findFullyQualifiedStructNames(compileUnits)
+    val fullyQualifiedStructNames: Map<Type, Struct> = findFullyQualifiedStructNames(compileUnits)
 
     val compileUnitsWithFlatStructs = compileUnitsWithImports.stream()
             .map { unit ->
-                Pair(
+                Triple(
                         unit,
                         unit.structs
                                 .stream()
                                 .map { struct ->
                                     addUnrollSpreadFieldsInStruct(
-                                            unit.structs,
-                                            unit.importStructs,
+                                            getTypes(unit) + importsToTypes(unit),
                                             struct,
                                             fullyQualifiedStructNames)
+                                }
+                                .toList()
+                                .toSet(),
+                        unit.unions
+                                .stream()
+                                .map { union ->
+                                    UnionWithType(
+                                            union.type,
+                                            union.types
+                                                    .stream()
+                                                    .map { parseType(union.codeMetainfo, it, getTypes(unit) + importsToTypes(unit)) }
+                                                    .toList()
+                                                    .toSet()
+                                    )
                                 }
                                 .toList()
                                 .toSet()
                 )
             }
-            .map { (unit, flatStructs) ->
+            .map { (unit, flatStructs, unions) ->
                 CompileUnitWithFlatStructs(
                         unit.packageName,
                         flatStructs,
+                        unions,
                         unit.functions,
                         unit.importStructs,
+                        unit.importUnions,
                         unit.importFunctions
                 )
             }
@@ -195,6 +224,10 @@ fun main(options: CommandLineOptions) {
                     .flatMap { it.structs.stream() }
                     .toList()
                     .toSet(),
+            compileUnitsWithFlatStructs.stream()
+                    .flatMap { it.unions.stream() }
+                    .toList()
+                    .toSet(),
             functions.stream()
                     .map { it.second }
                     .toList()
@@ -216,16 +249,19 @@ fun main(options: CommandLineOptions) {
                         }
                         .map { triple ->
                             val returnType = triple.function.returnType
-                            if (returnType != null && parseType(triple.function.codeMetainfo, returnType, triple.unit.structs, triple.unit.importStructs) != triple.expression.returnType) {
-                                throw CompilationException(triple.function.codeMetainfo, "Declared return type of function `${triple.function.packageName}/${triple.function.name}` do not corresponds what it really return. " +
-                                        "You declared `$returnType` and computed was `${typeToString(triple.expression.returnType)}`.")
+                            if (returnType != null) {
+                                val declaredReturnType = parseType(triple.function.codeMetainfo, returnType, getTypes(compilationContext, triple.unit.packageName) + importsToTypes(triple.unit))
+                                if (!isSameType(declaredReturnType, triple.expression.returnType, compilationContext)) {
+                                    throw CompilationException(triple.function.codeMetainfo, "Declared return type of function `${triple.function.packageName}/${triple.function.name}` do not corresponds what it really return. " +
+                                            "You declared `$returnType` and computed was `${typeToString(triple.expression.returnType)}`.")
+                                }
                             }
                             triple
                         }
                         .map { pair ->
                             val parameters = pair.function.parameters
                                     .stream()
-                                    .map { TypedParameter(it.name, parseType(pair.function.codeMetainfo, it.type, pair.unit.structs, pair.unit.importStructs)) }
+                                    .map { TypedParameter(it.name, parseType(pair.function.codeMetainfo, it.type, getTypes(compilationContext, pair.unit.packageName) + importsToTypes(pair.unit))) }
                                     .toList()
                             FunctionWithReturnType(
                                     pair.function.packageName,
@@ -242,7 +278,7 @@ fun main(options: CommandLineOptions) {
                                 .stream()
                                 .map {
                                     StructToExport(
-                                            Type(it.packageName, it.name),
+                                            it.type,
                                             it.fields
                                                     .stream()
                                                     .map { FieldToExport(it.name, it.type) }
@@ -284,6 +320,16 @@ fun main(options: CommandLineOptions) {
     }
 }
 
+private fun isSameType(declaredReturnType: Type, actualReturnType: Type, compilationContext: CompilationContext) =
+        if (declaredReturnType == actualReturnType) {
+            true
+        } else {
+            compilationContext.unions
+                    .stream()
+                    .filter { it.type == declaredReturnType }
+                    .anyMatch { it.types.contains(actualReturnType) }
+        }
+
 data class FunctionOnBuild(
         val function: com.magx2.capybara.Function,
         val expression: ExpressionWithReturnType,
@@ -294,10 +340,24 @@ data class FunctionOnBuild(
 /*
     Represents every struct nad every function in compilation context (from all files)
  */
-data class CompilationContext(val structs: Set<FlatStruct>, val functions: Set<com.magx2.capybara.Function>)
+data class CompilationContext(val structs: Set<FlatStruct>, val unions: Set<UnionWithType>, val functions: Set<com.magx2.capybara.Function>)
 
 class CompilationException(codeMetainfo: CodeMetainfo, msg: String) : RuntimeException("${codeMetainfo.fileName} [${codeMetainfo.line}:${codeMetainfo.charInLine}] $msg")
 
 data class CodeMetainfo(val fileName: String, val line: Int, val charInLine: Int)
 
 fun parseCodeMetainfo(fileName: String, token: Token) = CodeMetainfo(fileName, token.line, token.charPositionInLine)
+
+fun importsToTypes(unit: CompileUnitWithImports): Set<Type> =
+        Stream.concat(
+                unit.importStructs.stream().map { it.type },
+                unit.importUnions.stream().map { it.type })
+                .toList()
+                .toSet()
+
+fun importsToTypes(unit: CompileUnitWithFlatStructs): Set<Type> =
+        Stream.concat(
+                unit.importStructs.stream().map { it.type },
+                unit.importUnions.stream().map { it.type })
+                .toList()
+                .toSet()

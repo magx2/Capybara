@@ -97,10 +97,10 @@ internal class FunctionsKtTest {
         fun booleanInfixOperator(): Stream<String> = Stream.of("+", "^", "*", "-", ">", "<", ">=", "<=", "~/")
     }
 
-    val compilationContext = CompilationContext(setOf(), setOf())
-    val compileUnit = CompileUnitWithFlatStructs("", setOf(), setOf(), listOf(), listOf())
+    val compilationContext = CompilationContext(setOf(), setOf(), setOf())
+    val compileUnit = CompileUnitWithFlatStructs("", setOf(), setOf(), setOf(), listOf(), listOf(), listOf())
     val assignments = listOf<AssigmentStatementWithReturnType>()
-    val fullyQualifiedStructNames = mapOf<String, Struct>()
+    val fullyQualifiedStructNames = mapOf<Type, Struct>()
 
     @ParameterizedTest
     @MethodSource(value = ["expressionReturnType"])
@@ -271,7 +271,9 @@ internal class FunctionsKtTest {
         val compileUnit = CompileUnitWithFlatStructs(
                 "pkg_name",
                 setOf(),
+                setOf(),
                 setOf(function),
+                listOf(),
                 listOf(),
                 listOf())
 
@@ -308,7 +310,9 @@ internal class FunctionsKtTest {
         val compileUnit = CompileUnitWithFlatStructs(
                 "pkg_name",
                 setOf(),
+                setOf(),
                 setOf(function),
+                listOf(),
                 listOf(),
                 listOf())
 
@@ -341,7 +345,9 @@ internal class FunctionsKtTest {
         val compileUnit = CompileUnitWithFlatStructs(
                 "pkg_name",
                 setOf(),
+                setOf(),
                 setOf(function),
+                listOf(),
                 listOf(),
                 listOf())
 
@@ -372,6 +378,8 @@ internal class FunctionsKtTest {
                 "pkg_name",
                 setOf(),
                 setOf(),
+                setOf(),
+                listOf(),
                 listOf(),
                 listOf(function))
 
@@ -405,6 +413,8 @@ internal class FunctionsKtTest {
                 "pkg_name",
                 setOf(),
                 setOf(),
+                setOf(),
+                listOf(),
                 listOf(),
                 listOf(function))
 
@@ -434,7 +444,9 @@ internal class FunctionsKtTest {
         val compileUnit = CompileUnitWithFlatStructs(
                 "pkg_name",
                 setOf(),
+                setOf(),
                 setOf(localFunction),
+                listOf(),
                 listOf(),
                 listOf(importedFunction))
 
@@ -469,6 +481,7 @@ internal class FunctionsKtTest {
                 listOf(),
                 stringExpression())
         val compilationContext = CompilationContext(
+                setOf(),
                 setOf(),
                 setOf(function))
         // when
@@ -506,6 +519,7 @@ internal class FunctionsKtTest {
                 listOf(),
                 stringExpression())
         val compilationContext = CompilationContext(
+                setOf(),
                 setOf(),
                 setOf(function))
 
@@ -570,6 +584,7 @@ internal class FunctionsKtTest {
                 stringExpression())
         val compilationContext = CompilationContext(
                 setOf(),
+                setOf(),
                 setOf(function))
 
         // when
@@ -610,7 +625,9 @@ internal class FunctionsKtTest {
         val compileUnit = CompileUnitWithFlatStructs(
                 "packageName",
                 setOf(),
+                setOf(),
                 setOf(function),
+                listOf(),
                 listOf(),
                 listOf())
 
@@ -652,6 +669,7 @@ internal class FunctionsKtTest {
                 stringExpression())
         val compilationContext = CompilationContext(
                 setOf(),
+                setOf(),
                 setOf(function))
 
         // when
@@ -692,7 +710,9 @@ internal class FunctionsKtTest {
         val compileUnit = CompileUnitWithFlatStructs(
                 "/package/name",
                 setOf(),
+                setOf(),
                 setOf(function),
+                listOf(),
                 listOf(),
                 listOf())
 
@@ -745,7 +765,9 @@ internal class FunctionsKtTest {
         val compileUnit = CompileUnitWithFlatStructs(
                 "/package/name",
                 setOf(),
+                setOf(),
                 setOf(function1, function2),
+                listOf(),
                 listOf(),
                 listOf())
 
@@ -952,6 +974,6 @@ internal class FunctionsKtTest {
                                compileUnit: CompileUnitWithFlatStructs,
                                assignments: List<AssigmentStatementWithReturnType>,
                                expression: Expression,
-                               fullyQualifiedStructNames: Map<String, Struct>) =
+                               fullyQualifiedStructNames: Map<Type, Struct>) =
             FunctionCompiler(compilationContext, compileUnit, fullyQualifiedStructNames).findReturnType(assignments, expression)
 }

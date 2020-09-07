@@ -15,6 +15,7 @@ class SmokeTest {
         File(outputDir).mkdirs()
         val files = File(url.path).walkTopDown()
                 .filter { it.isFile }
+                .filter { it.extension == "cb" }
                 .map { it.absolutePath }
                 .toList()
                 .stream()
@@ -24,7 +25,9 @@ class SmokeTest {
                 outputDir,
                 "-f",
                 files,
-                "--clear-output"))
+                "--clear-output",
+                "--debug",
+        ))
     }
 
     private fun outputDir() =

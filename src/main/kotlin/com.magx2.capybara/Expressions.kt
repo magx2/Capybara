@@ -3,6 +3,7 @@ package com.magx2.capybara
 import com.magx2.capybara.BasicTypes.booleanType
 import com.magx2.capybara.BasicTypes.floatType
 import com.magx2.capybara.BasicTypes.intType
+import com.magx2.capybara.BasicTypes.nothingType
 import com.magx2.capybara.BasicTypes.stringType
 
 sealed class Expression(open val codeMetainfo: CodeMetainfo)
@@ -13,6 +14,7 @@ data class IntegerExpression(override val codeMetainfo: CodeMetainfo, val value:
 data class FloatExpression(override val codeMetainfo: CodeMetainfo, val value: Double) : ConstantExpression(codeMetainfo)
 data class BooleanExpression(override val codeMetainfo: CodeMetainfo, val value: Boolean) : ConstantExpression(codeMetainfo)
 data class StringExpression(override val codeMetainfo: CodeMetainfo, val value: String) : ConstantExpression(codeMetainfo)
+data class NothingExpression(override val codeMetainfo: CodeMetainfo) : ConstantExpression(codeMetainfo)
 data class FunctionInvocationExpression(override val codeMetainfo: CodeMetainfo, val packageName: String?, val functionName: String, val parameters: List<Expression>) : Expression(codeMetainfo)
 data class InfixExpression(override val codeMetainfo: CodeMetainfo, val operation: String, val left: Expression, val right: Expression) : Expression(codeMetainfo)
 data class IfExpression(override val codeMetainfo: CodeMetainfo, val condition: Expression, val trueBranch: Expression, val falseBranch: Expression) : Expression(codeMetainfo)
@@ -35,6 +37,7 @@ data class IntegerExpressionWithReturnType(val value: Long) : ConstantExpression
 data class FloatExpressionWithReturnType(val value: Double) : ConstantExpressionWithReturnType(floatType)
 data class BooleanExpressionWithReturnType(val value: Boolean) : ConstantExpressionWithReturnType(booleanType)
 data class StringExpressionWithReturnType(val value: String) : ConstantExpressionWithReturnType(stringType)
+object NothingExpressionWithReturnType : ConstantExpressionWithReturnType(nothingType)
 data class FunctionInvocationExpressionWithReturnType(override val returnType: Type, val packageName: String, val functionName: String, val parameters: List<ExpressionWithReturnType>) : ExpressionWithReturnType(returnType)
 data class InfixExpressionWithReturnType(override val returnType: Type, val operation: String, val left: ExpressionWithReturnType, val right: ExpressionWithReturnType) : ExpressionWithReturnType(returnType)
 data class IfExpressionWithReturnType(override val returnType: Type, val condition: ExpressionWithReturnType, val trueBranch: ExpressionWithReturnType, val falseBranch: ExpressionWithReturnType) : ExpressionWithReturnType(returnType)

@@ -217,6 +217,7 @@ private fun expressionToString(expression: ExpressionWithReturnType): String =
             is FloatExpressionWithReturnType -> expression.value.toString()
             is BooleanExpressionWithReturnType -> if (expression.value) "True" else "False"
             is StringExpressionWithReturnType -> "\"${expression.value}\""
+            is NothingExpressionWithReturnType -> "None"
             is FunctionInvocationExpressionWithReturnType -> {
                 val parameters = expression.parameters
                         .stream()

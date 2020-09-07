@@ -1,0 +1,9 @@
+package /misc/union
+
+import /capybara/type
+
+fun response_in(Response): String =
+    when(response) {
+        is Success -> response.msg
+        is Error -> response.value
+    }

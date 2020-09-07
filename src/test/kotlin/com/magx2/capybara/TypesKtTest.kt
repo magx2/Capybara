@@ -6,8 +6,7 @@ import org.assertj.core.api.ThrowableAssert
 import org.junit.jupiter.api.Test
 
 internal class TypesKtTest {
-    private val localStructs = setOf<BaseStruct>()
-    private val importedStructs = listOf<BaseStruct>()
+    private val types = setOf<Type>()
 
     @Test
     fun `should parse fully qualified type`() {
@@ -18,8 +17,7 @@ internal class TypesKtTest {
         val type = parseType(
                 CodeMetainfo("/home/capybara/xyz.cb", 1, 2),
                 rawType,
-                localStructs,
-                importedStructs)
+                types)
 
         // then
         assertThat(type.name).isEqualTo("Foo")
@@ -32,14 +30,13 @@ internal class TypesKtTest {
         // given
         val rawType = "Foo"
         val packageName = "/x/y/z"
-        val localStructs = setOf(FlatStruct(packageName, rawType, listOf()))
+        val types = setOf(Type(packageName, rawType))
 
         // when
         val type = parseType(CodeMetainfo(
                 "/home/capybara/xyz.cb", 1, 2),
                 rawType,
-                localStructs,
-                importedStructs)
+                types)
 
         // then
         assertThat(type.name).isEqualTo("Foo")
@@ -57,8 +54,7 @@ internal class TypesKtTest {
             parseType(
                     CodeMetainfo("/home/capybara/xyz.cb", 1, 2),
                     rawType,
-                    localStructs,
-                    importedStructs)
+                    types)
         }
 
         // then
@@ -75,8 +71,7 @@ internal class TypesKtTest {
         val type = parseType(
                 CodeMetainfo("/home/capybara/xyz.cb", 1, 2),
                 rawType,
-                localStructs,
-                importedStructs)
+                types)
 
         // then
         assertThat(type.name).isEqualTo("Foo")
@@ -90,14 +85,13 @@ internal class TypesKtTest {
         // given
         val rawType = "Foo[/a/b/c/Boo]"
         val packageName = "/x/y/z"
-        val localStructs = setOf(FlatStruct(packageName, "Foo", listOf()))
+        val types = setOf(Type(packageName, "Foo"))
 
         // when
         val type = parseType(
                 CodeMetainfo("/home/capybara/xyz.cb", 1, 2),
                 rawType,
-                localStructs,
-                importedStructs)
+                types)
 
         // then
         assertThat(type.name).isEqualTo("Foo")
@@ -111,14 +105,13 @@ internal class TypesKtTest {
         // given
         val rawType = "Foo[/a/b/c/Boo[/q/w/e/Bar]]"
         val packageName = "/x/y/z"
-        val localStructs = setOf(FlatStruct(packageName, "Foo", listOf()))
+        val types = setOf(Type(packageName, "Foo"))
 
         // when
         val type = parseType(
                 CodeMetainfo("/home/capybara/xyz.cb", 1, 2),
                 rawType,
-                localStructs,
-                importedStructs)
+                types)
 
         // then
         assertThat(type.name).isEqualTo("Foo")
@@ -134,14 +127,13 @@ internal class TypesKtTest {
         // given
         val packageName = "/x/y/z"
         val rawType = "Foo"
-        val localStructs = setOf(FlatStruct(packageName, rawType, listOf()))
+        val types = setOf(Type(packageName, rawType))
 
         // when
         val type = parseType(
                 CodeMetainfo("/home/capybara/xyz.cb", 1, 2),
                 rawType,
-                localStructs,
-                importedStructs)
+                types)
 
         // then
         assertThat(type.name).isEqualTo("Foo")
@@ -154,14 +146,13 @@ internal class TypesKtTest {
         // given
         val packageName = "/x/y/z"
         val rawType = "Foo"
-        val importedStructs = listOf(FlatStruct(packageName, rawType, listOf()))
+        val types = setOf(Type(packageName, rawType))
 
         // when
         val type = parseType(
                 CodeMetainfo("/home/capybara/xyz.cb", 1, 2),
                 rawType,
-                localStructs,
-                importedStructs)
+                types)
 
         // then
         assertThat(type.name).isEqualTo("Foo")
@@ -176,15 +167,13 @@ internal class TypesKtTest {
         val packageName1 = "/x/y/z"
         val packageName2 = "/a/b/c"
         val rawType = "Foo"
-        val localStructs = setOf(FlatStruct(packageName1, rawType, listOf()))
-        val importedStructs = listOf(FlatStruct(packageName2, rawType, listOf()))
+        val types = setOf(Type(packageName1, rawType), Type(packageName2, rawType))
 
         // when
         val type = parseType(
                 CodeMetainfo("/home/capybara/xyz.cb", 1, 2),
                 rawType,
-                localStructs,
-                importedStructs)
+                types)
 
         // then
         assertThat(type.name).isEqualTo("Foo")
@@ -198,15 +187,13 @@ internal class TypesKtTest {
         val packageName1 = "/x/y/z"
         val packageName2 = "/a/b/c"
         val rawType = "Foo"
-        val localStructs = setOf(FlatStruct(packageName1, rawType, listOf()))
-        val importedStructs = listOf(FlatStruct(packageName2, rawType, listOf()))
+        val types = setOf(Type(packageName1, rawType), Type(packageName2, rawType))
 
         // when
         val type = parseType(
                 CodeMetainfo("/home/capybara/xyz.cb", 1, 2),
                 rawType,
-                localStructs,
-                importedStructs)
+                types)
 
         // then
         assertThat(type.name).isEqualTo("Foo")

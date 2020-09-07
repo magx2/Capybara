@@ -23,6 +23,7 @@ code
 	: struct
 	| fun_
 	| def_
+	| union
 	;
 
 struct
@@ -38,7 +39,7 @@ fun_
 	: FUN name=SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL ROUNDL listOfParameters? ROUNDR
 		(COLON returnType=fullyQualifiedType)? CURLYL NEWLINE funBody+ CURLYR
 	| FUN name=SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL ROUNDL listOfParameters? ROUNDR
-		(COLON returnType=fullyQualifiedType)? EQUALS returnExpression=expression
+		(COLON returnType=fullyQualifiedType)? EQUALS NEWLINE* returnExpression=expression
 	;
 
 listOfParameters
@@ -93,7 +94,7 @@ constant
 	| BOOLEAN
 	| string=STRING_DOUBLE_QUOTES
 	| string=STRING_SINGLE_QUOTES
-	| VOID
+	| NOTHING
 	;
 
 fully_qualified_function
@@ -168,6 +169,16 @@ update_action
 	| '/='
 	;
 
+union
+	: UNION name=ALPH_NUM_STARTING_WITH_CAPITAL CURLYL NEWLINE? unionField+ CURLYR ;
+
+unionField
+	: fullyQualifiedType
+	| fullyQualifiedType COMMA
+	| fullyQualifiedType NEWLINE
+	| fullyQualifiedType COMMA NEWLINE
+	;
+
 fullyQualifiedType
 	: (type_package=PACKAGE SLASH)? name=ALPH_NUM_STARTING_WITH_CAPITAL (SQUAREL generic_type=fullyQualifiedType SQUARER)?
 	;
@@ -210,12 +221,13 @@ FOR : 'for' ;
 PACKAGE_ : 'package' ;
 IMPORT : 'import' ;
 STRUCT : 'struct' ;
+UNION : 'union';
 
 // Types
 INTEGER : ('-')?[0-9_]+ ;
 FLOAT : ('-')?[0-9_]+ '.' [0-9_]+ ;
 BOOLEAN : ('true'|'false') ;
-VOID : 'void' ;
+NOTHING : 'nothing' ;
 STRING_SINGLE_QUOTES : '"' .+? '"' ;
 STRING_DOUBLE_QUOTES : '\'' .+? '\'' ;
 

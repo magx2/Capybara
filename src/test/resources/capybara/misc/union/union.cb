@@ -1,0 +1,33 @@
+package /misc/union
+
+import /capybara/type
+
+struct Success {
+	code: Int
+	msg: String
+}
+
+struct Error {
+	value: String
+}
+
+union Response {
+	Success,
+	Error
+}
+
+union PrimitiveUnion { Int, String, Float }
+
+union NullUnion {
+	String,
+	Nothing,
+}
+
+union ImportUnion {
+	/imports/a/FirstStruct, /imports/b/SecondStruct
+}
+
+union ListUnion {
+	List[String], Nothing
+}
+

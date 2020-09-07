@@ -13,6 +13,7 @@ import java.io.FileInputStream
 import java.util.*
 import java.util.stream.Collectors
 import java.util.stream.Collectors.toSet
+import java.util.stream.Stream
 import kotlin.collections.ArrayList
 import kotlin.collections.HashMap
 import kotlin.streams.toList
@@ -32,24 +33,45 @@ data class CompileUnit(
         val packageName: String,
         val imports: List<Import>,
         val structs: Set<Struct>,
+        val unions: Set<Union>,
         val functions: Set<Function>,
         val defs: Set<Def>)
 
 data class CompileUnitWithImports(
         val packageName: String,
         val structs: Set<Struct>,
+        val unions: Set<Union>,
         val functions: Set<Function>,
         val importStructs: List<Struct>,
+        val importUnions: List<Union>,
         val importFunctions: List<Function>)
 
 data class CompileUnitWithFlatStructs(
         val packageName: String,
         val structs: Set<FlatStruct>,
+        val unions: Set<UnionWithType>,
         val functions: Set<Function>,
         val importStructs: List<Struct>,
+        val importUnions: List<Union>,
         val importFunctions: List<Function>)
 
-data class Export(val packageName: String, val structs: Set<Struct>, val functions: Set<Function>)
+fun getTypes(unit: CompileUnitWithImports): Set<Type> =
+        Stream.concat(
+                unit.structs.stream().map { it.type },
+                unit.unions.stream().map { it.type })
+                .toList()
+                .toSet()
+
+fun getTypes(context: CompilationContext, packageName: String): Set<Type> =
+        Stream.concat(
+                context.structs.stream().map { it.type },
+                context.unions.stream().map { it.type })
+                .filter { it.packageName == packageName }
+                .toList()
+                .toSet()
+
+
+data class Export(val packageName: String, val structs: Set<Struct>, val unions: Set<Union>, val functions: Set<Function>)
 
 data class Import(val codeMetainfo: CodeMetainfo, val importPackage: String, val subImport: Set<String>)
 
@@ -93,6 +115,7 @@ private class CapybaraCompilerImpl : CapybaraCompiler {
                 listener.packageName,
                 listener.imports,
                 listener.structs.toSet(),
+                listener.unions.toSet(),
                 listener.functions.toSet(),
                 listener.defs.toSet())
     }
@@ -100,10 +123,11 @@ private class CapybaraCompilerImpl : CapybaraCompiler {
 
 private class Listener(private val fileName: String) : CapybaraBaseListener() {
     lateinit var packageName: String
-    val imports = ArrayList<Import>()
-    val structs = ArrayList<Struct>()
-    val functions = ArrayList<Function>()
-    val defs = ArrayList<Def>()
+    val imports = LinkedList<Import>()
+    val structs = LinkedList<Struct>()
+    val unions = LinkedList<Union>()
+    val functions = LinkedList<Function>()
+    val defs = LinkedList<Def>()
 
     var parameters: Map<String, String> = mapOf()
     var defParameters: Map<String, String> = mapOf()
@@ -126,7 +150,25 @@ private class Listener(private val fileName: String) : CapybaraBaseListener() {
     }
 
     override fun enterStruct(ctx: CapybaraParser.StructContext) {
-        structs.add(Struct(packageName, ctx.name.text, LinkedList()))
+        structs.add(Struct(parseCodeMetainfo(fileName, ctx.start), Type(packageName, ctx.name.text), LinkedList()))
+    }
+
+    override fun exitUnion(ctx: CapybaraParser.UnionContext) {
+        unions.add(Union(
+                parseCodeMetainfo(fileName, ctx.start),
+                Type(packageName, ctx.name.text),
+                ctx.unionField()
+                        .stream()
+                        .map { it.fullyQualifiedType() }
+                        .map {
+                            TypeWithoutPackage(
+                                    it.type_package?.text,
+                                    it.name.text
+                            )
+                        }
+                        .toList()
+                        .toSet()
+        ))
     }
 
     override fun enterField(ctx: CapybaraParser.FieldContext) {
@@ -236,7 +278,8 @@ private class Listener(private val fileName: String) : CapybaraBaseListener() {
                         ctx.constant().FLOAT() != null -> FloatExpression(parseCodeMetainfo(fileName, ctx.start), ctx.constant().FLOAT().text.toDouble())
                         ctx.constant().INTEGER() != null -> IntegerExpression(parseCodeMetainfo(fileName, ctx.start), ctx.constant().INTEGER().text.toLong())
                         ctx.constant().string != null -> StringExpression(parseCodeMetainfo(fileName, ctx.start), ctx.constant().string.text.substring(1 until (ctx.constant().string.text.length - 1)))
-                        else -> throw IllegalStateException("I don't know how to handle it!")
+                        ctx.constant().NOTHING() != null -> NothingExpression(parseCodeMetainfo(fileName, ctx.start))
+                        else -> throw IllegalStateException("I don't know how to handle this constant expression: `${ctx.constant().text}`!")
                     }
                 }
                 ctx.function_qualified_name != null -> {

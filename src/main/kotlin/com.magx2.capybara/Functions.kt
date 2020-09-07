@@ -9,6 +9,7 @@ import com.magx2.capybara.BasicTypes.nothingType
 import com.magx2.capybara.BasicTypes.stringType
 import java.util.*
 import java.util.stream.Collectors
+import java.util.stream.Stream
 import kotlin.collections.ArrayList
 import kotlin.streams.toList
 
@@ -28,7 +29,7 @@ data class FunctionWithReturnType(val packageName: String,
 
 class FunctionCompiler(private val compilationContext: CompilationContext,
                        private val compileUnit: CompileUnitWithFlatStructs,
-                       private val fullyQualifiedStructNames: Map<String, Struct>) {
+                       private val fullyQualifiedStructNames: Map<Type, Struct>) {
 
     fun findReturnTypeForAssignments(assignments: List<AssigmentStatement>): List<AssigmentStatementWithReturnType> {
         val assignmentsWithReturnType = ArrayList<AssigmentStatementWithReturnType>(assignments.size)
@@ -55,17 +56,18 @@ class FunctionCompiler(private val compilationContext: CompilationContext,
             callStack: List<FunctionInvocationExpression> = listOf()): ExpressionWithReturnType =
             when (expression) {
                 is ParenthesisExpression -> findReturnType(assignments, expression.expression) // TODO should there be ParenthesisExpressionWithReturnTypeUsed?
-                is ParameterExpression -> ParameterExpressionWithReturnType(parseType(expression.codeMetainfo, expression.type, compileUnit.structs, compileUnit.importStructs), expression.valueName)
+                is ParameterExpression -> ParameterExpressionWithReturnType(parseType(expression.codeMetainfo, expression.type, localStructs() + importsToTypes(compileUnit)), expression.valueName)
                 is IntegerExpression -> IntegerExpressionWithReturnType(expression.value)
                 is FloatExpression -> FloatExpressionWithReturnType(expression.value)
                 is BooleanExpression -> BooleanExpressionWithReturnType(expression.value)
                 is StringExpression -> StringExpressionWithReturnType(expression.value)
+                is NothingExpression -> NothingExpressionWithReturnType
                 is FunctionInvocationExpression -> {
                     val function = findFunctionForGivenFunctionInvocation(assignments, expression)
                     if (function.isPresent) {
                         val f = function.get()
                         val returnType = if (f.returnType != null) {
-                            parseType(expression.codeMetainfo, f.returnType, compileUnit.structs, compileUnit.importStructs)
+                            parseType(expression.codeMetainfo, f.returnType, localStructs() + importsToTypes(compileUnit))
                         } else {
                             if (callStack.contains(f.returnExpression)) {
                                 throw CompilationException(expression.codeMetainfo, "There is recursive invocation of functions. Please specify return type explicitly.")
@@ -133,14 +135,14 @@ class FunctionCompiler(private val compilationContext: CompilationContext,
                 is NewStruct -> {
                     val structPackageName = expression.packageName ?: compileUnit.packageName
                     val structs = if (expression.packageName == null) {
-                        compileUnit.structs + importStructsToFlatStructs()
+                        findPackageStructs() + importStructsToFlatStructs()
                     } else {
                         compilationContext.structs
                     }
 
                     val optional = structs.stream()
-                            .filter { it.name == expression.structName }
-                            .filter { it.packageName == structPackageName }
+                            .filter { it.type.name == expression.structName }
+                            .filter { it.type.packageName == structPackageName }
                             .findFirst()
 
                     if (optional.isPresent) {
@@ -197,7 +199,7 @@ class FunctionCompiler(private val compilationContext: CompilationContext,
                             throw CompilationException(expression.codeMetainfo, "Cannot create struct. Given arguments has bad types: [$wrongTypes]")
                         }
                         NewStructExpressionWithReturnType(
-                                Type(struct.packageName, struct.name),
+                                struct.type,
                                 fields
                         )
 
@@ -217,7 +219,7 @@ class FunctionCompiler(private val compilationContext: CompilationContext,
                 is StructureAccessExpression -> {
                     @Suppress("ThrowableNotThrown")
                     val elementType = if (expression.structureType != null) {
-                        parseType(expression.codeMetainfo, expression.structureType, compileUnit.structs, compileUnit.importStructs)
+                        parseType(expression.codeMetainfo, expression.structureType, localStructs() + importsToTypes(compileUnit))
                     } else {
                         assignments.stream()
                                 .filter { it.name == expression.structureName }
@@ -250,6 +252,13 @@ class FunctionCompiler(private val compilationContext: CompilationContext,
                 }
             }
 
+    private fun findPackageStructs(): Set<FlatStruct> =
+            compilationContext.structs
+                    .stream()
+                    .filter { it.type.packageName == compileUnit.packageName }
+                    .toList()
+                    .toSet()
+
     private fun findCommonType(types: Collection<Type>): Type =
             when {
                 types.isEmpty() -> nothingType
@@ -271,7 +280,7 @@ class FunctionCompiler(private val compilationContext: CompilationContext,
                     var equals = true
                     while (i < parameters.size && equals) {
                         val parameters = findFunctionParametersValues(assignments, function)
-                        equals = parseType(f.codeMetainfo, f.parameters[i].type, compileUnit.structs, compileUnit.importStructs) == parameters[i].returnType
+                        equals = parseType(f.codeMetainfo, f.parameters[i].type, localStructs() + importsToTypes(compileUnit)) == parameters[i].returnType
                         i++
                     }
                     equals
@@ -287,7 +296,7 @@ class FunctionCompiler(private val compilationContext: CompilationContext,
                                 var i = 0
                                 var equals = true
                                 while (i < parameters.size && equals) {
-                                    equals = parseType(f.codeMetainfo, f.parameters[i].type, compileUnit.structs, compileUnit.importStructs) == parameters[i].returnType
+                                    equals = parseType(f.codeMetainfo, f.parameters[i].type, localStructs() + importsToTypes(compileUnit)) == parameters[i].returnType
                                     i++
                                 }
                                 equals
@@ -300,9 +309,17 @@ class FunctionCompiler(private val compilationContext: CompilationContext,
             compileUnit.importStructs
                     .stream()
                     .map { struct ->
-                        addUnrollSpreadFieldsInStruct(compileUnit.structs, compileUnit.importStructs, struct, fullyQualifiedStructNames)
+                        addUnrollSpreadFieldsInStruct(localStructs() + importsToTypes(compileUnit), struct, fullyQualifiedStructNames)
                     }
                     .toList()
+
+    private fun localStructs(): Set<Type> =
+            Stream.concat(
+                    compilationContext.structs.stream().map { it.type },
+                    compilationContext.unions.stream().map { it.type })
+                    .filter { type -> type.packageName == compileUnit.packageName }
+                    .toList()
+                    .toSet()
 
     private fun findFunctionParametersValues(
             assignments: List<AssigmentStatementWithReturnType>,
@@ -321,7 +338,9 @@ class FunctionCompiler(private val compilationContext: CompilationContext,
         return if (leftType == rightType) {
             leftType
         } else {
-            if (leftType == stringType || rightType == stringType) {
+            if (findUnionType(leftType, rightType).isPresent) {
+                findUnionType(leftType, rightType).get()
+            } else if (leftType == stringType || rightType == stringType) {
                 val notStringType = if (leftType == stringType) Pair(rightType, rightCodeMetainfo) else Pair(leftType, leftCodeMetainfo)
                 if (notStringType.first == intType || notStringType.first == booleanType) {
                     stringType
@@ -346,6 +365,15 @@ class FunctionCompiler(private val compilationContext: CompilationContext,
             }
         }
     }
+
+    private fun findUnionType(leftType: Type, rightType: Type): Optional<Type> =
+            compilationContext.unions
+                    .stream()
+                    .filter { it.type.packageName == compileUnit.packageName || compileUnit.importUnions.stream().anyMatch { x -> x.type == it.type } }
+                    .filter { it.types.contains(leftType) }
+                    .filter { it.types.contains(rightType) }
+                    .map { it.type }
+                    .findAny()
 
     private fun findReturnTypeForNumericOperations(
             expression: InfixExpression,

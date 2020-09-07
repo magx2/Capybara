@@ -5,26 +5,25 @@ import java.util.stream.Collectors
 import java.util.stream.Stream
 import kotlin.streams.toList
 
-sealed class BaseStruct(open val packageName: String, open val name: String)
-data class Struct(override val packageName: String, override val name: String, val fields: LinkedList<Field>) : BaseStruct(packageName, name)
-data class FlatStruct(override val packageName: String, override val name: String, val fields: List<TypedField>) : BaseStruct(packageName, name)
+sealed class BaseStruct(open val type: Type)
+data class Struct(val codeMetainfo: CodeMetainfo, override val type: Type, val fields: LinkedList<Field>) : BaseStruct(type)
+data class FlatStruct(override val type: Type, val fields: List<TypedField>) : BaseStruct(type)
 
-fun addUnrollSpreadFieldsInStruct(localStructs: Set<BaseStruct>,
-                                  importedStructs: List<BaseStruct>,
+data class Union(val codeMetainfo: CodeMetainfo, val type: Type, val types: Set<TypeWithoutPackage>)
+data class UnionWithType(val type: Type, val types: Set<Type>)
+
+fun addUnrollSpreadFieldsInStruct(types: Set<Type>,
                                   struct: Struct,
-                                  fullyQualifiedStructNames: Map<String, Struct>): FlatStruct {
+                                  fullyQualifiedStructNames: Map<Type, Struct>): FlatStruct {
     val newFields = struct.fields
             .stream()
             .flatMap { x(it, struct, fullyQualifiedStructNames) }
-            .map { TypedField(it.name, parseType(it.codeMetainfo, it.type, localStructs, importedStructs)) }
+            .map { TypedField(it.name, parseType(it.codeMetainfo, it.type, types)) }
             .toList()
-    return FlatStruct(
-            struct.packageName,
-            struct.name,
-            newFields)
+    return FlatStruct(struct.type, newFields)
 }
 
-fun x(field: Field, struct: Struct, fullyQualifiedStructNames: Map<String, Struct>): Stream<BasicField> =
+fun x(field: Field, struct: Struct, fullyQualifiedStructNames: Map<Type, Struct>): Stream<BasicField> =
         when (field) {
             is BasicField -> Stream.of(field)
             is SpreadField -> {
@@ -32,23 +31,23 @@ fun x(field: Field, struct: Struct, fullyQualifiedStructNames: Map<String, Struc
             }
         }
 
-fun mapSpreadFieldToBasicField(spreadField: SpreadField, struct: Struct, fullyQualifiedStructNames: Map<String, Struct>): Stream<BasicField> {
+fun mapSpreadFieldToBasicField(spreadField: SpreadField, struct: Struct, fullyQualifiedStructNames: Map<Type, Struct>): Stream<BasicField> {
     val spreadType = if (spreadField.spreadType.startsWith("/")) {
-        spreadField.spreadType
+        parseType(struct.codeMetainfo, spreadField.spreadType, setOf())
     } else {
-        "${struct.packageName}/${spreadField.spreadType}"
+        Type(struct.type.packageName, spreadField.spreadType)
     }
     val spreadStruct = fullyQualifiedStructNames[spreadType]
             ?: throw IllegalStateException("Cannot find struct with name `${spreadField.spreadType}`")
     return spreadStruct.fields.stream().flatMap { x(it, struct, fullyQualifiedStructNames) }
 }
 
-fun findFullyQualifiedStructNames(compileUnits: List<CompileUnit>): Map<String, Struct> {
+fun findFullyQualifiedStructNames(compileUnits: List<CompileUnit>): Map<Type, Struct> {
     return compileUnits.stream()
             .flatMap { it.structs.stream() }
-            .map { struct -> Pair("${struct.packageName}/${struct.name}", struct) }
+            .map { struct -> Pair(struct.type, struct) }
             .collect(Collectors.toMap(
-                    (java.util.function.Function<Pair<String, Struct>, String> { it.first }),
-                    (java.util.function.Function<Pair<String, Struct>, Struct> { it.second })
+                    (java.util.function.Function<Pair<Type, Struct>, Type> { it.first }),
+                    (java.util.function.Function<Pair<Type, Struct>, Struct> { it.second })
             ))
 }
