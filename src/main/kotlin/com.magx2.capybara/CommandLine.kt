@@ -72,6 +72,7 @@ fun parseFilesToCompile(files: String?): Set<String> =
                         if (file.isDirectory) {
                             file.walkTopDown()
                                     .filter { it.isFile }
+                                    .filter { it.extension == "cb" }
                                     .asStream()
                         } else {
                             Stream.of(file)
