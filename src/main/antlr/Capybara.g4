@@ -69,6 +69,7 @@ expression
 	| struct_name=fullyQualifiedType CURLYL NEWLINE* struct_field_initializations NEWLINE* CURLYR
 	| newListExpression
 	| structureAccessExpression
+	| is_value=SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL IS is_type=fullyQualifiedType
 	;
 
 struct_field_initializations
@@ -222,6 +223,7 @@ PACKAGE_ : 'package' ;
 IMPORT : 'import' ;
 STRUCT : 'struct' ;
 UNION : 'union';
+IS : 'is' ;
 
 // Types
 INTEGER : ('-')?[0-9_]+ ;

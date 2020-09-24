@@ -975,5 +975,5 @@ internal class FunctionsKtTest {
                                assignments: List<AssigmentStatementWithReturnType>,
                                expression: Expression,
                                fullyQualifiedStructNames: Map<Type, Struct>) =
-            FunctionCompiler(compilationContext, compileUnit, fullyQualifiedStructNames).findReturnType(assignments, expression)
+            FunctionCompiler(compilationContext, compileUnit, fullyQualifiedStructNames).findReturnType(assignments, expression, emptySet())
 }

@@ -35,7 +35,7 @@ class FunctionCompiler(private val compilationContext: CompilationContext,
         val assignmentsWithReturnType = ArrayList<AssigmentStatementWithReturnType>(assignments.size)
         for (assigment in assignments) {
             assignmentsWithReturnType.add(
-                    findReturnTypeForAssignment(assigment, assignmentsWithReturnType)
+                    findReturnTypeForAssignment(assigment, emptySet(), assignmentsWithReturnType)
             )
         }
         return assignmentsWithReturnType
@@ -43,27 +43,37 @@ class FunctionCompiler(private val compilationContext: CompilationContext,
 
     private fun findReturnTypeForAssignment(
             assignment: AssigmentStatement,
+            casts: Set<Cast>,
             assignmentsWithReturnType: List<AssigmentStatementWithReturnType> = listOf()) =
             AssigmentStatementWithReturnType(
                     assignment.name,
                     findReturnType(
                             assignmentsWithReturnType,
-                            assignment.expression))
+                            assignment.expression,
+                            casts))
 
     fun findReturnType(
             assignments: List<AssigmentStatementWithReturnType>,
             expression: Expression,
+            casts: Set<Cast>,
             callStack: List<FunctionInvocationExpression> = listOf()): ExpressionWithReturnType =
             when (expression) {
-                is ParenthesisExpression -> findReturnType(assignments, expression.expression) // TODO should there be ParenthesisExpressionWithReturnTypeUsed?
-                is ParameterExpression -> ParameterExpressionWithReturnType(parseType(expression.codeMetainfo, expression.type, localStructs() + importsToTypes(compileUnit)), expression.valueName)
+                is ParenthesisExpression -> findReturnType(assignments, expression.expression, casts) // TODO should there be ParenthesisExpressionWithReturnTypeUsed?
+                is ParameterExpression -> {
+                    val type = casts.stream()
+                            .filter { cast -> cast.name == expression.valueName }
+                            .map { cast -> cast.type }
+                            .findAny()
+                            .orElseGet { parseType(expression.codeMetainfo, expression.type, localStructs() + importsToTypes(compileUnit)) }
+                    ParameterExpressionWithReturnType(type, expression.valueName)
+                }
                 is IntegerExpression -> IntegerExpressionWithReturnType(expression.value)
                 is FloatExpression -> FloatExpressionWithReturnType(expression.value)
                 is BooleanExpression -> BooleanExpressionWithReturnType(expression.value)
                 is StringExpression -> StringExpressionWithReturnType(expression.value)
                 is NothingExpression -> NothingExpressionWithReturnType
                 is FunctionInvocationExpression -> {
-                    val function = findFunctionForGivenFunctionInvocation(assignments, expression)
+                    val function = findFunctionForGivenFunctionInvocation(assignments, expression, casts)
                     if (function.isPresent) {
                         val f = function.get()
                         val returnType = if (f.returnType != null) {
@@ -75,6 +85,7 @@ class FunctionCompiler(private val compilationContext: CompilationContext,
                             findReturnType(
                                     assignments,
                                     f.returnExpression,
+                                    casts,
                                     callStack + expression).returnType
                         }
                         FunctionInvocationExpressionWithReturnType(
@@ -83,11 +94,11 @@ class FunctionCompiler(private val compilationContext: CompilationContext,
                                 f.name,
                                 expression.parameters
                                         .stream()
-                                        .map { findReturnType(assignments, it) }
+                                        .map { findReturnType(assignments, it, casts) }
                                         .toList()
                         )
                     } else {
-                        val parameters = findFunctionParametersValues(assignments, expression)
+                        val parameters = findFunctionParametersValues(assignments, expression, casts)
                                 .stream()
                                 .map { it.returnType }
                                 .map { typeToString(it) }
@@ -96,14 +107,16 @@ class FunctionCompiler(private val compilationContext: CompilationContext,
                                 "`${expression.packageName ?: compileUnit.packageName}:${expression.functionName}($parameters)`")
                     }
                 }
-                is InfixExpression -> findReturnType(assignments, expression)
+                is InfixExpression -> findReturnType(assignments, expression, casts)
                 is IfExpression -> {
-                    val ifReturnType = findReturnType(assignments, expression.condition)
+                    val ifReturnType = findReturnType(assignments, expression.condition, casts)
                     if (ifReturnType.returnType != booleanType) {
-                        throw CompilationException(expression.codeMetainfo, "Expression in `if` should return `$booleanType` not `$ifReturnType`")
+                        throw CompilationException(expression.codeMetainfo, "Expression in `if` should return " +
+                                "`${typeToString(booleanType)}` not `${typeToString(ifReturnType.returnType)}`")
                     }
-                    val trueBranchExpression = findReturnType(assignments, expression.trueBranch)
-                    val falseBranchExpression = findReturnType(assignments, expression.falseBranch)
+                    val castingInIf = isCastingInIf(expression.condition, emptySet())
+                    val trueBranchExpression = findReturnType(assignments, expression.trueBranch, castingInIf.left + casts)
+                    val falseBranchExpression = findReturnType(assignments, expression.falseBranch, castingInIf.right + casts)
                     val type = findReturnTypeFromBranchExpression(
                             expression,
                             trueBranchExpression.returnType,
@@ -118,7 +131,7 @@ class FunctionCompiler(private val compilationContext: CompilationContext,
                     )
                 }
                 is NegateExpression -> {
-                    val expressionWithReturnType = findReturnType(assignments, expression.negateExpression)
+                    val expressionWithReturnType = findReturnType(assignments, expression.negateExpression, casts)
                     if (expressionWithReturnType.returnType != booleanType) {
                         throw CompilationException(expression.codeMetainfo, "You can only negate boolean expressions. Type `$expressionWithReturnType` cannot be negated.")
                     }
@@ -128,7 +141,14 @@ class FunctionCompiler(private val compilationContext: CompilationContext,
                     assignments.stream()
                             .filter { it.name == expression.valueName }
                             .map { it.expression }
-                            .map { ValueExpressionWithReturnType(it.returnType, expression.valueName) }
+                            .map { ex ->
+                                val type = casts.stream()
+                                        .filter { cast -> cast.name == expression.valueName }
+                                        .map { cast -> cast.type }
+                                        .findAny()
+                                        .orElse(ex.returnType)
+                                ValueExpressionWithReturnType(type, expression.valueName)
+                            }
                             .findAny()
                             .orElseThrow { CompilationException(expression.codeMetainfo, "There is no value with name `${expression.valueName}`") }
                 }
@@ -178,7 +198,7 @@ class FunctionCompiler(private val compilationContext: CompilationContext,
                         }
                         val fields = expression.fields
                                 .stream()
-                                .map { StructFieldExpressionWithReturnType(it.name, findReturnType(assignments, it.value)) }
+                                .map { StructFieldExpressionWithReturnType(it.name, findReturnType(assignments, it.value, casts)) }
                                 .toList()
                         val declaredTypes = fields.stream()
                                 .collect(Collectors.toMap(
@@ -210,7 +230,7 @@ class FunctionCompiler(private val compilationContext: CompilationContext,
                 is NewListExpression -> {
                     val elements = expression.elements
                             .stream()
-                            .map { findReturnType(assignments, it) }
+                            .map { findReturnType(assignments, it, casts) }
                             .toList()
                     val genericType = findCommonType(elements.map { it.returnType })
                     val type = addGenericType(listType, genericType)
@@ -231,7 +251,7 @@ class FunctionCompiler(private val compilationContext: CompilationContext,
 
                     val x = when (elementType.name) {
                         listType.name -> {
-                            val indexCallType = findReturnType(assignments, expression.structureIndex)
+                            val indexCallType = findReturnType(assignments, expression.structureIndex, casts)
                             if (indexCallType.returnType != intType) {
                                 throw CompilationException(
                                         expression.structureIndexCodeMetainfo,
@@ -250,7 +270,39 @@ class FunctionCompiler(private val compilationContext: CompilationContext,
                             expression.structureName,
                             x)
                 }
+                is IsExpression -> {
+                    IsExpressionWithReturnType(
+                            expression.value,
+                            parseType(expression.typeCodeMetainfo, expression.type, localStructs() + importsToTypes(compileUnit)))
+                }
             }
+
+    data class SmartCasting(val left: Set<Cast>, val right: Set<Cast>)
+
+    data class Cast(val name: String, val type: Type)
+
+    private fun isCastingInIf(expression: Expression, actualCasts: Set<Cast>): SmartCasting {
+        return when (expression) {
+            is ParenthesisExpression -> isCastingInIf(expression.expression, actualCasts)
+            is NegateExpression -> {
+                val (left, right) = isCastingInIf(expression.negateExpression, actualCasts)
+                SmartCasting(right, left)
+            }
+            is IsExpression -> {
+                val cast = Cast(expression.value, parseType(expression.typeCodeMetainfo, expression.type))
+                SmartCasting(setOf(cast), emptySet())
+            }
+            is InfixExpression -> {
+                val left = isCastingInIf(expression.left, actualCasts)
+                val right = isCastingInIf(expression.right, actualCasts + left.left + left.right)
+                SmartCasting(left.left + left.right, right.left + right.right)
+            }
+            else -> SmartCasting(setOf(), setOf())
+        }
+    }
+
+    private fun parseType(typeCodeMetainfo: CodeMetainfo, type: String): Type =
+            parseType(typeCodeMetainfo, type, localStructs() + importsToTypes(compileUnit))
 
     private fun findPackageStructs(): Set<FlatStruct> =
             compilationContext.structs
@@ -268,9 +320,10 @@ class FunctionCompiler(private val compilationContext: CompilationContext,
 
     private fun findFunctionForGivenFunctionInvocation(
             assignments: List<AssigmentStatementWithReturnType>,
-            function: FunctionInvocationExpression): Optional<Function> {
+            function: FunctionInvocationExpression,
+            casts: Set<Cast>): Optional<Function> {
         val functions = compileUnit.functions + compileUnit.importFunctions
-        val parameters = findFunctionParametersValues(assignments, function)
+        val parameters = findFunctionParametersValues(assignments, function, casts)
         return functions.stream()
                 .filter { it.name == function.functionName }
                 .filter { function.packageName == null }
@@ -279,7 +332,7 @@ class FunctionCompiler(private val compilationContext: CompilationContext,
                     var i = 0
                     var equals = true
                     while (i < parameters.size && equals) {
-                        val parameters = findFunctionParametersValues(assignments, function)
+                        val parameters = findFunctionParametersValues(assignments, function, casts)
                         equals = parseType(f.codeMetainfo, f.parameters[i].type, localStructs() + importsToTypes(compileUnit)) == parameters[i].returnType
                         i++
                     }
@@ -323,10 +376,11 @@ class FunctionCompiler(private val compilationContext: CompilationContext,
 
     private fun findFunctionParametersValues(
             assignments: List<AssigmentStatementWithReturnType>,
-            function: FunctionInvocationExpression): List<ExpressionWithReturnType> =
+            function: FunctionInvocationExpression,
+            casts: Set<Cast>): List<ExpressionWithReturnType> =
             function.parameters
                     .stream()
-                    .map { findReturnType(assignments, it) }
+                    .map { findReturnType(assignments, it, casts) }
                     .toList()
 
     private fun findReturnTypeFromBranchExpression(
@@ -354,7 +408,7 @@ class FunctionCompiler(private val compilationContext: CompilationContext,
                     }
                 } else {
                     throw CompilationException(notStringType.second,
-                            "Cannot convert type `${notStringType.first}` to `$stringType` automatically.")
+                            "Cannot convert type `${typeToString(notStringType.first)}` to `${typeToString(stringType)}` automatically.")
                 }
             } else if (isOneOfGivenType(intType, leftType, rightType) && isOneOfGivenType(floatType, leftType, rightType)) {
                 floatType
@@ -403,9 +457,10 @@ class FunctionCompiler(private val compilationContext: CompilationContext,
 
     private fun findReturnType(
             assignments: List<AssigmentStatementWithReturnType>,
-            expression: InfixExpression): ExpressionWithReturnType {
-        val leftType = findReturnType(assignments, expression.left)
-        val rightType = findReturnType(assignments, expression.right)
+            expression: InfixExpression,
+            casts: Set<Cast>): ExpressionWithReturnType {
+        val leftType = findReturnType(assignments, expression.left, casts)
+        val rightType = findReturnType(assignments, expression.right, casts)
         when (expression.operation) {
             "^", "-", "~/" ->
                 if (isOneOfGivenType(stringType, leftType.returnType, rightType.returnType)) {

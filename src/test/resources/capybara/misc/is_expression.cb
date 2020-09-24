@@ -1,0 +1,49 @@
+package /misc/is_expression
+
+import /capybara/type
+
+fun is_infix(Any): Boolean = any is String
+
+fun is_infix_return_string(Any): String = (any is String) ? "Any: " + any : ":("
+
+fun is_infix_return_string_negate(Any): String = !(any is String) ? ":(" : any
+
+//fun is_infix_with_assigment(Any): Boolean {
+//	is_string = any is String
+//	return is_string ? "Any: " + any : ":("
+//}
+//
+//fun is_infix_with_assigment_negate(Any): Boolean {
+//	is_not_string = !(any is String)
+//	return is_not_string ? ":(" : "Any: " + any
+//}
+//
+//fun is_infix_cast_in_if(Any): Boolean = (any is Int) && any > 0
+//
+//fun is_infix_cast_in_if2(Any): Boolean = !(any is Int) || any > 0
+//
+//
+//
+//struct Struct1 {
+//	string1: String
+//}
+//
+//struct Struct2 {
+//	string2: String
+//}
+//
+//struct Struct3 {
+//	string3: String
+//}
+//
+//union Union1And2And3 { Struct1, Struct2, Struct3 }
+//
+//fun is_infix_with_union_not_exhaustive(union: Union1And2And3): String = (union is Struct1) ? union.string1 : "Nope"
+//
+//fun is_infix_with_union_exhaustive_all_options(union: Union1And2And3): String =
+//	(union is Struct1) ? union.string1 : ((union is Struct2) ? union.string2 : union.string3)
+//
+//union Union1And2 { Struct1, Struct2 }
+//
+//fun is_infix_with_union_exhaustive(union: Union1And2): String = (union is Struct1) ? union.string1 : union.string2
+

@@ -30,6 +30,12 @@ data class StructureAccessExpression(
         val structureIndexCodeMetainfo: CodeMetainfo,
         val structureType: String?) : Expression(codeMetainfo)
 
+data class IsExpression(
+        override val codeMetainfo: CodeMetainfo,
+        val value: String,
+        val typeCodeMetainfo: CodeMetainfo,
+        val type: String) : Expression(codeMetainfo)
+
 sealed class ExpressionWithReturnType(open val returnType: Type)
 data class ParameterExpressionWithReturnType(override val returnType: Type, val valueName: String) : ExpressionWithReturnType(returnType)
 sealed class ConstantExpressionWithReturnType(returnType: Type) : ExpressionWithReturnType(returnType)
@@ -51,3 +57,5 @@ data class StructureAccessExpressionWithReturnType(
         val structureType: Type,
         val structureName: String,
         val structureIndex: ExpressionWithReturnType) : ExpressionWithReturnType(returnType)
+
+data class IsExpressionWithReturnType(val value: String, val type: Type) : ExpressionWithReturnType(booleanType)

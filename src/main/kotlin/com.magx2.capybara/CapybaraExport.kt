@@ -244,7 +244,12 @@ private fun expressionToString(expression: ExpressionWithReturnType): String =
             is StructureAccessExpressionWithReturnType -> {
                 "${expression.structureName}[${expressionToString(expression.structureIndex)}]"
             }
+            is IsExpressionWithReturnType -> "isInstance(${expression.value}, ${findPythonType(expression.type)})"
         }
+
+fun findPythonType(type: Type): String {
+    return type.packageName.substring(1).replace("/", ".") + "." + type.name
+}
 
 private fun mapInfixOperator(expression: InfixExpressionWithReturnType) = when (expression.operation) {
     "^" -> "**"

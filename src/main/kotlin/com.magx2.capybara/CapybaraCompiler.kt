@@ -356,7 +356,13 @@ private class Listener(private val fileName: String) : CapybaraBaseListener() {
                                 null)
                     }
                 }
-                else -> throw IllegalStateException("I don't know how to handle it!")
+                ctx.is_value != null ->
+                    IsExpression(
+                            parseCodeMetainfo(fileName, ctx.start),
+                            ctx.is_value.text,
+                            parseCodeMetainfo(fileName, ctx.is_type.start),
+                            ctx.is_type.text)
+                else -> throw IllegalStateException("I don't know how to handle `${ctx.text}`!")
             }
 
     override fun enterDefBody(ctx: CapybaraParser.DefBodyContext) {
