@@ -35,7 +35,7 @@ class FunctionCompiler(private val compilationContext: CompilationContext,
         val assignmentsWithReturnType = ArrayList<AssigmentStatementWithReturnType>(assignments.size)
         for (assigment in assignments) {
             assignmentsWithReturnType.add(
-                    findReturnTypeForAssignment(assigment, emptySet(), assignmentsWithReturnType)
+                    findReturnTypeForAssignment(assigment, assignmentsWithReturnType)
             )
         }
         return assignmentsWithReturnType
@@ -43,14 +43,13 @@ class FunctionCompiler(private val compilationContext: CompilationContext,
 
     private fun findReturnTypeForAssignment(
             assignment: AssigmentStatement,
-            casts: Set<Cast>,
             assignmentsWithReturnType: List<AssigmentStatementWithReturnType> = listOf()) =
             AssigmentStatementWithReturnType(
                     assignment.name,
                     findReturnType(
                             assignmentsWithReturnType,
                             assignment.expression,
-                            casts))
+                            emptySet()))
 
     fun findReturnType(
             assignments: List<AssigmentStatementWithReturnType>,
@@ -281,24 +280,23 @@ class FunctionCompiler(private val compilationContext: CompilationContext,
 
     data class Cast(val name: String, val type: Type)
 
-    private fun isCastingInIf(expression: Expression, actualCasts: Set<Cast>): SmartCasting {
-        return when (expression) {
-            is ParenthesisExpression -> isCastingInIf(expression.expression, actualCasts)
-            is NegateExpression -> {
-                val (left, right) = isCastingInIf(expression.negateExpression, actualCasts)
-                SmartCasting(right, left)
-            }
-            is IsExpression -> {
-                val cast = Cast(expression.value, parseType(expression.typeCodeMetainfo, expression.type))
-                SmartCasting(setOf(cast), emptySet())
-            }
-            is InfixExpression -> {
-                val left = isCastingInIf(expression.left, actualCasts)
-                val right = isCastingInIf(expression.right, actualCasts + left.left + left.right)
-                SmartCasting(left.left + left.right, right.left + right.right)
-            }
+    private fun isCastingInIf(expression: Expression, actualCasts: Set<Cast>): SmartCasting =
+            when (expression) {
+                is ParenthesisExpression -> isCastingInIf(expression.expression, actualCasts)
+                is NegateExpression -> {
+                    val (left, right) = isCastingInIf(expression.negateExpression, actualCasts)
+                    SmartCasting(right, left)
+                }
+                is IsExpression -> {
+                    val cast = Cast(expression.value, parseType(expression.typeCodeMetainfo, expression.type))
+                    SmartCasting(setOf(cast), emptySet())
+                }
+                is InfixExpression -> {
+                    val left = isCastingInIf(expression.left, actualCasts)
+                    val right = isCastingInIf(expression.right, actualCasts + left.left + left.right)
+                    SmartCasting(left.left + left.right, right.left + right.right)
+                }
             else -> SmartCasting(setOf(), setOf())
-        }
     }
 
     private fun parseType(typeCodeMetainfo: CodeMetainfo, type: String): Type =
