@@ -113,7 +113,7 @@ class FunctionCompiler(private val compilationContext: CompilationContext,
                         throw CompilationException(expression.codeMetainfo, "Expression in `if` should return " +
                                 "`${typeToString(booleanType)}` not `${typeToString(ifReturnType.returnType)}`")
                     }
-                    val castingInIf = isCastingInIf(expression.condition, emptySet())
+                    val castingInIf = isCastingInIf(ifReturnType, emptySet(), assignments)
                     val trueBranchExpression = findReturnType(assignments, expression.trueBranch, castingInIf.left + casts)
                     val falseBranchExpression = findReturnType(assignments, expression.falseBranch, castingInIf.right + casts)
                     val type = findReturnTypeFromBranchExpression(
@@ -280,24 +280,27 @@ class FunctionCompiler(private val compilationContext: CompilationContext,
 
     data class Cast(val name: String, val type: Type)
 
-    private fun isCastingInIf(expression: Expression, actualCasts: Set<Cast>): SmartCasting =
+    private fun isCastingInIf(expression: ExpressionWithReturnType, actualCasts: Set<Cast>, assignments: List<AssigmentStatementWithReturnType>): SmartCasting =
             when (expression) {
-                is ParenthesisExpression -> isCastingInIf(expression.expression, actualCasts)
-                is NegateExpression -> {
-                    val (left, right) = isCastingInIf(expression.negateExpression, actualCasts)
+                is NegateExpressionWithReturnType -> {
+                    val (left, right) = isCastingInIf(expression.negateExpression, actualCasts, assignments)
                     SmartCasting(right, left)
                 }
-                is IsExpression -> {
-                    val cast = Cast(expression.value, parseType(expression.typeCodeMetainfo, expression.type))
-                    SmartCasting(setOf(cast), emptySet())
-                }
-                is InfixExpression -> {
-                    val left = isCastingInIf(expression.left, actualCasts)
-                    val right = isCastingInIf(expression.right, actualCasts + left.left + left.right)
+                is IsExpressionWithReturnType -> SmartCasting(setOf(Cast(expression.value, expression.type)), emptySet())
+                is InfixExpressionWithReturnType -> {
+                    val left = isCastingInIf(expression.left, actualCasts, assignments)
+                    val right = isCastingInIf(expression.right, actualCasts + left.left + left.right, assignments)
                     SmartCasting(left.left + left.right, right.left + right.right)
                 }
-            else -> SmartCasting(setOf(), setOf())
-    }
+                is ValueExpressionWithReturnType ->
+                    assignments.stream()
+                            .filter { it.name == expression.valueName }
+                            .map { it.expression }
+                            .map { isCastingInIf(it, actualCasts, assignments) }
+                            .findFirst()
+                            .orElseGet { SmartCasting(setOf(), setOf()) }
+                else -> SmartCasting(setOf(), setOf())
+            }
 
     private fun parseType(typeCodeMetainfo: CodeMetainfo, type: String): Type =
             parseType(typeCodeMetainfo, type, localStructs() + importsToTypes(compileUnit))

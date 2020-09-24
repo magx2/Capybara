@@ -8,14 +8,26 @@ fun is_infix_return_string(Any): String = (any is String) ? "Any: " + any : ":("
 
 fun is_infix_return_string_negate(Any): String = !(any is String) ? ":(" : any
 
-//fun is_infix_with_assigment(Any): Boolean {
+fun is_infix_with_assigment(Any): String {
+	is_string = any is String
+	return is_string ? "Any: " + any : ":("
+}
+
+fun is_infix_with_assigment_negate(Any): String {
+	is_not_string = !(any is String)
+	return is_not_string ? ":(" : "Any: " + any
+}
+//
+//fun is_infix_with_2_assignments(Any): String {
 //	is_string = any is String
-//	return is_string ? "Any: " + any : ":("
+//	to_return = is_string ? "Any: " + any : ":("
+//	return to_return
 //}
 //
-//fun is_infix_with_assigment_negate(Any): Boolean {
+//fun is_infix_with_2_assignments_negate(Any): String {
 //	is_not_string = !(any is String)
-//	return is_not_string ? ":(" : "Any: " + any
+//	to_return = is_not_string ? ":(" : "Any: " + any
+//	return to_return
 //}
 //
 //fun is_infix_cast_in_if(Any): Boolean = (any is Int) && any > 0
