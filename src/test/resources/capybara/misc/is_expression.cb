@@ -29,12 +29,10 @@ fun is_infix_with_2_assignments_negate(Any): String {
 	to_return = is_not_string ? ":(" : "Any: " + any
 	return to_return
 }
-//
-//fun is_infix_cast_in_if(Any): Boolean = (any is Int) && any > 0
-//
-//fun is_infix_cast_in_if2(Any): Boolean = !(any is Int) || any > 0
-//
-//
+
+fun is_infix_cast_in_if(Any): Boolean = (any is Int) && (any > 0)
+
+fun is_infix_cast_in_if2(Any): Boolean = !(any is Int) || (any > 0)
 //
 //struct Struct1 {
 //	string1: String
