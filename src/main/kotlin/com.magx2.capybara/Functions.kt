@@ -151,6 +151,26 @@ class FunctionCompiler(private val compilationContext: CompilationContext,
                             .findAny()
                             .orElseThrow { CompilationException(expression.codeMetainfo, "There is no value with name `${expression.valueName}`") }
                 }
+                is StructFieldAccessExpression -> {
+                    val structExpression = findReturnType(assignments, expression.structureExpression, casts, callStack)
+                    val structType = structExpression.returnType
+                    val structs = findPackageStructs() + importStructsToFlatStructs() + compilationContext.structs
+                    val struct = structs.stream()
+                            .filter { it.type == structType }
+                            .findAny()
+                            .orElseThrow { CompilationException(expression.codeMetainfo, "There is no struct with type `${typeToString(structType)}`") }
+                    val type = struct.fields
+                            .stream()
+                            .filter { it.name == expression.fieldName }
+                            .map { it.type }
+                            .findAny()
+                            .orElseThrow { CompilationException(expression.codeMetainfo, "There is no filed called `${expression.fieldName}` in type `${typeToString(structType)}`") }
+                    StructFieldAccessExpressionWithReturnType(
+                            structExpression,
+                            expression.fieldName,
+                            type
+                    )
+                }
                 is NewStruct -> {
                     val structPackageName = expression.packageName ?: compileUnit.packageName
                     val structs = if (expression.packageName == null) {

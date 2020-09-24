@@ -242,7 +242,7 @@ private class Listener(private val fileName: String) : CapybaraBaseListener() {
         } else {
             val regex = "(?:/[a-z][a-z_0-9]*)*/?([A-Z][a-zA-Z0-9]*)".toRegex()
             val rawType = regex.find(type)?.groupValues?.get(1) ?: error("")
-            Parameter(rawType.decapitalize(), type)
+            Parameter(rawType.camelToSnakeCase(), type)
         }
     }
 
@@ -275,6 +275,12 @@ private class Listener(private val fileName: String) : CapybaraBaseListener() {
                             ValueExpression(parseCodeMetainfo(fileName, ctx.start), valueName)
                         }
                     }
+                }
+                ctx.structure_expression != null -> {
+                    StructFieldAccessExpression(
+                            parseCodeMetainfo(fileName, ctx.start),
+                            parseExpression(ctx.structure_expression),
+                            ctx.field_name.text)
                 }
                 ctx.constant() != null -> {
                     when {

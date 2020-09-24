@@ -22,6 +22,7 @@ data class NegateExpression(override val codeMetainfo: CodeMetainfo, val negateE
 data class NewStruct(override val codeMetainfo: CodeMetainfo, val packageName: String?, val structName: String, val fields: List<StructField>) : Expression(codeMetainfo)
 data class StructField(val codeMetainfo: CodeMetainfo, val name: String, val value: Expression)
 data class ValueExpression(override val codeMetainfo: CodeMetainfo, val valueName: String) : Expression(codeMetainfo)
+data class StructFieldAccessExpression(override val codeMetainfo: CodeMetainfo, val structureExpression: Expression, val fieldName: String) : Expression(codeMetainfo)
 data class NewListExpression(override val codeMetainfo: CodeMetainfo, val elements: List<Expression> = listOf()) : Expression(codeMetainfo)
 data class StructureAccessExpression(
         override val codeMetainfo: CodeMetainfo,
@@ -51,6 +52,7 @@ data class NegateExpressionWithReturnType(val negateExpression: ExpressionWithRe
 data class NewStructExpressionWithReturnType(override val returnType: Type, val fields: List<StructFieldExpressionWithReturnType>) : ExpressionWithReturnType(returnType)
 data class StructFieldExpressionWithReturnType(val name: String, val value: ExpressionWithReturnType)
 data class ValueExpressionWithReturnType(override val returnType: Type, val valueName: String) : ExpressionWithReturnType(returnType)
+data class StructFieldAccessExpressionWithReturnType(val structureExpression: ExpressionWithReturnType, val fieldName: String, val fieldType: Type) : ExpressionWithReturnType(fieldType)
 data class NewListExpressionWithReturnType(override val returnType: Type, val elements: List<ExpressionWithReturnType>) : ExpressionWithReturnType(returnType)
 data class StructureAccessExpressionWithReturnType(
         override val returnType: Type,

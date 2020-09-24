@@ -60,6 +60,7 @@ expression
 	: ROUNDL in_parenthisis_expression=expression ROUNDR
 	| constant
 	| value=SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL
+	| structure_expression=expression DOT field_name=SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL
 	| BANG negate_expression=expression
 	| function_qualified_name=fully_qualified_function ROUNDL parameters? ROUNDR
 	| left=expression infix_operation right=expression
@@ -201,6 +202,7 @@ ANGLEL : '<' ;
 ANGLER : '>' ;
 
 COMMA : ',' ;
+DOT: '.' ;
 COLON : ':' ;
 SEMICOLON : ';' ;
 ARROW_SLIM : '->' ;

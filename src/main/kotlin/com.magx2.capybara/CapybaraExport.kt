@@ -245,6 +245,7 @@ private fun expressionToString(expression: ExpressionWithReturnType): String =
                 "${expression.structureName}[${expressionToString(expression.structureIndex)}]"
             }
             is IsExpressionWithReturnType -> "isInstance(${expression.value}, ${findPythonType(expression.type)})"
+            is StructFieldAccessExpressionWithReturnType -> "${expressionToString(expression.structureExpression)}.${expression.fieldName}"
         }
 
 fun findPythonType(type: Type): String {
