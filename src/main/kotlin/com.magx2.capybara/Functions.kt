@@ -43,7 +43,7 @@ class FunctionCompiler(private val compilationContext: CompilationContext,
 
     private fun findReturnTypeForAssignment(
             assignment: AssigmentStatement,
-            assignmentsWithReturnType: List<AssigmentStatementWithReturnType> = listOf()) =
+            assignmentsWithReturnType: List<AssigmentStatementWithReturnType>) =
             AssigmentStatementWithReturnType(
                     assignment.name,
                     findReturnType(

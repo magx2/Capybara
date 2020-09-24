@@ -15,7 +15,6 @@ import java.util.stream.Collectors
 import java.util.stream.Collectors.toSet
 import java.util.stream.Stream
 import kotlin.collections.ArrayList
-import kotlin.collections.HashMap
 import kotlin.streams.toList
 
 private val log = LoggerFactory.getLogger(CapybaraCompiler::class.java)
@@ -136,7 +135,7 @@ private class Listener(private val fileName: String) : CapybaraBaseListener() {
 
     var parameters: Map<String, String> = mapOf()
     var defParameters: Map<String, String> = mapOf()
-    val values: HashMap<String, Expression> = HashMap()
+    val assignments: MutableList<AssigmentStatement> = ArrayList()
     var returnExpression: Expression? = null
     var defReturnExpression: Expression? = null
     val statements = ArrayList<Statement>()
@@ -204,11 +203,9 @@ private class Listener(private val fileName: String) : CapybaraBaseListener() {
                 ctx.name.text,
                 ctx.returnType?.text,
                 parameters,
-                values.entries.stream()
-                        .map { (k, v) -> AssigmentStatement(k, v) }
-                        .toList(),
+                ArrayList(assignments),
                 returnExpression!!))
-        values.clear()
+        assignments.clear()
         returnExpression = null
     }
 
@@ -251,7 +248,9 @@ private class Listener(private val fileName: String) : CapybaraBaseListener() {
 
     override fun enterFunBody(ctx: CapybaraParser.FunBodyContext) {
         if (ctx.assigment()?.assign_to != null) {
-            values[ctx.assigment().assign_to.text] = parseExpression(ctx.assigment().expression())
+            assignments.add(AssigmentStatement(
+                    ctx.assigment().assign_to.text,
+                    parseExpression(ctx.assigment().expression())))
         } else {
             returnExpression = parseExpression(ctx.expression())
         }
