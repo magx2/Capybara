@@ -61,12 +61,8 @@ fun main(options: CommandLineOptions) {
                 .forEach { it.deleteRecursively() }
     }
 
-
-    println("Lang files:")
-    langFiles().forEach { println(" > $it") }
-
     val compiler = CapybaraCompiler.instance()
-    val compileUnits = (options.filesToCompile + langFiles())
+    val compileUnits = (langFiles() + options.filesToCompile)
             .stream()
             .map { compiler.compile(it) }
             .toList()
