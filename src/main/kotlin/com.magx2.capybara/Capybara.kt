@@ -12,6 +12,7 @@ import java.util.stream.Collector
 import java.util.stream.Collector.Characteristics.UNORDERED
 import java.util.stream.Collectors
 import java.util.stream.Stream
+import kotlin.streams.asStream
 import kotlin.streams.toList
 import kotlin.system.exitProcess
 
@@ -60,8 +61,12 @@ fun main(options: CommandLineOptions) {
                 .forEach { it.deleteRecursively() }
     }
 
+
+    println("Lang files:")
+    langFiles().forEach { println(" > $it") }
+
     val compiler = CapybaraCompiler.instance()
-    val compileUnits = options.filesToCompile
+    val compileUnits = (options.filesToCompile + langFiles())
             .stream()
             .map { compiler.compile(it) }
             .toList()
@@ -320,6 +325,15 @@ fun main(options: CommandLineOptions) {
         log.info("Not exporting files, because `outputDir` is not set")
     }
 }
+
+fun langFiles(): List<String> =
+        File("src/main/resources/capybara")
+                .walkTopDown()
+                .filter { it.isFile }
+                .filter { it.extension == "cb" }
+                .asStream()
+                .map { it.absolutePath }
+                .toList()
 
 private fun isSameType(declaredReturnType: Type, actualReturnType: Type, compilationContext: CompilationContext) =
         if (declaredReturnType == actualReturnType) {
