@@ -33,27 +33,26 @@ fun is_infix_with_2_assignments_negate(Any): String {
 fun is_infix_cast_in_if(Any): Boolean = (any is Int) && (any > 0)
 
 fun is_infix_cast_in_if2(Any): Boolean = !(any is Int) || (any > 0)
-//
-//struct Struct1 {
-//	string1: String
-//}
-//
-//struct Struct2 {
-//	string2: String
-//}
-//
-//struct Struct3 {
-//	string3: String
-//}
-//
-//union Union1And2And3 { Struct1, Struct2, Struct3 }
-//
-//fun is_infix_with_union_not_exhaustive(union: Union1And2And3): String = (union is Struct1) ? union.string1 : "Nope"
-//
-//fun is_infix_with_union_exhaustive_all_options(union: Union1And2And3): String =
-//	(union is Struct1) ? union.string1 : ((union is Struct2) ? union.string2 : union.string3)
-//
-//union Union1And2 { Struct1, Struct2 }
-//
-//fun is_infix_with_union_exhaustive(union: Union1And2): String = (union is Struct1) ? union.string1 : union.string2
+
+struct Struct1 {
+	string1: String
+}
+
+struct Struct2 {
+	string2: String
+}
+
+struct Struct3 {
+	string3: String
+}
+
+union Union1And2And3 { Struct1, Struct2, Struct3 }
+
+fun is_infix_with_union_not_exhaustive(u: Union1And2And3): String = (u is Struct1) ? u.string1 : "Nope"
+
+fun is_infix_with_union_exhaustive_all_options(u: Union1And2And3): String = (u is Struct1) ? u.string1 : ((u is Struct2) ? u.string2 : u.string3)
+
+union Union1And2 { Struct1, Struct2 }
+
+fun is_infix_with_union_exhaustive(u: Union1And2): String = (u is Struct1) ? u.string1 : u.string2
 

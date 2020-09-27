@@ -244,7 +244,7 @@ fun main(options: CommandLineOptions) {
                             val assignments = functionCompiler.findReturnTypeForAssignments(function.assignments)
                             FunctionOnBuild(
                                     function,
-                                    functionCompiler.findReturnType(assignments, function.returnExpression, emptySet()),
+                                    functionCompiler.findReturnType(assignments, function.returnExpression, emptySet(), emptySet()),
                                     unit,
                                     assignments)
                         }
