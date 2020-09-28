@@ -1,7 +1,7 @@
 language: java
 sudo: false
 #script: ./gradlew clean build -s && ./gradlew ciPerformRelease
-script: ./gradlew clean build --debug --stacktrace
+script: ./gradlew clean build
 matrix:
   include:
     - jdk: openjdk11
