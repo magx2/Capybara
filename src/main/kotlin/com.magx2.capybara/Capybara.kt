@@ -4,6 +4,7 @@ import org.antlr.v4.runtime.Token
 import org.apache.commons.cli.HelpFormatter
 import org.slf4j.LoggerFactory
 import java.io.File
+import java.util.*
 import java.util.function.BiConsumer
 import java.util.function.BinaryOperator
 import java.util.function.Function
@@ -12,6 +13,7 @@ import java.util.stream.Collector
 import java.util.stream.Collector.Characteristics.UNORDERED
 import java.util.stream.Collectors
 import java.util.stream.Stream
+import kotlin.collections.HashMap
 import kotlin.streams.asStream
 import kotlin.streams.toList
 import kotlin.system.exitProcess
@@ -335,11 +337,27 @@ private fun isSameType(declaredReturnType: Type, actualReturnType: Type, compila
         if (declaredReturnType == actualReturnType) {
             true
         } else {
-            compilationContext.unions
-                    .stream()
-                    .filter { it.type == declaredReturnType }
-                    .anyMatch { it.types.contains(actualReturnType) }
+            val declaredUnionType = findUnionType(declaredReturnType, compilationContext)
+            val actualUnionType = findUnionType(actualReturnType, compilationContext)
+            if (declaredUnionType.isPresent && actualUnionType.isPresent) {
+                areUnionTypesTheSame(
+                        declaredUnionType.get(),
+                        actualUnionType.get())
+            } else {
+                compilationContext.unions
+                        .stream()
+                        .filter { it.type == declaredReturnType }
+                        .anyMatch { it.types.contains(actualReturnType) }
+            }
         }
+
+fun findUnionType(type: Type, compilationContext: CompilationContext): Optional<UnionWithType> =
+        compilationContext.unions
+                .stream()
+                .filter { it.type == type }
+                .findAny()
+
+fun areUnionTypesTheSame(union1: UnionWithType, union2: UnionWithType): Boolean = union1.types == union2.types
 
 data class FunctionOnBuild(
         val function: com.magx2.capybara.Function,
