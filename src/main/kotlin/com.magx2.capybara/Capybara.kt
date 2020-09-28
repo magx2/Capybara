@@ -81,8 +81,8 @@ fun main(options: CommandLineOptions) {
                 override fun accumulator(): BiConsumer<MutableMap<String, Export>, Export> =
                         BiConsumer { map, export ->
                             val exportFromMap = map[export.packageName]
-                            if (exportFromMap == null) {
-                                map[export.packageName] = export
+                            map[export.packageName] = if (exportFromMap == null) {
+                                export
                             } else {
                                 Export(
                                         export.packageName,
