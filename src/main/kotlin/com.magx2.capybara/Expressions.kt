@@ -24,6 +24,7 @@ data class StructField(val codeMetainfo: CodeMetainfo, val name: String, val val
 data class ValueExpression(override val codeMetainfo: CodeMetainfo, val valueName: String) : Expression(codeMetainfo)
 data class StructFieldAccessExpression(override val codeMetainfo: CodeMetainfo, val structureExpression: Expression, val fieldName: String) : Expression(codeMetainfo)
 data class NewListExpression(override val codeMetainfo: CodeMetainfo, val elements: List<Expression> = listOf()) : Expression(codeMetainfo)
+data class AssertExpression(override val codeMetainfo: CodeMetainfo, val checkExpression: Expression, val returnExpression: Expression, val messageExpression: Expression?) : Expression(codeMetainfo)
 data class StructureAccessExpression(
         override val codeMetainfo: CodeMetainfo,
         val structureName: String,
@@ -54,6 +55,7 @@ data class StructFieldExpressionWithReturnType(val name: String, val value: Expr
 data class ValueExpressionWithReturnType(override val returnType: Type, val valueName: String) : ExpressionWithReturnType(returnType)
 data class StructFieldAccessExpressionWithReturnType(val structureExpression: ExpressionWithReturnType, val fieldName: String, val fieldType: Type) : ExpressionWithReturnType(fieldType)
 data class NewListExpressionWithReturnType(override val returnType: Type, val elements: List<ExpressionWithReturnType>) : ExpressionWithReturnType(returnType)
+data class AssertExpressionWithReturnType(val checkExpression: ExpressionWithReturnType, val returnExpression: ExpressionWithReturnType, val messageExpression: ExpressionWithReturnType?) : ExpressionWithReturnType(returnExpression.returnType)
 data class StructureAccessExpressionWithReturnType(
         override val returnType: Type,
         val structureType: Type,

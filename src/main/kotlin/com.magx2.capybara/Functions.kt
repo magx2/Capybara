@@ -353,6 +353,26 @@ class FunctionCompiler(private val compilationContext: CompilationContext,
                             expression.value,
                             parseType(expression.typeCodeMetainfo, expression.type, localStructs() + importsToTypes(compileUnit)))
                 }
+                is AssertExpression -> {
+                    val checkExpression = findReturnType(assignments, expression.checkExpression, casts, notCasts, callStack)
+                    if (checkExpression.returnType != booleanType) {
+                        throw CompilationException(expression.codeMetainfo, "First expression in `assert` should return " +
+                                "`${typeToString(booleanType)}` not `${typeToString(checkExpression.returnType)}`")
+                    }
+                    val returnExpression = findReturnType(assignments, expression.returnExpression, casts, notCasts, callStack)
+                    val messageExpression = if (expression.messageExpression != null) {
+                        val x = findReturnType(assignments, expression.messageExpression, casts, notCasts, callStack)
+                        if (x.returnType != stringType) {
+                            throw CompilationException(expression.codeMetainfo, "First expression in `assert` should return " +
+                                    "`${typeToString(booleanType)}` not `${typeToString(x.returnType)}`")
+                        }
+                        x
+                    } else {
+                        null
+                    }
+
+                    AssertExpressionWithReturnType(checkExpression, returnExpression, messageExpression)
+                }
             }
 
     data class SmartCasting(val leftCasts: Set<Cast>,

@@ -12,6 +12,7 @@ fun buildOptions(): Options {
     val options = Options()
     options.addOption("o", "output", true, "Output directory where compiled files should be placed")
     options.addOption("f", "files", true, "Coma separated Capybara files to compile (either files or dirs)")
+    options.addOption("da", "disable_asserts", false, "Should assertions be disabled")
     options.addOption("h", "help", false, "Help")
     options.addOption(
             Option.builder()
@@ -36,6 +37,7 @@ fun parseCommandLine(args: Array<String>): CommandLineOptions {
             parse.hasOption("h"),
             findOutputDir(parse),
             parseFilesToCompile(parse.getOptionValue("f")),
+            parse.hasOption("da"),
             parse.hasOption("clear-output"),
             parse.hasOption("debug"))
 }
@@ -92,6 +94,7 @@ data class CommandLineOptions(
         val help: Boolean,
         val outputDir: String?,
         val filesToCompile: Set<String>,
+        val disableAssertions: Boolean,
         val clearOutput: Boolean,
         val debug: Boolean
 )

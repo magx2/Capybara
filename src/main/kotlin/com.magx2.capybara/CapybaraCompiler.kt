@@ -367,6 +367,12 @@ private class Listener(private val fileName: String) : CapybaraBaseListener() {
                             ctx.is_value.text,
                             parseCodeMetainfo(fileName, ctx.is_type.start),
                             ctx.is_type.text)
+                ctx.check_expression != null -> AssertExpression(
+                        parseCodeMetainfo(fileName, ctx.start),
+                        parseExpression(ctx.check_expression),
+                        parseExpression(ctx.return_expression),
+                        if (ctx.message_expression != null) parseExpression(ctx.message_expression) else null
+                )
                 else -> throw IllegalStateException("I don't know how to handle `${ctx.text}`!")
             }
 

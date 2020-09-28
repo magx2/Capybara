@@ -10,7 +10,7 @@ import java.util.stream.Stream
 import kotlin.streams.toList
 
 interface CapybaraExport {
-    fun export(outputDir: String, compilationUnits: Set<CompileUnitToExport>)
+    fun export(outputDir: String, compilationUnits: Set<CompileUnitToExport>, assertions: Boolean)
 }
 
 
@@ -36,7 +36,7 @@ data class ParameterToExport(val name: String, val type: Type)
 private val log = LoggerFactory.getLogger(PythonExport::class.java)
 
 object PythonExport : CapybaraExport {
-    override fun export(outputDir: String, compilationUnits: Set<CompileUnitToExport>) {
+    override fun export(outputDir: String, compilationUnits: Set<CompileUnitToExport>, assertions: Boolean) {
         val structs = compilationUnits.stream()
                 .flatMap { it.structs.stream() }
                 .collect(
@@ -70,7 +70,7 @@ object PythonExport : CapybaraExport {
                             Pair(
                                     packageName,
                                     functions.stream()
-                                            .map { functionToPython(it) }
+                                            .map { functionToPython(it, assertions) }
                                             .toList())
                         })
                 .collect(Collectors.groupingBy(
@@ -169,7 +169,7 @@ private fun generateDocForDef(defName: String, parameters: List<Pair<String, Typ
         """.trimMargin()
 }
 
-private fun functionToPython(function: FunctionToExport): String {
+private fun functionToPython(function: FunctionToExport, assertions: Boolean): String {
     val parameters = function.parameters
             .stream()
             .map { it.name }
@@ -177,7 +177,11 @@ private fun functionToPython(function: FunctionToExport): String {
     val assignments = if (function.assignments.isNotEmpty()) {
         "\n\t" + function.assignments
                 .stream()
-                .map { "${it.name} = ${expressionToString(it.expression)}" }
+                .map {
+                    generateAssertStatement(assertions, it.expression) +
+                            "${it.name} = ${expressionToString(it.expression, assertions)}"
+                }
+                .filter { it.isNotBlank() }
                 .collect(Collectors.joining("\n|\t"))
     } else {
         ""
@@ -206,11 +210,24 @@ private fun functionToPython(function: FunctionToExport): String {
     return """
     |def ${function.name}($parameters):
     |${'\t'}$methodDoc$assignments
-    |${'\t'}return ${expressionToString(function.returnExpression)}
+    |${'\t'}${generateAssertStatement(assertions, function.returnExpression)}return ${expressionToString(function.returnExpression, assertions)}
     |${'\n'}$main""".trimMargin()
 }
 
-private fun expressionToString(expression: ExpressionWithReturnType): String =
+private fun generateAssertStatement(assertions: Boolean, expression: ExpressionWithReturnType): String {
+    return if (assertions && expression is AssertExpressionWithReturnType) {
+        val message = if (expression.messageExpression != null) {
+            expressionToString(expression.messageExpression, assertions)
+        } else {
+            "<no message>"
+        }
+        "if not ${expressionToString(expression.checkExpression, assertions)}: raise AssertionError($message)\n\t"
+    } else {
+        ""
+    }
+}
+
+private fun expressionToString(expression: ExpressionWithReturnType, assertions: Boolean): String =
         when (expression) {
             is ParameterExpressionWithReturnType -> expression.valueName
             is IntegerExpressionWithReturnType -> expression.value.toString()
@@ -221,17 +238,17 @@ private fun expressionToString(expression: ExpressionWithReturnType): String =
             is FunctionInvocationExpressionWithReturnType -> {
                 val parameters = expression.parameters
                         .stream()
-                        .map { expressionToString(it) }
+                        .map { expressionToString(it, assertions) }
                         .collect(Collectors.joining(", "))
                 "${expression.functionName}($parameters)"
             }
-            is InfixExpressionWithReturnType -> "(${expressionToString(expression.left)}) ${mapInfixOperator(expression)} (${expressionToString(expression.right)})"
-            is IfExpressionWithReturnType -> "(${expressionToString(expression.trueBranch)}) if (${expressionToString(expression.condition)}) else (${expressionToString(expression.falseBranch)})"
-            is NegateExpressionWithReturnType -> "not ${expressionToString(expression.negateExpression)}"
+            is InfixExpressionWithReturnType -> "(${expressionToString(expression.left, assertions)}) ${mapInfixOperator(expression)} (${expressionToString(expression.right, assertions)})"
+            is IfExpressionWithReturnType -> "(${expressionToString(expression.trueBranch, assertions)}) if (${expressionToString(expression.condition, assertions)}) else (${expressionToString(expression.falseBranch, assertions)})"
+            is NegateExpressionWithReturnType -> "not ${expressionToString(expression.negateExpression, assertions)}"
             is NewStructExpressionWithReturnType -> {
                 val parameters = expression.fields
                         .stream()
-                        .map { (name, expression) -> Pair(name, expressionToString(expression)) }
+                        .map { (name, expression) -> Pair(name, expressionToString(expression, assertions)) }
                         .map { (name, value) -> "${name}=${value}" }
                         .collect(Collectors.joining(", "))
                 "${expression.returnType.name}($parameters)" // TODO support imports
@@ -239,13 +256,16 @@ private fun expressionToString(expression: ExpressionWithReturnType): String =
             is ValueExpressionWithReturnType -> expression.valueName
             is NewListExpressionWithReturnType -> expression.elements
                     .stream()
-                    .map { expressionToString(it) }
+                    .map { expressionToString(it, assertions) }
                     .collect(Collectors.joining(", ", "[", "]"))
             is StructureAccessExpressionWithReturnType -> {
-                "${expression.structureName}[${expressionToString(expression.structureIndex)}]"
+                "${expression.structureName}[${expressionToString(expression.structureIndex, assertions)}]"
             }
             is IsExpressionWithReturnType -> "isInstance(${expression.value}, ${findPythonType(expression.type)})"
-            is StructFieldAccessExpressionWithReturnType -> "${expressionToString(expression.structureExpression)}.${expression.fieldName}"
+            is StructFieldAccessExpressionWithReturnType -> "${expressionToString(expression.structureExpression, assertions)}.${expression.fieldName}"
+            is AssertExpressionWithReturnType -> {
+                expressionToString(expression.returnExpression, assertions)
+            }
         }
 
 fun findPythonType(type: Type): String {

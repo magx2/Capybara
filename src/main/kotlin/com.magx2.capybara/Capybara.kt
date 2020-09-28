@@ -33,6 +33,7 @@ fun main(args: Array<String>) {
         printHelp()
         return
     }
+    log.info("Assertions are " + if (options.disableAssertions) "disabled" else "enabled")
     if (args.isEmpty() || options.help) {
         printHelp()
         return
@@ -318,7 +319,7 @@ fun main(options: CommandLineOptions) {
     //
     if (options.outputDir != null) {
         log.info("Exporting files to ${options.outputDir}")
-        PythonExport.export(options.outputDir, compilationUnitsToExport)
+        PythonExport.export(options.outputDir, compilationUnitsToExport, options.disableAssertions.not())
     } else {
         log.info("Not exporting files, because `outputDir` is not set")
     }

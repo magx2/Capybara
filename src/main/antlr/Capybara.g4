@@ -71,6 +71,7 @@ expression
 	| newListExpression
 	| structureAccessExpression
 	| is_value=SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL IS is_type=fullyQualifiedType
+	| ASSERT check_expression=expression return_expression=expression message_expression=expression?
 	;
 
 struct_field_initializations
@@ -226,6 +227,7 @@ IMPORT : 'import' ;
 STRUCT : 'struct' ;
 UNION : 'union';
 IS : 'is' ;
+ASSERT: 'assert' ;
 
 // Types
 INTEGER : ('-')?[0-9_]+ ;
