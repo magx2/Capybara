@@ -2,7 +2,8 @@ language: java
 os: linux
 stages:
   - "Build"
-  - "Perform Release"
+  - name: "Perform Release"
+    if: branch = master
   - name: "Push Docker"
     if: branch = master
 jobs:
