@@ -1,6 +1,5 @@
 language: java
 os: linux
-install: ./gradlew --version
 stages:
   - "Build"
   - name: "Perform Release"
