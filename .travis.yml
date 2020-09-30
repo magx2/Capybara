@@ -17,7 +17,7 @@ jobs:
       script: ./gradlew ciPerformRelease
     - stage: "Push Docker"
       name: "jib"
-      script: ./gradlew jib -x test
+      script: docker login -u $DOCKER_USERNAME -p $DOCKER_PASSWORD && ./gradlew jib -x test
 jdk: openjdk11
 #don't build tags
 branches:
