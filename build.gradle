@@ -11,6 +11,7 @@ plugins {
 	id 'antlr'
 	id 'org.jetbrains.kotlin.jvm' version '1.4.0'
 	id "org.shipkit.java" version "2.3.4"
+	id 'com.google.cloud.tools.jib' version '2.5.0'
 }
 apply plugin: 'kotlin'
 
@@ -62,5 +63,27 @@ jar {
 	}
 	from {
 		configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
+	}
+}
+
+jib {
+	to {
+		image = "mgrzeslowski/capybara"
+		tags = [version, "latest"]
+	}
+	container {
+		format = "oci"
+		args = [
+				"-o", "/capybara/out",
+				"-f", "/capybara/src",
+				"--clear-output",
+		]
+	}
+	extraDirectories {
+		paths {
+			path {
+				from = file('src/main/docker')
+			}
+		}
 	}
 }
