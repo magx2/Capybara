@@ -16,7 +16,6 @@ jobs:
     - stage: "Push Docker"
       name: "jib"
       script: ./gradlew jib -x test
-script: ./gradlew clean build -s && ./gradlew ciPerformRelease
 matrix:
   include:
     - jdk: openjdk11
