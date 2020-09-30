@@ -5,7 +5,7 @@ stages:
   - name: "Perform Release"
     if: branch = master
   - name: "Push Docker"
-#    if: branch = master
+    if: branch = master
 jobs:
   include:
     - stage: "Build"
