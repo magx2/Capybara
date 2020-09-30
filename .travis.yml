@@ -1,20 +1,20 @@
 language: java
 sudo: false
 stages:
-  - Build
-  - Perform Release
-  - Push Docker
+  - "Build"
+  - "Perform Release"
+  - "Push Docker"
     if: branch = master
 jobs:
   include:
-    - stage: Build
-      name: Gradle Build
+    - stage: "Build"
+      name: "Gradle Build"
       script: ./gradlew clean build
-    - stage: Perform Release
-      name: Shipkit Perform Release
+    - stage: "Perform Release"
+      name: "Shipkit Perform Release"
       script: ./gradlew ciPerformRelease
-    - stage: Push Docker
-      name: jib
+    - stage: "Push Docker"
+      name: "jib"
       script: ./gradlew jib -x test
 script: ./gradlew clean build -s && ./gradlew ciPerformRelease
 matrix:
