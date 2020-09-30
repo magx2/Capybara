@@ -1,8 +1,9 @@
 language: java
+os: linux
 stages:
   - "Build"
   - "Perform Release"
-  - "Push Docker"
+  - name: "Push Docker"
     if: branch = master
 jobs:
   include:
@@ -15,9 +16,7 @@ jobs:
     - stage: "Push Docker"
       name: "jib"
       script: ./gradlew jib -x test
-matrix:
-  include:
-    - jdk: openjdk11
+jdk: openjdk11
 #don't build tags
 branches:
   except:
