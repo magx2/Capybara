@@ -12,7 +12,7 @@ jobs:
   include:
     - stage: "Build"
       name: "Gradle Build"
-      script: ./gradlew clean build
+      script: ./gradlew clean test build
     - stage: "E2E"
       name: "Check Capybara Compiled Files"
       before_install:
