@@ -19,7 +19,7 @@ import java.util.*
 import java.util.stream.Stream
 
 @Suppress("MemberVisibilityCanBePrivate")
-internal class FunctionsKtTest {
+internal class ExpressionCompilerKtTest {
 
     companion object {
         private fun integerExpression() = IntegerExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), Random().nextLong())
@@ -97,8 +97,8 @@ internal class FunctionsKtTest {
         fun booleanInfixOperator(): Stream<String> = Stream.of("+", "^", "*", "-", ">", "<", ">=", "<=", "~/")
     }
 
-    val compilationContext = CompilationContext(setOf(), setOf(), setOf())
-    val compileUnit = CompileUnitWithFlatStructs("", setOf(), setOf(), setOf(), listOf(), listOf(), listOf())
+    val compilationContext = CompilationContext(setOf(), setOf(), setOf(), setOf())
+    val compileUnit = CompileUnitWithFlatStructs("", setOf(), setOf(), setOf(), setOf(), listOf(), listOf(), listOf(), listOf())
     val assignments = listOf<AssigmentStatementWithReturnType>()
     val fullyQualifiedStructNames = mapOf<Type, Struct>()
 
@@ -273,6 +273,8 @@ internal class FunctionsKtTest {
                 setOf(),
                 setOf(),
                 setOf(function),
+                setOf(),
+                listOf(),
                 listOf(),
                 listOf(),
                 listOf())
@@ -312,6 +314,8 @@ internal class FunctionsKtTest {
                 setOf(),
                 setOf(),
                 setOf(function),
+                setOf(),
+                listOf(),
                 listOf(),
                 listOf(),
                 listOf())
@@ -347,6 +351,8 @@ internal class FunctionsKtTest {
                 setOf(),
                 setOf(),
                 setOf(function),
+                setOf(),
+                listOf(),
                 listOf(),
                 listOf(),
                 listOf())
@@ -379,9 +385,11 @@ internal class FunctionsKtTest {
                 setOf(),
                 setOf(),
                 setOf(),
+                setOf(),
                 listOf(),
                 listOf(),
-                listOf(function))
+                listOf(function),
+                listOf())
 
         // when
         val returnType = findReturnType(
@@ -414,9 +422,11 @@ internal class FunctionsKtTest {
                 setOf(),
                 setOf(),
                 setOf(),
+                setOf(),
                 listOf(),
                 listOf(),
-                listOf(function))
+                listOf(function),
+                listOf())
 
         // when
         val returnType = findReturnType(
@@ -446,9 +456,11 @@ internal class FunctionsKtTest {
                 setOf(),
                 setOf(),
                 setOf(localFunction),
+                setOf(),
                 listOf(),
                 listOf(),
-                listOf(importedFunction))
+                listOf(importedFunction),
+                listOf())
 
         // when
         val returnType = findReturnType(
@@ -483,7 +495,8 @@ internal class FunctionsKtTest {
         val compilationContext = CompilationContext(
                 setOf(),
                 setOf(),
-                setOf(function))
+                setOf(function),
+                setOf())
         // when
         val returnType = findReturnType(
                 compilationContext,
@@ -521,7 +534,8 @@ internal class FunctionsKtTest {
         val compilationContext = CompilationContext(
                 setOf(),
                 setOf(),
-                setOf(function))
+                setOf(function),
+                setOf())
 
         // when
         val returnType = findReturnType(
@@ -585,7 +599,8 @@ internal class FunctionsKtTest {
         val compilationContext = CompilationContext(
                 setOf(),
                 setOf(),
-                setOf(function))
+                setOf(function),
+                setOf())
 
         // when
         val `when` = ThrowableAssert.ThrowingCallable {
@@ -627,6 +642,8 @@ internal class FunctionsKtTest {
                 setOf(),
                 setOf(),
                 setOf(function),
+                setOf(),
+                listOf(),
                 listOf(),
                 listOf(),
                 listOf())
@@ -670,7 +687,8 @@ internal class FunctionsKtTest {
         val compilationContext = CompilationContext(
                 setOf(),
                 setOf(),
-                setOf(function))
+                setOf(function),
+                setOf())
 
         // when
         val `when` = ThrowableAssert.ThrowingCallable {
@@ -712,6 +730,8 @@ internal class FunctionsKtTest {
                 setOf(),
                 setOf(),
                 setOf(function),
+                setOf(),
+                listOf(),
                 listOf(),
                 listOf(),
                 listOf())
@@ -767,6 +787,8 @@ internal class FunctionsKtTest {
                 setOf(),
                 setOf(),
                 setOf(function1, function2),
+                setOf(),
+                listOf(),
                 listOf(),
                 listOf(),
                 listOf())
@@ -975,5 +997,5 @@ internal class FunctionsKtTest {
                                assignments: List<AssigmentStatementWithReturnType>,
                                expression: Expression,
                                fullyQualifiedStructNames: Map<Type, Struct>) =
-            FunctionCompiler(compilationContext, compileUnit, fullyQualifiedStructNames).findReturnType(assignments, expression, emptySet(), emptySet())
+            ExpressionCompiler(assignments, compilationContext, compileUnit, fullyQualifiedStructNames).findReturnType(expression)
 }
