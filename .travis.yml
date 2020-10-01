@@ -16,7 +16,7 @@ jobs:
     - stage: "E2E"
       name: "Check Capybara Compiled Files"
       before_install:
-        - docker pull mgrzeslowski/capybara:0.1.4
+        - ./gradlew jibDockerBuild
         - docker build src/test/resources -t integration_test
       script: docker run integration_test
     - stage: "Perform Release"
