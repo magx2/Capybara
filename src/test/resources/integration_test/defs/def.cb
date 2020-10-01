@@ -1,0 +1,15 @@
+package /def
+
+import /capybara/type
+
+def simple(): Int {
+    a = 1
+    b = 2
+   return a + b
+}
+
+def test_all(): Int {
+	simple = assert (simple() == 3) true "def simple is not working!"
+	return 0
+}
+
