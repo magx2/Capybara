@@ -4,8 +4,6 @@ stages:
   - "Build"
   - name: "Perform Release"
     if: branch = master and type != pull_request
-  - name: "Push Docker"
-    if: branch = master and type != pull_request
 jobs:
   include:
     - stage: "Build"
@@ -14,8 +12,8 @@ jobs:
     - stage: "Perform Release"
       name: "Shipkit Perform Release"
       script: ./gradlew ciPerformRelease
-    - stage: "Push Docker"
-      name: "jib"
+    - stage: "Perform Release"
+      name: "Push Docker"
       script: docker login -u $DOCKER_USERNAME -p $DOCKER_PASSWORD && ./gradlew jib -x test
 jdk: openjdk11
 #don't build tags
