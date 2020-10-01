@@ -271,9 +271,10 @@ fun main(options: CommandLineOptions) {
                         .map { function ->
                             val functionCompiler = FunctionCompiler(compilationContext, unit, fullyQualifiedStructNames)
                             val assignments = functionCompiler.findReturnTypeForAssignments(function.assignments)
+                            val expressionCompiler = ExpressionCompiler(assignments, compilationContext, unit, fullyQualifiedStructNames)
                             FunctionOnBuild(
                                     function,
-                                    functionCompiler.findReturnType(assignments, function.returnExpression, emptySet(), emptySet()),
+                                    expressionCompiler.findReturnType(function.returnExpression),
                                     unit,
                                     assignments)
                         }
