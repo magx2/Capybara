@@ -18,7 +18,7 @@ jobs:
       before_install:
         - docker pull mgrzeslowski/capybara
         - docker build src/test/resources -t integration_test
-      script: docker run integration_test:latest
+      script: docker run integration_test
     - stage: "Perform Release"
       name: "Release to Bintray"
       script: ./gradlew ciPerformRelease
