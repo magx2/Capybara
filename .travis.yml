@@ -1,5 +1,7 @@
 language: java
 os: linux
+services:
+  - docker
 stages:
   - "Build"
   - name: "E2E"
@@ -10,11 +12,13 @@ jobs:
   include:
     - stage: "Build"
       name: "Gradle Build"
-      script: ./gradlew clean build
+      script: ./gradlew clean test build
     - stage: "E2E"
       name: "Check Capybara Compiled Files"
-      install: docker build src/test/resources -t integration_test
-      script: docker run integration_test:latest
+      before_install:
+        - ./gradlew jibDockerBuild
+        - docker build src/test/resources -t integration_test
+      script: docker run integration_test
     - stage: "Perform Release"
       name: "Release to Bintray"
       script: ./gradlew ciPerformRelease
