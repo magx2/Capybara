@@ -15,7 +15,9 @@ jobs:
       script: ./gradlew clean build
     - stage: "E2E"
       name: "Check Capybara Compiled Files"
-      before_install: docker build src/test/resources -t integration_test
+      before_install:
+        - docker pull mgrzeslowski/capybara:latest
+        - docker build src/test/resources -t integration_test
       script: docker run integration_test:latest
     - stage: "Perform Release"
       name: "Release to Bintray"
