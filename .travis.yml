@@ -5,7 +5,7 @@ services:
 stages:
   - "Build"
   - name: "E2E"
-    if: branch = master or type = pull_request
+#    if: branch = master or type = pull_request
   - name: "Perform Release"
     if: branch = master and type != pull_request
 jobs:
