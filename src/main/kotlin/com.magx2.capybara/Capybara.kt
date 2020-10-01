@@ -65,7 +65,11 @@ fun main(options: CommandLineOptions) {
     }
 
     val compiler = CapybaraCompiler.instance()
-    val compileUnits = (langFiles() + options.filesToCompile)
+    val langFiles = langFiles()
+    if (options.debug) {
+        log.info("Adding capybara lang files: [{}]", java.lang.String.join(", ", langFiles))
+    }
+    val compileUnits = (langFiles + options.filesToCompile)
             .stream()
             .map { compiler.compile(it) }
             .toList()
@@ -326,7 +330,7 @@ fun main(options: CommandLineOptions) {
 }
 
 fun langFiles(): List<String> =
-        File("src/main/resources/capybara")
+        File({}.javaClass.getResource("/capybara").toURI())
                 .walkTopDown()
                 .filter { it.isFile }
                 .filter { it.extension == "cb" }
