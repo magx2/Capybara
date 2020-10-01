@@ -129,7 +129,7 @@ def_
 	;
 
 defBody
-	: statement ((SEMICOLON|NEWLINE) defBody)?
+	: statement (semicolonEnd defBody)?
 	| RETURN return_expression=expression (SEMICOLON|NEWLINE)
 	;
 
@@ -228,6 +228,16 @@ STRUCT : 'struct' ;
 UNION : 'union';
 IS : 'is' ;
 ASSERT: 'assert' ;
+
+commaEnd
+	: COMMA NEWLINE*
+	| NEWLINE+
+	;
+
+semicolonEnd
+	: SEMICOLON NEWLINE*
+	| NEWLINE+
+	;
 
 // Types
 INTEGER : ('-')?[0-9_]+ ;
