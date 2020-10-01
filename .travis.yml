@@ -5,14 +5,14 @@ services:
 stages:
   - "Build"
   - name: "E2E"
-#    if: branch = master or type = pull_request
+    if: branch = master or type = pull_request
   - name: "Perform Release"
     if: branch = master and type != pull_request
 jobs:
   include:
-#    - stage: "Build"
-    #      name: "Gradle Build"
-    #      script: ./gradlew clean build
+    - stage: "Build"
+        name: "Gradle Build"
+        script: ./gradlew clean build
     - stage: "E2E"
       name: "Check Capybara Compiled Files"
       before_install:
