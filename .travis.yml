@@ -3,9 +3,9 @@ os: linux
 stages:
   - "Build"
   - name: "Perform Release"
-    if: branch = master
+    if: branch = master and type != pull_request
   - name: "Push Docker"
-    if: branch = master
+    if: branch = master and type != pull_request
 jobs:
   include:
     - stage: "Build"
