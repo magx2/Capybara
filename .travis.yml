@@ -1,5 +1,7 @@
 language: java
 os: linux
+services:
+  - docker
 stages:
   - "Build"
   - name: "E2E"
