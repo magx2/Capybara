@@ -17,7 +17,9 @@ interface CapybaraExport {
 data class CompileUnitToExport(
         val packageName: String,
         val structs: Set<StructToExport>,
-        val functions: Set<FunctionToExport>)
+        val functions: Set<FunctionToExport>,
+        val defs: Set<DefToExport>,
+)
 
 data class StructToExport(val type: Type,
                           val fields: List<FieldToExport>)
@@ -29,6 +31,12 @@ data class FunctionToExport(val packageName: String,
                             val returnExpression: ExpressionWithReturnType,
                             val parameters: List<ParameterToExport>,
                             val assignments: List<AssigmentStatementWithReturnType>)
+
+data class DefToExport(val packageName: String,
+                       val name: String,
+                       val parameters: List<Parameter>,
+                       val statements: List<Statement>,
+                       val returnExpression: ExpressionWithReturnType?)
 
 data class ParameterToExport(val name: String, val type: Type)
 

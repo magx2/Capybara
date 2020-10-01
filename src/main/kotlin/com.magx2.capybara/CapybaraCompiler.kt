@@ -41,18 +41,24 @@ data class CompileUnitWithImports(
         val structs: Set<Struct>,
         val unions: Set<Union>,
         val functions: Set<Function>,
+        val defs: Set<Def>,
         val importStructs: List<Struct>,
         val importUnions: List<Union>,
-        val importFunctions: List<Function>)
+        val importFunctions: List<Function>,
+        val importDefs: List<Def>,
+)
 
 data class CompileUnitWithFlatStructs(
         val packageName: String,
         val structs: Set<FlatStruct>,
         val unions: Set<UnionWithType>,
         val functions: Set<Function>,
+        val defs: Set<Def>,
         val importStructs: List<Struct>,
         val importUnions: List<Union>,
-        val importFunctions: List<Function>)
+        val importFunctions: List<Function>,
+        val importDefs: List<Def>,
+)
 
 fun getTypes(units: Collection<CompileUnitWithImports>, packageName: String): Set<Type> =
         units.stream()
@@ -75,7 +81,13 @@ fun getTypes(context: CompilationContext, packageName: String): Set<Type> =
                 .toSet()
 
 
-data class Export(val packageName: String, val structs: Set<Struct>, val unions: Set<Union>, val functions: Set<Function>)
+data class Export(
+        val packageName: String,
+        val structs: Set<Struct>,
+        val unions: Set<Union>,
+        val functions: Set<Function>,
+        val defs: Set<Def>,
+)
 
 data class Import(val codeMetainfo: CodeMetainfo, val importPackage: String, val subImport: Set<String>)
 

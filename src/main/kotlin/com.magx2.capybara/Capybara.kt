@@ -78,7 +78,7 @@ fun main(options: CommandLineOptions) {
     // EXPORTS/IMPORTS
     //
     val exports = compileUnits.stream()
-            .map { Export(it.packageName, it.structs.toSet(), it.unions, it.functions.toSet()) }
+            .map { Export(it.packageName, it.structs.toSet(), it.unions, it.functions.toSet(), it.defs.toSet()) }
             .collect(object : Collector<Export, MutableMap<String, Export>, Map<String, Export>> {
                 override fun characteristics(): MutableSet<Collector.Characteristics> = setOf(UNORDERED).toMutableSet()
 
@@ -95,7 +95,9 @@ fun main(options: CommandLineOptions) {
                                         export.packageName,
                                         export.structs + exportFromMap.structs,
                                         export.unions + exportFromMap.unions,
-                                        export.functions + exportFromMap.functions)
+                                        export.functions + exportFromMap.functions,
+                                        export.defs + exportFromMap.defs,
+                                )
                             }
                         }
 
@@ -126,6 +128,7 @@ fun main(options: CommandLineOptions) {
                         compileUnit.structs,
                         compileUnit.unions,
                         compileUnit.functions,
+                        compileUnit.defs,
                         imports.stream()
                                 .flatMap { (import, exportForPackage) ->
                                     if (import.subImport.isEmpty()) {
@@ -158,7 +161,18 @@ fun main(options: CommandLineOptions) {
                                                 .filter { import.subImport.contains(it.name) }
                                     }
                                 }
-                                .toList()
+                                .toList(),
+                        imports.stream()
+                                .flatMap { (import, exportForPackage) ->
+                                    if (import.subImport.isEmpty()) {
+                                        exportForPackage.defs.stream()
+                                    } else {
+                                        exportForPackage.defs
+                                                .stream()
+                                                .filter { import.subImport.contains(it.name) }
+                                    }
+                                }
+                                .toList(),
                 )
             }
             .toList()
@@ -207,9 +221,11 @@ fun main(options: CommandLineOptions) {
                         flatStructs,
                         unions,
                         unit.functions,
+                        unit.defs,
                         unit.importStructs,
                         unit.importUnions,
-                        unit.importFunctions
+                        unit.importFunctions,
+                        unit.importDefs,
                 )
             }
             .toList()
@@ -240,7 +256,12 @@ fun main(options: CommandLineOptions) {
             functions.stream()
                     .map { it.second }
                     .toList()
-                    .toSet())
+                    .toSet(),
+            compileUnitsWithFlatStructs.stream()
+                    .flatMap { it.defs.stream() }
+                    .toList()
+                    .toSet(),
+    )
 
     // find return types for functions
     val compilationUnitsToExport = compileUnitsWithFlatStructs.stream()
@@ -309,7 +330,9 @@ fun main(options: CommandLineOptions) {
                                             it.assignments)
                                 }
                                 .toList()
-                                .toSet())
+                                .toSet(),
+                        emptySet(), //TODO
+                )
             }
             .toList()
             .toSet()
@@ -374,7 +397,12 @@ data class FunctionOnBuild(
 /*
     Represents every struct nad every function in compilation context (from all files)
  */
-data class CompilationContext(val structs: Set<FlatStruct>, val unions: Set<UnionWithType>, val functions: Set<com.magx2.capybara.Function>)
+data class CompilationContext(
+        val structs: Set<FlatStruct>,
+        val unions: Set<UnionWithType>,
+        val functions: Set<com.magx2.capybara.Function>,
+        val defs: Set<Def>,
+)
 
 class CompilationException(codeMetainfo: CodeMetainfo, msg: String) : RuntimeException("${codeMetainfo.fileName} [${codeMetainfo.line}:${codeMetainfo.charInLine}] $msg")
 
