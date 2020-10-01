@@ -10,7 +10,7 @@ jobs:
       name: "Gradle Build"
       script: ./gradlew clean build
     - stage: "Perform Release"
-      name: "Shipkit Perform Release"
+      name: "Release to Bintray"
       script: ./gradlew ciPerformRelease
     - stage: "Perform Release"
       name: "Push Docker"
