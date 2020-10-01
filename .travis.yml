@@ -10,9 +10,9 @@ stages:
     if: branch = master and type != pull_request
 jobs:
   include:
-    - stage: "Build"
-      name: "Gradle Build"
-      script: ./gradlew clean build
+#    - stage: "Build"
+    #      name: "Gradle Build"
+    #      script: ./gradlew clean build
     - stage: "E2E"
       name: "Check Capybara Compiled Files"
       before_install:
