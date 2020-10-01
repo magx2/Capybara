@@ -10,6 +10,6 @@ fun main(args: List[String]): Boolean {
 	x1 = assert multiply(2) == 4 true assert_message("2", "4")
 	x2 = assert multiply(3) == 6 true assert_message("3", "6")
 	x3 = assert multiply(4) == 8 true assert_message("4", "8")
-	return assert multiply(2) == 4 true "2 * 2 != 4 o.O?"
+	return assert multiply(2) == 8 true "2 * 2 != 4 o.O?"
 }
 
