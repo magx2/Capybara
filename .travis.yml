@@ -2,6 +2,8 @@ language: java
 os: linux
 stages:
   - "Build"
+  - name: "E2E"
+    if: branch = master
   - name: "Perform Release"
     if: branch = master and type != pull_request
 jobs:
