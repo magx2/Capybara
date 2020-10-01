@@ -1,9 +1,23 @@
 language: java
-sudo: false
-script: ./gradlew clean build -s && ./gradlew ciPerformRelease
-matrix:
+os: linux
+stages:
+  - "Build"
+  - name: "Perform Release"
+    if: branch = master and type != pull_request
+  - name: "Push Docker"
+    if: branch = master and type != pull_request
+jobs:
   include:
-    - jdk: openjdk11
+    - stage: "Build"
+      name: "Gradle Build"
+      script: ./gradlew clean build
+    - stage: "Perform Release"
+      name: "Shipkit Perform Release"
+      script: ./gradlew ciPerformRelease
+    - stage: "Push Docker"
+      name: "jib"
+      script: docker login -u $DOCKER_USERNAME -p $DOCKER_PASSWORD && ./gradlew jib -x test
+jdk: openjdk11
 #don't build tags
 branches:
   except:
