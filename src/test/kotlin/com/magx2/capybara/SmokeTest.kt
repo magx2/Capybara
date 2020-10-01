@@ -10,7 +10,7 @@ class SmokeTest {
     @Test
     fun `should parse everything in one compilation unit`() {
         val loader = Thread.currentThread().contextClassLoader
-        val url = loader.getResource("capybara")!!
+        val url = loader.getResource("integration_test")!!
         val outputDir = outputDir()
         File(outputDir).mkdirs()
         val files = File(url.path).walkTopDown()

@@ -1,4 +1,4 @@
-package /capybara/test/main
+package /integration_test
 
 import /capybara/type
 

@@ -1,21 +1,29 @@
 language: java
 os: linux
+services:
+  - docker
 stages:
   - "Build"
+  - name: "E2E"
+    if: branch = master or type = pull_request
   - name: "Perform Release"
-    if: branch = master and type != pull_request
-  - name: "Push Docker"
     if: branch = master and type != pull_request
 jobs:
   include:
     - stage: "Build"
       name: "Gradle Build"
-      script: ./gradlew clean build
+      script: ./gradlew clean test build
+    - stage: "E2E"
+      name: "Check Capybara Compiled Files"
+      before_install:
+        - ./gradlew jibDockerBuild
+        - docker build src/test/resources -t integration_test
+      script: docker run integration_test
     - stage: "Perform Release"
-      name: "Shipkit Perform Release"
+      name: "Release to Bintray"
       script: ./gradlew ciPerformRelease
-    - stage: "Push Docker"
-      name: "jib"
+    - stage: "Perform Release"
+      name: "Push Docker"
       script: docker login -u $DOCKER_USERNAME -p $DOCKER_PASSWORD && ./gradlew jib -x test
 jdk: openjdk11
 #don't build tags

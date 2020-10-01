@@ -67,6 +67,9 @@ jar {
 }
 
 jib {
+	from {
+		image = "openjdk:11-jre"
+	}
 	to {
 		image = "mgrzeslowski/capybara"
 		tags = [version, "latest"]
