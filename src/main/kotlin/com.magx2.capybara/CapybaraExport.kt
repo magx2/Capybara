@@ -45,6 +45,20 @@ class PythonExport(private val outputDir: String, private val assertions: Boolea
     private val initFilesDirectories = HashSet<String>()
 
     override fun export(unit: CompileUnitToExport) {
+        val imports = unit.functions
+                .stream()
+                .flatMap { function ->
+                    concat(
+                            findImports(function.returnExpression, unit.packageName).stream(),
+                            function.assignments
+                                    .stream()
+                                    .map { findImports(it.expression, unit.packageName) }
+                                    .flatMap { it.stream() }
+                    )
+                }
+                .map { packageToPythonPackage(it) }
+                .map { "import $it" }
+
         val structs = unit.structs
                 .stream()
                 .filter { it.type != intType }
@@ -63,7 +77,7 @@ class PythonExport(private val outputDir: String, private val assertions: Boolea
         writeAllToPackageFile(
                 outputDir,
                 unit.packageName,
-                concat(structs, functions).toList())
+                concat(imports, structs, functions).toList())
 
         val packageName = unit.packageName
         val directory = File("$outputDir$packageName.py").parentFile
@@ -84,6 +98,38 @@ private fun writeAllToPackageFile(outputDir: String, packageName: String, texts:
         it.writeText(text)
     }
 }
+
+private fun findImports(expresion: ExpressionWithReturnType, packageName: String): List<String> =
+        when (expresion) {
+            is ParameterExpressionWithReturnType -> emptyList()
+            is IntegerExpressionWithReturnType -> emptyList()
+            is FloatExpressionWithReturnType -> emptyList()
+            is BooleanExpressionWithReturnType -> emptyList()
+            is StringExpressionWithReturnType -> emptyList()
+            NothingExpressionWithReturnType -> emptyList()
+            is FunctionInvocationExpressionWithReturnType -> {
+                expresion.parameters.flatMap { findImports(it, packageName) } + if (packageName != expresion.packageName) {
+                    listOf(expresion.packageName)
+                } else {
+                    emptyList()
+                }
+            }
+            is InfixExpressionWithReturnType -> findImports(expresion.left, packageName) + findImports(expresion.right, packageName)
+            is IfExpressionWithReturnType -> findImports(expresion.condition, packageName) + findImports(expresion.trueBranch, packageName) + findImports(expresion.falseBranch, packageName)
+            is NegateExpressionWithReturnType -> findImports(expresion.negateExpression, packageName)
+            is NewStructExpressionWithReturnType ->
+                if (packageName != expresion.returnType.packageName) {
+                    listOf(expresion.returnType.packageName)
+                } else {
+                    emptyList()
+                }
+            is ValueExpressionWithReturnType -> emptyList()
+            is StructFieldAccessExpressionWithReturnType -> findImports(expresion.structureExpression, packageName)
+            is NewListExpressionWithReturnType -> expresion.elements.flatMap { findImports(it, packageName) }
+            is AssertExpressionWithReturnType -> findImports(expresion.checkExpression, packageName) + findImports(expresion.returnExpression, packageName) + (if (expresion.messageExpression != null) findImports(expresion.messageExpression, packageName) else emptyList())
+            is StructureAccessExpressionWithReturnType -> findImports(expresion.structureIndex, packageName)
+            is IsExpressionWithReturnType -> emptyList()
+        }
 
 private fun structToPython(struct: StructToExport): String {
     val constructorParameters = struct.fields
@@ -208,7 +254,7 @@ private fun generateAssertStatement(assertions: Boolean, expression: ExpressionW
         val message = if (expression.messageExpression != null) {
             expressionToString(expression.messageExpression, assertions, unions, packageName)
         } else {
-            "<no message>"
+            "\"<no message>\""
         }
         "if not ${expressionToString(expression.checkExpression, assertions, unions, packageName)}: raise AssertionError($message)\n\t"
     } else {
@@ -244,7 +290,11 @@ private fun expressionToString(expression: ExpressionWithReturnType, assertions:
                         .map { (name, expression) -> Pair(name, expressionToString(expression, assertions, unions, packageName)) }
                         .map { (name, value) -> "${name}=${value}" }
                         .collect(Collectors.joining(", "))
-                "${expression.returnType.name}($parameters)" // TODO support imports
+                if (expression.returnType.packageName == packageName) {
+                    "${expression.returnType.name}($parameters)"
+                } else {
+                    "${packageToPythonPackage(expression.returnType.packageName)}.${expression.returnType.name}($parameters)"
+                }
             }
             is ValueExpressionWithReturnType -> expression.valueName
             is NewListExpressionWithReturnType -> expression.elements

@@ -1,7 +1,25 @@
 package /imports
 
-import /imports/a { FirstStruct, test }
-import /imports/b { SecondStruct }
+import /capybara/type
+import /imports/a { test }
+import /imports/a_structs { FirstStruct }
 
-fun import1(i1: /capybara/type/Int, i2: /capybara/type/Int) = test(i1) ? /imports/b:test() : false
+fun import_functions(Int) = int == 0 ? /imports/c:test(int) : (int > 0 ? test(int) : /imports/b:test(int))
+
+fun a_first_struct(FirstStruct) = first_struct.i1 + first_struct.i2
+
+fun b_first_struct(/imports/b_structs/FirstStruct) = first_struct.i5 - first_struct.i6
+
+fun main(List[String]): Boolean {
+	// functions
+	t1 = assert (import_functions(0) == 0) nothing
+	t2 = assert (import_functions(1) == 2) nothing
+	t3 = assert (import_functions(-1) == -2) nothing
+	// structs
+	first_struct_a = FirstStruct { i1=2, i2=4 }
+	t_a_1 = assert (a_first_struct(first_struct_a) == 6) nothing
+	first_struct_b = /imports/b_structs/FirstStruct { i5=2, i6=4 }
+	t_b_1 = assert (b_first_struct(first_struct_b) == -2) nothing
+	return true
+}
 
