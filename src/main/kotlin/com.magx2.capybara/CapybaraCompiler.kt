@@ -412,7 +412,9 @@ private class Listener(private val fileName: String) : CapybaraBaseListener() {
                 statement.for_loop() != null -> {
                     val forLoop = statement.for_loop().for_loop_expression()
                     ForLoopStatement(
+                            parseCodeMetainfo(fileName, statement.for_loop().start),
                             if (forLoop.assigment() != null) parseAssigmentStatement(forLoop.assigment()) else null,
+                            parseCodeMetainfo(fileName, forLoop.while_.start),
                             parseExpression(forLoop.while_),
                             if (forLoop.each_iteration != null) parseStatement(forLoop.each_iteration) else null,
                             statement.for_loop()

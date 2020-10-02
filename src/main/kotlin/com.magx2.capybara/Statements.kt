@@ -15,7 +15,9 @@ data class WhileLoopStatement(
         val condition: Expression,
         val statements: List<Statement>) : Loop()
 
-data class ForLoopStatement(val assigment: AssigmentStatement?,
+data class ForLoopStatement(val codeMetainfo: CodeMetainfo,
+                            val assigment: AssigmentStatement?,
+                            val whileCodeMetainfo: CodeMetainfo,
                             val whileExpression: Expression,
                             val eachIteration: Statement?,
                             val statements: List<Statement>) : Loop()

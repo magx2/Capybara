@@ -2,6 +2,7 @@ package com.magx2.capybara
 
 import com.magx2.capybara.BasicTypes.booleanType
 import java.util.*
+import java.util.stream.Stream
 import kotlin.collections.HashMap
 import kotlin.collections.HashSet
 import kotlin.streams.toList
@@ -12,7 +13,10 @@ class DefCompiler(private val compilationContext: CompilationContext,
     fun def(def: Def): DefWithTypes {
         val assignmentsMap = HashMap<String, Type>()
         val assignments = LinkedList<AssigmentStatementWithType>()
-        val statements = def.statements.map { parseStatement(assignments, assignmentsMap, it) }
+        val statements = def.statements
+                .stream()
+                .flatMap { parseStatement(assignments, assignmentsMap, it) }
+                .toList()
         val returnExpression = findReturnExpression(def, assignments)
         return DefWithTypes(
                 def.packageName,
@@ -25,7 +29,7 @@ class DefCompiler(private val compilationContext: CompilationContext,
 
     private fun parseStatement(assignments: MutableList<AssigmentStatementWithType>,
                                assignmentsMap: MutableMap<String, Type>,
-                               statement: Statement): StatementWithType =
+                               statement: Statement): Stream<StatementWithType> =
             when (statement) {
                 is AssigmentStatement -> {
                     val assigment = ExpressionCompiler(
@@ -59,7 +63,7 @@ class DefCompiler(private val compilationContext: CompilationContext,
                             assigment,
                             assigmentType)
                     assignments.add(assignment)
-                    assignment
+                    Stream.of(assignment)
                 }
                 is WhileLoopStatement -> {
                     val condition = ExpressionCompiler(
@@ -76,15 +80,32 @@ class DefCompiler(private val compilationContext: CompilationContext,
                     }
                     val whileAssignments = LinkedList(assignments)
                     val whileAssignmentsMap = HashMap(assignmentsMap)
-                    WhileStatementWithType(
+                    Stream.of(WhileStatementWithType(
                             condition,
                             statement.statements
                                     .stream()
-                                    .map { parseStatement(whileAssignments, whileAssignmentsMap, it) }
-                                    .toList()
-                    )
+                                    .flatMap { parseStatement(whileAssignments, whileAssignmentsMap, it) }
+                                    .toList()))
                 }
-                else -> TODO(statement.javaClass.simpleName)
+                is ForLoopStatement -> {
+                    var statements = Stream.empty<StatementWithType>()
+                    if (statement.assigment != null) {
+                        val elements = parseStatement(assignments, assignmentsMap, statement.assigment)
+                        statements = concat(statements, elements)
+                    }
+                    val whileLoop = WhileLoopStatement(
+                            statement.whileCodeMetainfo,
+                            statement.whileCodeMetainfo,
+                            statement.whileExpression,
+                            statement.statements)
+                    val whileElements = parseStatement(assignments, assignmentsMap, whileLoop)
+                    statements = concat(statements, whileElements)
+                    if (statement.eachIteration != null) {
+                        val elements = parseStatement(assignments, assignmentsMap, statement.eachIteration)
+                        statements = concat(statements, elements)
+                    }
+                    statements
+                }
             }
 
     private fun findReturnExpression(def: Def, assignments: List<AssigmentStatementWithType>): ExpressionWithReturnType? {
