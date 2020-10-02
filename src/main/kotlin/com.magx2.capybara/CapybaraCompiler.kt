@@ -261,8 +261,10 @@ private class Listener(private val fileName: String) : CapybaraBaseListener() {
     override fun enterFunBody(ctx: CapybaraParser.FunBodyContext) {
         if (ctx.assigment()?.assign_to != null) {
             assignments.add(AssigmentStatement(
+                    parseCodeMetainfo(fileName, ctx.assigment().start),
                     ctx.assigment().assign_to.text,
-                    parseExpression(ctx.assigment().expression())))
+                    parseExpression(ctx.assigment().expression()),
+                    ctx.assigment().assigment_type?.text))
         } else {
             returnExpression = parseExpression(ctx.expression())
         }
@@ -426,12 +428,14 @@ private class Listener(private val fileName: String) : CapybaraBaseListener() {
                 statement.update_assigment() != null -> {
                     val valueName = statement.update_assigment().assign_to.text
                     AssigmentStatement(
+                            parseCodeMetainfo(fileName, statement.update_assigment().start),
                             valueName,
                             InfixExpression(
                                     parseCodeMetainfo(fileName, statement.update_assigment().start),
                                     findOperation(statement.update_assigment().update_action().text),
                                     ValueExpression(parseCodeMetainfo(fileName, statement.update_assigment().start), valueName),
-                                    parseExpression(statement.update_assigment().expression())))
+                                    parseExpression(statement.update_assigment().expression())),
+                            statement.update_assigment().assign_to.text)
                 }
                 else -> throw IllegalStateException("I don't know how to handle it!")
             }
@@ -439,17 +443,11 @@ private class Listener(private val fileName: String) : CapybaraBaseListener() {
     private fun findOperation(text: String): String = text[0].toString()
 
     private fun parseAssigmentStatement(assigment: CapybaraParser.AssigmentContext) =
-            AssigmentStatement(assigment.assign_to.text, parseExpression(assigment.expression()))
+            AssigmentStatement(
+                    parseCodeMetainfo(fileName, assigment.start),
+                    assigment.assign_to.text,
+                    parseExpression(assigment.expression()),
+                    assigment.assigment_type?.text)
 }
 
 
-// Statements
-sealed class Statement
-data class AssigmentStatement(val name: String, val expression: Expression) : Statement()
-data class AssigmentStatementWithReturnType(val name: String, val expression: ExpressionWithReturnType) : Statement()
-sealed class Loop : Statement()
-data class WhileLoopStatement(val whileExpression: Expression, val statements: List<Statement>) : Loop()
-data class ForLoopStatement(val assigment: AssigmentStatement?,
-                            val whileExpression: Expression,
-                            val eachIteration: Statement?,
-                            val statements: List<Statement>) : Loop()

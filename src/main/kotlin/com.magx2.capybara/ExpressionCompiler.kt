@@ -181,7 +181,6 @@ class ExpressionCompiler(private val assignments: List<AssigmentStatementWithRet
                     )
                 }
                 is NewStruct -> {
-                    val structPackageName = expression.packageName ?: compileUnit.packageName
                     val structs = if (expression.packageName == null) {
                         findPackageStructs() + importStructsToFlatStructs()
                     } else {
@@ -190,7 +189,13 @@ class ExpressionCompiler(private val assignments: List<AssigmentStatementWithRet
 
                     val optional = structs.stream()
                             .filter { it.type.name == expression.structName }
-                            .filter { it.type.packageName == structPackageName }
+                            .filter {
+                                if (expression.packageName == null) {
+                                    true
+                                } else {
+                                    it.type.packageName == expression.packageName
+                                }
+                            }
                             .findFirst()
 
                     if (optional.isPresent) {

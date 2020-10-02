@@ -1,0 +1,26 @@
+package /assigment
+
+import /capybara/type
+
+fun assign_int(): IntOrNothing {
+	x: IntOrNothing = 5
+	return x
+}
+
+fun assign_nothing(): IntOrNothing {
+	x: IntOrNothing = nothing
+	return x
+}
+
+fun test_assign(): Boolean {
+	x_type_int = assign_int()
+	x_type_nothing = assign_nothing()
+	x1 = assert (x_type_int is IntOrNothing) (true) ("Function assign_int should return `IntOrNothing`")
+	x2 = assert (x_type_nothing is IntOrNothing) (true) ("Function assign_nothing should return `IntOrNothing`")
+	return true
+}
+
+fun main(args: List[String]): Boolean {
+	return test_assign()
+}
+

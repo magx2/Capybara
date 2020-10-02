@@ -157,7 +157,7 @@ for_loop_expression
 	;
 
 assigment
-	: assign_to=SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL EQUALS expression
+	: assign_to=SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL (COLON assigment_type=fullyQualifiedType)? EQUALS expression
 	;
 
 update_assigment

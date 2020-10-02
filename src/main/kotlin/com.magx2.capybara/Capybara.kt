@@ -78,7 +78,7 @@ fun main(options: CommandLineOptions) {
     // EXPORTS/IMPORTS
     //
     val exports = compileUnits.stream()
-            .map { Export(it.packageName, it.structs.toSet(), it.unions, it.functions.toSet(), it.defs.toSet()) }
+            .map { Export(it.packageName, it.structs, it.unions, it.functions, it.defs) }
             .collect(object : Collector<Export, MutableMap<String, Export>, Map<String, Export>> {
                 override fun characteristics(): MutableSet<Collector.Characteristics> = setOf(UNORDERED).toMutableSet()
 
@@ -325,7 +325,7 @@ fun main(options: CommandLineOptions) {
                                 }
                                 .toList()
                                 .toSet(),
-                        emptySet(),//TODO()
+                        emptySet(), //TODO
                         unit.unions + unit.importUnions.map { parseUnion(it, unit) },
                 )
             }
@@ -341,6 +341,7 @@ fun main(options: CommandLineOptions) {
                                         unit.packageName,
                                         unit.structs + unitInMap.structs,
                                         unit.functions + unitInMap.functions,
+                                        emptySet(),//TODO
                                         unit.unions + unitInMap.unions,
                                 )
                             } else {
