@@ -280,27 +280,37 @@ private fun defToPython(def: DefToExport,
     val methodDoc = ""
     val statements = def.statements
             .stream()
-            .map { statementToPython(it, assertions, unions, packageName) }
-            .collect(Collectors.joining("\n\t"))
+            .map { statementToPython(it, assertions, unions, packageName, 1) }
+            .collect(Collectors.joining("\n"))
 
     val returnExpression = if (def.returnExpression != null) {
-        "\n|${'\t'}${generateAssertStatement(assertions, def.returnExpression, unions, packageName)}return ${expressionToString(def.returnExpression, assertions, unions, packageName)}"
+        "\n|${generateAssertStatement(assertions, def.returnExpression, unions, packageName)}${buildIndent(1)}return ${expressionToString(def.returnExpression, assertions, unions, packageName)}"
     } else {
         ""
     }
 
     return """
     |def ${def.name}($parameters):
-    |${'\t'}$methodDoc$statements$returnExpression""".trimMargin()
+    |$methodDoc$statements$returnExpression""".trimMargin()
 }
 
 private fun statementToPython(statement: StatementWithType,
                               assertions: Boolean,
                               unions: Set<UnionWithType>,
-                              packageName: String): String =
+                              packageName: String,
+                              indent: Int): String =
         when (statement) {
-            is AssigmentStatementWithType -> "${statement.name} = ${expressionToString(statement.expression, assertions, unions, packageName)}"
+            is AssigmentStatementWithType -> "${buildIndent(indent)}${statement.name} = ${expressionToString(statement.expression, assertions, unions, packageName)}"
+            is WhileStatementWithType -> {
+                val statements = statement.statements
+                        .stream()
+                        .map { statementToPython(it, assertions, unions, packageName, indent + 1) }
+                        .collect(Collectors.joining("\n"))
+                "${buildIndent(indent)}while ${expressionToString(statement.condition, assertions, unions, packageName)}:\n$statements"
+            }
         }
+
+private fun buildIndent(indent: Int) = "\t".repeat(indent)
 
 private fun generateAssertStatement(assertions: Boolean, expression: ExpressionWithReturnType, unions: Set<UnionWithType>, packageName: String): String {
     return if (assertions && expression is AssertExpressionWithReturnType) {

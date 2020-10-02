@@ -1,8 +1,10 @@
 package com.magx2.capybara
 
+import com.magx2.capybara.BasicTypes.booleanType
 import java.util.*
 import kotlin.collections.HashMap
 import kotlin.collections.HashSet
+import kotlin.streams.toList
 
 class DefCompiler(private val compilationContext: CompilationContext,
                   private val compileUnit: CompileUnitWithFlatStructs,
@@ -10,7 +12,7 @@ class DefCompiler(private val compilationContext: CompilationContext,
     fun def(def: Def): DefWithTypes {
         val assignmentsMap = HashMap<String, Type>()
         val assignments = LinkedList<AssigmentStatementWithType>()
-        val statements = def.statements.map { statement(assignments, assignmentsMap, it) }
+        val statements = def.statements.map { parseStatement(assignments, assignmentsMap, it) }
         val returnExpression = findReturnExpression(def, assignments)
         return DefWithTypes(
                 def.packageName,
@@ -21,9 +23,9 @@ class DefCompiler(private val compilationContext: CompilationContext,
         )
     }
 
-    private fun statement(assignments: MutableList<AssigmentStatementWithType>,
-                          assignmentsMap: MutableMap<String, Type>,
-                          statement: Statement): StatementWithType =
+    private fun parseStatement(assignments: MutableList<AssigmentStatementWithType>,
+                               assignmentsMap: MutableMap<String, Type>,
+                               statement: Statement): StatementWithType =
             when (statement) {
                 is AssigmentStatement -> {
                     val assigment = ExpressionCompiler(
@@ -59,7 +61,30 @@ class DefCompiler(private val compilationContext: CompilationContext,
                     assignments.add(assignment)
                     assignment
                 }
-                else -> TODO()
+                is WhileLoopStatement -> {
+                    val condition = ExpressionCompiler(
+                            findPreviousAssignments(assignments),
+                            compilationContext,
+                            compileUnit,
+                            fullyQualifiedStructNames)
+                            .findReturnType(statement.condition)
+                    if (condition.returnType != booleanType) {
+                        throw CompilationException(
+                                statement.conditionCodeMetainfo,
+                                "While condition should return `${typeToString(booleanType)}` not `${typeToString(condition.returnType)}`."
+                        )
+                    }
+                    val whileAssignments = LinkedList(assignments)
+                    val whileAssignmentsMap = HashMap(assignmentsMap)
+                    WhileStatementWithType(
+                            condition,
+                            statement.statements
+                                    .stream()
+                                    .map { parseStatement(whileAssignments, whileAssignmentsMap, it) }
+                                    .toList()
+                    )
+                }
+                else -> TODO(statement.javaClass.simpleName)
             }
 
     private fun findReturnExpression(def: Def, assignments: List<AssigmentStatementWithType>): ExpressionWithReturnType? {

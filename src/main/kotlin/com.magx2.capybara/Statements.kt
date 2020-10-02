@@ -9,7 +9,12 @@ data class AssigmentStatement(val codeMetainfo: CodeMetainfo,
                               val type: String?) : Statement()
 
 sealed class Loop : Statement()
-data class WhileLoopStatement(val whileExpression: Expression, val statements: List<Statement>) : Loop()
+data class WhileLoopStatement(
+        val codeMetainfo: CodeMetainfo,
+        val conditionCodeMetainfo: CodeMetainfo,
+        val condition: Expression,
+        val statements: List<Statement>) : Loop()
+
 data class ForLoopStatement(val assigment: AssigmentStatement?,
                             val whileExpression: Expression,
                             val eachIteration: Statement?,
@@ -18,3 +23,4 @@ data class ForLoopStatement(val assigment: AssigmentStatement?,
 // Statements
 sealed class StatementWithType
 data class AssigmentStatementWithType(val name: String, val expression: ExpressionWithReturnType, val type: Type) : StatementWithType()
+data class WhileStatementWithType(val condition: ExpressionWithReturnType, val statements: List<StatementWithType>) : StatementWithType()

@@ -399,6 +399,8 @@ private class Listener(private val fileName: String) : CapybaraBaseListener() {
                 statement.assigment() != null -> parseAssigmentStatement(statement.assigment())
                 statement.while_loop() != null ->
                     WhileLoopStatement(
+                            parseCodeMetainfo(fileName, statement.while_loop().start),
+                            parseCodeMetainfo(fileName, statement.while_loop().while_.start),
                             parseExpression(statement.while_loop().while_),
                             statement.while_loop()
                                     .loop_body()

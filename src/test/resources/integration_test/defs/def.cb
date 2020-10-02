@@ -21,5 +21,12 @@ def union_re_assigment(): IntOrNothing {
    return x
 }
 
-
+def simple_while(): Int {
+	accumulator = 0
+	i = 0
+	while i < 10 {
+		 accumulator = accumulator + 1
+	}
+	return accumulator
+}
 
