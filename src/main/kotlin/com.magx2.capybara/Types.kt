@@ -1,7 +1,6 @@
 package com.magx2.capybara
 
 import java.util.regex.Pattern
-import java.util.stream.Stream
 
 const val typePackageName = "/capybara/type"
 
@@ -62,14 +61,6 @@ fun parseType(
                     .orElseThrow { CompilationException(codeMetainfo, "Cannot find type `$type` in compilation unit nor in imports") }
         }
     }
-}
-
-private fun <T> concat(vararg streams: Stream<T>): Stream<T> {
-    var stream = Stream.empty<T>()
-    for (s in streams) {
-        stream = Stream.concat(stream, s)
-    }
-    return stream
 }
 
 fun addGenericType(type: Type, genericType: Type) = type.copy(genericType = genericType)

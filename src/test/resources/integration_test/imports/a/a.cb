@@ -1,15 +1,6 @@
 package /imports/a
 
-struct FirstStruct {
-	i1: /capybara/type/Int
-	i2: /capybara/type/Int
-}
+import /capybara/type
 
-struct SecondStruct {
-	...FirstStruct
-	i3: /capybara/type/Int
-	i4: /capybara/type/Int
-}
-
-fun test(/capybara/type/Int) = int > 0
+fun test(Int) = int + 1
 

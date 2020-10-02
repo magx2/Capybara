@@ -1,5 +1,7 @@
 package com.magx2.capybara
 
+import java.util.stream.Stream
+
 // https://stackoverflow.com/a/60010299
 val camelRegex = "(?<=[a-zA-Z])[A-Z]".toRegex()
 val snakeRegex = "_[a-zA-Z]".toRegex()
@@ -20,4 +22,12 @@ fun String.snakeToLowerCamelCase(): String {
 
 fun String.snakeToUpperCamelCase(): String {
     return this.snakeToLowerCamelCase().capitalize()
+}
+
+fun <T> concat(vararg streams: Stream<T>): Stream<T> {
+    var stream = Stream.empty<T>()
+    for (s in streams) {
+        stream = Stream.concat(stream, s)
+    }
+    return stream
 }
