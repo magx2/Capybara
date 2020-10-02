@@ -1,6 +1,11 @@
 package com.magx2.capybara
 
+import com.magx2.capybara.BasicTypes.anyType
+import com.magx2.capybara.BasicTypes.booleanType
+import com.magx2.capybara.BasicTypes.floatType
+import com.magx2.capybara.BasicTypes.intType
 import com.magx2.capybara.BasicTypes.listType
+import com.magx2.capybara.BasicTypes.nothingType
 import com.magx2.capybara.BasicTypes.stringType
 import org.slf4j.LoggerFactory
 import java.io.File
@@ -39,6 +44,13 @@ class PythonExport(private val outputDir: String, private val assertions: Boolea
     override fun export(unit: CompileUnitToExport) {
         val structs = unit.structs
                 .stream()
+                .filter { it.type != intType }
+                .filter { it.type != floatType }
+                .filter { it.type != booleanType }
+                .filter { it.type != listType }
+                .filter { it.type != stringType }
+                .filter { it.type != nothingType }
+                .filter { it.type != anyType }
                 .map { struct -> structToPython(struct) }
 
         val functions = unit.functions
@@ -252,6 +264,19 @@ private fun expressionToString(expression: ExpressionWithReturnType, assertions:
         }
 
 fun findPythonType(type: Type): String {
+    if (type.packageName == typePackageName) {
+        if (type == intType) {
+            return "int"
+        } else if (type == floatType) {
+            return "float"
+        } else if (type == booleanType) {
+            return "bool"
+        } else if (type == stringType) {
+            return "str"
+        } else if (type == listType) {
+            return "list"
+        }
+    }
     return packageToPythonPackage(type.packageName) + "." + type.name
 }
 
