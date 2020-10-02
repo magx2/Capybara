@@ -5,7 +5,7 @@ import java.util.stream.Collectors
 import java.util.stream.Stream
 import kotlin.streams.toList
 
-class ExpressionCompiler(private val assignments: List<AssigmentStatementWithReturnType>,
+class ExpressionCompiler(private val assignments: List<AssigmentStatementWithType>,
                          private val compilationContext: CompilationContext,
                          private val compileUnit: CompileUnitWithFlatStructs,
                          private val fullyQualifiedStructNames: Map<Type, Struct>) {
@@ -61,7 +61,7 @@ class ExpressionCompiler(private val assignments: List<AssigmentStatementWithRet
                     if (function.isPresent) {
                         val f = function.get()
                         val returnType = if (f.returnType != null) {
-                            parseType(expression.codeMetainfo, f.returnType, localStructs() + importsToTypes(compileUnit))
+                            parseType(expression.codeMetainfo, f.returnType, compilationContext, compileUnit)
                         } else {
                             if (callStack.contains(f.returnExpression)) {
                                 throw CompilationException(expression.codeMetainfo, "There is recursive invocation of functions. Please specify return type explicitly.")
@@ -272,7 +272,7 @@ class ExpressionCompiler(private val assignments: List<AssigmentStatementWithRet
                 is StructureAccessExpression -> {
                     @Suppress("ThrowableNotThrown")
                     val elementType = if (expression.structureType != null) {
-                        parseType(expression.codeMetainfo, expression.structureType, localStructs() + importsToTypes(compileUnit))
+                        parseType(expression.codeMetainfo, expression.structureType, compilationContext, compileUnit)
                     } else {
                         assignments.stream()
                                 .filter { it.name == expression.structureName }
@@ -306,7 +306,7 @@ class ExpressionCompiler(private val assignments: List<AssigmentStatementWithRet
                 is IsExpression -> {
                     IsExpressionWithReturnType(
                             expression.value,
-                            parseType(expression.typeCodeMetainfo, expression.type, localStructs() + importsToTypes(compileUnit)))
+                            parseType(expression.typeCodeMetainfo, expression.type, compilationContext, compileUnit))
                 }
                 is AssertExpression -> {
                     val checkExpression = findReturnType(expression.checkExpression, casts, notCasts, callStack)
@@ -330,12 +330,7 @@ class ExpressionCompiler(private val assignments: List<AssigmentStatementWithRet
                 }
             }
 
-    private fun finUnionSubTypes(unionType: Type): Set<Type> =
-            (compileUnit.unions + compilationContext.unions).stream()
-                    .filter { it.type == unionType }
-                    .map { it.types }
-                    .findAny()
-                    .orElse(emptySet())
+    private fun finUnionSubTypes(unionType: Type): Set<Type> = finUnionSubTypes(unionType, compilationContext, compileUnit)
 
     private data class SmartCasting(val leftCasts: Set<Cast>,
                                     val leftNotCasts: Set<NotCast>,
@@ -346,7 +341,7 @@ class ExpressionCompiler(private val assignments: List<AssigmentStatementWithRet
 
     private data class NotCast(val name: String, val notTypes: Set<Type>)
 
-    private fun isCastingInIf(expression: ExpressionWithReturnType, actualCasts: Set<Cast>, assignments: List<AssigmentStatementWithReturnType>): SmartCasting =
+    private fun isCastingInIf(expression: ExpressionWithReturnType, actualCasts: Set<Cast>, assignments: List<AssigmentStatementWithType>): SmartCasting =
             when (expression) {
                 is NegateExpressionWithReturnType -> {
                     val smart = isCastingInIf(expression.negateExpression, actualCasts, assignments)

@@ -14,14 +14,14 @@ data class FunctionWithReturnType(val packageName: String,
                                   val name: String,
                                   val returnExpression: ExpressionWithReturnType,
                                   val parameters: List<TypedParameter>,
-                                  val assignments: List<AssigmentStatementWithReturnType>)
+                                  val assignments: List<AssigmentStatementWithType>)
 
 class FunctionCompiler(private val compilationContext: CompilationContext,
                        private val compileUnit: CompileUnitWithFlatStructs,
                        private val fullyQualifiedStructNames: Map<Type, Struct>) {
 
-    fun findReturnTypeForAssignments(assignments: List<AssigmentStatement>): List<AssigmentStatementWithReturnType> {
-        val assignmentsWithReturnType = ArrayList<AssigmentStatementWithReturnType>(assignments.size)
+    fun findReturnTypeForAssignments(assignments: List<AssigmentStatement>): List<AssigmentStatementWithType> {
+        val assignmentsWithReturnType = ArrayList<AssigmentStatementWithType>(assignments.size)
         for (assigment in assignments) {
             assignmentsWithReturnType.add(
                     findReturnTypeForAssignment(assigment, assignmentsWithReturnType)
@@ -32,7 +32,7 @@ class FunctionCompiler(private val compilationContext: CompilationContext,
 
     private fun findReturnTypeForAssignment(
             assignment: AssigmentStatement,
-            assignmentsWithReturnType: List<AssigmentStatementWithReturnType>): AssigmentStatementWithReturnType {
+            assignmentsWithReturnType: List<AssigmentStatementWithType>): AssigmentStatementWithType {
         val expression = ExpressionCompiler(assignmentsWithReturnType, compilationContext, compileUnit, fullyQualifiedStructNames)
                 .findReturnType(assignment.expression)
         val type = if (assignment.type != null) {
@@ -46,7 +46,7 @@ class FunctionCompiler(private val compilationContext: CompilationContext,
         } else {
             expression.returnType
         }
-        return AssigmentStatementWithReturnType(
+        return AssigmentStatementWithType(
                 assignment.name,
                 expression,
                 type)

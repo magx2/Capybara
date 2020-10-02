@@ -259,43 +259,8 @@ fun main(options: CommandLineOptions) {
     // find return types for functions
     val compilationUnitsToExport = compileUnitsWithFlatStructs.stream()
             .map { unit ->
-                val functionsWithReturnType = unit.functions
-                        .stream()
-                        .map { function ->
-                            val functionCompiler = FunctionCompiler(compilationContext, unit, fullyQualifiedStructNames)
-                            val assignments = functionCompiler.findReturnTypeForAssignments(function.assignments)
-                            val expressionCompiler = ExpressionCompiler(assignments, compilationContext, unit, fullyQualifiedStructNames)
-                            FunctionOnBuild(
-                                    function,
-                                    expressionCompiler.findReturnType(function.returnExpression),
-                                    unit,
-                                    assignments)
-                        }
-                        .map { triple ->
-                            val returnType = triple.function.returnType
-                            if (returnType != null) {
-                                val declaredReturnType = parseType(triple.function.codeMetainfo, returnType, getTypes(compilationContext, triple.unit.packageName) + importsToTypes(triple.unit))
-                                if (!isSameType(declaredReturnType, triple.expression.returnType, compilationContext)) {
-                                    throw CompilationException(triple.function.codeMetainfo, "Declared return type of function `${triple.function.packageName}/${triple.function.name}` do not corresponds what it really return. " +
-                                            "You declared `$returnType` and computed was `${typeToString(triple.expression.returnType)}`.")
-                                }
-                            }
-                            triple
-                        }
-                        .map { pair ->
-                            val parameters = pair.function.parameters
-                                    .stream()
-                                    .map { TypedParameter(it.name, parseType(pair.function.codeMetainfo, it.type, getTypes(compilationContext, pair.unit.packageName) + importsToTypes(pair.unit))) }
-                                    .toList()
-                            FunctionWithReturnType(
-                                    pair.function.packageName,
-                                    pair.function.name,
-                                    pair.expression,
-                                    parameters,
-                                    pair.assignments)
-                        }
-                        .toList()
-                        .toSet()
+                val functionsWithReturnType = buildFunctions(unit, compilationContext, fullyQualifiedStructNames)
+                val defs = buildDefs(unit, compilationContext, fullyQualifiedStructNames)
                 CompileUnitToExport(
                         unit.packageName,
                         unit.structs
@@ -325,7 +290,7 @@ fun main(options: CommandLineOptions) {
                                 }
                                 .toList()
                                 .toSet(),
-                        emptySet(), //TODO
+                        defs.map { mapDef(it) }.toSet(),
                         unit.unions + unit.importUnions.map { parseUnion(it, unit) },
                 )
             }
@@ -341,7 +306,7 @@ fun main(options: CommandLineOptions) {
                                         unit.packageName,
                                         unit.structs + unitInMap.structs,
                                         unit.functions + unitInMap.functions,
-                                        emptySet(),//TODO
+                                        unit.defs + unitInMap.defs,
                                         unit.unions + unitInMap.unions,
                                 )
                             } else {
@@ -378,6 +343,67 @@ fun main(options: CommandLineOptions) {
     } else {
         log.info("Not exporting files, because `outputDir` is not set")
     }
+}
+
+private fun buildFunctions(unit: CompileUnitWithFlatStructs, compilationContext: CompilationContext, fullyQualifiedStructNames: Map<Type, Struct>): Set<FunctionWithReturnType> {
+    return unit.functions
+            .stream()
+            .map { function ->
+                val functionCompiler = FunctionCompiler(compilationContext, unit, fullyQualifiedStructNames)
+                val assignments = functionCompiler.findReturnTypeForAssignments(function.assignments)
+                val expressionCompiler = ExpressionCompiler(assignments, compilationContext, unit, fullyQualifiedStructNames)
+                FunctionOnBuild(
+                        function,
+                        expressionCompiler.findReturnType(function.returnExpression),
+                        unit,
+                        assignments)
+            }
+            .map { triple ->
+                val returnType = triple.function.returnType
+                if (returnType != null) {
+                    val declaredReturnType = parseType(triple.function.codeMetainfo, returnType, getTypes(compilationContext, triple.unit.packageName) + importsToTypes(triple.unit))
+                    if (!isSameType(declaredReturnType, triple.expression.returnType, compilationContext)) {
+                        throw CompilationException(triple.function.codeMetainfo, "Declared return type of function `${triple.function.packageName}/${triple.function.name}` do not corresponds what it really return. " +
+                                "You declared `$returnType` and computed was `${typeToString(triple.expression.returnType)}`.")
+                    }
+                }
+                triple
+            }
+            .map { pair ->
+                val parameters = pair.function.parameters
+                        .stream()
+                        .map { TypedParameter(it.name, parseType(pair.function.codeMetainfo, it.type, getTypes(compilationContext, pair.unit.packageName) + importsToTypes(pair.unit))) }
+                        .toList()
+                FunctionWithReturnType(
+                        pair.function.packageName,
+                        pair.function.name,
+                        pair.expression,
+                        parameters,
+                        pair.assignments)
+            }
+            .toList()
+            .toSet()
+}
+
+fun buildDefs(unit: CompileUnitWithFlatStructs,
+              compilationContext: CompilationContext,
+              fullyQualifiedStructNames: Map<Type, Struct>): Set<DefWithTypes> {
+    val compiler = DefCompiler(compilationContext, unit, fullyQualifiedStructNames)
+    return unit.defs
+            .stream()
+            .map { def -> compiler.def(def) }
+            // add checks
+            .map { def ->
+                DefWithTypes(
+                        def.packageName,
+                        def.name,
+                        listOf(),
+                        def.statements,
+                        def.returnExpression
+                )
+            }
+            .toList()
+            .toSet()
 }
 
 fun langFiles(): List<String> =
@@ -419,7 +445,7 @@ data class FunctionOnBuild(
         val function: com.magx2.capybara.Function,
         val expression: ExpressionWithReturnType,
         val unit: CompileUnitWithFlatStructs,
-        val assignments: List<AssigmentStatementWithReturnType>
+        val assignments: List<AssigmentStatementWithType>
 )
 
 /*

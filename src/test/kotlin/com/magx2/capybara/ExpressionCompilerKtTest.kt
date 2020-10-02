@@ -99,7 +99,7 @@ internal class ExpressionCompilerKtTest {
 
     val compilationContext = CompilationContext(setOf(), setOf(), setOf(), setOf())
     val compileUnit = CompileUnitWithFlatStructs("", setOf(), setOf(), setOf(), setOf(), listOf(), listOf(), listOf(), listOf())
-    val assignments = listOf<AssigmentStatementWithReturnType>()
+    val assignments = listOf<AssigmentStatementWithType>()
     val fullyQualifiedStructNames = mapOf<Type, Struct>()
 
     @ParameterizedTest
@@ -223,7 +223,7 @@ internal class ExpressionCompilerKtTest {
         // given
         val valueName = "foo"
         val expression = ValueExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), valueName)
-        val assigmentStatement = AssigmentStatementWithReturnType(valueName, integerExpressionWithReturnType(), intType)
+        val assigmentStatement = AssigmentStatementWithType(valueName, integerExpressionWithReturnType(), intType)
 
         // when
         val returnType = findReturnType(
@@ -241,7 +241,7 @@ internal class ExpressionCompilerKtTest {
     fun `should throw exception if cannot find assigment for given value`() {
         // given
         val expression = ValueExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "foo")
-        val assigmentStatement = AssigmentStatementWithReturnType("boo", integerExpressionWithReturnType(), intType)
+        val assigmentStatement = AssigmentStatementWithType("boo", integerExpressionWithReturnType(), intType)
 
         // when
         val `when` = ThrowableAssert.ThrowingCallable {
@@ -903,7 +903,7 @@ internal class ExpressionCompilerKtTest {
                 typeToString(addGenericType(listType, stringType)))
 
         val assignments = listOf(
-                AssigmentStatementWithReturnType(
+                AssigmentStatementWithType(
                         "foo",
                         NewListExpressionWithReturnType(
                                 stringType,
@@ -939,7 +939,7 @@ internal class ExpressionCompilerKtTest {
                 null)
 
         val assignments = listOf(
-                AssigmentStatementWithReturnType(
+                AssigmentStatementWithType(
                         "foo2",
                         NewListExpressionWithReturnType(
                                 stringType,
@@ -996,7 +996,7 @@ internal class ExpressionCompilerKtTest {
 
     private fun findReturnType(compilationContext: CompilationContext,
                                compileUnit: CompileUnitWithFlatStructs,
-                               assignments: List<AssigmentStatementWithReturnType>,
+                               assignments: List<AssigmentStatementWithType>,
                                expression: Expression,
                                fullyQualifiedStructNames: Map<Type, Struct>) =
             ExpressionCompiler(assignments, compilationContext, compileUnit, fullyQualifiedStructNames).findReturnType(expression)

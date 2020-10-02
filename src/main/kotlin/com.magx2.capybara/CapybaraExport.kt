@@ -36,13 +36,20 @@ data class FunctionToExport(val packageName: String,
                             val name: String,
                             val returnExpression: ExpressionWithReturnType,
                             val parameters: List<ParameterToExport>,
-                            val assignments: List<AssigmentStatementWithReturnType>)
+                            val assignments: List<AssigmentStatementWithType>)
 
 data class DefToExport(val packageName: String,
                        val name: String,
-                       val parameters: List<Parameter>,
-                       val statements: List<Statement>,
+                       val parameters: List<TypedParameter>,
+                       val statements: List<StatementWithType>,
                        val returnExpression: ExpressionWithReturnType?)
+
+fun mapDef(def: DefWithTypes) =
+        DefToExport(def.packageName,
+                def.name,
+                def.parameters,
+                def.statements,
+                def.returnExpression)
 
 data class ParameterToExport(val name: String, val type: Type)
 
@@ -82,10 +89,14 @@ class PythonExport(private val outputDir: String, private val assertions: Boolea
                 .stream()
                 .map { function -> functionToPython(function, assertions, unit.unions, unit.packageName) }
 
+        val defs = unit.defs
+                .stream()
+                .map { def -> defToPython(def, assertions, unit.unions, unit.packageName) }
+
         writeAllToPackageFile(
                 outputDir,
                 unit.packageName,
-                concat(imports, structs, functions).toList())
+                concat(imports, structs, functions, defs).toList())
 
         val packageName = unit.packageName
         val directory = File("$outputDir$packageName.py").parentFile
@@ -256,6 +267,40 @@ private fun functionToPython(function: FunctionToExport, assertions: Boolean, un
     |${'\t'}${generateAssertStatement(assertions, function.returnExpression, unions, packageName)}return ${expressionToString(function.returnExpression, assertions, unions, packageName)}
     |${'\n'}$main""".trimMargin()
 }
+
+private fun defToPython(def: DefToExport,
+                        assertions: Boolean,
+                        unions: Set<UnionWithType>,
+                        packageName: String): String {
+    val parameters = def.parameters
+            .stream()
+            .map { it.name }
+            .collect(Collectors.joining(", "))
+
+    val methodDoc = ""
+    val statements = def.statements
+            .stream()
+            .map { statementToPython(it, assertions, unions, packageName) }
+            .collect(Collectors.joining("\n\t"))
+
+    val returnExpression = if (def.returnExpression != null) {
+        "\n|${'\t'}${generateAssertStatement(assertions, def.returnExpression, unions, packageName)}return ${expressionToString(def.returnExpression, assertions, unions, packageName)}"
+    } else {
+        ""
+    }
+
+    return """
+    |def ${def.name}($parameters):
+    |${'\t'}$methodDoc$statements$returnExpression""".trimMargin()
+}
+
+private fun statementToPython(statement: StatementWithType,
+                              assertions: Boolean,
+                              unions: Set<UnionWithType>,
+                              packageName: String): String =
+        when (statement) {
+            is AssigmentStatementWithType -> "${statement.name} = ${expressionToString(statement.expression, assertions, unions, packageName)}"
+        }
 
 private fun generateAssertStatement(assertions: Boolean, expression: ExpressionWithReturnType, unions: Set<UnionWithType>, packageName: String): String {
     return if (assertions && expression is AssertExpressionWithReturnType) {

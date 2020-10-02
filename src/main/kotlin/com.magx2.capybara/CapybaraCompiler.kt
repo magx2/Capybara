@@ -103,12 +103,6 @@ data class Def(val packageName: String,
                val statements: List<Statement>,
                val returnExpression: Expression?)
 
-data class DefWithReturnType(val packageName: String,
-                             val name: String,
-                             val returnType: Type,
-                             val parameters: List<Parameter>,
-                             val returnExpression: Expression?)
-
 data class Parameter(val name: String, val type: String)
 data class TypedParameter(val name: String, val type: Type)
 
@@ -236,9 +230,10 @@ private class Listener(private val fileName: String) : CapybaraBaseListener() {
                 ctx.name.text,
                 ctx.returnType?.text,
                 parameters,
-                statements,
+                statements.toList(),
                 defReturnExpression))
         returnExpression = null
+        statements.clear()
     }
 
     private fun findListOfParametersInFun(ctx: CapybaraParser.ListOfParametersContext?): List<Parameter> =
@@ -264,6 +259,7 @@ private class Listener(private val fileName: String) : CapybaraBaseListener() {
                     parseCodeMetainfo(fileName, ctx.assigment().start),
                     ctx.assigment().assign_to.text,
                     parseExpression(ctx.assigment().expression()),
+                    if (ctx.assigment().assigment_type != null) parseCodeMetainfo(fileName, ctx.assigment().assigment_type?.start!!) else null,
                     ctx.assigment().assigment_type?.text))
         } else {
             returnExpression = parseExpression(ctx.expression())
@@ -435,6 +431,7 @@ private class Listener(private val fileName: String) : CapybaraBaseListener() {
                                     findOperation(statement.update_assigment().update_action().text),
                                     ValueExpression(parseCodeMetainfo(fileName, statement.update_assigment().start), valueName),
                                     parseExpression(statement.update_assigment().expression())),
+                            parseCodeMetainfo(fileName, statement.update_assigment().assign_to),
                             statement.update_assigment().assign_to.text)
                 }
                 else -> throw IllegalStateException("I don't know how to handle it!")
@@ -447,6 +444,7 @@ private class Listener(private val fileName: String) : CapybaraBaseListener() {
                     parseCodeMetainfo(fileName, assigment.start),
                     assigment.assign_to.text,
                     parseExpression(assigment.expression()),
+                    if (assigment.assign_to != null) parseCodeMetainfo(fileName, assigment.assign_to) else null,
                     assigment.assigment_type?.text)
 }
 
