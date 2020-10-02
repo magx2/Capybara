@@ -10,6 +10,7 @@ import com.magx2.capybara.BasicTypes.stringType
 import org.slf4j.LoggerFactory
 import java.io.File
 import java.lang.String.join
+import java.nio.file.Paths
 import java.util.stream.Collectors
 import kotlin.streams.toList
 
@@ -41,6 +42,8 @@ data class ParameterToExport(val name: String, val type: Type)
 private val log = LoggerFactory.getLogger(PythonExport::class.java)
 
 class PythonExport(private val outputDir: String, private val assertions: Boolean) : CapybaraExport {
+    private val initFilesDirectories = HashSet<String>()
+
     override fun export(unit: CompileUnitToExport) {
         val structs = unit.structs
                 .stream()
@@ -61,6 +64,14 @@ class PythonExport(private val outputDir: String, private val assertions: Boolea
                 outputDir,
                 unit.packageName,
                 concat(structs, functions).toList())
+
+        val packageName = unit.packageName
+        val directory = File("$outputDir$packageName.py").parentFile
+        if (initFilesDirectories.contains(directory.absolutePath).not()) {
+            val init = Paths.get(directory.absolutePath, "__init__.py")
+            init.toFile().createNewFile()
+            initFilesDirectories.add(directory.absolutePath)
+        }
     }
 }
 
