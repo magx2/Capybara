@@ -11,6 +11,7 @@ class DefCompiler(private val compilationContext: CompilationContext,
                   private val compileUnit: CompileUnitWithFlatStructs,
                   private val fullyQualifiedStructNames: Map<Type, Struct>) {
     fun def(def: Def): DefWithTypes {
+        val parameters = def.parameters.map { parseTypedParameter(it, compilationContext, compileUnit) }
         val assignmentsMap = HashMap<String, Type>()
         val assignments = LinkedList<AssigmentStatementWithType>()
         val statements = def.statements
@@ -21,7 +22,7 @@ class DefCompiler(private val compilationContext: CompilationContext,
         return DefWithTypes(
                 def.packageName,
                 def.name,
-                listOf(),// TODO
+                parameters,
                 statements,
                 returnExpression
         )

@@ -372,7 +372,7 @@ private fun buildFunctions(unit: CompileUnitWithFlatStructs, compilationContext:
             .map { pair ->
                 val parameters = pair.function.parameters
                         .stream()
-                        .map { TypedParameter(it.name, parseType(pair.function.codeMetainfo, it.type, getTypes(compilationContext, pair.unit.packageName) + importsToTypes(pair.unit))) }
+                        .map { parseTypedParameter(it, compilationContext, pair.unit) }
                         .toList()
                 FunctionWithReturnType(
                         pair.function.packageName,
@@ -397,7 +397,7 @@ fun buildDefs(unit: CompileUnitWithFlatStructs,
                 DefWithTypes(
                         def.packageName,
                         def.name,
-                        listOf(),
+                        def.parameters,
                         def.statements,
                         def.returnExpression
                 )

@@ -342,9 +342,9 @@ internal class ExpressionCompilerKtTest {
                 functionName,
                 listOf(stringExpression(), integerExpression(), booleanExpression()))
         val parameters = listOf(
-                Parameter("foo", typeToString(stringType)),
-                Parameter("boo", typeToString(intType)),
-                Parameter("bar", typeToString(booleanType)))
+                Parameter(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "foo", typeToString(stringType)),
+                Parameter(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "boo", typeToString(intType)),
+                Parameter(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "bar", typeToString(booleanType)))
         val function = Function(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "pkg_name", functionName, null, parameters, listOf(), stringExpression())
         val compileUnit = CompileUnitWithFlatStructs(
                 "pkg_name",
@@ -413,9 +413,9 @@ internal class ExpressionCompilerKtTest {
                 functionName,
                 listOf(stringExpression(), integerExpression(), booleanExpression()))
         val parameters = listOf(
-                Parameter("foo", typeToString(stringType)),
-                Parameter("boo", typeToString(intType)),
-                Parameter("bar", typeToString(booleanType)))
+                Parameter(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "foo", typeToString(stringType)),
+                Parameter(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "boo", typeToString(intType)),
+                Parameter(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "bar", typeToString(booleanType)))
         val function = Function(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "pkg_name", functionName, null, parameters, listOf(), stringExpression())
         val compileUnit = CompileUnitWithFlatStructs(
                 "pkg_name",
@@ -520,9 +520,9 @@ internal class ExpressionCompilerKtTest {
                 functionName,
                 listOf(stringExpression(), integerExpression(), booleanExpression()))
         val parameters = listOf(
-                Parameter("foo", typeToString(stringType)),
-                Parameter("boo", typeToString(intType)),
-                Parameter("bar", typeToString(booleanType)))
+                Parameter(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "foo", typeToString(stringType)),
+                Parameter(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "boo", typeToString(intType)),
+                Parameter(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "bar", typeToString(booleanType)))
         val function = Function(
                 CodeMetainfo("/home/capybara/xyz.cb", 1, 2),
                 packageName,
@@ -585,9 +585,9 @@ internal class ExpressionCompilerKtTest {
                 functionName,
                 listOf(stringExpression(), integerExpression()))
         val parameters = listOf(
-                Parameter("foo", typeToString(stringType)),
-                Parameter("boo", typeToString(intType)),
-                Parameter("bar", typeToString(booleanType)))
+                Parameter(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "foo", typeToString(stringType)),
+                Parameter(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "boo", typeToString(intType)),
+                Parameter(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "bar", typeToString(booleanType)))
         val function = Function(
                 CodeMetainfo("/home/capybara/xyz.cb", 1, 2),
                 packageName,
@@ -626,9 +626,9 @@ internal class ExpressionCompilerKtTest {
                 functionName,
                 listOf(stringExpression(), integerExpression()))
         val parameters = listOf(
-                Parameter("foo", typeToString(stringType)),
-                Parameter("boo", typeToString(intType)),
-                Parameter("bar", typeToString(booleanType)))
+                Parameter(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "foo", typeToString(stringType)),
+                Parameter(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "boo", typeToString(intType)),
+                Parameter(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "bar", typeToString(booleanType)))
         val function = Function(
                 CodeMetainfo("/home/capybara/xyz.cb", 1, 2),
                 "packageName",
@@ -673,9 +673,9 @@ internal class ExpressionCompilerKtTest {
                 functionName,
                 listOf(stringExpression(), integerExpression(), integerExpression()))
         val parameters = listOf(
-                Parameter("foo", typeToString(stringType)),
-                Parameter("boo", typeToString(intType)),
-                Parameter("bar", typeToString(booleanType)))
+                Parameter(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "foo", typeToString(stringType)),
+                Parameter(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "boo", typeToString(intType)),
+                Parameter(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "bar", typeToString(booleanType)))
         val function = Function(
                 CodeMetainfo("/home/capybara/xyz.cb", 1, 2),
                 packageName,
@@ -714,9 +714,9 @@ internal class ExpressionCompilerKtTest {
                 functionName,
                 listOf(stringExpression(), integerExpression(), integerExpression()))
         val parameters = listOf(
-                Parameter("foo", typeToString(stringType)),
-                Parameter("boo", typeToString(intType)),
-                Parameter("bar", typeToString(booleanType)))
+                Parameter(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "foo", typeToString(stringType)),
+                Parameter(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "boo", typeToString(intType)),
+                Parameter(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "bar", typeToString(booleanType)))
         val function = Function(
                 CodeMetainfo("/home/capybara/xyz.cb", 1, 2),
                 "/package/name",

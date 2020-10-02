@@ -103,8 +103,19 @@ data class Def(val packageName: String,
                val statements: List<Statement>,
                val returnExpression: Expression?)
 
-data class Parameter(val name: String, val type: String)
+data class Parameter(val codeMetainfo: CodeMetainfo, val name: String, val type: String)
 data class TypedParameter(val name: String, val type: Type)
+
+fun parseTypedParameter(parameter: Parameter,
+                        compilationContext: CompilationContext,
+                        unit: CompileUnitWithFlatStructs): TypedParameter =
+        TypedParameter(
+                parameter.name,
+                parseType(
+                        parameter.codeMetainfo,
+                        parameter.type,
+                        getTypes(compilationContext, unit.packageName) + importsToTypes(unit)))
+
 
 private class CapybaraCompilerImpl : CapybaraCompiler {
     override fun compile(fileName: String): CompileUnit {
@@ -140,7 +151,6 @@ private class Listener(private val fileName: String) : CapybaraBaseListener() {
     val defs = LinkedList<Def>()
 
     var parameters: Map<String, String> = mapOf()
-    var defParameters: Map<String, String> = mapOf()
     val assignments: MutableList<AssigmentStatement> = ArrayList()
     var returnExpression: Expression? = null
     var defReturnExpression: Expression? = null
@@ -216,7 +226,7 @@ private class Listener(private val fileName: String) : CapybaraBaseListener() {
     }
 
     override fun enterDef_(ctx: CapybaraParser.Def_Context) {
-        this.defParameters = findListOfParametersInFun(ctx.listOfParameters())
+        this.parameters = findListOfParametersInFun(ctx.listOfParameters())
                 .stream()
                 .collect(Collectors.toMap(
                         (java.util.function.Function<Parameter, String> { it.name }),
@@ -234,6 +244,7 @@ private class Listener(private val fileName: String) : CapybaraBaseListener() {
                 defReturnExpression))
         returnExpression = null
         statements.clear()
+        assignments.clear()
     }
 
     private fun findListOfParametersInFun(ctx: CapybaraParser.ListOfParametersContext?): List<Parameter> =
@@ -243,13 +254,14 @@ private class Listener(private val fileName: String) : CapybaraBaseListener() {
                     ?.toList() ?: listOf()
 
     private fun newParameter(it: CapybaraParser.ParameterContext): Parameter {
+        val codeMetainfo = parseCodeMetainfo(fileName, it.start)
         val type = it.type.text
         return if (it.name != null) {
-            Parameter(it.name.text, type)
+            Parameter(codeMetainfo, it.name.text, type)
         } else {
             val regex = "(?:/[a-z][a-z_0-9]*)*/?([A-Z][a-zA-Z0-9]*)".toRegex()
             val rawType = regex.find(type)?.groupValues?.get(1) ?: error("")
-            Parameter(rawType.camelToSnakeCase(), type)
+            Parameter(codeMetainfo, rawType.camelToSnakeCase(), type)
         }
     }
 

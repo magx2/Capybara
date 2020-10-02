@@ -57,3 +57,12 @@ def for_loop_no_loop_expresion(): Int {
 	return accumulator
 }
 
+def def_with_params(Int): Int {
+	int = int * 2
+	accumulator = 0
+	for i = 0 ; i < int ; i = i + 1 {
+		accumulator = accumulator * accumulator
+	}
+	return accumulator
+}
+
