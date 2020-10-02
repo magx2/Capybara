@@ -1,0 +1,17 @@
+package /imports/c
+
+import /capybara/type
+
+struct FirstStruct {
+	i9: /capybara/type/Int
+	i10: /capybara/type/Int
+}
+
+struct SecondStruct {
+	...FirstStruct
+	i11: /capybara/type/Int
+	i12: /capybara/type/Int
+}
+
+fun test(Int) = int
+

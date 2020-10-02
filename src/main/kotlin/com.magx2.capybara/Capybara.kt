@@ -202,14 +202,7 @@ fun main(options: CommandLineOptions) {
                         unit.unions
                                 .stream()
                                 .map { union ->
-                                    UnionWithType(
-                                            union.type,
-                                            union.types
-                                                    .stream()
-                                                    .map { parseType(union.codeMetainfo, it, types) }
-                                                    .toList()
-                                                    .toSet()
-                                    )
+                                    parseUnion(union, types)
                                 }
                                 .toList()
                                 .toSet()
@@ -312,7 +305,7 @@ fun main(options: CommandLineOptions) {
                                             it.type,
                                             it.fields
                                                     .stream()
-                                                    .map { FieldToExport(it.name, it.type) }
+                                                    .map { f -> FieldToExport(f.name, f.type) }
                                                     .toList()
                                     )
                                 }
@@ -326,17 +319,49 @@ fun main(options: CommandLineOptions) {
                                             it.returnExpression,
                                             it.parameters
                                                     .stream()
-                                                    .map { ParameterToExport(it.name, it.type) }
+                                                    .map { p -> ParameterToExport(p.name, p.type) }
                                                     .toList(),
                                             it.assignments)
                                 }
                                 .toList()
                                 .toSet(),
-                        emptySet(), //TODO
+                        emptySet(),//TODO()
+                        unit.unions + unit.importUnions.map { parseUnion(it, unit) },
                 )
             }
-            .toList()
-            .toSet()
+            .collect(object : Collector<CompileUnitToExport, MutableMap<String, CompileUnitToExport>, Set<CompileUnitToExport>> {
+                override fun supplier(): Supplier<MutableMap<String, CompileUnitToExport>> =
+                        Supplier<MutableMap<String, CompileUnitToExport>> { HashMap() }
+
+                override fun accumulator(): BiConsumer<MutableMap<String, CompileUnitToExport>, CompileUnitToExport> =
+                        BiConsumer<MutableMap<String, CompileUnitToExport>, CompileUnitToExport> { map, unit ->
+                            val unitInMap = map[unit.packageName]
+                            map[unit.packageName] = if (unitInMap != null) {
+                                CompileUnitToExport(
+                                        unit.packageName,
+                                        unit.structs + unitInMap.structs,
+                                        unit.functions + unitInMap.functions,
+                                        unit.unions + unitInMap.unions,
+                                )
+                            } else {
+                                unit
+                            }
+                        }
+
+                override fun combiner(): BinaryOperator<MutableMap<String, CompileUnitToExport>> =
+                        BinaryOperator<MutableMap<String, CompileUnitToExport>> { map1, map2 ->
+                            val map = HashMap<String, CompileUnitToExport>(map1.size + map2.size)
+                            map.putAll(map1)
+                            map.putAll(map2)
+                            map
+                        }
+
+                override fun finisher(): Function<MutableMap<String, CompileUnitToExport>, Set<CompileUnitToExport>> =
+                        java.util.function.Function<MutableMap<String, CompileUnitToExport>, Set<CompileUnitToExport>> { it.values.toSet() }
+
+                override fun characteristics(): MutableSet<Collector.Characteristics> = setOf(UNORDERED).toMutableSet()
+
+            })
 
     //
     // DEFINITIONS
@@ -347,7 +372,8 @@ fun main(options: CommandLineOptions) {
     //
     if (options.outputDir != null) {
         log.info("Exporting files to ${options.outputDir}")
-        PythonExport.export(options.outputDir, compilationUnitsToExport, options.disableAssertions.not())
+        val exporter = PythonExport(options.outputDir, options.disableAssertions.not())
+        compilationUnitsToExport.forEach { exporter.export(it) }
     } else {
         log.info("Not exporting files, because `outputDir` is not set")
     }

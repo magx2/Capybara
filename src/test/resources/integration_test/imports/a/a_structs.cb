@@ -1,0 +1,15 @@
+package /imports/a_structs
+
+import /capybara/type
+
+struct FirstStruct {
+	i1: /capybara/type/Int
+	i2: /capybara/type/Int
+}
+
+struct SecondStruct {
+	...FirstStruct
+	i3: /capybara/type/Int
+	i4: /capybara/type/Int
+}
+
