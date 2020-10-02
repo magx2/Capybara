@@ -94,17 +94,18 @@ class DefCompiler(private val compilationContext: CompilationContext,
                         val elements = parseStatement(assignments, assignmentsMap, statement.assigment)
                         statements = concat(statements, elements)
                     }
+                    val whileStatements = if (statement.eachIteration != null) {
+                        statement.statements + statement.eachIteration
+                    } else {
+                        statement.statements
+                    }
                     val whileLoop = WhileLoopStatement(
                             statement.whileCodeMetainfo,
                             statement.whileCodeMetainfo,
                             statement.whileExpression,
-                            statement.statements)
+                            whileStatements)
                     val whileElements = parseStatement(assignments, assignmentsMap, whileLoop)
                     statements = concat(statements, whileElements)
-                    if (statement.eachIteration != null) {
-                        val elements = parseStatement(assignments, assignmentsMap, statement.eachIteration)
-                        statements = concat(statements, elements)
-                    }
                     statements
                 }
             }
