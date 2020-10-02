@@ -1,0 +1,18 @@
+package /misc/union
+
+import /capybara/type
+
+fun assign(): IntOrNothing {
+	x = 5
+	return x
+}
+
+fun test_assign(): Boolean {
+	x_type = assign()
+	return assert (x_type is IntOrNothing) (true) ("Function assign should return `IntOrNothing`")
+}
+
+fun main(args: List[String]): Boolean {
+	return test_assign()
+}
+
