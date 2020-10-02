@@ -320,16 +320,23 @@ private fun expressionToString(expression: ExpressionWithReturnType, assertions:
                     union.get()
                             .types
                             .stream()
-                            .map { "isinstance(${expression.value}, ${findPythonType(it)})" }
+                            .map { isInstance(expression.value, it) }
                             .collect(Collectors.joining(" or ", "(", ")"))
                 } else {
-                    "isInstance(${expression.value}, ${findPythonType(expression.type)})"
+                    isInstance(expression.value, expression.type)
                 }
             }
             is StructFieldAccessExpressionWithReturnType -> "${expressionToString(expression.structureExpression, assertions, unions, packageName)}.${expression.fieldName}"
             is AssertExpressionWithReturnType -> {
                 expressionToString(expression.returnExpression, assertions, unions, packageName)
             }
+        }
+
+private fun isInstance(expressionValue: String, expressionType: Type): String =
+        if (expressionType == nothingType) {
+            "$expressionValue is None"
+        } else {
+            "isinstance($expressionValue, ${findPythonType(expressionType)})"
         }
 
 fun findPythonType(type: Type): String {
