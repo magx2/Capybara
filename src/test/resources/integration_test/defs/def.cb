@@ -8,8 +8,22 @@ def simple(): Int {
    return a + b
 }
 
-def test_all(): Int {
-	simple = assert (simple() == 3) true "def simple is not working!"
-	return 0
+def re_assigment(): Int {
+    a = 1
+    b = 2
+    a = 3
+   return a + b
+}
+
+def union_re_assigment(): IntOrNothing {
+    x: IntOrNothing = nothing
+    x = 1
+   return x
+}
+
+def test_all() {
+	assert (simple() == 3) nothing "def `simple` is not working!"
+	assert (re_assigment() == 5) nothing "def `re_assigment` is not working!"
+	assert (union_re_assigment() == 1) nothing "def `union_re_assigment` is not working!"
 }
 
