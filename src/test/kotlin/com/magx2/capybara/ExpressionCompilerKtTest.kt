@@ -223,7 +223,7 @@ internal class ExpressionCompilerKtTest {
         // given
         val valueName = "foo"
         val expression = ValueExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), valueName)
-        val assigmentStatement = AssigmentStatementWithReturnType(valueName, integerExpressionWithReturnType())
+        val assigmentStatement = AssigmentStatementWithReturnType(valueName, integerExpressionWithReturnType(), intType)
 
         // when
         val returnType = findReturnType(
@@ -241,7 +241,7 @@ internal class ExpressionCompilerKtTest {
     fun `should throw exception if cannot find assigment for given value`() {
         // given
         val expression = ValueExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "foo")
-        val assigmentStatement = AssigmentStatementWithReturnType("boo", integerExpressionWithReturnType())
+        val assigmentStatement = AssigmentStatementWithReturnType("boo", integerExpressionWithReturnType(), intType)
 
         // when
         val `when` = ThrowableAssert.ThrowingCallable {
@@ -911,7 +911,8 @@ internal class ExpressionCompilerKtTest {
                                         StringExpressionWithReturnType("a"),
                                         StringExpressionWithReturnType("b"),
                                         StringExpressionWithReturnType("c"),
-                                ))
+                                )),
+                        stringType
                 )
         )
 
@@ -946,7 +947,8 @@ internal class ExpressionCompilerKtTest {
                                         StringExpressionWithReturnType("a"),
                                         StringExpressionWithReturnType("b"),
                                         StringExpressionWithReturnType("c"),
-                                ))
+                                )),
+                        stringType
                 )
         )
 
