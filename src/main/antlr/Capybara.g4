@@ -125,12 +125,13 @@ infix_operation
 
 def_
 	: DEF name=SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL ROUNDL listOfParameters? ROUNDR
-      		(COLON returnType=fullyQualifiedType)? CURLYL NEWLINE defBody+ CURLYR
+      		(COLON returnType=fullyQualifiedType)? CURLYL NEWLINE+ defBody CURLYR
 	;
 
 defBody
-	: statement (semicolonEnd defBody)?
-	| RETURN return_expression=expression (SEMICOLON|NEWLINE)
+	: (statement semicolonEnd)+
+	| RETURN return_expression=expression semicolonEnd?
+	| (statement semicolonEnd)+ RETURN return_expression=expression semicolonEnd?
 	;
 
 statement

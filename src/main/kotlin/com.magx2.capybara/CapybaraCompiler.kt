@@ -153,7 +153,6 @@ private class Listener(private val fileName: String) : CapybaraBaseListener() {
     var parameters: Map<String, String> = mapOf()
     val assignments: MutableList<AssigmentStatement> = ArrayList()
     var returnExpression: Expression? = null
-    var defReturnExpression: Expression? = null
     val statements = ArrayList<Statement>()
 
     override fun enterPackageDeclaration(ctx: CapybaraParser.PackageDeclarationContext) {
@@ -241,7 +240,7 @@ private class Listener(private val fileName: String) : CapybaraBaseListener() {
                 ctx.returnType?.text,
                 parameters,
                 statements.toList(),
-                defReturnExpression))
+                returnExpression))
         returnExpression = null
         statements.clear()
         assignments.clear()
@@ -400,9 +399,14 @@ private class Listener(private val fileName: String) : CapybaraBaseListener() {
 
     override fun enterDefBody(ctx: CapybaraParser.DefBodyContext) {
         if (ctx.statement() != null) {
-            statements.add(parseStatement(ctx.statement()))
-        } else if (ctx.return_expression != null) {
-            defReturnExpression = parseExpression(ctx.return_expression)
+            val sts = ctx.statement()
+                    .stream()
+                    .map { parseStatement(it) }
+                    .toList()
+            statements.addAll(sts)
+        }
+        if (ctx.return_expression != null) {
+            returnExpression = parseExpression(ctx.return_expression)
         }
     }
 

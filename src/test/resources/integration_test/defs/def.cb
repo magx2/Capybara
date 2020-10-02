@@ -66,3 +66,7 @@ def def_with_params(Int): Int {
 	return accumulator
 }
 
+def def_without_return_type(Int) {
+	x = int + 1 ; x = x + 1
+}
+
