@@ -280,8 +280,7 @@ private fun functionToPython(function: FunctionToExport, assertions: Boolean, un
 
     return """
     |def ${function.name}($parameters):
-    |$methodDoc$assignments
-    |${'\t'}${generateAssertStatement(assertions, function.returnExpression, unions, packageName)}${buildIndent(1)}return ${expressionToString(function.returnExpression, assertions, unions, packageName)}
+    |$methodDoc$assignments${generateAssertStatement(assertions, function.returnExpression, unions, packageName)}${buildIndent(1)}return ${expressionToString(function.returnExpression, assertions, unions, packageName)}
     |${'\n'}$main""".trimMargin()
 }
 
@@ -301,7 +300,7 @@ private fun defToPython(def: DefToExport,
             .collect(Collectors.joining("\n"))
 
     val returnExpression = if (def.returnExpression != null) {
-        "\n|${generateAssertStatement(assertions, def.returnExpression, unions, packageName, 1)}${buildIndent(1)}return ${expressionToString(def.returnExpression, assertions, unions, packageName)}"
+        "\n|${generateAssertStatement(assertions, def.returnExpression, unions, packageName)}${buildIndent(1)}return ${expressionToString(def.returnExpression, assertions, unions, packageName)}"
     } else {
         ""
     }
@@ -348,7 +347,7 @@ private fun generateAssertStatement(
         expression: ExpressionWithReturnType,
         unions: Set<UnionWithType>,
         packageName: String,
-        indent: Int = 0): String {
+        indent: Int = 1): String {
     return if (expression is AssertExpressionWithReturnType) {
         generateAssertStatement(
                 assertions,
