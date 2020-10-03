@@ -1,6 +1,8 @@
 package com.magx2.capybara
 
 import java.util.regex.Pattern
+import java.util.stream.Stream
+import kotlin.streams.toList
 
 const val typePackageName = "/capybara/type"
 
@@ -45,6 +47,26 @@ fun parseType(
 fun parseType(
         codeMetainfo: CodeMetainfo,
         type: String,
+        compilationContext: CompilationContext,
+        compileUnit: CompileUnitWithFlatStructs,
+): Type {
+    return parseType(
+            codeMetainfo,
+            type,
+            localStructs(compilationContext, compileUnit) + importsToTypes(compileUnit))
+}
+
+private fun localStructs(compilationContext: CompilationContext, compileUnit: CompileUnitWithFlatStructs): Set<Type> =
+        Stream.concat(
+                compilationContext.structs.stream().map { it.type },
+                compilationContext.unions.stream().map { it.type })
+                .filter { type -> type.packageName == compileUnit.packageName }
+                .toList()
+                .toSet()
+
+fun parseType(
+        codeMetainfo: CodeMetainfo,
+        type: String,
         types: Set<Type>,
 ): Type {
     val matcher = rawTypeRegex.matcher(type)
@@ -62,6 +84,27 @@ fun parseType(
         }
     }
 }
+
+fun finUnionSubTypes(unionType: Type,
+                     compilationContext: CompilationContext,
+                     compileUnit: CompileUnitWithFlatStructs): Set<Type> =
+        (compileUnit.unions + compilationContext.unions).stream()
+                .filter { it.type == unionType }
+                .map { it.types }
+                .findAny()
+                .orElse(emptySet())
+
+fun isTypePartOfUnion(type: Type,
+                      unionType: Type,
+                      compilationContext: CompilationContext,
+                      compileUnit: CompileUnitWithFlatStructs): Boolean =
+        finUnionSubTypes(unionType, compilationContext, compileUnit).contains(type)
+
+fun areTypesEqual(type1: Type,
+                  type2: Type,
+                  compilationContext: CompilationContext,
+                  compileUnit: CompileUnitWithFlatStructs): Boolean =
+        type1 == type2 || isTypePartOfUnion(type1, type2, compilationContext, compileUnit) || isTypePartOfUnion(type2, type1, compilationContext, compileUnit)
 
 fun addGenericType(type: Type, genericType: Type) = type.copy(genericType = genericType)
 

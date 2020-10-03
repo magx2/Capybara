@@ -41,18 +41,24 @@ data class CompileUnitWithImports(
         val structs: Set<Struct>,
         val unions: Set<Union>,
         val functions: Set<Function>,
+        val defs: Set<Def>,
         val importStructs: List<Struct>,
         val importUnions: List<Union>,
-        val importFunctions: List<Function>)
+        val importFunctions: List<Function>,
+        val importDefs: List<Def>,
+)
 
 data class CompileUnitWithFlatStructs(
         val packageName: String,
         val structs: Set<FlatStruct>,
         val unions: Set<UnionWithType>,
         val functions: Set<Function>,
+        val defs: Set<Def>,
         val importStructs: List<Struct>,
         val importUnions: List<Union>,
-        val importFunctions: List<Function>)
+        val importFunctions: List<Function>,
+        val importDefs: List<Def>,
+)
 
 fun getTypes(units: Collection<CompileUnitWithImports>, packageName: String): Set<Type> =
         units.stream()
@@ -75,7 +81,13 @@ fun getTypes(context: CompilationContext, packageName: String): Set<Type> =
                 .toSet()
 
 
-data class Export(val packageName: String, val structs: Set<Struct>, val unions: Set<Union>, val functions: Set<Function>)
+data class Export(
+        val packageName: String,
+        val structs: Set<Struct>,
+        val unions: Set<Union>,
+        val functions: Set<Function>,
+        val defs: Set<Def>,
+)
 
 data class Import(val codeMetainfo: CodeMetainfo, val importPackage: String, val subImport: Set<String>)
 
@@ -84,21 +96,28 @@ data class BasicField(val codeMetainfo: CodeMetainfo, val name: String, val type
 data class SpreadField(val codeMetainfo: CodeMetainfo, val spreadType: String) : Field()
 
 
-data class Def(val packageName: String,
+data class Def(val codeMetainfo: CodeMetainfo,
+               val packageName: String,
                val name: String,
+               val returnTypeCodeMetainfo: CodeMetainfo?,
                val returnType: String?,
                val parameters: List<Parameter>,
                val statements: List<Statement>,
                val returnExpression: Expression?)
 
-data class DefWithReturnType(val packageName: String,
-                             val name: String,
-                             val returnType: Type,
-                             val parameters: List<Parameter>,
-                             val returnExpression: Expression?)
-
-data class Parameter(val name: String, val type: String)
+data class Parameter(val codeMetainfo: CodeMetainfo, val name: String, val type: String)
 data class TypedParameter(val name: String, val type: Type)
+
+fun parseTypedParameter(parameter: Parameter,
+                        compilationContext: CompilationContext,
+                        unit: CompileUnitWithFlatStructs): TypedParameter =
+        TypedParameter(
+                parameter.name,
+                parseType(
+                        parameter.codeMetainfo,
+                        parameter.type,
+                        getTypes(compilationContext, unit.packageName) + importsToTypes(unit)))
+
 
 private class CapybaraCompilerImpl : CapybaraCompiler {
     override fun compile(fileName: String): CompileUnit {
@@ -134,10 +153,8 @@ private class Listener(private val fileName: String) : CapybaraBaseListener() {
     val defs = LinkedList<Def>()
 
     var parameters: Map<String, String> = mapOf()
-    var defParameters: Map<String, String> = mapOf()
     val assignments: MutableList<AssigmentStatement> = ArrayList()
     var returnExpression: Expression? = null
-    var defReturnExpression: Expression? = null
     val statements = ArrayList<Statement>()
 
     override fun enterPackageDeclaration(ctx: CapybaraParser.PackageDeclarationContext) {
@@ -210,7 +227,7 @@ private class Listener(private val fileName: String) : CapybaraBaseListener() {
     }
 
     override fun enterDef_(ctx: CapybaraParser.Def_Context) {
-        this.defParameters = findListOfParametersInFun(ctx.listOfParameters())
+        this.parameters = findListOfParametersInFun(ctx.listOfParameters())
                 .stream()
                 .collect(Collectors.toMap(
                         (java.util.function.Function<Parameter, String> { it.name }),
@@ -220,13 +237,17 @@ private class Listener(private val fileName: String) : CapybaraBaseListener() {
     override fun exitDef_(ctx: CapybaraParser.Def_Context) {
         val parameters = findListOfParametersInFun(ctx.listOfParameters())
         defs.add(Def(
+                parseCodeMetainfo(fileName, ctx.start),
                 packageName,
                 ctx.name.text,
+                if (ctx.returnType != null) parseCodeMetainfo(fileName, ctx.returnType.start) else null,
                 ctx.returnType?.text,
                 parameters,
-                statements,
-                defReturnExpression))
+                statements.toList(),
+                returnExpression))
         returnExpression = null
+        statements.clear()
+        assignments.clear()
     }
 
     private fun findListOfParametersInFun(ctx: CapybaraParser.ListOfParametersContext?): List<Parameter> =
@@ -236,21 +257,25 @@ private class Listener(private val fileName: String) : CapybaraBaseListener() {
                     ?.toList() ?: listOf()
 
     private fun newParameter(it: CapybaraParser.ParameterContext): Parameter {
+        val codeMetainfo = parseCodeMetainfo(fileName, it.start)
         val type = it.type.text
         return if (it.name != null) {
-            Parameter(it.name.text, type)
+            Parameter(codeMetainfo, it.name.text, type)
         } else {
             val regex = "(?:/[a-z][a-z_0-9]*)*/?([A-Z][a-zA-Z0-9]*)".toRegex()
             val rawType = regex.find(type)?.groupValues?.get(1) ?: error("")
-            Parameter(rawType.camelToSnakeCase(), type)
+            Parameter(codeMetainfo, rawType.camelToSnakeCase(), type)
         }
     }
 
     override fun enterFunBody(ctx: CapybaraParser.FunBodyContext) {
         if (ctx.assigment()?.assign_to != null) {
             assignments.add(AssigmentStatement(
+                    parseCodeMetainfo(fileName, ctx.assigment().start),
                     ctx.assigment().assign_to.text,
-                    parseExpression(ctx.assigment().expression())))
+                    parseExpression(ctx.assigment().expression()),
+                    if (ctx.assigment().assigment_type != null) parseCodeMetainfo(fileName, ctx.assigment().assigment_type?.start!!) else null,
+                    ctx.assigment().assigment_type?.text))
         } else {
             returnExpression = parseExpression(ctx.expression())
         }
@@ -378,9 +403,14 @@ private class Listener(private val fileName: String) : CapybaraBaseListener() {
 
     override fun enterDefBody(ctx: CapybaraParser.DefBodyContext) {
         if (ctx.statement() != null) {
-            statements.add(parseStatement(ctx.statement()))
-        } else if (ctx.return_expression != null) {
-            defReturnExpression = parseExpression(ctx.return_expression)
+            val sts = ctx.statement()
+                    .stream()
+                    .map { parseStatement(it) }
+                    .toList()
+            statements.addAll(sts)
+        }
+        if (ctx.return_expression != null) {
+            returnExpression = parseExpression(ctx.return_expression)
         }
     }
 
@@ -389,6 +419,8 @@ private class Listener(private val fileName: String) : CapybaraBaseListener() {
                 statement.assigment() != null -> parseAssigmentStatement(statement.assigment())
                 statement.while_loop() != null ->
                     WhileLoopStatement(
+                            parseCodeMetainfo(fileName, statement.while_loop().start),
+                            parseCodeMetainfo(fileName, statement.while_loop().while_.start),
                             parseExpression(statement.while_loop().while_),
                             statement.while_loop()
                                     .loop_body()
@@ -400,7 +432,9 @@ private class Listener(private val fileName: String) : CapybaraBaseListener() {
                 statement.for_loop() != null -> {
                     val forLoop = statement.for_loop().for_loop_expression()
                     ForLoopStatement(
+                            parseCodeMetainfo(fileName, statement.for_loop().start),
                             if (forLoop.assigment() != null) parseAssigmentStatement(forLoop.assigment()) else null,
+                            parseCodeMetainfo(fileName, forLoop.while_.start),
                             parseExpression(forLoop.while_),
                             if (forLoop.each_iteration != null) parseStatement(forLoop.each_iteration) else null,
                             statement.for_loop()
@@ -414,12 +448,34 @@ private class Listener(private val fileName: String) : CapybaraBaseListener() {
                 statement.update_assigment() != null -> {
                     val valueName = statement.update_assigment().assign_to.text
                     AssigmentStatement(
+                            parseCodeMetainfo(fileName, statement.update_assigment().start),
                             valueName,
                             InfixExpression(
                                     parseCodeMetainfo(fileName, statement.update_assigment().start),
                                     findOperation(statement.update_assigment().update_action().text),
                                     ValueExpression(parseCodeMetainfo(fileName, statement.update_assigment().start), valueName),
-                                    parseExpression(statement.update_assigment().expression())))
+                                    parseExpression(statement.update_assigment().expression())),
+                            parseCodeMetainfo(fileName, statement.update_assigment().assign_to),
+                            statement.update_assigment().assign_to.text)
+                }
+                statement.assert_statement() != null ->
+                    AssertStatement(
+                            parseCodeMetainfo(fileName, statement.assert_statement().start),
+                            parseExpression(statement.assert_statement().check_expression),
+                            if (statement.assert_statement().message_expression != null) parseExpression(statement.assert_statement().message_expression) else null,
+                    )
+                statement.def_call() != null -> {
+                    val ctx = statement.def_call()
+                    val parameters = (ctx.parameters()
+                            ?.expression() ?: listOf())
+                            .stream()
+                            .map { parseExpression(it) }
+                            .toList()
+                    DefCallStatement(
+                            parseCodeMetainfo(fileName, ctx.start),
+                            ctx.def_qualified_name.package_?.text,
+                            ctx.def_qualified_name.function_name.text,
+                            parameters)
                 }
                 else -> throw IllegalStateException("I don't know how to handle it!")
             }
@@ -427,17 +483,12 @@ private class Listener(private val fileName: String) : CapybaraBaseListener() {
     private fun findOperation(text: String): String = text[0].toString()
 
     private fun parseAssigmentStatement(assigment: CapybaraParser.AssigmentContext) =
-            AssigmentStatement(assigment.assign_to.text, parseExpression(assigment.expression()))
+            AssigmentStatement(
+                    parseCodeMetainfo(fileName, assigment.start),
+                    assigment.assign_to.text,
+                    parseExpression(assigment.expression()),
+                    if (assigment.assign_to != null) parseCodeMetainfo(fileName, assigment.assign_to) else null,
+                    assigment.assigment_type?.text)
 }
 
 
-// Statements
-sealed class Statement
-data class AssigmentStatement(val name: String, val expression: Expression) : Statement()
-data class AssigmentStatementWithReturnType(val name: String, val expression: ExpressionWithReturnType) : Statement()
-sealed class Loop : Statement()
-data class WhileLoopStatement(val whileExpression: Expression, val statements: List<Statement>) : Loop()
-data class ForLoopStatement(val assigment: AssigmentStatement?,
-                            val whileExpression: Expression,
-                            val eachIteration: Statement?,
-                            val statements: List<Statement>) : Loop()

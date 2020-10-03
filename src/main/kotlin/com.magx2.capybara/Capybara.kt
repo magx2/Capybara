@@ -78,7 +78,7 @@ fun main(options: CommandLineOptions) {
     // EXPORTS/IMPORTS
     //
     val exports = compileUnits.stream()
-            .map { Export(it.packageName, it.structs.toSet(), it.unions, it.functions.toSet()) }
+            .map { Export(it.packageName, it.structs, it.unions, it.functions, it.defs) }
             .collect(object : Collector<Export, MutableMap<String, Export>, Map<String, Export>> {
                 override fun characteristics(): MutableSet<Collector.Characteristics> = setOf(UNORDERED).toMutableSet()
 
@@ -95,7 +95,9 @@ fun main(options: CommandLineOptions) {
                                         export.packageName,
                                         export.structs + exportFromMap.structs,
                                         export.unions + exportFromMap.unions,
-                                        export.functions + exportFromMap.functions)
+                                        export.functions + exportFromMap.functions,
+                                        export.defs + exportFromMap.defs,
+                                )
                             }
                         }
 
@@ -126,6 +128,7 @@ fun main(options: CommandLineOptions) {
                         compileUnit.structs,
                         compileUnit.unions,
                         compileUnit.functions,
+                        compileUnit.defs,
                         imports.stream()
                                 .flatMap { (import, exportForPackage) ->
                                     if (import.subImport.isEmpty()) {
@@ -158,7 +161,18 @@ fun main(options: CommandLineOptions) {
                                                 .filter { import.subImport.contains(it.name) }
                                     }
                                 }
-                                .toList()
+                                .toList(),
+                        imports.stream()
+                                .flatMap { (import, exportForPackage) ->
+                                    if (import.subImport.isEmpty()) {
+                                        exportForPackage.defs.stream()
+                                    } else {
+                                        exportForPackage.defs
+                                                .stream()
+                                                .filter { import.subImport.contains(it.name) }
+                                    }
+                                }
+                                .toList(),
                 )
             }
             .toList()
@@ -200,9 +214,11 @@ fun main(options: CommandLineOptions) {
                         flatStructs,
                         unions,
                         unit.functions,
+                        unit.defs,
                         unit.importStructs,
                         unit.importUnions,
-                        unit.importFunctions
+                        unit.importFunctions,
+                        unit.importDefs,
                 )
             }
             .toList()
@@ -233,47 +249,18 @@ fun main(options: CommandLineOptions) {
             functions.stream()
                     .map { it.second }
                     .toList()
-                    .toSet())
+                    .toSet(),
+            compileUnitsWithFlatStructs.stream()
+                    .flatMap { it.defs.stream() }
+                    .toList()
+                    .toSet(),
+    )
 
     // find return types for functions
     val compilationUnitsToExport = compileUnitsWithFlatStructs.stream()
             .map { unit ->
-                val functionsWithReturnType = unit.functions
-                        .stream()
-                        .map { function ->
-                            val functionCompiler = FunctionCompiler(compilationContext, unit, fullyQualifiedStructNames)
-                            val assignments = functionCompiler.findReturnTypeForAssignments(function.assignments)
-                            FunctionOnBuild(
-                                    function,
-                                    functionCompiler.findReturnType(assignments, function.returnExpression, emptySet(), emptySet()),
-                                    unit,
-                                    assignments)
-                        }
-                        .map { triple ->
-                            val returnType = triple.function.returnType
-                            if (returnType != null) {
-                                val declaredReturnType = parseType(triple.function.codeMetainfo, returnType, getTypes(compilationContext, triple.unit.packageName) + importsToTypes(triple.unit))
-                                if (!isSameType(declaredReturnType, triple.expression.returnType, compilationContext)) {
-                                    throw CompilationException(triple.function.codeMetainfo, "Declared return type of function `${triple.function.packageName}/${triple.function.name}` do not corresponds what it really return. " +
-                                            "You declared `$returnType` and computed was `${typeToString(triple.expression.returnType)}`.")
-                                }
-                            }
-                            triple
-                        }
-                        .map { pair ->
-                            val parameters = pair.function.parameters
-                                    .stream()
-                                    .map { TypedParameter(it.name, parseType(pair.function.codeMetainfo, it.type, getTypes(compilationContext, pair.unit.packageName) + importsToTypes(pair.unit))) }
-                                    .toList()
-                            FunctionWithReturnType(
-                                    pair.function.packageName,
-                                    pair.function.name,
-                                    pair.expression,
-                                    parameters,
-                                    pair.assignments)
-                        }
-                        .toList()
-                        .toSet()
+                val functionsWithReturnType = buildFunctions(unit, compilationContext, fullyQualifiedStructNames)
+                val defs = buildDefs(unit, compilationContext, fullyQualifiedStructNames)
                 CompileUnitToExport(
                         unit.packageName,
                         unit.structs
@@ -303,6 +290,7 @@ fun main(options: CommandLineOptions) {
                                 }
                                 .toList()
                                 .toSet(),
+                        defs.map { mapDef(it) }.toSet(),
                         unit.unions + unit.importUnions.map { parseUnion(it, unit) },
                 )
             }
@@ -318,6 +306,7 @@ fun main(options: CommandLineOptions) {
                                         unit.packageName,
                                         unit.structs + unitInMap.structs,
                                         unit.functions + unitInMap.functions,
+                                        unit.defs + unitInMap.defs,
                                         unit.unions + unitInMap.unions,
                                 )
                             } else {
@@ -354,6 +343,67 @@ fun main(options: CommandLineOptions) {
     } else {
         log.info("Not exporting files, because `outputDir` is not set")
     }
+}
+
+private fun buildFunctions(unit: CompileUnitWithFlatStructs, compilationContext: CompilationContext, fullyQualifiedStructNames: Map<Type, Struct>): Set<FunctionWithReturnType> {
+    return unit.functions
+            .stream()
+            .map { function ->
+                val functionCompiler = FunctionCompiler(compilationContext, unit, fullyQualifiedStructNames)
+                val assignments = functionCompiler.findReturnTypeForAssignments(function.assignments)
+                val expressionCompiler = ExpressionCompiler(assignments, compilationContext, unit, fullyQualifiedStructNames, true)
+                FunctionOnBuild(
+                        function,
+                        expressionCompiler.findReturnType(function.returnExpression),
+                        unit,
+                        assignments)
+            }
+            .map { triple ->
+                val returnType = triple.function.returnType
+                if (returnType != null) {
+                    val declaredReturnType = parseType(triple.function.codeMetainfo, returnType, getTypes(compilationContext, triple.unit.packageName) + importsToTypes(triple.unit))
+                    if (!isSameType(declaredReturnType, triple.expression.returnType, compilationContext)) {
+                        throw CompilationException(triple.function.codeMetainfo, "Declared return type of function `${triple.function.packageName}/${triple.function.name}` do not corresponds what it really return. " +
+                                "You declared `$returnType` and computed was `${typeToString(triple.expression.returnType)}`.")
+                    }
+                }
+                triple
+            }
+            .map { pair ->
+                val parameters = pair.function.parameters
+                        .stream()
+                        .map { parseTypedParameter(it, compilationContext, pair.unit) }
+                        .toList()
+                FunctionWithReturnType(
+                        pair.function.packageName,
+                        pair.function.name,
+                        pair.expression,
+                        parameters,
+                        pair.assignments)
+            }
+            .toList()
+            .toSet()
+}
+
+fun buildDefs(unit: CompileUnitWithFlatStructs,
+              compilationContext: CompilationContext,
+              fullyQualifiedStructNames: Map<Type, Struct>): Set<DefWithTypes> {
+    val compiler = DefCompiler(compilationContext, unit, fullyQualifiedStructNames)
+    return unit.defs
+            .stream()
+            .map { def -> compiler.def(def) }
+            // add checks
+            .map { def ->
+                DefWithTypes(
+                        def.packageName,
+                        def.name,
+                        def.parameters,
+                        def.statements,
+                        def.returnExpression
+                )
+            }
+            .toList()
+            .toSet()
 }
 
 fun langFiles(): List<String> =
@@ -395,13 +445,18 @@ data class FunctionOnBuild(
         val function: com.magx2.capybara.Function,
         val expression: ExpressionWithReturnType,
         val unit: CompileUnitWithFlatStructs,
-        val assignments: List<AssigmentStatementWithReturnType>
+        val assignments: List<AssigmentStatementWithType>
 )
 
 /*
     Represents every struct nad every function in compilation context (from all files)
  */
-data class CompilationContext(val structs: Set<FlatStruct>, val unions: Set<UnionWithType>, val functions: Set<com.magx2.capybara.Function>)
+data class CompilationContext(
+        val structs: Set<FlatStruct>,
+        val unions: Set<UnionWithType>,
+        val functions: Set<com.magx2.capybara.Function>,
+        val defs: Set<Def>,
+)
 
 class CompilationException(codeMetainfo: CodeMetainfo, msg: String) : RuntimeException("${codeMetainfo.fileName} [${codeMetainfo.line}:${codeMetainfo.charInLine}] $msg")
 

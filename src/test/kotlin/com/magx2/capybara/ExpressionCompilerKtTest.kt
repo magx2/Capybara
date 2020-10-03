@@ -19,7 +19,7 @@ import java.util.*
 import java.util.stream.Stream
 
 @Suppress("MemberVisibilityCanBePrivate")
-internal class FunctionsKtTest {
+internal class ExpressionCompilerKtTest {
 
     companion object {
         private fun integerExpression() = IntegerExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), Random().nextLong())
@@ -97,9 +97,9 @@ internal class FunctionsKtTest {
         fun booleanInfixOperator(): Stream<String> = Stream.of("+", "^", "*", "-", ">", "<", ">=", "<=", "~/")
     }
 
-    val compilationContext = CompilationContext(setOf(), setOf(), setOf())
-    val compileUnit = CompileUnitWithFlatStructs("", setOf(), setOf(), setOf(), listOf(), listOf(), listOf())
-    val assignments = listOf<AssigmentStatementWithReturnType>()
+    val compilationContext = CompilationContext(setOf(), setOf(), setOf(), setOf())
+    val compileUnit = CompileUnitWithFlatStructs("", setOf(), setOf(), setOf(), setOf(), listOf(), listOf(), listOf(), listOf())
+    val assignments = listOf<AssigmentStatementWithType>()
     val fullyQualifiedStructNames = mapOf<Type, Struct>()
 
     @ParameterizedTest
@@ -223,7 +223,7 @@ internal class FunctionsKtTest {
         // given
         val valueName = "foo"
         val expression = ValueExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), valueName)
-        val assigmentStatement = AssigmentStatementWithReturnType(valueName, integerExpressionWithReturnType())
+        val assigmentStatement = AssigmentStatementWithType(valueName, integerExpressionWithReturnType(), intType)
 
         // when
         val returnType = findReturnType(
@@ -241,7 +241,7 @@ internal class FunctionsKtTest {
     fun `should throw exception if cannot find assigment for given value`() {
         // given
         val expression = ValueExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "foo")
-        val assigmentStatement = AssigmentStatementWithReturnType("boo", integerExpressionWithReturnType())
+        val assigmentStatement = AssigmentStatementWithType("boo", integerExpressionWithReturnType(), intType)
 
         // when
         val `when` = ThrowableAssert.ThrowingCallable {
@@ -273,6 +273,8 @@ internal class FunctionsKtTest {
                 setOf(),
                 setOf(),
                 setOf(function),
+                setOf(),
+                listOf(),
                 listOf(),
                 listOf(),
                 listOf())
@@ -312,6 +314,8 @@ internal class FunctionsKtTest {
                 setOf(),
                 setOf(),
                 setOf(function),
+                setOf(),
+                listOf(),
                 listOf(),
                 listOf(),
                 listOf())
@@ -338,15 +342,17 @@ internal class FunctionsKtTest {
                 functionName,
                 listOf(stringExpression(), integerExpression(), booleanExpression()))
         val parameters = listOf(
-                Parameter("foo", typeToString(stringType)),
-                Parameter("boo", typeToString(intType)),
-                Parameter("bar", typeToString(booleanType)))
+                Parameter(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "foo", typeToString(stringType)),
+                Parameter(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "boo", typeToString(intType)),
+                Parameter(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "bar", typeToString(booleanType)))
         val function = Function(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "pkg_name", functionName, null, parameters, listOf(), stringExpression())
         val compileUnit = CompileUnitWithFlatStructs(
                 "pkg_name",
                 setOf(),
                 setOf(),
                 setOf(function),
+                setOf(),
+                listOf(),
                 listOf(),
                 listOf(),
                 listOf())
@@ -379,9 +385,11 @@ internal class FunctionsKtTest {
                 setOf(),
                 setOf(),
                 setOf(),
+                setOf(),
                 listOf(),
                 listOf(),
-                listOf(function))
+                listOf(function),
+                listOf())
 
         // when
         val returnType = findReturnType(
@@ -405,18 +413,20 @@ internal class FunctionsKtTest {
                 functionName,
                 listOf(stringExpression(), integerExpression(), booleanExpression()))
         val parameters = listOf(
-                Parameter("foo", typeToString(stringType)),
-                Parameter("boo", typeToString(intType)),
-                Parameter("bar", typeToString(booleanType)))
+                Parameter(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "foo", typeToString(stringType)),
+                Parameter(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "boo", typeToString(intType)),
+                Parameter(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "bar", typeToString(booleanType)))
         val function = Function(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "pkg_name", functionName, null, parameters, listOf(), stringExpression())
         val compileUnit = CompileUnitWithFlatStructs(
                 "pkg_name",
                 setOf(),
                 setOf(),
                 setOf(),
+                setOf(),
                 listOf(),
                 listOf(),
-                listOf(function))
+                listOf(function),
+                listOf())
 
         // when
         val returnType = findReturnType(
@@ -446,9 +456,11 @@ internal class FunctionsKtTest {
                 setOf(),
                 setOf(),
                 setOf(localFunction),
+                setOf(),
                 listOf(),
                 listOf(),
-                listOf(importedFunction))
+                listOf(importedFunction),
+                listOf())
 
         // when
         val returnType = findReturnType(
@@ -483,7 +495,8 @@ internal class FunctionsKtTest {
         val compilationContext = CompilationContext(
                 setOf(),
                 setOf(),
-                setOf(function))
+                setOf(function),
+                setOf())
         // when
         val returnType = findReturnType(
                 compilationContext,
@@ -507,9 +520,9 @@ internal class FunctionsKtTest {
                 functionName,
                 listOf(stringExpression(), integerExpression(), booleanExpression()))
         val parameters = listOf(
-                Parameter("foo", typeToString(stringType)),
-                Parameter("boo", typeToString(intType)),
-                Parameter("bar", typeToString(booleanType)))
+                Parameter(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "foo", typeToString(stringType)),
+                Parameter(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "boo", typeToString(intType)),
+                Parameter(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "bar", typeToString(booleanType)))
         val function = Function(
                 CodeMetainfo("/home/capybara/xyz.cb", 1, 2),
                 packageName,
@@ -521,7 +534,8 @@ internal class FunctionsKtTest {
         val compilationContext = CompilationContext(
                 setOf(),
                 setOf(),
-                setOf(function))
+                setOf(function),
+                setOf())
 
         // when
         val returnType = findReturnType(
@@ -571,9 +585,9 @@ internal class FunctionsKtTest {
                 functionName,
                 listOf(stringExpression(), integerExpression()))
         val parameters = listOf(
-                Parameter("foo", typeToString(stringType)),
-                Parameter("boo", typeToString(intType)),
-                Parameter("bar", typeToString(booleanType)))
+                Parameter(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "foo", typeToString(stringType)),
+                Parameter(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "boo", typeToString(intType)),
+                Parameter(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "bar", typeToString(booleanType)))
         val function = Function(
                 CodeMetainfo("/home/capybara/xyz.cb", 1, 2),
                 packageName,
@@ -585,7 +599,8 @@ internal class FunctionsKtTest {
         val compilationContext = CompilationContext(
                 setOf(),
                 setOf(),
-                setOf(function))
+                setOf(function),
+                setOf())
 
         // when
         val `when` = ThrowableAssert.ThrowingCallable {
@@ -611,9 +626,9 @@ internal class FunctionsKtTest {
                 functionName,
                 listOf(stringExpression(), integerExpression()))
         val parameters = listOf(
-                Parameter("foo", typeToString(stringType)),
-                Parameter("boo", typeToString(intType)),
-                Parameter("bar", typeToString(booleanType)))
+                Parameter(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "foo", typeToString(stringType)),
+                Parameter(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "boo", typeToString(intType)),
+                Parameter(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "bar", typeToString(booleanType)))
         val function = Function(
                 CodeMetainfo("/home/capybara/xyz.cb", 1, 2),
                 "packageName",
@@ -627,6 +642,8 @@ internal class FunctionsKtTest {
                 setOf(),
                 setOf(),
                 setOf(function),
+                setOf(),
+                listOf(),
                 listOf(),
                 listOf(),
                 listOf())
@@ -656,9 +673,9 @@ internal class FunctionsKtTest {
                 functionName,
                 listOf(stringExpression(), integerExpression(), integerExpression()))
         val parameters = listOf(
-                Parameter("foo", typeToString(stringType)),
-                Parameter("boo", typeToString(intType)),
-                Parameter("bar", typeToString(booleanType)))
+                Parameter(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "foo", typeToString(stringType)),
+                Parameter(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "boo", typeToString(intType)),
+                Parameter(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "bar", typeToString(booleanType)))
         val function = Function(
                 CodeMetainfo("/home/capybara/xyz.cb", 1, 2),
                 packageName,
@@ -670,7 +687,8 @@ internal class FunctionsKtTest {
         val compilationContext = CompilationContext(
                 setOf(),
                 setOf(),
-                setOf(function))
+                setOf(function),
+                setOf())
 
         // when
         val `when` = ThrowableAssert.ThrowingCallable {
@@ -696,9 +714,9 @@ internal class FunctionsKtTest {
                 functionName,
                 listOf(stringExpression(), integerExpression(), integerExpression()))
         val parameters = listOf(
-                Parameter("foo", typeToString(stringType)),
-                Parameter("boo", typeToString(intType)),
-                Parameter("bar", typeToString(booleanType)))
+                Parameter(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "foo", typeToString(stringType)),
+                Parameter(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "boo", typeToString(intType)),
+                Parameter(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "bar", typeToString(booleanType)))
         val function = Function(
                 CodeMetainfo("/home/capybara/xyz.cb", 1, 2),
                 "/package/name",
@@ -712,6 +730,8 @@ internal class FunctionsKtTest {
                 setOf(),
                 setOf(),
                 setOf(function),
+                setOf(),
+                listOf(),
                 listOf(),
                 listOf(),
                 listOf())
@@ -767,6 +787,8 @@ internal class FunctionsKtTest {
                 setOf(),
                 setOf(),
                 setOf(function1, function2),
+                setOf(),
+                listOf(),
                 listOf(),
                 listOf(),
                 listOf())
@@ -881,7 +903,7 @@ internal class FunctionsKtTest {
                 typeToString(addGenericType(listType, stringType)))
 
         val assignments = listOf(
-                AssigmentStatementWithReturnType(
+                AssigmentStatementWithType(
                         "foo",
                         NewListExpressionWithReturnType(
                                 stringType,
@@ -889,7 +911,8 @@ internal class FunctionsKtTest {
                                         StringExpressionWithReturnType("a"),
                                         StringExpressionWithReturnType("b"),
                                         StringExpressionWithReturnType("c"),
-                                ))
+                                )),
+                        stringType
                 )
         )
 
@@ -916,7 +939,7 @@ internal class FunctionsKtTest {
                 null)
 
         val assignments = listOf(
-                AssigmentStatementWithReturnType(
+                AssigmentStatementWithType(
                         "foo2",
                         NewListExpressionWithReturnType(
                                 stringType,
@@ -924,7 +947,8 @@ internal class FunctionsKtTest {
                                         StringExpressionWithReturnType("a"),
                                         StringExpressionWithReturnType("b"),
                                         StringExpressionWithReturnType("c"),
-                                ))
+                                )),
+                        stringType
                 )
         )
 
@@ -972,8 +996,8 @@ internal class FunctionsKtTest {
 
     private fun findReturnType(compilationContext: CompilationContext,
                                compileUnit: CompileUnitWithFlatStructs,
-                               assignments: List<AssigmentStatementWithReturnType>,
+                               assignments: List<AssigmentStatementWithType>,
                                expression: Expression,
                                fullyQualifiedStructNames: Map<Type, Struct>) =
-            FunctionCompiler(compilationContext, compileUnit, fullyQualifiedStructNames).findReturnType(assignments, expression, emptySet(), emptySet())
+            ExpressionCompiler(assignments, compilationContext, compileUnit, fullyQualifiedStructNames, true).findReturnType(expression)
 }

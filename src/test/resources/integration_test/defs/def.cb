@@ -1,0 +1,107 @@
+package /def
+
+import /capybara/type
+
+def simple(): Int {
+    a1 = 1
+    b1 = 2
+	return a1 + b1
+}
+
+def re_assigment(): Int {
+    a2 = 1
+    b2 = 2
+    a2 = 3
+   return a2 - b2
+}
+
+def union_re_assigment(): IntOrNothing {
+    x: IntOrNothing = nothing
+    x = 1
+   return x
+}
+
+def simple_while(): Int {
+	accumulator = 0
+	i = 0
+	while i < 10 {
+		 accumulator = accumulator + 1
+	}
+	return accumulator
+}
+
+def for_loop_simple(): Int {
+	accumulator = 0
+	for i = 0 ; i < 10 ; i = i + 1 {
+		accumulator = accumulator * i
+	}
+	return accumulator
+}
+
+def for_loop_no_each_iteration(): Int {
+	accumulator = 0
+	for i = 0 ; i < 10 ; {
+		accumulator = accumulator * i
+		i = i + 1
+	}
+	return accumulator
+}
+
+def for_loop_no_loop_expresion(): Int {
+	accumulator = 0
+	i = 0
+	for ; i < 10 ; {
+		accumulator = accumulator * i
+		i = i + 1
+	}
+	return accumulator
+}
+
+def def_with_params(Int): Int {
+	int = int * 2
+	accumulator = 0
+	for i = 0 ; i < int ; i = i + 1 {
+		accumulator = accumulator * i
+	}
+	return accumulator
+}
+
+def def_without_return_type(Int) {
+	x = int + 1 ; x = x + 1
+}
+
+def def_with_assert_expression(Int): Int {
+	x = assert (int > 0) (int + 1) "int should be bigger than 0!"
+	return x * x
+}
+
+def def_with_assert_expression_in_return(Int): Int {
+	x = int + 1 ; x = x + 1
+	return assert (int > 0) (x) "int should be bigger than 0!"
+}
+
+def def_with_assert_statement(Int): Int {
+	assert int != 0 "Int cannot be 0!"
+	return int * int
+}
+
+fun next(Int) = assert int >= 0 int + 1
+
+def def_with_call_fun(Int): Int {
+	x = next(int)
+	return next(x)
+}
+
+def test_def(Int, String, Float): Int {
+	x = int * 2
+	return x
+}
+
+def def_with_call_def(Int) {
+	test_def(int * 2, "1" + "2", 1.5)
+}
+
+def def_with_call_def_to_var(Int) {
+	x = test_def(int * 2, "1" + "2", 1.5)
+}
+

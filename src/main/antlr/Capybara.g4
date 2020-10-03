@@ -125,12 +125,13 @@ infix_operation
 
 def_
 	: DEF name=SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL ROUNDL listOfParameters? ROUNDR
-      		(COLON returnType=fullyQualifiedType)? CURLYL NEWLINE defBody+ CURLYR
+      		(COLON returnType=fullyQualifiedType)? CURLYL NEWLINE+ defBody CURLYR
 	;
 
 defBody
-	: statement ((SEMICOLON|NEWLINE) defBody)?
-	| RETURN return_expression=expression (SEMICOLON|NEWLINE)
+	: (statement semicolonEnd)+
+	| RETURN return_expression=expression semicolonEnd?
+	| (statement semicolonEnd)+ RETURN return_expression=expression semicolonEnd?
 	;
 
 statement
@@ -138,6 +139,8 @@ statement
 	| update_assigment
 	| while_loop
 	| for_loop
+	| def_call
+	| assert_statement
 	;
 
 while_loop
@@ -157,7 +160,7 @@ for_loop_expression
 	;
 
 assigment
-	: assign_to=SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL EQUALS expression
+	: assign_to=SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL (COLON assigment_type=fullyQualifiedType)? EQUALS expression
 	;
 
 update_assigment
@@ -170,6 +173,14 @@ update_action
 	| '*='
 	| '^='
 	| '/='
+	;
+
+def_call
+	: def_qualified_name=fully_qualified_function ROUNDL parameters? ROUNDR
+	;
+
+assert_statement
+	: ASSERT check_expression=expression message_expression=expression?
 	;
 
 union
@@ -228,6 +239,16 @@ STRUCT : 'struct' ;
 UNION : 'union';
 IS : 'is' ;
 ASSERT: 'assert' ;
+
+commaEnd
+	: COMMA NEWLINE*
+	| NEWLINE+
+	;
+
+semicolonEnd
+	: SEMICOLON NEWLINE*
+	| NEWLINE+
+	;
 
 // Types
 INTEGER : ('-')?[0-9_]+ ;
