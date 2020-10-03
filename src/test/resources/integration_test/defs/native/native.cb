@@ -1,0 +1,20 @@
+package /def/native
+
+import /capybara/type
+
+native python exit(Int) {{{
+	sys.exit(int)
+}}}
+
+native python exit(String) {{{
+	sys.exit(string)
+}}}
+
+native python print(String) {{{
+	print(string)
+}}}
+
+native python str(Int): String {{{
+	return str(int)
+}}}
+

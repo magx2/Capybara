@@ -23,6 +23,7 @@ code
 	: struct
 	| fun_
 	| def_
+	| native_python
 	| union
 	;
 
@@ -183,6 +184,11 @@ assert_statement
 	: ASSERT check_expression=expression message_expression=expression?
 	;
 
+native_python
+	: NATIVE PYTHON name=SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL ROUNDL listOfParameters? ROUNDR
+                       		(COLON returnType=fullyQualifiedType)? native_code=NATIVE_CODE
+	;
+
 union
 	: UNION name=ALPH_NUM_STARTING_WITH_CAPITAL CURLYL NEWLINE? unionField+ CURLYR ;
 
@@ -231,6 +237,11 @@ ELSE : 'else' ;
 RETURN : 'return' ;
 FUN : 'fun' ;
 DEF : 'def' ;
+NATIVE : 'native' ;
+PYTHON : 'python' ;
+NATIVE_CODE_OPEN : '{{{' ;
+NATIVE_CODE_CLOSE : '}}}' ;
+NATIVE_CODE : NATIVE_CODE_OPEN .+? NATIVE_CODE_CLOSE ;
 WHILE : 'while' ;
 FOR : 'for' ;
 PACKAGE_ : 'package' ;

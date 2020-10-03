@@ -250,6 +250,11 @@ private class Listener(private val fileName: String) : CapybaraBaseListener() {
         assignments.clear()
     }
 
+    override fun enterNative_python(ctx: CapybaraParser.Native_pythonContext) {
+        println("Name: ${ctx.name.text}")
+        println(" > `${ctx.native_code.text.replace("{{{", "").replace("}}}", "")}`")
+    }
+
     private fun findListOfParametersInFun(ctx: CapybaraParser.ListOfParametersContext?): List<Parameter> =
             ctx?.parameter()
                     ?.stream()
