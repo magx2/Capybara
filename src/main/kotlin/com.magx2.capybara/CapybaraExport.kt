@@ -301,7 +301,7 @@ private fun defToPython(def: DefToExport,
             .collect(Collectors.joining("\n"))
 
     val returnExpression = if (def.returnExpression != null) {
-        "\n|${generateAssertStatement(assertions, def.returnExpression, unions, packageName)}${buildIndent(1)}return ${expressionToString(def.returnExpression, assertions, unions, packageName)}"
+        "\n|${generateAssertStatement(assertions, def.returnExpression, unions, packageName, 1)}${buildIndent(1)}return ${expressionToString(def.returnExpression, assertions, unions, packageName)}"
     } else {
         ""
     }
@@ -317,7 +317,14 @@ private fun statementToPython(statement: StatementWithType,
                               packageName: String,
                               indent: Int): String =
         when (statement) {
-            is AssigmentStatementWithType -> "${buildIndent(indent)}${statement.name} = ${expressionToString(statement.expression, assertions, unions, packageName)}"
+            is AssigmentStatementWithType -> {
+                val assert = if (statement.expression is AssertExpressionWithReturnType) {
+                    generateAssertStatement(assertions, statement.expression, unions, packageName, indent)
+                } else {
+                    ""
+                }
+                "$assert${buildIndent(indent)}${statement.name} = ${expressionToString(statement.expression, assertions, unions, packageName)}"
+            }
             is WhileStatementWithType -> {
                 val statements = statement.statements
                         .stream()
@@ -329,14 +336,19 @@ private fun statementToPython(statement: StatementWithType,
 
 private fun buildIndent(indent: Int) = "\t".repeat(indent)
 
-private fun generateAssertStatement(assertions: Boolean, expression: ExpressionWithReturnType, unions: Set<UnionWithType>, packageName: String): String {
+private fun generateAssertStatement(
+        assertions: Boolean,
+        expression: ExpressionWithReturnType,
+        unions: Set<UnionWithType>,
+        packageName: String,
+        indent: Int = 0): String {
     return if (assertions && expression is AssertExpressionWithReturnType) {
         val message = if (expression.messageExpression != null) {
             expressionToString(expression.messageExpression, assertions, unions, packageName)
         } else {
             "\"<no message>\""
         }
-        "if not ${expressionToString(expression.checkExpression, assertions, unions, packageName)}: raise AssertionError($message)\n\t"
+        "${buildIndent(indent)}if not ${expressionToString(expression.checkExpression, assertions, unions, packageName)}: raise AssertionError($message)\n"
     } else {
         ""
     }
