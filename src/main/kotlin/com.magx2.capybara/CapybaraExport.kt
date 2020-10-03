@@ -281,7 +281,7 @@ private fun functionToPython(function: FunctionToExport, assertions: Boolean, un
     return """
     |def ${function.name}($parameters):
     |$methodDoc$assignments
-    |${'\t'}${generateAssertStatement(assertions, function.returnExpression, unions, packageName)}return ${expressionToString(function.returnExpression, assertions, unions, packageName)}
+    |${'\t'}${generateAssertStatement(assertions, function.returnExpression, unions, packageName)}${buildIndent(1)}return ${expressionToString(function.returnExpression, assertions, unions, packageName)}
     |${'\n'}$main""".trimMargin()
 }
 
