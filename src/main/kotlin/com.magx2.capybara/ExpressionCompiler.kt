@@ -91,8 +91,16 @@ class ExpressionCompiler(private val assignments: List<AssigmentStatementWithTyp
                                 if (callStack.contains(d.returnExpression)) {
                                     throw CompilationException(expression.codeMetainfo, "There is recursive invocation of functions. Please specify return type explicitly.")
                                 }
+                                if (d.returnExpression == null) {
+                                    val parameters = findFunctionParametersValues(expression, casts, notCasts)
+                                            .stream()
+                                            .map { it.returnType }
+                                            .map { typeToString(it) }
+                                            .collect(Collectors.joining(", "))
+                                    throw CompilationException(expression.codeMetainfo, "Def `${d.packageName}:${d.name}($parameters)` do not return anything, so it can't be used as expression.")
+                                }
                                 findReturnType(
-                                        d.returnExpression!!, // TODO should add check if returnExpression == null?
+                                        d.returnExpression,
                                         casts,
                                         notCasts,
                                         callStack + expression).returnType
