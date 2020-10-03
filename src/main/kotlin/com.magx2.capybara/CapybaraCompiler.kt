@@ -464,6 +464,19 @@ private class Listener(private val fileName: String) : CapybaraBaseListener() {
                             parseExpression(statement.assert_statement().check_expression),
                             if (statement.assert_statement().message_expression != null) parseExpression(statement.assert_statement().message_expression) else null,
                     )
+                statement.def_call() != null -> {
+                    val ctx = statement.def_call()
+                    val parameters = (ctx.parameters()
+                            ?.expression() ?: listOf())
+                            .stream()
+                            .map { parseExpression(it) }
+                            .toList()
+                    DefCallStatement(
+                            parseCodeMetainfo(fileName, ctx.start),
+                            ctx.def_qualified_name.package_?.text,
+                            ctx.def_qualified_name.function_name.text,
+                            parameters)
+                }
                 else -> throw IllegalStateException("I don't know how to handle it!")
             }
 

@@ -87,7 +87,7 @@ class ExpressionCompiler(private val assignments: List<AssigmentStatementWithTyp
                                 .map { it.returnType }
                                 .map { typeToString(it) }
                                 .collect(Collectors.joining(", "))
-                        throw CompilationException(expression.codeMetainfo, "Cant find method with signature: " +
+                        throw CompilationException(expression.codeMetainfo, "Can't find method with signature: " +
                                 "`${expression.packageName ?: compileUnit.packageName}:${expression.functionName}($parameters)`")
                     }
                 }

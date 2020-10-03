@@ -26,6 +26,8 @@ data class ForLoopStatement(val codeMetainfo: CodeMetainfo,
                             val eachIteration: Statement?,
                             val statements: List<Statement>) : Loop()
 
+data class DefCallStatement(val codeMetainfo: CodeMetainfo, val packageName: String?, val defName: String, val parameters: List<Expression>) : Statement()
+
 // Statements
 sealed class StatementWithType
 data class AssigmentStatementWithType(val name: String, val expression: ExpressionWithReturnType, val type: Type) : StatementWithType()
@@ -33,3 +35,7 @@ data class AssertStatementWithType(val checkExpression: ExpressionWithReturnType
                                    val messageExpression: ExpressionWithReturnType?) : StatementWithType()
 
 data class WhileStatementWithType(val condition: ExpressionWithReturnType, val statements: List<StatementWithType>) : StatementWithType()
+data class DefCallStatementWithType(
+        val packageName: String,
+        val defName: String,
+        val parameters: List<ExpressionWithReturnType>) : StatementWithType()

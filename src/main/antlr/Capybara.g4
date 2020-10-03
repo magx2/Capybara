@@ -139,6 +139,7 @@ statement
 	| update_assigment
 	| while_loop
 	| for_loop
+	| def_call
 	| assert_statement
 	;
 
@@ -172,6 +173,10 @@ update_action
 	| '*='
 	| '^='
 	| '/='
+	;
+
+def_call
+	: def_qualified_name=fully_qualified_function ROUNDL parameters? ROUNDR
 	;
 
 assert_statement

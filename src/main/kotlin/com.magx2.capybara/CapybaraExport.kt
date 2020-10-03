@@ -338,6 +338,18 @@ private fun statementToPython(statement: StatementWithType,
                     unions,
                     packageName,
                     indent)
+            is DefCallStatementWithType -> {
+                val parameters = statement.parameters
+                        .stream()
+                        .map { expressionToString(it, assertions, unions, packageName) }
+                        .collect(Collectors.joining(", "))
+
+                buildIndent(indent) + if (statement.packageName == packageName) {
+                    "${statement.defName}($parameters)"
+                } else {
+                    "${packageToPythonPackage(statement.packageName)}.${statement.defName}($parameters)"
+                }
+            }
         }
 
 private fun buildIndent(indent: Int) = "\t".repeat(indent)

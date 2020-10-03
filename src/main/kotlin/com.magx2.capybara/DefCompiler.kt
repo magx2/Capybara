@@ -2,6 +2,7 @@ package com.magx2.capybara
 
 import com.magx2.capybara.BasicTypes.booleanType
 import java.util.*
+import java.util.stream.Collectors
 import java.util.stream.Stream
 import kotlin.collections.HashMap
 import kotlin.collections.HashSet
@@ -121,7 +122,57 @@ class DefCompiler(private val compilationContext: CompilationContext,
                     val x = buildExpressionCompiler(assignments).findReturnType(assertExpression) as AssertExpressionWithReturnType
                     Stream.of(AssertStatementWithType(x.checkExpression, x.messageExpression))
                 }
+                is DefCallStatement -> {
+                    val expressionCompiler = buildExpressionCompiler(assignments)
+                    val parameters = statement.parameters.map { expressionCompiler.findReturnType(it) }
+                    val def: Optional<Def> = findDefForInvocation(statement, assignments)
+                    if (def.isPresent) {
+                        val d = def.get()
+                        Stream.of(DefCallStatementWithType(
+                                d.packageName,
+                                d.name,
+                                parameters
+                        ))
+                    } else {
+                        val ps = parameters
+                                .stream()
+                                .map { it.returnType }
+                                .map { typeToString(it) }
+                                .collect(Collectors.joining(", "))
+                        throw CompilationException(statement.codeMetainfo, "Can't find def with signature: " +
+                                "`${statement.packageName ?: compileUnit.packageName}:${statement.defName}($ps)`.")
+                    }
+                }
             }
+
+    private fun findDefForInvocation(statement: DefCallStatement, assignments: MutableList<AssigmentStatementWithType>): Optional<Def> {
+        val streamOfDefs = if (statement.packageName == null) {
+            (compileUnit.defs + compileUnit.importDefs).stream()
+        } else {
+            compilationContext.defs
+                    .stream()
+                    .filter { it.packageName == statement.packageName }
+        }
+
+        val expressionCompiler = buildExpressionCompiler(assignments)
+        val parameters = statement.parameters.map { expressionCompiler.findReturnType(it) }
+        return streamOfDefs
+                .filter { it.name == statement.defName }
+                .filter { it.parameters.size == statement.parameters.size }
+                .filter { def ->
+                    var i = 0
+                    var equals = true
+                    val p = statement.parameters.map { expressionCompiler.findReturnType(it) }
+                    while (i < parameters.size && equals) {
+                        equals = parseType(def.codeMetainfo, def.parameters[i].type) == p[i].returnType
+                        i++
+                    }
+                    equals
+                }
+                .findFirst()
+    }
+
+    private fun parseType(codeMetainfo: CodeMetainfo, type: String) = parseType(codeMetainfo, type, compilationContext, compileUnit)
 
     private fun buildExpressionCompiler(assignments: MutableList<AssigmentStatementWithType>): ExpressionCompiler {
         return ExpressionCompiler(
