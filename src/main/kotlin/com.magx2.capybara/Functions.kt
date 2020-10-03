@@ -33,7 +33,7 @@ class FunctionCompiler(private val compilationContext: CompilationContext,
     private fun findReturnTypeForAssignment(
             assignment: AssigmentStatement,
             assignmentsWithReturnType: List<AssigmentStatementWithType>): AssigmentStatementWithType {
-        val expression = ExpressionCompiler(assignmentsWithReturnType, compilationContext, compileUnit, fullyQualifiedStructNames)
+        val expression = ExpressionCompiler(assignmentsWithReturnType, compilationContext, compileUnit, fullyQualifiedStructNames, true)
                 .findReturnType(assignment.expression)
         val type = if (assignment.type != null) {
             val types = concat(

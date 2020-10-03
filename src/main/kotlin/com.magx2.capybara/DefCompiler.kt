@@ -179,7 +179,8 @@ class DefCompiler(private val compilationContext: CompilationContext,
                 findPreviousAssignments(assignments),
                 compilationContext,
                 compileUnit,
-                fullyQualifiedStructNames)
+                fullyQualifiedStructNames,
+                false)
     }
 
     private fun findReturnExpression(def: Def, assignments: List<AssigmentStatementWithType>): ExpressionWithReturnType? {
@@ -189,7 +190,8 @@ class DefCompiler(private val compilationContext: CompilationContext,
                     uniqueAssignments,
                     compilationContext,
                     compileUnit,
-                    fullyQualifiedStructNames)
+                    fullyQualifiedStructNames,
+                    false)
                     .findReturnType(def.returnExpression)
         } else {
             null

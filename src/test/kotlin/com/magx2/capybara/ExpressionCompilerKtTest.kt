@@ -999,5 +999,5 @@ internal class ExpressionCompilerKtTest {
                                assignments: List<AssigmentStatementWithType>,
                                expression: Expression,
                                fullyQualifiedStructNames: Map<Type, Struct>) =
-            ExpressionCompiler(assignments, compilationContext, compileUnit, fullyQualifiedStructNames).findReturnType(expression)
+            ExpressionCompiler(assignments, compilationContext, compileUnit, fullyQualifiedStructNames, true).findReturnType(expression)
 }

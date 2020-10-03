@@ -92,11 +92,16 @@ def def_with_call_fun(Int): Int {
 	return next(x)
 }
 
-def test_def(Int, String, Float) {
+def test_def(Int, String, Float): Int {
 	x = int * 2
+	return x
 }
 
 def def_with_call_def(Int) {
 	test_def(int * 2, "1" + "2", 1.5)
+}
+
+def def_with_call_def_to_var(Int) {
+	x = test_def(int * 2, "1" + "2", 1.5)
 }
 

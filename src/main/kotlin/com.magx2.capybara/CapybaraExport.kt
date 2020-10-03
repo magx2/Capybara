@@ -126,13 +126,10 @@ private fun findImports(expresion: ExpressionWithReturnType, packageName: String
             is BooleanExpressionWithReturnType -> emptyList()
             is StringExpressionWithReturnType -> emptyList()
             NothingExpressionWithReturnType -> emptyList()
-            is FunctionInvocationExpressionWithReturnType -> {
-                expresion.parameters.flatMap { findImports(it, packageName) } + if (packageName != expresion.packageName) {
-                    listOf(expresion.packageName)
-                } else {
-                    emptyList()
-                }
-            }
+            is FunctionInvocationExpressionWithReturnType ->
+                exportMethodInvocation(expresion.parameters, expresion.packageName, packageName)
+            is DefInvocationExpressionWithReturnType ->
+                exportMethodInvocation(expresion.parameters, expresion.packageName, packageName)
             is InfixExpressionWithReturnType -> findImports(expresion.left, packageName) + findImports(expresion.right, packageName)
             is IfExpressionWithReturnType -> findImports(expresion.condition, packageName) + findImports(expresion.trueBranch, packageName) + findImports(expresion.falseBranch, packageName)
             is NegateExpressionWithReturnType -> findImports(expresion.negateExpression, packageName)
@@ -148,6 +145,16 @@ private fun findImports(expresion: ExpressionWithReturnType, packageName: String
             is AssertExpressionWithReturnType -> findImports(expresion.checkExpression, packageName) + findImports(expresion.returnExpression, packageName) + (if (expresion.messageExpression != null) findImports(expresion.messageExpression, packageName) else emptyList())
             is StructureAccessExpressionWithReturnType -> findImports(expresion.structureIndex, packageName)
             is IsExpressionWithReturnType -> emptyList()
+        }
+
+private fun exportMethodInvocation(
+        parameters: List<ExpressionWithReturnType>,
+        expressionPackageName: String,
+        packageName: String): List<String> =
+        parameters.flatMap { findImports(it, packageName) } + if (packageName != expressionPackageName) {
+            listOf(expressionPackageName)
+        } else {
+            emptyList()
         }
 
 private fun structToPython(struct: StructToExport): String {
@@ -400,17 +407,10 @@ private fun expressionToString(expression: ExpressionWithReturnType, assertions:
             is BooleanExpressionWithReturnType -> if (expression.value) "True" else "False"
             is StringExpressionWithReturnType -> "\"${expression.value}\""
             is NothingExpressionWithReturnType -> "None"
-            is FunctionInvocationExpressionWithReturnType -> {
-                val parameters = expression.parameters
-                        .stream()
-                        .map { expressionToString(it, assertions, unions, packageName) }
-                        .collect(Collectors.joining(", "))
-                if (expression.packageName == packageName) {
-                    "${expression.functionName}($parameters)"
-                } else {
-                    "${packageToPythonPackage(expression.packageName)}.${expression.functionName}($parameters)"
-                }
-            }
+            is FunctionInvocationExpressionWithReturnType ->
+                methodToString(expression.parameters, expression.packageName, expression.functionName, assertions, unions, packageName)
+            is DefInvocationExpressionWithReturnType ->
+                methodToString(expression.parameters, expression.packageName, expression.functionName, assertions, unions, packageName)
             is InfixExpressionWithReturnType -> "(${expressionToString(expression.left, assertions, unions, packageName)}) ${mapInfixOperator(expression)} (${expressionToString(expression.right, assertions, unions, packageName)})"
             is IfExpressionWithReturnType -> "(${expressionToString(expression.trueBranch, assertions, unions, packageName)}) if (${expressionToString(expression.condition, assertions, unions, packageName)}) else (${expressionToString(expression.falseBranch, assertions, unions, packageName)})"
             is NegateExpressionWithReturnType -> "not ${expressionToString(expression.negateExpression, assertions, unions, packageName)}"
@@ -453,6 +453,24 @@ private fun expressionToString(expression: ExpressionWithReturnType, assertions:
                 expressionToString(expression.returnExpression, assertions, unions, packageName)
             }
         }
+
+private fun methodToString(
+        expressionParameters: List<ExpressionWithReturnType>,
+        expressionPackageName: String,
+        expressionFunctionName: String,
+        assertions: Boolean,
+        unions: Set<UnionWithType>,
+        packageName: String): String {
+    val parameters = expressionParameters
+            .stream()
+            .map { expressionToString(it, assertions, unions, packageName) }
+            .collect(Collectors.joining(", "))
+    return if (expressionPackageName == packageName) {
+        "${expressionFunctionName}($parameters)"
+    } else {
+        "${packageToPythonPackage(expressionPackageName)}.${expressionFunctionName}($parameters)"
+    }
+}
 
 private fun isInstance(expressionValue: String, expressionType: Type): String =
         if (expressionType == nothingType) {

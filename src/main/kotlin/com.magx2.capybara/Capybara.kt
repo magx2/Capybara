@@ -351,7 +351,7 @@ private fun buildFunctions(unit: CompileUnitWithFlatStructs, compilationContext:
             .map { function ->
                 val functionCompiler = FunctionCompiler(compilationContext, unit, fullyQualifiedStructNames)
                 val assignments = functionCompiler.findReturnTypeForAssignments(function.assignments)
-                val expressionCompiler = ExpressionCompiler(assignments, compilationContext, unit, fullyQualifiedStructNames)
+                val expressionCompiler = ExpressionCompiler(assignments, compilationContext, unit, fullyQualifiedStructNames, true)
                 FunctionOnBuild(
                         function,
                         expressionCompiler.findReturnType(function.returnExpression),

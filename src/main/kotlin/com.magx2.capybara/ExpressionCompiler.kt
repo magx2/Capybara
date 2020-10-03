@@ -8,7 +8,8 @@ import kotlin.streams.toList
 class ExpressionCompiler(private val assignments: List<AssigmentStatementWithType>,
                          private val compilationContext: CompilationContext,
                          private val compileUnit: CompileUnitWithFlatStructs,
-                         private val fullyQualifiedStructNames: Map<Type, Struct>) {
+                         private val fullyQualifiedStructNames: Map<Type, Struct>,
+                         private val pure: Boolean) {
     fun findReturnType(expression: Expression): ExpressionWithReturnType = findReturnType(expression, emptySet(), emptySet(), listOf())
 
     private fun findReturnType(
@@ -79,15 +80,47 @@ class ExpressionCompiler(private val assignments: List<AssigmentStatementWithTyp
                                 expression.parameters
                                         .stream()
                                         .map { findReturnType(it, casts, notCasts) }
-                                        .toList()
-                        )
+                                        .toList())
+                    } else if (pure.not()) {
+                        val def = findDefForGivenFunctionInvocation(expression, casts, notCasts)
+                        if (def.isPresent) {
+                            val d = def.get()
+                            val returnType = if (d.returnType != null) {
+                                parseType(expression.codeMetainfo, d.returnType, compilationContext, compileUnit)
+                            } else {
+                                if (callStack.contains(d.returnExpression)) {
+                                    throw CompilationException(expression.codeMetainfo, "There is recursive invocation of functions. Please specify return type explicitly.")
+                                }
+                                findReturnType(
+                                        d.returnExpression!!, // TODO should add check if returnExpression == null?
+                                        casts,
+                                        notCasts,
+                                        callStack + expression).returnType
+                            }
+                            DefInvocationExpressionWithReturnType(
+                                    returnType,
+                                    d.packageName,
+                                    d.name,
+                                    expression.parameters
+                                            .stream()
+                                            .map { findReturnType(it, casts, notCasts) }
+                                            .toList())
+                        } else {
+                            val parameters = findFunctionParametersValues(expression, casts, notCasts)
+                                    .stream()
+                                    .map { it.returnType }
+                                    .map { typeToString(it) }
+                                    .collect(Collectors.joining(", "))
+                            throw CompilationException(expression.codeMetainfo, "Can't find fun/def with signature: " +
+                                    "`${expression.packageName ?: compileUnit.packageName}:${expression.functionName}($parameters)`")
+                        }
                     } else {
                         val parameters = findFunctionParametersValues(expression, casts, notCasts)
                                 .stream()
                                 .map { it.returnType }
                                 .map { typeToString(it) }
                                 .collect(Collectors.joining(", "))
-                        throw CompilationException(expression.codeMetainfo, "Can't find method with signature: " +
+                        throw CompilationException(expression.codeMetainfo, "Can't find fun with signature: " +
                                 "`${expression.packageName ?: compileUnit.packageName}:${expression.functionName}($parameters)`")
                     }
                 }
@@ -415,11 +448,10 @@ class ExpressionCompiler(private val assignments: List<AssigmentStatementWithTyp
             casts: Set<Cast>,
             notCasts: Set<NotCast>,
     ): Optional<Function> {
-        val functions = compileUnit.functions + compileUnit.importFunctions
         val parameters = findFunctionParametersValues(function, casts, notCasts)
-        return functions.stream()
+        val functions = findFunctionsStream(function)
+        return functions
                 .filter { it.name == function.functionName }
-                .filter { function.packageName == null }
                 .filter { it.parameters.size == parameters.size }
                 .filter { f ->
                     var i = 0
@@ -432,24 +464,48 @@ class ExpressionCompiler(private val assignments: List<AssigmentStatementWithTyp
                     equals
                 }
                 .findFirst()
-                .or {
-                    compilationContext.functions
-                            .stream()
-                            .filter { it.name == function.functionName }
-                            .filter { it.packageName == function.packageName }
-                            .filter { it.parameters.size == parameters.size }
-                            .filter { f ->
-                                var i = 0
-                                var equals = true
-                                while (i < parameters.size && equals) {
-                                    equals = parseType(f.codeMetainfo, f.parameters[i].type, localStructs() + importsToTypes(compileUnit)) == parameters[i].returnType
-                                    i++
-                                }
-                                equals
-                            }
-                            .findFirst()
-                }
     }
+
+    private fun findFunctionsStream(function: FunctionInvocationExpression): Stream<Function> =
+            if (function.packageName == null) {
+                (compileUnit.functions + compileUnit.importFunctions).stream()
+            } else {
+                compilationContext.functions
+                        .stream()
+                        .filter { it.packageName == function.packageName }
+            }
+
+    private fun findDefForGivenFunctionInvocation(
+            function: FunctionInvocationExpression,
+            casts: Set<Cast>,
+            notCasts: Set<NotCast>,
+    ): Optional<Def> {
+        val parameters = findFunctionParametersValues(function, casts, notCasts)
+        val defs = findDefsStream(function)
+        return defs
+                .filter { it.name == function.functionName }
+                .filter { it.parameters.size == parameters.size }
+                .filter { f ->
+                    var i = 0
+                    var equals = true
+                    while (i < parameters.size && equals) {
+                        val p = findFunctionParametersValues(function, casts, notCasts)
+                        equals = parseType(f.codeMetainfo, f.parameters[i].type, localStructs() + importsToTypes(compileUnit)) == p[i].returnType
+                        i++
+                    }
+                    equals
+                }
+                .findFirst()
+    }
+
+    private fun findDefsStream(function: FunctionInvocationExpression): Stream<Def> =
+            if (function.packageName == null) {
+                (compileUnit.defs + compileUnit.defs).stream()
+            } else {
+                compilationContext.defs
+                        .stream()
+                        .filter { it.packageName == function.packageName }
+            }
 
     private fun importStructsToFlatStructs(): List<FlatStruct> =
             compileUnit.importStructs
