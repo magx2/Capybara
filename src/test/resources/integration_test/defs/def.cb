@@ -85,3 +85,10 @@ def def_with_assert_statement(Int): Int {
 	return int * int
 }
 
+fun next(Int) = int + 1
+
+def def_with_call_fun(Int): Int {
+	x = next(int)
+	return next(x)
+}
+
