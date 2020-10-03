@@ -1,5 +1,6 @@
 package com.magx2.capybara
 
+import java.util.stream.Collectors
 import kotlin.streams.toList
 
 data class Function(val codeMetainfo: CodeMetainfo,
@@ -20,7 +21,24 @@ class FunctionCompiler(private val compilationContext: CompilationContext,
                        private val compileUnit: CompileUnitWithFlatStructs,
                        private val fullyQualifiedStructNames: Map<Type, Struct>) {
 
-    fun findReturnTypeForAssignments(assignments: List<AssigmentStatement>): List<AssigmentStatementWithType> {
+    fun findReturnTypeForAssignments(function: Function): List<AssigmentStatementWithType> {
+        val assignments = function.assignments
+        val duplicatedAssignments = assignments.stream()
+                .collect(Collectors.groupingBy { it.name })
+                .entries
+                .stream()
+                .filter { entry -> entry.value.size > 1 }
+                .map { Pair(it.key, it.value[0].codeMetainfo) }
+                .toList()
+        if (duplicatedAssignments.isNotEmpty()) {
+            val (name, codeMetainfo) = duplicatedAssignments[duplicatedAssignments.size - 1]
+            val parameters = function.parameters
+                    .stream()
+                    .map { (_, name, type) -> "$name: $type" }
+                    .collect(Collectors.joining(", "))
+            throw CompilationException(codeMetainfo, "Const `$name` was reassign in function `${function.packageName}:${function.name}($parameters)`.")
+        }
+
         val assignmentsWithReturnType = ArrayList<AssigmentStatementWithType>(assignments.size)
         for (assigment in assignments) {
             assignmentsWithReturnType.add(
