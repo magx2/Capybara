@@ -387,21 +387,21 @@ private fun buildFunctions(unit: CompileUnitWithFlatStructs, compilationContext:
 
 fun buildDefs(unit: CompileUnitWithFlatStructs,
               compilationContext: CompilationContext,
-              fullyQualifiedStructNames: Map<Type, Struct>): Set<DefWithTypes> {
+              fullyQualifiedStructNames: Map<Type, Struct>): Set<AbstractDefWithTypes> {
     val compiler = DefCompiler(compilationContext, unit, fullyQualifiedStructNames)
     return unit.defs
             .stream()
             .map { def -> compiler.def(def) }
-            // add checks
-            .map { def ->
-                DefWithTypes(
-                        def.packageName,
-                        def.name,
-                        def.parameters,
-                        def.statements,
-                        def.returnExpression
-                )
-            }
+            // TODO add checks
+//            .map { def ->
+//                DefWithTypes(
+//                        def.packageName,
+//                        def.name,
+//                        def.parameters,
+//                        def.statements,
+//                        def.returnExpression
+//                )
+//            }
             .toList()
             .toSet()
 }
@@ -455,7 +455,7 @@ data class CompilationContext(
         val structs: Set<FlatStruct>,
         val unions: Set<UnionWithType>,
         val functions: Set<com.magx2.capybara.Function>,
-        val defs: Set<Def>,
+        val defs: Set<AbstractDef>,
 )
 
 class CompilationException(codeMetainfo: CodeMetainfo, msg: String) : RuntimeException("${codeMetainfo.fileName} [${codeMetainfo.line}:${codeMetainfo.charInLine}] $msg")

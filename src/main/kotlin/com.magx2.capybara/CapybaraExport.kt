@@ -23,7 +23,7 @@ data class CompileUnitToExport(
         val packageName: String,
         val structs: Set<StructToExport>,
         val functions: Set<FunctionToExport>,
-        val defs: Set<DefToExport>,
+        val defs: Set<AbstractDefToExport>,
         val unions: Set<UnionWithType>,
 )
 
@@ -38,18 +38,42 @@ data class FunctionToExport(val packageName: String,
                             val parameters: List<ParameterToExport>,
                             val assignments: List<AssigmentStatementWithType>)
 
-data class DefToExport(val packageName: String,
-                       val name: String,
-                       val parameters: List<ParameterToExport>,
-                       val statements: List<StatementWithType>,
-                       val returnExpression: ExpressionWithReturnType?)
+sealed class AbstractDefToExport(
+        open val packageName: String,
+        open val name: String,
+        open val parameters: List<ParameterToExport>,
+        open val returnType: Type?)
 
-fun mapDef(def: DefWithTypes) =
-        DefToExport(def.packageName,
-                def.name,
-                def.parameters.map { ParameterToExport(it.name, it.type) },
-                def.statements,
-                def.returnExpression)
+data class DefToExport(
+        override val packageName: String,
+        override val name: String,
+        override val parameters: List<ParameterToExport>,
+        val statements: List<StatementWithType>,
+        val returnExpression: ExpressionWithReturnType?) : AbstractDefToExport(packageName, name, parameters, returnExpression?.returnType)
+
+data class NativeDefToExport(override val packageName: String,
+                             override val name: String,
+                             override val parameters: List<ParameterToExport>,
+                             override val returnType: Type?,
+                             val nativeStatements: List<String>) : AbstractDefToExport(packageName, name, parameters, returnType)
+
+fun mapDef(def: AbstractDefWithTypes) =
+        when (def) {
+            is DefWithTypes ->
+                DefToExport(
+                        def.packageName,
+                        def.name,
+                        def.parameters.map { ParameterToExport(it.name, it.type) },
+                        def.statements,
+                        def.returnExpression)
+            is NativeDefWithTypes ->
+                NativeDefToExport(
+                        def.packageName,
+                        def.name,
+                        def.parameters.map { ParameterToExport(it.name, it.type) },
+                        def.returnType,
+                        def.nativeStatements)
+        }
 
 data class ParameterToExport(val name: String, val type: Type)
 
@@ -291,7 +315,7 @@ private fun functionToPython(function: FunctionToExport, assertions: Boolean, un
     |${'\n'}$main""".trimMargin()
 }
 
-private fun defToPython(def: DefToExport,
+private fun defToPython(def: AbstractDefToExport,
                         assertions: Boolean,
                         unions: Set<UnionWithType>,
                         packageName: String): String {
@@ -300,7 +324,22 @@ private fun defToPython(def: DefToExport,
             .map { it.name }
             .collect(Collectors.joining(", "))
 
-    val methodDoc = generateDocForDefWithTypedParameters(def.name, def.parameters, def.returnExpression?.returnType)
+    val methodDoc = generateDocForDefWithTypedParameters(def.name, def.parameters, def.returnType)
+    val body =
+            when (def) {
+                is DefToExport -> defToPythonBody(def, assertions, unions, packageName)
+                is NativeDefToExport -> defToPythonBody(def, assertions, unions, packageName)
+            }
+
+    return """
+    |def ${def.name}($parameters):
+    |$methodDoc$body""".trimMargin()
+}
+
+private fun defToPythonBody(def: DefToExport,
+                            assertions: Boolean,
+                            unions: Set<UnionWithType>,
+                            packageName: String): String {
     val statements = def.statements
             .stream()
             .map { statementToPython(it, assertions, unions, packageName, 1) }
@@ -312,10 +351,16 @@ private fun defToPython(def: DefToExport,
         ""
     }
 
-    return """
-    |def ${def.name}($parameters):
-    |$methodDoc$statements$returnExpression""".trimMargin()
+    return statements + returnExpression
 }
+
+private fun defToPythonBody(def: NativeDefToExport,
+                            assertions: Boolean,
+                            unions: Set<UnionWithType>,
+                            packageName: String): String =
+        "\t" + def.nativeStatements
+                .stream()
+                .collect(Collectors.joining("\n\t"))
 
 private fun statementToPython(statement: StatementWithType,
                               assertions: Boolean,

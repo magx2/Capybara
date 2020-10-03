@@ -11,7 +11,13 @@ import kotlin.streams.toList
 class DefCompiler(private val compilationContext: CompilationContext,
                   private val compileUnit: CompileUnitWithFlatStructs,
                   private val fullyQualifiedStructNames: Map<Type, Struct>) {
-    fun def(def: Def): DefWithTypes {
+    fun def(def: AbstractDef): AbstractDefWithTypes =
+            when (def) {
+                is Def -> def(def)
+                is NativeDef -> def(def)
+            }
+
+    private fun def(def: Def): DefWithTypes {
         if (def.returnType != null && def.returnExpression == null) {
             throw CompilationException(def.codeMetainfo, "Please specify return expression of type `${def.returnType}`.")
         }
@@ -41,6 +47,32 @@ class DefCompiler(private val compilationContext: CompilationContext,
                 statements,
                 returnExpression
         )
+    }
+
+    private fun def(def: NativeDef): NativeDefWithTypes {
+        val parameters = def.parameters.map { parseTypedParameter(it, compilationContext, compileUnit) }
+        val type = if (def.returnType != null) {
+            parseType(def.returnTypeCodeMetainfo!!, def.returnType)
+        } else {
+            null
+        }
+        val nativeStatements = if (def.nativeStatements.isNotEmpty()) {
+            val first = def.nativeStatements[0]
+            var prefixLength = 0
+            var char = first[0]
+            while (char.isWhitespace()) {
+                char = first[++prefixLength]
+            }
+            def.nativeStatements.map { it.substring(prefixLength) }
+        } else {
+            emptyList()
+        }
+        return NativeDefWithTypes(
+                def.packageName,
+                def.name,
+                parameters,
+                type,
+                nativeStatements)
     }
 
     private fun parseStatement(assignments: MutableList<AssigmentStatementWithType>,
@@ -125,7 +157,7 @@ class DefCompiler(private val compilationContext: CompilationContext,
                 is DefCallStatement -> {
                     val expressionCompiler = buildExpressionCompiler(assignments)
                     val parameters = statement.parameters.map { expressionCompiler.findReturnType(it) }
-                    val def: Optional<Def> = findDefForInvocation(statement, assignments)
+                    val def = findDefForInvocation(statement, assignments)
                     if (def.isPresent) {
                         val d = def.get()
                         Stream.of(DefCallStatementWithType(
@@ -145,7 +177,7 @@ class DefCompiler(private val compilationContext: CompilationContext,
                 }
             }
 
-    private fun findDefForInvocation(statement: DefCallStatement, assignments: MutableList<AssigmentStatementWithType>): Optional<Def> {
+    private fun findDefForInvocation(statement: DefCallStatement, assignments: MutableList<AssigmentStatementWithType>): Optional<AbstractDef> {
         val streamOfDefs = if (statement.packageName == null) {
             (compileUnit.defs + compileUnit.importDefs).stream()
         } else {

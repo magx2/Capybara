@@ -34,18 +34,18 @@ data class CompileUnit(
         val structs: Set<Struct>,
         val unions: Set<Union>,
         val functions: Set<Function>,
-        val defs: Set<Def>)
+        val defs: Set<AbstractDef>)
 
 data class CompileUnitWithImports(
         val packageName: String,
         val structs: Set<Struct>,
         val unions: Set<Union>,
         val functions: Set<Function>,
-        val defs: Set<Def>,
+        val defs: Set<AbstractDef>,
         val importStructs: List<Struct>,
         val importUnions: List<Union>,
         val importFunctions: List<Function>,
-        val importDefs: List<Def>,
+        val importDefs: List<AbstractDef>,
 )
 
 data class CompileUnitWithFlatStructs(
@@ -53,11 +53,11 @@ data class CompileUnitWithFlatStructs(
         val structs: Set<FlatStruct>,
         val unions: Set<UnionWithType>,
         val functions: Set<Function>,
-        val defs: Set<Def>,
+        val defs: Set<AbstractDef>,
         val importStructs: List<Struct>,
         val importUnions: List<Union>,
         val importFunctions: List<Function>,
-        val importDefs: List<Def>,
+        val importDefs: List<AbstractDef>,
 )
 
 fun getTypes(units: Collection<CompileUnitWithImports>, packageName: String): Set<Type> =
@@ -86,7 +86,7 @@ data class Export(
         val structs: Set<Struct>,
         val unions: Set<Union>,
         val functions: Set<Function>,
-        val defs: Set<Def>,
+        val defs: Set<AbstractDef>,
 )
 
 data class Import(val codeMetainfo: CodeMetainfo, val importPackage: String, val subImport: Set<String>)
@@ -95,15 +95,29 @@ sealed class Field
 data class BasicField(val codeMetainfo: CodeMetainfo, val name: String, val type: String) : Field()
 data class SpreadField(val codeMetainfo: CodeMetainfo, val spreadType: String) : Field()
 
+sealed class AbstractDef(open val codeMetainfo: CodeMetainfo,
+                         open val packageName: String,
+                         open val name: String,
+                         open val returnTypeCodeMetainfo: CodeMetainfo?,
+                         open val returnType: String?,
+                         open val parameters: List<Parameter>)
 
-data class Def(val codeMetainfo: CodeMetainfo,
-               val packageName: String,
-               val name: String,
-               val returnTypeCodeMetainfo: CodeMetainfo?,
-               val returnType: String?,
-               val parameters: List<Parameter>,
+data class Def(override val codeMetainfo: CodeMetainfo,
+               override val packageName: String,
+               override val name: String,
+               override val returnTypeCodeMetainfo: CodeMetainfo?,
+               override val returnType: String?,
+               override val parameters: List<Parameter>,
                val statements: List<Statement>,
-               val returnExpression: Expression?)
+               val returnExpression: Expression?) : AbstractDef(codeMetainfo, packageName, name, returnTypeCodeMetainfo, returnType, parameters)
+
+data class NativeDef(override val codeMetainfo: CodeMetainfo,
+                     override val packageName: String,
+                     override val name: String,
+                     override val returnTypeCodeMetainfo: CodeMetainfo?,
+                     override val returnType: String?,
+                     override val parameters: List<Parameter>,
+                     val nativeStatements: List<String>) : AbstractDef(codeMetainfo, packageName, name, returnTypeCodeMetainfo, returnType, parameters)
 
 data class Parameter(val codeMetainfo: CodeMetainfo, val name: String, val type: String)
 data class TypedParameter(val name: String, val type: Type)
@@ -150,7 +164,7 @@ private class Listener(private val fileName: String) : CapybaraBaseListener() {
     val structs = LinkedList<Struct>()
     val unions = LinkedList<Union>()
     val functions = LinkedList<Function>()
-    val defs = LinkedList<Def>()
+    val defs = LinkedList<AbstractDef>()
 
     var parameters: Map<String, String> = mapOf()
     val assignments: MutableList<AssigmentStatement> = ArrayList()
@@ -252,7 +266,21 @@ private class Listener(private val fileName: String) : CapybaraBaseListener() {
 
     override fun enterNative_python(ctx: CapybaraParser.Native_pythonContext) {
         println("Name: ${ctx.name.text}")
-        println(" > `${ctx.native_code.text.replace("{{{", "").replace("}}}", "")}`")
+        val nativeCode = ctx.native_code.text.replace("{{{", "").replace("}}}", "")
+        val nativeStatements = nativeCode.split("\n").filter { it.isNotBlank() }
+
+        val parameters = findListOfParametersInFun(ctx.listOfParameters())
+        defs.add(NativeDef(
+                parseCodeMetainfo(fileName, ctx.start),
+                packageName,
+                ctx.name.text,
+                if (ctx.returnType != null) parseCodeMetainfo(fileName, ctx.returnType.start) else null,
+                ctx.returnType?.text,
+                parameters,
+                nativeStatements))
+        returnExpression = null
+        statements.clear()
+        assignments.clear()
     }
 
     private fun findListOfParametersInFun(ctx: CapybaraParser.ListOfParametersContext?): List<Parameter> =
