@@ -96,8 +96,10 @@ data class BasicField(val codeMetainfo: CodeMetainfo, val name: String, val type
 data class SpreadField(val codeMetainfo: CodeMetainfo, val spreadType: String) : Field()
 
 
-data class Def(val packageName: String,
+data class Def(val codeMetainfo: CodeMetainfo,
+               val packageName: String,
                val name: String,
+               val returnTypeCodeMetainfo: CodeMetainfo?,
                val returnType: String?,
                val parameters: List<Parameter>,
                val statements: List<Statement>,
@@ -235,8 +237,10 @@ private class Listener(private val fileName: String) : CapybaraBaseListener() {
     override fun exitDef_(ctx: CapybaraParser.Def_Context) {
         val parameters = findListOfParametersInFun(ctx.listOfParameters())
         defs.add(Def(
+                parseCodeMetainfo(fileName, ctx.start),
                 packageName,
                 ctx.name.text,
+                if (ctx.returnType != null) parseCodeMetainfo(fileName, ctx.returnType.start) else null,
                 ctx.returnType?.text,
                 parameters,
                 statements.toList(),

@@ -11,6 +11,12 @@ class DefCompiler(private val compilationContext: CompilationContext,
                   private val compileUnit: CompileUnitWithFlatStructs,
                   private val fullyQualifiedStructNames: Map<Type, Struct>) {
     fun def(def: Def): DefWithTypes {
+        if (def.returnType != null && def.returnExpression == null) {
+            throw CompilationException(def.codeMetainfo, "Please specify return expression of type `${def.returnType}`.")
+        }
+        if (def.returnType == null && def.returnExpression != null) {
+            throw CompilationException(def.codeMetainfo, "Please specify return type in def signature.")
+        }
         val parameters = def.parameters.map { parseTypedParameter(it, compilationContext, compileUnit) }
         val assignmentsMap = HashMap<String, Type>()
         val assignments = LinkedList<AssigmentStatementWithType>()
@@ -19,6 +25,14 @@ class DefCompiler(private val compilationContext: CompilationContext,
                 .flatMap { parseStatement(assignments, assignmentsMap, it) }
                 .toList()
         val returnExpression = findReturnExpression(def, assignments)
+        if (def.returnType != null && returnExpression != null) {
+            val type = parseType(def.returnTypeCodeMetainfo!!, def.returnType, compilationContext, compileUnit)
+            val returnType = returnExpression.returnType
+            if (areTypesEqual(type, returnType, compilationContext, compileUnit).not()) {
+                throw CompilationException(def.returnTypeCodeMetainfo, "Declared return type is not the same as actual one. " +
+                        "Declared return type: `${typeToString(type)}`, actual return type: `${typeToString(returnType)}`.")
+            }
+        }
         return DefWithTypes(
                 def.packageName,
                 def.name,
