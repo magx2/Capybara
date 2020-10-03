@@ -265,7 +265,6 @@ private class Listener(private val fileName: String) : CapybaraBaseListener() {
     }
 
     override fun enterNative_python(ctx: CapybaraParser.Native_pythonContext) {
-        println("Name: ${ctx.name.text}")
         val nativeCode = ctx.native_code.text.replace("{{{", "").replace("}}}", "")
         val nativeStatements = nativeCode.split("\n").filter { it.isNotBlank() }
 
