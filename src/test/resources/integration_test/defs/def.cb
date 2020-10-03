@@ -80,3 +80,8 @@ def def_with_assert_expression_in_return(Int) {
 	return assert (int > 0) (x) "int should be bigger than 0!"
 }
 
+def def_with_assert_statement(Int) {
+	assert int != 0 "Int cannot be 0!"
+	return int * int
+}
+

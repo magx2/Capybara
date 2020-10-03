@@ -33,12 +33,7 @@ class DefCompiler(private val compilationContext: CompilationContext,
                                statement: Statement): Stream<StatementWithType> =
             when (statement) {
                 is AssigmentStatement -> {
-                    val assigment = ExpressionCompiler(
-                            findPreviousAssignments(assignments),
-                            compilationContext,
-                            compileUnit,
-                            fullyQualifiedStructNames)
-                            .findReturnType(statement.expression)
+                    val assigment = buildExpressionCompiler(assignments).findReturnType(statement.expression)
                     val assigmentType = assigment.returnType
                     val previousAssigment = assignmentsMap[statement.name]
                     if (previousAssigment != null) {
@@ -67,12 +62,7 @@ class DefCompiler(private val compilationContext: CompilationContext,
                     Stream.of(assignment)
                 }
                 is WhileLoopStatement -> {
-                    val condition = ExpressionCompiler(
-                            findPreviousAssignments(assignments),
-                            compilationContext,
-                            compileUnit,
-                            fullyQualifiedStructNames)
-                            .findReturnType(statement.condition)
+                    val condition = buildExpressionCompiler(assignments).findReturnType(statement.condition)
                     if (condition.returnType != booleanType) {
                         throw CompilationException(
                                 statement.conditionCodeMetainfo,
@@ -108,7 +98,24 @@ class DefCompiler(private val compilationContext: CompilationContext,
                     statements = concat(statements, whileElements)
                     statements
                 }
+                is AssertStatement -> {
+                    val assertExpression = AssertExpression(
+                            statement.codeMetainfo,
+                            statement.checkExpression,
+                            NothingExpression(statement.codeMetainfo),
+                            statement.messageExpression)
+                    val x = buildExpressionCompiler(assignments).findReturnType(assertExpression) as AssertExpressionWithReturnType
+                    Stream.of(AssertStatementWithType(x.checkExpression, x.messageExpression))
+                }
             }
+
+    private fun buildExpressionCompiler(assignments: MutableList<AssigmentStatementWithType>): ExpressionCompiler {
+        return ExpressionCompiler(
+                findPreviousAssignments(assignments),
+                compilationContext,
+                compileUnit,
+                fullyQualifiedStructNames)
+    }
 
     private fun findReturnExpression(def: Def, assignments: List<AssigmentStatementWithType>): ExpressionWithReturnType? {
         val uniqueAssignments = findPreviousAssignments(assignments)

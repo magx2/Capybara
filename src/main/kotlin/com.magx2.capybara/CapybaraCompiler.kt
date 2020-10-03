@@ -454,6 +454,12 @@ private class Listener(private val fileName: String) : CapybaraBaseListener() {
                             parseCodeMetainfo(fileName, statement.update_assigment().assign_to),
                             statement.update_assigment().assign_to.text)
                 }
+                statement.assert_statement() != null ->
+                    AssertStatement(
+                            parseCodeMetainfo(fileName, statement.assert_statement().start),
+                            parseExpression(statement.assert_statement().check_expression),
+                            if (statement.assert_statement().message_expression != null) parseExpression(statement.assert_statement().message_expression) else null,
+                    )
                 else -> throw IllegalStateException("I don't know how to handle it!")
             }
 

@@ -332,6 +332,13 @@ private fun statementToPython(statement: StatementWithType,
                         .collect(Collectors.joining("\n"))
                 "${buildIndent(indent)}while ${expressionToString(statement.condition, assertions, unions, packageName)}:\n$statements"
             }
+            is AssertStatementWithType -> generateAssertStatement(
+                    assertions,
+                    statement.checkExpression,
+                    statement.messageExpression,
+                    unions,
+                    packageName,
+                    indent)
         }
 
 private fun buildIndent(indent: Int) = "\t".repeat(indent)
@@ -342,13 +349,33 @@ private fun generateAssertStatement(
         unions: Set<UnionWithType>,
         packageName: String,
         indent: Int = 0): String {
-    return if (assertions && expression is AssertExpressionWithReturnType) {
-        val message = if (expression.messageExpression != null) {
-            expressionToString(expression.messageExpression, assertions, unions, packageName)
+    return if (expression is AssertExpressionWithReturnType) {
+        generateAssertStatement(
+                assertions,
+                expression.checkExpression,
+                expression.messageExpression,
+                unions,
+                packageName,
+                indent)
+    } else {
+        ""
+    }
+}
+
+private fun generateAssertStatement(
+        assertions: Boolean,
+        checkExpression: ExpressionWithReturnType,
+        messageExpression: ExpressionWithReturnType?,
+        unions: Set<UnionWithType>,
+        packageName: String,
+        indent: Int = 0): String {
+    return if (assertions) {
+        val message = if (messageExpression != null) {
+            expressionToString(messageExpression, assertions, unions, packageName)
         } else {
             "\"<no message>\""
         }
-        "${buildIndent(indent)}if not ${expressionToString(expression.checkExpression, assertions, unions, packageName)}: raise AssertionError($message)\n"
+        "${buildIndent(indent)}if not ${expressionToString(checkExpression, assertions, unions, packageName)}: raise AssertionError($message)\n"
     } else {
         ""
     }

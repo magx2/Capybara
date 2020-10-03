@@ -139,6 +139,7 @@ statement
 	| update_assigment
 	| while_loop
 	| for_loop
+	| assert_statement
 	;
 
 while_loop
@@ -171,6 +172,10 @@ update_action
 	| '*='
 	| '^='
 	| '/='
+	;
+
+assert_statement
+	: ASSERT check_expression=expression message_expression=expression?
 	;
 
 union
