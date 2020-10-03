@@ -12,4 +12,5 @@ RUN java \
 FROM python:3.8.5
 WORKDIR /usr/src/app
 COPY --from=COMPILE_CAPYBARA /capybara/out .
+RUN python -m compileall .
 CMD ["python", "integration_test.py"]
