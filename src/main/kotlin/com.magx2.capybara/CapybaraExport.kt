@@ -125,17 +125,6 @@ class PythonExport(private val outputDir: String,
                 .stream()
                 .map { def -> defToPython(def, assertions, unit.unions, methodsToRewrite, unit.packageName) }
 
-//        val main = if (function.name == "main"
-//                && function.parameters.size == 1
-//                && function.parameters[0].type == addGenericType(listType, stringType)) {
-//            """
-//        |${'\n'}if __name__ == "__main__":
-//        |${'\t'}import sys
-//        |${'\t'}${function.name}(sys.argv)
-//        |${"\n".repeat(2)}""".trimMargin()
-//        } else {
-//            ""
-//        }
         val listOfStrings = addGenericType(listType, stringType)
         val main = unit.defs
                 .stream()
