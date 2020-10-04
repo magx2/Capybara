@@ -1,0 +1,39 @@
+package /same_name
+
+import /capybara/type
+
+fun x_fun(Int) = 5
+
+def x_fun(Int, String): Int {
+	return 5
+}
+
+fun x_fun(String) = "foo"
+
+fun x_fun() = 44
+
+def x_fun(Float): Int {
+	return 44
+}
+
+def x_def(Int): Int {
+	return 6
+}
+
+def x_def(String): String {
+	return "def foo"
+}
+
+def x_def(): Int {
+	return 123
+}
+
+def call_overloaded_methods() {
+	x = x_fun(1)
+	y = x_fun("baz")
+	z = x_fun()
+	x_def(2)
+	x_def("boo")
+	x_def()
+}
+

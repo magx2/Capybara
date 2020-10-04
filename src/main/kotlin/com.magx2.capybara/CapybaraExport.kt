@@ -32,35 +32,40 @@ data class StructToExport(val type: Type,
 
 data class FieldToExport(val name: String, val type: Type)
 
-data class FunctionToExport(val packageName: String,
+data class FunctionToExport(val codeMetainfo: CodeMetainfo,
+                            val packageName: String,
                             val name: String,
                             val returnExpression: ExpressionWithReturnType,
                             val parameters: List<ParameterToExport>,
                             val assignments: List<AssigmentStatementWithType>)
 
 sealed class AbstractDefToExport(
+        open val codeMetainfo: CodeMetainfo,
         open val packageName: String,
         open val name: String,
         open val parameters: List<ParameterToExport>,
         open val returnType: Type?)
 
 data class DefToExport(
+        override val codeMetainfo: CodeMetainfo,
         override val packageName: String,
         override val name: String,
         override val parameters: List<ParameterToExport>,
         val statements: List<StatementWithType>,
-        val returnExpression: ExpressionWithReturnType?) : AbstractDefToExport(packageName, name, parameters, returnExpression?.returnType)
+        val returnExpression: ExpressionWithReturnType?) : AbstractDefToExport(codeMetainfo, packageName, name, parameters, returnExpression?.returnType)
 
-data class NativeDefToExport(override val packageName: String,
-                             override val name: String,
-                             override val parameters: List<ParameterToExport>,
-                             override val returnType: Type?,
-                             val nativeStatements: List<String>) : AbstractDefToExport(packageName, name, parameters, returnType)
+data class NativeDefToExport(
+        override val codeMetainfo: CodeMetainfo, override val packageName: String,
+        override val name: String,
+        override val parameters: List<ParameterToExport>,
+        override val returnType: Type?,
+        val nativeStatements: List<String>) : AbstractDefToExport(codeMetainfo, packageName, name, parameters, returnType)
 
 fun mapDef(def: AbstractDefWithTypes) =
         when (def) {
             is DefWithTypes ->
                 DefToExport(
+                        def.codeMetainfo,
                         def.packageName,
                         def.name,
                         def.parameters.map { ParameterToExport(it.name, it.type) },
@@ -68,6 +73,7 @@ fun mapDef(def: AbstractDefWithTypes) =
                         def.returnExpression)
             is NativeDefWithTypes ->
                 NativeDefToExport(
+                        def.codeMetainfo,
                         def.packageName,
                         def.name,
                         def.parameters.map { ParameterToExport(it.name, it.type) },
@@ -80,7 +86,9 @@ data class ParameterToExport(val name: String, val type: Type)
 
 private val log = LoggerFactory.getLogger(PythonExport::class.java)
 
-class PythonExport(private val outputDir: String, private val assertions: Boolean) : CapybaraExport {
+class PythonExport(private val outputDir: String,
+                   private val methodsToRewrite: Set<MethodToRewrite>,
+                   private val assertions: Boolean) : CapybaraExport {
     private val initFilesDirectories = HashSet<String>()
 
     override fun export(unit: CompileUnitToExport) {
@@ -111,11 +119,11 @@ class PythonExport(private val outputDir: String, private val assertions: Boolea
 
         val functions = unit.functions
                 .stream()
-                .map { function -> functionToPython(function, assertions, unit.unions, unit.packageName) }
+                .map { function -> functionToPython(function, assertions, unit.unions, methodsToRewrite, unit.packageName) }
 
         val defs = unit.defs
                 .stream()
-                .map { def -> defToPython(def, assertions, unit.unions, unit.packageName) }
+                .map { def -> defToPython(def, assertions, unit.unions, methodsToRewrite, unit.packageName) }
 
         writeAllToPackageFile(
                 outputDir,
@@ -277,7 +285,11 @@ private fun generateDocForDefWithTypedParameters(
                 returnType,
                 indent)
 
-private fun functionToPython(function: FunctionToExport, assertions: Boolean, unions: Set<UnionWithType>, packageName: String): String {
+private fun functionToPython(function: FunctionToExport,
+                             assertions: Boolean,
+                             unions: Set<UnionWithType>,
+                             methodsToRewrite: Set<MethodToRewrite>,
+                             packageName: String): String {
     val parameters = function.parameters
             .stream()
             .map { it.name }
@@ -286,8 +298,8 @@ private fun functionToPython(function: FunctionToExport, assertions: Boolean, un
         function.assignments
                 .stream()
                 .map {
-                    generateAssertStatement(assertions, it.expression, unions, packageName) +
-                            "\t${it.name} = ${expressionToString(it.expression, assertions, unions, packageName)}"
+                    generateAssertStatement(assertions, it.expression, unions, methodsToRewrite, packageName) +
+                            "\t${it.name} = ${expressionToString(it.expression, assertions, unions, methodsToRewrite, packageName)}"
                 }
                 .filter { it.isNotBlank() }
                 .collect(Collectors.joining("\n|")) + "\n|"
@@ -309,15 +321,22 @@ private fun functionToPython(function: FunctionToExport, assertions: Boolean, un
         ""
     }
 
+    val name = findMethodNameFromParameter(
+            function.packageName,
+            function.name,
+            function.parameters,
+            methodsToRewrite)
+
     return """
-    |def ${function.name}($parameters):
-    |$methodDoc$assignments${generateAssertStatement(assertions, function.returnExpression, unions, packageName)}${buildIndent(1)}return ${expressionToString(function.returnExpression, assertions, unions, packageName)}
+    |def $name($parameters):
+    |$methodDoc$assignments${generateAssertStatement(assertions, function.returnExpression, unions, methodsToRewrite, packageName)}${buildIndent(1)}return ${expressionToString(function.returnExpression, assertions, unions, methodsToRewrite, packageName)}
     |${'\n'}$main""".trimMargin()
 }
 
 private fun defToPython(def: AbstractDefToExport,
                         assertions: Boolean,
                         unions: Set<UnionWithType>,
+                        methodsToRewrite: Set<MethodToRewrite>,
                         packageName: String): String {
     val parameters = def.parameters
             .stream()
@@ -327,26 +346,33 @@ private fun defToPython(def: AbstractDefToExport,
     val methodDoc = generateDocForDefWithTypedParameters(def.name, def.parameters, def.returnType)
     val body =
             when (def) {
-                is DefToExport -> defToPythonBody(def, assertions, unions, packageName)
-                is NativeDefToExport -> defToPythonBody(def, assertions, unions, packageName)
+                is DefToExport -> defToPythonBody(def, assertions, unions, methodsToRewrite, packageName)
+                is NativeDefToExport -> defToPythonBody(def, assertions, unions, methodsToRewrite, packageName)
             }
 
+    val name = findMethodNameFromParameter(
+            def.packageName,
+            def.name,
+            def.parameters,
+            methodsToRewrite)
+
     return """
-    |def ${def.name}($parameters):
+    |def $name($parameters):
     |$methodDoc$body""".trimMargin()
 }
 
 private fun defToPythonBody(def: DefToExport,
                             assertions: Boolean,
                             unions: Set<UnionWithType>,
+                            methodsToRewrite: Set<MethodToRewrite>,
                             packageName: String): String {
     val statements = def.statements
             .stream()
-            .map { statementToPython(it, assertions, unions, packageName, 1) }
+            .map { statementToPython(it, assertions, unions, methodsToRewrite, packageName, 1) }
             .collect(Collectors.joining("\n"))
 
     val returnExpression = if (def.returnExpression != null) {
-        "\n|${generateAssertStatement(assertions, def.returnExpression, unions, packageName)}${buildIndent(1)}return ${expressionToString(def.returnExpression, assertions, unions, packageName)}"
+        "\n|${generateAssertStatement(assertions, def.returnExpression, unions, methodsToRewrite, packageName)}${buildIndent(1)}return ${expressionToString(def.returnExpression, assertions, unions, methodsToRewrite, packageName)}"
     } else {
         ""
     }
@@ -357,6 +383,7 @@ private fun defToPythonBody(def: DefToExport,
 private fun defToPythonBody(def: NativeDefToExport,
                             assertions: Boolean,
                             unions: Set<UnionWithType>,
+                            methodsToRewrite: Set<MethodToRewrite>,
                             packageName: String): String =
         "\t" + def.nativeStatements
                 .stream()
@@ -365,41 +392,47 @@ private fun defToPythonBody(def: NativeDefToExport,
 private fun statementToPython(statement: StatementWithType,
                               assertions: Boolean,
                               unions: Set<UnionWithType>,
+                              methodsToRewrite: Set<MethodToRewrite>,
                               packageName: String,
                               indent: Int): String =
         when (statement) {
             is AssigmentStatementWithType -> {
                 val assert = if (statement.expression is AssertExpressionWithReturnType) {
-                    generateAssertStatement(assertions, statement.expression, unions, packageName, indent)
+                    generateAssertStatement(assertions, statement.expression, unions, methodsToRewrite, packageName, indent)
                 } else {
                     ""
                 }
-                "$assert${buildIndent(indent)}${statement.name} = ${expressionToString(statement.expression, assertions, unions, packageName)}"
+                "$assert${buildIndent(indent)}${statement.name} = ${expressionToString(statement.expression, assertions, unions, methodsToRewrite, packageName)}"
             }
             is WhileStatementWithType -> {
                 val statements = statement.statements
                         .stream()
-                        .map { statementToPython(it, assertions, unions, packageName, indent + 1) }
+                        .map { statementToPython(it, assertions, unions, methodsToRewrite, packageName, indent + 1) }
                         .collect(Collectors.joining("\n"))
-                "${buildIndent(indent)}while ${expressionToString(statement.condition, assertions, unions, packageName)}:\n$statements"
+                "${buildIndent(indent)}while ${expressionToString(statement.condition, assertions, unions, methodsToRewrite, packageName)}:\n$statements"
             }
             is AssertStatementWithType -> generateAssertStatement(
                     assertions,
                     statement.checkExpression,
                     statement.messageExpression,
                     unions,
+                    methodsToRewrite,
                     packageName,
                     indent)
             is DefCallStatementWithType -> {
                 val parameters = statement.parameters
                         .stream()
-                        .map { expressionToString(it, assertions, unions, packageName) }
+                        .map { expressionToString(it, assertions, unions, methodsToRewrite, packageName) }
                         .collect(Collectors.joining(", "))
-
+                val name = findMethodNameFromExpression(
+                        statement.packageName,
+                        statement.defName,
+                        statement.parameters,
+                        methodsToRewrite)
                 buildIndent(indent) + if (statement.packageName == packageName) {
-                    "${statement.defName}($parameters)"
+                    "$name($parameters)"
                 } else {
-                    "${packageToPythonPackage(statement.packageName)}.${statement.defName}($parameters)"
+                    "${packageToPythonPackage(statement.packageName)}.$name($parameters)"
                 }
             }
         }
@@ -410,6 +443,7 @@ private fun generateAssertStatement(
         assertions: Boolean,
         expression: ExpressionWithReturnType,
         unions: Set<UnionWithType>,
+        methodsToRewrite: Set<MethodToRewrite>,
         packageName: String,
         indent: Int = 1): String {
     return if (expression is AssertExpressionWithReturnType) {
@@ -418,6 +452,7 @@ private fun generateAssertStatement(
                 expression.checkExpression,
                 expression.messageExpression,
                 unions,
+                methodsToRewrite,
                 packageName,
                 indent)
     } else {
@@ -430,21 +465,26 @@ private fun generateAssertStatement(
         checkExpression: ExpressionWithReturnType,
         messageExpression: ExpressionWithReturnType?,
         unions: Set<UnionWithType>,
+        methodsToRewrite: Set<MethodToRewrite>,
         packageName: String,
         indent: Int = 0): String {
     return if (assertions) {
         val message = if (messageExpression != null) {
-            expressionToString(messageExpression, assertions, unions, packageName)
+            expressionToString(messageExpression, assertions, unions, methodsToRewrite, packageName)
         } else {
             "\"<no message>\""
         }
-        "${buildIndent(indent)}if not ${expressionToString(checkExpression, assertions, unions, packageName)}: raise AssertionError($message)\n"
+        "${buildIndent(indent)}if not ${expressionToString(checkExpression, assertions, unions, methodsToRewrite, packageName)}: raise AssertionError($message)\n"
     } else {
         ""
     }
 }
 
-private fun expressionToString(expression: ExpressionWithReturnType, assertions: Boolean, unions: Set<UnionWithType>, packageName: String): String =
+private fun expressionToString(expression: ExpressionWithReturnType,
+                               assertions: Boolean,
+                               unions: Set<UnionWithType>,
+                               methodsToRewrite: Set<MethodToRewrite>,
+                               packageName: String): String =
         when (expression) {
             is ParameterExpressionWithReturnType -> expression.valueName
             is IntegerExpressionWithReturnType -> expression.value.toString()
@@ -453,16 +493,16 @@ private fun expressionToString(expression: ExpressionWithReturnType, assertions:
             is StringExpressionWithReturnType -> "\"${expression.value}\""
             is NothingExpressionWithReturnType -> "None"
             is FunctionInvocationExpressionWithReturnType ->
-                methodToString(expression.parameters, expression.packageName, expression.functionName, assertions, unions, packageName)
+                methodToString(expression.parameters, expression.packageName, expression.functionName, assertions, unions, methodsToRewrite, packageName)
             is DefInvocationExpressionWithReturnType ->
-                methodToString(expression.parameters, expression.packageName, expression.functionName, assertions, unions, packageName)
-            is InfixExpressionWithReturnType -> "(${expressionToString(expression.left, assertions, unions, packageName)}) ${mapInfixOperator(expression)} (${expressionToString(expression.right, assertions, unions, packageName)})"
-            is IfExpressionWithReturnType -> "(${expressionToString(expression.trueBranch, assertions, unions, packageName)}) if (${expressionToString(expression.condition, assertions, unions, packageName)}) else (${expressionToString(expression.falseBranch, assertions, unions, packageName)})"
-            is NegateExpressionWithReturnType -> "not ${expressionToString(expression.negateExpression, assertions, unions, packageName)}"
+                methodToString(expression.parameters, expression.packageName, expression.functionName, assertions, unions, methodsToRewrite, packageName)
+            is InfixExpressionWithReturnType -> "(${expressionToString(expression.left, assertions, unions, methodsToRewrite, packageName)}) ${mapInfixOperator(expression)} (${expressionToString(expression.right, assertions, unions, methodsToRewrite, packageName)})"
+            is IfExpressionWithReturnType -> "(${expressionToString(expression.trueBranch, assertions, unions, methodsToRewrite, packageName)}) if (${expressionToString(expression.condition, assertions, unions, methodsToRewrite, packageName)}) else (${expressionToString(expression.falseBranch, assertions, unions, methodsToRewrite, packageName)})"
+            is NegateExpressionWithReturnType -> "not ${expressionToString(expression.negateExpression, assertions, unions, methodsToRewrite, packageName)}"
             is NewStructExpressionWithReturnType -> {
                 val parameters = expression.fields
                         .stream()
-                        .map { (name, expression) -> Pair(name, expressionToString(expression, assertions, unions, packageName)) }
+                        .map { (name, expression) -> Pair(name, expressionToString(expression, assertions, unions, methodsToRewrite, packageName)) }
                         .map { (name, value) -> "${name}=${value}" }
                         .collect(Collectors.joining(", "))
                 if (expression.returnType.packageName == packageName) {
@@ -474,10 +514,10 @@ private fun expressionToString(expression: ExpressionWithReturnType, assertions:
             is ValueExpressionWithReturnType -> expression.valueName
             is NewListExpressionWithReturnType -> expression.elements
                     .stream()
-                    .map { expressionToString(it, assertions, unions, packageName) }
+                    .map { expressionToString(it, assertions, unions, methodsToRewrite, packageName) }
                     .collect(Collectors.joining(", ", "[", "]"))
             is StructureAccessExpressionWithReturnType -> {
-                "${expression.structureName}[${expressionToString(expression.structureIndex, assertions, unions, packageName)}]"
+                "${expression.structureName}[${expressionToString(expression.structureIndex, assertions, unions, methodsToRewrite, packageName)}]"
             }
             is IsExpressionWithReturnType -> {
                 val union = unions.stream()
@@ -493,9 +533,9 @@ private fun expressionToString(expression: ExpressionWithReturnType, assertions:
                     isInstance(expression.value, expression.type)
                 }
             }
-            is StructFieldAccessExpressionWithReturnType -> "${expressionToString(expression.structureExpression, assertions, unions, packageName)}.${expression.fieldName}"
+            is StructFieldAccessExpressionWithReturnType -> "${expressionToString(expression.structureExpression, assertions, unions, methodsToRewrite, packageName)}.${expression.fieldName}"
             is AssertExpressionWithReturnType -> {
-                expressionToString(expression.returnExpression, assertions, unions, packageName)
+                expressionToString(expression.returnExpression, assertions, unions, methodsToRewrite, packageName)
             }
         }
 
@@ -505,15 +545,56 @@ private fun methodToString(
         expressionFunctionName: String,
         assertions: Boolean,
         unions: Set<UnionWithType>,
+        methodsToRewrite: Set<MethodToRewrite>,
         packageName: String): String {
     val parameters = expressionParameters
             .stream()
-            .map { expressionToString(it, assertions, unions, packageName) }
+            .map { expressionToString(it, assertions, unions, methodsToRewrite, packageName) }
             .collect(Collectors.joining(", "))
+    val name = findMethodNameFromExpression(expressionPackageName, expressionFunctionName, expressionParameters, methodsToRewrite)
     return if (expressionPackageName == packageName) {
-        "${expressionFunctionName}($parameters)"
+        "$name($parameters)"
     } else {
-        "${packageToPythonPackage(expressionPackageName)}.${expressionFunctionName}($parameters)"
+        "${packageToPythonPackage(expressionPackageName)}.$name($parameters)"
+    }
+}
+
+
+private fun findMethodNameFromExpression(methodPackageName: String,
+                                         methodName: String,
+                                         methodParameters: List<ExpressionWithReturnType>,
+                                         methodsToRewrite: Set<MethodToRewrite>): String =
+        findMethodName(methodPackageName,
+                methodName,
+                methodParameters.map { it.returnType },
+                methodsToRewrite)
+
+private fun findMethodNameFromParameter(methodPackageName: String,
+                                        methodName: String,
+                                        methodParameters: List<ParameterToExport>,
+                                        methodsToRewrite: Set<MethodToRewrite>): String =
+        findMethodName(methodPackageName,
+                methodName,
+                methodParameters.map { it.type },
+                methodsToRewrite)
+
+private fun findMethodName(methodPackageName: String,
+                           methodName: String,
+                           methodParameters: List<Type>,
+                           methodsToRewrite: Set<MethodToRewrite>): String {
+    val isDuplicated = methodsToRewrite.stream()
+            .filter { it.packageName == methodPackageName }
+            .filter { it.name == it.name }
+            .findAny()
+            .isPresent
+    return if (isDuplicated) {
+        val par = methodParameters
+                .stream()
+                .map { it.packageName.replace("/", "_") + "_" + it.name }
+                .collect(Collectors.joining("_"))
+        methodName + par
+    } else {
+        methodName
     }
 }
 

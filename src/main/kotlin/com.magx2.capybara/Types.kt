@@ -1,6 +1,7 @@
 package com.magx2.capybara
 
 import java.util.regex.Pattern
+import java.util.stream.Collectors
 import java.util.stream.Stream
 import kotlin.streams.toList
 
@@ -14,6 +15,22 @@ object BasicTypes {
     val listType = Type(typePackageName, "List")
     val anyType = Type(typePackageName, "Any")
     val nothingType = Type(typePackageName, "Nothing")
+}
+
+
+fun funToString(function: FunctionToExport): String =
+        methodToString(function.packageName, function.name, function.parameters)
+
+fun defToString(def: DefToExport): String =
+        methodToString(def.packageName, def.name, def.parameters)
+
+fun methodToString(packageName: String, name: String, parameters: List<ParameterToExport>): String {
+    val p = parameters
+            .stream()
+            .map { it.type }
+            .map { typeToString(it) }
+            .collect(Collectors.joining(", "))
+    return "${packageName}:${name}($p)"
 }
 
 fun typeToString(type: Type): String =

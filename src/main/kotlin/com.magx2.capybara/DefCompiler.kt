@@ -41,6 +41,7 @@ class DefCompiler(private val compilationContext: CompilationContext,
             }
         }
         return DefWithTypes(
+                def.codeMetainfo,
                 def.packageName,
                 def.name,
                 parameters,
@@ -68,6 +69,7 @@ class DefCompiler(private val compilationContext: CompilationContext,
             emptyList()
         }
         return NativeDefWithTypes(
+                def.codeMetainfo,
                 def.packageName,
                 def.name,
                 parameters,
