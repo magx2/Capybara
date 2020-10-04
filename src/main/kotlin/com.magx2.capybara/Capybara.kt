@@ -14,6 +14,7 @@ import java.util.stream.Collector.Characteristics.UNORDERED
 import java.util.stream.Collectors
 import java.util.stream.Stream
 import kotlin.collections.HashMap
+import kotlin.collections.HashSet
 import kotlin.streams.asStream
 import kotlin.streams.toList
 import kotlin.system.exitProcess
@@ -279,6 +280,7 @@ fun main(options: CommandLineOptions) {
                         functionsWithReturnType.stream()
                                 .map {
                                     FunctionToExport(
+                                            it.codeMetainfo,
                                             it.packageName,
                                             it.name,
                                             it.returnExpression,
@@ -329,9 +331,8 @@ fun main(options: CommandLineOptions) {
 
             })
 
-    //
-    // DEFINITIONS
-    //
+    compilationUnitsToExport.stream()
+            .forEach { unit -> checkDuplicateMethods(unit) }
 
     //
     // EXPORT TO FILE
@@ -344,6 +345,69 @@ fun main(options: CommandLineOptions) {
         log.info("Not exporting files, because `outputDir` is not set")
     }
 }
+
+private fun checkDuplicateMethods(unit: CompileUnitToExport): CompileUnitToExport {
+    val funDef = concat(unit.functions
+            .stream()
+            .map { Method("Fun", it.codeMetainfo, it.packageName, it.name, it.parameters) },
+            unit.defs
+                    .stream()
+                    .map { Method("Def", it.codeMetainfo, it.packageName, it.name, it.parameters) })
+            .toList()
+    checkDuplicates(funDef)
+
+    return unit
+}
+
+data class Method(val type: String, val codeMetainfo: CodeMetainfo, val packageName: String, val name: String, val parameters: List<ParameterToExport>)
+
+private fun checkDuplicates(funDef: Collection<Method>) {
+    val duplicateMethod = funDef.stream()
+            .collect(Collectors.groupingBy { it.name })
+            .entries
+            .stream()
+            .map { it.value }
+            .filter { it.size > 1 }
+            .map { duplicateFunctionNames ->
+                val toReturn = HashSet<Method>()
+                for (first in duplicateFunctionNames.indices) {
+                    for (second in (first + 1) until duplicateFunctionNames.size) {
+                        val firstFun = duplicateFunctionNames[first]
+                        val secondFun = duplicateFunctionNames[second]
+                        if (parametersAreEqual(
+                                        firstFun.parameters,
+                                        secondFun.parameters)) {
+                            toReturn.add(firstFun)
+                            toReturn.add(secondFun)
+                        }
+                    }
+                }
+                toReturn
+            }
+            .filter { it.isNotEmpty() }
+            .map { it.last() }
+            .findFirst()
+    if (duplicateMethod.isPresent) {
+        val (type, codeMetainfo, packageName, name, parameters) = duplicateMethod.get()
+        throw CompilationException(codeMetainfo, "$type `${methodToString(packageName, name, parameters)}` is duplicated.")
+    }
+}
+
+private fun parametersAreEqual(first: List<ParameterToExport>, second: List<ParameterToExport>): Boolean =
+        if (first.size == second.size) {
+            var equal = true
+            for (i in first.indices) {
+                val firstParam = first[i]
+                val secondParam = second[i]
+                if (firstParam != secondParam) {
+                    equal = false
+                    break
+                }
+            }
+            equal
+        } else {
+            false
+        }
 
 private fun buildFunctions(unit: CompileUnitWithFlatStructs, compilationContext: CompilationContext, fullyQualifiedStructNames: Map<Type, Struct>): Set<FunctionWithReturnType> {
     return unit.functions
@@ -375,6 +439,7 @@ private fun buildFunctions(unit: CompileUnitWithFlatStructs, compilationContext:
                         .map { parseTypedParameter(it, compilationContext, pair.unit) }
                         .toList()
                 FunctionWithReturnType(
+                        pair.function.codeMetainfo,
                         pair.function.packageName,
                         pair.function.name,
                         pair.expression,

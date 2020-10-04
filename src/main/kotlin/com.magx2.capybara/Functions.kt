@@ -11,11 +11,13 @@ data class Function(val codeMetainfo: CodeMetainfo,
                     val assignments: List<AssigmentStatement>,
                     val returnExpression: Expression)
 
-data class FunctionWithReturnType(val packageName: String,
-                                  val name: String,
-                                  val returnExpression: ExpressionWithReturnType,
-                                  val parameters: List<TypedParameter>,
-                                  val assignments: List<AssigmentStatementWithType>)
+data class FunctionWithReturnType(
+        val codeMetainfo: CodeMetainfo,
+        val packageName: String,
+        val name: String,
+        val returnExpression: ExpressionWithReturnType,
+        val parameters: List<TypedParameter>,
+        val assignments: List<AssigmentStatementWithType>)
 
 class FunctionCompiler(private val compilationContext: CompilationContext,
                        private val compileUnit: CompileUnitWithFlatStructs,

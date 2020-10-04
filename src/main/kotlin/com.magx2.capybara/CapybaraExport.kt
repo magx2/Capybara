@@ -32,35 +32,40 @@ data class StructToExport(val type: Type,
 
 data class FieldToExport(val name: String, val type: Type)
 
-data class FunctionToExport(val packageName: String,
+data class FunctionToExport(val codeMetainfo: CodeMetainfo,
+                            val packageName: String,
                             val name: String,
                             val returnExpression: ExpressionWithReturnType,
                             val parameters: List<ParameterToExport>,
                             val assignments: List<AssigmentStatementWithType>)
 
 sealed class AbstractDefToExport(
+        open val codeMetainfo: CodeMetainfo,
         open val packageName: String,
         open val name: String,
         open val parameters: List<ParameterToExport>,
         open val returnType: Type?)
 
 data class DefToExport(
+        override val codeMetainfo: CodeMetainfo,
         override val packageName: String,
         override val name: String,
         override val parameters: List<ParameterToExport>,
         val statements: List<StatementWithType>,
-        val returnExpression: ExpressionWithReturnType?) : AbstractDefToExport(packageName, name, parameters, returnExpression?.returnType)
+        val returnExpression: ExpressionWithReturnType?) : AbstractDefToExport(codeMetainfo, packageName, name, parameters, returnExpression?.returnType)
 
-data class NativeDefToExport(override val packageName: String,
-                             override val name: String,
-                             override val parameters: List<ParameterToExport>,
-                             override val returnType: Type?,
-                             val nativeStatements: List<String>) : AbstractDefToExport(packageName, name, parameters, returnType)
+data class NativeDefToExport(
+        override val codeMetainfo: CodeMetainfo, override val packageName: String,
+        override val name: String,
+        override val parameters: List<ParameterToExport>,
+        override val returnType: Type?,
+        val nativeStatements: List<String>) : AbstractDefToExport(codeMetainfo, packageName, name, parameters, returnType)
 
 fun mapDef(def: AbstractDefWithTypes) =
         when (def) {
             is DefWithTypes ->
                 DefToExport(
+                        def.codeMetainfo,
                         def.packageName,
                         def.name,
                         def.parameters.map { ParameterToExport(it.name, it.type) },
@@ -68,6 +73,7 @@ fun mapDef(def: AbstractDefWithTypes) =
                         def.returnExpression)
             is NativeDefWithTypes ->
                 NativeDefToExport(
+                        def.codeMetainfo,
                         def.packageName,
                         def.name,
                         def.parameters.map { ParameterToExport(it.name, it.type) },
