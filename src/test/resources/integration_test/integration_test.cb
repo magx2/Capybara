@@ -6,8 +6,7 @@ fun multiply(Int) = int * 2
 
 fun assert_message(given: String, expected: String) = given + " * 2 != " + expected + " o.O?"
 
-fun main(args: List[String]): Boolean {
+def main(args: List[String]) {
 	x = /misc/union:test_assign()
-	return assert multiply(2) == 4 true "2 * 2 != 4 o.O?"
 }
 
