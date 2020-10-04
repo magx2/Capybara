@@ -4,9 +4,13 @@ import /capybara/type
 
 fun x_fun(Int) = 5
 
+def x_fun(Int, String) = 5
+
 fun x_fun(String) = "foo"
 
 fun x_fun() = 44
+
+def x_fun(Float) = 44
 
 def x_def(Int): Int {
 	return 6

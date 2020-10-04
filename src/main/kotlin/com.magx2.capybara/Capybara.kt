@@ -331,20 +331,40 @@ fun main(options: CommandLineOptions) {
 
             })
 
-    compilationUnitsToExport.stream()
-            .forEach { unit -> checkDuplicateMethods(unit) }
+    val methodsToRewrite = compilationUnitsToExport.stream()
+            .map { unit -> checkDuplicateMethods(unit) }
+            .flatMap { unit -> findMethodsToRewrite(unit) }
+            .toList()
+            .toSet()
 
     //
     // EXPORT TO FILE
     //
     if (options.outputDir != null) {
         log.info("Exporting files to ${options.outputDir}")
-        val exporter = PythonExport(options.outputDir, options.disableAssertions.not())
+        val exporter = PythonExport(options.outputDir, methodsToRewrite, options.disableAssertions.not())
         compilationUnitsToExport.forEach { exporter.export(it) }
     } else {
         log.info("Not exporting files, because `outputDir` is not set")
     }
 }
+
+data class MethodToRewrite(val packageName: String, val name: String)
+
+private fun findMethodsToRewrite(unit: CompileUnitToExport): Stream<MethodToRewrite> =
+        concat(
+                unit.functions
+                        .stream()
+                        .map { MethodToRewrite(it.packageName, it.name) },
+                unit.defs
+                        .stream()
+                        .map { MethodToRewrite(it.packageName, it.name) })
+                .collect(Collectors.groupingBy { it.name })
+                .entries
+                .stream()
+                .map { it.value }
+                .filter { it.size > 1 }
+                .map { it.first() }
 
 private fun checkDuplicateMethods(unit: CompileUnitToExport): CompileUnitToExport {
     val funDef = concat(unit.functions

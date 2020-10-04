@@ -86,7 +86,9 @@ data class ParameterToExport(val name: String, val type: Type)
 
 private val log = LoggerFactory.getLogger(PythonExport::class.java)
 
-class PythonExport(private val outputDir: String, private val assertions: Boolean) : CapybaraExport {
+class PythonExport(private val outputDir: String,
+                   private val methodsToRewrite: Set<MethodToRewrite>,
+                   private val assertions: Boolean) : CapybaraExport {
     private val initFilesDirectories = HashSet<String>()
 
     override fun export(unit: CompileUnitToExport) {
