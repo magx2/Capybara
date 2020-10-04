@@ -7,6 +7,6 @@ fun multiply(Int) = int * 2
 fun assert_message(given: String, expected: String) = given + " * 2 != " + expected + " o.O?"
 
 def main(args: List[String]) {
-	x = /misc/union:test_assign()
+	x = assert_message("foo", "boo")
 }
 
