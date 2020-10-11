@@ -239,6 +239,11 @@ private fun findImports(expresion: ExpressionWithReturnType?, packageName: Strin
                         emptyList()
                     }
                 is ValueExpressionWithReturnType -> emptyList()
+                is LambdaExpressionWithReturnType ->
+                    expresion.expressions
+                            .stream()
+                            .flatMap { findImports(it, packageName).stream() }
+                            .toList()
                 is StructFieldAccessExpressionWithReturnType -> findImports(expresion.structureExpression, packageName)
                 is NewListExpressionWithReturnType -> expresion.elements.flatMap { findImports(it, packageName) }
                 is AssertExpressionWithReturnType -> findImports(expresion.checkExpression, packageName) + findImports(expresion.returnExpression, packageName) + (if (expresion.messageExpression != null) findImports(expresion.messageExpression, packageName) else emptyList())
@@ -569,6 +574,9 @@ private fun expressionToString(expression: ExpressionWithReturnType,
                 }
             }
             is ValueExpressionWithReturnType -> expression.valueName
+            is LambdaExpressionWithReturnType -> {
+                "lambda: " + expressionToString(expression.expressions.last(), assertions, unions, methodsToRewrite, packageName)
+            }
             is NewListExpressionWithReturnType -> expression.elements
                     .stream()
                     .map { expressionToString(it, assertions, unions, methodsToRewrite, packageName) }

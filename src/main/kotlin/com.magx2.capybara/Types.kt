@@ -13,6 +13,7 @@ object BasicTypes {
     val booleanType = Type(typePackageName, "Boolean")
     val stringType = Type(typePackageName, "String")
     val listType = Type(typePackageName, "List")
+    val lambdaType = Type(typePackageName, "Lambda")
     val anyType = Type(typePackageName, "Any")
     val nothingType = Type(typePackageName, "Nothing")
 }

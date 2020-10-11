@@ -214,6 +214,15 @@ class ExpressionCompiler(private val assignments: List<AssigmentStatementWithTyp
                             .findAny()
                             .orElseThrow { CompilationException(expression.codeMetainfo, "There is no value with name `${expression.valueName}`") }
                 }
+                is LambdaExpression -> {
+                    val expressions = expression.expressions
+                            .stream()
+                            .map { findReturnType(it, casts, notCasts, callStack) }
+                            .toList()
+                    val lastExpressionReturnType = expressions.last().returnType
+                    val returnType = addGenericType(BasicTypes.lambdaType, lastExpressionReturnType)
+                    LambdaExpressionWithReturnType(returnType, expressions)
+                }
                 is StructFieldAccessExpression -> {
                     val structExpression = findReturnType(expression.structureExpression, casts, notCasts, callStack)
                     val structType = structExpression.returnType

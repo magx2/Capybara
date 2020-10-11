@@ -10,6 +10,8 @@ struct String {}
 
 struct List {}
 
+struct Lambda {}
+
 struct Any {}
 
 struct Nothing {}

@@ -61,6 +61,7 @@ expression
 	: ROUNDL in_parenthisis_expression=expression ROUNDR
 	| constant
 	| value=SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL
+	| lambda=lambda_expression
 	| structure_expression=expression DOT field_name=SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL
 	| BANG negate_expression=expression
 	| function_qualified_name=fully_qualified_function ROUNDL parameters? ROUNDR
@@ -73,6 +74,14 @@ expression
 	| structureAccessExpression
 	| is_value=SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL IS is_type=fullyQualifiedType
 	| ASSERT check_expression=expression return_expression=expression message_expression=expression?
+	;
+
+lambda_expression
+	: CURLYL lambda_body CURLYR
+	;
+
+lambda_body
+	: expression ((SEMICOLON|NEWLINE) expression)*
 	;
 
 struct_field_initializations

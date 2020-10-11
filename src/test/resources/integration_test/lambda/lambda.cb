@@ -1,0 +1,6 @@
+package /lambda
+
+import /capybara/type
+
+fun simple_lambda(): Lambda[Int] = { 44 }
+
