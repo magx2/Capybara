@@ -12,6 +12,7 @@ import java.io.File
 import java.lang.String.join
 import java.nio.file.Paths
 import java.util.stream.Collectors
+import java.util.stream.Stream
 import kotlin.streams.toList
 
 interface CapybaraExport {
@@ -92,17 +93,10 @@ class PythonExport(private val outputDir: String,
     private val initFilesDirectories = HashSet<String>()
 
     override fun export(unit: CompileUnitToExport) {
-        val imports = unit.functions
-                .stream()
-                .flatMap { function ->
-                    concat(
-                            findImports(function.returnExpression, unit.packageName).stream(),
-                            function.assignments
-                                    .stream()
-                                    .map { findImports(it.expression, unit.packageName) }
-                                    .flatMap { it.stream() }
-                    )
-                }
+        val imports = concat(
+                findImportsForFunctions(unit),
+                findImportsForDefs(unit))
+                .distinct()
                 .map { packageToPythonPackage(it) }
                 .map { "import $it" }
 
@@ -157,6 +151,59 @@ class PythonExport(private val outputDir: String,
             initFilesDirectories.add(directory.absolutePath)
         }
     }
+
+    private fun findImportsForFunctions(unit: CompileUnitToExport): Stream<String> =
+            unit.functions
+                    .stream()
+                    .flatMap { function ->
+                        concat(
+                                findImports(function.returnExpression, unit.packageName).stream(),
+                                function.assignments
+                                        .stream()
+                                        .map { findImports(it.expression, unit.packageName) }
+                                        .flatMap { it.stream() }
+                        )
+                    }
+
+    private fun findImportsForDefs(unit: CompileUnitToExport): Stream<String> =
+            unit.defs
+                    .stream()
+                    .filter { def -> def is DefToExport }
+                    .map { def -> def as DefToExport }
+                    .flatMap { def ->
+                        concat(
+                                findImports(def.returnExpression, unit.packageName).stream(),
+                                def.statements
+                                        .stream()
+                                        .flatMap { statement -> findImportsForStatement(statement, unit.packageName) }
+                        )
+                    }
+
+    private fun findImportsForStatement(statement: StatementWithType, packageName: String): Stream<String> =
+            when (statement) {
+                is AssigmentStatementWithType -> findImports(statement.expression, packageName).stream()
+                is AssertStatementWithType -> {
+                    if (assertions) {
+                        concat(
+                                findImports(statement.checkExpression, packageName).stream(),
+                                findImports(statement.messageExpression, packageName).stream()
+                        )
+                    } else {
+                        Stream.empty()
+                    }
+                }
+                is WhileStatementWithType -> {
+                    concat(
+                            findImports(statement.condition, packageName).stream(),
+                            statement.statements
+                                    .stream()
+                                    .flatMap { it -> findImportsForStatement(it, packageName) })
+                }
+                is DefCallStatementWithType ->
+                    statement.parameters
+                            .stream()
+                            .flatMap { findImports(it, packageName).stream() }
+            }
 }
 
 private fun writeAllToPackageFile(outputDir: String, packageName: String, texts: List<String>) {
@@ -169,33 +216,37 @@ private fun writeAllToPackageFile(outputDir: String, packageName: String, texts:
     }
 }
 
-private fun findImports(expresion: ExpressionWithReturnType, packageName: String): List<String> =
-        when (expresion) {
-            is ParameterExpressionWithReturnType -> emptyList()
-            is IntegerExpressionWithReturnType -> emptyList()
-            is FloatExpressionWithReturnType -> emptyList()
-            is BooleanExpressionWithReturnType -> emptyList()
-            is StringExpressionWithReturnType -> emptyList()
-            NothingExpressionWithReturnType -> emptyList()
-            is FunctionInvocationExpressionWithReturnType ->
-                exportMethodInvocation(expresion.parameters, expresion.packageName, packageName)
-            is DefInvocationExpressionWithReturnType ->
-                exportMethodInvocation(expresion.parameters, expresion.packageName, packageName)
-            is InfixExpressionWithReturnType -> findImports(expresion.left, packageName) + findImports(expresion.right, packageName)
-            is IfExpressionWithReturnType -> findImports(expresion.condition, packageName) + findImports(expresion.trueBranch, packageName) + findImports(expresion.falseBranch, packageName)
-            is NegateExpressionWithReturnType -> findImports(expresion.negateExpression, packageName)
-            is NewStructExpressionWithReturnType ->
-                if (packageName != expresion.returnType.packageName) {
-                    listOf(expresion.returnType.packageName)
-                } else {
-                    emptyList()
-                }
-            is ValueExpressionWithReturnType -> emptyList()
-            is StructFieldAccessExpressionWithReturnType -> findImports(expresion.structureExpression, packageName)
-            is NewListExpressionWithReturnType -> expresion.elements.flatMap { findImports(it, packageName) }
-            is AssertExpressionWithReturnType -> findImports(expresion.checkExpression, packageName) + findImports(expresion.returnExpression, packageName) + (if (expresion.messageExpression != null) findImports(expresion.messageExpression, packageName) else emptyList())
-            is StructureAccessExpressionWithReturnType -> findImports(expresion.structureIndex, packageName)
-            is IsExpressionWithReturnType -> emptyList()
+private fun findImports(expresion: ExpressionWithReturnType?, packageName: String): List<String> =
+        if (expresion != null) {
+            when (expresion) {
+                is ParameterExpressionWithReturnType -> emptyList()
+                is IntegerExpressionWithReturnType -> emptyList()
+                is FloatExpressionWithReturnType -> emptyList()
+                is BooleanExpressionWithReturnType -> emptyList()
+                is StringExpressionWithReturnType -> emptyList()
+                NothingExpressionWithReturnType -> emptyList()
+                is FunctionInvocationExpressionWithReturnType ->
+                    exportMethodInvocation(expresion.parameters, expresion.packageName, packageName)
+                is DefInvocationExpressionWithReturnType ->
+                    exportMethodInvocation(expresion.parameters, expresion.packageName, packageName)
+                is InfixExpressionWithReturnType -> findImports(expresion.left, packageName) + findImports(expresion.right, packageName)
+                is IfExpressionWithReturnType -> findImports(expresion.condition, packageName) + findImports(expresion.trueBranch, packageName) + findImports(expresion.falseBranch, packageName)
+                is NegateExpressionWithReturnType -> findImports(expresion.negateExpression, packageName)
+                is NewStructExpressionWithReturnType ->
+                    if (packageName != expresion.returnType.packageName) {
+                        listOf(expresion.returnType.packageName)
+                    } else {
+                        emptyList()
+                    }
+                is ValueExpressionWithReturnType -> emptyList()
+                is StructFieldAccessExpressionWithReturnType -> findImports(expresion.structureExpression, packageName)
+                is NewListExpressionWithReturnType -> expresion.elements.flatMap { findImports(it, packageName) }
+                is AssertExpressionWithReturnType -> findImports(expresion.checkExpression, packageName) + findImports(expresion.returnExpression, packageName) + (if (expresion.messageExpression != null) findImports(expresion.messageExpression, packageName) else emptyList())
+                is StructureAccessExpressionWithReturnType -> findImports(expresion.structureIndex, packageName)
+                is IsExpressionWithReturnType -> emptyList()
+            }
+        } else {
+            emptyList()
         }
 
 private fun exportMethodInvocation(
