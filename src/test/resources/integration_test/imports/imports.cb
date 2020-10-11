@@ -10,7 +10,7 @@ fun a_first_struct(FirstStruct) = first_struct.i1 + first_struct.i2
 
 fun b_first_struct(/imports/b_structs/FirstStruct) = first_struct.i5 - first_struct.i6
 
-fun main(List[String]): Boolean {
+def main(List[String]): Boolean {
 	// functions
 	t1 = assert (import_functions(0) == 0) nothing
 	t2 = assert (import_functions(1) == 2) nothing
