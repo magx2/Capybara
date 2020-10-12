@@ -4,3 +4,19 @@ import /capybara/type
 
 fun simple_lambda(): Lambda[Int] = { 44 }
 
+fun lambda_as_assignment(): Int {
+	local_lambda = { 55 }
+	return local_lambda()
+}
+
+fun lambda_as_parameter(l : Lambda[Int]): Int {
+	return l()
+}
+
+def main(List[String]) {
+	assert /lambda:simple_lambda()() == 44, "Simple lambda should return `44`!"
+	assert simple_lambda()() == 44, "Simple lambda should return `44` (no fully qualified name)!"
+	assert lambda_as_assignment() == 55 ,"`lambda_as_assignment` should return `55`!"
+	assert lambda_as_parameter({ 66 }) == 66, "`lambda_as_parameter` should return `66`!"
+}
+

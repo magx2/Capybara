@@ -263,8 +263,7 @@ internal class ExpressionCompilerKtTest {
         val functionName = "f"
         val expression = FunctionInvocationExpression(
                 CodeMetainfo("/home/capybara/xyz.cb", 1, 2),
-                null,
-                functionName,
+                FunctionInvocationByName(null, functionName),
                 listOf())
 
         val function = Function(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "pkg_name", functionName, null, listOf(), listOf(), stringExpression())
@@ -297,8 +296,7 @@ internal class ExpressionCompilerKtTest {
         val functionName = "f"
         val expression = FunctionInvocationExpression(
                 CodeMetainfo("/home/capybara/xyz.cb", 1, 2),
-                null,
-                functionName,
+                FunctionInvocationByName(null, functionName),
                 listOf())
 
         val function = Function(
@@ -338,8 +336,7 @@ internal class ExpressionCompilerKtTest {
         val functionName = "f"
         val expression = FunctionInvocationExpression(
                 CodeMetainfo("/home/capybara/xyz.cb", 1, 2),
-                null,
-                functionName,
+                FunctionInvocationByName(null, functionName),
                 listOf(stringExpression(), integerExpression(), booleanExpression()))
         val parameters = listOf(
                 Parameter(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "foo", typeToString(stringType)),
@@ -375,8 +372,7 @@ internal class ExpressionCompilerKtTest {
         val functionName = "f"
         val expression = FunctionInvocationExpression(
                 CodeMetainfo("/home/capybara/xyz.cb", 1, 2),
-                null,
-                functionName,
+                FunctionInvocationByName(null, functionName),
                 listOf())
 
         val function = Function(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "pkg_name", functionName, null, listOf(), listOf(), stringExpression())
@@ -409,8 +405,7 @@ internal class ExpressionCompilerKtTest {
         val functionName = "f"
         val expression = FunctionInvocationExpression(
                 CodeMetainfo("/home/capybara/xyz.cb", 1, 2),
-                null,
-                functionName,
+                FunctionInvocationByName(null, functionName),
                 listOf(stringExpression(), integerExpression(), booleanExpression()))
         val parameters = listOf(
                 Parameter(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "foo", typeToString(stringType)),
@@ -446,8 +441,7 @@ internal class ExpressionCompilerKtTest {
         val functionName = "f"
         val expression = FunctionInvocationExpression(
                 CodeMetainfo("/home/capybara/xyz.cb", 1, 2),
-                null,
-                functionName,
+                FunctionInvocationByName(null, functionName),
                 listOf())
         val localFunction = Function(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "pkg_name", functionName, null, listOf(), listOf(), stringExpression())
         val importedFunction = Function(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "pkg_name", functionName, null, listOf(), listOf(), integerExpression())
@@ -481,8 +475,7 @@ internal class ExpressionCompilerKtTest {
         val functionName = "f"
         val expression = FunctionInvocationExpression(
                 CodeMetainfo("/home/capybara/xyz.cb", 1, 2),
-                packageName,
-                functionName,
+                FunctionInvocationByName(packageName, functionName),
                 listOf())
         val function = Function(
                 CodeMetainfo("/home/capybara/xyz.cb", 1, 2),
@@ -516,8 +509,7 @@ internal class ExpressionCompilerKtTest {
         val functionName = "f"
         val expression = FunctionInvocationExpression(
                 CodeMetainfo("/home/capybara/xyz.cb", 1, 2),
-                packageName,
-                functionName,
+                FunctionInvocationByName(packageName, functionName),
                 listOf(stringExpression(), integerExpression(), booleanExpression()))
         val parameters = listOf(
                 Parameter(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "foo", typeToString(stringType)),
@@ -556,8 +548,7 @@ internal class ExpressionCompilerKtTest {
         val functionName = "f"
         val expression = FunctionInvocationExpression(
                 CodeMetainfo("/home/capybara/xyz.cb", 1, 2),
-                packageName,
-                functionName,
+                FunctionInvocationByName(packageName, functionName),
                 listOf(stringExpression(), integerExpression(), booleanExpression()))
 
         // when
@@ -581,8 +572,7 @@ internal class ExpressionCompilerKtTest {
         val functionName = "f"
         val expression = FunctionInvocationExpression(
                 CodeMetainfo("/home/capybara/xyz.cb", 1, 2),
-                packageName,
-                functionName,
+                FunctionInvocationByName(packageName, functionName),
                 listOf(stringExpression(), integerExpression()))
         val parameters = listOf(
                 Parameter(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "foo", typeToString(stringType)),
@@ -622,8 +612,7 @@ internal class ExpressionCompilerKtTest {
         val functionName = "f"
         val expression = FunctionInvocationExpression(
                 CodeMetainfo("/home/capybara/xyz.cb", 1, 2),
-                null,
-                functionName,
+                FunctionInvocationByName(null, functionName),
                 listOf(stringExpression(), integerExpression()))
         val parameters = listOf(
                 Parameter(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "foo", typeToString(stringType)),
@@ -669,8 +658,7 @@ internal class ExpressionCompilerKtTest {
         val functionName = "f"
         val expression = FunctionInvocationExpression(
                 CodeMetainfo("/home/capybara/xyz.cb", 1, 2),
-                packageName,
-                functionName,
+                FunctionInvocationByName(packageName, functionName),
                 listOf(stringExpression(), integerExpression(), integerExpression()))
         val parameters = listOf(
                 Parameter(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "foo", typeToString(stringType)),
@@ -710,8 +698,7 @@ internal class ExpressionCompilerKtTest {
         val functionName = "f"
         val expression = FunctionInvocationExpression(
                 CodeMetainfo("/home/capybara/xyz.cb", 1, 2),
-                null,
-                functionName,
+                FunctionInvocationByName(null, functionName),
                 listOf(stringExpression(), integerExpression(), integerExpression()))
         val parameters = listOf(
                 Parameter(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "foo", typeToString(stringType)),
@@ -758,13 +745,11 @@ internal class ExpressionCompilerKtTest {
         val function2Name = "f2"
         val expression1 = FunctionInvocationExpression(
                 CodeMetainfo("/home/capybara/xyz.cb", 1, 2),
-                null,
-                function1Name,
+                FunctionInvocationByName(null, function1Name),
                 listOf())
         val expression2 = FunctionInvocationExpression(
                 CodeMetainfo("/home/capybara/xyz.cb", 1, 2),
-                null,
-                function2Name,
+                FunctionInvocationByName(null, function2Name),
                 listOf())
         val function1 = Function(
                 CodeMetainfo("/home/capybara/xyz.cb", 1, 2),

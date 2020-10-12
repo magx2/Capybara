@@ -313,7 +313,7 @@ private class Listener(private val fileName: String) : CapybaraBaseListener() {
         }
     }
 
-    private fun parseExpression(ctx: CapybaraParser.ExpressionContext): Expression =
+    private fun parseExpression(ctx: CapybaraParser.ExpressionContext, isMethodInvocation: Boolean = false): Expression =
             when {
                 ctx.in_parenthisis_expression != null -> {
                     ParenthesisExpression(parseCodeMetainfo(fileName, ctx.start), parseExpression(ctx.in_parenthisis_expression))
@@ -367,8 +367,19 @@ private class Listener(private val fileName: String) : CapybaraBaseListener() {
                             .toList()
                     FunctionInvocationExpression(
                             parseCodeMetainfo(fileName, ctx.start),
-                            ctx.function_qualified_name.package_?.text,
-                            ctx.function_qualified_name.function_name.text,
+                            FunctionInvocationByName(ctx.function_qualified_name.package_?.text,
+                                    ctx.function_qualified_name.function_name.text),
+                            parameters)
+                }
+                ctx.normal_function_invocation != null -> {
+                    val parameters = (ctx.parameters()
+                            ?.expression() ?: listOf())
+                            .stream()
+                            .map { parseExpression(it) }
+                            .toList()
+                    FunctionInvocationExpression(
+                            parseCodeMetainfo(fileName, ctx.start),
+                            buildFunctionInvocationExpression(ctx.normal_function_invocation),
                             parameters)
                 }
                 ctx.infix_operation() != null -> {
@@ -382,11 +393,24 @@ private class Listener(private val fileName: String) : CapybaraBaseListener() {
                             parseExpression(ctx.false_expression))
                 }
                 ctx.argument_to_function != null -> {
-                    FunctionInvocationExpression(
-                            parseCodeMetainfo(fileName, ctx.start),
-                            ctx.apply_to_function_qualified_name.package_?.text,
-                            ctx.apply_to_function_qualified_name.function_name.text,
-                            listOf(parseExpression(ctx.argument_to_function)))
+                    val argumentToFunction = ctx.argument_to_function
+                    val functionExpression = ctx.apply_to_function_expression
+                    when {
+                        argumentToFunction.apply_to_function_qualified_name != null ->
+                            FunctionInvocationExpression(
+                                    parseCodeMetainfo(fileName, ctx.start),
+                                    FunctionInvocationByName(ctx.apply_to_function_qualified_name.package_?.text,
+                                            ctx.apply_to_function_qualified_name.function_name.text),
+                                    listOf(parseExpression(argumentToFunction)))
+                        functionExpression != null -> {
+                            val codeMetainfo = parseCodeMetainfo(fileName, ctx.start)
+                            FunctionInvocationExpression(
+                                    codeMetainfo,
+                                    buildFunctionInvocationExpression(functionExpression),
+                                    listOf(parseExpression(argumentToFunction)))
+                        }
+                        else -> throw CompilationException(parseCodeMetainfo(fileName, argumentToFunction.start), "I don't know how to handle this!")
+                    }
                 }
                 ctx.negate_expression != null -> NegateExpression(parseCodeMetainfo(fileName, ctx.start), parseExpression(ctx.negate_expression))
                 ctx.struct_name != null ->
@@ -442,6 +466,15 @@ private class Listener(private val fileName: String) : CapybaraBaseListener() {
                 )
                 else -> throw IllegalStateException("I don't know how to handle `${ctx.text}`!")
             }
+
+    private fun buildFunctionInvocationExpression(functionExpression: CapybaraParser.ExpressionContext): FunctionInvocation {
+        val expression = parseExpression(functionExpression, true)
+//        return if (expression is ValueExpression) {
+//            FunctionInvocationByName(null, expression.valueName)
+//        } else {
+        return FunctionInvocationByExpression(expression)
+//        }
+    }
 
     override fun enterDefBody(ctx: CapybaraParser.DefBodyContext) {
         if (ctx.statement() != null) {

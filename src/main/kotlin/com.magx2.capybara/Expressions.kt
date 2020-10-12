@@ -15,7 +15,16 @@ data class FloatExpression(override val codeMetainfo: CodeMetainfo, val value: D
 data class BooleanExpression(override val codeMetainfo: CodeMetainfo, val value: Boolean) : ConstantExpression(codeMetainfo)
 data class StringExpression(override val codeMetainfo: CodeMetainfo, val value: String) : ConstantExpression(codeMetainfo)
 data class NothingExpression(override val codeMetainfo: CodeMetainfo) : ConstantExpression(codeMetainfo)
-data class FunctionInvocationExpression(override val codeMetainfo: CodeMetainfo, val packageName: String?, val functionName: String, val parameters: List<Expression>) : Expression(codeMetainfo)
+data class FunctionInvocationExpression(override val codeMetainfo: CodeMetainfo,
+                                        val functionInvocation: FunctionInvocation,
+                                        val parameters: List<Expression>) : Expression(codeMetainfo)
+
+sealed class FunctionInvocation()
+data class FunctionInvocationByName(val packageName: String?,
+                                    val functionName: String) : FunctionInvocation()
+
+data class FunctionInvocationByExpression(val expression: Expression) : FunctionInvocation()
+
 data class InfixExpression(override val codeMetainfo: CodeMetainfo, val operation: String, val left: Expression, val right: Expression) : Expression(codeMetainfo)
 data class IfExpression(override val codeMetainfo: CodeMetainfo, val condition: Expression, val trueBranch: Expression, val falseBranch: Expression) : Expression(codeMetainfo)
 data class NegateExpression(override val codeMetainfo: CodeMetainfo, val negateExpression: Expression) : Expression(codeMetainfo)
@@ -47,8 +56,22 @@ data class FloatExpressionWithReturnType(val value: Double) : ConstantExpression
 data class BooleanExpressionWithReturnType(val value: Boolean) : ConstantExpressionWithReturnType(booleanType)
 data class StringExpressionWithReturnType(val value: String) : ConstantExpressionWithReturnType(stringType)
 object NothingExpressionWithReturnType : ConstantExpressionWithReturnType(nothingType)
-data class FunctionInvocationExpressionWithReturnType(override val returnType: Type, val packageName: String, val functionName: String, val parameters: List<ExpressionWithReturnType>) : ExpressionWithReturnType(returnType)
-data class DefInvocationExpressionWithReturnType(override val returnType: Type, val packageName: String, val functionName: String, val parameters: List<ExpressionWithReturnType>) : ExpressionWithReturnType(returnType)
+data class FunctionInvocationExpressionWithReturnType(val functionInvocation: FunctionInvocationWithReturnType,
+                                                      val parameters: List<ExpressionWithReturnType>) : ExpressionWithReturnType(functionInvocation.returnType)
+
+sealed class FunctionInvocationWithReturnType(open val returnType: Type)
+data class FunctionInvocationByNameWithReturnType(override val returnType: Type,
+                                                  val packageName: String,
+                                                  val functionName: String) : FunctionInvocationWithReturnType(returnType)
+
+data class FunctionInvocationByExpressionWithReturnType(val expression: ExpressionWithReturnType) : FunctionInvocationWithReturnType(expression.returnType)
+
+data class DefInvocationExpressionWithReturnType(
+        override val returnType: Type,
+        val packageName: String,
+        val functionName: String,
+        val parameters: List<ExpressionWithReturnType>) : ExpressionWithReturnType(returnType)
+
 data class InfixExpressionWithReturnType(override val returnType: Type, val operation: String, val left: ExpressionWithReturnType, val right: ExpressionWithReturnType) : ExpressionWithReturnType(returnType)
 data class IfExpressionWithReturnType(override val returnType: Type, val condition: ExpressionWithReturnType, val trueBranch: ExpressionWithReturnType, val falseBranch: ExpressionWithReturnType) : ExpressionWithReturnType(returnType)
 data class NegateExpressionWithReturnType(val negateExpression: ExpressionWithReturnType) : ExpressionWithReturnType(booleanType)

@@ -226,7 +226,13 @@ private fun findImports(expresion: ExpressionWithReturnType?, packageName: Strin
                 is StringExpressionWithReturnType -> emptyList()
                 NothingExpressionWithReturnType -> emptyList()
                 is FunctionInvocationExpressionWithReturnType ->
-                    exportMethodInvocation(expresion.parameters, expresion.packageName, packageName)
+                    when (expresion.functionInvocation) {
+                        is FunctionInvocationByNameWithReturnType -> {
+                            exportMethodInvocation(expresion.parameters, expresion.functionInvocation.packageName, packageName)
+                        }
+                        is FunctionInvocationByExpressionWithReturnType ->
+                            findImports(expresion.functionInvocation.expression, packageName)
+                    }
                 is DefInvocationExpressionWithReturnType ->
                     exportMethodInvocation(expresion.parameters, expresion.packageName, packageName)
                 is InfixExpressionWithReturnType -> findImports(expresion.left, packageName) + findImports(expresion.right, packageName)
@@ -555,9 +561,24 @@ private fun expressionToString(expression: ExpressionWithReturnType,
             is StringExpressionWithReturnType -> "\"${expression.value}\""
             is NothingExpressionWithReturnType -> "None"
             is FunctionInvocationExpressionWithReturnType ->
-                methodToString(expression.parameters, expression.packageName, expression.functionName, assertions, unions, methodsToRewrite, packageName)
+                methodToString(
+                        expression.functionInvocation,
+                        expression.parameters,
+                        assertions,
+                        unions,
+                        methodsToRewrite,
+                        packageName)
             is DefInvocationExpressionWithReturnType ->
-                methodToString(expression.parameters, expression.packageName, expression.functionName, assertions, unions, methodsToRewrite, packageName)
+                methodToString(
+                        FunctionInvocationByNameWithReturnType(
+                                expression.returnType,
+                                expression.packageName,
+                                expression.functionName),
+                        expression.parameters,
+                        assertions,
+                        unions,
+                        methodsToRewrite,
+                        packageName)
             is InfixExpressionWithReturnType -> "(${expressionToString(expression.left, assertions, unions, methodsToRewrite, packageName)}) ${mapInfixOperator(expression)} (${expressionToString(expression.right, assertions, unions, methodsToRewrite, packageName)})"
             is IfExpressionWithReturnType -> "(${expressionToString(expression.trueBranch, assertions, unions, methodsToRewrite, packageName)}) if (${expressionToString(expression.condition, assertions, unions, methodsToRewrite, packageName)}) else (${expressionToString(expression.falseBranch, assertions, unions, methodsToRewrite, packageName)})"
             is NegateExpressionWithReturnType -> "not ${expressionToString(expression.negateExpression, assertions, unions, methodsToRewrite, packageName)}"
@@ -605,9 +626,8 @@ private fun expressionToString(expression: ExpressionWithReturnType,
         }
 
 private fun methodToString(
+        functionInvocation: FunctionInvocationWithReturnType,
         expressionParameters: List<ExpressionWithReturnType>,
-        expressionPackageName: String,
-        expressionFunctionName: String,
         assertions: Boolean,
         unions: Set<UnionWithType>,
         methodsToRewrite: Set<MethodToRewrite>,
@@ -616,14 +636,25 @@ private fun methodToString(
             .stream()
             .map { expressionToString(it, assertions, unions, methodsToRewrite, packageName) }
             .collect(Collectors.joining(", "))
-    val name = findMethodNameFromExpression(expressionPackageName, expressionFunctionName, expressionParameters, methodsToRewrite)
-    return if (expressionPackageName == packageName) {
-        "$name($parameters)"
-    } else {
-        "${packageToPythonPackage(expressionPackageName)}.$name($parameters)"
+    return when (functionInvocation) {
+        is FunctionInvocationByNameWithReturnType -> {
+            val name = findMethodNameFromExpression(
+                    functionInvocation.packageName,
+                    functionInvocation.functionName,
+                    expressionParameters,
+                    methodsToRewrite)
+            if (functionInvocation.packageName == packageName) {
+                "$name($parameters)"
+            } else {
+                "${packageToPythonPackage(functionInvocation.packageName)}.$name($parameters)"
+            }
+        }
+        is FunctionInvocationByExpressionWithReturnType -> {
+            val lambda = expressionToString(functionInvocation.expression, assertions, unions, methodsToRewrite, packageName)
+            "($lambda)($parameters)"
+        }
     }
 }
-
 
 private fun findMethodNameFromExpression(methodPackageName: String,
                                          methodName: String,

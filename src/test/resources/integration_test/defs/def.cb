@@ -71,21 +71,21 @@ def def_without_return_type(Int) {
 }
 
 def def_with_assert_expression(Int): Int {
-	x = assert (int > 0) (int + 1) "int should be bigger than 0!"
+	x = assert (int > 0), (int + 1), "int should be bigger than 0!"
 	return x * x
 }
 
 def def_with_assert_expression_in_return(Int): Int {
 	x = int + 1 ; x = x + 1
-	return assert (int > 0) (x) "int should be bigger than 0!"
+	return assert (int > 0), (x), "int should be bigger than 0!"
 }
 
 def def_with_assert_statement(Int): Int {
-	assert int != 0 "Int cannot be 0!"
+	assert int != 0, "Int cannot be 0!"
 	return int * int
 }
 
-fun next(Int) = assert int >= 0 int + 1
+fun next(Int) = assert int >= 0, int + 1
 
 def def_with_call_fun(Int): Int {
 	x = next(int)

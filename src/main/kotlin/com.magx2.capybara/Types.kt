@@ -1,5 +1,6 @@
 package com.magx2.capybara
 
+import com.magx2.capybara.BasicTypes.lambdaType
 import java.util.regex.Pattern
 import java.util.stream.Collectors
 import java.util.stream.Stream
@@ -125,6 +126,9 @@ fun areTypesEqual(type1: Type,
         type1 == type2 || isTypePartOfUnion(type1, type2, compilationContext, compileUnit) || isTypePartOfUnion(type2, type1, compilationContext, compileUnit)
 
 fun addGenericType(type: Type, genericType: Type) = type.copy(genericType = genericType)
+
+fun isLambda(type: Type) =
+        type.packageName == lambdaType.packageName && type.name == lambdaType.name
 
 data class TypedField(val name: String, val type: Type)
 data class Type(val packageName: String, val name: String, val genericType: Type? = null)
