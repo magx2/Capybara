@@ -680,51 +680,6 @@ private fun defToPythonBody(def: NativeDefToExport,
 
 private fun isShortLambda(lambda: LambdaExpressionWithReturnType) = lambda.assignments.isEmpty()
 
-//private fun assignmentToPython(assigment: AssigmentStatementWithType,
-//                               assertions: Boolean,
-//                               unions: Set<UnionWithType>,
-//                               methodsToRewrite: Set<MethodToRewrite>,
-//                               packageName: String,
-//                               indent: Int): String {
-//    val (prefix, expression) = coverMultilineLambdaInPython(assigment.expression, assertions, unions, methodsToRewrite, packageName, indent)
-//    return prefix + buildIndent(indent) + assigment.name + " = " + expression
-//}
-//
-//private fun returnToPython(expression: ExpressionWithReturnType,
-//                           assertions: Boolean,
-//                           unions: Set<UnionWithType>,
-//                           methodsToRewrite: Set<MethodToRewrite>,
-//                           packageName: String,
-//                           indent: Int): String {
-//    val (prefix, expressionString) = coverMultilineLambdaInPython(expression, assertions, unions, methodsToRewrite, packageName, indent)
-//    return prefix + buildIndent(indent) + "return " + expressionString
-//}
-//
-//private fun coverMultilineLambdaInPython(expression: ExpressionWithReturnType,
-//                                         assertions: Boolean,
-//                                         unions: Set<UnionWithType>,
-//                                         methodsToRewrite: Set<MethodToRewrite>,
-//                                         packageName: String,
-//                                         indent: Int): Pair<String, String> {
-//    val (lambdaDef, exp) = if (expression is LambdaExpressionWithReturnType && isShortLambda(expression)) {
-//        val randomLambdaName = "_lambda_name_" + Random.nextInt(0, 100)
-//        val lambdaAssignments = buildIndent(indent + 1) + expression.assignments
-//                .stream()
-//                .map { assignmentToPython(it, assertions, unions, methodsToRewrite, packageName, indent) }
-//                .collect(Collectors.joining("\n${buildIndent(indent + 1)}"))
-//        Pair("${buildIndent(indent)}def $randomLambdaName():\n" +
-//                "${buildIndent(indent + 1)}$lambdaAssignments", randomLambdaName)
-//    } else {
-//        Pair("", expressionToString(expression, assertions, unions, methodsToRewrite, packageName, longLambdas))
-//    }
-//    val assert = if (expression is AssertExpressionWithReturnType) {
-//        generateAssertStatement(assertions, expression, unions, methodsToRewrite, packageName, indent)
-//    } else {
-//        ""
-//    }
-//    return Pair("$lambdaDef$assert", exp)
-//}
-
 private fun statementToPython(statement: StatementWithType,
                               assertions: Boolean,
                               unions: Set<UnionWithType>,
