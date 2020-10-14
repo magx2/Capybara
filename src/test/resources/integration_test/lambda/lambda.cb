@@ -38,7 +38,7 @@ fun lambda_in_lambda(): Int {
 
 fun iife(): Int = { 5 + 10 }()
 
-fun iife_multiline(): Int = { x=5; y=10; x*y }()
+fun iife_multiline(): Int = { x=3; y=6; { x=5; y=10; x*y } }()()
 
 def main(List[String]) {
 	assert /lambda:simple_lambda()() == 44, "Simple lambda should return `44`!"

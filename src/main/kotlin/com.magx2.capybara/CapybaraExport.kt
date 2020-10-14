@@ -371,10 +371,10 @@ private fun generateDocForDefWithTypedParameters(
 private fun generateLongLambdas(expressions: List<ExpressionWithReturnType>, depth: Int): Map<LambdaExpressionWithReturnType, String> {
     val lambdaNr = AtomicInteger()
     val collect = expressions.stream()
-//            .flatMap { findLambdas(it, 0).stream() }
-            .filter { it is LambdaExpressionWithReturnType }
-            .map { it as LambdaExpressionWithReturnType }
-//            .filter { (l, _) -> isShortLambda(l).not() }
+            .flatMap { findLambdas(it).stream() }
+//            .filter { it is LambdaExpressionWithReturnType }
+//            .map { it as LambdaExpressionWithReturnType }
+            .filter { l -> isShortLambda(l).not() }
             .collect(Collectors.groupingBy { it })
     return collect
             .entries
@@ -392,33 +392,15 @@ private fun generateLongLambdas(expressions: List<ExpressionWithReturnType>, dep
                     { (_, v) -> v }))
 }
 
-private fun findLambdas(expresion: ExpressionWithReturnType, depth: Int): List<Pair<LambdaExpressionWithReturnType, Int>> =
+private fun findLambdas(expresion: ExpressionWithReturnType): List<LambdaExpressionWithReturnType> =
         when (expresion) {
-            is LambdaExpressionWithReturnType -> listOf(Pair(expresion, depth))
+            is LambdaExpressionWithReturnType -> listOf(expresion)
             is FunctionInvocationExpressionWithReturnType ->
                 when (expresion.functionInvocation) {
                     is FunctionInvocationByNameWithReturnType -> emptyList()
-                    is FunctionInvocationByExpressionWithReturnType -> findLambdas(expresion.functionInvocation.expression, depth + 1)
+                    is FunctionInvocationByExpressionWithReturnType -> findLambdas(expresion.functionInvocation.expression)
                 }
-            is InfixExpressionWithReturnType -> findLambdas(expresion.left, depth + 1) + findLambdas(expresion.right, depth + 1)
-            is IfExpressionWithReturnType -> findLambdas(expresion.condition, depth + 1) + findLambdas(expresion.trueBranch, depth + 1) + findLambdas(expresion.falseBranch, depth + 1)
-            is NegateExpressionWithReturnType -> findLambdas(expresion.negateExpression, depth + 1)
-            is AssertExpressionWithReturnType -> findLambdas(expresion.checkExpression, depth + 1) +
-                    findLambdas(expresion.returnExpression, depth + 1) +
-                    if (expresion.messageExpression != null) findLambdas(expresion.messageExpression, depth + 1) else emptyList()
-            is DefInvocationExpressionWithReturnType,
-            is StructureAccessExpressionWithReturnType,
-            is NewStructExpressionWithReturnType,
-            is StructFieldAccessExpressionWithReturnType,
-            is NewListExpressionWithReturnType,
-            is IsExpressionWithReturnType,
-            is ParameterExpressionWithReturnType,
-            is IntegerExpressionWithReturnType,
-            is FloatExpressionWithReturnType,
-            is BooleanExpressionWithReturnType,
-            is StringExpressionWithReturnType,
-            is ValueExpressionWithReturnType,
-            NothingExpressionWithReturnType -> emptyList()
+            else -> emptyList()
         }
 
 
@@ -613,7 +595,7 @@ private fun functionToPython(name: String,
                         unions,
                         methodsToRewrite,
                         packageName,
-                        generateLongLambdas(lambda.assignments, lambda.expression, depth),
+                        generateLongLambdas(lambda.assignments, lambda.expression, depth + 1),
                         indent + 1,
                         depth + 1)
             }
@@ -715,7 +697,9 @@ private fun defToPythonBody(def: NativeDefToExport): String =
                 .stream()
                 .collect(Collectors.joining("\n\t"))
 
-private fun isShortLambda(lambda: LambdaExpressionWithReturnType) = lambda.assignments.isEmpty()
+private fun isShortLambda(lambda: LambdaExpressionWithReturnType): Boolean =
+        lambda.assignments.isEmpty() &&
+                (lambda.expression !is LambdaExpressionWithReturnType || isShortLambda(lambda.expression))
 
 private fun statementToPython(statement: StatementWithType,
                               assertions: Boolean,
