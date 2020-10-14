@@ -368,21 +368,23 @@ private fun generateDocForDefWithTypedParameters(
                 returnType,
                 indent)
 
-private fun generateLongLambdas(expressions: Stream<ExpressionWithReturnType>): Map<LambdaExpressionWithReturnType, String> {
+private fun generateLongLambdas(expressions: List<ExpressionWithReturnType>, depth: Int): Map<LambdaExpressionWithReturnType, String> {
     val lambdaNr = AtomicInteger()
-    val collect = expressions
-            .flatMap { findLambdas(it, 0).stream() }
-            .filter { (l, _) -> isShortLambda(l).not() }
-            .collect(Collectors.groupingBy { it.first })
+    val collect = expressions.stream()
+//            .flatMap { findLambdas(it, 0).stream() }
+            .filter { it is LambdaExpressionWithReturnType }
+            .map { it as LambdaExpressionWithReturnType }
+//            .filter { (l, _) -> isShortLambda(l).not() }
+            .collect(Collectors.groupingBy { it })
     return collect
             .entries
             .stream()
-            .map { (k, v) -> Pair(k, v.last().second) }
-            .map { (k, v) ->
+//            .map { (k, v) -> Pair(k, v.last().second) }
+            .map { (k, _) ->
                 Pair(
                         k,
                         "_local_lambda_" +
-                                (if (v > 0) "depth_" + v + "_" else "") +
+                                (if (depth > 0) "depth_" + depth + "_" else "") +
                                 "nr_" + lambdaNr.incrementAndGet())
             }
             .collect(Collectors.toMap(
@@ -419,11 +421,17 @@ private fun findLambdas(expresion: ExpressionWithReturnType, depth: Int): List<P
             NothingExpressionWithReturnType -> emptyList()
         }
 
+
 private fun generateLongLambdas(function: FunctionToExport): Map<LambdaExpressionWithReturnType, String> =
+        generateLongLambdas(function.assignments, function.returnExpression, 0)
+
+private fun generateLongLambdas(assignments: List<AssigmentStatementWithType>,
+                                returnExpression: ExpressionWithReturnType,
+                                depth: Int): Map<LambdaExpressionWithReturnType, String> =
         generateLongLambdas(
                 concat(
-                        function.assignments.stream().map { it.expression },
-                        Stream.of(function.returnExpression)))
+                        assignments.stream().map { it.expression },
+                        Stream.of(returnExpression)).toList(), depth)
 
 private fun generateLongLambdas(def: DefToExport): Map<LambdaExpressionWithReturnType, String> =
         generateLongLambdas(
@@ -432,7 +440,8 @@ private fun generateLongLambdas(def: DefToExport): Map<LambdaExpressionWithRetur
                                 .stream()
                                 .flatMap { findExpressionsInStatement(it) },
                         Stream.of(def.returnExpression).filter { it != null }.map { it!! }
-                ))
+                ).toList(),
+                0)
 
 private fun findExpressionsInStatement(statement: StatementWithType): Stream<ExpressionWithReturnType> {
     return when (statement) {
@@ -460,7 +469,8 @@ private fun longLambdaToPython(name: String,
                                methodsToRewrite: Set<MethodToRewrite>,
                                packageName: String,
                                longLambdas: Map<LambdaExpressionWithReturnType, String>,
-                               indent: Int = 1): String {
+                               indent: Int = 1,
+                               depth: Int): String {
     val prefix = name + "_"
     return functionToPython(
             name,
@@ -478,6 +488,7 @@ private fun longLambdaToPython(name: String,
             methodsToRewrite,
             packageName,
             indent,
+            depth
     )
 }
 
@@ -586,15 +597,27 @@ private fun functionToPython(name: String,
                              unions: Set<UnionWithType>,
                              methodsToRewrite: Set<MethodToRewrite>,
                              packageName: String,
-                             indent: Int = 0): String {
+                             indent: Int = 0,
+                             depth: Int = 0): String {
     val par = parameters
             .stream()
             .map { it.name }
             .collect(Collectors.joining(", "))
     val longLambdasAsPython = longLambdas.entries
             .stream()
-            .map { (lambda, name) -> longLambdaToPython(name, lambda, assertions, unions, methodsToRewrite, packageName, longLambdas, indent + 1) }
-            .collect(Collectors.joining("\n")) + "\n"
+            .map { (lambda, name) ->
+                longLambdaToPython(
+                        name,
+                        lambda,
+                        assertions,
+                        unions,
+                        methodsToRewrite,
+                        packageName,
+                        generateLongLambdas(lambda.assignments, lambda.expression, depth),
+                        indent + 1,
+                        depth + 1)
+            }
+            .collect(Collectors.joining("\n\n")) + "\n"
     val assig = if (assignments.isNotEmpty()) {
         assignments
                 .stream()
@@ -635,7 +658,7 @@ private fun defToPython(def: AbstractDefToExport,
     val body =
             when (def) {
                 is DefToExport -> defToPythonBody(def, assertions, unions, methodsToRewrite, packageName)
-                is NativeDefToExport -> defToPythonBody(def, assertions, unions, methodsToRewrite, packageName)
+                is NativeDefToExport -> defToPythonBody(def)
             }
 
     val name = findMethodNameFromParameter(
@@ -655,25 +678,39 @@ private fun defToPythonBody(def: DefToExport,
                             methodsToRewrite: Set<MethodToRewrite>,
                             packageName: String): String {
     val longLambdas = generateLongLambdas(def)
+    val longLambdasAsPython = longLambdas.entries
+            .stream()
+            .map { (lambda, name) ->
+                longLambdaToPython(
+                        name,
+                        lambda,
+                        assertions,
+                        unions,
+                        methodsToRewrite,
+                        packageName,
+                        generateLongLambdas(lambda.assignments, lambda.expression, 0),
+                        1,
+                        1)
+            }
+            .collect(Collectors.joining("\n\n")) + "\n"
     val statements = def.statements
             .stream()
             .map { statementToPython(it, assertions, unions, methodsToRewrite, packageName, longLambdas, 1) }
             .collect(Collectors.joining("\n"))
 
     val returnExpression = if (def.returnExpression != null) {
-        "\n|${generateAssertStatement(assertions, def.returnExpression, unions, methodsToRewrite, packageName, longLambdas)}${buildIndent(1)}return ${expressionToString(def.returnExpression, assertions, unions, methodsToRewrite, packageName, longLambdas)}"
+        "\n" +
+                generateAssertStatement(assertions, def.returnExpression, unions, methodsToRewrite, packageName, longLambdas) +
+                buildIndent(1) +
+                "return " + expressionToString(def.returnExpression, assertions, unions, methodsToRewrite, packageName, longLambdas)
     } else {
         ""
     }
 
-    return statements + returnExpression
+    return longLambdasAsPython + statements + returnExpression
 }
 
-private fun defToPythonBody(def: NativeDefToExport,
-                            assertions: Boolean,
-                            unions: Set<UnionWithType>,
-                            methodsToRewrite: Set<MethodToRewrite>,
-                            packageName: String): String =
+private fun defToPythonBody(def: NativeDefToExport): String =
         "\t" + def.nativeStatements
                 .stream()
                 .collect(Collectors.joining("\n\t"))
