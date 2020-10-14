@@ -46,4 +46,3 @@ def main(List[String]) {
 	assert multiline_lambda_invocation() == 184, "`multiline_lambda_invocation` should return `184`"
 }
 
-
