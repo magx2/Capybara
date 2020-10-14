@@ -36,6 +36,8 @@ fun lambda_in_lambda(): Int {
 	return x() + y()
 }
 
+fun iife(): Int = { 5 + 10 }()
+
 def main(List[String]) {
 	assert /lambda:simple_lambda()() == 44, "Simple lambda should return `44`!"
 	assert simple_lambda()() == 44, "Simple lambda should return `44` (no fully qualified name)!"
@@ -44,5 +46,6 @@ def main(List[String]) {
 	assert multiline_lambda()() == 88, "`multiline_lambda` should return 88"
 	assert { x = 2 ; y = 3 ; x + y}() == { 5 }(), { "lambda should return 5" }()
 	assert multiline_lambda_invocation() == 184, "`multiline_lambda_invocation` should return `184`"
+	assert iife() == 15, "`iife` should return `15`"
 }
 
