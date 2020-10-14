@@ -31,7 +31,11 @@ data class NegateExpression(override val codeMetainfo: CodeMetainfo, val negateE
 data class NewStruct(override val codeMetainfo: CodeMetainfo, val packageName: String?, val structName: String, val fields: List<StructField>) : Expression(codeMetainfo)
 data class StructField(val codeMetainfo: CodeMetainfo, val name: String, val value: Expression)
 data class ValueExpression(override val codeMetainfo: CodeMetainfo, val valueName: String) : Expression(codeMetainfo)
-data class LambdaExpression(override val codeMetainfo: CodeMetainfo, val expressions: List<Expression>) : Expression(codeMetainfo)
+data class LambdaExpression(
+        override val codeMetainfo: CodeMetainfo,
+        val assignments: List<AssigmentStatement>,
+        val expression: Expression) : Expression(codeMetainfo)
+
 data class StructFieldAccessExpression(override val codeMetainfo: CodeMetainfo, val structureExpression: Expression, val fieldName: String) : Expression(codeMetainfo)
 data class NewListExpression(override val codeMetainfo: CodeMetainfo, val elements: List<Expression> = listOf()) : Expression(codeMetainfo)
 data class AssertExpression(override val codeMetainfo: CodeMetainfo, val checkExpression: Expression, val returnExpression: Expression, val messageExpression: Expression?) : Expression(codeMetainfo)
@@ -56,8 +60,9 @@ data class FloatExpressionWithReturnType(val value: Double) : ConstantExpression
 data class BooleanExpressionWithReturnType(val value: Boolean) : ConstantExpressionWithReturnType(booleanType)
 data class StringExpressionWithReturnType(val value: String) : ConstantExpressionWithReturnType(stringType)
 object NothingExpressionWithReturnType : ConstantExpressionWithReturnType(nothingType)
-data class FunctionInvocationExpressionWithReturnType(val functionInvocation: FunctionInvocationWithReturnType,
-                                                      val parameters: List<ExpressionWithReturnType>) : ExpressionWithReturnType(functionInvocation.returnType)
+data class FunctionInvocationExpressionWithReturnType(override val returnType: Type,
+                                                      val functionInvocation: FunctionInvocationWithReturnType,
+                                                      val parameters: List<ExpressionWithReturnType>) : ExpressionWithReturnType(returnType)
 
 sealed class FunctionInvocationWithReturnType(open val returnType: Type)
 data class FunctionInvocationByNameWithReturnType(override val returnType: Type,
@@ -77,7 +82,11 @@ data class IfExpressionWithReturnType(override val returnType: Type, val conditi
 data class NegateExpressionWithReturnType(val negateExpression: ExpressionWithReturnType) : ExpressionWithReturnType(booleanType)
 data class NewStructExpressionWithReturnType(override val returnType: Type, val fields: List<StructFieldExpressionWithReturnType>) : ExpressionWithReturnType(returnType)
 data class StructFieldExpressionWithReturnType(val name: String, val value: ExpressionWithReturnType)
-data class LambdaExpressionWithReturnType(override val returnType: Type, val expressions: List<ExpressionWithReturnType>) : ExpressionWithReturnType(returnType)
+data class LambdaExpressionWithReturnType(
+        override val returnType: Type,
+        val assignments: List<AssigmentStatementWithType>,
+        val expression: ExpressionWithReturnType) : ExpressionWithReturnType(returnType)
+
 data class ValueExpressionWithReturnType(override val returnType: Type, val valueName: String) : ExpressionWithReturnType(returnType)
 data class StructFieldAccessExpressionWithReturnType(val structureExpression: ExpressionWithReturnType, val fieldName: String, val fieldType: Type) : ExpressionWithReturnType(fieldType)
 data class NewListExpressionWithReturnType(override val returnType: Type, val elements: List<ExpressionWithReturnType>) : ExpressionWithReturnType(returnType)

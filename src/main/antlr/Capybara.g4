@@ -79,11 +79,12 @@ expression
 	;
 
 lambda_expression
-	: CURLYL lambda_body CURLYR
+	: CURLYL NEWLINE* lambda_body NEWLINE* CURLYR
 	;
 
 lambda_body
-	: expression ((SEMICOLON|NEWLINE) expression)*
+	: expression
+	| (assigment semicolonEnd)+ expression
 	;
 
 struct_field_initializations
@@ -264,11 +265,13 @@ ASSERT: 'assert' ;
 
 commaEnd
 	: COMMA NEWLINE*
+	| COMMA
 	| NEWLINE+
 	;
 
 semicolonEnd
 	: SEMICOLON NEWLINE*
+	| SEMICOLON
 	| NEWLINE+
 	;
 

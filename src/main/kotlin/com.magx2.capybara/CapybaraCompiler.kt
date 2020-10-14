@@ -335,13 +335,12 @@ private class Listener(private val fileName: String) : CapybaraBaseListener() {
                 }
                 ctx.lambda != null -> {
                     val codeMetainfo = parseCodeMetainfo(fileName, ctx.start)
-                    val expressions = ctx.lambda.lambda_body().expression()
-                    if (expressions.isEmpty()) {
-                        throw CompilationException(codeMetainfo, "There are no expressions in lambda!")
-                    }
+                    val assignments = ctx.lambda.lambda_body().assigment().map { parseAssigmentStatement(it) }
+                    val expression = ctx.lambda.lambda_body().expression()
                     LambdaExpression(
                             codeMetainfo,
-                            expressions.map { parseExpression(it) })
+                            assignments,
+                            parseExpression(expression))
                 }
                 ctx.structure_expression != null -> {
                     StructFieldAccessExpression(
