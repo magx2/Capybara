@@ -24,7 +24,7 @@ class SmokeTest {
                 "-o",
                 outputDir,
                 "-f",
-                "D:\\Programowanie\\GitProjects\\Capybara\\src\\test\\resources\\integration_test\\lambda\\lambda.cb",
+                files,
                 "--clear-output",
                 "--debug",
         ))
