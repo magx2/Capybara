@@ -2,36 +2,8 @@ package /lambda
 
 import /capybara/type
 
-fun simple_lambda(): Lambda[Int] = { 44 }
-
-fun lambda_as_assignment(): Int {
-	local_lambda = { 55 }
-	return local_lambda()
-}
-
-fun lambda_as_parameter(l : Lambda[Int]): Int {
-	return l()
-}
-
-fun multiline_lambda(): Lambda[Int] =
-	{
-		x = 44
-		y = 1 + 1
-		x * y
-	}
-
 fun multiline_lambda_invocation(): Int {
 	x = { x = 44 ; y = 2 + 2 ; x * y }
-	y = { x = 2 ; y = 6 ; x + y }
-	return x() + y()
-}
-
-fun lambda_in_lambda(): Int {
-	x = {
-		x = { assert 1 == 1, { 44 }, "1 should equal to 1" }
-		y = { { 2 + 2 } }
-		x()() * y()()
-	}
 	y = { x = 2 ; y = 6 ; x + y }
 	return x() + y()
 }

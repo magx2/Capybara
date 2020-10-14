@@ -370,32 +370,40 @@ private fun generateDocForDefWithTypedParameters(
 
 private fun generateLongLambdas(expressions: Stream<ExpressionWithReturnType>): Map<LambdaExpressionWithReturnType, String> {
     val lambdaNr = AtomicInteger()
-    return expressions
-            .flatMap { findLambdas(it).stream() }
-            .filter { isShortLambda(it).not() }
-            .collect(Collectors.groupingBy { it })
+    val collect = expressions
+            .flatMap { findLambdas(it, 0).stream() }
+            .filter { (l, _) -> isShortLambda(l).not() }
+            .collect(Collectors.groupingBy { it.first })
+    return collect
             .entries
             .stream()
-            .map { (k, _) -> Pair(k, "_local_lambda_" + lambdaNr.incrementAndGet()) }
+            .map { (k, v) -> Pair(k, v.last().second) }
+            .map { (k, v) ->
+                Pair(
+                        k,
+                        "_local_lambda_" +
+                                (if (v > 0) "depth_" + v + "_" else "") +
+                                "nr_" + lambdaNr.incrementAndGet())
+            }
             .collect(Collectors.toMap(
                     { (k, _) -> k },
                     { (_, v) -> v }))
 }
 
-private fun findLambdas(expresion: ExpressionWithReturnType): List<LambdaExpressionWithReturnType> =
+private fun findLambdas(expresion: ExpressionWithReturnType, depth: Int): List<Pair<LambdaExpressionWithReturnType, Int>> =
         when (expresion) {
-            is LambdaExpressionWithReturnType -> listOf(expresion)
+            is LambdaExpressionWithReturnType -> listOf(Pair(expresion, depth))
             is FunctionInvocationExpressionWithReturnType ->
                 when (expresion.functionInvocation) {
                     is FunctionInvocationByNameWithReturnType -> emptyList()
-                    is FunctionInvocationByExpressionWithReturnType -> findLambdas(expresion.functionInvocation.expression)
+                    is FunctionInvocationByExpressionWithReturnType -> findLambdas(expresion.functionInvocation.expression, depth + 1)
                 }
-            is InfixExpressionWithReturnType -> findLambdas(expresion.left) + findLambdas(expresion.right)
-            is IfExpressionWithReturnType -> findLambdas(expresion.condition) + findLambdas(expresion.trueBranch) + findLambdas(expresion.falseBranch)
-            is NegateExpressionWithReturnType -> findLambdas(expresion.negateExpression)
-            is AssertExpressionWithReturnType -> findLambdas(expresion.checkExpression) +
-                    findLambdas(expresion.returnExpression) +
-                    if (expresion.messageExpression != null) findLambdas(expresion.messageExpression) else emptyList()
+            is InfixExpressionWithReturnType -> findLambdas(expresion.left, depth + 1) + findLambdas(expresion.right, depth + 1)
+            is IfExpressionWithReturnType -> findLambdas(expresion.condition, depth + 1) + findLambdas(expresion.trueBranch, depth + 1) + findLambdas(expresion.falseBranch, depth + 1)
+            is NegateExpressionWithReturnType -> findLambdas(expresion.negateExpression, depth + 1)
+            is AssertExpressionWithReturnType -> findLambdas(expresion.checkExpression, depth + 1) +
+                    findLambdas(expresion.returnExpression, depth + 1) +
+                    if (expresion.messageExpression != null) findLambdas(expresion.messageExpression, depth + 1) else emptyList()
             is DefInvocationExpressionWithReturnType,
             is StructureAccessExpressionWithReturnType,
             is NewStructExpressionWithReturnType,
@@ -452,19 +460,105 @@ private fun longLambdaToPython(name: String,
                                methodsToRewrite: Set<MethodToRewrite>,
                                packageName: String,
                                longLambdas: Map<LambdaExpressionWithReturnType, String>,
-                               indent: Int = 1) =
-        functionToPython(
-                name,
-                lambda.expression,
-                emptyList(),
-                lambda.assignments,
-                longLambdas.filterKeys { k -> k != lambda },
-                assertions,
-                unions,
-                methodsToRewrite,
-                packageName,
-                indent,
-        )
+                               indent: Int = 1): String {
+    val prefix = name + "_"
+    return functionToPython(
+            name,
+            rewriteValNamesInExpression(lambda.expression, prefix),
+            emptyList(),
+            lambda.assignments.map { assignment ->
+                AssigmentStatementWithType(
+                        prefix + assignment.name,
+                        rewriteValNamesInExpression(assignment.expression, prefix),
+                        assignment.type)
+            },
+            longLambdas.filterKeys { k -> k != lambda },
+            assertions,
+            unions,
+            methodsToRewrite,
+            packageName,
+            indent,
+    )
+}
+
+private fun rewriteValNamesInExpression(expression: ExpressionWithReturnType, prefix: String): ExpressionWithReturnType =
+        when (expression) {
+            is LambdaExpressionWithReturnType,
+            is ParameterExpressionWithReturnType,
+            is IntegerExpressionWithReturnType,
+            is FloatExpressionWithReturnType,
+            is BooleanExpressionWithReturnType,
+            is StringExpressionWithReturnType,
+            NothingExpressionWithReturnType,
+            is NewStructExpressionWithReturnType,
+            is IsExpressionWithReturnType -> expression
+            is FunctionInvocationExpressionWithReturnType ->
+                FunctionInvocationExpressionWithReturnType(
+                        expression.returnType,
+                        when (expression.functionInvocation) {
+                            is FunctionInvocationByNameWithReturnType -> expression.functionInvocation
+                            is FunctionInvocationByExpressionWithReturnType ->
+                                FunctionInvocationByExpressionWithReturnType(
+                                        rewriteValNamesInExpression(expression.functionInvocation.expression, prefix)
+                                )
+                        },
+                        expression.parameters
+                                .stream()
+                                .map { rewriteValNamesInExpression(it, prefix) }
+                                .toList()
+                )
+            is DefInvocationExpressionWithReturnType ->
+                DefInvocationExpressionWithReturnType(
+                        expression.returnType,
+                        expression.packageName,
+                        expression.functionName,
+                        expression.parameters
+                                .stream()
+                                .map { rewriteValNamesInExpression(it, prefix) }
+                                .toList()
+                )
+            is InfixExpressionWithReturnType ->
+                InfixExpressionWithReturnType(
+                        expression.returnType,
+                        expression.operation,
+                        rewriteValNamesInExpression(expression.left, prefix),
+                        rewriteValNamesInExpression(expression.right, prefix),
+                )
+            is IfExpressionWithReturnType ->
+                IfExpressionWithReturnType(
+                        expression.returnType,
+                        rewriteValNamesInExpression(expression.condition, prefix),
+                        rewriteValNamesInExpression(expression.trueBranch, prefix),
+                        rewriteValNamesInExpression(expression.falseBranch, prefix),
+                )
+            is NegateExpressionWithReturnType -> NegateExpressionWithReturnType(rewriteValNamesInExpression(expression.negateExpression, prefix))
+            is ValueExpressionWithReturnType -> ValueExpressionWithReturnType(expression.returnType, prefix + expression.valueName)
+            is StructFieldAccessExpressionWithReturnType ->
+                StructFieldAccessExpressionWithReturnType(
+                        rewriteValNamesInExpression(expression.structureExpression, prefix),
+                        expression.fieldName,
+                        expression.fieldType
+                )
+            is NewListExpressionWithReturnType ->
+                NewListExpressionWithReturnType(
+                        expression.returnType,
+                        expression.elements
+                                .map { rewriteValNamesInExpression(it, prefix) }
+                )
+            is AssertExpressionWithReturnType ->
+                AssertExpressionWithReturnType(
+                        rewriteValNamesInExpression(expression.checkExpression, prefix),
+                        rewriteValNamesInExpression(expression.returnExpression, prefix),
+                        if (expression.messageExpression != null) rewriteValNamesInExpression(expression.messageExpression, prefix) else null
+                )
+            is StructureAccessExpressionWithReturnType ->
+                StructureAccessExpressionWithReturnType(
+                        expression.returnType,
+                        expression.structureType,
+                        expression.structureName,
+                        rewriteValNamesInExpression(expression.structureIndex, prefix)
+                )
+        }
 
 private fun functionToPython(function: FunctionToExport,
                              assertions: Boolean,
