@@ -400,7 +400,25 @@ private fun findLambdas(expresion: ExpressionWithReturnType): List<LambdaExpress
                     is FunctionInvocationByNameWithReturnType -> emptyList()
                     is FunctionInvocationByExpressionWithReturnType -> findLambdas(expresion.functionInvocation.expression)
                 }
-            else -> emptyList()
+            is InfixExpressionWithReturnType -> findLambdas(expresion.left) + findLambdas(expresion.right)
+            is IfExpressionWithReturnType -> findLambdas(expresion.condition) + findLambdas(expresion.trueBranch) + findLambdas(expresion.falseBranch)
+            is NegateExpressionWithReturnType -> findLambdas(expresion.negateExpression)
+            is AssertExpressionWithReturnType -> findLambdas(expresion.checkExpression) +
+                    findLambdas(expresion.returnExpression) +
+                    if (expresion.messageExpression != null) findLambdas(expresion.messageExpression) else emptyList()
+            is DefInvocationExpressionWithReturnType,
+            is StructureAccessExpressionWithReturnType,
+            is NewStructExpressionWithReturnType,
+            is StructFieldAccessExpressionWithReturnType,
+            is NewListExpressionWithReturnType,
+            is IsExpressionWithReturnType,
+            is ParameterExpressionWithReturnType,
+            is IntegerExpressionWithReturnType,
+            is FloatExpressionWithReturnType,
+            is BooleanExpressionWithReturnType,
+            is StringExpressionWithReturnType,
+            is ValueExpressionWithReturnType,
+            NothingExpressionWithReturnType -> emptyList()
         }
 
 
