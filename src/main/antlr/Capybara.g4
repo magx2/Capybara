@@ -212,7 +212,11 @@ unionField
 	;
 
 fullyQualifiedType
-	: (type_package=PACKAGE SLASH)? name=ALPH_NUM_STARTING_WITH_CAPITAL (SQUAREL generic_type=fullyQualifiedType SQUARER)?
+	: (type_package=PACKAGE SLASH)? name=ALPH_NUM_STARTING_WITH_CAPITAL (SQUAREL generic_types SQUARER)?
+	;
+
+generic_types
+	: fullyQualifiedType (commaEnd fullyQualifiedType)*
 	;
 
 next

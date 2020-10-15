@@ -22,7 +22,7 @@ internal class TypesKtTest {
         // then
         assertThat(type.name).isEqualTo("Foo")
         assertThat(type.packageName).isEqualTo("/x/y/z")
-        assertThat(type.genericType).isNull()
+        assertThat(type.genericTypes).isEmpty()
     }
 
     @Test
@@ -41,7 +41,7 @@ internal class TypesKtTest {
         // then
         assertThat(type.name).isEqualTo("Foo")
         assertThat(type.packageName).isEqualTo("/x/y/z")
-        assertThat(type.genericType).isNull()
+        assertThat(type.genericTypes).isEmpty()
     }
 
     @Test
@@ -76,8 +76,32 @@ internal class TypesKtTest {
         // then
         assertThat(type.name).isEqualTo("Foo")
         assertThat(type.packageName).isEqualTo("/x/y/z")
-        assertThat(type.genericType?.name).isEqualTo("Boo")
-        assertThat(type.genericType?.packageName).isEqualTo("/a/b/c")
+        assertThat(type.genericTypes).hasSize(1)
+        assertThat(type.genericTypes[0].name).isEqualTo("Boo")
+        assertThat(type.genericTypes[0].packageName).isEqualTo("/a/b/c")
+    }
+
+    @Test
+    fun `should parse 3 generic type`() {
+        // given
+        val rawType = "/x/y/z/Foo[/a/b/c/Boo, /a/b/c/Bar, /a/b/c/Baz]"
+
+        // when
+        val type = parseType(
+                CodeMetainfo("/home/capybara/xyz.cb", 1, 2),
+                rawType,
+                types)
+
+        // then
+        assertThat(type.name).isEqualTo("Foo")
+        assertThat(type.packageName).isEqualTo("/x/y/z")
+        assertThat(type.genericTypes).hasSize(3)
+        assertThat(type.genericTypes[0].name).isEqualTo("Boo")
+        assertThat(type.genericTypes[0].packageName).isEqualTo("/a/b/c")
+        assertThat(type.genericTypes[1].name).isEqualTo("Bar")
+        assertThat(type.genericTypes[1].packageName).isEqualTo("/a/b/c")
+        assertThat(type.genericTypes[2].name).isEqualTo("Baz")
+        assertThat(type.genericTypes[2].packageName).isEqualTo("/a/b/c")
     }
 
     @Test
@@ -96,8 +120,9 @@ internal class TypesKtTest {
         // then
         assertThat(type.name).isEqualTo("Foo")
         assertThat(type.packageName).isEqualTo("/x/y/z")
-        assertThat(type.genericType?.name).isEqualTo("Boo")
-        assertThat(type.genericType?.packageName).isEqualTo("/a/b/c")
+        assertThat(type.genericTypes).hasSize(1)
+        assertThat(type.genericTypes[0].name).isEqualTo("Boo")
+        assertThat(type.genericTypes[0].packageName).isEqualTo("/a/b/c")
     }
 
     @Test
@@ -116,10 +141,13 @@ internal class TypesKtTest {
         // then
         assertThat(type.name).isEqualTo("Foo")
         assertThat(type.packageName).isEqualTo("/x/y/z")
-        assertThat(type.genericType?.name).isEqualTo("Boo")
-        assertThat(type.genericType?.packageName).isEqualTo("/a/b/c")
-        assertThat(type.genericType?.genericType?.name).isEqualTo("Bar")
-        assertThat(type.genericType?.genericType?.packageName).isEqualTo("/q/w/e")
+        assertThat(type.genericTypes).hasSize(1)
+        assertThat(type.genericTypes[0].name).isEqualTo("Boo")
+        assertThat(type.genericTypes[0].packageName).isEqualTo("/a/b/c")
+        assertThat(type.genericTypes[0].genericTypes).hasSize(1)
+        assertThat(type.genericTypes[0].genericTypes[0].name).isEqualTo("Bar")
+        assertThat(type.genericTypes[0].genericTypes).hasSize(1)
+        assertThat(type.genericTypes[0].genericTypes[0].packageName).isEqualTo("/q/w/e")
     }
 
     @Test
@@ -138,7 +166,7 @@ internal class TypesKtTest {
         // then
         assertThat(type.name).isEqualTo("Foo")
         assertThat(type.packageName).isEqualTo("/x/y/z")
-        assertThat(type.genericType).isNull()
+        assertThat(type.genericTypes).isEmpty()
     }
 
     @Test
@@ -157,7 +185,7 @@ internal class TypesKtTest {
         // then
         assertThat(type.name).isEqualTo("Foo")
         assertThat(type.packageName).isEqualTo("/x/y/z")
-        assertThat(type.genericType).isNull()
+        assertThat(type.genericTypes).isEmpty()
     }
 
 
@@ -178,7 +206,7 @@ internal class TypesKtTest {
         // then
         assertThat(type.name).isEqualTo("Foo")
         assertThat(type.packageName).isEqualTo("/x/y/z")
-        assertThat(type.genericType).isNull()
+        assertThat(type.genericTypes).isEmpty()
     }
 
     @Test
@@ -198,6 +226,6 @@ internal class TypesKtTest {
         // then
         assertThat(type.name).isEqualTo("Foo")
         assertThat(type.packageName).isEqualTo("/x/y/z")
-        assertThat(type.genericType).isNull()
+        assertThat(type.genericTypes).isEmpty()
     }
 }

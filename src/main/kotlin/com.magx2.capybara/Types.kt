@@ -36,21 +36,26 @@ fun methodToString(packageName: String, name: String, parameters: List<Parameter
 }
 
 fun typeToString(type: Type): String =
-        if (type.genericType != null) {
-            "${type.packageName}/${type.name}[${typeToString(type.genericType)}]"
+        if (type.genericTypes.isNotEmpty()) {
+            val genericTypes = type.genericTypes
+                    .stream()
+                    .map { typeToString(it) }
+                    .collect(Collectors.joining(", "))
+            "${type.packageName}/${type.name}[$genericTypes]"
         } else {
             "${type.packageName}/${type.name}"
         }
 
 fun typeToString(type: TypeWithoutPackage): String =
-        if (type.genericType != null) {
-            "${type.packageName}/${type.name}[${typeToString(type.genericType)}]"
+        if (type.genericTypes.isNotEmpty()) {
+            val genericTypes = type.genericTypes
+                    .stream()
+                    .map { typeToString(it) }
+                    .collect(Collectors.joining(", "))
+            "${type.packageName}/${type.name}[$genericTypes]"
         } else {
             "${type.packageName}/${type.name}"
         }
-
-private val rawTypeRegex = Pattern.compile("(.+?)\\[(.+)]")
-
 
 fun parseType(
         codeMetainfo: CodeMetainfo,
@@ -83,6 +88,8 @@ private fun localStructs(compilationContext: CompilationContext, compileUnit: Co
                 .toList()
                 .toSet()
 
+private val rawTypeRegex = Pattern.compile("(.+?)\\[(.+)]")
+
 fun parseType(
         codeMetainfo: CodeMetainfo,
         type: String,
@@ -90,8 +97,13 @@ fun parseType(
 ): Type {
     val matcher = rawTypeRegex.matcher(type)
     return if (matcher.find()) {
-        val genericType = parseType(codeMetainfo, matcher.group(2), types)
-        addGenericType(parseType(codeMetainfo, matcher.group(1), types), genericType)
+        val genericTypes = matcher.group(2)
+                .split(",")
+                .stream()
+                .map { it.trim() }
+                .map { parseType(codeMetainfo, it, types) }
+                .toList()
+        addGenericType(parseType(codeMetainfo, matcher.group(1), types), genericTypes)
     } else {
         if (type.contains("/")) {
             Type(type.substringBeforeLast("/"), type.substringAfterLast("/"))
@@ -125,11 +137,41 @@ fun areTypesEqual(type1: Type,
                   compileUnit: CompileUnitWithFlatStructs): Boolean =
         type1 == type2 || isTypePartOfUnion(type1, type2, compilationContext, compileUnit) || isTypePartOfUnion(type2, type1, compilationContext, compileUnit)
 
-fun addGenericType(type: Type, genericType: Type) = type.copy(genericType = genericType)
+fun addGenericType(type: Type, genericTypes: List<Type>): Type {
+    val newGenerics = ArrayList(type.genericTypes)
+    newGenerics.addAll(genericTypes)
+    return type.copy(genericTypes = newGenerics.toList())
+}
+
+fun addGenericTypes(type: Type, genericTypes: List<TypedParameter>): Type =
+        addGenericType(
+                type,
+                genericTypes.stream()
+                        .map { it.type }
+                        .toList())
+
+fun addGenericType(type: Type, genericType: Type): Type = addGenericType(type, listOf(genericType))
 
 fun isLambda(type: Type) =
         type.packageName == lambdaType.packageName && type.name == lambdaType.name
 
+fun findSingleGenericType(type: Type, codeMetainfo: CodeMetainfo): Type {
+    if (type.genericTypes.isEmpty()) {
+        throw CompilationException(codeMetainfo, "Type `${typeToString(type)}` is not generic.")
+    }
+    if (type.genericTypes.size > 1) {
+        throw CompilationException(codeMetainfo, "Type `${typeToString(type)}` is multi generic type.")
+    }
+    return type.genericTypes[0];
+}
+
+fun findLastGenericType(type: Type, codeMetainfo: CodeMetainfo): Type {
+    if (type.genericTypes.isEmpty()) {
+        throw CompilationException(codeMetainfo, "Type `${typeToString(type)}` is not generic.")
+    }
+    return type.genericTypes.last();
+}
+
 data class TypedField(val name: String, val type: Type)
-data class Type(val packageName: String, val name: String, val genericType: Type? = null)
-data class TypeWithoutPackage(val packageName: String?, val name: String, val genericType: TypeWithoutPackage? = null)
+data class Type(val packageName: String, val name: String, val genericTypes: List<Type> = emptyList())
+data class TypeWithoutPackage(val packageName: String?, val name: String, val genericTypes: List<TypeWithoutPackage> = emptyList())

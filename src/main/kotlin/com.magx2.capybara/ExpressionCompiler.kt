@@ -72,7 +72,7 @@ class ExpressionCompiler(private val compilationContext: CompilationContext,
                                         .map { exp ->
                                             @Suppress("USELESS_CAST")
                                             FunctionInvocationExpressionWithReturnType(
-                                                    findGenericType(exp.returnType, functionInvocationExpression.valueName, functionInvocationExpression.codeMetainfo, false),
+                                                    findLastGenericType(exp.returnType, functionInvocationExpression.codeMetainfo),
                                                     FunctionInvocationByExpressionWithReturnType(exp),
                                                     expression.parameters
                                                             .stream()
@@ -140,7 +140,7 @@ class ExpressionCompiler(private val compilationContext: CompilationContext,
                                     throw CompilationException(functionInvocationExpression.codeMetainfo, "Parameter `${functionInvocationExpression.valueName}` is not a lambda. " +
                                             "Actual type is `${typeToString(parameter.returnType)}`.")
                                 }
-                                val genericType = findGenericType(parameter.returnType, functionInvocationExpression.valueName, functionInvocationExpression.codeMetainfo, true)
+                                val genericType = findLastGenericType(parameter.returnType, functionInvocationExpression.codeMetainfo)
                                 FunctionInvocationExpressionWithReturnType(
                                         genericType,
                                         FunctionInvocationByExpressionWithReturnType(parameter),
@@ -159,7 +159,7 @@ class ExpressionCompiler(private val compilationContext: CompilationContext,
                                             "Actual return type is `${typeToString(returnExpression.returnType)}`.")
                                 }
                                 FunctionInvocationExpressionWithReturnType(
-                                        findGenericType(returnExpression.returnType, functionInvocationExpression.codeMetainfo),
+                                        findLastGenericType(returnExpression.returnType, functionInvocationExpression.codeMetainfo),
                                         FunctionInvocationByExpressionWithReturnType(returnExpression),
                                         expression.parameters
                                                 .stream()
@@ -346,11 +346,11 @@ class ExpressionCompiler(private val compilationContext: CompilationContext,
                     val lambdaAssignments = FunctionCompiler(compilationContext, compileUnit, fullyQualifiedStructNames)
                             .findReturnTypeForAssignments(expression.assignments)
                     val returnExpression = findReturnType(expression.expression, lambdaAssignments + assignments, casts, notCasts, callStack)
-                    val returnType = addGenericType(BasicTypes.lambdaType, returnExpression.returnType)
                     val parameters = expression.parameters
                             .stream()
                             .map { parseTypedParameter(it, compilationContext, compileUnit) }
                             .toList()
+                    val returnType = addGenericType(addGenericTypes(BasicTypes.lambdaType, parameters), returnExpression.returnType)
                     LambdaExpressionWithReturnType(returnType, parameters, lambdaAssignments, returnExpression)
                 }
                 is StructFieldAccessExpression -> {
@@ -487,11 +487,8 @@ class ExpressionCompiler(private val compilationContext: CompilationContext,
                         }
                         else -> throw CompilationException(expression.structureIndex.codeMetainfo, "Do not know this type of structure access")
                     }
-
-                    val returnType = (elementType.genericType
-                            ?: throw CompilationException(expression.codeMetainfo, "Type `${typeToString(elementType)}` is not generic."))
                     StructureAccessExpressionWithReturnType(
-                            returnType,
+                            findSingleGenericType(elementType, expression.codeMetainfo),
                             elementType,
                             expression.structureName,
                             x)
@@ -522,17 +519,6 @@ class ExpressionCompiler(private val compilationContext: CompilationContext,
                     AssertExpressionWithReturnType(checkExpression, returnExpression, messageExpression)
                 }
             }
-
-    private fun findGenericType(type: Type, name: String, codeMetainfo: CodeMetainfo, parameter: Boolean): Type {
-        val x = if (parameter) "Parameter" else "Value";
-        return (type.genericType
-                ?: throw CompilationException(codeMetainfo, "$x `$name` should have generic type!"))
-    }
-
-    private fun findGenericType(type: Type, codeMetainfo: CodeMetainfo): Type {
-        return (type.genericType
-                ?: throw CompilationException(codeMetainfo, "Expression should have generic type!"))
-    }
 
     private fun finUnionSubTypes(unionType: Type): Set<Type> = finUnionSubTypes(unionType, compilationContext, compileUnit)
 
