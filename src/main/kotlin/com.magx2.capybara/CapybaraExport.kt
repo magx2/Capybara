@@ -475,7 +475,7 @@ private fun longLambdaToPython(name: String,
     return functionToPython(
             name,
             rewriteValNamesInExpression(lambda.expression, prefix),
-            emptyList(),
+            lambda.parameters.map { ParameterToExport(it.name, it.type) },
             lambda.assignments.map { assignment ->
                 AssigmentStatementWithType(
                         prefix + assignment.name,

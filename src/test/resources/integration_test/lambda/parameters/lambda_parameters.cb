@@ -6,8 +6,16 @@ fun simple_lambda_with_one_param() = {i: Int -> i * 2 }
 
 fun simple_lambda_with_one_param_implicit_name() = {Int -> int * 3 }
 
+fun multiline_lambda(): Lambda[Int] =
+	{ Int ->
+		x = 44
+		y = 1 + 1
+		int * x * y
+	}
+
 def main(List[String]) {
 	assert simple_lambda_with_one_param()(3) == 6, "`simple_lambda_with_one_param` should return `6`"
 	assert simple_lambda_with_one_param_implicit_name()(4) == 12, "`simple_lambda_with_one_param_implicit_name` should return `12`"
+	assert multiline_lambda()(2) == (88 * 2), "`multiline_lambda` should return 88 * 2"
 }
 
