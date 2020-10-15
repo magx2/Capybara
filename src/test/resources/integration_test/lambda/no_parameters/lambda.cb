@@ -46,7 +46,10 @@ def main(List[String]) {
 	assert lambda_as_assignment() == 55, "`lambda_as_assignment` should return `55`!"
 	assert lambda_as_parameter({ 66 }) == 66, "`lambda_as_parameter` should return `66`!"
 	assert multiline_lambda()() == 88, "`multiline_lambda` should return 88"
+	assert multiline_lambda_invocation() == 188, "`multiline_lambda_invocation` should return 188"
 	assert { x = 2 ; y = 3 ; x + y}() == { 5 }(), { "lambda should return 5" }()
 	assert { x = 2 ; y = 3 ; true }(), { "lambda should return 5" }()
+	assert iife() == 15, "`` should return `15`"
+	assert iife_multiline() == 50, "`` should return `50`"
 }
 
