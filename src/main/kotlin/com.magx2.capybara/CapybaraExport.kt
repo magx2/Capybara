@@ -868,7 +868,11 @@ private fun expressionToString(expression: ExpressionWithReturnType,
             is ValueExpressionWithReturnType -> expression.valueName
             is LambdaExpressionWithReturnType -> {
                 if (isShortLambda(expression)) {
-                    "lambda: " + expressionToString(expression.expression, assertions, unions, methodsToRewrite, packageName, longLambdas)
+                    val parameters = expression.parameters
+                            .stream()
+                            .map { it.name }
+                            .collect(Collectors.joining(", "))
+                    "lambda $parameters: " + expressionToString(expression.expression, assertions, unions, methodsToRewrite, packageName, longLambdas)
                 } else {
                     longLambdas[expression]
                             ?: throw IllegalStateException("Should not happen ; Check long lambdas")

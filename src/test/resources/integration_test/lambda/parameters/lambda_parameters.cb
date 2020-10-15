@@ -1,0 +1,13 @@
+package /lambda/parameters
+
+import /capybara/type
+
+fun simple_lambda_with_one_param() = {i: Int -> i * 2 }
+
+fun simple_lambda_with_one_param_implicit_name() = {Int -> int * 3 }
+
+def main(List[String]) {
+	assert simple_lambda_with_one_param()(3) == 6, "`simple_lambda_with_one_param` should return `6`"
+	assert simple_lambda_with_one_param_implicit_name()(4) == 12, "`simple_lambda_with_one_param_implicit_name` should return `12`"
+}
+

@@ -79,7 +79,7 @@ expression
 	;
 
 lambda_expression
-	: CURLYL NEWLINE* lambda_body NEWLINE* CURLYR
+	: CURLYL NEWLINE* (listOfParameters ARROW_SLIM)? lambda_body NEWLINE* CURLYR
 	;
 
 lambda_body

@@ -33,6 +33,7 @@ data class StructField(val codeMetainfo: CodeMetainfo, val name: String, val val
 data class ValueExpression(override val codeMetainfo: CodeMetainfo, val valueName: String) : Expression(codeMetainfo)
 data class LambdaExpression(
         override val codeMetainfo: CodeMetainfo,
+        val parameters: List<Parameter>,
         val assignments: List<AssigmentStatement>,
         val expression: Expression) : Expression(codeMetainfo)
 
@@ -84,6 +85,7 @@ data class NewStructExpressionWithReturnType(override val returnType: Type, val 
 data class StructFieldExpressionWithReturnType(val name: String, val value: ExpressionWithReturnType)
 data class LambdaExpressionWithReturnType(
         override val returnType: Type,
+        val parameters: List<TypedParameter>,
         val assignments: List<AssigmentStatementWithType>,
         val expression: ExpressionWithReturnType) : ExpressionWithReturnType(returnType)
 

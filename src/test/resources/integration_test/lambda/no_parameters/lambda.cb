@@ -1,4 +1,4 @@
-package /lambda
+package /lambda/no_parameters
 
 import /capybara/type
 
@@ -41,7 +41,7 @@ fun iife(): Int = { 5 + 10 }()
 fun iife_multiline(): Int = { x=3; y=6; { x=5; y=10; x*y } }()()
 
 def main(List[String]) {
-	assert /lambda:simple_lambda()() == 44, "Simple lambda should return `44`!"
+	assert /lambda/no_parameters:simple_lambda()() == 44, "Simple lambda should return `44`!"
 	assert simple_lambda()() == 44, "Simple lambda should return `44` (no fully qualified name)!"
 	assert lambda_as_assignment() == 55, "`lambda_as_assignment` should return `55`!"
 	assert lambda_as_parameter({ 66 }) == 66, "`lambda_as_parameter` should return `66`!"

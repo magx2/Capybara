@@ -68,11 +68,6 @@ class ExpressionCompiler(private val compilationContext: CompilationContext,
                                 assignments.stream()
                                         .filter { it.name == valueName }
                                         .filter { isLambda(it.expression.returnType) }
-//                                        .map {
-//                                            ValueExpressionWithReturnType(
-//                                                    findGenericType(it.expression.returnType, functionInvocationExpression.valueName, functionInvocationExpression.codeMetainfo, false),
-//                                                    it.name)
-//                                        }
                                         .map { it.expression }
                                         .map { exp ->
                                             @Suppress("USELESS_CAST")
@@ -350,12 +345,13 @@ class ExpressionCompiler(private val compilationContext: CompilationContext,
                 is LambdaExpression -> {
                     val lambdaAssignments = FunctionCompiler(compilationContext, compileUnit, fullyQualifiedStructNames)
                             .findReturnTypeForAssignments(expression.assignments)
-                            .stream()
-//                            .map { AssigmentStatementWithType("_" + it.name, it.expression, it.type) }
-                            .toList()
                     val returnExpression = findReturnType(expression.expression, lambdaAssignments + assignments, casts, notCasts, callStack)
                     val returnType = addGenericType(BasicTypes.lambdaType, returnExpression.returnType)
-                    LambdaExpressionWithReturnType(returnType, lambdaAssignments, returnExpression)
+                    val parameters = expression.parameters
+                            .stream()
+                            .map { parseTypedParameter(it, compilationContext, compileUnit) }
+                            .toList()
+                    LambdaExpressionWithReturnType(returnType, parameters, lambdaAssignments, returnExpression)
                 }
                 is StructFieldAccessExpression -> {
                     val structExpression = findReturnType(expression.structureExpression, assignments, casts, notCasts, callStack)
