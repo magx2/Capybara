@@ -13,9 +13,33 @@ fun multiline_lambda(): Lambda[Int] =
 		int * x * y
 	}
 
+fun multiline_lambda_invocation(first: Int, second: Int): Int {
+	x = { i1: Int, i2:Int ->  x = 44 ; y = 2 + 2 ; x * y + i1 + i2 }
+	y = { Int -> x = 2 ; y = 6 ; x + y + int }
+	return x(first, second) + y(second)
+}
+
+fun lambda_in_lambda(Int): Int {
+	x = { Int ->
+		x = { Int -> assert 1 == 1, { 44 + int }, "1 should equal to 1" }
+		y = { Int -> { Int -> 2 + 2 } }
+		x(int)() * y(int)(int)
+	}
+	y = { Int -> x = 2 ; y = 6 ; (x + y) * int }
+	return x(int) + y(int)
+}
+
+fun iife(Int): Int = { Int -> 5 + 10 + int }(int)
+
+fun iife_multiline(Int): Int = { Int -> x=3; y=6; { x=5; y=10; x*y } }(int)()
+
 def main(List[String]) {
 	assert simple_lambda_with_one_param()(3) == 6, "`simple_lambda_with_one_param` should return `6`"
 	assert simple_lambda_with_one_param_implicit_name()(4) == 12, "`simple_lambda_with_one_param_implicit_name` should return `12`"
-	assert multiline_lambda()(2) == (88 * 2), "`multiline_lambda` should return 88 * 2"
+	assert multiline_lambda()(2) == (88 * 2), "`multiline_lambda` should return `88 * 2`"
+	assert multiline_lambda_invocation(2, 3) == 192, "`multiline_lambda_invocation` should return `192`"
+	assert lambda_in_lambda(7) == 260, "`lambda_in_lambda` should return `260`"
+	assert iife(2) == 17, "`` should return `17`"
+	assert iife_multiline(3) == 50, "`` should return `50`"
 }
 

@@ -475,7 +475,8 @@ private fun longLambdaToPython(name: String,
     return functionToPython(
             name,
             rewriteValNamesInExpression(lambda.expression, prefix),
-            lambda.parameters.map { ParameterToExport(it.name, it.type) },
+            lambda.parameters
+                    .map { ParameterToExport(prefix + it.name, it.type) },
             lambda.assignments.map { assignment ->
                 AssigmentStatementWithType(
                         prefix + assignment.name,
@@ -495,7 +496,6 @@ private fun longLambdaToPython(name: String,
 private fun rewriteValNamesInExpression(expression: ExpressionWithReturnType, prefix: String): ExpressionWithReturnType =
         when (expression) {
             is LambdaExpressionWithReturnType,
-            is ParameterExpressionWithReturnType,
             is IntegerExpressionWithReturnType,
             is FloatExpressionWithReturnType,
             is BooleanExpressionWithReturnType,
@@ -503,6 +503,7 @@ private fun rewriteValNamesInExpression(expression: ExpressionWithReturnType, pr
             NothingExpressionWithReturnType,
             is NewStructExpressionWithReturnType,
             is IsExpressionWithReturnType -> expression
+            is ParameterExpressionWithReturnType -> ParameterExpressionWithReturnType(expression.returnType, prefix + expression.valueName)
             is FunctionInvocationExpressionWithReturnType ->
                 FunctionInvocationExpressionWithReturnType(
                         expression.returnType,
@@ -868,11 +869,14 @@ private fun expressionToString(expression: ExpressionWithReturnType,
             is ValueExpressionWithReturnType -> expression.valueName
             is LambdaExpressionWithReturnType -> {
                 if (isShortLambda(expression)) {
+                    val prefix = "_short_lambda_"
                     val parameters = expression.parameters
                             .stream()
                             .map { it.name }
+                            .map { prefix + it }
                             .collect(Collectors.joining(", "))
-                    "lambda $parameters: " + expressionToString(expression.expression, assertions, unions, methodsToRewrite, packageName, longLambdas)
+                    val exp = rewriteValNamesInExpression(expression.expression, prefix)
+                    "(lambda $parameters: " + expressionToString(exp, assertions, unions, methodsToRewrite, packageName, longLambdas) + ")"
                 } else {
                     longLambdas[expression]
                             ?: throw IllegalStateException("Should not happen ; Check long lambdas")
