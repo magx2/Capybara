@@ -33,7 +33,7 @@ fun iife(Int): Int = { Int -> 5 + 10 + int }(int)
 
 fun iife_multiline(Int): Int = { Int -> x=3; y=6; { x=5; y=10; x*y } }(int)()
 
-fun lambda_with_parameter(l: Lambda[Int, Int], Int): Int = return l(int)
+fun lambda_with_parameter(l: Lambda[Int, Int], Int): Int = l(int)
 
 def def_simple_lambda_with_one_param(): Lambda[Int, Int] {
 	return {i: Int -> i * 2 }
