@@ -67,7 +67,10 @@ expression
 	| function_qualified_name=fully_qualified_function ROUNDL parameters? ROUNDR
 	| normal_function_invocation=expression ROUNDL parameters? ROUNDR
 	| left=expression infix_operation right=expression
-	| IF condition=expression CURLYL NEWLINE true_expression=expression NEWLINE CURLYR ELSE CURLYL NEWLINE false_expression=expression NEWLINE CURLYR
+	| IF ROUNDL condition=expression ROUNDR
+		CURLYL NEWLINE* true_expression=expression NEWLINE*
+		(CURLYR ELSE IF ROUNDL next_condition=expression ROUNDR CURLYL NEWLINE* next_true_expression=expression NEWLINE*)*
+		CURLYR ELSE CURLYL NEWLINE* false_expression=expression NEWLINE* CURLYR
 	| condition=expression QUESTION_MARK true_expression=expression COLON false_expression=expression
 	| argument_to_function=expression ARROW_SLIM apply_to_function_qualified_name=fully_qualified_function
 	| argument_to_function=expression ARROW_SLIM apply_to_function_expression=expression

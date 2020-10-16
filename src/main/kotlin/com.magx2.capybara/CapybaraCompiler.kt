@@ -390,11 +390,23 @@ private class Listener(private val fileName: String) : CapybaraBaseListener() {
                     InfixExpression(parseCodeMetainfo(fileName, ctx.start), ctx.infix_operation().text, parseExpression(ctx.left, parametersMap), parseExpression(ctx.right, parametersMap))
                 }
                 ctx.condition != null -> {
-                    IfExpression(
-                            parseCodeMetainfo(fileName, ctx.start),
-                            parseExpression(ctx.condition, parametersMap),
-                            parseExpression(ctx.true_expression, parametersMap),
-                            parseExpression(ctx.false_expression, parametersMap))
+                    if (ctx.next_condition != null) {
+                        IfExpression(
+                                parseCodeMetainfo(fileName, ctx.start),
+                                parseExpression(ctx.condition, parametersMap),
+                                parseExpression(ctx.true_expression, parametersMap),
+                                parseIfElseExpression(
+                                        ctx.next_condition,
+                                        ctx.next_true_expression,
+                                        ctx.false_expression, parametersMap))
+//                                parseExpression(ctx.false_expression, parametersMap))
+                    } else {
+                        IfExpression(
+                                parseCodeMetainfo(fileName, ctx.start),
+                                parseExpression(ctx.condition, parametersMap),
+                                parseExpression(ctx.true_expression, parametersMap),
+                                parseExpression(ctx.false_expression, parametersMap))
+                    }
                 }
                 ctx.argument_to_function != null -> {
                     val argumentToFunction = ctx.argument_to_function
@@ -470,6 +482,17 @@ private class Listener(private val fileName: String) : CapybaraBaseListener() {
                 )
                 else -> throw IllegalStateException("I don't know how to handle `${ctx.text}`!")
             }
+
+    private fun parseIfElseExpression(nextCondition: CapybaraParser.ExpressionContext,
+                                      nextTrueExpression: CapybaraParser.ExpressionContext,
+                                      falseExpression: CapybaraParser.ExpressionContext,
+                                      parametersMap: Map<String, String>): Expression {
+        return IfExpression(
+                parseCodeMetainfo(fileName, nextCondition.start),
+                parseExpression(nextCondition, parametersMap),
+                parseExpression(nextTrueExpression, parametersMap),
+                parseExpression(falseExpression, parametersMap))
+    }
 
     private fun buildFunctionInvocationExpression(functionExpression: CapybaraParser.ExpressionContext, parametersMap: Map<String, String>): FunctionInvocation {
         val expression = parseExpression(functionExpression, parametersMap)
