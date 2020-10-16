@@ -47,7 +47,7 @@ private fun listCompileUnit(): CompileUnit {
                     Function(
                             codeMetainfo,
                             packageName,
-                            "length",
+                            "list_length",
                             typeToString(intType),
                             listOf(Parameter(codeMetainfo, "list", typeToString(addGenericType(listType, anyType)))),
                             listOf(),
