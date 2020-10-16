@@ -66,8 +66,8 @@ struct TestModuleExecutionResult {
 	name: String,
 	test_method_execution_results: List[TestMethodExecutionResult]
 }
-
-fun run_tests(modules: List[TestModule]): List[TestModuleExecutionResult] {
-
-}
+//
+//fun run_tests(modules: List[TestModule]): List[TestModuleExecutionResult] {
+//	return []
+//}
 
