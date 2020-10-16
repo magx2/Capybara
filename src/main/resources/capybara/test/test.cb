@@ -57,3 +57,17 @@ struct TestMethod { name: String, assertions: List[Lambda[AssertionResult]] }
 
 struct TestModule { name: String, test_methods: List[TestMethod] }
 
+struct TestMethodExecutionResult {
+	name: String,
+	executed_assertions: List[String]
+}
+
+struct TestModuleExecutionResult {
+	name: String,
+	test_method_execution_results: List[TestMethodExecutionResult]
+}
+
+fun run_tests(modules: List[TestModule]): List[TestModuleExecutionResult] {
+
+}
+
