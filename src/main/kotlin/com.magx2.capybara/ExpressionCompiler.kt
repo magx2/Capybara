@@ -68,7 +68,7 @@ class ExpressionCompiler(private val compilationContext: CompilationContext,
                                 assignments.stream()
                                         .filter { it.name == valueName }
                                         .filter { isLambda(it.expression.returnType) }
-                                        .map { it.expression }
+                                        .map { ValueExpressionWithReturnType(it.type, it.name) }
                                         .map { exp ->
                                             @Suppress("USELESS_CAST")
                                             FunctionInvocationExpressionWithReturnType(
