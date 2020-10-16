@@ -69,7 +69,7 @@ expression
 	| left=expression infix_operation right=expression
 	| IF ROUNDL condition=expression ROUNDR
 		CURLYL NEWLINE* true_expression=expression NEWLINE*
-		(CURLYR ELSE IF ROUNDL next_condition=expression ROUNDR CURLYL NEWLINE* next_true_expression=expression NEWLINE*)*
+		if_else*
 		CURLYR ELSE CURLYL NEWLINE* false_expression=expression NEWLINE* CURLYR
 	| condition=expression QUESTION_MARK true_expression=expression COLON false_expression=expression
 	| argument_to_function=expression ARROW_SLIM apply_to_function_qualified_name=fully_qualified_function
@@ -79,6 +79,10 @@ expression
 	| structureAccessExpression
 	| is_value=SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL IS is_type=fullyQualifiedType
 	| ASSERT check_expression=expression COMMA return_expression=expression (COMMA message_expression=expression)?
+	;
+
+if_else
+	: CURLYR ELSE IF ROUNDL next_condition=expression ROUNDR CURLYL NEWLINE* next_true_expression=expression NEWLINE*
 	;
 
 lambda_expression
