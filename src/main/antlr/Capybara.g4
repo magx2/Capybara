@@ -28,12 +28,16 @@ code
 	;
 
 struct
-	: STRUCT name=ALPH_NUM_STARTING_WITH_CAPITAL CURLYL NEWLINE? field* CURLYR
+	: STRUCT name=ALPH_NUM_STARTING_WITH_CAPITAL CURLYL NEWLINE* list_of_fields? NEWLINE* CURLYR
+	;
+
+list_of_fields
+	: field (commaEnd field)*
 	;
 
 field
-	: name=SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL COLON type=fullyQualifiedType NEWLINE
-	| SPREAD spread_type=fullyQualifiedType NEWLINE
+	: name=SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL COLON type=fullyQualifiedType
+	| SPREAD spread_type=fullyQualifiedType
 	;
 
 fun_
@@ -88,12 +92,12 @@ lambda_body
 	;
 
 struct_field_initializations
-	: struct_field_initialization (COMMA NEWLINE* struct_field_initialization)*
+	: struct_field_initialization (commaEnd struct_field_initialization)*
 	;
 
 newListExpression
-	: SQUAREL expression (COMMA expression)*  SQUARER
-	| SQUAREL SQUARER
+	: SQUAREL NEWLINE* expression (commaEnd expression)* NEWLINE* SQUARER
+	| SQUAREL NEWLINE* SQUARER
 	;
 
 structureAccessExpression

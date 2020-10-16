@@ -1,0 +1,59 @@
+package /capybara/test
+
+import /capybara/type
+
+struct IntAssertion {
+	is_equal_to: Lambda[Int, AssertionResult]
+}
+
+struct StringAssertion {
+	is_equal_to: Lambda[String, AssertionResult]
+}
+
+struct ListOfStringsAssertion {
+	is_equal_to: Lambda[List[String], AssertionResult]
+}
+
+union AssertionResult { OkResult, ErrorResult }
+
+struct OkResult { message: String }
+
+struct ErrorResult { error_message: String }
+
+fun assert_that(actual: Int): IntAssertion =
+	IntAssertion {
+		is_equal_to = { expected: Int ->
+			if(expected == actual) {
+				OkResult { message = "actual==expected"}
+			} else {
+				ErrorResult { error_message = "actual `" + actual + "` is not equal to expected `" + expected + "`"}
+			}
+		}
+	}
+
+fun assert_that(actual: String): StringAssertion =
+	StringAssertion {
+		is_equal_to = { expected: String ->
+			if(expected == actual) {
+				OkResult { message = "actual==expected"}
+			} else {
+				ErrorResult { error_message = "actual `" + actual + "` is not equal to expected `" + expected + "`"}
+			}
+		}
+	}
+
+fun assert_that(actual: List[String]): ListOfStringsAssertion =
+	ListOfStringsAssertion {
+		is_equal_to = { expected: List[String] ->
+			if(expected == actual) {
+				OkResult { message = "actual==expected"}
+			} else {
+				ErrorResult { error_message = "actual `" + actual + "` is not equal to expected `" + expected + "`"}
+			}
+		}
+	}
+
+struct TestMethod { name: String, assertions: List[Lambda[AssertionResult]] }
+
+struct TestModule { name: String, test_methods: List[TestMethod] }
+

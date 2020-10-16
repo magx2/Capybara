@@ -1,12 +1,9 @@
 package /integration_test
 
 import /capybara/type
-
-fun multiply(Int) = int * 2
-
-fun assert_message(given: String, expected: String) = given + " * 2 != " + expected + " o.O?"
+import /infix_operation/plus
 
 def main(args: List[String]) {
-	x = assert_message("foo", "boo")
+
 }
 

@@ -1,5 +1,6 @@
 package com.magx2.capybara
 
+import com.magx2.capybara.BasicTypes.nothingType
 import java.util.*
 import java.util.stream.Collectors
 import java.util.stream.Stream
@@ -131,8 +132,14 @@ class ExpressionCompiler(private val compilationContext: CompilationContext,
                                             }
                                         }
                                         .orElseThrow {
+                                            val parameters = expression.parameters
+                                                    .stream()
+                                                    .map { findReturnType(it, assignments, casts, notCasts) }
+                                                    .map { it.returnType }
+                                                    .map { typeToString(it) }
+                                                    .collect(Collectors.joining(", "))
                                             throw CompilationException(functionInvocationExpression.codeMetainfo,
-                                                    "Could not find value or fun/def name `$valueName`.")
+                                                    "Could not find value or fun/def name `$valueName($parameters)`.")
                                         }
                             } else if (functionInvocationExpression is ParameterExpression) {
                                 val parameter = findReturnType(functionInvocationExpression, assignments)
@@ -366,7 +373,17 @@ class ExpressionCompiler(private val compilationContext: CompilationContext,
                             .filter { it.name == expression.fieldName }
                             .map { it.type }
                             .findAny()
-                            .orElseThrow { CompilationException(expression.codeMetainfo, "There is no filed called `${expression.fieldName}` in type `${typeToString(structType)}`") }
+                            .orElseThrow {
+                                val fields = struct.fields
+                                        .stream()
+                                        .map { "`${it.name}`=`${typeToString(it.type)}`" }
+                                        .collect(Collectors.joining(", "))
+                                CompilationException(
+                                        expression.codeMetainfo,
+                                        "There is no filed called `${expression.fieldName}` " +
+                                                "in type `${typeToString(structType)}`. " +
+                                                "Available fields: $fields.")
+                            }
                     StructFieldAccessExpressionWithReturnType(
                             structExpression,
                             expression.fieldName,
@@ -595,7 +612,7 @@ class ExpressionCompiler(private val compilationContext: CompilationContext,
 
     private fun findCommonType(types: Collection<Type>): Type =
             when {
-                types.isEmpty() -> BasicTypes.nothingType
+                types.isEmpty() -> nothingType
                 types.toSet().size == 1 -> types.first()
                 else -> BasicTypes.anyType
             }
@@ -716,7 +733,7 @@ class ExpressionCompiler(private val compilationContext: CompilationContext,
                 findUnionType(leftType, rightType).get()
             } else if (leftType == BasicTypes.stringType || rightType == BasicTypes.stringType) {
                 val notStringType = if (leftType == BasicTypes.stringType) Pair(rightType, rightCodeMetainfo) else Pair(leftType, leftCodeMetainfo)
-                if (notStringType.first == BasicTypes.intType || notStringType.first == BasicTypes.booleanType) {
+                if (notStringType.first == BasicTypes.intType || notStringType.first == BasicTypes.booleanType || isList(notStringType.first)) {
                     BasicTypes.stringType
                 } else if (expression is InfixExpression && notStringType.first == BasicTypes.floatType) {
                     if (expression.operation != "*") {
@@ -732,6 +749,12 @@ class ExpressionCompiler(private val compilationContext: CompilationContext,
                 }
             } else if (isOneOfGivenType(BasicTypes.intType, leftType, rightType) && isOneOfGivenType(BasicTypes.floatType, leftType, rightType)) {
                 BasicTypes.floatType
+            } else if (isList(leftType) && isList(rightType) && (leftType.genericTypes[0] == nothingType || rightType.genericTypes[0] == nothingType)) {
+                if (leftType.genericTypes[0] == nothingType) {
+                    rightType
+                } else {
+                    leftType
+                }
             } else {
                 throw CompilationException(expression.codeMetainfo, "You need to return same types from infix expression. " +
                         "Left expression returns `${typeToString(leftType)}`, " +

@@ -1,0 +1,44 @@
+package /infix_operation/plus
+
+import /capybara/test
+import /capybara/type
+
+fun plus_module() =
+	TestModule {
+		name = "Plus"
+		test_methods = [
+			should_add_two_ints(),
+			should_add_two_strings(),
+			should_add_two_lists()
+		]
+	}
+
+fun should_add_two_ints(): TestMethod =
+	TestMethod {
+		name = "should_add_two_ints"
+		assertions = [
+			{ assert_that(1 + 2).is_equal_to(3) }
+			{ assert_that(-3 + 2).is_equal_to(-1) }
+			{ assert_that(3 + -2).is_equal_to(1) }
+			{ assert_that(-3 + -2).is_equal_to(-5) }
+		]
+	}
+
+fun should_add_two_strings(): TestMethod =
+	TestMethod {
+		name = "should_add_two_strings"
+		assertions = [
+			{ assert_that("a" + "b").is_equal_to("ab") }
+		]
+	}
+
+fun should_add_two_lists(): TestMethod =
+	TestMethod {
+		name = "should_add_two_lists"
+		assertions = [
+			{ assert_that(["a"] + ["b"]).is_equal_to(["a", "b"]) },
+			{ assert_that(["a"] + []).is_equal_to(["a"]) },
+			{ assert_that([] + ["b"]).is_equal_to(["b"]) }
+		]
+	}
+
