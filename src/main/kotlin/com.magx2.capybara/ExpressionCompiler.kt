@@ -535,6 +535,7 @@ class ExpressionCompiler(private val compilationContext: CompilationContext,
 
                     AssertExpressionWithReturnType(checkExpression, returnExpression, messageExpression)
                 }
+                is NativeExpression -> NativeExpressionWithReturnType(expression.returnType, expression.pythonCode)
             }
 
     private fun finUnionSubTypes(unionType: Type): Set<Type> = finUnionSubTypes(unionType, compilationContext, compileUnit)

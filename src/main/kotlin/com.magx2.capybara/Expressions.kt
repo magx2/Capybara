@@ -53,6 +53,11 @@ data class IsExpression(
         val typeCodeMetainfo: CodeMetainfo,
         val type: String) : Expression(codeMetainfo)
 
+data class NativeExpression(
+        override val codeMetainfo: CodeMetainfo,
+        val pythonCode: String,
+        val returnType: Type) : Expression(codeMetainfo)
+
 sealed class ExpressionWithReturnType(open val returnType: Type)
 data class ParameterExpressionWithReturnType(override val returnType: Type, val valueName: String) : ExpressionWithReturnType(returnType)
 sealed class ConstantExpressionWithReturnType(returnType: Type) : ExpressionWithReturnType(returnType)
@@ -100,3 +105,7 @@ data class StructureAccessExpressionWithReturnType(
         val structureIndex: ExpressionWithReturnType) : ExpressionWithReturnType(returnType)
 
 data class IsExpressionWithReturnType(val value: String, val type: Type) : ExpressionWithReturnType(booleanType)
+
+data class NativeExpressionWithReturnType(
+        override val returnType: Type,
+        val nativeCode: String) : ExpressionWithReturnType(returnType)

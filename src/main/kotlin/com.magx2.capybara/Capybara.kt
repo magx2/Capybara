@@ -73,7 +73,7 @@ fun main(options: CommandLineOptions) {
     val compileUnits = (langFiles + options.filesToCompile)
             .stream()
             .map { compiler.compile(it) }
-            .toList()
+            .toList() + getBinaryCompileUnits()
 
     //
     // EXPORTS/IMPORTS

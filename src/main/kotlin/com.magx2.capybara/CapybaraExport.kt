@@ -257,6 +257,7 @@ private fun findImports(expresion: ExpressionWithReturnType?, packageName: Strin
                 is AssertExpressionWithReturnType -> findImports(expresion.checkExpression, packageName) + findImports(expresion.returnExpression, packageName) + (if (expresion.messageExpression != null) findImports(expresion.messageExpression, packageName) else emptyList())
                 is StructureAccessExpressionWithReturnType -> findImports(expresion.structureIndex, packageName)
                 is IsExpressionWithReturnType -> emptyList()
+                is NativeExpressionWithReturnType -> emptyList()
             }
         } else {
             emptyList()
@@ -418,6 +419,7 @@ private fun findLambdas(expresion: ExpressionWithReturnType): List<LambdaExpress
             is BooleanExpressionWithReturnType,
             is StringExpressionWithReturnType,
             is ValueExpressionWithReturnType,
+            is NativeExpressionWithReturnType,
             NothingExpressionWithReturnType -> emptyList()
         }
 
@@ -495,14 +497,6 @@ private fun longLambdaToPython(name: String,
 
 private fun rewriteValNamesInExpression(expression: ExpressionWithReturnType, prefix: String): ExpressionWithReturnType =
         when (expression) {
-            is LambdaExpressionWithReturnType,
-            is IntegerExpressionWithReturnType,
-            is FloatExpressionWithReturnType,
-            is BooleanExpressionWithReturnType,
-            is StringExpressionWithReturnType,
-            NothingExpressionWithReturnType,
-            is NewStructExpressionWithReturnType,
-            is IsExpressionWithReturnType -> expression
             is ParameterExpressionWithReturnType -> ParameterExpressionWithReturnType(expression.returnType, prefix + expression.valueName)
             is FunctionInvocationExpressionWithReturnType ->
                 FunctionInvocationExpressionWithReturnType(
@@ -570,6 +564,15 @@ private fun rewriteValNamesInExpression(expression: ExpressionWithReturnType, pr
                         expression.structureName,
                         rewriteValNamesInExpression(expression.structureIndex, prefix)
                 )
+            is NativeExpressionWithReturnType,
+            is LambdaExpressionWithReturnType,
+            is IntegerExpressionWithReturnType,
+            is FloatExpressionWithReturnType,
+            is BooleanExpressionWithReturnType,
+            is StringExpressionWithReturnType,
+            NothingExpressionWithReturnType,
+            is NewStructExpressionWithReturnType,
+            is IsExpressionWithReturnType -> expression
         }
 
 private fun functionToPython(function: FunctionToExport,
@@ -907,6 +910,7 @@ private fun expressionToString(expression: ExpressionWithReturnType,
             is AssertExpressionWithReturnType -> {
                 expressionToString(expression.returnExpression, assertions, unions, methodsToRewrite, packageName, longLambdas)
             }
+            is NativeExpressionWithReturnType -> expression.nativeCode
         }
 
 private fun methodToString(
