@@ -61,18 +61,30 @@ expression
 	: ROUNDL in_parenthisis_expression=expression ROUNDR
 	| constant
 	| value=SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL
+	| lambda=lambda_expression
 	| structure_expression=expression DOT field_name=SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL
 	| BANG negate_expression=expression
 	| function_qualified_name=fully_qualified_function ROUNDL parameters? ROUNDR
+	| normal_function_invocation=expression ROUNDL parameters? ROUNDR
 	| left=expression infix_operation right=expression
 	| IF condition=expression CURLYL NEWLINE true_expression=expression NEWLINE CURLYR ELSE CURLYL NEWLINE false_expression=expression NEWLINE CURLYR
 	| condition=expression QUESTION_MARK true_expression=expression COLON false_expression=expression
 	| argument_to_function=expression ARROW_SLIM apply_to_function_qualified_name=fully_qualified_function
+	| argument_to_function=expression ARROW_SLIM apply_to_function_expression=expression
 	| struct_name=fullyQualifiedType CURLYL NEWLINE* struct_field_initializations NEWLINE* CURLYR
 	| newListExpression
 	| structureAccessExpression
 	| is_value=SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL IS is_type=fullyQualifiedType
-	| ASSERT check_expression=expression return_expression=expression message_expression=expression?
+	| ASSERT check_expression=expression COMMA return_expression=expression (COMMA message_expression=expression)?
+	;
+
+lambda_expression
+	: CURLYL NEWLINE* (listOfParameters ARROW_SLIM NEWLINE*)? lambda_body NEWLINE* CURLYR
+	;
+
+lambda_body
+	: expression
+	| (assigment semicolonEnd)+ expression
 	;
 
 struct_field_initializations
@@ -181,7 +193,7 @@ def_call
 	;
 
 assert_statement
-	: ASSERT check_expression=expression message_expression=expression?
+	: ASSERT check_expression=expression (COMMA message_expression=expression)?
 	;
 
 native_python
@@ -200,7 +212,11 @@ unionField
 	;
 
 fullyQualifiedType
-	: (type_package=PACKAGE SLASH)? name=ALPH_NUM_STARTING_WITH_CAPITAL (SQUAREL generic_type=fullyQualifiedType SQUARER)?
+	: (type_package=PACKAGE SLASH)? name=ALPH_NUM_STARTING_WITH_CAPITAL (SQUAREL generic_types SQUARER)?
+	;
+
+generic_types
+	: fullyQualifiedType (commaEnd fullyQualifiedType)*
 	;
 
 next
@@ -253,11 +269,13 @@ ASSERT: 'assert' ;
 
 commaEnd
 	: COMMA NEWLINE*
+	| COMMA
 	| NEWLINE+
 	;
 
 semicolonEnd
 	: SEMICOLON NEWLINE*
+	| SEMICOLON
 	| NEWLINE+
 	;
 

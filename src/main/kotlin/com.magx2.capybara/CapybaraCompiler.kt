@@ -222,7 +222,7 @@ private class Listener(private val fileName: String) : CapybaraBaseListener() {
                         (java.util.function.Function<Parameter, String> { it.name }),
                         (java.util.function.Function<Parameter, String> { it.type })))
         if (ctx.returnExpression != null) {
-            returnExpression = parseExpression(ctx.returnExpression)
+            returnExpression = parseExpression(ctx.returnExpression, parameters)
         }
     }
 
@@ -305,27 +305,27 @@ private class Listener(private val fileName: String) : CapybaraBaseListener() {
             assignments.add(AssigmentStatement(
                     parseCodeMetainfo(fileName, ctx.assigment().start),
                     ctx.assigment().assign_to.text,
-                    parseExpression(ctx.assigment().expression()),
+                    parseExpression(ctx.assigment().expression(), parameters),
                     if (ctx.assigment().assigment_type != null) parseCodeMetainfo(fileName, ctx.assigment().assigment_type?.start!!) else null,
                     ctx.assigment().assigment_type?.text))
         } else {
-            returnExpression = parseExpression(ctx.expression())
+            returnExpression = parseExpression(ctx.expression(), parameters)
         }
     }
 
-    private fun parseExpression(ctx: CapybaraParser.ExpressionContext): Expression =
+    private fun parseExpression(ctx: CapybaraParser.ExpressionContext, parametersMap: Map<String, String>): Expression =
             when {
                 ctx.in_parenthisis_expression != null -> {
-                    ParenthesisExpression(parseCodeMetainfo(fileName, ctx.start), parseExpression(ctx.in_parenthisis_expression))
+                    ParenthesisExpression(parseCodeMetainfo(fileName, ctx.start), parseExpression(ctx.in_parenthisis_expression, parametersMap))
                 }
                 ctx.value != null -> {
                     val valueName = ctx.value.text
                     when {
-                        parameters.containsKey(valueName) -> {
+                        parametersMap.containsKey(valueName) -> {
                             ParameterExpression(
                                     parseCodeMetainfo(fileName, ctx.start),
                                     valueName,
-                                    parameters[valueName]!!
+                                    parametersMap[valueName]!!
                             )
                         }
                         else -> {
@@ -333,10 +333,24 @@ private class Listener(private val fileName: String) : CapybaraBaseListener() {
                         }
                     }
                 }
+                ctx.lambda != null -> {
+                    val codeMetainfo = parseCodeMetainfo(fileName, ctx.start)
+                    val assignments = ctx.lambda.lambda_body().assigment().map { parseAssigmentStatement(it, parametersMap) }
+                    val expression = ctx.lambda.lambda_body().expression()
+                    val parameters = findListOfParametersInFun(ctx.lambda.listOfParameters())
+                    val newParameters = parametersMap +
+                            parameters.stream()
+                                    .collect(Collectors.toMap({ it.name }, { it.type }))
+                    LambdaExpression(
+                            codeMetainfo,
+                            parameters,
+                            assignments,
+                            parseExpression(expression, newParameters))
+                }
                 ctx.structure_expression != null -> {
                     StructFieldAccessExpression(
                             parseCodeMetainfo(fileName, ctx.start),
-                            parseExpression(ctx.structure_expression),
+                            parseExpression(ctx.structure_expression, parametersMap),
                             ctx.field_name.text)
                 }
                 ctx.constant() != null -> {
@@ -353,32 +367,56 @@ private class Listener(private val fileName: String) : CapybaraBaseListener() {
                     val parameters = (ctx.parameters()
                             ?.expression() ?: listOf())
                             .stream()
-                            .map { parseExpression(it) }
+                            .map { parseExpression(it, parametersMap) }
                             .toList()
                     FunctionInvocationExpression(
                             parseCodeMetainfo(fileName, ctx.start),
-                            ctx.function_qualified_name.package_?.text,
-                            ctx.function_qualified_name.function_name.text,
+                            FunctionInvocationByName(ctx.function_qualified_name.package_?.text,
+                                    ctx.function_qualified_name.function_name.text),
+                            parameters)
+                }
+                ctx.normal_function_invocation != null -> {
+                    val parameters = (ctx.parameters()
+                            ?.expression() ?: listOf())
+                            .stream()
+                            .map { parseExpression(it, parametersMap) }
+                            .toList()
+                    FunctionInvocationExpression(
+                            parseCodeMetainfo(fileName, ctx.start),
+                            buildFunctionInvocationExpression(ctx.normal_function_invocation, parametersMap),
                             parameters)
                 }
                 ctx.infix_operation() != null -> {
-                    InfixExpression(parseCodeMetainfo(fileName, ctx.start), ctx.infix_operation().text, parseExpression(ctx.left), parseExpression(ctx.right))
+                    InfixExpression(parseCodeMetainfo(fileName, ctx.start), ctx.infix_operation().text, parseExpression(ctx.left, parametersMap), parseExpression(ctx.right, parametersMap))
                 }
                 ctx.condition != null -> {
                     IfExpression(
                             parseCodeMetainfo(fileName, ctx.start),
-                            parseExpression(ctx.condition),
-                            parseExpression(ctx.true_expression),
-                            parseExpression(ctx.false_expression))
+                            parseExpression(ctx.condition, parametersMap),
+                            parseExpression(ctx.true_expression, parametersMap),
+                            parseExpression(ctx.false_expression, parametersMap))
                 }
                 ctx.argument_to_function != null -> {
-                    FunctionInvocationExpression(
-                            parseCodeMetainfo(fileName, ctx.start),
-                            ctx.apply_to_function_qualified_name.package_?.text,
-                            ctx.apply_to_function_qualified_name.function_name.text,
-                            listOf(parseExpression(ctx.argument_to_function)))
+                    val argumentToFunction = ctx.argument_to_function
+                    val functionExpression = ctx.apply_to_function_expression
+                    when {
+                        argumentToFunction.apply_to_function_qualified_name != null ->
+                            FunctionInvocationExpression(
+                                    parseCodeMetainfo(fileName, ctx.start),
+                                    FunctionInvocationByName(ctx.apply_to_function_qualified_name.package_?.text,
+                                            ctx.apply_to_function_qualified_name.function_name.text),
+                                    listOf(parseExpression(argumentToFunction, parametersMap)))
+                        functionExpression != null -> {
+                            val codeMetainfo = parseCodeMetainfo(fileName, ctx.start)
+                            FunctionInvocationExpression(
+                                    codeMetainfo,
+                                    buildFunctionInvocationExpression(functionExpression, parametersMap),
+                                    listOf(parseExpression(argumentToFunction, parametersMap)))
+                        }
+                        else -> throw CompilationException(parseCodeMetainfo(fileName, argumentToFunction.start), "I don't know how to handle this!")
+                    }
                 }
-                ctx.negate_expression != null -> NegateExpression(parseCodeMetainfo(fileName, ctx.start), parseExpression(ctx.negate_expression))
+                ctx.negate_expression != null -> NegateExpression(parseCodeMetainfo(fileName, ctx.start), parseExpression(ctx.negate_expression, parametersMap))
                 ctx.struct_name != null ->
                     NewStruct(
                             parseCodeMetainfo(fileName, ctx.start),
@@ -387,7 +425,7 @@ private class Listener(private val fileName: String) : CapybaraBaseListener() {
                             ctx.struct_field_initializations()
                                     .struct_field_initialization()
                                     .stream()
-                                    .map { StructField(parseCodeMetainfo(fileName, ctx.start), it.field_name.text, parseExpression(it.field_value)) }
+                                    .map { StructField(parseCodeMetainfo(fileName, ctx.start), it.field_name.text, parseExpression(it.field_value, parametersMap)) }
                                     .toList()
                     )
                 ctx.newListExpression() != null -> {
@@ -396,24 +434,24 @@ private class Listener(private val fileName: String) : CapybaraBaseListener() {
                             ctx.newListExpression()
                                     .expression()
                                     .stream()
-                                    .map { parseExpression(it) }
+                                    .map { parseExpression(it, parametersMap) }
                                     .toList()
                     )
                 }
                 ctx.structureAccessExpression() != null -> {
                     val name = ctx.structureAccessExpression().structure_name.text
-                    if (parameters.containsKey(name)) {
+                    if (parametersMap.containsKey(name)) {
                         StructureAccessExpression(
                                 parseCodeMetainfo(fileName, ctx.start),
                                 name,
-                                parseExpression(ctx.structureAccessExpression().structure_index),
+                                parseExpression(ctx.structureAccessExpression().structure_index, parametersMap),
                                 parseCodeMetainfo(fileName, ctx.structureAccessExpression().structure_index.start),
-                                parameters[name])
+                                parametersMap[name])
                     } else {
                         StructureAccessExpression(
                                 parseCodeMetainfo(fileName, ctx.start),
                                 name,
-                                parseExpression(ctx.structureAccessExpression().structure_index),
+                                parseExpression(ctx.structureAccessExpression().structure_index, parametersMap),
                                 parseCodeMetainfo(fileName, ctx.structureAccessExpression().structure_index.start),
                                 null)
                     }
@@ -426,54 +464,63 @@ private class Listener(private val fileName: String) : CapybaraBaseListener() {
                             ctx.is_type.text)
                 ctx.check_expression != null -> AssertExpression(
                         parseCodeMetainfo(fileName, ctx.start),
-                        parseExpression(ctx.check_expression),
-                        parseExpression(ctx.return_expression),
-                        if (ctx.message_expression != null) parseExpression(ctx.message_expression) else null
+                        parseExpression(ctx.check_expression, parametersMap),
+                        parseExpression(ctx.return_expression, parametersMap),
+                        if (ctx.message_expression != null) parseExpression(ctx.message_expression, parametersMap) else null
                 )
                 else -> throw IllegalStateException("I don't know how to handle `${ctx.text}`!")
             }
+
+    private fun buildFunctionInvocationExpression(functionExpression: CapybaraParser.ExpressionContext, parametersMap: Map<String, String>): FunctionInvocation {
+        val expression = parseExpression(functionExpression, parametersMap)
+//        return if (expression is ValueExpression) {
+//            FunctionInvocationByName(null, expression.valueName)
+//        } else {
+        return FunctionInvocationByExpression(expression)
+//        }
+    }
 
     override fun enterDefBody(ctx: CapybaraParser.DefBodyContext) {
         if (ctx.statement() != null) {
             val sts = ctx.statement()
                     .stream()
-                    .map { parseStatement(it) }
+                    .map { parseStatement(it, parameters) }
                     .toList()
             statements.addAll(sts)
         }
         if (ctx.return_expression != null) {
-            returnExpression = parseExpression(ctx.return_expression)
+            returnExpression = parseExpression(ctx.return_expression, parameters)
         }
     }
 
-    private fun parseStatement(statement: CapybaraParser.StatementContext): Statement =
+    private fun parseStatement(statement: CapybaraParser.StatementContext, parametersMap: Map<String, String>): Statement =
             when {
-                statement.assigment() != null -> parseAssigmentStatement(statement.assigment())
+                statement.assigment() != null -> parseAssigmentStatement(statement.assigment(), parametersMap)
                 statement.while_loop() != null ->
                     WhileLoopStatement(
                             parseCodeMetainfo(fileName, statement.while_loop().start),
                             parseCodeMetainfo(fileName, statement.while_loop().while_.start),
-                            parseExpression(statement.while_loop().while_),
+                            parseExpression(statement.while_loop().while_, parametersMap),
                             statement.while_loop()
                                     .loop_body()
                                     .statement()
                                     .stream()
-                                    .map { parseStatement(it) }
+                                    .map { parseStatement(it, parametersMap) }
                                     .toList()
                     )
                 statement.for_loop() != null -> {
                     val forLoop = statement.for_loop().for_loop_expression()
                     ForLoopStatement(
                             parseCodeMetainfo(fileName, statement.for_loop().start),
-                            if (forLoop.assigment() != null) parseAssigmentStatement(forLoop.assigment()) else null,
+                            if (forLoop.assigment() != null) parseAssigmentStatement(forLoop.assigment(), parametersMap) else null,
                             parseCodeMetainfo(fileName, forLoop.while_.start),
-                            parseExpression(forLoop.while_),
-                            if (forLoop.each_iteration != null) parseStatement(forLoop.each_iteration) else null,
+                            parseExpression(forLoop.while_, parametersMap),
+                            if (forLoop.each_iteration != null) parseStatement(forLoop.each_iteration, parametersMap) else null,
                             statement.for_loop()
                                     .loop_body()
                                     .statement()
                                     .stream()
-                                    .map { parseStatement(it) }
+                                    .map { parseStatement(it, parametersMap) }
                                     .toList()
                     )
                 }
@@ -486,22 +533,22 @@ private class Listener(private val fileName: String) : CapybaraBaseListener() {
                                     parseCodeMetainfo(fileName, statement.update_assigment().start),
                                     findOperation(statement.update_assigment().update_action().text),
                                     ValueExpression(parseCodeMetainfo(fileName, statement.update_assigment().start), valueName),
-                                    parseExpression(statement.update_assigment().expression())),
+                                    parseExpression(statement.update_assigment().expression(), parametersMap)),
                             parseCodeMetainfo(fileName, statement.update_assigment().assign_to),
                             statement.update_assigment().assign_to.text)
                 }
                 statement.assert_statement() != null ->
                     AssertStatement(
                             parseCodeMetainfo(fileName, statement.assert_statement().start),
-                            parseExpression(statement.assert_statement().check_expression),
-                            if (statement.assert_statement().message_expression != null) parseExpression(statement.assert_statement().message_expression) else null,
+                            parseExpression(statement.assert_statement().check_expression, parametersMap),
+                            if (statement.assert_statement().message_expression != null) parseExpression(statement.assert_statement().message_expression, parametersMap) else null,
                     )
                 statement.def_call() != null -> {
                     val ctx = statement.def_call()
                     val parameters = (ctx.parameters()
                             ?.expression() ?: listOf())
                             .stream()
-                            .map { parseExpression(it) }
+                            .map { parseExpression(it, parametersMap) }
                             .toList()
                     DefCallStatement(
                             parseCodeMetainfo(fileName, ctx.start),
@@ -514,11 +561,11 @@ private class Listener(private val fileName: String) : CapybaraBaseListener() {
 
     private fun findOperation(text: String): String = text[0].toString()
 
-    private fun parseAssigmentStatement(assigment: CapybaraParser.AssigmentContext) =
+    private fun parseAssigmentStatement(assigment: CapybaraParser.AssigmentContext, parametersMap: Map<String, String>) =
             AssigmentStatement(
                     parseCodeMetainfo(fileName, assigment.start),
                     assigment.assign_to.text,
-                    parseExpression(assigment.expression()),
+                    parseExpression(assigment.expression(), parametersMap),
                     if (assigment.assign_to != null) parseCodeMetainfo(fileName, assigment.assign_to) else null,
                     assigment.assigment_type?.text)
 }

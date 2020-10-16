@@ -17,45 +17,11 @@ struct AnotherTestStruct2 {
 	is_adult: /capybara/type/Boolean
 }
 
-fun main(args: /capybara/type/List[/capybara/type/String]) {
-	return args
-}
-
-fun xyz(i1: /capybara/type/Int, i2: /capybara/type/Int, i3: /capybara/type/Int, i4: /capybara/type/Int, f1: /capybara/type/Int, f2: /capybara/type/Int, f3: /capybara/type/Int, f4: /capybara/type/Int, double: /capybara/type/Int): /capybara/type/String {
-	a1 = i1 * f1
-	a2 = i2 ^ (f2 * 2)
-	a3 = f(i3, f3, double)
-	a4 = i4 - i1 > i2 ? 4 : i4 + 4
-	a5 = i1 + i2 -> f -> f2
-	a6 = 61 -> f2 -> f
-	a7 = 'abc 71 xyz' -> s -> s
-	a8 = true -> b -> b -> b2
-	return a1 + a2 + a3 + a4 + a5 + a6 + a7 + a8
-}
-
-fun float_below_one() = 0.1
-
-fun float() = 123.456
-
-fun f(/capybara/type/Int, i2: /capybara/type/Int, double: /capybara/type/Int) {
-	return int
+fun xyz(): /capybara/type/Int {
+	return 1 -> f
 }
 
 fun f(/capybara/type/Int): /capybara/type/Int {
-	return int == 0 ? 1 : int * f(int - 1)
+	return int
 }
-
-fun f2(/capybara/type/Int): /capybara/type/Int {
-	return int == 0 ? 1 : int * f(int - 1)
-}
-
-fun x() = 5 < 6 ? -1 : 1
-
-fun s(/capybara/type/String) = string + " x"
-
-fun b(/capybara/type/Boolean) = !boolean
-
-fun b2(/capybara/type/Boolean) = boolean ? 1 : 0
-
-fun new_struct(/capybara/type/Int, /capybara/type/Boolean) = AnotherTestStruct2 { age = int, is_adult = boolean }
 

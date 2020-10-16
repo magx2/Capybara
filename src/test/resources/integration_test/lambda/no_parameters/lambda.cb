@@ -1,0 +1,55 @@
+package /lambda/no_parameters
+
+import /capybara/type
+
+fun simple_lambda(): Lambda[Int] = { 44 }
+
+fun lambda_as_assignment(): Int {
+	local_lambda = { 55 }
+	return local_lambda()
+}
+
+fun lambda_as_parameter(l : Lambda[Int]): Int {
+	return l()
+}
+
+fun multiline_lambda(): Lambda[Int] =
+	{
+		x = 44
+		y = 1 + 1
+		x * y
+	}
+
+fun multiline_lambda_invocation(): Int {
+	x = { x = 44 ; y = 2 + 2 ; x * y }
+	y = { x = 2 ; y = 6 ; x + y }
+	return x() + y()
+}
+
+fun lambda_in_lambda(): Int {
+	x = {
+		x = { assert 1 == 1, { 44 }, "1 should equal to 1" }
+		y = { { 2 + 2 } }
+		x()() * y()()
+	}
+	y = { x = 2 ; y = 6 ; x + y }
+	return x() + y()
+}
+
+fun iife(): Int = { 5 + 10 }()
+
+fun iife_multiline(): Int = { x=3; y=6; { x=5; y=10; x*y } }()()
+
+def main(List[String]) {
+	assert /lambda/no_parameters:simple_lambda()() == 44, "Simple lambda should return `44`!"
+	assert simple_lambda()() == 44, "Simple lambda should return `44` (no fully qualified name)!"
+	assert lambda_as_assignment() == 55, "`lambda_as_assignment` should return `55`!"
+	assert lambda_as_parameter({ 66 }) == 66, "`lambda_as_parameter` should return `66`!"
+	assert multiline_lambda()() == 88, "`multiline_lambda` should return 88"
+	assert multiline_lambda_invocation() == 188, "`multiline_lambda_invocation` should return 188"
+	assert { x = 2 ; y = 3 ; x + y}() == { 5 }(), { "lambda should return 5" }()
+	assert { x = 2 ; y = 3 ; true }(), { "lambda should return 5" }()
+	assert iife() == 15, "`` should return `15`"
+	assert iife_multiline() == 50, "`` should return `50`"
+}
+

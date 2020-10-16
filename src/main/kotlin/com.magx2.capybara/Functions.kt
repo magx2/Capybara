@@ -23,8 +23,13 @@ class FunctionCompiler(private val compilationContext: CompilationContext,
                        private val compileUnit: CompileUnitWithFlatStructs,
                        private val fullyQualifiedStructNames: Map<Type, Struct>) {
 
-    fun findReturnTypeForAssignments(function: Function): List<AssigmentStatementWithType> {
-        val assignments = function.assignments
+    fun findReturnTypeForAssignments(function: Function): List<AssigmentStatementWithType> =
+            findReturnTypeForAssignments(function.assignments)
+
+    fun findReturnTypeForAssignments(assignments: List<AssigmentStatement>): List<AssigmentStatementWithType> {
+        if (assignments.isEmpty()) {
+            return emptyList()
+        }
         val duplicatedAssignments = assignments.stream()
                 .collect(Collectors.groupingBy { it.name })
                 .entries
@@ -34,11 +39,7 @@ class FunctionCompiler(private val compilationContext: CompilationContext,
                 .toList()
         if (duplicatedAssignments.isNotEmpty()) {
             val (name, codeMetainfo) = duplicatedAssignments[duplicatedAssignments.size - 1]
-            val parameters = function.parameters
-                    .stream()
-                    .map { (_, name, type) -> "$name: $type" }
-                    .collect(Collectors.joining(", "))
-            throw CompilationException(codeMetainfo, "Const `$name` was reassign in function `${function.packageName}:${function.name}($parameters)`.")
+            throw CompilationException(codeMetainfo, "Const `$name` was reassign.")
         }
 
         val assignmentsWithReturnType = ArrayList<AssigmentStatementWithType>(assignments.size)
@@ -53,8 +54,8 @@ class FunctionCompiler(private val compilationContext: CompilationContext,
     private fun findReturnTypeForAssignment(
             assignment: AssigmentStatement,
             assignmentsWithReturnType: List<AssigmentStatementWithType>): AssigmentStatementWithType {
-        val expression = ExpressionCompiler(assignmentsWithReturnType, compilationContext, compileUnit, fullyQualifiedStructNames, true)
-                .findReturnType(assignment.expression)
+        val expression = ExpressionCompiler(compilationContext, compileUnit, fullyQualifiedStructNames, true)
+                .findReturnType(assignment.expression, assignmentsWithReturnType)
         val type = if (assignment.type != null) {
             val types = concat(
                     (compileUnit.structs + compileUnit.importStructs).stream().map { it.type },
