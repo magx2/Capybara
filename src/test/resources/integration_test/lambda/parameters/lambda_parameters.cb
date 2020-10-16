@@ -6,7 +6,7 @@ fun simple_lambda_with_one_param() = {i: Int -> i * 2 }
 
 fun simple_lambda_with_one_param_implicit_name() = {Int -> int * 3 }
 
-fun multiline_lambda(): Lambda[Int] =
+fun multiline_lambda(): Lambda[Int, Int] =
 	{ Int ->
 		x = 44
 		y = 1 + 1
