@@ -66,8 +66,21 @@ struct TestModuleExecutionResult {
 	name: String,
 	test_method_execution_results: List[TestMethodExecutionResult]
 }
-//
-//fun run_tests(modules: List[TestModule]): List[TestModuleExecutionResult] {
-//	return []
-//}
+
+fun run_tests(modules: List[TestModule]): List[TestModuleExecutionResult] = run_tests(modules, [])
+
+fun run_tests(modules: List[TestModule], to_return: List[TestModuleExecutionResult]): List[TestModuleExecutionResult] {
+	return if(is_list_not_empty(modules) {
+		head = modules[0]
+		tail = modules[1:]
+		result = run_test_module(head)
+		run_tests(tail, to_return + result)
+	} else {
+		to_return
+	}
+}
+
+fun run_test_module(TestModule): TestModuleExecutionResult {
+	TODO
+}
 
