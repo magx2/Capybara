@@ -34,6 +34,15 @@ fun multiple_if_else(Int): String {
 	}
 }
 
+fun assigment_in_simple_if(Int): String =
+	if(int > 0) {
+		msg = "Not "
+		msg + " Negative"
+	} else {
+		msg = ", o really?"
+		"Negative " + msg
+	}
+
 def main(List[String]) {
 	assert simple_if(1) == "Not Negative"
 	assert simple_if(-1) == "Negative"
@@ -47,5 +56,8 @@ def main(List[String]) {
 	assert multiple_if_else(2) == "B"
 	assert multiple_if_else(3) == "C"
 	assert multiple_if_else(4) == "Too hard..."
+
+	assert assigment_in_simple_if(1) == "Not Negative"
+	assert assigment_in_simple_if(-1) == "Negative, o really?"
 }
 
