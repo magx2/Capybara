@@ -43,6 +43,27 @@ fun assigment_in_simple_if(Int): String =
 		"Negative " + msg
 	}
 
+fun multiple_if_else_assignment(Int): String {
+	letter = if(int <= 0) {
+		prefix = "! "
+		prefix + "WRONG!"
+	} else if(int == 1) {
+		prefix = "> "
+		prefix + "A"
+	} else if(int == 2) {
+		prefix = "> "
+		prefix + "B"
+	} else if(int == 3) {
+		prefix = "> "
+		prefix + "C"
+	} else {
+		prefix = "? "
+		prefix + "Too hard..."
+	}
+
+	return "Letter: " + letter
+}
+
 def main(List[String]) {
 	assert simple_if(1) == "Not Negative"
 	assert simple_if(-1) == "Negative"
@@ -59,5 +80,11 @@ def main(List[String]) {
 
 	assert assigment_in_simple_if(1) == "Not Negative"
 	assert assigment_in_simple_if(-1) == "Negative, o really?"
+
+	assert multiple_if_else_assignment(0) == "Letter: ! WRONG!"
+	assert multiple_if_else_assignment(1) == "Letter: > A"
+	assert multiple_if_else_assignment(2) == "Letter: > B"
+	assert multiple_if_else_assignment(3) == "Letter: > C"
+	assert multiple_if_else_assignment(4) == "Letter: ? Too hard..."
 }
 
