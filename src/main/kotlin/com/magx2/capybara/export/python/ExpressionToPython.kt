@@ -1,5 +1,6 @@
-package com.magx2.capybara
+package com.magx2.capybara.export.python
 
+import com.magx2.capybara.*
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.stream.Collectors
 import java.util.stream.Stream

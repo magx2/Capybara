@@ -1,4 +1,9 @@
-package com.magx2.capybara
+package com.magx2.capybara.export.python
+
+import com.magx2.capybara.LambdaExpressionWithReturnType
+import com.magx2.capybara.MethodToRewrite
+import com.magx2.capybara.StatementWithType
+import com.magx2.capybara.UnionWithType
 
 private fun statementToPython(statement: StatementWithType,
                               assertions: Boolean,

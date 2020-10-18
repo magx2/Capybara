@@ -1,23 +1,13 @@
-package com.magx2.capybara
+package com.magx2.capybara.export.python
 
-import com.magx2.capybara.BasicTypes.anyType
-import com.magx2.capybara.BasicTypes.booleanType
-import com.magx2.capybara.BasicTypes.floatType
-import com.magx2.capybara.BasicTypes.intType
-import com.magx2.capybara.BasicTypes.listType
-import com.magx2.capybara.BasicTypes.nothingType
-import com.magx2.capybara.BasicTypes.stringType
+import com.magx2.capybara.*
+import com.magx2.capybara.export.CapybaraExport
 import org.slf4j.LoggerFactory
 import java.io.File
-import java.lang.String.join
 import java.nio.file.Paths
 import java.util.stream.Collectors
 import java.util.stream.Stream
 import kotlin.streams.toList
-
-interface CapybaraExport {
-    fun export(unit: CompileUnitToExport)
-}
 
 
 data class CompileUnitToExport(
@@ -102,13 +92,13 @@ class PythonExport(private val outputDir: String,
 
         val structs = unit.structs
                 .stream()
-                .filter { it.type != intType }
-                .filter { it.type != floatType }
-                .filter { it.type != booleanType }
-                .filter { it.type != listType }
-                .filter { it.type != stringType }
-                .filter { it.type != nothingType }
-                .filter { it.type != anyType }
+                .filter { it.type != BasicTypes.intType }
+                .filter { it.type != BasicTypes.floatType }
+                .filter { it.type != BasicTypes.booleanType }
+                .filter { it.type != BasicTypes.listType }
+                .filter { it.type != BasicTypes.stringType }
+                .filter { it.type != BasicTypes.nothingType }
+                .filter { it.type != BasicTypes.anyType }
                 .map { struct -> structToPython(struct) }
 
         val functions = unit.functions
@@ -119,7 +109,7 @@ class PythonExport(private val outputDir: String,
                 .stream()
                 .map { def -> defToPython(def, assertions, unit.unions, methodsToRewrite, unit.packageName) }
 
-        val listOfStrings = addGenericType(listType, stringType)
+        val listOfStrings = addGenericType(BasicTypes.listType, BasicTypes.stringType)
         val main = unit.defs
                 .stream()
                 .filter { it.name == "main" }
@@ -207,7 +197,7 @@ class PythonExport(private val outputDir: String,
 }
 
 private fun writeAllToPackageFile(outputDir: String, packageName: String, texts: List<String>) {
-    val text = join("\n\n", texts)
+    val text = java.lang.String.join("\n\n", texts)
     val fileName = "$outputDir$packageName.py"
     File(fileName).also {
         it.parentFile.mkdirs()

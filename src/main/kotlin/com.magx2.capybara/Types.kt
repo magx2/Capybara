@@ -1,6 +1,9 @@
 package com.magx2.capybara
 
 import com.magx2.capybara.BasicTypes.lambdaType
+import com.magx2.capybara.export.python.DefToExport
+import com.magx2.capybara.export.python.FunctionToExport
+import com.magx2.capybara.export.python.ParameterToExport
 import java.util.regex.Pattern
 import java.util.stream.Collectors
 import java.util.stream.Stream
