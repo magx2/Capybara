@@ -21,11 +21,12 @@ fun defToPython(def: AbstractDefToExport,
                 is NativeDefToExport -> defToPythonBody(def)
             }
 
-    val name = "xyz"/*findMethodNameFromParameter(
-            def.packageName,
-            def.name,
-            def.parameters,
-            methodsToRewrite)*/
+    val name = def.name // FIXME
+    /*findMethodNameFromParameter(
+       def.packageName,
+       def.name,
+       def.parameters,
+       methodsToRewrite)*/
 
     return """
     |def $name($parameters):

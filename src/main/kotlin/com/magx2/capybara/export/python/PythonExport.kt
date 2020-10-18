@@ -308,64 +308,16 @@ private fun long(assignments: List<AssigmentStatementWithType>,
                  unions: Set<UnionWithType>,
                  methodsToRewrite: Set<MethodToRewrite>,
                  packageName: String,
-                 longLambdas: Map<LambdaExpressionWithReturnType, String>,
                  indent: Int = 1,
                  depth: Int): String {
     val assignmentsInPython = assignments.stream()
-            .map { assignmentToPython(it, assertions, unions, methodsToRewrite, packageName, longLambdas, indent, depth) }
+            .map { assignmentToPython(it, assertions, unions, methodsToRewrite, packageName, indent, depth) }
             .collect(Collectors.joining("\n")) ?: "\n"
-    val returnExpressionInPython = returnExpressionToPython(returnExpression, assertions, unions, methodsToRewrite, packageName, longLambdas, indent, depth)
+    val returnExpressionInPython = returnExpressionToPython(returnExpression, assertions, unions, methodsToRewrite, packageName, indent, depth)
 
     return assignmentsInPython + returnExpressionInPython
 }
 
-fun functionToPython(name: String,
-                     returnExpression: ExpressionWithReturnType,
-                     parameters: List<ParameterToExport>,
-                     assignments: List<AssigmentStatementWithType>,
-                     longLambdas: Map<LambdaExpressionWithReturnType, String>,
-                     assertions: Boolean,
-                     unions: Set<UnionWithType>,
-                     methodsToRewrite: Set<MethodToRewrite>,
-                     packageName: String,
-                     indent: Int = 0,
-                     depth: Int = 0): String {
-    val par = parameters
-            .stream()
-            .map { it.name }
-            .collect(Collectors.joining(", "))
-//    val longLambdasAsPython = longLambdas.entries
-//            .stream()
-//            .map { (lambda, name) ->
-//                longLambdaToPython(
-//                        name,
-//                        lambda,
-//                        assertions,
-//                        unions,
-//                        methodsToRewrite,
-//                        packageName,
-//                        generateLongLambdas(lambda.assignments, lambda.expression, depth + 1),
-//                        indent + 1,
-//                        depth + 1)
-//            }
-//            .collect(Collectors.joining("\n\n")) + "\n"
-    val assignmentsInPython = if (assignments.isNotEmpty()) {
-        assignments
-                .stream()
-                .map { assignmentToPython(it, assertions, unions, methodsToRewrite, packageName, longLambdas, indent + 1, depth + 1) }
-                .collect(Collectors.joining("\n")) + "\n"
-    } else {
-        ""
-    }
-    val methodDoc = generateDocForDefWithTypedParameters(name, parameters, returnExpression.returnType, indent + 1)
-    val n = "x"// findMethodNameFromParameter(packageName, name, parameters, methodsToRewrite)
-    val returnExpressionInPython = returnExpressionToPython(returnExpression, assertions, unions, methodsToRewrite, packageName, longLambdas, indent + 1, depth + 1)
 
-    return buildIndent(indent) + "def $n($par):\n" +
-            methodDoc +
-//            longLambdasAsPython +
-            assignmentsInPython +
-            returnExpressionInPython
-}
 
 
