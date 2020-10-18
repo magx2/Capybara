@@ -13,7 +13,7 @@ fun assignmentToPython(assignment: AssigmentStatementWithType,
                        packageName: String,
                        indent: Int,
                        depth: Int): String =
-        buildIndent(indent, 'a') + expressionLongOrShortToString(
+        buildIndent(indent) + expressionLongOrShortToString(
                 assignment.expression,
                 assignment.name + " = ",
                 assertions,
@@ -31,7 +31,7 @@ fun returnExpressionToPython(expression: ExpressionWithReturnType,
                              packageName: String,
                              indent: Int,
                              depth: Int): String =
-        buildIndent(indent, 'o') + expressionLongOrShortToString(
+        buildIndent(indent) + expressionLongOrShortToString(
                 expression,
                 "return ",
                 assertions,
@@ -68,13 +68,13 @@ private fun expressionLongOrShortToString(expression: ExpressionWithReturnType,
                                 expressionLongOrShortToString(
                                         expression.condition,
                                         "$conditionName = ",
-                                        assertions, unions, methodsToRewrite, packageName, indent, depth + 1) + "\n" + buildIndent(indent, 'c')
+                                        assertions, unions, methodsToRewrite, packageName, indent, depth + 1) + "\n" + buildIndent(indent)
                         )
                     }
                     prefix + "if " + condition + ":\n" +
-                            buildIndent(indent + 1, 't') + ifBranchToPython(expression.trueBranch, expressionPrefix, assertions, unions, methodsToRewrite, packageName, indent + 1, depth + 1) + "\n" +
+                            buildIndent(indent + 1) + ifBranchToPython(expression.trueBranch, expressionPrefix, assertions, unions, methodsToRewrite, packageName, indent + 1, depth + 1) + "\n" +
                             buildIndent(indent) + "else:\n" +
-                            buildIndent(indent + 1, 'f') + ifBranchToPython(expression.falseBranch, expressionPrefix, assertions, unions, methodsToRewrite, packageName, indent + 1, depth + 1)
+                            buildIndent(indent + 1) + ifBranchToPython(expression.falseBranch, expressionPrefix, assertions, unions, methodsToRewrite, packageName, indent + 1, depth + 1)
                 }
                 is LambdaExpressionWithReturnType -> {
 //                    val name = longLambdas[expression]
@@ -102,7 +102,7 @@ private fun expressionLongOrShortToString(expression: ExpressionWithReturnType,
                             val conditionName = "_assert_message_$depth"
                             Pair(
                                     conditionName,
-                                    expressionLongOrShortToString(messageExpression, "$conditionName = ", assertions, unions, methodsToRewrite, packageName, indent, depth + 1) + "\n" + buildIndent(indent, 'd')
+                                    expressionLongOrShortToString(messageExpression, "$conditionName = ", assertions, unions, methodsToRewrite, packageName, indent, depth + 1) + "\n" + buildIndent(indent)
                             )
                         }
                     } else {
@@ -117,13 +117,13 @@ private fun expressionLongOrShortToString(expression: ExpressionWithReturnType,
                         val conditionName = "_check_expression_$depth"
                         Pair(
                                 conditionName,
-                                expressionLongOrShortToString(checkExpression, "$conditionName = ", assertions, unions, methodsToRewrite, packageName, indent, depth + 1) + "\n" + buildIndent(indent, 'd')
+                                expressionLongOrShortToString(checkExpression, "$conditionName = ", assertions, unions, methodsToRewrite, packageName, indent, depth + 1) + "\n" + buildIndent(indent)
                         )
                     }
                     prefix +
                             prefix2 +
                             "if not " + checkExpressionInPython + ": raise AssertionError($message)\n" +
-                            buildIndent(indent, 'm') + expressionLongOrShortToString(returnExpression, expressionPrefix, assertions, unions, methodsToRewrite, packageName, indent, depth + 1)
+                            buildIndent(indent) + expressionLongOrShortToString(returnExpression, expressionPrefix, assertions, unions, methodsToRewrite, packageName, indent, depth + 1)
                 }
                 is InfixExpressionWithReturnType -> {
                     val leftName = "_left_$depth"
@@ -138,8 +138,8 @@ private fun expressionLongOrShortToString(expression: ExpressionWithReturnType,
                                     ValueExpressionWithReturnType(expression.right.returnType, rightName)),
                             assertions, unions, methodsToRewrite, packageName)
                     leftExpression + "\n" +
-                            buildIndent(indent, 'r') + rightExpression + "\n" +
-                            buildIndent(indent, 'l') + expressionPrefix + infixExpresion
+                            buildIndent(indent) + rightExpression + "\n" +
+                            buildIndent(indent) + expressionPrefix + infixExpresion
                 }
                 is NegateExpressionWithReturnType -> TODO()
                 is NewListExpressionWithReturnType -> TODO()
@@ -162,7 +162,7 @@ fun ifBranchToPython(
             .map { expressionLongOrShortToString(it.expression, it.name + " = ", assertions, unions, methodsToRewrite, packageName, indent, depth + 1) }
 //                .map { buildIndent(indent) + it }
             .map { it + "\n" }
-            .map { it + buildIndent(indent, 'a') }
+            .map { it + buildIndent(indent) }
             .collect(Collectors.joining())
     val lastExpression = expressionLongOrShortToString(branch.expression, expressionPrefix, assertions, unions, methodsToRewrite, packageName, indent, depth + 1)
     return assignments + lastExpression
