@@ -143,6 +143,8 @@ private fun expressionLongOrShortToString(expression: ExpressionWithReturnType,
                 }
                 is NegateExpressionWithReturnType -> TODO()
                 is NewListExpressionWithReturnType -> TODO()
+                is FunctionInvocationExpressionWithReturnType -> TODO()
+                is DefInvocationExpressionWithReturnType -> TODO()
                 else -> throw java.lang.IllegalStateException("I don't know how to handle long expression of type `${expression.javaClass.simpleName}`")
             }
         }
@@ -441,6 +443,15 @@ private fun isOneLinerExpression(expression: ExpressionWithReturnType, assertion
                 expression.elements
                         .map { isOneLinerExpression(it, assertions) }
                         .all { it }
+            is FunctionInvocationExpressionWithReturnType ->
+                expression.parameters
+                        .map { isOneLinerExpression(it, assertions) }
+                        .all { it } &&
+                        (expression.functionInvocation !is FunctionInvocationByExpressionWithReturnType || isOneLinerExpression(expression.functionInvocation.expression, true))
+            is DefInvocationExpressionWithReturnType ->
+                expression.parameters
+                        .map { isOneLinerExpression(it, assertions) }
+                        .all { it }
             is StructureAccessExpressionWithReturnType -> isOneLinerExpression(expression.structureIndex, assertions)
             is ParameterExpressionWithReturnType,
             is IntegerExpressionWithReturnType,
@@ -451,8 +462,6 @@ private fun isOneLinerExpression(expression: ExpressionWithReturnType, assertion
             is NewStructExpressionWithReturnType,
             is ValueExpressionWithReturnType,
             is StructFieldAccessExpressionWithReturnType,
-            is FunctionInvocationExpressionWithReturnType, // TODO check
-            is DefInvocationExpressionWithReturnType, // TODO check
             is IsExpressionWithReturnType -> true
         }
 
