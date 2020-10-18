@@ -391,8 +391,6 @@ private fun isShortLambda(lambda: LambdaExpressionWithReturnType): Boolean =
         lambda.assignments.isEmpty() &&
                 (lambda.expression !is LambdaExpressionWithReturnType || isShortLambda(lambda.expression))
 
-private fun buildIndent(indent: Int) = "\t".repeat(indent)
-
 private fun generateLongLambdas(expressions: List<ExpressionWithReturnType>, depth: Int): Map<LambdaExpressionWithReturnType, String> {
     val lambdaNr = AtomicInteger()
     val collect = expressions.stream()
