@@ -86,7 +86,13 @@ data class DefInvocationExpressionWithReturnType(
         val parameters: List<ExpressionWithReturnType>) : ExpressionWithReturnType(returnType)
 
 data class InfixExpressionWithReturnType(override val returnType: Type, val operation: String, val left: ExpressionWithReturnType, val right: ExpressionWithReturnType) : ExpressionWithReturnType(returnType)
-data class IfExpressionWithReturnType(override val returnType: Type, val condition: ExpressionWithReturnType, val trueBranch: ExpressionWithReturnType, val falseBranch: ExpressionWithReturnType) : ExpressionWithReturnType(returnType)
+data class IfExpressionWithReturnType(override val returnType: Type,
+                                      val condition: ExpressionWithReturnType,
+                                      val trueBranch: IfBranchWithReturnType,
+                                      val falseBranch: IfBranchWithReturnType) : ExpressionWithReturnType(returnType)
+
+data class IfBranchWithReturnType(val expression: ExpressionWithReturnType, val assignments: List<AssigmentStatementWithType>)
+
 data class NegateExpressionWithReturnType(val negateExpression: ExpressionWithReturnType) : ExpressionWithReturnType(booleanType)
 data class NewStructExpressionWithReturnType(override val returnType: Type, val fields: List<StructFieldExpressionWithReturnType>) : ExpressionWithReturnType(returnType)
 data class StructFieldExpressionWithReturnType(val name: String, val value: ExpressionWithReturnType)

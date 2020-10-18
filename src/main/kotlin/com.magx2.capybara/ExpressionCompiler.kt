@@ -292,8 +292,8 @@ class ExpressionCompiler(private val compilationContext: CompilationContext,
                     IfExpressionWithReturnType(
                             type,
                             ifReturnType,
-                            trueBranchExpression,
-                            falseBranchExpression
+                            IfBranchWithReturnType(trueBranchExpression, emptyList()),// TODO
+                            IfBranchWithReturnType(falseBranchExpression, emptyList())// TODO
                     )
                 }
                 is NegateExpression -> {
