@@ -302,21 +302,21 @@ fun generateDocForDef(
 
 
 // TODO cahnge name
-private fun long(assignments: List<AssigmentStatementWithType>,
-                 returnExpression: ExpressionWithReturnType,
-                 assertions: Boolean,
-                 unions: Set<UnionWithType>,
-                 methodsToRewrite: Set<MethodToRewrite>,
-                 packageName: String,
-                 indent: Int = 1,
-                 depth: Int): String {
-    val assignmentsInPython = assignments.stream()
-            .map { assignmentToPython(it, assertions, unions, methodsToRewrite, packageName, indent, depth) }
-            .collect(Collectors.joining("\n")) ?: "\n"
-    val returnExpressionInPython = returnExpressionToPython(returnExpression, assertions, unions, methodsToRewrite, packageName, indent, depth)
-
-    return assignmentsInPython + returnExpressionInPython
-}
+//private fun long(assignments: List<AssigmentStatementWithType>,
+//                 returnExpression: ExpressionWithReturnType,
+//                 assertions: Boolean,
+//                 unions: Set<UnionWithType>,
+//                 methodsToRewrite: Set<MethodToRewrite>,
+//                 packageName: String,
+//                 indent: Int = 1,
+//                 depth: Int): String {
+//    val assignmentsInPython = assignments.stream()
+//            .map { assignmentToPython(it, assertions, unions, methodsToRewrite, packageName, indent, depth) }
+//            .collect(Collectors.joining("\n")) ?: "\n"
+//    val returnExpressionInPython = returnExpressionToPython(returnExpression, assertions, unions, methodsToRewrite, packageName, indent, depth)
+//
+//    return assignmentsInPython + returnExpressionInPython
+//}
 
 
 

@@ -13,7 +13,7 @@ fun assignmentToPython(assignment: AssigmentStatementWithType,
                        packageName: String,
                        indent: Int,
                        depth: Int): String =
-        expressionLongOrShortToString(
+        buildIndent(indent, 'a') + expressionLongOrShortToString(
                 assignment.expression,
                 assignment.name + " = ",
                 assertions,
@@ -31,7 +31,7 @@ fun returnExpressionToPython(expression: ExpressionWithReturnType,
                              packageName: String,
                              indent: Int,
                              depth: Int): String =
-        expressionLongOrShortToString(
+        buildIndent(indent, 'o') + expressionLongOrShortToString(
                 expression,
                 "return ",
                 assertions,
@@ -52,11 +52,10 @@ private fun expressionLongOrShortToString(expression: ExpressionWithReturnType,
                                           indent: Int,
                                           depth: Int): String =
         if (isOneLinerExpression(expression, assertions)) {
-          buildIndent(indent) + expressionPrefix + oneLinerExpressionToPython(expression, assertions, unions, methodsToRewrite, packageName)
+            expressionPrefix + oneLinerExpressionToPython(expression, assertions, unions, methodsToRewrite, packageName)
         } else {
             when (expression) {
                 is IfExpressionWithReturnType -> {
-                    // TODO check for condition as a not one liner expression
                     val (condition, prefix) = if (isOneLinerExpression(expression.condition, assertions)) {
                         Pair(
                                 oneLinerExpressionToPython(expression.condition, assertions, unions, methodsToRewrite, packageName),
@@ -66,16 +65,16 @@ private fun expressionLongOrShortToString(expression: ExpressionWithReturnType,
                         val conditionName = "_condition_$depth"
                         Pair(
                                 conditionName,
-                                buildIndent(indent) + expressionLongOrShortToString(
+                                expressionLongOrShortToString(
                                         expression.condition,
-                                        "$conditionName =",
-                                        assertions, unions, methodsToRewrite, packageName, indent, depth) + "\n"
+                                        "$conditionName = ",
+                                        assertions, unions, methodsToRewrite, packageName, indent, depth + 1) + "\n" + buildIndent(indent, 'c')
                         )
                     }
-                    prefix + buildIndent(indent) + "if " + condition + ":\n" +
-                            ifBranchToPython(expression.trueBranch, expressionPrefix, assertions, unions, methodsToRewrite, packageName, indent + 1, depth + 1) + "\n" +
+                    prefix + "if " + condition + ":\n" +
+                            buildIndent(indent + 1, 't') + ifBranchToPython(expression.trueBranch, expressionPrefix, assertions, unions, methodsToRewrite, packageName, indent + 1, depth + 1) + "\n" +
                             buildIndent(indent) + "else:\n" +
-                            ifBranchToPython(expression.falseBranch, expressionPrefix, assertions, unions, methodsToRewrite, packageName, indent + 1, depth + 1)
+                            buildIndent(indent + 1, 'f') + ifBranchToPython(expression.falseBranch, expressionPrefix, assertions, unions, methodsToRewrite, packageName, indent + 1, depth + 1)
                 }
                 is LambdaExpressionWithReturnType -> {
 //                    val name = longLambdas[expression]
@@ -96,15 +95,54 @@ private fun expressionLongOrShortToString(expression: ExpressionWithReturnType,
                     val messageExpression = expression.messageExpression
                     val checkExpression = expression.checkExpression
                     val returnExpression = expression.returnExpression
-                    val message = if (messageExpression != null) {
-                        expressionLongOrShortToString(messageExpression, "", assertions, unions, methodsToRewrite, packageName, indent + 1, depth + 1)
+                    val (message, prefix) = if (messageExpression != null) {
+                        if (isOneLinerExpression(messageExpression, assertions)) {
+                            Pair(oneLinerExpressionToPython(messageExpression, assertions, unions, methodsToRewrite, packageName), "")
+                        } else {
+                            val conditionName = "_assert_message_$depth"
+                            Pair(
+                                    conditionName,
+                                    expressionLongOrShortToString(messageExpression, "$conditionName = ", assertions, unions, methodsToRewrite, packageName, indent, depth + 1) + "\n" + buildIndent(indent, 'd')
+                            )
+                        }
                     } else {
-                        "\"<no message>\""
+                        Pair("\"<no message>\"", "")
                     }
-                    buildIndent(indent) + "if not " + expressionLongOrShortToString(checkExpression, "", assertions, unions, methodsToRewrite, packageName, indent + 1, depth + 1) + ": " +
-                            "raise AssertionError($message)\n" +
-                            expressionLongOrShortToString(returnExpression, expressionPrefix, assertions, unions, methodsToRewrite, packageName, indent, depth)
+                    val (checkExpressionInPython, prefix2) = if (isOneLinerExpression(checkExpression, assertions)) {
+                        Pair(
+                                expressionLongOrShortToString(checkExpression, "", assertions, unions, methodsToRewrite, packageName, indent, depth + 1),
+                                ""
+                        )
+                    } else {
+                        val conditionName = "_check_expression_$depth"
+                        Pair(
+                                conditionName,
+                                expressionLongOrShortToString(checkExpression, "$conditionName = ", assertions, unions, methodsToRewrite, packageName, indent, depth + 1) + "\n" + buildIndent(indent, 'd')
+                        )
+                    }
+                    prefix +
+                            prefix2 +
+                            "if not " + checkExpressionInPython + ": raise AssertionError($message)\n" +
+                            buildIndent(indent, 'm') + expressionLongOrShortToString(returnExpression, expressionPrefix, assertions, unions, methodsToRewrite, packageName, indent, depth + 1)
                 }
+                is InfixExpressionWithReturnType -> {
+                    val leftName = "_left_$depth"
+                    val rightName = "_right_$depth"
+                    val leftExpression = expressionLongOrShortToString(expression.left, "$leftName = ", assertions, unions, methodsToRewrite, packageName, indent, depth + 1)
+                    val rightExpression = expressionLongOrShortToString(expression.right, "$rightName = ", assertions, unions, methodsToRewrite, packageName, indent, depth + 1)
+                    val infixExpresion = oneLinerExpressionToPython(
+                            InfixExpressionWithReturnType(
+                                    expression.returnType,
+                                    expression.operation,
+                                    ValueExpressionWithReturnType(expression.left.returnType, leftName),
+                                    ValueExpressionWithReturnType(expression.right.returnType, rightName)),
+                            assertions, unions, methodsToRewrite, packageName)
+                    leftExpression + "\n" +
+                            buildIndent(indent, 'r') + rightExpression + "\n" +
+                            buildIndent(indent, 'l') + expressionPrefix + infixExpresion
+                }
+                is NegateExpressionWithReturnType -> TODO()
+                is NewListExpressionWithReturnType -> TODO()
                 else -> throw java.lang.IllegalStateException("I don't know how to handle long expression of type `${expression.javaClass.simpleName}`")
             }
         }
@@ -119,15 +157,14 @@ fun ifBranchToPython(
         indent: Int,
         depth: Int,
 ): String {
-    val assignments = if (branch.assignments.isNotEmpty()) {
-        branch.assignments
-                .stream()
-                .map { assignmentToPython(it, assertions, unions, methodsToRewrite, packageName, indent, depth) }
-                .collect(Collectors.joining("\n")) + "\n"
-    } else {
-        ""
-    }
-    val lastExpression = expressionLongOrShortToString(branch.expression, expressionPrefix, assertions, unions, methodsToRewrite, packageName, indent, depth)
+    val assignments = branch.assignments
+            .stream()
+            .map { expressionLongOrShortToString(it.expression, it.name + " = ", assertions, unions, methodsToRewrite, packageName, indent, depth + 1) }
+//                .map { buildIndent(indent) + it }
+            .map { it + "\n" }
+            .map { it + buildIndent(indent, 'a') }
+            .collect(Collectors.joining())
+    val lastExpression = expressionLongOrShortToString(branch.expression, expressionPrefix, assertions, unions, methodsToRewrite, packageName, indent, depth + 1)
     return assignments + lastExpression
 }
 
@@ -370,22 +407,19 @@ private fun isInstance(expressionValue: String, expressionType: Type): String =
             "isinstance($expressionValue, ${findPythonType(expressionType)})"
         }
 
-fun findPythonType(type: Type): String {
-    if (type.packageName == typePackageName) {
-        if (type == BasicTypes.intType) {
-            return "int"
-        } else if (type == BasicTypes.floatType) {
-            return "float"
-        } else if (type == BasicTypes.booleanType) {
-            return "bool"
-        } else if (type == BasicTypes.stringType) {
-            return "str"
-        } else if (type == BasicTypes.listType) {
-            return "list"
+fun findPythonType(type: Type): String =
+        if (type.packageName == typePackageName) {
+            when (type) {
+                BasicTypes.intType -> "int"
+                BasicTypes.floatType -> "float"
+                BasicTypes.booleanType -> "bool"
+                BasicTypes.stringType -> "str"
+                BasicTypes.listType -> "list"
+                else -> packageToPythonPackage(type.packageName) + "." + type.name
+            }
+        } else {
+            packageToPythonPackage(type.packageName) + "." + type.name
         }
-    }
-    return packageToPythonPackage(type.packageName) + "." + type.name
-}
 
 
 private fun mapInfixOperator(expression: InfixExpressionWithReturnType) = when (expression.operation) {
@@ -401,7 +435,25 @@ private fun isOneLinerExpression(expression: ExpressionWithReturnType, assertion
             is LambdaExpressionWithReturnType -> isShortLambda(expression)
             is IfExpressionWithReturnType -> isShortIf(expression, assertions)
             is AssertExpressionWithReturnType -> assertions.not()
-            else -> true
+            is InfixExpressionWithReturnType -> isOneLinerExpression(expression.right, assertions) && isOneLinerExpression(expression.left, assertions)
+            is NegateExpressionWithReturnType -> isOneLinerExpression(expression.negateExpression, assertions)
+            is NewListExpressionWithReturnType ->
+                expression.elements
+                        .map { isOneLinerExpression(it, assertions) }
+                        .all { it }
+            is StructureAccessExpressionWithReturnType -> isOneLinerExpression(expression.structureIndex, assertions)
+            is ParameterExpressionWithReturnType,
+            is IntegerExpressionWithReturnType,
+            is FloatExpressionWithReturnType,
+            is BooleanExpressionWithReturnType,
+            is StringExpressionWithReturnType,
+            NothingExpressionWithReturnType,
+            is NewStructExpressionWithReturnType,
+            is ValueExpressionWithReturnType,
+            is StructFieldAccessExpressionWithReturnType,
+            is FunctionInvocationExpressionWithReturnType, // TODO check
+            is DefInvocationExpressionWithReturnType, // TODO check
+            is IsExpressionWithReturnType -> true
         }
 
 private fun isShortIf(expression: IfExpressionWithReturnType, assertions: Boolean) =
@@ -477,7 +529,7 @@ private fun generateLongLambdas(assignments: List<AssigmentStatementWithType>,
         generateLongLambdas(
                 concat(
                         assignments.stream().map { it.expression },
-                        Stream.of(returnExpression)).toList(), depth)
+                        Stream.of(returnExpression)).toList(), depth + 1)
 
 private fun generateLongLambdas(def: DefToExport): Map<LambdaExpressionWithReturnType, String> =
         generateLongLambdas(
