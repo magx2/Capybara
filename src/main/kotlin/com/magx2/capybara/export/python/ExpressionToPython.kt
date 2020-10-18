@@ -52,15 +52,30 @@ private fun expressionLongOrShortToString(expression: ExpressionWithReturnType,
                                           indent: Int,
                                           depth: Int): String =
         if (isOneLinerExpression(expression, assertions)) {
-            expressionPrefix + buildIndent(indent) + expressionToString(expression, assertions, unions, methodsToRewrite, packageName)
+          buildIndent(indent) + expressionPrefix + oneLinerExpressionToPython(expression, assertions, unions, methodsToRewrite, packageName)
         } else {
             when (expression) {
                 is IfExpressionWithReturnType -> {
-                    val condition = expressionToString(expression.condition, assertions, unions, methodsToRewrite, packageName)
-                    buildIndent(indent) + "if " + condition + ":\n" +
-                            expressionLongOrShortToString(expression.trueBranch.expression, expressionPrefix, assertions, unions, methodsToRewrite, packageName, indent + 1, depth + 1) +
-                            buildIndent(indent) + " else:\n" +
-                            expressionLongOrShortToString(expression.falseBranch.expression, expressionPrefix, assertions, unions, methodsToRewrite, packageName, indent + 1, depth + 1)
+                    // TODO check for condition as a not one liner expression
+                    val (condition, prefix) = if (isOneLinerExpression(expression.condition, assertions)) {
+                        Pair(
+                                oneLinerExpressionToPython(expression.condition, assertions, unions, methodsToRewrite, packageName),
+                                ""
+                        )
+                    } else {
+                        val conditionName = "_condition_$depth"
+                        Pair(
+                                conditionName,
+                                buildIndent(indent) + expressionLongOrShortToString(
+                                        expression.condition,
+                                        "$conditionName =",
+                                        assertions, unions, methodsToRewrite, packageName, indent, depth) + "\n"
+                        )
+                    }
+                    prefix + buildIndent(indent) + "if " + condition + ":\n" +
+                            ifBranchToPython(expression.trueBranch, expressionPrefix, assertions, unions, methodsToRewrite, packageName, indent + 1, depth + 1) + "\n" +
+                            buildIndent(indent) + "else:\n" +
+                            ifBranchToPython(expression.falseBranch, expressionPrefix, assertions, unions, methodsToRewrite, packageName, indent + 1, depth + 1)
                 }
                 is LambdaExpressionWithReturnType -> {
 //                    val name = longLambdas[expression]
@@ -93,6 +108,28 @@ private fun expressionLongOrShortToString(expression: ExpressionWithReturnType,
                 else -> throw java.lang.IllegalStateException("I don't know how to handle long expression of type `${expression.javaClass.simpleName}`")
             }
         }
+
+fun ifBranchToPython(
+        branch: IfBranchWithReturnType,
+        expressionPrefix: String,
+        assertions: Boolean,
+        unions: Set<UnionWithType>,
+        methodsToRewrite: Set<MethodToRewrite>,
+        packageName: String,
+        indent: Int,
+        depth: Int,
+): String {
+    val assignments = if (branch.assignments.isNotEmpty()) {
+        branch.assignments
+                .stream()
+                .map { assignmentToPython(it, assertions, unions, methodsToRewrite, packageName, indent, depth) }
+                .collect(Collectors.joining("\n")) + "\n"
+    } else {
+        ""
+    }
+    val lastExpression = expressionLongOrShortToString(branch.expression, expressionPrefix, assertions, unions, methodsToRewrite, packageName, indent, depth)
+    return assignments + lastExpression
+}
 
 //private fun longLambdaToPython(name: String,
 //                               lambda: LambdaExpressionWithReturnType,
@@ -210,11 +247,11 @@ private fun rewriteValNamesInExpression(expression: ExpressionWithReturnType, pr
                 )
         }
 
-private fun expressionToString(expression: ExpressionWithReturnType,
-                               assertions: Boolean,
-                               unions: Set<UnionWithType>,
-                               methodsToRewrite: Set<MethodToRewrite>,
-                               packageName: String): String =
+private fun oneLinerExpressionToPython(expression: ExpressionWithReturnType,
+                                       assertions: Boolean,
+                                       unions: Set<UnionWithType>,
+                                       methodsToRewrite: Set<MethodToRewrite>,
+                                       packageName: String): String =
         when (expression) {
             is ParameterExpressionWithReturnType -> expression.valueName
             is IntegerExpressionWithReturnType -> expression.value.toString()
@@ -242,13 +279,13 @@ private fun expressionToString(expression: ExpressionWithReturnType,
                         unions,
                         methodsToRewrite,
                         packageName)
-            is InfixExpressionWithReturnType -> "(${expressionToString(expression.left, assertions, unions, methodsToRewrite, packageName)}) ${mapInfixOperator(expression)} (${expressionToString(expression.right, assertions, unions, methodsToRewrite, packageName)})"
-            is IfExpressionWithReturnType -> "(${expressionToString(expression.trueBranch.expression, assertions, unions, methodsToRewrite, packageName)}) if (${expressionToString(expression.condition, assertions, unions, methodsToRewrite, packageName)}) else (${expressionToString(expression.falseBranch.expression, assertions, unions, methodsToRewrite, packageName)})"
-            is NegateExpressionWithReturnType -> "not ${expressionToString(expression.negateExpression, assertions, unions, methodsToRewrite, packageName)}"
+            is InfixExpressionWithReturnType -> "(${oneLinerExpressionToPython(expression.left, assertions, unions, methodsToRewrite, packageName)}) ${mapInfixOperator(expression)} (${oneLinerExpressionToPython(expression.right, assertions, unions, methodsToRewrite, packageName)})"
+            is IfExpressionWithReturnType -> "(${oneLinerExpressionToPython(expression.trueBranch.expression, assertions, unions, methodsToRewrite, packageName)}) if (${oneLinerExpressionToPython(expression.condition, assertions, unions, methodsToRewrite, packageName)}) else (${oneLinerExpressionToPython(expression.falseBranch.expression, assertions, unions, methodsToRewrite, packageName)})"
+            is NegateExpressionWithReturnType -> "not ${oneLinerExpressionToPython(expression.negateExpression, assertions, unions, methodsToRewrite, packageName)}"
             is NewStructExpressionWithReturnType -> {
                 val parameters = expression.fields
                         .stream()
-                        .map { (name, expression) -> Pair(name, expressionToString(expression, assertions, unions, methodsToRewrite, packageName)) }
+                        .map { (name, expression) -> Pair(name, oneLinerExpressionToPython(expression, assertions, unions, methodsToRewrite, packageName)) }
                         .map { (name, value) -> "${name}=${value}" }
                         .collect(Collectors.joining(", "))
                 if (expression.returnType.packageName == packageName) {
@@ -259,26 +296,21 @@ private fun expressionToString(expression: ExpressionWithReturnType,
             }
             is ValueExpressionWithReturnType -> expression.valueName
             is LambdaExpressionWithReturnType -> {
-                if (isShortLambda(expression)) {
-                    val prefix = "_short_lambda_"
-                    val parameters = expression.parameters
-                            .stream()
-                            .map { it.name }
-                            .map { prefix + it }
-                            .collect(Collectors.joining(", "))
-                    val exp = rewriteValNamesInExpression(expression.expression, prefix)
-                    "(lambda $parameters: " + expressionToString(exp, assertions, unions, methodsToRewrite, packageName) + ")"
-                } else {
-//                    longLambdas[expression] ?: // TODO still valid?
-                    throw IllegalStateException("Should not happen ; Check long lambdas")
-                }
+                val prefix = "_short_lambda_"
+                val parameters = expression.parameters
+                        .stream()
+                        .map { it.name }
+                        .map { prefix + it }
+                        .collect(Collectors.joining(", "))
+                val exp = rewriteValNamesInExpression(expression.expression, prefix)
+                "(lambda $parameters: " + oneLinerExpressionToPython(exp, assertions, unions, methodsToRewrite, packageName) + ")"
             }
             is NewListExpressionWithReturnType -> expression.elements
                     .stream()
-                    .map { expressionToString(it, assertions, unions, methodsToRewrite, packageName) }
+                    .map { oneLinerExpressionToPython(it, assertions, unions, methodsToRewrite, packageName) }
                     .collect(Collectors.joining(", ", "[", "]"))
             is StructureAccessExpressionWithReturnType -> {
-                "${expression.structureName}[${expressionToString(expression.structureIndex, assertions, unions, methodsToRewrite, packageName)}]"
+                "${expression.structureName}[${oneLinerExpressionToPython(expression.structureIndex, assertions, unions, methodsToRewrite, packageName)}]"
             }
             is IsExpressionWithReturnType -> {
                 val union = unions.stream()
@@ -294,9 +326,9 @@ private fun expressionToString(expression: ExpressionWithReturnType,
                     isInstance(expression.value, expression.type)
                 }
             }
-            is StructFieldAccessExpressionWithReturnType -> "${expressionToString(expression.structureExpression, assertions, unions, methodsToRewrite, packageName)}.${expression.fieldName}"
+            is StructFieldAccessExpressionWithReturnType -> "${oneLinerExpressionToPython(expression.structureExpression, assertions, unions, methodsToRewrite, packageName)}.${expression.fieldName}"
             is AssertExpressionWithReturnType -> {
-                expressionToString(expression.returnExpression, assertions, unions, methodsToRewrite, packageName)
+                oneLinerExpressionToPython(expression.returnExpression, assertions, unions, methodsToRewrite, packageName)
             }
         }
 
@@ -309,7 +341,7 @@ private fun methodToString(
         packageName: String): String {
     val parameters = expressionParameters
             .stream()
-            .map { expressionToString(it, assertions, unions, methodsToRewrite, packageName) }
+            .map { oneLinerExpressionToPython(it, assertions, unions, methodsToRewrite, packageName) }
             .collect(Collectors.joining(", "))
     return when (functionInvocation) {
         is FunctionInvocationByNameWithReturnType -> {
@@ -325,7 +357,7 @@ private fun methodToString(
             }
         }
         is FunctionInvocationByExpressionWithReturnType -> {
-            val lambda = expressionToString(functionInvocation.expression, assertions, unions, methodsToRewrite, packageName)
+            val lambda = oneLinerExpressionToPython(functionInvocation.expression, assertions, unions, methodsToRewrite, packageName)
             "($lambda)($parameters)"
         }
     }

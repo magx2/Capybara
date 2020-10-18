@@ -289,11 +289,14 @@ class ExpressionCompiler(private val compilationContext: CompilationContext,
                             falseBranchExpression.returnType,
                             expression.trueBranch.expression.codeMetainfo,
                             expression.falseBranch.expression.codeMetainfo)
+                    val functionCompiler = FunctionCompiler(compilationContext, compileUnit, fullyQualifiedStructNames)
+                    val trueAssignments = functionCompiler.findReturnTypeForAssignments(expression.trueBranch.assignments)
+                    val falseAssignments = functionCompiler.findReturnTypeForAssignments(expression.falseBranch.assignments)
                     IfExpressionWithReturnType(
                             type,
                             ifReturnType,
-                            IfBranchWithReturnType(trueBranchExpression, emptyList()),// TODO
-                            IfBranchWithReturnType(falseBranchExpression, emptyList())// TODO
+                            IfBranchWithReturnType(trueBranchExpression, trueAssignments),
+                            IfBranchWithReturnType(falseBranchExpression, falseAssignments)
                     )
                 }
                 is NegateExpression -> {
