@@ -29,6 +29,16 @@ fun lambda_in_lambda(param_int: Int): Int {
 	return x(param_int) + y(param_int)
 }
 
+fun lambda_as_clojure(param_int: Int): Int {
+	x = { Int ->
+		x = { Int -> assert 1 == 1, { 44 + param_int }, "1 should equal to 1" }
+		y = { Int -> { Int -> 2 + 2 } }
+		x(param_int)() * y(int)(int)
+	}
+	y = { Int -> x = 2 ; y = 6 ; (x + y) * int }
+	return x(param_int) + y(param_int)
+}
+
 fun iife(Int): Int = { Int -> 5 + 10 + int }(int)
 
 fun iife_multiline(Int): Int = { Int -> x=3; y=6; { x=5; y=10; x*y } }(int)()
