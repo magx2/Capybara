@@ -1,9 +1,7 @@
 package com.magx2.capybara.export.python
 
 import com.magx2.capybara.*
-import java.util.concurrent.atomic.AtomicInteger
 import java.util.stream.Collectors
-import java.util.stream.Stream
 import kotlin.streams.toList
 
 fun assignmentToPython(assignment: AssigmentStatementWithType,
@@ -77,19 +75,29 @@ private fun expressionLongOrShortToString(expression: ExpressionWithReturnType,
                             buildIndent(indent + 1) + ifBranchToPython(expression.falseBranch, expressionPrefix, assertions, unions, methodsToRewrite, packageName, indent + 1, depth + 1)
                 }
                 is LambdaExpressionWithReturnType -> {
-//                    val name = longLambdas[expression]
-//                            ?: throw java.lang.IllegalStateException("Should not happen ; cannot find `name` for lambda `$expression`")
-//                    longLambdaToPython(
-//                            name,
-//                            expression,
-//                            assertions,
-//                            unions,
-//                            methodsToRewrite,
-//                            packageName,
-//                            generateLongLambdas(expression.assignments, expression.expression, depth + 1),
-//                            indent + 1,
-//                            depth + 1)
-                    TODO()
+                    val name = "_lambda_$depth"
+                    val prefix = name + "_"
+                    val lambdaInPython = functionToPython(
+                            name,
+                            rewriteValNamesInExpression(expression.expression, prefix),
+                            expression.parameters
+                                    .map { ParameterToExport(prefix + it.name, it.type) },
+                            expression.assignments.map { assignment ->
+                                AssigmentStatementWithType(
+                                        prefix + assignment.name,
+                                        rewriteValNamesInExpression(assignment.expression, prefix),
+                                        assignment.type)
+                            },
+                            assertions,
+                            unions,
+                            methodsToRewrite,
+                            packageName,
+                            indent,
+                            depth + 1
+                    )
+                    val newExpression = ValueExpressionWithReturnType(expression.returnType, name)
+                    lambdaInPython + "\n" +
+                            buildIndent(indent) + expressionLongOrShortToString(newExpression, expressionPrefix, assertions, unions, methodsToRewrite, packageName, indent, depth)
                 }
                 is AssertExpressionWithReturnType -> {
                     val messageExpression = expression.messageExpression
@@ -148,7 +156,7 @@ private fun expressionLongOrShortToString(expression: ExpressionWithReturnType,
                 }
                 is NewListExpressionWithReturnType -> {
                     val elementNames = ArrayList<ValueExpressionWithReturnType>(expression.elements.size)
-                    var prefix = "";
+                    var prefix = ""
                     val prefixName = "_new_list_${depth}_"
                     for (idx in expression.elements.indices) {
                         val element = expression.elements[idx]
@@ -212,44 +220,12 @@ fun ifBranchToPython(
     val assignments = branch.assignments
             .stream()
             .map { expressionLongOrShortToString(it.expression, it.name + " = ", assertions, unions, methodsToRewrite, packageName, indent, depth + 1) }
-//                .map { buildIndent(indent) + it }
             .map { it + "\n" }
             .map { it + buildIndent(indent) }
             .collect(Collectors.joining())
     val lastExpression = expressionLongOrShortToString(branch.expression, expressionPrefix, assertions, unions, methodsToRewrite, packageName, indent, depth + 1)
     return assignments + lastExpression
 }
-
-//private fun longLambdaToPython(name: String,
-//                               lambda: LambdaExpressionWithReturnType,
-//                               assertions: Boolean,
-//                               unions: Set<UnionWithType>,
-//                               methodsToRewrite: Set<MethodToRewrite>,
-//                               packageName: String,
-//                               indent: Int = 1,
-//                               depth: Int): String {
-//    val prefix = name + "_"
-//    return functionToPython(
-//            name,
-//            rewriteValNamesInExpression(lambda.expression, prefix),
-//            lambda.parameters
-//                    .map { ParameterToExport(prefix + it.name, it.type) },
-//            lambda.assignments.map { assignment ->
-//                AssigmentStatementWithType(
-//                        prefix + assignment.name,
-//                        rewriteValNamesInExpression(assignment.expression, prefix),
-//                        assignment.type)
-//            },
-//            longLambdas.filterKeys { k -> k != lambda },
-//            assertions,
-//            unions,
-//            methodsToRewrite,
-//            packageName,
-//            indent,
-//            depth
-//    )
-//}
-
 
 private fun rewriteValNamesInExpression(expression: ExpressionWithReturnType, prefix: String): ExpressionWithReturnType =
         when (expression) {
@@ -525,81 +501,6 @@ private fun isShortLambda(lambda: LambdaExpressionWithReturnType): Boolean =
         lambda.assignments.isEmpty() &&
                 (lambda.expression !is LambdaExpressionWithReturnType || isShortLambda(lambda.expression))
 
-private fun generateLongLambdas(expressions: List<ExpressionWithReturnType>, depth: Int): Map<LambdaExpressionWithReturnType, String> {
-    val lambdaNr = AtomicInteger()
-    val collect = expressions.stream()
-            .flatMap { findLambdas(it).stream() }
-//            .filter { it is LambdaExpressionWithReturnType }
-//            .map { it as LambdaExpressionWithReturnType }
-            .filter { l -> isShortLambda(l).not() }
-            .collect(Collectors.groupingBy { it })
-    return collect
-            .entries
-            .stream()
-//            .map { (k, v) -> Pair(k, v.last().second) }
-            .map { (k, _) ->
-                Pair(
-                        k,
-                        "_local_lambda_" +
-                                (if (depth > 0) "depth_" + depth + "_" else "") +
-                                "nr_" + lambdaNr.incrementAndGet())
-            }
-            .collect(Collectors.toMap(
-                    { (k, _) -> k },
-                    { (_, v) -> v }))
-}
-
-
-private fun findLambdas(expresion: ExpressionWithReturnType): List<LambdaExpressionWithReturnType> =
-        when (expresion) {
-            is LambdaExpressionWithReturnType -> listOf(expresion)
-            is FunctionInvocationExpressionWithReturnType ->
-                when (expresion.functionInvocation) {
-                    is FunctionInvocationByNameWithReturnType -> emptyList()
-                    is FunctionInvocationByExpressionWithReturnType -> findLambdas(expresion.functionInvocation.expression)
-                }
-            is InfixExpressionWithReturnType -> findLambdas(expresion.left) + findLambdas(expresion.right)
-            is IfExpressionWithReturnType -> findLambdas(expresion.condition) + findLambdas(expresion.trueBranch.expression) + findLambdas(expresion.falseBranch.expression)
-            is NegateExpressionWithReturnType -> findLambdas(expresion.negateExpression)
-            is AssertExpressionWithReturnType -> findLambdas(expresion.checkExpression) +
-                    findLambdas(expresion.returnExpression) +
-                    if (expresion.messageExpression != null) findLambdas(expresion.messageExpression) else emptyList()
-            is DefInvocationExpressionWithReturnType,
-            is StructureAccessExpressionWithReturnType,
-            is NewStructExpressionWithReturnType,
-            is StructFieldAccessExpressionWithReturnType,
-            is NewListExpressionWithReturnType,
-            is IsExpressionWithReturnType,
-            is ParameterExpressionWithReturnType,
-            is IntegerExpressionWithReturnType,
-            is FloatExpressionWithReturnType,
-            is BooleanExpressionWithReturnType,
-            is StringExpressionWithReturnType,
-            is ValueExpressionWithReturnType,
-            NothingExpressionWithReturnType -> emptyList()
-        }
-
-private fun generateLongLambdas(function: FunctionToExport): Map<LambdaExpressionWithReturnType, String> =
-        generateLongLambdas(function.assignments, function.returnExpression, 0)
-
-private fun generateLongLambdas(assignments: List<AssigmentStatementWithType>,
-                                returnExpression: ExpressionWithReturnType,
-                                depth: Int): Map<LambdaExpressionWithReturnType, String> =
-        generateLongLambdas(
-                concat(
-                        assignments.stream().map { it.expression },
-                        Stream.of(returnExpression)).toList(), depth + 1)
-
-private fun generateLongLambdas(def: DefToExport): Map<LambdaExpressionWithReturnType, String> =
-        generateLongLambdas(
-                concat(
-                        def.statements
-                                .stream()
-                                .flatMap { findExpressionsInStatement(it) },
-                        Stream.of(def.returnExpression).filter { it != null }.map { it!! }
-                ).toList(),
-                0)
-
 private fun findMethodNameFromExpression(methodPackageName: String,
                                          methodName: String,
                                          methodParameters: List<ExpressionWithReturnType>,
@@ -626,25 +527,5 @@ private fun findMethodName(methodPackageName: String,
         methodName + par
     } else {
         methodName
-    }
-}
-
-
-private fun findExpressionsInStatement(statement: StatementWithType): Stream<ExpressionWithReturnType> {
-    return when (statement) {
-        is AssigmentStatementWithType -> Stream.of(statement.expression)
-        is AssertStatementWithType ->
-            if (statement.messageExpression != null) {
-                Stream.of(statement.checkExpression, statement.messageExpression)
-            } else {
-                Stream.of(statement.checkExpression)
-            }
-        is WhileStatementWithType -> concat(
-                Stream.of(statement.condition),
-                statement.statements
-                        .stream()
-                        .flatMap { findExpressionsInStatement(it) }
-        )
-        is DefCallStatementWithType -> Stream.empty()
     }
 }

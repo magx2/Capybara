@@ -38,17 +38,19 @@ fun functionToPython(name: String,
             .collect(Collectors.joining(", "))
     val assignmentsInPython = if (assignments.isNotEmpty()) {
         assignments
+                .mapIndexed { index, assigment ->
+                    assignmentToPython(assigment, assertions, unions, methodsToRewrite, packageName, indent + 1, depth + index)
+                }
                 .stream()
-                .map { assignmentToPython(it, assertions, unions, methodsToRewrite, packageName, indent + 1, depth + 1) }
                 .collect(Collectors.joining("\n")) + "\n"
     } else {
         ""
     }
     val methodDoc = generateDocForDefWithTypedParameters(name, parameters, returnExpression.returnType, indent + 1)
     val n = name// findMethodNameFromParameter(packageName, name, parameters, methodsToRewrite) // FIXME
-    val returnExpressionInPython = returnExpressionToPython(returnExpression, assertions, unions, methodsToRewrite, packageName, indent + 1, depth + 1)
+    val returnExpressionInPython = returnExpressionToPython(returnExpression, assertions, unions, methodsToRewrite, packageName, indent + 1, depth + 1 + assignments.size)
 
-    return buildIndent(indent) + "def $n($par):\n" +
+    return "def $n($par):\n" +
             methodDoc +
             assignmentsInPython +
             returnExpressionInPython
