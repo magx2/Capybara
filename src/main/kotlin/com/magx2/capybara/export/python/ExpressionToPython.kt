@@ -142,8 +142,7 @@ private fun expressionLongOrShortToString(expression: ExpressionWithReturnType,
                             buildIndent(indent) + expressionPrefix + infixExpresion
                 }
                 is NegateExpressionWithReturnType -> {
-                    val valName = "_negate_$depth"
-                    val (valExpression, longExpression) = introduceNewVariable(valName, expression.negateExpression, assertions, unions, methodsToRewrite, packageName, indent, depth)
+                    val (valExpression, longExpression) = introduceNewVariable("_negate_$depth", expression.negateExpression, assertions, unions, methodsToRewrite, packageName, indent, depth)
                     longExpression + "\n" +
                             buildIndent(indent) + expressionLongOrShortToString(valExpression, expressionPrefix, assertions, unions, methodsToRewrite, packageName, indent, depth)
                 }
@@ -161,9 +160,29 @@ private fun expressionLongOrShortToString(expression: ExpressionWithReturnType,
                     val newExpression = NewListExpressionWithReturnType(expression.returnType, elementNames)
                     prefix + expressionLongOrShortToString(newExpression, expressionPrefix, assertions, unions, methodsToRewrite, packageName, indent, depth)
                 }
-                is FunctionInvocationExpressionWithReturnType -> TODO()
-                is DefInvocationExpressionWithReturnType -> TODO()
-                else -> throw java.lang.IllegalStateException("I don't know how to handle long expression of type `${expression.javaClass.simpleName}`")
+                is FunctionInvocationExpressionWithReturnType -> {
+                    val functionInvocation = expression.functionInvocation
+                    if (functionInvocation !is FunctionInvocationByExpressionWithReturnType) {
+                        throw IllegalStateException("`expression.functionInvocation` should be of type `${FunctionInvocationByExpressionWithReturnType::class.java.simpleName}`, was `${functionInvocation.javaClass.simpleName}`")
+                    }
+                    val (valExpression, longExpression) = introduceNewVariable("_function_invocation_$depth", functionInvocation.expression, assertions, unions, methodsToRewrite, packageName, indent, depth)
+                    longExpression + "\n" +
+                            buildIndent(indent) + expressionLongOrShortToString(valExpression, expressionPrefix, assertions, unions, methodsToRewrite, packageName, indent, depth)
+                }
+                is DefInvocationExpressionWithReturnType -> {
+                    val elementNames = ArrayList<ValueExpressionWithReturnType>(expression.parameters.size)
+                    val parameters = expression.parameters
+                    var prefix = ""
+                    for (idx in parameters.indices) {
+                        val parameter = parameters[idx]
+                        val (valExpression, longExpression) = introduceNewVariable("_def_inv_${depth}_$idx", parameter, assertions, unions, methodsToRewrite, packageName, indent, depth)
+                        prefix += longExpression + "\n" + buildIndent(indent)
+                        elementNames.add(valExpression)
+                    }
+                    val newExpression = DefInvocationExpressionWithReturnType(expression.returnType, expression.packageName, expression.functionName, elementNames)
+                    prefix + expressionLongOrShortToString(newExpression, expressionPrefix, assertions, unions, methodsToRewrite, packageName, indent, depth)
+                }
+                else -> throw IllegalStateException("I don't know how to handle long expression of type `${expression.javaClass.simpleName}`")
             }
         }
 
