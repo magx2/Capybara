@@ -141,8 +141,25 @@ private fun expressionLongOrShortToString(expression: ExpressionWithReturnType,
                             buildIndent(indent) + rightExpression + "\n" +
                             buildIndent(indent) + expressionPrefix + infixExpresion
                 }
-                is NegateExpressionWithReturnType -> TODO()
-                is NewListExpressionWithReturnType -> TODO()
+                is NegateExpressionWithReturnType -> {
+                    val negateName = "_negate_$depth"
+                    val negateExpression = expressionLongOrShortToString(expression.negateExpression, "$negateName = ", assertions, unions, methodsToRewrite, packageName, indent, depth + 1)
+                    negateExpression + "\n" +
+                            buildIndent(indent) + expressionPrefix + oneLinerExpressionToPython(NegateExpressionWithReturnType(ValueExpressionWithReturnType(expression.returnType, negateName)), assertions, unions, methodsToRewrite, packageName)
+                }
+                is NewListExpressionWithReturnType -> {
+                    val elementNames = ArrayList<ValueExpressionWithReturnType>(expression.elements.size)
+                    var prefix = "";
+                    val prefixName = "_new_list_${depth}_"
+                    for (idx in expression.elements.indices) {
+                        val element = expression.elements[idx]
+                        val elementName = prefixName + idx
+                        prefix += expressionLongOrShortToString(element, "$elementName = ", assertions, unions, methodsToRewrite, packageName, indent, depth) + "\n" + buildIndent(indent)
+                        elementNames.add(ValueExpressionWithReturnType(element.returnType, elementName))
+                    }
+                    val newExpression = NewListExpressionWithReturnType(expression.returnType, elementNames)
+                    prefix + expressionPrefix + oneLinerExpressionToPython(newExpression, assertions, unions, methodsToRewrite, packageName)
+                }
                 is FunctionInvocationExpressionWithReturnType -> TODO()
                 is DefInvocationExpressionWithReturnType -> TODO()
                 else -> throw java.lang.IllegalStateException("I don't know how to handle long expression of type `${expression.javaClass.simpleName}`")
