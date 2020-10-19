@@ -77,15 +77,19 @@ private fun expressionLongOrShortToString(expression: ExpressionWithReturnType,
                 is LambdaExpressionWithReturnType -> {
                     val name = "_lambda_$depth"
                     val prefix = name + "_"
+                    val valuesToRewrite =
+                            concat(
+                                    expression.parameters.stream().map { it.name },
+                                    expression.assignments.stream().map { it.name }
+                            ).toList().toSet()
                     val lambdaInPython = functionToPython(
                             name,
-                            rewriteValNamesInExpression(expression.expression, prefix),
-                            expression.parameters
-                                    .map { ParameterToExport(prefix + it.name, it.type) },
+                            rewriteValNamesInExpression(expression.expression, prefix, valuesToRewrite),
+                            expression.parameters.map { ParameterToExport(prefix + it.name, it.type) },
                             expression.assignments.map { assignment ->
                                 AssigmentStatementWithType(
                                         prefix + assignment.name,
-                                        rewriteValNamesInExpression(assignment.expression, prefix),
+                                        rewriteValNamesInExpression(assignment.expression, prefix, valuesToRewrite),
                                         assignment.type)
                             },
                             assertions,
@@ -227,8 +231,18 @@ fun ifBranchToPython(
     return assignments + lastExpression
 }
 
-private fun rewriteValNamesInExpression(expression: ExpressionWithReturnType, prefix: String): ExpressionWithReturnType =
+private fun rewriteValNamesInExpression(expression: ExpressionWithReturnType, prefix: String, valuesToRewrite: Set<String>): ExpressionWithReturnType =
         when (expression) {
+            is ValueExpressionWithReturnType -> if (valuesToRewrite.contains(expression.valueName)) {
+                ValueExpressionWithReturnType(expression.returnType, prefix + expression.valueName)
+            } else {
+                expression
+            }
+            is ParameterExpressionWithReturnType -> if (valuesToRewrite.contains(expression.valueName)) {
+                ParameterExpressionWithReturnType(expression.returnType, prefix + expression.valueName)
+            } else {
+                expression
+            }
             is LambdaExpressionWithReturnType,
             is IntegerExpressionWithReturnType,
             is FloatExpressionWithReturnType,
@@ -237,7 +251,6 @@ private fun rewriteValNamesInExpression(expression: ExpressionWithReturnType, pr
             NothingExpressionWithReturnType,
             is NewStructExpressionWithReturnType,
             is IsExpressionWithReturnType -> expression
-            is ParameterExpressionWithReturnType -> ParameterExpressionWithReturnType(expression.returnType, prefix + expression.valueName)
             is FunctionInvocationExpressionWithReturnType ->
                 FunctionInvocationExpressionWithReturnType(
                         expression.returnType,
@@ -245,12 +258,12 @@ private fun rewriteValNamesInExpression(expression: ExpressionWithReturnType, pr
                             is FunctionInvocationByNameWithReturnType -> expression.functionInvocation
                             is FunctionInvocationByExpressionWithReturnType ->
                                 FunctionInvocationByExpressionWithReturnType(
-                                        rewriteValNamesInExpression(expression.functionInvocation.expression, prefix)
+                                        rewriteValNamesInExpression(expression.functionInvocation.expression, prefix, valuesToRewrite)
                                 )
                         },
                         expression.parameters
                                 .stream()
-                                .map { rewriteValNamesInExpression(it, prefix) }
+                                .map { rewriteValNamesInExpression(it, prefix, valuesToRewrite) }
                                 .toList()
                 )
             is DefInvocationExpressionWithReturnType ->
@@ -260,34 +273,51 @@ private fun rewriteValNamesInExpression(expression: ExpressionWithReturnType, pr
                         expression.functionName,
                         expression.parameters
                                 .stream()
-                                .map { rewriteValNamesInExpression(it, prefix) }
+                                .map { rewriteValNamesInExpression(it, prefix, valuesToRewrite) }
                                 .toList()
                 )
             is InfixExpressionWithReturnType ->
                 InfixExpressionWithReturnType(
                         expression.returnType,
                         expression.operation,
-                        rewriteValNamesInExpression(expression.left, prefix),
-                        rewriteValNamesInExpression(expression.right, prefix),
+                        rewriteValNamesInExpression(expression.left, prefix, valuesToRewrite),
+                        rewriteValNamesInExpression(expression.right, prefix, valuesToRewrite),
                 )
             is IfExpressionWithReturnType ->
                 IfExpressionWithReturnType(
                         expression.returnType,
-                        rewriteValNamesInExpression(expression.condition, prefix),
+                        rewriteValNamesInExpression(expression.condition, prefix, valuesToRewrite),
                         IfBranchWithReturnType(
-                                rewriteValNamesInExpression(expression.trueBranch.expression, prefix),
-                                expression.trueBranch.assignments
+                                rewriteValNamesInExpression(expression.trueBranch.expression, prefix, valuesToRewrite),
+                                expression.trueBranch
+                                        .assignments
+                                        .stream()
+                                        .map { assignment ->
+                                            AssigmentStatementWithType(
+                                                    prefix + assignment.name,
+                                                    rewriteValNamesInExpression(assignment.expression, prefix, valuesToRewrite),
+                                                    assignment.type)
+                                        }
+                                        .toList()
                         ),
                         IfBranchWithReturnType(
-                                rewriteValNamesInExpression(expression.falseBranch.expression, prefix),
-                                expression.falseBranch.assignments
+                                rewriteValNamesInExpression(expression.falseBranch.expression, prefix, valuesToRewrite),
+                                expression.falseBranch
+                                        .assignments
+                                        .stream()
+                                        .map { assignment ->
+                                            AssigmentStatementWithType(
+                                                    prefix + assignment.name,
+                                                    rewriteValNamesInExpression(assignment.expression, prefix, valuesToRewrite),
+                                                    assignment.type)
+                                        }
+                                        .toList()
                         )
                 )
-            is NegateExpressionWithReturnType -> NegateExpressionWithReturnType(rewriteValNamesInExpression(expression.negateExpression, prefix))
-            is ValueExpressionWithReturnType -> ValueExpressionWithReturnType(expression.returnType, prefix + expression.valueName)
+            is NegateExpressionWithReturnType -> NegateExpressionWithReturnType(rewriteValNamesInExpression(expression.negateExpression, prefix, valuesToRewrite))
             is StructFieldAccessExpressionWithReturnType ->
                 StructFieldAccessExpressionWithReturnType(
-                        rewriteValNamesInExpression(expression.structureExpression, prefix),
+                        rewriteValNamesInExpression(expression.structureExpression, prefix, valuesToRewrite),
                         expression.fieldName,
                         expression.fieldType
                 )
@@ -295,20 +325,20 @@ private fun rewriteValNamesInExpression(expression: ExpressionWithReturnType, pr
                 NewListExpressionWithReturnType(
                         expression.returnType,
                         expression.elements
-                                .map { rewriteValNamesInExpression(it, prefix) }
+                                .map { rewriteValNamesInExpression(it, prefix, valuesToRewrite) }
                 )
             is AssertExpressionWithReturnType ->
                 AssertExpressionWithReturnType(
-                        rewriteValNamesInExpression(expression.checkExpression, prefix),
-                        rewriteValNamesInExpression(expression.returnExpression, prefix),
-                        if (expression.messageExpression != null) rewriteValNamesInExpression(expression.messageExpression, prefix) else null
+                        rewriteValNamesInExpression(expression.checkExpression, prefix, valuesToRewrite),
+                        rewriteValNamesInExpression(expression.returnExpression, prefix, valuesToRewrite),
+                        if (expression.messageExpression != null) rewriteValNamesInExpression(expression.messageExpression, prefix, valuesToRewrite) else null
                 )
             is StructureAccessExpressionWithReturnType ->
                 StructureAccessExpressionWithReturnType(
                         expression.returnType,
                         expression.structureType,
                         expression.structureName,
-                        rewriteValNamesInExpression(expression.structureIndex, prefix)
+                        rewriteValNamesInExpression(expression.structureIndex, prefix, valuesToRewrite)
                 )
         }
 
@@ -367,7 +397,12 @@ private fun oneLinerExpressionToPython(expression: ExpressionWithReturnType,
                         .map { it.name }
                         .map { prefix + it }
                         .collect(Collectors.joining(", "))
-                val exp = rewriteValNamesInExpression(expression.expression, prefix)
+                val valuesToRewrite =
+                        concat(
+                                expression.parameters.stream().map { it.name },
+                                expression.assignments.stream().map { it.name }
+                        ).toList().toSet()
+                val exp = rewriteValNamesInExpression(expression.expression, prefix, valuesToRewrite)
                 "(lambda $parameters: " + oneLinerExpressionToPython(exp, assertions, unions, methodsToRewrite, packageName) + ")"
             }
             is NewListExpressionWithReturnType -> expression.elements
@@ -460,7 +495,7 @@ private fun mapInfixOperator(expression: InfixExpressionWithReturnType) = when (
 
 private fun isOneLinerExpression(expression: ExpressionWithReturnType, assertions: Boolean): Boolean =
         when (expression) {
-            is LambdaExpressionWithReturnType -> isShortLambda(expression)
+            is LambdaExpressionWithReturnType -> expression.assignments.isEmpty() && isOneLinerExpression(expression.expression, assertions)
             is IfExpressionWithReturnType -> isShortIf(expression, assertions)
             is AssertExpressionWithReturnType -> assertions.not()
             is InfixExpressionWithReturnType -> isOneLinerExpression(expression.right, assertions) && isOneLinerExpression(expression.left, assertions)
@@ -497,9 +532,9 @@ private fun isShortIf(expression: IfExpressionWithReturnType, assertions: Boolea
                 && isOneLinerExpression(expression.trueBranch.expression, assertions)
                 && isOneLinerExpression(expression.falseBranch.expression, assertions)
 
-private fun isShortLambda(lambda: LambdaExpressionWithReturnType): Boolean =
-        lambda.assignments.isEmpty() &&
-                (lambda.expression !is LambdaExpressionWithReturnType || isShortLambda(lambda.expression))
+//private fun isShortLambda(lambda: LambdaExpressionWithReturnType): Boolean =
+//        lambda.assignments.isEmpty() &&
+//                (lambda.expression !is LambdaExpressionWithReturnType || isShortLambda(lambda.expression))
 
 private fun findMethodNameFromExpression(methodPackageName: String,
                                          methodName: String,
