@@ -19,14 +19,14 @@ fun multiline_lambda_invocation(first: Int, second: Int): Int {
 	return x(first, second) + y(second)
 }
 
-fun lambda_in_lambda(Int): Int {
+fun lambda_in_lambda(param_int: Int): Int {
 	x = { Int ->
 		x = { Int -> assert 1 == 1, { 44 + int }, "1 should equal to 1" }
 		y = { Int -> { Int -> 2 + 2 } }
 		x(int)() * y(int)(int)
 	}
 	y = { Int -> x = 2 ; y = 6 ; (x + y) * int }
-	return x(int) + y(int)
+	return x(param_int) + y(param_int)
 }
 
 fun iife(Int): Int = { Int -> 5 + 10 + int }(int)
