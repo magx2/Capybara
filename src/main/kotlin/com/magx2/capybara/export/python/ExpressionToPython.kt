@@ -142,10 +142,10 @@ private fun expressionLongOrShortToString(expression: ExpressionWithReturnType,
                             buildIndent(indent) + expressionPrefix + infixExpresion
                 }
                 is NegateExpressionWithReturnType -> {
-                    val negateName = "_negate_$depth"
-                    val negateExpression = expressionLongOrShortToString(expression.negateExpression, "$negateName = ", assertions, unions, methodsToRewrite, packageName, indent, depth + 1)
-                    negateExpression + "\n" +
-                            buildIndent(indent) + expressionPrefix + oneLinerExpressionToPython(NegateExpressionWithReturnType(ValueExpressionWithReturnType(expression.returnType, negateName)), assertions, unions, methodsToRewrite, packageName)
+                    val valName = "_negate_$depth"
+                    val (valExpression, longExpression) = introduceNewVariable(valName, expression.negateExpression, assertions, unions, methodsToRewrite, packageName, indent, depth)
+                    longExpression + "\n" +
+                            buildIndent(indent) + expressionLongOrShortToString(valExpression, expressionPrefix, assertions, unions, methodsToRewrite, packageName, indent, depth)
                 }
                 is NewListExpressionWithReturnType -> {
                     val elementNames = ArrayList<ValueExpressionWithReturnType>(expression.elements.size)
@@ -154,17 +154,31 @@ private fun expressionLongOrShortToString(expression: ExpressionWithReturnType,
                     for (idx in expression.elements.indices) {
                         val element = expression.elements[idx]
                         val elementName = prefixName + idx
-                        prefix += expressionLongOrShortToString(element, "$elementName = ", assertions, unions, methodsToRewrite, packageName, indent, depth) + "\n" + buildIndent(indent)
-                        elementNames.add(ValueExpressionWithReturnType(element.returnType, elementName))
+                        val (valueExpressionWithReturnType, longExpression) = introduceNewVariable(elementName, element, assertions, unions, methodsToRewrite, packageName, indent, depth)
+                        prefix += longExpression + "\n" + buildIndent(indent)
+                        elementNames.add(valueExpressionWithReturnType)
                     }
                     val newExpression = NewListExpressionWithReturnType(expression.returnType, elementNames)
-                    prefix + expressionPrefix + oneLinerExpressionToPython(newExpression, assertions, unions, methodsToRewrite, packageName)
+                    prefix + expressionLongOrShortToString(newExpression, expressionPrefix, assertions, unions, methodsToRewrite, packageName, indent, depth)
                 }
                 is FunctionInvocationExpressionWithReturnType -> TODO()
                 is DefInvocationExpressionWithReturnType -> TODO()
                 else -> throw java.lang.IllegalStateException("I don't know how to handle long expression of type `${expression.javaClass.simpleName}`")
             }
         }
+
+private fun introduceNewVariable(valName: String,
+                                 longExpression: ExpressionWithReturnType,
+                                 assertions: Boolean,
+                                 unions: Set<UnionWithType>,
+                                 methodsToRewrite: Set<MethodToRewrite>,
+                                 packageName: String,
+                                 indent: Int,
+                                 depth: Int): Pair<ValueExpressionWithReturnType, String> {
+    val newExpression = expressionLongOrShortToString(longExpression, "$valName = ", assertions, unions, methodsToRewrite, packageName, indent, depth + 1)
+    val valueExpression = ValueExpressionWithReturnType(longExpression.returnType, valName)
+    return Pair(valueExpression, newExpression)
+}
 
 fun ifBranchToPython(
         branch: IfBranchWithReturnType,
