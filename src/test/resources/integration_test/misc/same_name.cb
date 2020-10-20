@@ -37,3 +37,18 @@ def call_overloaded_methods() {
 	x_def()
 }
 
+def main() {
+	x = "I'm not main"
+}
+
+def main(Int) {
+	x = "I'm not main"
+}
+
+def main(List[Int]) {
+	x = "I'm not main"
+}
+
+def main(List[String]) {
+	x = "I'm main"
+}

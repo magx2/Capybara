@@ -120,22 +120,16 @@ class PythonExport(private val outputDir: String,
                 .stream()
                 .map { def -> defToPython(def, assertions, unit.unions, unit.packageName) }
 
-        // TODO add this main generation to `defToPython`
         val main = unit.defs
                 .stream()
-                .filter { it.name == "main" }
+                .filter { it.name == "main" || it.name == "main_capybara_type_List_capybara_type_String" }
                 .filter { it.parameters.size == 1 }
                 .filter { isListOfStrings(it.parameters.first().type) }
                 .map { def ->
-                    val name = "abc"/*findMethodNameFromParameter(
-                            def.packageName,
-                            def.name,
-                            def.parameters,
-                            methodsToRewrite)*/
                     """
                     |${'\n'}if __name__ == "__main__":
                     |${'\t'}import sys
-                    |${'\t'}$name(sys.argv)
+                    |${'\t'}${def.name}(sys.argv)
                     |${"\n".repeat(2)}""".trimMargin()
                 }
 
@@ -361,10 +355,14 @@ class PythonExport(private val outputDir: String,
         val parameters = methodParameters
                 .stream()
                 .map { it.type }
-                .map { it.packageName.replace("/", "_") + "_" + it.name }
+                .map { typeToMethodName(it) }
                 .collect(Collectors.joining("_"))
         return methodName + parameters
     }
+
+    private fun typeToMethodName(type: Type): String =
+            type.packageName.replace("/", "_") + "_" + type.name +
+                    type.genericTypes.stream().map { typeToMethodName(it) }.collect(Collectors.joining("_"))
 
     private fun findImportsForFunctions(unit: CompileUnitToExport): Stream<String> =
             unit.functions
