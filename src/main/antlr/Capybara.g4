@@ -154,7 +154,7 @@ def_
 	;
 
 defBody
-	: (statement semicolonEnd)+
+	: (statement semicolonEnd)*
 	| RETURN return_expression=expression semicolonEnd?
 	| (statement semicolonEnd)+ RETURN return_expression=expression semicolonEnd?
 	;
