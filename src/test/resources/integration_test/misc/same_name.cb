@@ -52,3 +52,4 @@ def main(List[Int]) {
 def main(List[String]) {
 	x = "I'm main"
 }
+
