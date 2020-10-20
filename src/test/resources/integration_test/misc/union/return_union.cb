@@ -7,7 +7,7 @@ fun new_response_union_success(): Response = Success { code=200, msg="OK" }
 fun new_response_union_error(): Response = Error { value="Not OK ;(" }
 
 fun new_response_union_if(Int, String): Response =
-	if (int >= 200) && (int <= 299) {
+	if ((int >= 200) && (int <= 299)) {
 		Success { code=int, msg=string }
 	} else {
 		Error { value=string }
@@ -20,7 +20,7 @@ fun new_primitive_union_string(String): PrimitiveUnion = "Hello " + string
 fun new_primitive_union_float(Float): PrimitiveUnion = float ^ 2
 
 fun new_primitive_union_if(Int): PrimitiveUnion =
-	if int > 0 {
+	if (int > 0) {
 		int
 	} else {
 		"Below zero"
@@ -29,7 +29,7 @@ fun new_primitive_union_if(Int): PrimitiveUnion =
 fun new_null_union_null(): NullUnion = nothing
 
 fun new_null_union_if(Int): NullUnion =
-	if int > 0 {
+	if (int > 0) {
 		"OK"
 	} else {
 		nothing

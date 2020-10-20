@@ -393,14 +393,24 @@ private class Listener(private val fileName: String) : CapybaraBaseListener() {
                     InfixExpression(parseCodeMetainfo(fileName, ctx.start), ctx.infix_operation().text, parseExpression(ctx.left, parametersMap), parseExpression(ctx.right, parametersMap))
                 }
                 ctx.condition != null -> {
-                    IfExpression(
-                            parseCodeMetainfo(fileName, ctx.start),
-                            parseExpression(ctx.condition, parametersMap),
-                            parseIfBranch(ctx.assignments_true, parametersMap),
-                            parseIfElseExpression(
-                                    ctx.if_else(),
-                                    ctx.assignments_false,
-                                    parametersMap))
+                    if (ctx.assignments_true != null && ctx.assignments_false != null) {
+                        IfExpression(
+                                parseCodeMetainfo(fileName, ctx.start),
+                                parseExpression(ctx.condition, parametersMap),
+                                parseIfBranch(ctx.assignments_true, parametersMap),
+                                parseIfElseExpression(
+                                        ctx.if_else(),
+                                        ctx.assignments_false,
+                                        parametersMap))
+                    } else if (ctx.true_expression != null && ctx.false_expression != null) {
+                        IfExpression(
+                                parseCodeMetainfo(fileName, ctx.start),
+                                parseExpression(ctx.condition, parametersMap),
+                                parseIfBranch(ctx.true_expression, parametersMap),
+                                parseIfBranch(ctx.false_expression, parametersMap))
+                    } else {
+                        throw java.lang.IllegalStateException("Should not happen")
+                    }
                 }
                 ctx.argument_to_function != null -> {
                     val argumentToFunction = ctx.argument_to_function
@@ -500,8 +510,10 @@ private class Listener(private val fileName: String) : CapybaraBaseListener() {
                     (ctx.assignment() ?: emptyList())
                             .stream()
                             .map { parseAssignment(it) }
-                            .toList()
-            )
+                            .toList())
+
+    private fun parseIfBranch(ctx: CapybaraParser.ExpressionContext, parametersMap: Map<String, String>): IfBranch =
+            IfBranch(parseExpression(ctx, parametersMap), emptyList())
 
     private fun buildFunctionInvocationExpression(functionExpression: CapybaraParser.ExpressionContext,
                                                   parametersMap: Map<String, String>): FunctionInvocation =
