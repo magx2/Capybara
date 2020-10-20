@@ -1,10 +1,9 @@
 package com.magx2.capybara
 
 import com.magx2.capybara.BasicTypes.lambdaType
+import com.magx2.capybara.BasicTypes.nothingType
 import com.magx2.capybara.BasicTypes.stringType
-import com.magx2.capybara.export.python.DefToExport
-import com.magx2.capybara.export.python.FunctionToExport
-import com.magx2.capybara.export.python.ParameterToExport
+import com.magx2.capybara.export.python.*
 import java.util.regex.Pattern
 import java.util.stream.Collectors
 import java.util.stream.Stream
@@ -120,26 +119,63 @@ fun parseType(
     }
 }
 
-fun finUnionSubTypes(unionType: Type,
-                     compilationContext: CompilationContext,
-                     compileUnit: CompileUnitWithFlatStructs): Set<Type> =
-        (compileUnit.unions + compilationContext.unions).stream()
+private data class UnionTmp(val type: Type, val types: Set<Type>)
+
+private fun findUnionSubTypes(unionType: Type, unions: Set<UnionTmp>): Set<Type> =
+        unions.stream()
                 .filter { it.type == unionType }
                 .map { it.types }
                 .findAny()
                 .orElse(emptySet())
 
+fun findUnionSubTypes(unionType: Type,
+                      compilationContext: CompilationContext,
+                      compileUnit: CompileUnitWithFlatStructs): Set<Type> =
+        findUnionSubTypes(unionType, toUnions(compileUnit, compilationContext))
+
+private fun toUnions(compileUnit: CompileUnitWithFlatStructs, compilationContext: CompilationContext): Set<UnionTmp> =
+        (compileUnit.unions + compilationContext.unions).stream()
+                .map { UnionTmp(it.type, it.types) }
+                .toList()
+                .toSet()
+
+private fun toUnions(compileUnit: CompileUnitToExport, compilationContext: CompilationContextToExport): Set<UnionTmp> =
+        (compileUnit.unions + compilationContext.unions).stream()
+                .map { UnionTmp(it.type, it.types) }
+                .toList()
+                .toSet()
+
+private fun isTypePartOfUnion(type: Type,
+                              unionType: Type,
+                              unions: Set<UnionTmp>): Boolean =
+        findUnionSubTypes(unionType, unions).contains(type)
+
 fun isTypePartOfUnion(type: Type,
                       unionType: Type,
                       compilationContext: CompilationContext,
                       compileUnit: CompileUnitWithFlatStructs): Boolean =
-        finUnionSubTypes(unionType, compilationContext, compileUnit).contains(type)
+        isTypePartOfUnion(type, unionType, toUnions(compileUnit, compilationContext))
+
+private fun areTypesEqual(type1: Type,
+                          type2: Type,
+                          unions: Set<UnionTmp>): Boolean =
+        type1 == type2
+                || isTypePartOfUnion(type1, type2, unions)
+                || isTypePartOfUnion(type2, type1, unions)
+                || (isListOf(type1, nothingType) && isList(type2))
+                || (isList(type1) && isListOf(type2, nothingType))
 
 fun areTypesEqual(type1: Type,
                   type2: Type,
                   compilationContext: CompilationContext,
                   compileUnit: CompileUnitWithFlatStructs): Boolean =
-        type1 == type2 || isTypePartOfUnion(type1, type2, compilationContext, compileUnit) || isTypePartOfUnion(type2, type1, compilationContext, compileUnit)
+        areTypesEqual(type1, type2, toUnions(compileUnit, compilationContext))
+
+fun areTypesEqual(type1: Type,
+                  type2: Type,
+                  compilationContext: CompilationContextToExport,
+                  compileUnit: CompileUnitToExport): Boolean =
+        areTypesEqual(type1, type2, toUnions(compileUnit, compilationContext))
 
 fun addGenericType(type: Type, genericTypes: List<Type>): Type {
     val newGenerics = ArrayList(type.genericTypes)

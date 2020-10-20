@@ -331,8 +331,12 @@ fun main(options: CommandLineOptions) {
                 override fun characteristics(): MutableSet<Collector.Characteristics> = setOf(UNORDERED).toMutableSet()
 
             })
-
-    compilationUnitsToExport.forEach { unit -> checkDuplicateMethods(unit) }
+    val compilationContextToExport = CompilationContextToExport(
+            compilationUnitsToExport.stream().flatMap { it.structs.stream() }.toList().toSet(),
+            compilationUnitsToExport.stream().flatMap { it.unions.stream() }.toList().toSet(),
+            compilationUnitsToExport.stream().flatMap { it.functions.stream() }.toList().toSet(),
+            compilationUnitsToExport.stream().flatMap { it.defs.stream() }.toList().toSet())
+    compilationUnitsToExport.forEach { unit -> checkDuplicateMethods(unit, compilationContextToExport, unit) }
 
     //
     // EXPORT TO FILE
@@ -346,7 +350,9 @@ fun main(options: CommandLineOptions) {
     }
 }
 
-private fun checkDuplicateMethods(unit: CompileUnitToExport) {
+private fun checkDuplicateMethods(unit: CompileUnitToExport,
+                                  compilationContext: CompilationContextToExport,
+                                  compileUnit: CompileUnitToExport) {
     val funDef = concat(unit.functions
             .stream()
             .map { Method("Fun", it.codeMetainfo, it.packageName, it.name, it.parameters) },
@@ -354,12 +360,14 @@ private fun checkDuplicateMethods(unit: CompileUnitToExport) {
                     .stream()
                     .map { Method("Def", it.codeMetainfo, it.packageName, it.name, it.parameters) })
             .toList()
-    checkDuplicates(funDef)
+    checkDuplicates(funDef, compilationContext, compileUnit)
 }
 
 data class Method(val type: String, val codeMetainfo: CodeMetainfo, val packageName: String, val name: String, val parameters: List<ParameterToExport>)
 
-private fun checkDuplicates(funDef: Collection<Method>) {
+private fun checkDuplicates(funDef: Collection<Method>,
+                            compilationContext: CompilationContextToExport,
+                            compileUnit: CompileUnitToExport) {
     val duplicateMethod = funDef.stream()
             .collect(Collectors.groupingBy { it.name })
             .entries
@@ -372,9 +380,11 @@ private fun checkDuplicates(funDef: Collection<Method>) {
                     for (second in (first + 1) until duplicateFunctionNames.size) {
                         val firstFun = duplicateFunctionNames[first]
                         val secondFun = duplicateFunctionNames[second]
-                        if (parametersAreEqual(
-                                        firstFun.parameters,
-                                        secondFun.parameters)) {
+                        if (areParametersEquals(
+                                        firstFun.parameters.map { it.type },
+                                        secondFun.parameters.map { it.type },
+                                        compilationContext,
+                                        compileUnit)) {
                             toReturn.add(firstFun)
                             toReturn.add(secondFun)
                         }
@@ -391,21 +401,21 @@ private fun checkDuplicates(funDef: Collection<Method>) {
     }
 }
 
-private fun parametersAreEqual(first: List<ParameterToExport>, second: List<ParameterToExport>): Boolean =
-        if (first.size == second.size) {
-            var equal = true
-            for (i in first.indices) {
-                val firstParam = first[i]
-                val secondParam = second[i]
-                if (firstParam != secondParam) {
-                    equal = false
-                    break
-                }
-            }
-            equal
-        } else {
-            false
-        }
+//private fun parametersAreEqual(first: List<ParameterToExport>, second: List<ParameterToExport>): Boolean =
+//        if (first.size == second.size) {
+//            var equal = true
+//            for (i in first.indices) {
+//                val firstParam = first[i]
+//                val secondParam = second[i]
+//                if (firstParam != secondParam) {
+//                    equal = false
+//                    break
+//                }
+//            }
+//            equal
+//        } else {
+//            false
+//        }
 
 private fun buildFunctions(unit: CompileUnitWithFlatStructs, compilationContext: CompilationContext, fullyQualifiedStructNames: Map<Type, Struct>): Set<FunctionWithReturnType> {
     return unit.functions

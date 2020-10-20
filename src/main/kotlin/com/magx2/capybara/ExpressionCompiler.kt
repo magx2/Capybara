@@ -84,16 +84,12 @@ class ExpressionCompiler(private val compilationContext: CompilationContext,
                                         .or {
                                             localFunctions().stream()
                                                     .filter { it.name == valueName }
-                                                    .filter { it.parameters.size == expression.parameters.size }
-                                                    .filter { f ->
-                                                        var i = 0
-                                                        var equals = true
-                                                        while (i < expression.parameters.size && equals) {
-                                                            val p = findFunctionParametersValues(expression.parameters, assignments, casts, notCasts)
-                                                            equals = parseType(f.codeMetainfo, f.parameters[i].type, localStructs() + importsToTypes(compileUnit)) == p[i].returnType
-                                                            i++
-                                                        }
-                                                        equals
+                                                    .filter { function ->
+                                                        areParametersEquals(
+                                                                findFunctionParametersValues(expression.parameters, assignments, casts, notCasts).map { it.returnType },
+                                                                function.parameters.map { parseType(function.codeMetainfo, it.type, localStructs() + importsToTypes(compileUnit)) },
+                                                                compilationContext, compileUnit
+                                                        )
                                                     }
                                                     .map { f ->
                                                         FunctionInvocationExpression(
@@ -108,16 +104,12 @@ class ExpressionCompiler(private val compilationContext: CompilationContext,
                                             if (pure.not()) {
                                                 localDefs().stream()
                                                         .filter { it.name == valueName }
-                                                        .filter { it.parameters.size == expression.parameters.size }
-                                                        .filter { d ->
-                                                            var i = 0
-                                                            var equals = true
-                                                            while (i < expression.parameters.size && equals) {
-                                                                val p = findFunctionParametersValues(expression.parameters, assignments, casts, notCasts)
-                                                                equals = parseType(d.codeMetainfo, d.parameters[i].type, localStructs() + importsToTypes(compileUnit)) == p[i].returnType
-                                                                i++
-                                                            }
-                                                            equals
+                                                        .filter { def ->
+                                                            areParametersEquals(
+                                                                    findFunctionParametersValues(expression.parameters, assignments, casts, notCasts).map { it.returnType },
+                                                                    def.parameters.map { parseType(def.codeMetainfo, it.type, localStructs() + importsToTypes(compileUnit)) },
+                                                                    compilationContext, compileUnit
+                                                            )
                                                         }
                                                         .map { d ->
                                                             FunctionInvocationExpression(
@@ -541,7 +533,7 @@ class ExpressionCompiler(private val compilationContext: CompilationContext,
                 is NativeExpression -> NativeExpressionWithReturnType(expression.returnType, expression.pythonCode)
             }
 
-    private fun finUnionSubTypes(unionType: Type): Set<Type> = finUnionSubTypes(unionType, compilationContext, compileUnit)
+    private fun finUnionSubTypes(unionType: Type): Set<Type> = findUnionSubTypes(unionType, compilationContext, compileUnit)
 
     private data class SmartCasting(val leftCasts: Set<Cast>,
                                     val leftNotCasts: Set<NotCast>,
@@ -632,16 +624,12 @@ class ExpressionCompiler(private val compilationContext: CompilationContext,
         val functions = findFunctionsStream(invocation)
         return functions
                 .filter { it.name == invocation.functionName }
-                .filter { it.parameters.size == parameters.size }
                 .filter { f ->
-                    var i = 0
-                    var equals = true
-                    while (i < parameters.size && equals) {
-                        val p = findFunctionParametersValues(function, assignments, casts, notCasts)
-                        equals = parseType(f.codeMetainfo, f.parameters[i].type, localStructs() + importsToTypes(compileUnit)) == p[i].returnType
-                        i++
-                    }
-                    equals
+                    areParametersEquals(
+                            parameters.map { it.returnType },
+                            f.parameters.map { parseType(f.codeMetainfo, it.type, localStructs() + importsToTypes(compileUnit)) },
+                            compilationContext,
+                            compileUnit)
                 }
                 .findFirst()
     }
@@ -668,16 +656,12 @@ class ExpressionCompiler(private val compilationContext: CompilationContext,
         val defs = findDefsStream(invocation)
         return defs
                 .filter { it.name == invocation.functionName }
-                .filter { it.parameters.size == parameters.size }
-                .filter { f ->
-                    var i = 0
-                    var equals = true
-                    while (i < parameters.size && equals) {
-                        val p = findFunctionParametersValues(function, assignments, casts, notCasts)
-                        equals = parseType(f.codeMetainfo, f.parameters[i].type, localStructs() + importsToTypes(compileUnit)) == p[i].returnType
-                        i++
-                    }
-                    equals
+                .filter { def ->
+                    areParametersEquals(
+                            parameters.map { it.returnType },
+                            def.parameters.map { parseType(def.codeMetainfo, it.type, localStructs() + importsToTypes(compileUnit)) },
+                            compilationContext,
+                            compileUnit)
                 }
                 .findFirst()
     }
