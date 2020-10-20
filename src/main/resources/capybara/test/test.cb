@@ -72,7 +72,8 @@ fun run_tests(modules: List[TestModule]): List[TestModuleExecutionResult] = run_
 fun run_tests(modules: List[TestModule], to_return: List[TestModuleExecutionResult]): List[TestModuleExecutionResult] {
 	return if(is_list_not_empty(modules)) {
 		head = modules[0]
-		tail = modules[1] // TODO
+		// TODO
+		tail = modules
 		result = run_test_module(head)
 		run_tests(tail, to_return + result)
 	} else {
