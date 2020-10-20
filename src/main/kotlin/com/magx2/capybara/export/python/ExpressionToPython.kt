@@ -18,7 +18,7 @@ fun assignmentToPython(assignment: AssigmentStatementWithType,
                 packageName,
                 indent,
                 depth
-        )
+        ) + "  # " + assignment.name + ": " + typeToString(assignment.type)
 
 fun returnExpressionToPython(expression: ExpressionWithReturnType,
                              assertions: Boolean,
@@ -34,7 +34,7 @@ fun returnExpressionToPython(expression: ExpressionWithReturnType,
                 packageName,
                 indent,
                 depth
-        )
+        ) + "  # " + typeToString(expression.returnType)
 
 fun whileToPython(statement: WhileStatementWithType,
                   assertions: Boolean,
