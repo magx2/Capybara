@@ -2,6 +2,11 @@ package com.magx2.capybara
 
 import com.magx2.capybara.BasicTypes.lambdaType
 import com.magx2.capybara.BasicTypes.listType
+import com.magx2.capybara.BasicTypes.stringType
+import com.magx2.capybara.export.python.DefToExport
+import com.magx2.capybara.export.python.FunctionToExport
+import com.magx2.capybara.export.python.ParameterToExport
+import com.magx2.capybara.BasicTypes.listType
 import java.util.regex.Pattern
 import java.util.stream.Collectors
 import java.util.stream.Stream
@@ -156,8 +161,13 @@ fun addGenericType(type: Type, genericType: Type): Type = addGenericType(type, l
 fun isLambda(type: Type) =
         type.packageName == lambdaType.packageName && type.name == lambdaType.name
 
-fun isList(type: Type) =
-        type.packageName == listType.packageName && type.name == listType.name
+fun isListOf(list: Type, of: Type) =
+        list.packageName == listType.packageName
+                && list.name == listType.name
+                && list.genericTypes.size == 1
+                && list.genericTypes[0] == of
+
+fun isListOfStrings(list: Type) = isListOf(list, stringType)
 
 fun findSingleGenericType(type: Type, codeMetainfo: CodeMetainfo): Type {
     if (type.genericTypes.isEmpty()) {

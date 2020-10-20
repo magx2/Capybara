@@ -57,7 +57,7 @@ parameter
 	;
 
 funBody
-	: assigment (SEMICOLON|NEWLINE) funBody
+	: assignment (SEMICOLON|NEWLINE) funBody
 	| RETURN expression (SEMICOLON|NEWLINE)
 	;
 
@@ -71,7 +71,10 @@ expression
 	| function_qualified_name=fully_qualified_function ROUNDL parameters? ROUNDR
 	| normal_function_invocation=expression ROUNDL parameters? ROUNDR
 	| left=expression infix_operation right=expression
-	| IF condition=expression CURLYL NEWLINE true_expression=expression NEWLINE CURLYR ELSE CURLYL NEWLINE false_expression=expression NEWLINE CURLYR
+	| IF ROUNDL condition=expression ROUNDR
+		CURLYL NEWLINE* assignments_true=assignments NEWLINE*
+		if_else*
+		CURLYR ELSE CURLYL NEWLINE* assignments_false=assignments NEWLINE* CURLYR
 	| condition=expression QUESTION_MARK true_expression=expression COLON false_expression=expression
 	| argument_to_function=expression ARROW_SLIM apply_to_function_qualified_name=fully_qualified_function
 	| argument_to_function=expression ARROW_SLIM apply_to_function_expression=expression
@@ -82,13 +85,18 @@ expression
 	| ASSERT check_expression=expression COMMA return_expression=expression (COMMA message_expression=expression)?
 	;
 
-lambda_expression
-	: CURLYL NEWLINE* (listOfParameters ARROW_SLIM NEWLINE*)? lambda_body NEWLINE* CURLYR
+if_else
+	: CURLYR ELSE IF ROUNDL next_condition=expression ROUNDR CURLYL NEWLINE*
+		assignments_next_true=assignments NEWLINE*
 	;
 
-lambda_body
+lambda_expression
+	: CURLYL NEWLINE* (listOfParameters ARROW_SLIM NEWLINE*)? lambda_body=assignments NEWLINE* CURLYR
+	;
+
+assignments
 	: expression
-	| (assigment semicolonEnd)+ expression
+	| (assignment semicolonEnd)+ expression
 	;
 
 struct_field_initializations
@@ -152,8 +160,8 @@ defBody
 	;
 
 statement
-	: assigment
-	| update_assigment
+	: assignment
+	| update_assignment
 	| while_loop
 	| for_loop
 	| def_call
@@ -173,14 +181,14 @@ for_loop
 	;
 
 for_loop_expression
-	: assigment? SEMICOLON while_=expression SEMICOLON each_iteration=statement?
+	: assignment? SEMICOLON while_=expression SEMICOLON each_iteration=statement?
 	;
 
-assigment
-	: assign_to=SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL (COLON assigment_type=fullyQualifiedType)? EQUALS expression
+assignment
+	: assign_to=SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL (COLON assignment_type=fullyQualifiedType)? EQUALS expression
 	;
 
-update_assigment
+update_assignment
 	: assign_to=SMALL_ALPH_NUM_DIGITS_STARTING_WITH_SMALL update_action expression
 	;
 
