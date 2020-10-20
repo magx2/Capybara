@@ -1,5 +1,6 @@
 package com.magx2.capybara
 
+import com.magx2.capybara.export.python.*
 import org.antlr.v4.runtime.Token
 import org.apache.commons.cli.HelpFormatter
 import org.slf4j.LoggerFactory
@@ -331,42 +332,21 @@ fun main(options: CommandLineOptions) {
 
             })
 
-    val methodsToRewrite = compilationUnitsToExport.stream()
-            .map { unit -> checkDuplicateMethods(unit) }
-            .flatMap { unit -> findMethodsToRewrite(unit) }
-            .toList()
-            .toSet()
+    compilationUnitsToExport.forEach { unit -> checkDuplicateMethods(unit) }
 
     //
     // EXPORT TO FILE
     //
     if (options.outputDir != null) {
         log.info("Exporting files to ${options.outputDir}")
-        val exporter = PythonExport(options.outputDir, methodsToRewrite, options.disableAssertions.not())
-        compilationUnitsToExport.forEach { exporter.export(it) }
+        val exporter = PythonExport(options.outputDir, options.disableAssertions.not())
+        exporter.export(compilationUnitsToExport)
     } else {
         log.info("Not exporting files, because `outputDir` is not set")
     }
 }
 
-data class MethodToRewrite(val packageName: String, val name: String)
-
-private fun findMethodsToRewrite(unit: CompileUnitToExport): Stream<MethodToRewrite> =
-        concat(
-                unit.functions
-                        .stream()
-                        .map { MethodToRewrite(it.packageName, it.name) },
-                unit.defs
-                        .stream()
-                        .map { MethodToRewrite(it.packageName, it.name) })
-                .collect(Collectors.groupingBy { it.name })
-                .entries
-                .stream()
-                .map { it.value }
-                .filter { it.size > 1 }
-                .map { it.first() }
-
-private fun checkDuplicateMethods(unit: CompileUnitToExport): CompileUnitToExport {
+private fun checkDuplicateMethods(unit: CompileUnitToExport) {
     val funDef = concat(unit.functions
             .stream()
             .map { Method("Fun", it.codeMetainfo, it.packageName, it.name, it.parameters) },
@@ -375,8 +355,6 @@ private fun checkDuplicateMethods(unit: CompileUnitToExport): CompileUnitToExpor
                     .map { Method("Def", it.codeMetainfo, it.packageName, it.name, it.parameters) })
             .toList()
     checkDuplicates(funDef)
-
-    return unit
 }
 
 data class Method(val type: String, val codeMetainfo: CodeMetainfo, val packageName: String, val name: String, val parameters: List<ParameterToExport>)

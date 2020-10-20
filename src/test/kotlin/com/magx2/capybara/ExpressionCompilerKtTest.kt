@@ -76,17 +76,19 @@ internal class ExpressionCompilerKtTest {
                         Arguments.of(InfixExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "*", stringExpression(), integerExpression()), stringType),
                         Arguments.of(InfixExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "*", integerExpression(), stringExpression()), stringType),
                         // if expression
-                        Arguments.of(IfExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), booleanExpression(), integerExpression(), integerExpression()), intType),
-                        Arguments.of(IfExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), booleanExpression(), stringExpression(), stringExpression()), stringType),
-                        Arguments.of(IfExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), booleanExpression(), booleanExpression(), booleanExpression()), booleanType),
+                        Arguments.of(IfExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), booleanExpression(), ifBranch(integerExpression()), ifBranch(integerExpression())), intType),
+                        Arguments.of(IfExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), booleanExpression(), ifBranch(stringExpression()), ifBranch(stringExpression())), stringType),
+                        Arguments.of(IfExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), booleanExpression(), ifBranch(booleanExpression()), ifBranch(booleanExpression())), booleanType),
                         // if expression with smart casting to string
-                        Arguments.of(IfExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), booleanExpression(), stringExpression(), integerExpression()), stringType),
-                        Arguments.of(IfExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), booleanExpression(), integerExpression(), stringExpression()), stringType),
-                        Arguments.of(IfExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), booleanExpression(), stringExpression(), booleanExpression()), stringType),
-                        Arguments.of(IfExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), booleanExpression(), booleanExpression(), stringExpression()), stringType),
+                        Arguments.of(IfExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), booleanExpression(), ifBranch(stringExpression()), ifBranch(integerExpression())), stringType),
+                        Arguments.of(IfExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), booleanExpression(), ifBranch(integerExpression()), ifBranch(stringExpression())), stringType),
+                        Arguments.of(IfExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), booleanExpression(), ifBranch(stringExpression()), ifBranch(booleanExpression())), stringType),
+                        Arguments.of(IfExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), booleanExpression(), ifBranch(booleanExpression()), ifBranch(stringExpression())), stringType),
                         // negate expression
                         Arguments.of(NegateExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), booleanExpression()), booleanType),
                 )
+
+        fun ifBranch(expression: Expression): IfBranch = IfBranch(expression, listOf())
 
         @Suppress("unused")
         @JvmStatic
@@ -183,7 +185,11 @@ internal class ExpressionCompilerKtTest {
     @Test
     fun `should throw exception for condition in if expression not being boolean type`() {
         // given
-        val expression = IfExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), ParameterExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "x", "/foo/Boo"), stringExpression(), stringExpression())
+        val expression = IfExpression(
+                CodeMetainfo("/home/capybara/xyz.cb", 1, 2),
+                ParameterExpression(CodeMetainfo("/home/capybara/xyz.cb", 1, 2), "x", "/foo/Boo"),
+                ifBranch(stringExpression()),
+                ifBranch(stringExpression()))
 
         // when
         val `when` = ThrowableAssert.ThrowingCallable {

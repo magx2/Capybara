@@ -287,13 +287,16 @@ class ExpressionCompiler(private val compilationContext: CompilationContext,
                             expression,
                             trueBranchExpression.returnType,
                             falseBranchExpression.returnType,
-                            expression.trueBranch.codeMetainfo,
-                            expression.falseBranch.codeMetainfo)
+                            expression.trueBranch.expression.codeMetainfo,
+                            expression.falseBranch.expression.codeMetainfo)
+                    val functionCompiler = FunctionCompiler(compilationContext, compileUnit, fullyQualifiedStructNames)
+                    val trueAssignments = functionCompiler.findReturnTypeForAssignments(expression.trueBranch.assignments)
+                    val falseAssignments = functionCompiler.findReturnTypeForAssignments(expression.falseBranch.assignments)
                     IfExpressionWithReturnType(
                             type,
                             ifReturnType,
-                            trueBranchExpression,
-                            falseBranchExpression
+                            IfBranchWithReturnType(trueBranchExpression, trueAssignments),
+                            IfBranchWithReturnType(falseBranchExpression, falseAssignments)
                     )
                 }
                 is NegateExpression -> {
@@ -774,6 +777,24 @@ class ExpressionCompiler(private val compilationContext: CompilationContext,
             }
         }
     }
+
+    private fun findReturnType(
+            branch: IfBranch,
+            assignments: List<AssigmentStatementWithType>,
+            casts: Set<Cast>,
+            notCasts: Set<NotCast>,
+    ): ExpressionWithReturnType =
+            findReturnType(
+                    branch.expression,
+                    parseAssignments(branch.assignments) + assignments,
+                    casts,
+                    notCasts
+            )
+
+    private fun parseAssignments(assignments: List<AssigmentStatement>) =
+            FunctionCompiler(compilationContext, compileUnit, fullyQualifiedStructNames)
+                    .findReturnTypeForAssignments(assignments)
+
 
     private fun findReturnType(
             expression: InfixExpression,
