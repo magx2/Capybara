@@ -60,7 +60,6 @@ fun multiple_if_else_assignment(Int): String {
 		prefix = "? "
 		prefix + "Too hard..."
 	}
-
 	return "Letter: " + letter
 }
 
