@@ -26,6 +26,13 @@ fun String.snakeToUpperCamelCase(): String {
     return this.snakeToLowerCamelCase().capitalize()
 }
 
+fun String.nullIfEmpty() =
+        if (this.isNotEmpty()) {
+            this
+        } else {
+            null
+        }
+
 fun <T> concat(vararg streams: Stream<T>): Stream<T> {
     var stream = Stream.empty<T>()
     for (s in streams) {

@@ -1,6 +1,7 @@
 package /capybara/test
 
 import /capybara/type
+import /capybara/type/list
 
 struct IntAssertion {
 	is_equal_to: Lambda[Int, AssertionResult]
@@ -70,7 +71,7 @@ struct TestModuleExecutionResult {
 fun run_tests(modules: List[TestModule]): List[TestModuleExecutionResult] = run_tests(modules, [])
 
 fun run_tests(modules: List[TestModule], to_return: List[TestModuleExecutionResult]): List[TestModuleExecutionResult] {
-	return if(is_list_not_empty(modules)) {
+	return if(list_length(modules) > 0) {
 		head = modules[0]
 		// TODO
 		tail = modules
@@ -80,8 +81,11 @@ fun run_tests(modules: List[TestModule], to_return: List[TestModuleExecutionResu
 		to_return
 	}
 }
-//
-//fun run_test_module(TestModule): TestModuleExecutionResult {
-//	TODO
-//}
+
+// TODO
+fun run_test_module(TestModule): TestModuleExecutionResult =
+	TestModuleExecutionResult {
+		name = "xxx"
+		test_method_execution_results = []
+	}
 

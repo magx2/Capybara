@@ -130,8 +130,22 @@ class ExpressionCompiler(private val compilationContext: CompilationContext,
                                                     .map { it.returnType }
                                                     .map { typeToString(it) }
                                                     .collect(Collectors.joining(", "))
+                                            val available = concat(
+                                                    compilationContext.functions.stream().map { Triple(it.packageName, it.name, it.parameters) },
+                                                    compilationContext.defs.stream().map { Triple(it.packageName, it.name, it.parameters) })
+                                                    .filter { it.second == valueName }
+                                                    .map { (packageName, name, params) ->
+                                                        val p = params
+                                                                .stream()
+                                                                .map { parseType(it.codeMetainfo, it.type, compilationContext, compileUnit) }
+                                                                .map { typeToString(it) }
+                                                                .collect(Collectors.joining(", "))
+                                                        "$packageName:$name($p)"
+                                                    }
+                                                    .map { "`$it`" }
+                                                    .collect(Collectors.joining(", ")).nullIfEmpty() ?: "<none>"
                                             throw CompilationException(functionInvocationExpression.codeMetainfo,
-                                                    "Could not find value or fun/def name `$valueName($parameters)`.")
+                                                    "Could not find value or fun/def name `$valueName($parameters)`. Available funs/defs: $available.")
                                         }
                             } else if (functionInvocationExpression is ParameterExpression) {
                                 val parameter = findReturnType(functionInvocationExpression, assignments)
@@ -445,7 +459,9 @@ class ExpressionCompiler(private val compilationContext: CompilationContext,
                                 ))
                         val wrongTypes = struct.fields
                                 .stream()
-                                .filter { declaredTypes[it.name]!! != it.type }
+                                .filter {
+                                    !areTypesEqual(declaredTypes[it.name]!!, it.type, compilationContext, compileUnit)
+                                }
                                 .map { Triple(it.name, it.type, declaredTypes[it.name]!!) }
                                 .map {
                                     "field name: `${it.first}`, " +
@@ -470,6 +486,11 @@ class ExpressionCompiler(private val compilationContext: CompilationContext,
                             .stream()
                             .map { findReturnType(it, assignments, casts, notCasts) }
                             .toList()
+                    elements.forEachIndexed { idx, ex ->
+                        if (ex.returnType == nothingType) {
+                            throw CompilationException(expression.elements[idx].codeMetainfo, "")
+                        }
+                    }
                     val genericType = findCommonType(elements.map { it.returnType })
                     val type = addGenericType(BasicTypes.listType, genericType)
                     NewListExpressionWithReturnType(type, elements)
@@ -708,6 +729,20 @@ class ExpressionCompiler(private val compilationContext: CompilationContext,
                     .map { findReturnType(it, assignments, casts, notCasts) }
                     .toList()
 
+    private fun findReturnTypeFromPlusExpression(
+            expression: Expression,
+            leftType: Type,
+            rightType: Type,
+            leftCodeMetainfo: CodeMetainfo,
+            rightCodeMetainfo: CodeMetainfo): Type =
+            when {
+                leftType == rightType -> leftType
+                isList(leftType)
+                        && areTypesEqual(leftType.genericTypes[0], rightType, compilationContext, compileUnit) ->
+                    leftType
+                else -> findReturnTypeFromBranchExpression(expression, leftType, rightType, leftCodeMetainfo, rightCodeMetainfo)
+            }
+
     private fun findReturnTypeFromBranchExpression(
             expression: Expression,
             leftType: Type,
@@ -737,7 +772,7 @@ class ExpressionCompiler(private val compilationContext: CompilationContext,
                 }
             } else if (isOneOfGivenType(BasicTypes.intType, leftType, rightType) && isOneOfGivenType(BasicTypes.floatType, leftType, rightType)) {
                 BasicTypes.floatType
-            } else if (isListOf(leftType, nothingType) && isListOf(rightType, nothingType)) {
+            } else if (isListOf(leftType, nothingType) || isListOf(rightType, nothingType)) {
                 if (leftType.genericTypes[0] == nothingType) {
                     rightType
                 } else {
@@ -836,7 +871,8 @@ class ExpressionCompiler(private val compilationContext: CompilationContext,
             ">", "<", ">=", "<=", "!=", "==", "&&", "||" -> BasicTypes.booleanType // FIXME check if left and right are correct types!
             // FIXME only + can be applied like this ; rest needs to have strict types
             // FIXME and you cannot add booleans...
-            "+", "*" -> findReturnTypeFromBranchExpression(expression, leftType.returnType, rightType.returnType, expression.left.codeMetainfo, expression.right.codeMetainfo)
+            "+" -> findReturnTypeFromPlusExpression(expression, leftType.returnType, rightType.returnType, expression.left.codeMetainfo, expression.right.codeMetainfo)
+            "*" -> findReturnTypeFromBranchExpression(expression, leftType.returnType, rightType.returnType, expression.left.codeMetainfo, expression.right.codeMetainfo)
             "^", "-", "~/" -> findReturnTypeForNumericOperations(expression, leftType.returnType, rightType.returnType, expression.left.codeMetainfo, expression.right.codeMetainfo)
             else -> throw CompilationException(expression.codeMetainfo,
                     "Do not know this `${expression.operation}` infix expression!")

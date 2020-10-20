@@ -1,6 +1,8 @@
 package com.magx2.capybara
 
+import com.magx2.capybara.BasicTypes.anyType
 import com.magx2.capybara.BasicTypes.lambdaType
+import com.magx2.capybara.BasicTypes.listType
 import com.magx2.capybara.BasicTypes.nothingType
 import com.magx2.capybara.BasicTypes.stringType
 import com.magx2.capybara.export.python.*
@@ -164,6 +166,8 @@ private fun areTypesEqual(type1: Type,
                 || isTypePartOfUnion(type2, type1, unions)
                 || (isListOf(type1, nothingType) && isList(type2))
                 || (isList(type1) && isListOf(type2, nothingType))
+                || (isList(type1) && isListOf(type2, anyType))
+                || (isListOf(type1, anyType) && isList(type2))
 
 fun areTypesEqual(type1: Type,
                   type2: Type,
@@ -196,8 +200,8 @@ fun isLambda(type: Type) =
         type.packageName == lambdaType.packageName && type.name == lambdaType.name
 
 fun isList(type: Type) =
-        type.packageName == type.packageName
-                && type.name == type.name
+        type.packageName == listType.packageName
+                && type.name == listType.name
 
 fun isListOf(list: Type, of: Type) =
         isList(list)
