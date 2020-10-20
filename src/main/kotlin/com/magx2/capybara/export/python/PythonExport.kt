@@ -294,7 +294,7 @@ class PythonExport(private val outputDir: String,
                             structureExpression = rewriteExpression(expression.structureExpression, methodsToRewrite))
                 is NewListExpressionWithReturnType ->
                     expression.copy(
-                            elements = expression.elements.map { rewriteExpression(expression, methodsToRewrite) })
+                            elements = expression.elements.map { rewriteExpression(it, methodsToRewrite) })
                 is AssertExpressionWithReturnType ->
                     if (expression.messageExpression != null) {
                         expression.copy(
