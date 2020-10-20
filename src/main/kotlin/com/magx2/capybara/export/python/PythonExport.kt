@@ -276,7 +276,7 @@ class PythonExport(private val outputDir: String,
                             trueBranch = rewriteIfBranch(expression.trueBranch, methodsToRewrite),
                             falseBranch = rewriteIfBranch(expression.falseBranch, methodsToRewrite))
                 is NegateExpressionWithReturnType ->
-                    expression.copy(negateExpression = rewriteExpression(expression, methodsToRewrite))
+                    expression.copy(negateExpression = rewriteExpression(expression.negateExpression, methodsToRewrite))
                 is NewStructExpressionWithReturnType ->
                     expression.copy(
                             fields = expression.fields
