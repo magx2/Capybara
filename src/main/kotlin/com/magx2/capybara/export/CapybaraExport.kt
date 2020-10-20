@@ -4,5 +4,5 @@ import com.magx2.capybara.export.python.CompileUnitToExport
 
 
 interface CapybaraExport {
-    fun export(unit: CompileUnitToExport)
+    fun export(units: Set<CompileUnitToExport>)
 }

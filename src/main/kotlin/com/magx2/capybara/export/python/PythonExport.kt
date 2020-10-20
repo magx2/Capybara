@@ -78,11 +78,21 @@ data class ParameterToExport(val name: String, val type: Type)
 private val log = LoggerFactory.getLogger(PythonExport::class.java)
 
 class PythonExport(private val outputDir: String,
-                   private val methodsToRewrite: Set<MethodToRewrite>,
                    private val assertions: Boolean) : CapybaraExport {
     private val initFilesDirectories = HashSet<String>()
 
-    override fun export(unit: CompileUnitToExport) {
+    override fun export(units: Set<CompileUnitToExport>) {
+        val methodsToRewrite = units.stream()
+                .flatMap { findMethodsToRewrite(it) }
+                .toList()
+                .toSet()
+
+        units.stream()
+                .map { rewriteDuplicateMethodNames(it, methodsToRewrite) }
+                .forEach { export(it) }
+    }
+
+    private fun export(unit: CompileUnitToExport) {
         val imports = concat(
                 findImportsForFunctions(unit),
                 findImportsForDefs(unit))
@@ -104,11 +114,11 @@ class PythonExport(private val outputDir: String,
 
         val functions = unit.functions
                 .stream()
-                .map { function -> functionToPython(function, assertions, unit.unions, methodsToRewrite, unit.packageName) }
+                .map { function -> functionToPython(function, assertions, unit.unions, unit.packageName) }
 
         val defs = unit.defs
                 .stream()
-                .map { def -> defToPython(def, assertions, unit.unions, methodsToRewrite, unit.packageName) }
+                .map { def -> defToPython(def, assertions, unit.unions, unit.packageName) }
 
         // TODO add this main generation to `defToPython`
         val main = unit.defs
@@ -141,6 +151,219 @@ class PythonExport(private val outputDir: String,
             init.toFile().createNewFile()
             initFilesDirectories.add(directory.absolutePath)
         }
+    }
+
+    private fun rewriteDuplicateMethodNames(unit: CompileUnitToExport, methodsToRewrite: Set<MethodToRewrite>): CompileUnitToExport {
+        val functions = unit.functions
+                .stream()
+                .map { function ->
+                    if (shouldRewrite(function.packageName, function.name, function.parameters.map { it.type }, methodsToRewrite)) {
+                        val name = findMethodName(function.name, function.parameters)
+                        function.copy(name = name)
+                    } else {
+                        function
+                    }
+                }
+                .map { function ->
+                    function.copy(
+                            returnExpression = rewriteExpression(function.returnExpression, methodsToRewrite),
+                            assignments = function.assignments.map { rewriteAssignment(it, methodsToRewrite) })
+                }
+                .toList()
+                .toSet()
+        val defs = unit.defs
+                .stream()
+                .map { def ->
+                    if (shouldRewrite(unit.packageName, def.name, def.parameters.map { it.type }, methodsToRewrite)) {
+                        val name = findMethodName(def.name, def.parameters)
+                        when (def) {
+                            is DefToExport -> def.copy(name = name)
+                            is NativeDefToExport -> def.copy(name = name)
+                        }
+                    } else {
+                        def
+                    }
+                }
+                .map { def ->
+                    when (def) {
+                        is DefToExport -> {
+                            val newReturnExpression = if (def.returnExpression != null) {
+                                rewriteExpression(def.returnExpression, methodsToRewrite)
+                            } else {
+                                null
+                            }
+                            def.copy(
+                                    returnExpression = newReturnExpression,
+                                    statements = def.statements.map { rewriteStatement(it, methodsToRewrite) })
+                        }
+                        is NativeDefToExport -> def
+                    }
+                }
+                .toList()
+                .toSet()
+        return unit.copy(functions = functions, defs = defs)
+    }
+
+    private fun rewriteAssignment(assigment: AssigmentStatementWithType, methodsToRewrite: Set<MethodToRewrite>) =
+            assigment.copy(expression = rewriteExpression(assigment.expression, methodsToRewrite))
+
+    private fun rewriteIfBranch(branch: IfBranchWithReturnType, methodsToRewrite: Set<MethodToRewrite>) =
+            branch.copy(
+                    expression = rewriteExpression(branch.expression, methodsToRewrite),
+                    assignments = branch.assignments.map { rewriteAssignment(it, methodsToRewrite) })
+
+    private fun rewriteStatement(statement: StatementWithType, methodsToRewrite: Set<MethodToRewrite>): StatementWithType =
+            when (statement) {
+                is AssigmentStatementWithType -> rewriteAssignment(statement, methodsToRewrite)
+                is AssertStatementWithType -> {
+                    val message = if (statement.messageExpression != null) {
+                        rewriteExpression(statement.messageExpression, methodsToRewrite)
+                    } else {
+                        null
+                    }
+                    statement.copy(
+                            checkExpression = rewriteExpression(statement.checkExpression, methodsToRewrite),
+                            messageExpression = message)
+                }
+                is WhileStatementWithType ->
+                    statement.copy(
+                            condition = rewriteExpression(statement.condition, methodsToRewrite),
+                            statements = statement.statements.map { rewriteStatement(it, methodsToRewrite) }
+                    )
+                is DefCallStatementWithType -> {
+                    val newParameters = statement.parameters.map { rewriteExpression(it, methodsToRewrite) }
+                    val rewriteTo = rewriteTo(statement.packageName, statement.defName, statement.parameters.map { it.returnType }, methodsToRewrite)
+                    if (rewriteTo.isPresent) {
+                        statement.copy(
+                                defName = rewriteTo.get().newName,
+                                parameters = newParameters)
+                    } else {
+                        statement.copy(parameters = newParameters)
+                    }
+                }
+            }
+
+    private fun rewriteExpression(expression: ExpressionWithReturnType, methodsToRewrite: Set<MethodToRewrite>): ExpressionWithReturnType =
+            when (expression) {
+                is FunctionInvocationExpressionWithReturnType -> {
+                    val newParameters = expression.parameters.map { rewriteExpression(it, methodsToRewrite) }
+                    when (expression.functionInvocation) {
+                        is FunctionInvocationByNameWithReturnType -> {
+                            val shouldRewrite = rewriteTo(
+                                    expression.functionInvocation.packageName,
+                                    expression.functionInvocation.functionName,
+                                    expression.parameters.map { it.returnType },
+                                    methodsToRewrite)
+                            if (shouldRewrite.isPresent) {
+                                expression.copy(
+                                        parameters = newParameters,
+                                        functionInvocation = expression.functionInvocation
+                                                .copy(functionName = shouldRewrite.get().newName))
+                            } else {
+                                expression.copy(parameters = newParameters)
+                            }
+                        }
+                        is FunctionInvocationByExpressionWithReturnType ->
+                            expression.copy(
+                                    parameters = newParameters,
+                                    functionInvocation = expression.functionInvocation
+                                            .copy(expression = rewriteExpression(expression.functionInvocation.expression, methodsToRewrite)))
+                    }
+                }
+                is DefInvocationExpressionWithReturnType ->
+                    expression.copy(parameters = expression.parameters.map { rewriteExpression(it, methodsToRewrite) })
+                is InfixExpressionWithReturnType ->
+                    expression.copy(
+                            left = rewriteExpression(expression.left, methodsToRewrite),
+                            right = rewriteExpression(expression.right, methodsToRewrite))
+                is IfExpressionWithReturnType ->
+                    expression.copy(
+                            condition = rewriteExpression(expression.condition, methodsToRewrite),
+                            trueBranch = rewriteIfBranch(expression.trueBranch, methodsToRewrite),
+                            falseBranch = rewriteIfBranch(expression.falseBranch, methodsToRewrite))
+                is NegateExpressionWithReturnType ->
+                    expression.copy(negateExpression = rewriteExpression(expression, methodsToRewrite))
+                is NewStructExpressionWithReturnType ->
+                    expression.copy(
+                            fields = expression.fields
+                                    .stream()
+                                    .map { it.copy(value = rewriteExpression(it.value, methodsToRewrite)) }
+                                    .toList()
+                    )
+                is LambdaExpressionWithReturnType ->
+                    expression.copy(
+                            assignments = expression.assignments.map { rewriteAssignment(it, methodsToRewrite) },
+                            expression = rewriteExpression(expression.expression, methodsToRewrite)
+                    )
+                is StructFieldAccessExpressionWithReturnType ->
+                    expression.copy(
+                            structureExpression = rewriteExpression(expression.structureExpression, methodsToRewrite))
+                is NewListExpressionWithReturnType ->
+                    expression.copy(
+                            elements = expression.elements.map { rewriteExpression(expression, methodsToRewrite) })
+                is AssertExpressionWithReturnType ->
+                    if (expression.messageExpression != null) {
+                        expression.copy(
+                                checkExpression = rewriteExpression(expression.checkExpression, methodsToRewrite),
+                                returnExpression = rewriteExpression(expression.returnExpression, methodsToRewrite),
+                                messageExpression = rewriteExpression(expression.messageExpression, methodsToRewrite))
+                    } else {
+                        expression.copy(
+                                checkExpression = rewriteExpression(expression.checkExpression, methodsToRewrite),
+                                returnExpression = rewriteExpression(expression.returnExpression, methodsToRewrite))
+                    }
+                is StructureAccessExpressionWithReturnType ->
+                    expression.copy(structureIndex = rewriteExpression(expression.structureIndex, methodsToRewrite))
+                is ParameterExpressionWithReturnType,
+                is IntegerExpressionWithReturnType,
+                is FloatExpressionWithReturnType,
+                is BooleanExpressionWithReturnType,
+                is StringExpressionWithReturnType,
+                NothingExpressionWithReturnType,
+                is IsExpressionWithReturnType,
+                is ValueExpressionWithReturnType -> expression
+            }
+
+    private fun rewriteTo(packageName: String, name: String, parameters: List<Type>, methodsToRewrite: Set<MethodToRewrite>) =
+            methodsToRewrite.stream()
+                    .filter { it.packageName == packageName }
+                    .filter { it.originalName == name }
+                    .filter { parametersAreEqual(it.parameters, parameters) }
+                    .findAny()
+
+    private fun shouldRewrite(packageName: String, name: String, parameters: List<Type>, methodsToRewrite: Set<MethodToRewrite>) =
+            rewriteTo(packageName, name, parameters, methodsToRewrite).isPresent
+
+
+    private data class MethodToRewrite(val packageName: String, val originalName: String, val newName: String, val parameters: List<Type>)
+
+    private data class Method(val name: String, val parameters: List<ParameterToExport>)
+
+    private fun findMethodsToRewrite(unit: CompileUnitToExport): Stream<MethodToRewrite> =
+            concat(
+                    unit.functions
+                            .stream()
+                            .map { Method(it.name, it.parameters) },
+                    unit.defs
+                            .stream()
+                            .map { Method(it.name, it.parameters) })
+                    .collect(Collectors.groupingBy { it.name })
+                    .entries
+                    .stream()
+                    .map { it.value }
+                    .filter { it.size > 1 }
+                    .flatMap { it.stream() }
+                    .map { MethodToRewrite(unit.packageName, it.name, findMethodName(it.name, it.parameters), it.parameters.map { p -> p.type }) }
+                    .distinct()
+
+    private fun findMethodName(methodName: String,
+                               methodParameters: List<ParameterToExport>): String {
+        val parameters = methodParameters
+                .stream()
+                .map { it.type }
+                .map { it.packageName.replace("/", "_") + "_" + it.name }
+                .collect(Collectors.joining("_"))
+        return methodName + parameters
     }
 
     private fun findImportsForFunctions(unit: CompileUnitToExport): Stream<String> =
@@ -300,24 +523,18 @@ fun generateDocForDef(
         """.trimMargin()
 }
 
-
-// TODO cahnge name
-//private fun long(assignments: List<AssigmentStatementWithType>,
-//                 returnExpression: ExpressionWithReturnType,
-//                 assertions: Boolean,
-//                 unions: Set<UnionWithType>,
-//                 methodsToRewrite: Set<MethodToRewrite>,
-//                 packageName: String,
-//                 indent: Int = 1,
-//                 depth: Int): String {
-//    val assignmentsInPython = assignments.stream()
-//            .map { assignmentToPython(it, assertions, unions, methodsToRewrite, packageName, indent, depth) }
-//            .collect(Collectors.joining("\n")) ?: "\n"
-//    val returnExpressionInPython = returnExpressionToPython(returnExpression, assertions, unions, methodsToRewrite, packageName, indent, depth)
-//
-//    return assignmentsInPython + returnExpressionInPython
-//}
-
-
-
-
+private fun parametersAreEqual(first: List<Type>, second: List<Type>): Boolean =
+        if (first.size == second.size) {
+            var equal = true
+            for (i in first.indices) {
+                val firstParam = first[i]
+                val secondParam = second[i]
+                if (firstParam != secondParam) {
+                    equal = false
+                    break
+                }
+            }
+            equal
+        } else {
+            false
+        }

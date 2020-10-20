@@ -98,6 +98,8 @@ def main(List[String]) {
 
 	assert lambda_in_lambda(7) == 260, "`lambda_in_lambda` should return `260`"
 
+	assert lambda_as_clojure(98) == 260, "`lambda_as_clojure` should return `260`"
+
 	assert iife(2) == 17, "`iife` should return `17`"
 
 	assert iife_multiline(3) == 50, "`iife_multiline` should return `50`"

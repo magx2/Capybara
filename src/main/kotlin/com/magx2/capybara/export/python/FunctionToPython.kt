@@ -2,14 +2,12 @@ package com.magx2.capybara.export.python
 
 import com.magx2.capybara.AssigmentStatementWithType
 import com.magx2.capybara.ExpressionWithReturnType
-import com.magx2.capybara.MethodToRewrite
 import com.magx2.capybara.UnionWithType
 import java.util.stream.Collectors
 
 fun functionToPython(function: FunctionToExport,
                      assertions: Boolean,
                      unions: Set<UnionWithType>,
-                     methodsToRewrite: Set<MethodToRewrite>,
                      packageName: String): String =
         functionToPython(
                 function.name,
@@ -18,7 +16,6 @@ fun functionToPython(function: FunctionToExport,
                 function.assignments,
                 assertions,
                 unions,
-                methodsToRewrite,
                 packageName,
         )
 
@@ -28,7 +25,6 @@ fun functionToPython(name: String,
                      assignments: List<AssigmentStatementWithType>,
                      assertions: Boolean,
                      unions: Set<UnionWithType>,
-                     methodsToRewrite: Set<MethodToRewrite>,
                      packageName: String,
                      indent: Int = 0,
                      depth: Int = 0): String {
@@ -39,7 +35,7 @@ fun functionToPython(name: String,
     val assignmentsInPython = if (assignments.isNotEmpty()) {
         assignments
                 .mapIndexed { index, assigment ->
-                    assignmentToPython(assigment, assertions, unions, methodsToRewrite, packageName, indent + 1, depth + index)
+                    assignmentToPython(assigment, assertions, unions, packageName, indent + 1, depth + index)
                 }
                 .stream()
                 .collect(Collectors.joining("\n")) + "\n"
@@ -47,10 +43,9 @@ fun functionToPython(name: String,
         ""
     }
     val methodDoc = generateDocForDefWithTypedParameters(name, parameters, returnExpression.returnType, indent + 1)
-    val n = name// findMethodNameFromParameter(packageName, name, parameters, methodsToRewrite) // FIXME
-    val returnExpressionInPython = returnExpressionToPython(returnExpression, assertions, unions, methodsToRewrite, packageName, indent + 1, depth + 1 + assignments.size)
+    val returnExpressionInPython = returnExpressionToPython(returnExpression, assertions, unions, packageName, indent + 1, depth + 1 + assignments.size)
 
-    return "def $n($par):\n" +
+    return "def $name($par):\n" +
             methodDoc +
             assignmentsInPython +
             returnExpressionInPython
