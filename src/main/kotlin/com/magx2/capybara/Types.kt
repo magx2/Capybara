@@ -159,9 +159,12 @@ fun addGenericType(type: Type, genericType: Type): Type = addGenericType(type, l
 fun isLambda(type: Type) =
         type.packageName == lambdaType.packageName && type.name == lambdaType.name
 
+fun isList(type: Type) =
+        type.packageName == type.packageName
+                && type.name == type.name
+
 fun isListOf(list: Type, of: Type) =
-        list.packageName == list.packageName
-                && list.name == list.name
+        isList(list)
                 && list.genericTypes.size == 1
                 && list.genericTypes[0] == of
 

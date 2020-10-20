@@ -737,7 +737,7 @@ class ExpressionCompiler(private val compilationContext: CompilationContext,
                 findUnionType(leftType, rightType).get()
             } else if (leftType == BasicTypes.stringType || rightType == BasicTypes.stringType) {
                 val notStringType = if (leftType == BasicTypes.stringType) Pair(rightType, rightCodeMetainfo) else Pair(leftType, leftCodeMetainfo)
-                if (notStringType.first == BasicTypes.intType || notStringType.first == BasicTypes.booleanType) {
+                if (notStringType.first == BasicTypes.intType || notStringType.first == BasicTypes.booleanType || isList(notStringType.first)) {
                     BasicTypes.stringType
                 } else if (expression is InfixExpression && notStringType.first == BasicTypes.floatType) {
                     if (expression.operation != "*") {
