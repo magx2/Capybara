@@ -79,8 +79,8 @@ fun run_tests(modules: List[TestModule], to_return: List[TestModuleExecutionResu
 		to_return
 	}
 }
-
-fun run_test_module(TestModule): TestModuleExecutionResult {
-	TODO
-}
+//
+//fun run_test_module(TestModule): TestModuleExecutionResult {
+//	TODO
+//}
 
