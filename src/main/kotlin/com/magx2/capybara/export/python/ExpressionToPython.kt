@@ -56,8 +56,7 @@ fun whileToPython(statement: WhileStatementWithType,
         buildIndent(indent) + "while " + oneLinerExpressionToPython(valExpression, assertions, unions, packageName) + ":"
     }
 
-    return buildIndent(indent) + whileInPython + "\n" +
-            buildIndent(indent + 1) + statements
+    return buildIndent(indent) + whileInPython + "\n" + statements
 }
 
 fun defCallToPython(statement: DefCallStatementWithType,
