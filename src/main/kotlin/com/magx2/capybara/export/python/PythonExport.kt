@@ -315,6 +315,7 @@ class PythonExport(private val outputDir: String,
                 is StringExpressionWithReturnType,
                 NothingExpressionWithReturnType,
                 is IsExpressionWithReturnType,
+                is NativeExpressionWithReturnType,
                 is ValueExpressionWithReturnType -> expression
             }
 
@@ -468,6 +469,7 @@ private fun findImports(expresion: ExpressionWithReturnType?, packageName: Strin
                 is AssertExpressionWithReturnType -> findImports(expresion.checkExpression, packageName) + findImports(expresion.returnExpression, packageName) + (if (expresion.messageExpression != null) findImports(expresion.messageExpression, packageName) else emptyList())
                 is StructureAccessExpressionWithReturnType -> findImports(expresion.structureIndex, packageName)
                 is IsExpressionWithReturnType -> emptyList()
+                is NativeExpressionWithReturnType -> emptyList()
             }
         } else {
             emptyList()

@@ -418,6 +418,7 @@ private fun rewriteValNamesInExpression(expression: ExpressionWithReturnType, pr
                         expression.structureName,
                         rewriteValNamesInExpression(expression.structureIndex, prefix, valuesToRewrite)
                 )
+            is NativeExpressionWithReturnType -> expression
         }
 
 private fun oneLinerExpressionToPython(expression: ExpressionWithReturnType,
@@ -505,6 +506,7 @@ private fun oneLinerExpressionToPython(expression: ExpressionWithReturnType,
             is AssertExpressionWithReturnType -> {
                 oneLinerExpressionToPython(expression.returnExpression, assertions, unions, packageName)
             }
+            is NativeExpressionWithReturnType -> "(${expression.nativeCode})"
         }
 
 private fun methodToString(
@@ -593,6 +595,7 @@ private fun isOneLinerExpression(expression: ExpressionWithReturnType, assertion
             is NewStructExpressionWithReturnType,
             is ValueExpressionWithReturnType,
             is StructFieldAccessExpressionWithReturnType,
+            is NativeExpressionWithReturnType,
             is IsExpressionWithReturnType -> true
         }
 

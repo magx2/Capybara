@@ -737,7 +737,7 @@ class ExpressionCompiler(private val compilationContext: CompilationContext,
                 findUnionType(leftType, rightType).get()
             } else if (leftType == BasicTypes.stringType || rightType == BasicTypes.stringType) {
                 val notStringType = if (leftType == BasicTypes.stringType) Pair(rightType, rightCodeMetainfo) else Pair(leftType, leftCodeMetainfo)
-                if (notStringType.first == BasicTypes.intType || notStringType.first == BasicTypes.booleanType || isList(notStringType.first)) {
+                if (notStringType.first == BasicTypes.intType || notStringType.first == BasicTypes.booleanType) {
                     BasicTypes.stringType
                 } else if (expression is InfixExpression && notStringType.first == BasicTypes.floatType) {
                     if (expression.operation != "*") {
@@ -753,7 +753,7 @@ class ExpressionCompiler(private val compilationContext: CompilationContext,
                 }
             } else if (isOneOfGivenType(BasicTypes.intType, leftType, rightType) && isOneOfGivenType(BasicTypes.floatType, leftType, rightType)) {
                 BasicTypes.floatType
-            } else if (isList(leftType) && isList(rightType) && (leftType.genericTypes[0] == nothingType || rightType.genericTypes[0] == nothingType)) {
+            } else if (isListOf(leftType, nothingType) && isListOf(rightType, nothingType)) {
                 if (leftType.genericTypes[0] == nothingType) {
                     rightType
                 } else {
