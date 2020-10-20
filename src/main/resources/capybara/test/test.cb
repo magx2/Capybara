@@ -70,7 +70,7 @@ struct TestModuleExecutionResult {
 fun run_tests(modules: List[TestModule]): List[TestModuleExecutionResult] = run_tests(modules, [])
 
 fun run_tests(modules: List[TestModule], to_return: List[TestModuleExecutionResult]): List[TestModuleExecutionResult] {
-	return if(is_list_not_empty(modules) {
+	return if(is_list_not_empty(modules)) {
 		head = modules[0]
 		tail = modules[1:]
 		result = run_test_module(head)
