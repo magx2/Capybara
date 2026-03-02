@@ -10,6 +10,7 @@ definition: functionDeclaration;
 
 functionDeclaration: 'fun' NAME '(' parameters? ')' ':' type '=' expression;
 
+BOOL_LITERAL: 'true' | 'false';
 NAME : [a-z][a-zA-Z0-9_]*;
 parameters: parameter (',' parameter)*;
 parameter: NAME ':' type;
@@ -32,7 +33,6 @@ value: literal | NAME;
 argumentList: expression (',' expression)*;
 literal: INT_LITERAL | BOOL_LITERAL | STRING_LITERAL;
 INT_LITERAL: [0-9]+;
-BOOL_LITERAL: 'true' | 'false';
 STRING_LITERAL: '"' (~["\r\n] | '\\' .)* '"';
 
 infixOperator: GT

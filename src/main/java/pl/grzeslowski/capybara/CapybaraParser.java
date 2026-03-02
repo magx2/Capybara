@@ -4,6 +4,7 @@ package pl.grzeslowski.capybara;
 import org.antlr.v4.runtime.TokenStream;
 import org.antlr.v4.runtime.tree.TerminalNode;
 
+import java.util.List;
 import java.util.Set;
 
 import static java.util.stream.Collectors.toSet;
@@ -20,13 +21,16 @@ public class CapybaraParser {
     }
 
     private Function functionDeclaration(pl.grzeslowski.capybara.FunctionalParser.FunctionDeclarationContext functionDeclarationContext) {
+        var parameters = functionDeclarationContext.parameters() == null
+                ? List.<Parameter>of()
+                : functionDeclarationContext.parameters()
+                .parameter()
+                .stream()
+                .map(this::parameter)
+                .toList();
         return new Function(
                 functionDeclarationContext.NAME().getText(),
-                functionDeclarationContext.parameters()
-                        .parameter()
-                        .stream()
-                        .map(this::parameter)
-                        .toList(),
+                parameters,
                 type(functionDeclarationContext.type()),
                 expression(functionDeclarationContext.expression())
         );
