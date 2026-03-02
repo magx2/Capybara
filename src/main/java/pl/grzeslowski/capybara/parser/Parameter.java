@@ -1,4 +1,4 @@
-package pl.grzeslowski.capybara;
+package pl.grzeslowski.capybara.parser;
 
 public record Parameter(Type type, String name) {
 }

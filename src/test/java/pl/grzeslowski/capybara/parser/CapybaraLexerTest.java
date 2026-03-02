@@ -1,4 +1,4 @@
-package pl.grzeslowski.capybara;
+package pl.grzeslowski.capybara.parser;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;

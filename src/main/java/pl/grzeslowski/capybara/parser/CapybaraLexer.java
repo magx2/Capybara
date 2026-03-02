@@ -1,4 +1,4 @@
-package pl.grzeslowski.capybara;
+package pl.grzeslowski.capybara.parser;
 
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;
@@ -6,7 +6,7 @@ import org.antlr.v4.runtime.TokenStream;
 
 public class CapybaraLexer {
     public TokenStream lex(String input) {
-        var lexer = new pl.grzeslowski.capybara.FunctionalLexer(CharStreams.fromString(input));
+        var lexer = new pl.grzeslowski.capybara.parser.antlr.FunctionalLexer(CharStreams.fromString(input));
         var tokenStream = new CommonTokenStream(lexer);
         tokenStream.fill();
         return tokenStream;

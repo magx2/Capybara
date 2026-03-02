@@ -1,4 +1,4 @@
-package pl.grzeslowski.capybara;
+package pl.grzeslowski.capybara.parser;
 
 
 import org.antlr.v4.runtime.TokenStream;
@@ -12,16 +12,16 @@ import static java.util.stream.Collectors.toSet;
 
 public class CapybaraParser {
     public Functional parse(TokenStream tokens) {
-        var parser = new pl.grzeslowski.capybara.FunctionalParser(tokens);
+        var parser = new pl.grzeslowski.capybara.parser.antlr.FunctionalParser(tokens);
         var definitions = parser.program().definition().stream().map(this::definition).collect(toSet());
         return new Functional(definitions);
     }
 
-    private Definition definition(pl.grzeslowski.capybara.FunctionalParser.DefinitionContext definitionContext) {
+    private Definition definition(pl.grzeslowski.capybara.parser.antlr.FunctionalParser.DefinitionContext definitionContext) {
       return functionDeclaration(definitionContext.functionDeclaration());
     }
 
-    private Function functionDeclaration(pl.grzeslowski.capybara.FunctionalParser.FunctionDeclarationContext functionDeclarationContext) {
+    private Function functionDeclaration(pl.grzeslowski.capybara.parser.antlr.FunctionalParser.FunctionDeclarationContext functionDeclarationContext) {
         var parameters = functionDeclarationContext.parameters() == null
                 ? List.<Parameter>of()
                 : functionDeclarationContext.parameters()
@@ -37,17 +37,17 @@ public class CapybaraParser {
         );
     }
 
-    private Optional<Type> functionType(pl.grzeslowski.capybara.FunctionalParser.FunctionTypeContext context) {
+    private Optional<Type> functionType(pl.grzeslowski.capybara.parser.antlr.FunctionalParser.FunctionTypeContext context) {
         return Optional.of(context)
-                .map(pl.grzeslowski.capybara.FunctionalParser.FunctionTypeContext::type)
+                .map(pl.grzeslowski.capybara.parser.antlr.FunctionalParser.FunctionTypeContext::type)
                 .map(CapybaraParser::type);
     }
 
-    private static Type type(pl.grzeslowski.capybara.FunctionalParser.TypeContext functionDeclarationContext) {
+    private static Type type(pl.grzeslowski.capybara.parser.antlr.FunctionalParser.TypeContext functionDeclarationContext) {
         return new Type(functionDeclarationContext.getText());
     }
 
-    private Expression expression(pl.grzeslowski.capybara.FunctionalParser.ExpressionContext expression) {
+    private Expression expression(pl.grzeslowski.capybara.parser.antlr.FunctionalParser.ExpressionContext expression) {
         if (expression.ifExpression() != null) {
             var ifExpression = expression.ifExpression();
             var condition = boolExpression(ifExpression.boolExperssion());
@@ -88,18 +88,18 @@ public class CapybaraParser {
         throw new IllegalStateException("Unknown expression: " + expression.getText());
     }
 
-    private Expression functionCall(pl.grzeslowski.capybara.FunctionalParser.FunctionCallContext context) {
+    private Expression functionCall(pl.grzeslowski.capybara.parser.antlr.FunctionalParser.FunctionCallContext context) {
         var arguments = context.argumentList() == null
                 ? List.<Expression>of()
                 : context.argumentList().expression().stream().map(this::expression).toList();
         return new Expression.FunctionCall(context.NAME().getText(), arguments);
     }
 
-    private Expression.NewData.FieldAssignment fieldAssignment(pl.grzeslowski.capybara.FunctionalParser.FieldAssignmentContext context) {
+    private Expression.NewData.FieldAssignment fieldAssignment(pl.grzeslowski.capybara.parser.antlr.FunctionalParser.FieldAssignmentContext context) {
         return new Expression.NewData.FieldAssignment(context.NAME().getText(), expression(context.expression()));
     }
 
-    private Expression.BoolExpression boolExpression(pl.grzeslowski.capybara.FunctionalParser.BoolExperssionContext context) {
+    private Expression.BoolExpression boolExpression(pl.grzeslowski.capybara.parser.antlr.FunctionalParser.BoolExperssionContext context) {
         if (context.BOOL_LITERAL() != null) {
             return boolLiteral(context.BOOL_LITERAL());
         }
@@ -120,7 +120,7 @@ public class CapybaraParser {
         };
     }
 
-    private Parameter parameter(pl.grzeslowski.capybara.FunctionalParser.ParameterContext context) {
+    private Parameter parameter(pl.grzeslowski.capybara.parser.antlr.FunctionalParser.ParameterContext context) {
         return new Parameter(type(context.type()), context.NAME().getText());
     }
 

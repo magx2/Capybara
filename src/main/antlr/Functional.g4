@@ -1,7 +1,7 @@
 grammar Functional;
 
 @header {
-package pl.grzeslowski.capybara;
+package pl.grzeslowski.capybara.parser.antlr;
 }
 
 program : definition+ EOF;

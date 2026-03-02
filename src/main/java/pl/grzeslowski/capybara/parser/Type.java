@@ -1,4 +1,4 @@
-package pl.grzeslowski.capybara;
+package pl.grzeslowski.capybara.parser;
 
 public record Type(String name) {
     public static final Type INT = new Type("int");
