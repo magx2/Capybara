@@ -5,10 +5,8 @@ import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;
 import org.antlr.v4.runtime.tree.TerminalNode;
 
-import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 
 import static java.util.stream.Collectors.toSet;
 
@@ -60,7 +58,7 @@ public class CapybaraParser {
             var condition = boolExpression(ifExpression.boolExperssion());
             var thenBranch = expression(ifExpression.expression(0));
             var elseBranch = expression(ifExpression.expression(1));
-            return new Expression.IfExpression(condition, thenBranch, elseBranch);
+            return new IfExpression(condition, thenBranch, elseBranch);
         }
 
         if (expression.functionCall() != null) {
@@ -75,21 +73,21 @@ public class CapybaraParser {
                     return boolLiteral(literal.BOOL_LITERAL());
                 }
                 if (literal.INT_LITERAL() != null) {
-                    return new Expression.IntValue(literal.INT_LITERAL().getText());
+                    return new IntValue(literal.INT_LITERAL().getText());
                 }
                 if (literal.STRING_LITERAL() != null) {
-                    return new Expression.StringValue(literal.STRING_LITERAL().getText());
+                    return new StringValue(literal.STRING_LITERAL().getText());
                 }
             }
 
             if (value.NAME() != null) {
-                return new Expression.Variable(value.NAME().getText());
+                return new Variable(value.NAME().getText());
             }
         }
 
         var newData = expression.newData();
         if (newData != null) {
-            return new Expression.NewData(type(newData.type()), newData.fieldAssignmentList().fieldAssignment().stream().map(this::fieldAssignment).toList());
+            return new NewData(type(newData.type()), newData.fieldAssignmentList().fieldAssignment().stream().map(this::fieldAssignment).toList());
         }
 
         throw new IllegalStateException("Unknown expression: " + expression.getText());
@@ -99,14 +97,14 @@ public class CapybaraParser {
         var arguments = context.argumentList() == null
                 ? List.<Expression>of()
                 : context.argumentList().expression().stream().map(this::expression).toList();
-        return new Expression.FunctionCall(context.NAME().getText(), arguments);
+        return new FunctionCall(context.NAME().getText(), arguments);
     }
 
-    private Expression.NewData.FieldAssignment fieldAssignment(pl.grzeslowski.capybara.parser.antlr.FunctionalParser.FieldAssignmentContext context) {
-        return new Expression.NewData.FieldAssignment(context.NAME().getText(), expression(context.expression()));
+    private NewData.FieldAssignment fieldAssignment(pl.grzeslowski.capybara.parser.antlr.FunctionalParser.FieldAssignmentContext context) {
+        return new NewData.FieldAssignment(context.NAME().getText(), expression(context.expression()));
     }
 
-    private Expression.BoolExpression boolExpression(pl.grzeslowski.capybara.parser.antlr.FunctionalParser.BoolExperssionContext context) {
+    private BoolExpression boolExpression(pl.grzeslowski.capybara.parser.antlr.FunctionalParser.BoolExperssionContext context) {
         if (context.BOOL_LITERAL() != null) {
             return boolLiteral(context.BOOL_LITERAL());
         }
@@ -114,15 +112,15 @@ public class CapybaraParser {
             var left = expression(context.expression(0));
             var operator = BoolInfixOperator.fromSymbol(context.boolInfixOperator().getText());
             var right = expression(context.expression(1));
-            return new Expression.BoolInfixExpression(left, operator, right);
+            return new BoolInfixExpression(left, operator, right);
         }
         throw new IllegalStateException("Unknown bool expression: " + context.getText());
     }
 
-    private static Expression.BoolExpression boolLiteral(TerminalNode node) {
+    private static BoolExpression boolLiteral(TerminalNode node) {
         return switch (node.getText()) {
-            case "true" -> Expression.BooleanValue.TRUE;
-            case "false" -> Expression.BooleanValue.FALSE;
+            case "true" -> BooleanValue.TRUE;
+            case "false" -> BooleanValue.FALSE;
             default -> throw new IllegalStateException("Unexpected value: " + node.getText());
         };
     }
@@ -131,12 +129,4 @@ public class CapybaraParser {
         return new Parameter(type(context.type()), context.NAME().getText());
     }
 
-    public record Functional(Set<Definition> definitions) {
-        public Functional reduce(Functional other) {
-            var sum = new HashSet<>(definitions);
-            sum.addAll(other.definitions);
-            return new Functional(sum);
-        }
-    }
-    public sealed interface Definition permits Function{}
 }

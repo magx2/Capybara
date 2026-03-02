@@ -30,12 +30,12 @@ class CapybaraParserIntegrationTest {
         assertEquals(Optional.of(new Type("string")), classify.returnType());
         assertEquals(1, classify.parameters().size());
         assertEquals(new Parameter(Type.INT, "x"), classify.parameters().getFirst());
-        assertInstanceOf(Expression.IfExpression.class, classify.expression());
+        assertInstanceOf(IfExpression.class, classify.expression());
 
         var alwaysTrue = functionsByName.get("always_true");
         assertEquals("always_true", alwaysTrue.name());
         assertEquals(Optional.of(Type.BOOL), alwaysTrue.returnType());
         assertEquals(0, alwaysTrue.parameters().size());
-        assertEquals(Expression.BooleanValue.TRUE, alwaysTrue.expression());
+        assertEquals(BooleanValue.TRUE, alwaysTrue.expression());
     }
 }

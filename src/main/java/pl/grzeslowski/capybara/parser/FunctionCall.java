@@ -1,0 +1,17 @@
+package pl.grzeslowski.capybara.parser;
+
+import java.util.List;
+
+public record FunctionCall(String name, List<Expression> arguments) implements Expression {
+    @Override
+    public Type type() {
+        // todo
+        return null;
+    }
+
+    @Override
+    public Expression value() {
+        // todo implement it
+        return null;
+    }
+}

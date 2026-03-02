@@ -4,7 +4,7 @@ import java.util.List;
 import java.util.Optional;
 
 public record Function(String name, List<Parameter> parameters, Optional<Type> returnType,
-                       Expression expression) implements CapybaraParser.Definition {
+                       Expression expression) implements Definition {
     public Type finalReturnType() {
         return returnType.orElseGet(expression::type);
     }
