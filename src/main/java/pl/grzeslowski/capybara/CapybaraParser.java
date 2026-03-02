@@ -56,6 +56,10 @@ public class CapybaraParser {
             return new Expression.IfExpression(condition, thenBranch, elseBranch);
         }
 
+        if (expression.functionCall() != null) {
+            return functionCall(expression.functionCall());
+        }
+
         var value = expression.value();
         if (value != null) {
             var literal = value.literal();
@@ -75,7 +79,24 @@ public class CapybaraParser {
                 return new Expression.Variable(value.NAME().getText());
             }
         }
+
+        var newData = expression.newData();
+        if (newData != null) {
+            return new Expression.NewData(type(newData.type()), newData.fieldAssignmentList().fieldAssignment().stream().map(this::fieldAssignment).toList());
+        }
+
         throw new IllegalStateException("Unknown expression: " + expression.getText());
+    }
+
+    private Expression functionCall(pl.grzeslowski.capybara.FunctionalParser.FunctionCallContext context) {
+        var arguments = context.argumentList() == null
+                ? List.<Expression>of()
+                : context.argumentList().expression().stream().map(this::expression).toList();
+        return new Expression.FunctionCall(context.NAME().getText(), arguments);
+    }
+
+    private Expression.NewData.FieldAssignment fieldAssignment(pl.grzeslowski.capybara.FunctionalParser.FieldAssignmentContext context) {
+        return new Expression.NewData.FieldAssignment(context.NAME().getText(), expression(context.expression()));
     }
 
     private Expression.BoolExpression boolExpression(pl.grzeslowski.capybara.FunctionalParser.BoolExperssionContext context) {

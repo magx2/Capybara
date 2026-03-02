@@ -1,5 +1,7 @@
 package pl.grzeslowski.capybara;
 
+import java.util.List;
+
 import static java.util.Objects.requireNonNull;
 
 public sealed interface Expression {
@@ -106,6 +108,31 @@ public sealed interface Expression {
             return null;
         }
     }
-}
 
+    public record NewData(Type type, List<FieldAssignment> assignments) implements Expression {
+        @Override
+        public Expression value() {
+            // todo implement it
+            return null;
+        }
+
+        public record FieldAssignment(String name, Expression value) {
+        }
+    }
+
+    public record FunctionCall(String name, List<Expression> arguments) implements Expression {
+        @Override
+        public Type type() {
+            // todo
+            return null;
+        }
+
+        @Override
+        public Expression value() {
+            // todo implement it
+            return null;
+        }
+    }
+
+}
 

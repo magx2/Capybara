@@ -12,6 +12,8 @@ class CapybaraLexerTest {
                     if x > 0 then "positive"
                     else if x < 0 then "negative"
                     else "zero"
+                
+                fun main(params: list[string]): ProgramResult = Success { result: Some { value: test_if(5) } }
                 """;
         var tokens = new CapybaraLexer().lex(input);
         var functional = new CapybaraParser().parse(tokens);

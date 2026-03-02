@@ -11,19 +11,25 @@ definition: functionDeclaration;
 functionDeclaration: 'fun' NAME '(' parameters? ')' functionType? '=' expression;
 
 BOOL_LITERAL: 'true' | 'false';
+COLLECTION: 'list' | 'set' | 'dict';
 NAME : [a-z][a-zA-Z0-9_]*;
 parameters: parameter (',' parameter)*;
 parameter: NAME ':' type;
 functionType: ':' type;
-type: NAME
+type: COLLECTION '[' type ']'
     | 'int'
     | 'bool'
-    | 'string';
+    | 'string'
+    | TYPE;
+TYPE: [A-Z][a-zA-Z0-9]*
+      | TYPE_FULL ;
+TYPE_FULL: '/' [A-Z][a-zA-Z0-9]* ( '/' [A-Z][a-zA-Z0-9]* )*;
 expression: ifExpression
             | functionCall
             | '(' expression ')'
             | expression infixOperator expression
-            | value;
+            | value
+            | newData;
 boolExperssion: expression boolInfixOperator expression
             | functionCall
             | '(' boolExperssion ')'
@@ -35,6 +41,11 @@ argumentList: expression (',' expression)*;
 literal: INT_LITERAL | BOOL_LITERAL | STRING_LITERAL;
 INT_LITERAL: [0-9]+;
 STRING_LITERAL: '"' (~["\r\n] | '\\' .)* '"';
+
+newData: type '{' fieldAssignmentList? '}';
+fieldAssignmentList: fieldAssignment (',' fieldAssignment)*;
+fieldAssignment: NAME ':' expression
+                | '"' NAME '"' ':' expression;
 
 infixOperator: boolInfixOperator
         | PLUS
@@ -68,7 +79,6 @@ DOT : '.';
 PLUS : '+';
 MINUS : '-';
 ASSIGN : '=';
-POW : '^';
 GT : '>';
 LT : '<';
 BANG : '!';

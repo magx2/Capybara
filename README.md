@@ -9,6 +9,12 @@ Extension: `.cfun`
 #### Example
 
 ```cfun
+fun main(params: list[string]): ProgramResult =
+    let name = params | head | default("world")
+    return Success { result = Some { value = "Hello, " + name + "!" }}
+ 
+type ProgramResult = Success { result: Option[string] } | Failure { errorCode: int } 
+ 
 fun test_if(x: int): string =
     if x > 0 then "positive"
     else if x < 0 then "negative"
