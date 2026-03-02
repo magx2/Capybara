@@ -35,26 +35,21 @@ literal: INT_LITERAL | BOOL_LITERAL | STRING_LITERAL;
 INT_LITERAL: [0-9]+;
 STRING_LITERAL: '"' (~["\r\n] | '\\' .)* '"';
 
-infixOperator: GT
-        | LT
+infixOperator: boolInfixOperator
         | PLUS
         | MINUS
         | MUL
         | DIV
-        | AND
-        | OR
-        | EQUAL
-        | NOTEQUAL
-        | LE
-        | GE
-        | POW;
+        | CARET;
 
 boolInfixOperator: GT
         | LT
         | EQUAL
         | NOTEQUAL
         | LE
-        | GE;
+        | GE
+        | AND
+        | OR;
 
 // Separators
 
@@ -87,8 +82,6 @@ AND : '&&';
 OR : '||';
 INC : '++';
 DEC : '--';
-ADD : '+';
-SUB : '-';
 MUL : '*';
 DIV : '/';
 BITAND : '&';
