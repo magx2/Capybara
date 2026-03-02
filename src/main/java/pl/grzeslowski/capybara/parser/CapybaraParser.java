@@ -1,9 +1,11 @@
 package pl.grzeslowski.capybara.parser;
 
 
-import org.antlr.v4.runtime.TokenStream;
+import org.antlr.v4.runtime.CharStreams;
+import org.antlr.v4.runtime.CommonTokenStream;
 import org.antlr.v4.runtime.tree.TerminalNode;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -11,7 +13,12 @@ import java.util.Set;
 import static java.util.stream.Collectors.toSet;
 
 public class CapybaraParser {
-    public Functional parse(TokenStream tokens) {
+    public static final CapybaraParser INSTANCE = new CapybaraParser();
+
+    public Functional parseFuntional(String input) {
+        var lexer = new pl.grzeslowski.capybara.parser.antlr.FunctionalLexer(CharStreams.fromString(input));
+        var tokens = new CommonTokenStream(lexer);
+        tokens.fill();
         var parser = new pl.grzeslowski.capybara.parser.antlr.FunctionalParser(tokens);
         var definitions = parser.program().definition().stream().map(this::definition).collect(toSet());
         return new Functional(definitions);
@@ -124,6 +131,12 @@ public class CapybaraParser {
         return new Parameter(type(context.type()), context.NAME().getText());
     }
 
-    public record Functional(Set<Definition> definitions) {}
+    public record Functional(Set<Definition> definitions) {
+        public Functional reduce(Functional other) {
+            var sum = new HashSet<>(definitions);
+            sum.addAll(other.definitions);
+            return new Functional(sum);
+        }
+    }
     public sealed interface Definition permits Function{}
 }

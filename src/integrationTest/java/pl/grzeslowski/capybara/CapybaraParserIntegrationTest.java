@@ -1,7 +1,7 @@
 package pl.grzeslowski.capybara;
 
 import org.junit.jupiter.api.Test;
-import pl.grzeslowski.capybara.parser.antlr.parser.*;
+import pl.grzeslowski.capybara.parser.*;
 
 import java.util.Optional;
 
@@ -19,7 +19,7 @@ class CapybaraParserIntegrationTest {
                 """;
 
         var tokens = new CapybaraLexer().lex(input);
-        var program = new CapybaraParser().parse(tokens);
+        var program = new CapybaraParser().parseFuntional(tokens);
         var functionsByName = program.definitions().stream()
                 .map(Function.class::cast)
                 .collect(java.util.stream.Collectors.toMap(Function::name, function -> function));
