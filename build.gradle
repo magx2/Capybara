@@ -1,3 +1,21 @@
 plugins {
     id 'java'
+    id 'antlr'
+}
+
+repositories {
+    mavenLocal()
+    mavenCentral()
+}
+
+dependencies {
+    antlr group: 'org.antlr', name: 'antlr4', version: antlrVersion
+    implementation group: 'org.antlr', name: 'antlr4-runtime', version: antlrVersion
+    testImplementation platform("org.junit:junit-bom:${junitVersion}")
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+test {
+    useJUnitPlatform()
 }
