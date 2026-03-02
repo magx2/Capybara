@@ -8,12 +8,13 @@ program : definition+ EOF;
 
 definition: functionDeclaration;
 
-functionDeclaration: 'fun' NAME '(' parameters? ')' ':' type '=' expression;
+functionDeclaration: 'fun' NAME '(' parameters? ')' functionType? '=' expression;
 
 BOOL_LITERAL: 'true' | 'false';
 NAME : [a-z][a-zA-Z0-9_]*;
 parameters: parameter (',' parameter)*;
 parameter: NAME ':' type;
+functionType: ':' type;
 type: NAME
     | 'int'
     | 'bool'

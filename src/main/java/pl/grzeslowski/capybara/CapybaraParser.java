@@ -5,6 +5,7 @@ import org.antlr.v4.runtime.TokenStream;
 import org.antlr.v4.runtime.tree.TerminalNode;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 import static java.util.stream.Collectors.toSet;
@@ -31,9 +32,15 @@ public class CapybaraParser {
         return new Function(
                 functionDeclarationContext.NAME().getText(),
                 parameters,
-                type(functionDeclarationContext.type()),
+                functionType(functionDeclarationContext.functionType()),
                 expression(functionDeclarationContext.expression())
         );
+    }
+
+    private Optional<Type> functionType(pl.grzeslowski.capybara.FunctionalParser.FunctionTypeContext context) {
+        return Optional.of(context)
+                .map(pl.grzeslowski.capybara.FunctionalParser.FunctionTypeContext::type)
+                .map(CapybaraParser::type);
     }
 
     private static Type type(pl.grzeslowski.capybara.FunctionalParser.TypeContext functionDeclarationContext) {

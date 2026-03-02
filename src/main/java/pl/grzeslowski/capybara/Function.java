@@ -1,7 +1,11 @@
 package pl.grzeslowski.capybara;
 
 import java.util.List;
+import java.util.Optional;
 
-public record Function(String name, List<Parameter> parameters, Type returnType,
+public record Function(String name, List<Parameter> parameters, Optional<Type> returnType,
                        Expression expression) implements CapybaraParser.Definition {
+    public Type finalReturnType() {
+        return returnType.orElseGet(expression::type);
+    }
 }
