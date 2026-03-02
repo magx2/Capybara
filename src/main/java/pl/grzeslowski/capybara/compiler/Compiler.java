@@ -1,6 +1,5 @@
 package pl.grzeslowski.capybara.compiler;
 
-import com.sun.jdi.connect.Connector;
 import pl.grzeslowski.capybara.Main;
 import pl.grzeslowski.capybara.generator.CompiledModule;
 import pl.grzeslowski.capybara.generator.JavaGenerator;
@@ -94,7 +93,7 @@ public class Compiler {
         return new Module(
                 fileNameWithoutExtension,
                 findModulePath(sourceFile),
-                CapybaraParser.INSTANCE.parseFuntional(readFile(sourceFile.path)));
+                CapybaraParser.INSTANCE.parseFunctional(readFile(sourceFile.path)));
     }
 
     private static String findModulePath(SourceFile sourceFile) {

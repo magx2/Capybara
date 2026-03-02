@@ -15,7 +15,7 @@ import static java.util.stream.Collectors.toSet;
 public class CapybaraParser {
     public static final CapybaraParser INSTANCE = new CapybaraParser();
 
-    public Functional parseFuntional(String input) {
+    public Functional parseFunctional(String input) {
         var lexer = new pl.grzeslowski.capybara.parser.antlr.FunctionalLexer(CharStreams.fromString(input));
         var tokens = new CommonTokenStream(lexer);
         tokens.fill();

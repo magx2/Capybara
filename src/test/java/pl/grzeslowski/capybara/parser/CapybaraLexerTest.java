@@ -15,8 +15,7 @@ class CapybaraLexerTest {
                 
                 fun main(params: list[string]): ProgramResult = Success { result: Some { value: test_if(5) } }
                 """;
-        var tokens = new CapybaraLexer().lex(input);
-        var functional = new CapybaraParser().parseFuntional(tokens);
+        var functional = new CapybaraParser().parseFunctional(input);
         System.out.println(functional);
     }
 }

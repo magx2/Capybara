@@ -18,8 +18,7 @@ class CapybaraParserIntegrationTest {
                 fun always_true(): bool = true
                 """;
 
-        var tokens = new CapybaraLexer().lex(input);
-        var program = new CapybaraParser().parseFuntional(tokens);
+        var program = new CapybaraParser().parseFunctional(input);
         var functionsByName = program.definitions().stream()
                 .map(Function.class::cast)
                 .collect(java.util.stream.Collectors.toMap(Function::name, function -> function));
