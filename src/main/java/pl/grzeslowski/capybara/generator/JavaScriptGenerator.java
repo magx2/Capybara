@@ -2,9 +2,11 @@ package pl.grzeslowski.capybara.generator;
 
 import pl.grzeslowski.capybara.linker.LinkedProgram;
 
+import java.util.List;
+
 public final class JavaScriptGenerator implements Generator {
     @Override
     public CompiledProgram generate(LinkedProgram program) {
-        throw new UnsupportedOperationException("JavaScriptGenerator.generate(program)");
+        return new CompiledProgram(List.of());
     }
 }

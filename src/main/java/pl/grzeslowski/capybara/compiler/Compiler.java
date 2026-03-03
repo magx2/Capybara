@@ -1,10 +1,7 @@
 package pl.grzeslowski.capybara.compiler;
 
 import pl.grzeslowski.capybara.Main;
-import pl.grzeslowski.capybara.generator.CompiledModule;
-import pl.grzeslowski.capybara.generator.JavaGenerator;
-import pl.grzeslowski.capybara.generator.JavaScriptGenerator;
-import pl.grzeslowski.capybara.generator.PythonGenerator;
+import pl.grzeslowski.capybara.generator.*;
 import pl.grzeslowski.capybara.linker.CapybaraLinker;
 import pl.grzeslowski.capybara.linker.LinkedProgram;
 import pl.grzeslowski.capybara.linker.ValueOrError;
@@ -68,11 +65,7 @@ public class Compiler {
         // TODO implement optimizations
 
         // 4. Generate bytecode or machine code from the AST
-        var generator = switch (args.outputType()) {
-            case JAVA -> new JavaGenerator();
-            case JAVASCRIPT -> new JavaScriptGenerator();
-            case PYTHON -> new PythonGenerator();
-        };
+        var generator = Generator.findGenerator(args.outputType());
         log.info("Using generator: " + generator.getClass().getSimpleName());
         var compiledProgram = generator.generate(linkedProgram);
 
