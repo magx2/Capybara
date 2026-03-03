@@ -44,24 +44,36 @@ public class CapybaraParser {
     }
 
     private TypeDeclaration typeDeclaration(FunctionalParser.TypeDeclarationContext context) {
+        var fieldDeclarationList = Optional.of(context)
+                .map(FunctionalParser.TypeDeclarationContext::fieldDeclarationList)
+                .map(this::fieldDeclarationList)
+                .stream()
+                .flatMap(Collection::stream)
+                .toList();
+
         return new TypeDeclaration(
                 context.TYPE().get(0).getText(),
-                context.TYPE().stream().skip(1).map(TerminalNode::getText).toList()
+                context.TYPE().stream().skip(1).map(TerminalNode::getText).toList(),
+                fieldDeclarationList
         );
     }
 
     private DataDeclaration dataDeclaration(FunctionalParser.DataDeclarationContext context) {
         return new DataDeclaration(
                 context.TYPE().getText(),
-                context.fieldDeclarationList().fieldDeclaration().stream().map(this::fieldDeclaration).toList()
+                fieldDeclarationList(context.fieldDeclarationList())
         );
     }
 
-    private DataDeclaration.Field fieldDeclaration(FunctionalParser.FieldDeclarationContext context) {
-        return new DataDeclaration.Field(
-                context.NAME().getText(),
-                type(context.type())
-        );
+    private List<DataDeclaration.DataField> fieldDeclarationList(FunctionalParser.FieldDeclarationListContext context) {
+        return context.fieldDeclaration()
+                .stream()
+                .map(this::fieldDeclaration)
+                .toList();
+    }
+
+    private DataDeclaration.DataField fieldDeclaration(FunctionalParser.FieldDeclarationContext context) {
+        return new DataDeclaration.DataField(context.NAME().getText(), type(context.type()));
     }
 
     private Function functionDeclaration(pl.grzeslowski.capybara.parser.antlr.FunctionalParser.FunctionDeclarationContext functionDeclarationContext) {

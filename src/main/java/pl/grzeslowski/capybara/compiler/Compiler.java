@@ -6,6 +6,8 @@ import pl.grzeslowski.capybara.generator.JavaGenerator;
 import pl.grzeslowski.capybara.generator.JavaScriptGenerator;
 import pl.grzeslowski.capybara.generator.PythonGenerator;
 import pl.grzeslowski.capybara.linker.CapybaraLinker;
+import pl.grzeslowski.capybara.linker.LinkedProgram;
+import pl.grzeslowski.capybara.linker.ValueOrError;
 import pl.grzeslowski.capybara.parser.CapybaraParser;
 
 import java.io.IOException;
@@ -54,7 +56,13 @@ public class Compiler {
         var program = new Program(modules);
 
         // 2. Perform semantic analysis on the AST (e.g., type checking, scope resolution)
-        var linkedProgram = CapybaraLinker.INSTANCE.link(program);
+        var linkingResult = CapybaraLinker.INSTANCE.link(program);
+        if (linkingResult instanceof ValueOrError.Error<?> le) {
+            log.severe("Linking failed with " + le.errors().size() + " error(s):");
+            le.errors().forEach(error -> log.severe(error.toString()));
+            return;
+        }
+        var linkedProgram = ((ValueOrError.Value<LinkedProgram>) linkingResult).value();
 
         // 3. Optimize the generated code if necessary
         // TODO implement optimizations

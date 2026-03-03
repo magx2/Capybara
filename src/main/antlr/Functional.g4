@@ -13,7 +13,8 @@ definition:
 
 functionDeclaration: 'fun' NAME '(' parameters? ')' functionType? '=' expression;
 
-typeDeclaration: 'type' TYPE '=' TYPE ('|' TYPE)*;
+typeDeclaration: 'type' TYPE '=' TYPE ('|' TYPE)*
+               | 'type' TYPE '{' fieldDeclarationList? '}' '=' TYPE ('|' TYPE)*;
 dataDeclaration: 'data' TYPE '{' fieldDeclarationList? '}';
 fieldDeclarationList: fieldDeclaration (',' fieldDeclaration)*;
 fieldDeclaration: NAME ':' type

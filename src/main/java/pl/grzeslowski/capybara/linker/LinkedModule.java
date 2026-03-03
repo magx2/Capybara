@@ -1,4 +1,7 @@
 package pl.grzeslowski.capybara.linker;
 
-public record LinkedModule() {
+import java.util.Set;
+import java.util.SortedSet;
+
+public record LinkedModule(Set<GenericDataType> types) {
 }

@@ -2,7 +2,7 @@ package pl.grzeslowski.capybara.parser;
 
 import java.util.List;
 
-public record DataDeclaration(String name, List<Field> fields) implements Definition {
-    public record Field(String name, Type type) {
+public record DataDeclaration(String name, List<DataField> fields) implements Definition {
+    public record DataField(String name, Type type) {
     }
 }

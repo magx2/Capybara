@@ -26,6 +26,11 @@ class CapybaraParserIntegrationTest {
                     match shape with
                     | Circle { radius } => Rectangle { width : radius * 2, height : radius * 2 }
                     | Rectangle { width, height } => Circle { radius : (width + height) / 4 }
+                
+                // type with common value
+                type Person { name: string, age: int } = Student | Teacher
+                data Student { grade: int }
+                data Teacher { subject: string }
                 """;
 
         var program = new CapybaraParser().parseFunctional(input);
