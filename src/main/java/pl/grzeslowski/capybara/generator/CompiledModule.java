@@ -1,17 +1,14 @@
 package pl.grzeslowski.capybara.generator;
 
-public record CompiledModule(String name, String path, String code) {
+import java.nio.file.Path;
+
+public record CompiledModule(Path relativePath, String code) {
     public CompiledModule {
-        if (name.isBlank()) {
-            throw new IllegalArgumentException("Module name cannot be blank");
-        }
-        if (!name.endsWith(".java")
-            && !name.endsWith(".js")
-            && !name.endsWith(".py")) {
+        var fileName = relativePath.getFileName().toString();
+        if (!fileName.endsWith(".java")
+            && !fileName.endsWith(".js")
+            && !fileName.endsWith(".py")) {
             throw new IllegalArgumentException("Module name must end with .java, .js or .py");
-        }
-        if (path.isBlank()) {
-            throw new IllegalArgumentException("Module path cannot be blank");
         }
     }
 }

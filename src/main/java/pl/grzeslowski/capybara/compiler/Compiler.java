@@ -1,7 +1,8 @@
 package pl.grzeslowski.capybara.compiler;
 
 import pl.grzeslowski.capybara.Main;
-import pl.grzeslowski.capybara.generator.*;
+import pl.grzeslowski.capybara.generator.CompiledModule;
+import pl.grzeslowski.capybara.generator.Generator;
 import pl.grzeslowski.capybara.linker.CapybaraLinker;
 import pl.grzeslowski.capybara.linker.LinkedProgram;
 import pl.grzeslowski.capybara.linker.ValueOrError;
@@ -76,14 +77,12 @@ public class Compiler {
     }
 
     private void write(Path output, CompiledModule module) {
-        var path = output
-                .resolve(module.path())
-                .resolve(module.name());
+        var absolutePath = output.resolve(module.relativePath());
         try {
-            log.info("Writing module: " + module.name() + " to file: " + path);
-            Files.write(path, module.code().getBytes());
+            log.info("Writing module to file: " + absolutePath);
+            Files.write(absolutePath, module.code().getBytes());
         } catch (IOException e) {
-            throw new UncheckedIOException("Unable to write file: " + path, e);
+            throw new UncheckedIOException("Unable to write file: " + absolutePath, e);
         }
     }
 
