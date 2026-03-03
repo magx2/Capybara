@@ -2,11 +2,16 @@ package pl.grzeslowski.capybara.parser;
 
 import java.util.Arrays;
 
-public enum BoolInfixOperator implements InfixOperator {
-    GT(">"), LT("<"), EQUAL("=="), NOTEQUAL("!="), LE("<="), GE(">=");
+public enum GenericOperator implements InfixOperator {
+    PLUS("+"),
+    MINUS("-"),
+    MUL("*"),
+    DIV("/"),
+    CARET("^");
+
     private final String symbol;
 
-    BoolInfixOperator(String symbol) {
+    GenericOperator(String symbol) {
         this.symbol = symbol;
     }
 
@@ -15,8 +20,8 @@ public enum BoolInfixOperator implements InfixOperator {
         return '"' + symbol + '"';
     }
 
-    public static BoolInfixOperator fromSymbol(String symbol) {
-        return Arrays.stream(BoolInfixOperator.values())
+    public static GenericOperator fromSymbol(String symbol) {
+        return Arrays.stream(values())
                 .filter(s -> s.symbol.equals(symbol))
                 .findAny()
                 .orElseThrow(() -> new IllegalArgumentException("Unknown operator: " + symbol));

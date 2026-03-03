@@ -6,9 +6,18 @@ package pl.grzeslowski.capybara.parser.antlr;
 
 program : definition+ EOF;
 
-definition: functionDeclaration;
+definition:
+    functionDeclaration
+    | typeDeclaration
+    | dataDeclaration;
 
 functionDeclaration: 'fun' NAME '(' parameters? ')' functionType? '=' expression;
+
+typeDeclaration: 'type' TYPE '=' TYPE ('|' TYPE)*;
+dataDeclaration: 'data' TYPE '{' fieldDeclarationList? '}';
+fieldDeclarationList: fieldDeclaration (',' fieldDeclaration)*;
+fieldDeclaration: NAME ':' type
+                | '"' NAME '"' ':' type;
 
 BOOL_LITERAL: 'true' | 'false';
 COLLECTION: 'list' | 'set' | 'dict';
@@ -20,6 +29,7 @@ type: COLLECTION '[' type ']'
     | 'int'
     | 'bool'
     | 'string'
+    | 'float'
     | TYPE;
 TYPE: [A-Z][a-zA-Z0-9]*
       | TYPE_FULL ;
@@ -29,7 +39,8 @@ expression: ifExpression
             | '(' expression ')'
             | expression infixOperator expression
             | value
-            | newData;
+            | newData
+            | matchExpression;
 boolExperssion: expression boolInfixOperator expression
             | functionCall
             | '(' boolExperssion ')'
@@ -38,9 +49,23 @@ ifExpression: 'if' boolExperssion 'then' expression 'else' expression;
 functionCall: NAME '(' argumentList? ')';
 value: literal | NAME;
 argumentList: expression (',' expression)*;
-literal: INT_LITERAL | BOOL_LITERAL | STRING_LITERAL;
+literal: INT_LITERAL | BOOL_LITERAL | STRING_LITERAL | FLOAT_LITERAL;
 INT_LITERAL: [0-9]+;
+FLOAT_LITERAL: [0-9]+ '.' [0-9]+;
 STRING_LITERAL: '"' (~["\r\n] | '\\' .)* '"';
+
+matchExpression: 'match' expression 'with' matchCaseList+;
+matchCaseList: matchCase (',' matchCase)*;
+matchCase: '|' pattern '=>' expression;
+pattern: TYPE
+        | INT_LITERAL
+        | BOOL_LITERAL
+        | STRING_LITERAL
+        | FLOAT_LITERAL
+        | UNDERSCORE // wildcard pattern
+        | constructorPattern;
+constructorPattern: TYPE '{' fieldPatternList? '}';
+fieldPatternList: NAME (',' NAME)*;
 
 newData: type '{' fieldAssignmentList? '}';
 fieldAssignmentList: fieldAssignment (',' fieldAssignment)*;
@@ -62,6 +87,8 @@ boolInfixOperator: GT
         | GE
         | AND
         | OR;
+
+UNDERSCORE: '_';
 
 // Separators
 
@@ -114,4 +141,5 @@ LSHIFT_ASSIGN : '<<=';
 RSHIFT_ASSIGN : '>>=';
 URSHIFT_ASSIGN : '>>>=';
 
+LINE_COMMENT : '//' ~[\r\n]* -> skip;
 WS : [ \t\r\n]+ -> skip;
