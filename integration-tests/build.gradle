@@ -29,7 +29,7 @@ tasks.register('generateJavaFromCapybara', JavaExec) {
     outputs.dir(generatedJavaDir)
 
     classpath = project(':app').sourceSets.main.runtimeClasspath
-    mainClass = 'org.example.app.App'
+    mainClass = 'pl.grzeslowski.capybara.App'
 
     doFirst {
         args 'JAVA', capybaraSourceDir.asFile.absolutePath, generatedJavaDir.get().asFile.absolutePath

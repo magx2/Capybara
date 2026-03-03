@@ -1,4 +1,4 @@
-package org.example.app;
+package pl.grzeslowski.capybara;
 
 import pl.grzeslowski.capybara.compiler.Arguments;
 import pl.grzeslowski.capybara.compiler.Compiler;
