@@ -9,6 +9,7 @@ repositories {
 dependencies {
     implementation project(':compiler')
 
+    testImplementation 'org.assertj:assertj-core:3.27.6'
     testImplementation 'org.junit.jupiter:junit-jupiter:5.13.4'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
@@ -17,8 +18,30 @@ test {
     useJUnitPlatform()
 }
 
-sourceSets {
-    test {
-        java.srcDir 'build/test-output/java'
+def capybaraSourceDir = layout.projectDirectory.dir('src/main/capybara')
+def generatedJavaDir = layout.buildDirectory.dir('generated/sources/capybara/java/main')
+
+tasks.register('generateJavaFromCapybara', JavaExec) {
+    group = 'build'
+    description = 'Compiles Capybara files from src/main/capybara into generated Java sources.'
+
+    inputs.dir(capybaraSourceDir)
+    outputs.dir(generatedJavaDir)
+
+    classpath = project(':compiler').sourceSets.main.runtimeClasspath
+    mainClass = 'pl.grzeslowski.capybara.Main'
+
+    doFirst {
+        args 'JAVA', capybaraSourceDir.asFile.absolutePath, generatedJavaDir.get().asFile.absolutePath
     }
+}
+
+sourceSets {
+    main {
+        java.srcDir generatedJavaDir
+    }
+}
+
+tasks.named('compileJava') {
+    dependsOn tasks.named('generateJavaFromCapybara')
 }

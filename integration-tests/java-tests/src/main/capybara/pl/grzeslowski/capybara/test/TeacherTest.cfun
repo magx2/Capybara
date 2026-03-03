@@ -1,0 +1,4 @@
+// type with common value
+type Person { name: string, age: int } = Student | Teacher
+data Student { grade: int }
+data Teacher { subject: string }
