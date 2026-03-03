@@ -3,6 +3,7 @@ package pl.grzeslowski.capybara.generator;
 import pl.grzeslowski.capybara.linker.*;
 
 import java.nio.file.Path;
+import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -32,11 +33,20 @@ public final class JavaGenerator implements Generator {
 
         // package
         code.append("package ")
-                .append(module.path().replaceAll("/", "."))
+                .append(module.path()
+                        // Linux and macOS
+                        .replaceAll("/", ".")
+                        // windows
+                        .replaceAll("\\\\", "."))
                 .append(";\n\n");
 
         // imports
         // TODO: imports
+
+        // generated annotation
+        code.append("@javax.annotation.processing.Generated(date = \"")
+                .append(ZonedDateTime.now())
+                .append("\", value = \"Capybara Compiler\")\n");
 
         // class declaration
         code.append("public class ")
@@ -64,6 +74,9 @@ public final class JavaGenerator implements Generator {
 
         // functions
         module.functions().stream().map(this::function).forEach(code::append);
+
+        // close object declaration
+        code.append('}');
 
         return code.toString();
     }

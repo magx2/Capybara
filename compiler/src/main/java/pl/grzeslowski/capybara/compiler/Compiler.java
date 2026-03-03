@@ -1,6 +1,5 @@
 package pl.grzeslowski.capybara.compiler;
 
-import pl.grzeslowski.capybara.Main;
 import pl.grzeslowski.capybara.generator.CompiledModule;
 import pl.grzeslowski.capybara.generator.Generator;
 import pl.grzeslowski.capybara.linker.CapybaraLinker;
@@ -12,6 +11,7 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.util.Collection;
 import java.util.List;
 import java.util.logging.Logger;
@@ -23,7 +23,7 @@ public class Compiler {
     public static final Compiler INSTANCE = new Compiler();
     private static final Logger log = Logger.getLogger(Compiler.class.getName());
 
-    public void compile(Main.Arguments args) throws IOException {
+    public void compile(Arguments args) throws IOException {
         if (Files.notExists(args.output())) {
             log.info("Creating output directory: " + args.output());
             Files.createDirectories(args.output());
@@ -79,8 +79,18 @@ public class Compiler {
     private void write(Path output, CompiledModule module) {
         var absolutePath = output.resolve(module.relativePath());
         try {
+            var parent = absolutePath.getParent();
+            if (parent != null) {
+                Files.createDirectories(parent);
+            }
             log.info("Writing module to file: " + absolutePath);
-            Files.write(absolutePath, module.code().getBytes());
+            Files.writeString(
+                    absolutePath,
+                    module.code(),
+                    StandardOpenOption.CREATE,
+                    StandardOpenOption.TRUNCATE_EXISTING,
+                    StandardOpenOption.WRITE
+            );
         } catch (IOException e) {
             throw new UncheckedIOException("Unable to write file: " + absolutePath, e);
         }
@@ -97,8 +107,8 @@ public class Compiler {
     }
 
     private static String findModulePath(SourceFile sourceFile) {
-        var relativePath = sourceFile.rootPath.relativize(sourceFile.path);
-        return relativePath.toString().substring(0, relativePath.toString().lastIndexOf('.'));
+        var relativePath = sourceFile.rootPath.relativize(sourceFile.path).getParent();
+        return relativePath.toString();
     }
 
     private String readFile(Path path) {

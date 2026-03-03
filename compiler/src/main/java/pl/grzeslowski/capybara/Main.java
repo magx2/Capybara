@@ -1,11 +1,11 @@
 package pl.grzeslowski.capybara;
 
+import pl.grzeslowski.capybara.compiler.Arguments;
 import pl.grzeslowski.capybara.compiler.Compiler;
 import pl.grzeslowski.capybara.compiler.OutputType;
 
 import java.io.IOException;
 import java.nio.file.Path;
-import java.util.List;
 import java.util.logging.Logger;
 
 import static java.util.Arrays.stream;
@@ -29,6 +29,4 @@ public class Main {
         return new Arguments(inputs, output, outputType);
     }
 
-    public record Arguments(List<Path> inputs, Path output, OutputType outputType) {
-    }
 }
