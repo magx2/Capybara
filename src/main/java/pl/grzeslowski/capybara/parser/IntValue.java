@@ -5,9 +5,4 @@ public record IntValue(String intValue) implements Expression {
     public Type type() {
         return Type.INT;
     }
-
-    @Override
-    public Expression value() {
-        return this;
-    }
 }

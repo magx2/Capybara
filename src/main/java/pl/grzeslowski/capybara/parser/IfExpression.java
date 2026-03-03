@@ -17,12 +17,4 @@ public record IfExpression(BoolExpression condition, Expression thenBranch,
     public Type type() {
         return thenBranch.type();
     }
-
-    @Override
-    public Expression value() {
-        if (condition.value() == BooleanValue.TRUE) {
-            return thenBranch.value();
-        }
-        return elseBranch.value();
-    }
 }

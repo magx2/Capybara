@@ -6,10 +6,4 @@ public record Variable(String name) implements Expression {
         // todo
         return null;
     }
-
-    @Override
-    public Expression value() {
-        // todo implement it
-        return null;
-    }
 }

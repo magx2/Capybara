@@ -8,10 +8,4 @@ public record FunctionCall(String name, List<Expression> arguments) implements E
         // todo
         return null;
     }
-
-    @Override
-    public Expression value() {
-        // todo implement it
-        return null;
-    }
 }

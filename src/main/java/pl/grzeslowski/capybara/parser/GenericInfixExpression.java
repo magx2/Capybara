@@ -6,9 +6,4 @@ public record GenericInfixExpression(Expression left, GenericOperator operator,
     public Type type() {
         return null;
     }
-
-    @Override
-    public Expression value() {
-        return null;
-    }
 }

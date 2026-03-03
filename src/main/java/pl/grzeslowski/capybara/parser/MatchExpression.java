@@ -15,11 +15,6 @@ public record MatchExpression(Expression matchWith, List<MatchCase> cases) imple
         return cases.get(0).expression.type();
     }
 
-    @Override
-    public Expression value() {
-        throw new UnsupportedOperationException("MatchExpression.value()");
-    }
-
     public record MatchCase(Pattern pattern, Expression expression) {
     }
 

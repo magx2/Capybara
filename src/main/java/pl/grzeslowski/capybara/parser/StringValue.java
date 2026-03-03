@@ -5,9 +5,4 @@ public record StringValue(String stringValue) implements Expression {
     public Type type() {
         return Type.STRING;
     }
-
-    @Override
-    public Expression value() {
-        return this;
-    }
 }
