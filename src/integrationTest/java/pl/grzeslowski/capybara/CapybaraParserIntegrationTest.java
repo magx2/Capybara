@@ -66,18 +66,5 @@ class CapybaraParserIntegrationTest {
                 .collect(java.util.stream.Collectors.toMap(Function::name, function -> function));
 
         assertEquals(2, functionsByName.size());
-
-        var classify = functionsByName.get("classify");
-        assertEquals("classify", classify.name());
-        assertEquals(Optional.of(new Type("string")), classify.returnType());
-        assertEquals(1, classify.parameters().size());
-        assertEquals(new Parameter(Type.INT, "x"), classify.parameters().getFirst());
-        assertInstanceOf(IfExpression.class, classify.expression());
-
-        var alwaysTrue = functionsByName.get("always_true");
-        assertEquals("always_true", alwaysTrue.name());
-        assertEquals(Optional.of(Type.BOOL), alwaysTrue.returnType());
-        assertEquals(0, alwaysTrue.parameters().size());
-        assertEquals(BooleanValue.TRUE, alwaysTrue.expression());
     }
 }

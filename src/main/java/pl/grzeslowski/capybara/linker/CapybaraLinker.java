@@ -2,13 +2,10 @@ package pl.grzeslowski.capybara.linker;
 
 import pl.grzeslowski.capybara.compiler.Module;
 import pl.grzeslowski.capybara.compiler.Program;
-import pl.grzeslowski.capybara.parser.DataDeclaration;
-import pl.grzeslowski.capybara.parser.Type;
-import pl.grzeslowski.capybara.parser.TypeDeclaration;
+import pl.grzeslowski.capybara.linker.LinkedFunction.LinkedFunctionParameter;
+import pl.grzeslowski.capybara.parser.*;
 
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 
 import static java.util.function.Function.identity;
 import static java.util.stream.Collectors.toMap;
@@ -28,10 +25,103 @@ public class CapybaraLinker {
     }
 
     private ValueOrError<LinkedModule> linkModule(Module module) {
-        return types(module).map(LinkedModule::new);
+        return types(module)
+                .flatMap(dataTypes ->
+                        linkFunctions(findFunctions(module.functional().definitions()), dataTypes)
+                                .map(functions -> new LinkedModule(dataTypes, Set.copyOf(functions))));
     }
 
-    private ValueOrError<Set<GenericDataType>> types(Module module) {
+    private List<Function> findFunctions(Set<Definition> definitions) {
+        return definitions.stream()
+                .filter(Function.class::isInstance)
+                .map(Function.class::cast)
+                .toList();
+    }
+
+    private ValueOrError<List<LinkedFunction>> linkFunctions(List<Function> functions, Map<String, GenericDataType> dataTypes) {
+        return functions.stream()
+                .map(f -> linkFunction(f, dataTypes))
+                .reduce(
+                        (ValueOrError<List<LinkedFunction>>) new ValueOrError.Value<List<LinkedFunction>>(List.of()),
+                        ValueOrError::joinWithList,
+                        ValueOrError::join);
+    }
+
+    private ValueOrError<LinkedFunction> linkFunction(Function function, Map<String, GenericDataType> dataTypes) {
+        var linkedTypeOrError = linkType(function.returnType(), dataTypes);
+        var linkedParametersOrError = linkParameters(function.parameters(), dataTypes);
+        var linkedExpressionOrError = linkExpression(function.expression(), dataTypes);
+
+        record TypeParameters(LinkedType type, List<LinkedFunctionParameter> parameters) {
+        }
+        var typeParameters = ValueOrError.join(
+                TypeParameters::new,
+                linkedTypeOrError,
+                linkedParametersOrError);
+
+        record TypeParametersExpression(LinkedType type, List<LinkedFunctionParameter> parameters,
+                                        LinkedExpression expression) {
+            public TypeParametersExpression(TypeParameters tp, LinkedExpression expression) {
+                this(tp.type, tp.parameters, expression);
+            }
+        }
+        var typeParametersExpression = ValueOrError.join(
+                TypeParametersExpression::new,
+                typeParameters,
+                linkedExpressionOrError);
+
+        return typeParametersExpression.map(tpe -> new LinkedFunction(function.name(), tpe.type, tpe.parameters, tpe.expression()));
+    }
+
+    private ValueOrError<LinkedExpression> linkExpression(Expression expression, Map<String, GenericDataType> dataTypes) {
+        return new ValueOrError.Value<>(new LinkedExpression(expression));
+    }
+
+    private ValueOrError<List<LinkedFunctionParameter>> linkParameters(List<Parameter> parameters, Map<String, GenericDataType> dataTypes) {
+        return parameters.stream()
+                .map(p -> linkParameter(p, dataTypes))
+                .reduce(
+                        (ValueOrError<List<LinkedFunctionParameter>>) new ValueOrError.Value<List<LinkedFunctionParameter>>(List.of()),
+                        ValueOrError::joinWithList,
+                        ValueOrError::join);
+    }
+
+    private ValueOrError<LinkedFunctionParameter> linkParameter(Parameter parameter, Map<String, GenericDataType> dataTypes) {
+        return linkType(parameter.type(), dataTypes)
+                .map(type -> new LinkedFunctionParameter(parameter.name(), type));
+    }
+
+    private ValueOrError<? extends LinkedType> linkType(Type type, Map<String, GenericDataType> dataTypes) {
+        return switch (type) {
+            case PrimitiveType primitiveType -> new ValueOrError.Value<>(linkPrimitiveType(primitiveType));
+            case DataType dataType -> linkDataType(dataType, dataTypes);
+        };
+    }
+
+    @Deprecated
+    private ValueOrError<? extends LinkedType> linkType(Type type) {
+        // TODO proper mapping of types
+        return linkType(type, Map.of());
+    }
+
+    private ValueOrError<? extends LinkedType> linkDataType(DataType dataType, Map<String, GenericDataType> dataTypes) {
+        if (dataTypes.containsKey(dataType.name())) {
+            return new ValueOrError.Value<>(dataTypes.get(dataType.name()));
+        }
+
+        return new ValueOrError.Error<>("Data type \"" + dataType.name() + "\" not found");
+    }
+
+    private LinkedType linkPrimitiveType(PrimitiveType primitiveType) {
+        return switch (primitiveType) {
+            case INT -> PrimitiveLinkedType.INT;
+            case STRING -> PrimitiveLinkedType.STRING;
+            case BOOL -> PrimitiveLinkedType.BOOL;
+            case FLOAT -> PrimitiveLinkedType.FLOAT;
+        };
+    }
+
+    private ValueOrError<Map<String, GenericDataType>> types(Module module) {
         var dataDeclarationsOrError = castList(module, DataDeclaration.class)
                 .stream()
                 .map(this::linkDataDeclaration)
@@ -61,36 +151,41 @@ public class CapybaraLinker {
         var set = new HashSet<GenericDataType>();
         set.addAll(dataDeclarations);
         set.addAll(typeDeclarations);
-        return new ValueOrError.Value<>(set);
+        var map = set.stream().collect(toMap(GenericDataType::name, identity()));
+        return new ValueOrError.Value<>(map);
     }
 
     private ValueOrError<LinkedDataType> linkDataDeclaration(DataDeclaration dataDeclaration) {
-        var dt = new LinkedDataType(
-                dataDeclaration.name(),
-                dataDeclaration.fields()
-                        .stream()
-                        .map(CapybaraLinker::linkField)
-                        .toList());
-        // todo: there might be linking errors, e.g. field types not found
-        return new ValueOrError.Value<>(dt);
+        return dataDeclaration.fields()
+                .stream()
+                .map(this::linkField)
+                .reduce(
+                        (ValueOrError<List<LinkedDataType.LinkedField>>) new ValueOrError.Value<List<LinkedDataType.LinkedField>>(List.of()),
+                        ValueOrError::joinWithList,
+                        ValueOrError::join)
+                .map(fields -> new LinkedDataType(dataDeclaration.name(), fields));
     }
 
-    private static LinkedDataType.LinkedField linkField(DataDeclaration.DataField type) {
-        return new LinkedDataType.LinkedField(type.name(), linkType(type.type()));
-    }
-
-    private static LinkedType linkType(Type type) {
-        // TODO proper mapping of types
-        return new PrimitiveLinkedType(type.name());
+    private ValueOrError<LinkedDataType.LinkedField> linkField(DataDeclaration.DataField type) {
+        return linkType(type.type())
+                .map(t -> new LinkedDataType.LinkedField(type.name(), t));
     }
 
     private ValueOrError<LinkedDataParentType> linkTypeDeclaration(TypeDeclaration typeDeclaration, List<LinkedDataType> dataDeclarations) {
         return findSubtypes(typeDeclaration.subTypes(), dataDeclarations)
-                .map(subTypes -> new LinkedDataParentType(typeDeclaration.name(),
-                        typeDeclaration.fields()
-                                .stream()
-                                .map(CapybaraLinker::linkField)
-                                .toList(),
+                .flatMap(subTypes -> linkedDataParentType(typeDeclaration, subTypes));
+    }
+
+    private ValueOrError<LinkedDataParentType> linkedDataParentType(TypeDeclaration typeDeclaration, List<LinkedDataType> subTypes) {
+        return typeDeclaration.fields()
+                .stream()
+                .map(this::linkField)
+                .reduce(
+                        (ValueOrError<List<LinkedDataType.LinkedField>>) new ValueOrError.Value<List<LinkedDataType.LinkedField>>(List.of()),
+                        ValueOrError::joinWithList,
+                        ValueOrError::join)
+                .map(fields -> new LinkedDataParentType(typeDeclaration.name(),
+                        fields,
                         subTypes));
     }
 

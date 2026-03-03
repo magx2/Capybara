@@ -2,10 +2,27 @@ package pl.grzeslowski.capybara.linker;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.stream.Stream;
 
 public sealed interface ValueOrError<T> {
+    static <T1, T2, OutT> ValueOrError<OutT> join(BiFunction<T1, T2, OutT> function, ValueOrError<T1> a, ValueOrError<T2> b) {
+        if (a instanceof ValueOrError.Error<?> errorA && b instanceof ValueOrError.Error<?> errorB) {
+            return Error.join(errorA.errors, errorB.errors);
+        }
+        if (a instanceof ValueOrError.Error<?> error) {
+            return new Error<>(error.errors);
+        }
+        if (b instanceof ValueOrError.Error<?> error) {
+            return new Error<>(error.errors);
+        }
+
+        var valueA = ((ValueOrError.Value<T1>) a).value();
+        var valueB = ((ValueOrError.Value<T2>) b).value();
+        return new Value<>(function.apply(valueA, valueB));
+    }
+
     static <T> ValueOrError<List<T>> join(ValueOrError<List<T>> a, ValueOrError<List<T>> b) {
         if (a instanceof ValueOrError.Error<?> errorA && b instanceof ValueOrError.Error<?> errorB) {
             return Error.join(errorA.errors, errorB.errors);
@@ -40,11 +57,19 @@ public sealed interface ValueOrError<T> {
 
     <U> ValueOrError<U> map(java.util.function.Function<? super T, ? extends U> mapper);
 
+    <U> ValueOrError<U> flatMap(java.util.function.Function<? super T, ValueOrError<? extends U>> mapper);
+
     public record Value<T>(T value) implements ValueOrError<T> {
 
         @Override
         public <U> ValueOrError<U> map(Function<? super T, ? extends U> mapper) {
             return new Value<>(mapper.apply(value));
+        }
+
+        @SuppressWarnings("unchecked")
+        @Override
+        public <U> ValueOrError<U> flatMap(Function<? super T, ValueOrError<? extends U>> mapper) {
+            return (ValueOrError<U>) mapper.apply(value);
         }
     }
 
@@ -60,6 +85,11 @@ public sealed interface ValueOrError<T> {
 
         @Override
         public <U> ValueOrError<U> map(Function<? super T, ? extends U> mapper) {
+            return new Error<>(errors);
+        }
+
+        @Override
+        public <U> ValueOrError<U> flatMap(Function<? super T, ValueOrError<? extends U>> mapper) {
             return new Error<>(errors);
         }
 

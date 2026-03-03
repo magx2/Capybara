@@ -10,6 +10,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
+import static java.util.stream.Collectors.mapping;
 import static java.util.stream.Collectors.toSet;
 
 public class CapybaraParser {
@@ -98,8 +99,11 @@ public class CapybaraParser {
                 .map(CapybaraParser::type);
     }
 
-    private static Type type(pl.grzeslowski.capybara.parser.antlr.FunctionalParser.TypeContext functionDeclarationContext) {
-        return new Type(functionDeclarationContext.getText());
+    private static Type type(pl.grzeslowski.capybara.parser.antlr.FunctionalParser.TypeContext context) {
+        var name = context.getText();
+        return PrimitiveType.find(name)
+                .map(Type.class::cast)
+                .orElseGet(() -> new DataType(name));
     }
 
     private Expression expression(pl.grzeslowski.capybara.parser.antlr.FunctionalParser.ExpressionContext expression) {

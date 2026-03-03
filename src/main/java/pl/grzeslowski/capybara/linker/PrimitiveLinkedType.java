@@ -1,10 +1,12 @@
 package pl.grzeslowski.capybara.linker;
 
-import pl.grzeslowski.capybara.parser.Type;
+import java.util.Arrays;
+import java.util.Optional;
 
-public record PrimitiveLinkedType(String name) implements LinkedType {
-    public static final PrimitiveLinkedType INT = new PrimitiveLinkedType("int");
-    public static final PrimitiveLinkedType STRING = new PrimitiveLinkedType("string");
-    public static final PrimitiveLinkedType BOOL = new PrimitiveLinkedType("bool");
-    public static final PrimitiveLinkedType FLOAT = new PrimitiveLinkedType("float");
+public enum PrimitiveLinkedType implements LinkedType {
+    INT, STRING, BOOL, FLOAT;
+
+    public static Optional<PrimitiveLinkedType> find(String name) {
+        return Arrays.stream(values()).filter(x -> x.name().equals(name)).findAny();
+    }
 }
