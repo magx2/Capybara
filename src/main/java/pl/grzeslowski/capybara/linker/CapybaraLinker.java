@@ -5,7 +5,10 @@ import pl.grzeslowski.capybara.compiler.Program;
 import pl.grzeslowski.capybara.linker.LinkedFunction.LinkedFunctionParameter;
 import pl.grzeslowski.capybara.parser.*;
 
-import java.util.*;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 import static java.util.function.Function.identity;
 import static java.util.stream.Collectors.toMap;
@@ -28,7 +31,7 @@ public class CapybaraLinker {
         return types(module)
                 .flatMap(dataTypes ->
                         linkFunctions(findFunctions(module.functional().definitions()), dataTypes)
-                                .map(functions -> new LinkedModule(dataTypes, Set.copyOf(functions))));
+                                .map(functions -> new LinkedModule(module.name(), module.path(), dataTypes, Set.copyOf(functions))));
     }
 
     private List<Function> findFunctions(Set<Definition> definitions) {
