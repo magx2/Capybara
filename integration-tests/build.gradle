@@ -33,7 +33,7 @@ tasks.register('generateJavaFromCapybara', JavaExec) {
     mainClass = 'pl.grzeslowski.capybara.App'
 
     doFirst {
-        args 'JAVA', capybaraSourceDir.asFile.absolutePath, generatedJavaDir.get().asFile.absolutePath
+        args '--debug', 'JAVA', capybaraSourceDir.asFile.absolutePath, generatedJavaDir.get().asFile.absolutePath
     }
 }
 

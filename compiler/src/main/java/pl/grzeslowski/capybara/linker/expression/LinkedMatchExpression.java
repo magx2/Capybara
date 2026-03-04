@@ -1,16 +1,17 @@
-package pl.grzeslowski.capybara.parser;
+package pl.grzeslowski.capybara.linker.expression;
+
+import pl.grzeslowski.capybara.linker.LinkedType;
 
 import java.util.List;
 
-public record MatchExpression(Expression matchWith, List<MatchCase> cases) implements Expression {
-    public MatchExpression {
+public record LinkedMatchExpression(LinkedExpression matchWith, List<MatchCase> cases) implements LinkedExpression {
+    public LinkedMatchExpression {
         if (cases.isEmpty()) {
             throw new IllegalArgumentException("Match expression must have at least one case");
         }
-        // todo check if all cases have the same type
     }
 
-    public record MatchCase(Pattern pattern, Expression expression) {
+    public record MatchCase(Pattern pattern, LinkedExpression expression) {
     }
 
     public sealed interface Pattern {
@@ -36,5 +37,10 @@ public record MatchExpression(Expression matchWith, List<MatchCase> cases) imple
     }
 
     public record ConstructorPattern(String constructorName, List<String> names) implements Pattern {
+    }
+
+    @Override
+    public LinkedType type() {
+        throw new UnsupportedOperationException("WIP");
     }
 }

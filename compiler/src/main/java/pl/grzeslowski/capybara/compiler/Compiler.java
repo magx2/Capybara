@@ -126,7 +126,7 @@ public class Compiler {
                     // have to do toList to force the stream read files
                     .toList();
         } catch (IOException e) {
-            throw new UncheckedIOException("Unable to list files in directory: " + directory, e);
+            throw new UncheckedIOException("Unable to list files rest directory: " + directory, e);
         }
     }
 

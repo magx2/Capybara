@@ -3,6 +3,7 @@ package pl.grzeslowski.capybara.linker;
 import pl.grzeslowski.capybara.compiler.Module;
 import pl.grzeslowski.capybara.compiler.Program;
 import pl.grzeslowski.capybara.linker.LinkedFunction.LinkedFunctionParameter;
+import pl.grzeslowski.capybara.linker.expression.CapybaraExpressionLinker;
 import pl.grzeslowski.capybara.parser.*;
 
 import java.util.HashSet;
@@ -12,6 +13,7 @@ import java.util.Set;
 
 import static java.util.function.Function.identity;
 import static java.util.stream.Collectors.toMap;
+import static pl.grzeslowski.capybara.linker.CapybaraTypeLinker.linkType;
 
 public class CapybaraLinker {
     public static final CapybaraLinker INSTANCE = new CapybaraLinker();
@@ -51,33 +53,17 @@ public class CapybaraLinker {
     }
 
     private ValueOrError<LinkedFunction> linkFunction(Function function, Map<String, GenericDataType> dataTypes) {
-        var linkedTypeOrError = linkType(function.returnType(), dataTypes);
-        var linkedParametersOrError = linkParameters(function.parameters(), dataTypes);
-        var linkedExpressionOrError = linkExpression(function.expression(), dataTypes);
-
-        record TypeParameters(LinkedType type, List<LinkedFunctionParameter> parameters) {
-        }
-        var typeParameters = ValueOrError.join(
-                TypeParameters::new,
-                linkedTypeOrError,
-                linkedParametersOrError);
-
-        record TypeParametersExpression(LinkedType type, List<LinkedFunctionParameter> parameters,
-                                        LinkedExpression expression) {
-            public TypeParametersExpression(TypeParameters tp, LinkedExpression expression) {
-                this(tp.type, tp.parameters, expression);
-            }
-        }
-        var typeParametersExpression = ValueOrError.join(
-                TypeParametersExpression::new,
-                typeParameters,
-                linkedExpressionOrError);
-
-        return typeParametersExpression.map(tpe -> new LinkedFunction(function.name(), tpe.type, tpe.parameters, tpe.expression()));
-    }
-
-    private ValueOrError<LinkedExpression> linkExpression(Expression expression, Map<String, GenericDataType> dataTypes) {
-        return new ValueOrError.Value<>(new LinkedExpression(expression));
+        return linkType(function.returnType(), dataTypes)
+                .flatMap(rtype ->
+                        linkParameters(function.parameters(), dataTypes)
+                                .flatMap(parameters ->
+                                        new CapybaraExpressionLinker(parameters, dataTypes).linkExpression(function.expression())
+                                                .map(ex ->
+                                                        new LinkedFunction(
+                                                                function.name(),
+                                                                rtype,
+                                                                parameters,
+                                                                ex))));
     }
 
     private ValueOrError<List<LinkedFunctionParameter>> linkParameters(List<Parameter> parameters, Map<String, GenericDataType> dataTypes) {
@@ -92,36 +78,6 @@ public class CapybaraLinker {
     private ValueOrError<LinkedFunctionParameter> linkParameter(Parameter parameter, Map<String, GenericDataType> dataTypes) {
         return linkType(parameter.type(), dataTypes)
                 .map(type -> new LinkedFunctionParameter(parameter.name(), type));
-    }
-
-    private ValueOrError<? extends LinkedType> linkType(Type type, Map<String, GenericDataType> dataTypes) {
-        return switch (type) {
-            case PrimitiveType primitiveType -> new ValueOrError.Value<>(linkPrimitiveType(primitiveType));
-            case DataType dataType -> linkDataType(dataType, dataTypes);
-        };
-    }
-
-    @Deprecated
-    private ValueOrError<? extends LinkedType> linkType(Type type) {
-        // TODO proper mapping of types
-        return linkType(type, Map.of());
-    }
-
-    private ValueOrError<? extends LinkedType> linkDataType(DataType dataType, Map<String, GenericDataType> dataTypes) {
-        if (dataTypes.containsKey(dataType.name())) {
-            return new ValueOrError.Value<>(dataTypes.get(dataType.name()));
-        }
-
-        return new ValueOrError.Error<>("Data type \"" + dataType.name() + "\" not found");
-    }
-
-    private LinkedType linkPrimitiveType(PrimitiveType primitiveType) {
-        return switch (primitiveType) {
-            case INT -> PrimitiveLinkedType.INT;
-            case STRING -> PrimitiveLinkedType.STRING;
-            case BOOL -> PrimitiveLinkedType.BOOL;
-            case FLOAT -> PrimitiveLinkedType.FLOAT;
-        };
     }
 
     private ValueOrError<Map<String, GenericDataType>> types(Module module) {

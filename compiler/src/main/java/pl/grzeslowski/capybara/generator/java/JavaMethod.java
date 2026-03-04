@@ -1,6 +1,7 @@
 package pl.grzeslowski.capybara.generator.java;
 
-import pl.grzeslowski.capybara.linker.LinkedExpression;
+
+import pl.grzeslowski.capybara.linker.expression.LinkedExpression;
 
 import java.util.List;
 

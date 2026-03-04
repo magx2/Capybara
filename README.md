@@ -11,7 +11,21 @@ Extension: `.cfun`
 ```cfun
 fun main(params: list[string]): ProgramResult =
     let name = params | head | default("world")
-    return Success { result = Some { value = "Hello, " + name + "!" }}
+    yield Success { result = Some { value = "Hello, " + name + "!" }}
+
+// local aliases with let
+fun greeting(firstName: string, lastName: string): string =
+    let fullName = firstName + " " + lastName
+    yield "Hello, " + fullName
+
+fun score_label(score: int): string =
+    let normalized = score / 10
+    if normalized > 8 then "great"
+    else "ok"
+
+fun rectangle_area(width: float, height: float): float =
+    let area = width * height
+    yield area
  
 type ProgramResult = Success { result: Option[string] } | Failure { errorCode: int } 
  

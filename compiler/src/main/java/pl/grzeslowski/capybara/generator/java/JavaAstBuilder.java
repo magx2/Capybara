@@ -111,6 +111,7 @@ public class JavaAstBuilder {
             case STRING -> new JavaType("java.lang.String");
             case BOOL -> new JavaType("boolean");
             case FLOAT -> new JavaType("float");
+            case ANY -> new JavaType("java.lang.Object");
         };
     }
 

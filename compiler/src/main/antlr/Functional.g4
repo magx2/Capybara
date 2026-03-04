@@ -35,18 +35,17 @@ type: COLLECTION '[' type ']'
 TYPE: [A-Z][a-zA-Z0-9]*
       | TYPE_FULL ;
 TYPE_FULL: '/' [A-Z][a-zA-Z0-9]* ( '/' [A-Z][a-zA-Z0-9]* )*;
-expression: ifExpression
-            | functionCall
-            | '(' expression ')'
-            | expression infixOperator expression
-            | value
-            | newData
-            | matchExpression;
-boolExperssion: expression boolInfixOperator expression
-            | functionCall
-            | '(' boolExperssion ')'
-            | BOOL_LITERAL;
-ifExpression: 'if' boolExperssion 'then' expression 'else' expression;
+expression: letExpression* expressionNoLet;
+letExpression: 'let' NAME '=' expressionNoLet ';'?;
+expressionNoLet: ifExpression
+               | functionCall
+               | '(' expression ')'
+               | '{' expression '}'
+               | expressionNoLet infixOperator expressionNoLet
+               | value
+               | newData
+               | matchExpression;
+ifExpression: 'if' expression 'then' expression 'else' expression;
 functionCall: NAME '(' argumentList? ')';
 value: literal | NAME;
 argumentList: expression (',' expression)*;
@@ -73,21 +72,19 @@ fieldAssignmentList: fieldAssignment (',' fieldAssignment)*;
 fieldAssignment: NAME ':' expression
                 | '"' NAME '"' ':' expression;
 
-infixOperator: boolInfixOperator
-        | PLUS
-        | MINUS
-        | MUL
-        | DIV
-        | CARET;
-
-boolInfixOperator: GT
-        | LT
-        | EQUAL
-        | NOTEQUAL
-        | LE
-        | GE
-        | AND
-        | OR;
+infixOperator: PLUS
+             | MINUS
+             | MUL
+             | DIV
+             | CARET
+             | GT
+             | LT
+             | EQUAL
+             | NOTEQUAL
+             | LE
+             | GE
+             | AND
+             | OR;
 
 UNDERSCORE: '_';
 

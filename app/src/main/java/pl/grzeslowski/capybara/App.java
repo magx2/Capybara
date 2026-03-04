@@ -6,10 +6,22 @@ import pl.grzeslowski.capybara.compiler.OutputType;
 
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.Arrays;
+import java.util.logging.Handler;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 public class App {
     public static void main(String[] args) throws IOException {
-        Compiler.INSTANCE.compile(parseArguments(args));
+        var filteredArgs = Arrays.stream(args)
+                .filter(arg -> !"--debug".equals(arg))
+                .toArray(String[]::new);
+
+        if (filteredArgs.length != args.length) {
+            enableDebugLogging();
+        }
+
+        Compiler.INSTANCE.compile(parseArguments(filteredArgs));
     }
 
     private static Arguments parseArguments(String[] args) {
@@ -24,5 +36,13 @@ public class App {
                 .toList();
         var output = Path.of(args[args.length - 1]);
         return new Arguments(inputs, output, outputType);
+    }
+
+    private static void enableDebugLogging() {
+        var rootLogger = Logger.getLogger("");
+        rootLogger.setLevel(Level.FINE);
+        for (Handler handler : rootLogger.getHandlers()) {
+            handler.setLevel(Level.FINE);
+        }
     }
 }

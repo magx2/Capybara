@@ -2,7 +2,7 @@ package pl.grzeslowski.capybara.parser;
 
 public record StringValue(String stringValue) implements Expression {
     @Override
-    public Type type() {
-        return PrimitiveType.STRING;
+    public String toString() {
+        return stringValue;
     }
 }

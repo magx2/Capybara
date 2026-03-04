@@ -1,101 +1,148 @@
 package pl.grzeslowski.capybara.generator.java;
 
-import pl.grzeslowski.capybara.parser.*;
+import pl.grzeslowski.capybara.linker.expression.*;
 
-import static java.util.stream.Collectors.joining;
-import static pl.grzeslowski.capybara.parser.GenericOperator.CARET;
+import java.util.logging.Logger;
+
+import static java.lang.System.lineSeparator;
 
 public class JavaExpressionEvaluator {
-    public static String evaluateExpression(Expression expression) {
-        return switch (expression) {
-            case BoolExpression boolExpression -> evaluateBoolExpression(boolExpression);
-            case FloatValue floatValue -> evaluateFloatValue(floatValue);
-            case FunctionCall functionCall -> evaluateFunctionCall(functionCall);
-            case IfExpression ifExpression -> evaluateIfExpression(ifExpression);
-            case InfixExpression<?> infixExpression -> evaluateInfixExpression(infixExpression);
-            case IntValue intValue -> evaluateIntValue(intValue);
-            case MatchExpression matchExpression -> evaluateMatchExpression(matchExpression);
-            case NewData newData -> evaluateNewData(newData);
-            case StringValue stringValue -> evaluateStringValue(stringValue);
-            case Variable variable -> evaluateVariable(variable);
-        };
+    private static final Logger log = Logger.getLogger(JavaExpressionEvaluator.class.getName());
 
-    }
-
-    private static String evaluateBoolExpression(BoolExpression expression) {
-        return switch (expression) {
-            case BoolInfixExpression boolInfixExpression -> evaluateBoolInfixExpression(boolInfixExpression);
-            case BooleanValue booleanValue -> evaluateBooleanValue(booleanValue);
-        };
-    }
-
-    private static String evaluateBoolInfixExpression(BoolInfixExpression expression) {
-        return evaluateExpression(expression.left())
-               + " "
-               + expression.operator().symbol()
-               + " "
-               + evaluateExpression(expression.right());
-    }
-
-    private static String evaluateBooleanValue(BooleanValue expression) {
-        return switch (expression) {
-            case TRUE -> "true";
-            case FALSE -> "false";
-        };
-    }
-
-    private static String evaluateFloatValue(FloatValue expression) {
-        throw new UnsupportedOperationException("WIP");
-    }
-
-    private static String evaluateFunctionCall(FunctionCall expression) {
-        String arguments = expression.arguments().stream().map(JavaExpressionEvaluator::evaluateExpression).collect(joining(", "));
-        return expression.name() + "(" +
-               arguments +
-               ")";
-    }
-
-    private static String evaluateIfExpression(IfExpression expression) {
-        return "(" +
-               evaluateBoolExpression(expression.condition()) +
-               ") ? (" +
-               evaluateExpression(expression.thenBranch()) +
-               ") : (" +
-               evaluateExpression(expression.elseBranch()) +
-               ")";
-    }
-
-    private static String evaluateInfixExpression(InfixExpression<?> expression) {
-        if (expression.operator() == CARET) {
-            return "pl.grzeslowski.capybara.CapybaraUtil.power(" +
-                   evaluateExpression(expression.left()) +
-                   "," +
-                   evaluateExpression(expression.right()) +
-                   ")";
+    public static String evaluateExpression(LinkedExpression expression) {
+        log.fine(() -> "evaluateExpression: " + expression.getClass().getSimpleName() + " -> " + expression);
+        var scope = evaluateExpression(expression, Scope.EMPTY);
+        var statements = scope.getStatements();
+        var sb = new StringBuilder();
+        for (int idx = 0; idx <= statements.size() - 1; idx++) {
+            sb.append(statements.get(idx)).append(';').append(lineSeparator());
         }
-        return evaluateExpression(expression.left())
-               + " " + expression.operator().symbol()
-               + " " + evaluateExpression(expression.right());
-
+        sb.append("return ").append(scope.getExpression()).append(';').append(lineSeparator());
+        return sb.toString();
     }
 
-    private static String evaluateIntValue(IntValue expression) {
-        return expression.intValue();
+    private static Scope evaluateExpression(LinkedExpression expression, Scope scope) {
+        return switch (expression) {
+            case LinkedBooleanValue booleanValue -> evaluateBooleanValue(booleanValue, scope);
+            case LinkedFloatValue floatValue -> evaluateFloatValue(floatValue, scope);
+            case LinkedFunctionCall functionCall -> evaluateFunctionCall(functionCall, scope);
+            case LinkedIfExpression ifExpression -> evaluateIfExpression(ifExpression, scope);
+            case LinkedInfixExpression infixExpression -> evaluateInfixExpression(infixExpression, scope);
+            case LinkedIntValue intValue -> evaluateIntValue(intValue, scope);
+            case LinkedLetExpression letExpression -> evaluateLetExpression(letExpression, scope);
+            case LinkedMatchExpression matchExpression -> evaluateMatchExpression(matchExpression, scope);
+            case LinkedNewData newData -> evaluateNewData(newData, scope);
+            case LinkedStringValue stringValue -> evaluateStringValue(stringValue, scope);
+            case LinkedVariable variable -> evaluateVariable(variable, scope);
+        };
     }
 
-    private static String evaluateMatchExpression(MatchExpression expression) {
-        throw new UnsupportedOperationException("WIP");
+    private static Scope evaluateBooleanValue(LinkedBooleanValue booleanValue, Scope scope) {
+        throw new UnsupportedOperationException("wip");
     }
 
-    private static String evaluateNewData(NewData expression) {
-        throw new UnsupportedOperationException("WIP");
+    private static Scope evaluateFloatValue(LinkedFloatValue floatValue, Scope scope) {
+        return scope.addExpression(floatValue.floatValue());
     }
 
-    private static String evaluateStringValue(StringValue stringValue) {
-        return stringValue.stringValue();
+    private static Scope evaluateFunctionCall(LinkedFunctionCall functionCall, Scope scope) {
+        throw new UnsupportedOperationException("wip");
     }
 
-    private static String evaluateVariable(Variable variable) {
-        return variable.name();
+    private static Scope evaluateIfExpression(LinkedIfExpression expression, Scope scope) {
+        if (expression.condition() instanceof LinkedLetExpression letExpression) {
+            var expressionScope = evaluateExpression(letExpression.value(), scope);
+            var valueExSc = expressionScope.popExpression();
+            var lastExpression = valueExSc.expression();
+            var updatedStatements = valueExSc.scope().declareValue(letExpression.name(), lastExpression);
+
+            return evaluateIfExpression(
+                    new LinkedIfExpression(
+                            letExpression.rest(),
+                            expression.thenBranch(),
+                            expression.elseBranch(),
+                            expression.type()),
+                    updatedStatements);
+        }
+
+        if (expression.thenBranch() instanceof LinkedLetExpression letExpression) {
+            var expressionScope = evaluateExpression(letExpression.value(), scope);
+            var valueExSc = expressionScope.popExpression();
+            var lastExpression = valueExSc.expression();
+            var updatedStatements = valueExSc.scope().declareValue(letExpression.name(), lastExpression);
+
+            return evaluateIfExpression(
+                    new LinkedIfExpression(
+                            expression.condition(),
+                            letExpression.rest(),
+                            expression.elseBranch(),
+                            expression.type()),
+                    updatedStatements);
+        }
+        if (expression.elseBranch() instanceof LinkedLetExpression letExpression) {
+            var expressionScope = evaluateExpression(letExpression.value(), scope);
+            var valueExSc = expressionScope.popExpression();
+            var lastExpression = valueExSc.expression();
+            var updatedStatements = valueExSc.scope().declareValue(letExpression.name(), lastExpression);
+
+            return evaluateIfExpression(
+                    new LinkedIfExpression(
+                            expression.condition(),
+                            expression.thenBranch(),
+                            letExpression.rest(),
+                            expression.type()),
+                    updatedStatements);
+        }
+
+        var condition = evaluateExpression(expression.condition(), scope).popExpression();
+        var then = evaluateExpression(expression.thenBranch(), scope).popExpression();
+        var elseExSc = evaluateExpression(expression.elseBranch(), scope).popExpression();
+
+        return scope
+//                .add(condition.scope())
+//                .add(then.scope())
+//                .add(elseExSc.scope())
+                .addExpression("(%s) ? (%s) : (%s)".formatted(
+                        condition.expression(),
+                        then.expression(),
+                        elseExSc.expression()));
+    }
+
+    private static Scope evaluateInfixExpression(LinkedInfixExpression infixExpression, Scope scope) {
+        var left = evaluateExpression(infixExpression.left(), scope).popExpression();
+        var right = evaluateExpression(infixExpression.right(), scope).popExpression();
+
+        return scope
+//                .add(left.scope())
+//                .add(right.scope())
+                .addExpression(left.expression() + infixExpression.operator().symbol() + right.expression());
+    }
+
+    private static Scope evaluateIntValue(LinkedIntValue intValue, Scope scope) {
+        return scope.addExpression(intValue.intValue());
+    }
+
+    private static Scope evaluateLetExpression(LinkedLetExpression let, Scope scope) {
+        var valueScope = evaluateExpression(let.value(), scope);
+        var valueExSc = valueScope.popExpression();
+        var restScope = valueExSc.scope().declareValue(let.name(), valueExSc.expression());
+        return scope.add(evaluateExpression(let.rest(), restScope));
+    }
+
+    private static Scope evaluateMatchExpression(LinkedMatchExpression matchExpression, Scope scope) {
+        throw new UnsupportedOperationException("wip");
+    }
+
+    private static Scope evaluateNewData(LinkedNewData newData, Scope scope) {
+        throw new UnsupportedOperationException("wip");
+    }
+
+    private static Scope evaluateStringValue(LinkedStringValue stringValue, Scope scope) {
+        return scope.addExpression(stringValue.toString());
+    }
+
+    private static Scope evaluateVariable(LinkedVariable variable, Scope scope) {
+        var name = scope.findValueOverride(variable.name()).orElse(variable.name());
+        return scope.addExpression(name);
     }
 }

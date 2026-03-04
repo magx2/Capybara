@@ -10,7 +10,6 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
-import static java.util.stream.Collectors.mapping;
 import static java.util.stream.Collectors.toSet;
 
 public class CapybaraParser {
@@ -107,11 +106,25 @@ public class CapybaraParser {
     }
 
     private Expression expression(pl.grzeslowski.capybara.parser.antlr.FunctionalParser.ExpressionContext expression) {
+        var result = expressionNoLet(expression.expressionNoLet());
+        var letExpressions = expression.letExpression();
+        for (var i = letExpressions.size() - 1; i >= 0; i--) {
+            var letExpression = letExpressions.get(i);
+            result = new LetExpression(
+                    letExpression.NAME().getText(),
+                    expressionNoLet(letExpression.expressionNoLet()),
+                    result
+            );
+        }
+        return result;
+    }
+
+    private Expression expressionNoLet(pl.grzeslowski.capybara.parser.antlr.FunctionalParser.ExpressionNoLetContext expression) {
         if (expression.ifExpression() != null) {
             var ifExpression = expression.ifExpression();
-            var condition = boolExpression(ifExpression.boolExperssion());
-            var thenBranch = expression(ifExpression.expression(0));
-            var elseBranch = expression(ifExpression.expression(1));
+            var condition = expression(ifExpression.expression(0));
+            var thenBranch = expression(ifExpression.expression(1));
+            var elseBranch = expression(ifExpression.expression(2));
             return new IfExpression(condition, thenBranch, elseBranch);
         }
 
@@ -138,7 +151,7 @@ public class CapybaraParser {
             }
 
             if (value.NAME() != null) {
-                return new Variable(value.NAME().getText());
+                return new Value(value.NAME().getText());
             }
         }
 
@@ -154,13 +167,13 @@ public class CapybaraParser {
 
         var infixOperator = expression.infixOperator();
         if (infixOperator != null) {
-            var left = expression.expression(0);
-            var operator = GenericOperator.fromSymbol(infixOperator.getText());
-            var right = expression.expression(1);
-            return new GenericInfixExpression(expression(left), operator, expression(right));
+            var left = expression.expressionNoLet(0);
+            var operator = InfixOperator.fromSymbol(infixOperator.getText());
+            var right = expression.expressionNoLet(1);
+            return new InfixExpression(expressionNoLet(left), operator, expressionNoLet(right));
         }
 
-        var subExpression = expression.expression(0);
+        var subExpression = expression.expression();
         if (subExpression != null) {
             return expression(subExpression);
         }
@@ -241,21 +254,7 @@ public class CapybaraParser {
         return new NewData.FieldAssignment(context.NAME().getText(), expression(context.expression()));
     }
 
-    private BoolExpression boolExpression(pl.grzeslowski.capybara.parser.antlr.FunctionalParser.BoolExperssionContext context) {
-        if (context.BOOL_LITERAL() != null) {
-            return boolLiteral(context.BOOL_LITERAL());
-        }
-        if (context.boolInfixOperator() != null) {
-            var left = expression(context.expression(0));
-            var operator = BoolInfixOperator.fromSymbol(context.boolInfixOperator().getText());
-            var right = expression(context.expression(1));
-            return new BoolInfixExpression(left, operator, right);
-        }
-
-        throw new IllegalStateException("Unknown bool expression: " + context.getText());
-    }
-
-    private static BoolExpression boolLiteral(TerminalNode node) {
+    private static BooleanValue boolLiteral(TerminalNode node) {
         return switch (node.getText()) {
             case "true" -> BooleanValue.TRUE;
             case "false" -> BooleanValue.FALSE;

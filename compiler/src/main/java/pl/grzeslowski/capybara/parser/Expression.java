@@ -1,8 +1,4 @@
 package pl.grzeslowski.capybara.parser;
 
-import static java.util.Objects.requireNonNull;
-
-public sealed interface Expression permits BoolExpression, FloatValue, FunctionCall, IfExpression, InfixExpression, IntValue, MatchExpression, NewData, StringValue, Variable {
-    Type type();
+public sealed interface Expression permits BooleanValue, FloatValue, FunctionCall, IfExpression, InfixExpression, IntValue, LetExpression, MatchExpression, NewData, StringValue, Value {
 }
-

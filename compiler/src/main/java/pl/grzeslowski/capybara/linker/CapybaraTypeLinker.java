@@ -1,0 +1,40 @@
+package pl.grzeslowski.capybara.linker;
+
+import pl.grzeslowski.capybara.parser.DataType;
+import pl.grzeslowski.capybara.parser.PrimitiveType;
+import pl.grzeslowski.capybara.parser.Type;
+
+import java.util.Map;
+
+public class CapybaraTypeLinker {
+
+    public static ValueOrError<? extends LinkedType> linkType(Type type, Map<String, GenericDataType> dataTypes) {
+        return switch (type) {
+            case PrimitiveType primitiveType -> new ValueOrError.Value<>(linkPrimitiveType(primitiveType));
+            case DataType dataType -> linkDataType(dataType, dataTypes);
+        };
+    }
+
+    @Deprecated
+    public static ValueOrError<? extends LinkedType> linkType(Type type) {
+        // TODO proper mapping of types
+        return linkType(type, Map.of());
+    }
+
+    private static ValueOrError<? extends LinkedType> linkDataType(DataType dataType, Map<String, GenericDataType> dataTypes) {
+        if (dataTypes.containsKey(dataType.name())) {
+            return new ValueOrError.Value<>(dataTypes.get(dataType.name()));
+        }
+
+        return new ValueOrError.Error<>("Data type \"" + dataType.name() + "\" not found");
+    }
+
+    private static LinkedType linkPrimitiveType(PrimitiveType primitiveType) {
+        return switch (primitiveType) {
+            case INT -> PrimitiveLinkedType.INT;
+            case STRING -> PrimitiveLinkedType.STRING;
+            case BOOL -> PrimitiveLinkedType.BOOL;
+            case FLOAT -> PrimitiveLinkedType.FLOAT;
+        };
+    }
+}

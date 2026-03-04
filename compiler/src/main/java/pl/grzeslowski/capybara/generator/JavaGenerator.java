@@ -131,7 +131,7 @@ public final class JavaGenerator implements Generator {
     private String mapJavaMethod(JavaMethod method) {
         return "public static " + method.returnType() + " " + method.name()
                + "(" + mapFunctionParameters(method.parameters()) + ") {\n"
-               + "return " + evaluateExpression(method.expression().expression()) + ";"
+               + evaluateExpression(method.expression())
                + "\n}\n";
     }
 
