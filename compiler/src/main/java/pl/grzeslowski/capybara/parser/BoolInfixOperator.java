@@ -10,6 +10,10 @@ public enum BoolInfixOperator implements InfixOperator {
         this.symbol = symbol;
     }
 
+    public String symbol() {
+        return symbol;
+    }
+
     @Override
     public String toString() {
         return '"' + symbol + '"';

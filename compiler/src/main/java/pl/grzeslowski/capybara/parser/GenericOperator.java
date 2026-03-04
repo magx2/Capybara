@@ -26,4 +26,9 @@ public enum GenericOperator implements InfixOperator {
                 .findAny()
                 .orElseThrow(() -> new IllegalArgumentException("Unknown operator: " + symbol));
     }
+
+    @Override
+    public String symbol() {
+        return symbol;
+    }
 }

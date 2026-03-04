@@ -8,6 +8,7 @@ repositories {
 
 dependencies {
     implementation project(':compiler')
+    implementation project(':lib:java-lib')
 
     testImplementation 'org.assertj:assertj-core:3.27.6'
     testImplementation 'org.junit.jupiter:junit-jupiter:5.13.4'

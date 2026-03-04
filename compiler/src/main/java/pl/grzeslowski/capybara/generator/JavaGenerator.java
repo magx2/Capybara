@@ -1,7 +1,6 @@
 package pl.grzeslowski.capybara.generator;
 
 import pl.grzeslowski.capybara.generator.java.*;
-import pl.grzeslowski.capybara.linker.LinkedExpression;
 import pl.grzeslowski.capybara.linker.LinkedModule;
 import pl.grzeslowski.capybara.linker.LinkedProgram;
 
@@ -11,6 +10,7 @@ import java.util.Objects;
 
 import static java.lang.String.join;
 import static java.util.stream.Collectors.joining;
+import static pl.grzeslowski.capybara.generator.java.JavaExpressionEvaluator.evaluateExpression;
 
 public final class JavaGenerator implements Generator {
     private final JavaAstBuilder astBuilder = new JavaAstBuilder();
@@ -131,12 +131,8 @@ public final class JavaGenerator implements Generator {
     private String mapJavaMethod(JavaMethod method) {
         return "public static " + method.returnType() + " " + method.name()
                + "(" + mapFunctionParameters(method.parameters()) + ") {\n"
-               + expression(method.expression())
+               + "return " + evaluateExpression(method.expression().expression()) + ";"
                + "\n}\n";
-    }
-
-    private String expression(LinkedExpression expression) {
-        return "throw new java.lang.UnsupportedOperationException(\"WIP\");";
     }
 
     private String mapFunctionParameters(List<JavaMethod.JavaFunctionParameter> parameters) {
