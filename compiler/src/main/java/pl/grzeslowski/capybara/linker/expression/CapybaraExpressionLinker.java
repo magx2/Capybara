@@ -1,9 +1,6 @@
 package pl.grzeslowski.capybara.linker.expression;
 
-import pl.grzeslowski.capybara.linker.GenericDataType;
-import pl.grzeslowski.capybara.linker.LinkedFunction;
-import pl.grzeslowski.capybara.linker.LinkedType;
-import pl.grzeslowski.capybara.linker.ValueOrError;
+import pl.grzeslowski.capybara.linker.*;
 import pl.grzeslowski.capybara.parser.*;
 
 import java.util.List;
@@ -64,10 +61,7 @@ public class CapybaraExpressionLinker {
         return functionCall.arguments()
                 .stream()
                 .map((Expression expression) -> linkExpression(expression, scope))
-                .reduce(
-                        ValueOrError.<List<LinkedExpression>>success(List.of()),
-                        ValueOrError::joinWithList,
-                        ValueOrError::join)
+                .collect(new ValueOrErrorCollectionCollector<>())
                 .map(args -> new LinkedFunctionCall(
                         functionCall.name(),
                         args, // todo has to check if args are correct
@@ -129,10 +123,7 @@ public class CapybaraExpressionLinker {
         return assignments.stream()
                 .map(a -> linkExpression(a.value(), scope)
                         .map(ex -> new LinkedNewData.FieldAssignment(a.name(), ex)))
-                .reduce(
-                        ValueOrError.<List<LinkedNewData.FieldAssignment>>success(List.of()),
-                        ValueOrError::joinWithList,
-                        ValueOrError::join);
+                .collect(new ValueOrErrorCollectionCollector<>());
     }
 
     private ValueOrError<LinkedExpression> linkStringValue(StringValue value, Scope scope) {

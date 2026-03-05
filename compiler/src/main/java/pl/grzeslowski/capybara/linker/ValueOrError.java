@@ -20,7 +20,6 @@ public sealed interface ValueOrError<T> {
         return new Value<>(value);
     }
 
-
     static <T1, T2, OutT> ValueOrError<OutT> join(BiFunction<T1, T2, OutT> function, ValueOrError<T1> a, ValueOrError<T2> b) {
         if (a instanceof ValueOrError.Error<?> errorA && b instanceof ValueOrError.Error<?> errorB) {
             return Error.join(errorA.errors, errorB.errors);
