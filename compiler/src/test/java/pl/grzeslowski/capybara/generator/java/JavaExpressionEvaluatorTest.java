@@ -1,7 +1,8 @@
 package pl.grzeslowski.capybara.generator.java;
 
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import pl.grzeslowski.capybara.compiler.Module;
 import pl.grzeslowski.capybara.compiler.Program;
 import pl.grzeslowski.capybara.linker.*;
@@ -12,6 +13,7 @@ import java.util.List;
 import java.util.logging.Handler;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.stream.Stream;
 
 import static java.util.stream.Collectors.joining;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -25,24 +27,9 @@ class JavaExpressionEvaluatorTest {
         }
     }
 
-    @Test
-    @DisplayName("should evaluate wild if")
-    void wildIf() {
-        // given
-        var fun = """
-                fun some_if(x: int): int =
-                    let a = "unsued?"
-                    if ({
-                        let a = x * 2
-                        a > 2
-                    }) then {
-                        let a = x * x
-                        "I'm happy " + a
-                       } else {
-                        let a = x / 2
-                        "I'm not happy " + a
-                        }
-                """;
+    @ParameterizedTest(name = "{index}: should `{0}`")
+    @MethodSource
+    void wild(String name, String fun, String expected) {
         var functional = CapybaraParser.INSTANCE.parseFunctional(fun);
         var programValueOrError = CapybaraLinker.INSTANCE.link(new Program(List.of(new Module("test", "/foo/boo", functional))));
         if (programValueOrError instanceof ValueOrError.Error<LinkedProgram> er) {
@@ -56,7 +43,7 @@ class JavaExpressionEvaluatorTest {
                 .stream()
                 .map(LinkedModule::functions)
                 .flatMap(Collection::stream)
-                .filter(f -> f.name().equals("some_if"))
+                .filter(f -> f.name().equals(name))
                 .map(LinkedFunction::expression)
                 .peek(LinkedExpressionPrinter::printExpression)
                 .findAny()
@@ -67,13 +54,54 @@ class JavaExpressionEvaluatorTest {
         var evaluated = JavaExpressionEvaluator.evaluateExpression(expression);
 
         // then
-        assertThat(evaluated).isEqualToNormalizingNewlines("""
-                var a = "unsued?";
-                var a_j1 = x*2;
-                var a_j2 = x*x;
-                var a_j3 = x/2;
-                return (a_j1>2) ? ("I'm happy "+a_j2) : ("I'm not happy "+a_j3);
-                """);
+        assertThat(evaluated).isEqualToNormalizingNewlines(expected);
     }
+
+    static Stream<Arguments> wild() {
+        return Stream.of(
+                Arguments.of(
+                        "wild_if",
+                        """
+                                fun wild_if(x: int): int =
+                                    let a = "unsued?"
+                                    if ({
+                                        let a = x * 2
+                                        a > 2
+                                    }) then {
+                                        let a = x * x
+                                        "I'm happy " + a
+                                       } else {
+                                        let a = x / 2
+                                        "I'm not happy " + a
+                                        }
+                                """,
+                        """
+                                var a = "unsued?";
+                                var a_j1 = x*2;
+                                var a_j2 = x*x;
+                                var a_j3 = x/2;
+                                return (a_j1>2) ? ("I'm happy "+a_j2) : ("I'm not happy "+a_j3);
+                                """
+                ),
+                Arguments.of(
+                        "wild_infix",
+                        """
+                                fun wild_infix(a: int, b: int): int =
+                                    {
+                                        let x = a * 2
+                                        x
+                                    } / {
+                                        let x = if(b!=0) b else 1
+                                        x
+                                    }
+                                """,
+                        """
+                                var x_j1 = a *2;
+                                var x_j2 = b!=0 ? b :1;
+                                return x_j1 / x_j2;
+                                """)
+        );
+    }
+
 
 }

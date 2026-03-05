@@ -9,7 +9,7 @@ fun divide(a: int, b: int): int =
         x
     }
 
-fun some_if(x: int): int =
+fun some_if(x: int): string =
     if ({
         let a = x * 2
         a > 2
