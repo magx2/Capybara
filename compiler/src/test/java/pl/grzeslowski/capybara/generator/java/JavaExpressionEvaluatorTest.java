@@ -58,6 +58,7 @@ class JavaExpressionEvaluatorTest {
                 .flatMap(Collection::stream)
                 .filter(f -> f.name().equals("some_if"))
                 .map(LinkedFunction::expression)
+                .peek(LinkedExpressionPrinter::printExpression)
                 .findAny()
                 .orElseThrow();
 

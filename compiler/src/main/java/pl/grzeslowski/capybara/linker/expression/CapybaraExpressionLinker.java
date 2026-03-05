@@ -135,11 +135,11 @@ public class CapybaraExpressionLinker {
             // found local value
             // has to check if there were a rewrite
             String finalName;
-            if (scope.variableNameToUniqueName().containsKey(value.name())) {
-                finalName = scope.variableNameToUniqueName().get(value.name());
-            } else {
+//            if (scope.variableNameToUniqueName().containsKey(value.name())) {
+//                finalName = scope.variableNameToUniqueName().get(value.name());
+//            } else {
                 finalName = value.name();
-            }
+//            }
             LOG.fine("Value `" + value.name() + "` is already defined in local scope. Renaming it to `" + finalName + "`");
             return ValueOrError.success(new LinkedVariable(finalName, scope.localValues().get(value.name())));
         }
