@@ -10,7 +10,7 @@ public class CapybaraTypeLinker {
 
     public static ValueOrError<? extends LinkedType> linkType(Type type, Map<String, GenericDataType> dataTypes) {
         return switch (type) {
-            case PrimitiveType primitiveType -> new ValueOrError.Value<>(linkPrimitiveType(primitiveType));
+            case PrimitiveType primitiveType -> ValueOrError.success(linkPrimitiveType(primitiveType));
             case DataType dataType -> linkDataType(dataType, dataTypes);
         };
     }
@@ -23,10 +23,10 @@ public class CapybaraTypeLinker {
 
     private static ValueOrError<? extends LinkedType> linkDataType(DataType dataType, Map<String, GenericDataType> dataTypes) {
         if (dataTypes.containsKey(dataType.name())) {
-            return new ValueOrError.Value<>(dataTypes.get(dataType.name()));
+            return ValueOrError.success(dataTypes.get(dataType.name()));
         }
 
-        return new ValueOrError.Error<>("Data type \"" + dataType.name() + "\" not found");
+        return ValueOrError.error("Data type \"" + dataType.name() + "\" not found");
     }
 
     private static LinkedType linkPrimitiveType(PrimitiveType primitiveType) {

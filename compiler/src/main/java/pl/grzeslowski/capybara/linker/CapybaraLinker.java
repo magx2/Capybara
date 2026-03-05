@@ -23,7 +23,7 @@ public class CapybaraLinker {
                 .stream()
                 .map(this::linkModule)
                 .reduce(
-                        (ValueOrError<List<LinkedModule>>) new ValueOrError.Value<List<LinkedModule>>(List.of()),
+                        ValueOrError.<List<LinkedModule>>success(List.of()),
                         ValueOrError::joinWithList,
                         ValueOrError::join)
                 .map(LinkedProgram::new);
@@ -47,7 +47,7 @@ public class CapybaraLinker {
         return functions.stream()
                 .map(f -> linkFunction(f, dataTypes))
                 .reduce(
-                        (ValueOrError<List<LinkedFunction>>) new ValueOrError.Value<List<LinkedFunction>>(List.of()),
+                        ValueOrError.<List<LinkedFunction>>success(List.of()),
                         ValueOrError::joinWithList,
                         ValueOrError::join);
     }
@@ -70,7 +70,7 @@ public class CapybaraLinker {
         return parameters.stream()
                 .map(p -> linkParameter(p, dataTypes))
                 .reduce(
-                        (ValueOrError<List<LinkedFunctionParameter>>) new ValueOrError.Value<List<LinkedFunctionParameter>>(List.of()),
+                        ValueOrError.<List<LinkedFunctionParameter>>success(List.of()),
                         ValueOrError::joinWithList,
                         ValueOrError::join);
     }
@@ -85,12 +85,12 @@ public class CapybaraLinker {
                 .stream()
                 .map(this::linkDataDeclaration)
                 .reduce(
-                        (ValueOrError<List<LinkedDataType>>) new ValueOrError.Value<List<LinkedDataType>>(List.of()),
+                        ValueOrError.<List<LinkedDataType>>success(List.of()),
                         ValueOrError::joinWithList,
                         ValueOrError::join);
 
         if (dataDeclarationsOrError instanceof ValueOrError.Error<?> error) {
-            return new ValueOrError.Error<>(error.errors());
+            return ValueOrError.error(error.errors().stream().map(ValueOrError.Error.SingleError::message).toList());
         }
         var dataDeclarations = ((ValueOrError.Value<List<LinkedDataType>>) dataDeclarationsOrError).value();
 
@@ -98,12 +98,12 @@ public class CapybaraLinker {
                 .stream()
                 .map(typeDeclaration -> linkTypeDeclaration(typeDeclaration, dataDeclarations))
                 .reduce(
-                        (ValueOrError<List<LinkedDataParentType>>) new ValueOrError.Value<List<LinkedDataParentType>>(List.of()),
+                        ValueOrError.<List<LinkedDataParentType>>success(List.of()),
                         ValueOrError::joinWithList,
                         ValueOrError::join);
 
         if (typeDeclarationsOrError instanceof ValueOrError.Error<?> error) {
-            return new ValueOrError.Error<>(error.errors());
+            return ValueOrError.error(error.errors().stream().map(ValueOrError.Error.SingleError::message).toList());
         }
         var typeDeclarations = ((ValueOrError.Value<List<LinkedDataParentType>>) typeDeclarationsOrError).value();
 
@@ -111,7 +111,7 @@ public class CapybaraLinker {
         set.addAll(dataDeclarations);
         set.addAll(typeDeclarations);
         var map = set.stream().collect(toMap(GenericDataType::name, identity()));
-        return new ValueOrError.Value<>(map);
+        return ValueOrError.success(map);
     }
 
     private ValueOrError<LinkedDataType> linkDataDeclaration(DataDeclaration dataDeclaration) {
@@ -119,7 +119,7 @@ public class CapybaraLinker {
                 .stream()
                 .map(this::linkField)
                 .reduce(
-                        (ValueOrError<List<LinkedDataType.LinkedField>>) new ValueOrError.Value<List<LinkedDataType.LinkedField>>(List.of()),
+                        ValueOrError.<List<LinkedDataType.LinkedField>>success(List.of()),
                         ValueOrError::joinWithList,
                         ValueOrError::join)
                 .map(fields -> new LinkedDataType(dataDeclaration.name(), fields));
@@ -140,7 +140,7 @@ public class CapybaraLinker {
                 .stream()
                 .map(this::linkField)
                 .reduce(
-                        (ValueOrError<List<LinkedDataType.LinkedField>>) new ValueOrError.Value<List<LinkedDataType.LinkedField>>(List.of()),
+                        ValueOrError.<List<LinkedDataType.LinkedField>>success(List.of()),
                         ValueOrError::joinWithList,
                         ValueOrError::join)
                 .map(fields -> new LinkedDataParentType(typeDeclaration.name(),
@@ -154,12 +154,12 @@ public class CapybaraLinker {
                 .map(key -> {
                     var dataType = dataTypesMap.get(key);
                     if (dataType == null) {
-                        return new ValueOrError.Error<LinkedDataType>("Type " + key + " not found");
+                        return ValueOrError.<LinkedDataType>error("Type " + key + " not found");
                     }
-                    return new ValueOrError.Value<>(dataType);
+                    return ValueOrError.success(dataType);
                 })
                 .reduce(
-                        (ValueOrError<List<LinkedDataType>>) new ValueOrError.Value<List<LinkedDataType>>(List.of()),
+                        ValueOrError.<List<LinkedDataType>>success(List.of()),
                         ValueOrError::joinWithList,
                         ValueOrError::join);
     }

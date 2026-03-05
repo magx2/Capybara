@@ -1,12 +1,26 @@
 package pl.grzeslowski.capybara.linker;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.stream.Stream;
 
 public sealed interface ValueOrError<T> {
+    static <T> ValueOrError<T> error(List<String> msgs) {
+        return new Error<>(msgs.stream().map(Error.SingleError::new).toList());
+    }
+
+    static <T> ValueOrError<T> error(String... msgs) {
+        return error(Arrays.stream(msgs).toList());
+    }
+
+    static <T> ValueOrError<T> success(T value) {
+        return new Value<>(value);
+    }
+
+
     static <T1, T2, OutT> ValueOrError<OutT> join(BiFunction<T1, T2, OutT> function, ValueOrError<T1> a, ValueOrError<T2> b) {
         if (a instanceof ValueOrError.Error<?> errorA && b instanceof ValueOrError.Error<?> errorB) {
             return Error.join(errorA.errors, errorB.errors);
@@ -37,7 +51,7 @@ public sealed interface ValueOrError<T> {
         var valueA = ((ValueOrError.Value<List<T>>) a).value().stream();
         var valueB = ((ValueOrError.Value<List<T>>) b).value().stream();
         var concat = Stream.concat(valueA, valueB).toList();
-        return new ValueOrError.Value<>(concat);
+        return ValueOrError.success(concat);
     }
 
     static <T> ValueOrError<List<T>> joinWithList(ValueOrError<List<T>> list, ValueOrError<T> single) {
@@ -46,13 +60,13 @@ public sealed interface ValueOrError<T> {
         }
 
         if (single instanceof ValueOrError.Error<?>) {
-            return new ValueOrError.Error<>(((ValueOrError.Error<?>) single).errors());
+            return ValueOrError.error(((ValueOrError.Error<?>) single).errors().stream().map(ValueOrError.Error.SingleError::message).toList());
         }
 
         var listValue = ((ValueOrError.Value<List<T>>) list).value();
         var singleValue = ((ValueOrError.Value<T>) single).value();
         var concat = Stream.concat(listValue.stream(), Stream.of(singleValue)).toList();
-        return new ValueOrError.Value<>(concat);
+        return ValueOrError.success(concat);
     }
 
     <U> ValueOrError<U> map(java.util.function.Function<? super T, ? extends U> mapper);

@@ -47,7 +47,7 @@ public class CapybaraExpressionLinker {
     }
 
     private ValueOrError<LinkedExpression> linkBooleanValue(BooleanValue booleanValue, Scope scope) {
-        return new ValueOrError.Value<>(
+        return ValueOrError.success(
                 switch (booleanValue) {
                     case TRUE -> LinkedBooleanValue.TRUE;
                     case FALSE -> LinkedBooleanValue.FALSE;
@@ -55,7 +55,7 @@ public class CapybaraExpressionLinker {
     }
 
     private ValueOrError<LinkedExpression> linkFloatValue(FloatValue floatValue, Scope scope) {
-        return new ValueOrError.Value<>(new LinkedFloatValue(floatValue.floatValue()));
+        return ValueOrError.success(new LinkedFloatValue(floatValue.floatValue()));
     }
 
     private ValueOrError<LinkedExpression> linkFunctionCall(FunctionCall functionCall, Scope scope) {
@@ -65,7 +65,7 @@ public class CapybaraExpressionLinker {
                 .stream()
                 .map((Expression expression) -> linkExpression(expression, scope))
                 .reduce(
-                        (ValueOrError<List<LinkedExpression>>) new ValueOrError.Value<List<LinkedExpression>>(List.of()),
+                        ValueOrError.<List<LinkedExpression>>success(List.of()),
                         ValueOrError::joinWithList,
                         ValueOrError::join)
                 .map(args -> new LinkedFunctionCall(
@@ -79,7 +79,7 @@ public class CapybaraExpressionLinker {
         return linkExpression(ifExpression.condition(), scope)
                 .flatMap(c -> {
                     if (c.type() != BOOL) {
-                        return new ValueOrError.Error<>("condition in if statement has to have type `" + BOOL + "`, was `" + c.type() + "`");
+                        return ValueOrError.error("condition in if statement has to have type `" + BOOL + "`, was `" + c.type() + "`");
                     }
                     return linkExpression(ifExpression.thenBranch(), scope)
                             .flatMap(t ->
@@ -106,7 +106,7 @@ public class CapybaraExpressionLinker {
     }
 
     private ValueOrError<LinkedExpression> linkIntValue(IntValue intValue, Scope scope) {
-        return new ValueOrError.Value<>(new LinkedIntValue(intValue.intValue()));
+        return ValueOrError.success(new LinkedIntValue(intValue.intValue()));
     }
 
     private ValueOrError<LinkedExpression> linkMatchExpression(MatchExpression matchExpression, Scope scope) {
@@ -130,13 +130,13 @@ public class CapybaraExpressionLinker {
                 .map(a -> linkExpression(a.value(), scope)
                         .map(ex -> new LinkedNewData.FieldAssignment(a.name(), ex)))
                 .reduce(
-                        (ValueOrError<List<LinkedNewData.FieldAssignment>>) new ValueOrError.Value<List<LinkedNewData.FieldAssignment>>(List.of()),
+                        ValueOrError.<List<LinkedNewData.FieldAssignment>>success(List.of()),
                         ValueOrError::joinWithList,
                         ValueOrError::join);
     }
 
     private ValueOrError<LinkedExpression> linkStringValue(StringValue value, Scope scope) {
-        return new ValueOrError.Value<>(new LinkedStringValue(value.stringValue()));
+        return ValueOrError.success(new LinkedStringValue(value.stringValue()));
     }
 
     private ValueOrError<LinkedExpression> linkValue(Value value, Scope scope) {
@@ -150,14 +150,14 @@ public class CapybaraExpressionLinker {
                 finalName = value.name();
             }
             LOG.fine("Value `" + value.name() + "` is already defined in local scope. Renaming it to `" + finalName + "`");
-            return new ValueOrError.Value<>(new LinkedVariable(finalName, scope.localValues().get(value.name())));
+            return ValueOrError.success(new LinkedVariable(finalName, scope.localValues().get(value.name())));
         }
         return parameters.stream()
                 .filter(parameter -> parameter.name().equals(value.name()))
                 .findAny()
                 .map(p -> new LinkedVariable(p.name(), p.type()))
-                .map(v -> (ValueOrError<LinkedExpression>) new ValueOrError.Value<LinkedExpression>(v))
-                .orElseGet(() -> new ValueOrError.Error<>("Variable " + value.name() + " not found"));
+                .map(ValueOrError::<LinkedExpression>success)
+                .orElseGet(() -> ValueOrError.error("Variable " + value.name() + " not found"));
     }
 
     private ValueOrError<LinkedExpression> linkLetExpression(LetExpression expression, Scope scope) {
