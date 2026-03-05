@@ -1,11 +1,14 @@
 package pl.grzeslowski.capybara.generator.java;
 
+import pl.grzeslowski.capybara.linker.expression.LinkedExpression;
+
 import java.util.*;
 import java.util.logging.Logger;
 import java.util.regex.Pattern;
 
 import static java.lang.Long.parseLong;
 import static java.util.function.Predicate.not;
+import static pl.grzeslowski.capybara.generator.java.ValueNameRewriter.rewriteValueInExpression;
 
 @SuppressWarnings("OptionalUsedAsFieldOrParameterType")
 class Scope {
@@ -31,18 +34,19 @@ class Scope {
         this.expression = expression;
     }
 
-    public UniqueNameScope addValue(String name) {
+    UniqueNameScopeExpression addValue(String name, LinkedExpression expression) {
         return Optional.of(name)
                 .filter(not(localValues::contains))
                 .map(n -> {
                     var updatedValues = new HashSet<>(localValues);
                     updatedValues.add(name);
-                    return new UniqueNameScope(
+                    return new UniqueNameScopeExpression(
                             n,
-                            new Scope(valueIdx, updatedValues, valueNameToUniqueName, statements, expression)
+                            new Scope(valueIdx, updatedValues, valueNameToUniqueName, statements, this.expression),
+                            expression
                     );
                 })
-                .orElseGet(() -> findUniqueName(name));
+                .orElseGet(() -> generateUniqueName(name, expression));
 /*
         var updatedVariableNameToUniqueName = new HashMap<>(valueNameToUniqueName);
         var scope = this;
@@ -78,12 +82,12 @@ class Scope {
         return new Scope(valueIdx, localValues, valueNameToUniqueName, statements, Optional.of(expression));
     }
 
-    private record UniqueNameScope(String uniqueName, Scope scope) {
+    private record UniqueNameScopeExpression(String uniqueName, Scope scope, LinkedExpression expression) {
     }
 
-    private UniqueNameScope findUniqueName(String name) {
+    private UniqueNameScopeExpression generateUniqueName(String name, LinkedExpression expression) {
         if (!localValues.contains(name)) {
-            return new UniqueNameScope(name, this);
+            throw new IllegalStateException("Name `%s` should be in `localValues`: %s".formatted(name, localValues));
         }
         var idx = valueIdx;
         var rawName = name;
@@ -99,14 +103,16 @@ class Scope {
         set.add(uniqueName);
         var map = new HashMap<>(valueNameToUniqueName);
         map.put(name, uniqueName);
-        return new UniqueNameScope(
+        return new UniqueNameScopeExpression(
                 uniqueName,
                 new Scope(
                         valueIdx + 1,
                         set,
                         map,
                         statements,
-                        expression));
+                        this.expression),
+                rewriteValueInExpression(name, uniqueName, expression)
+        );
     }
 
     public List<String> getStatements() {
@@ -154,9 +160,14 @@ class Scope {
         return Optional.ofNullable(valueNameToUniqueName.get(name));
     }
 
-    public Scope declareValue(String name, String lastExpression) {
-        var uniqueNameScope = addValue(name);
-        return uniqueNameScope.scope.addStatementUnchecked("var %s = %s".formatted(uniqueNameScope.uniqueName, lastExpression));
+    record ScopeExpression(Scope scope, LinkedExpression expression) {
+    }
+
+    ScopeExpression declareValue(String name, String lastExpression, LinkedExpression expression) {
+        var unique = addValue(name, expression);
+        return new ScopeExpression(
+                unique.scope.addStatementUnchecked("var %s = %s".formatted(unique.uniqueName, lastExpression)),
+                unique.expression);
     }
 
     public record ExpressionScope(String expression, Scope scope) {
