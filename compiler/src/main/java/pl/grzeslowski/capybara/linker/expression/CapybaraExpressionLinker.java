@@ -22,15 +22,18 @@ public class CapybaraExpressionLinker {
     private final List<LinkedFunction.LinkedFunctionParameter> parameters;
     private final Map<String, GenericDataType> dataTypes;
     private final List<FunctionSignature> functionSignatures;
+    private final Map<String, List<FunctionSignature>> functionSignaturesByModule;
 
     public CapybaraExpressionLinker(
             List<LinkedFunction.LinkedFunctionParameter> parameters,
             Map<String, GenericDataType> dataTypes,
-            List<FunctionSignature> functionSignatures
+            List<FunctionSignature> functionSignatures,
+            Map<String, List<FunctionSignature>> functionSignaturesByModule
     ) {
         this.parameters = parameters;
         this.dataTypes = dataTypes;
         this.functionSignatures = functionSignatures;
+        this.functionSignaturesByModule = functionSignaturesByModule;
     }
 
     public ValueOrError<LinkedExpression> linkExpression(Expression expression) {
@@ -100,11 +103,72 @@ public class CapybaraExpressionLinker {
     }
 
     private ValueOrError<LinkedExpression> linkFunctionCall(FunctionCall functionCall, Scope scope) {
+        if (functionCall.moduleName().isPresent()) {
+            return resolveQualifiedFunctionCall(functionCall, scope);
+        }
         var functionVariable = resolveFunctionVariable(functionCall.name(), scope);
         if (functionVariable.isPresent()) {
             return resolveFunctionInvoke(functionCall, scope, functionVariable.get());
         }
         return resolveGlobalFunctionCall(functionCall, scope);
+    }
+
+    private ValueOrError<LinkedExpression> resolveQualifiedFunctionCall(FunctionCall functionCall, Scope scope) {
+        var moduleName = functionCall.moduleName().orElseThrow();
+        var signatures = functionSignaturesByModule.get(moduleName);
+        if (signatures == null) {
+            return withPosition(
+                    ValueOrError.error("Unknown module `" + moduleName + "` in call `" + moduleName + "." + functionCall.name() + "`"),
+                    functionCall.position()
+            );
+        }
+
+        var candidates = signatures.stream()
+                .filter(signature -> signature.name().equals(functionCall.name()))
+                .filter(signature -> signature.parameterTypes().size() == functionCall.arguments().size())
+                .toList();
+        if (candidates.isEmpty()) {
+            return withPosition(
+                    ValueOrError.error(
+                            "Module `" + moduleName + "` has no function `" + functionCall.name() + "` with "
+                            + functionCall.arguments().size() + " argument(s)"
+                    ),
+                    functionCall.position()
+            );
+        }
+
+        ResolvedFunctionCall best = null;
+        for (var candidate : candidates) {
+            var maybeResolved = linkArgumentsForExpectedTypes(functionCall.arguments(), scope, candidate.parameterTypes());
+            if (!(maybeResolved instanceof ValueOrError.Value<CoercedArguments> resolvedValue)) {
+                continue;
+            }
+            var resolved = resolvedValue.value();
+            if (best == null || resolved.coercions() < best.coercions()) {
+                best = new ResolvedFunctionCall(candidate, resolved.arguments(), resolved.coercions());
+            }
+        }
+        if (best == null) {
+            var actualTypes = new java.util.ArrayList<String>();
+            for (var argument : functionCall.arguments()) {
+                var linked = linkExpression(argument, scope);
+                if (linked instanceof ValueOrError.Value<LinkedExpression> value) {
+                    actualTypes.add(value.value().type().name());
+                }
+            }
+            return withPosition(
+                    ValueOrError.error(
+                            "No matching function `" + moduleName + "." + functionCall.name() + "` for argument types " + actualTypes
+                    ),
+                    functionCall.position()
+            );
+        }
+
+        return ValueOrError.success(new LinkedFunctionCall(
+                moduleName + "." + functionCall.name(),
+                best.arguments(),
+                best.signature().returnType()
+        ));
     }
 
     private ValueOrError<LinkedExpression> resolveGlobalFunctionCall(FunctionCall functionCall, Scope scope) {

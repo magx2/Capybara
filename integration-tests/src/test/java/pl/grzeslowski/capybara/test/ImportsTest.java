@@ -17,5 +17,7 @@ class ImportsTest {
                 .isEqualTo(4);
         assertThat(pl.grzeslowski.capybara.test.imports.Main.calculator(2, 3, "%"))
                 .isEqualTo(1);
+        assertThat(pl.grzeslowski.capybara.test.imports.Main.calculator(15, 0, "p3"))
+                .isEqualTo(100);
     }
 }

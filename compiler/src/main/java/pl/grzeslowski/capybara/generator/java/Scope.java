@@ -99,7 +99,6 @@ class Scope {
             throw new IllegalStateException("Name `%s` should be in `localValues`: %s".formatted(name, localValues));
         }
         var idx = valueIdx;
-        var rawName = name;
         var matcher = LAST_NUMBER_PATTERN.matcher(name);
         if (matcher.matches()) {
             idx = parseLong(matcher.group(2));
@@ -122,6 +121,12 @@ class Scope {
                         this.expression),
                 rewriteValueInExpression(name, uniqueName, expression)
         );
+    }
+
+    Scope addValueOverride(String sourceName, String targetName) {
+        var updatedMap = new HashMap<>(valueNameToUniqueName);
+        updatedMap.put(sourceName, targetName);
+        return new Scope(valueIdx, localValues, updatedMap, statements, expression);
     }
 
     public List<String> getStatements() {

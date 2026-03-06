@@ -520,7 +520,8 @@ public class CapybaraParser {
         var arguments = context.argumentList() == null
                 ? List.<Expression>of()
                 : context.argumentList().expression().stream().map(this::expression).toList();
-        return new FunctionCall(identifier(context.identifier()), arguments, position(context));
+        var moduleName = context.TYPE() == null ? Optional.<String>empty() : Optional.of(context.TYPE().getText());
+        return new FunctionCall(moduleName, identifier(context.identifier()), arguments, position(context));
     }
 
     private Expression newListExpression(pl.grzeslowski.capybara.parser.antlr.FunctionalParser.New_listContext context) {

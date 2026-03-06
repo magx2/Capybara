@@ -79,7 +79,8 @@ expressionNoLetNoPipe: ifExpression
                      | matchExpression;
 ifExpression: 'if' expression 'then' expression 'else' expression;
 functionReference: COLON identifier;
-functionCall: identifier '(' argumentList? ')';
+functionCall: identifier '(' argumentList? ')'
+            | TYPE DOT identifier '(' argumentList? ')';
 value: literal | identifier;
 argumentList: expression (',' expression)*;
 literal: INT_LITERAL | BOOL_LITERAL | STRING_LITERAL | FLOAT_LITERAL;

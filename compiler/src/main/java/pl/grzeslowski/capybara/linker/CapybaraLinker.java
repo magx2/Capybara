@@ -71,7 +71,7 @@ public class CapybaraLinker {
             return ValueOrError.error(error.errors().stream().map(ValueOrError.Error.SingleError::message).toList());
         }
         var initialSignatures = ((ValueOrError.Value<List<CapybaraExpressionLinker.FunctionSignature>>) availableSignatures).value();
-        return linkFunctions(functions, dataTypes, initialSignatures);
+        return linkFunctions(functions, dataTypes, initialSignatures, signaturesByModule);
     }
 
     private ValueOrError<LinkedModule> linkModule(
@@ -87,14 +87,14 @@ public class CapybaraLinker {
             return ValueOrError.error(error.errors().stream().map(ValueOrError.Error.SingleError::message).toList());
         }
         var initialSignatures = ((ValueOrError.Value<List<CapybaraExpressionLinker.FunctionSignature>>) availableSignatures).value();
-        return linkFunctions(functions, dataTypes, initialSignatures)
+        return linkFunctions(functions, dataTypes, initialSignatures, signaturesByModule)
                 .flatMap(firstPassFunctions -> {
                     var refinedSignatures = mergeSignatures(
                             signaturesByModule.get(module.name()),
                             signaturesFromLinkedFunctions(firstPassFunctions)
                     );
                     var refinedAvailableSignatures = mergeSignatures(initialSignatures, refinedSignatures);
-                    return linkFunctions(functions, dataTypes, refinedAvailableSignatures)
+                    return linkFunctions(functions, dataTypes, refinedAvailableSignatures, signaturesByModule)
                             .map(linkedFunctions -> new LinkedModule(
                                     module.name(),
                                     module.path(),
@@ -204,21 +204,23 @@ public class CapybaraLinker {
     private ValueOrError<List<LinkedFunction>> linkFunctions(
             List<Function> functions,
             Map<String, GenericDataType> dataTypes,
-            List<CapybaraExpressionLinker.FunctionSignature> signatures
+            List<CapybaraExpressionLinker.FunctionSignature> signatures,
+            Map<String, List<CapybaraExpressionLinker.FunctionSignature>> signaturesByModule
     ) {
         return functions.stream()
-                .map(f -> linkFunction(f, dataTypes, signatures))
+                .map(f -> linkFunction(f, dataTypes, signatures, signaturesByModule))
                 .collect(new ValueOrErrorCollectionCollector<>());
     }
 
     private ValueOrError<LinkedFunction> linkFunction(
             Function function,
             Map<String, GenericDataType> dataTypes,
-            List<CapybaraExpressionLinker.FunctionSignature> signatures
+            List<CapybaraExpressionLinker.FunctionSignature> signatures,
+            Map<String, List<CapybaraExpressionLinker.FunctionSignature>> signaturesByModule
     ) {
         var linked = linkParameters(function.parameters(), dataTypes)
                 .flatMap(parameters ->
-                        new CapybaraExpressionLinker(parameters, dataTypes, signatures).linkExpression(function.expression())
+                        new CapybaraExpressionLinker(parameters, dataTypes, signatures, signaturesByModule).linkExpression(function.expression())
                                 .flatMap(ex ->
                                         function.returnType()
                                                 .map(type -> {

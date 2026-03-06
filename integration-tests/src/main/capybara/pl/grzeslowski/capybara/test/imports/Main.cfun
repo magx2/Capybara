@@ -10,4 +10,8 @@ fun calculator(a: int, b: int, op: string) =
     then multiply(a,b)
     else if op == "/"
     then divide(a,b)
+    else if op == "p3"
+    then Pck3.foo_boo(a>10, a<20)
     else empty(a+b)
+
+fun what_to_do(x: int) = Pck3.foo_boo(x>10, x<20)

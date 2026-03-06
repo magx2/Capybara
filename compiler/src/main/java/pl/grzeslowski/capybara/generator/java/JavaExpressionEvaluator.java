@@ -3,6 +3,7 @@ package pl.grzeslowski.capybara.generator.java;
 import pl.grzeslowski.capybara.linker.expression.*;
 
 import java.util.ArrayList;
+import java.util.List;
 import java.util.logging.Logger;
 
 import static java.lang.System.lineSeparator;
@@ -23,6 +24,21 @@ public class JavaExpressionEvaluator {
     public static String evaluateExpression(LinkedExpression expression) {
         log.fine(() -> "evaluateExpression: " + expression.getClass().getSimpleName() + " -> " + expression);
         var scope = evaluateExpression(expression, Scope.EMPTY);
+        return expressionToJava(scope);
+    }
+
+    public static String evaluateExpression(LinkedExpression expression, List<JavaMethod.JavaFunctionParameter> parameters) {
+        log.fine(() -> "evaluateExpression: " + expression.getClass().getSimpleName() + " -> " + expression);
+        var scope = Scope.EMPTY;
+        for (var parameter : parameters) {
+            scope = scope.addLocalValue(parameter.sourceName())
+                    .addValueOverride(parameter.sourceName(), parameter.generatedName());
+        }
+        var evaluatedScope = evaluateExpression(expression, scope);
+        return expressionToJava(evaluatedScope);
+    }
+
+    private static String expressionToJava(Scope scope) {
         var statements = scope.getStatements();
         var sb = new StringBuilder();
         for (int idx = 0; idx <= statements.size() - 1; idx++) {
@@ -87,7 +103,7 @@ public class JavaExpressionEvaluator {
                 }
                 yield "((float) java.lang.Math.sqrt(" + args.get(0) + "))";
             }
-            default -> normalizeJavaMethodName(functionCall.name()) + "(" + String.join(", ", args) + ")";
+            default -> normalizeFunctionCallTarget(functionCall.name()) + "(" + String.join(", ", args) + ")";
         };
         return current.addExpression(expression);
     }
@@ -497,4 +513,15 @@ public class JavaExpressionEvaluator {
         }
         return identifier;
     }
+
+    private static String normalizeFunctionCallTarget(String target) {
+        var lastDot = target.lastIndexOf('.');
+        if (lastDot < 0) {
+            return normalizeJavaMethodName(target);
+        }
+        var qualifier = target.substring(0, lastDot);
+        var methodName = target.substring(lastDot + 1);
+        return qualifier + "." + normalizeJavaMethodName(methodName);
+    }
+
 }

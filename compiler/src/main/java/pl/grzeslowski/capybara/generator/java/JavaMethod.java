@@ -10,6 +10,6 @@ public record JavaMethod(
         JavaType returnType,
         List<JavaFunctionParameter> parameters,
         LinkedExpression expression) {
-    public record JavaFunctionParameter(JavaType type, String name) {
+    public record JavaFunctionParameter(JavaType type, String sourceName, String generatedName) {
     }
 }

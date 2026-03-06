@@ -166,12 +166,47 @@ public class JavaAstBuilder {
     private JavaMethod.JavaFunctionParameter buildJavaFunctionParameter(LinkedFunction.LinkedFunctionParameter parameter) {
         return new JavaMethod.JavaFunctionParameter(
                 buildJavaType(parameter.type()),
+                parameter.name(),
                 buildJavaFunctionParameterName(parameter.name())
         );
     }
 
     private String buildJavaFunctionParameterName(String name) {
-        return normalizeJavaIdentifier(name, false);
+        return normalizeJavaVariableName(name);
+    }
+
+    private String normalizeJavaVariableName(String name) {
+        var parts = Stream.of(name.split("[^A-Za-z0-9]+"))
+                .filter(part -> !part.isEmpty())
+                .toList();
+
+        var result = new StringBuilder();
+        var first = true;
+        for (var part : parts) {
+            if (first) {
+                result.append(Character.toLowerCase(part.charAt(0)));
+                if (part.length() > 1) {
+                    result.append(part.substring(1));
+                }
+                first = false;
+            } else {
+                result.append(Character.toUpperCase(part.charAt(0)));
+                if (part.length() > 1) {
+                    result.append(part.substring(1));
+                }
+            }
+        }
+        if (result.isEmpty()) {
+            result.append("value");
+        }
+        if (!Character.isJavaIdentifierStart(result.charAt(0))) {
+            result.insert(0, 'v');
+        }
+        var identifier = result.toString();
+        if (JAVA_KEYWORDS.contains(identifier)) {
+            return identifier + "_";
+        }
+        return identifier;
     }
 
     private static String normalizeJavaIdentifier(String name, boolean upperCamel) {
