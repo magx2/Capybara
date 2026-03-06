@@ -33,6 +33,7 @@ parameters: parameter (',' parameter)*;
 parameter: identifier ':' type;
 functionType: ':' type;
 type: COLLECTION '[' type ']'
+    | LPAREN type (COMMA type)+ RPAREN ARROW type
     | type ARROW type
     | 'int'
     | 'bool'
@@ -59,7 +60,8 @@ expressionNoLet: ifExpression
                | value
                | newData
                | matchExpression;
-lambdaExpression: NAME FAT_ARROW expressionNoLetNoPipe;
+lambdaExpression: identifier FAT_ARROW expressionNoLetNoPipe
+                | LPAREN identifier (COMMA identifier)+ RPAREN FAT_ARROW expressionNoLetNoPipe;
 reduceExpression: expressionNoLetNoPipe COMMA LPAREN NAME COMMA NAME RPAREN FAT_ARROW expressionNoLetNoPipe;
 expressionNoLetNoPipe: ifExpression
                      | functionReference

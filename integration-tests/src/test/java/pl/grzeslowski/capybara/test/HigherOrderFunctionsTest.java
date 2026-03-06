@@ -24,4 +24,16 @@ class HigherOrderFunctionsTest {
         assertThat(HigherOrderFunctions.invokeHof("Hello"))
                 .isEqualTo("Hello 5");
     }
+
+    @Test
+    void invokesHigherOrderFunctionWithMultiArgumentLambda() {
+        assertThat(HigherOrderFunctions.runLambda())
+                .isEqualTo(-45);
+    }
+
+    @Test
+    void invokesHigherOrderFunctionWithFunctionReference() {
+        assertThat(HigherOrderFunctions.runLambda2())
+                .isEqualTo(-45);
+    }
 }

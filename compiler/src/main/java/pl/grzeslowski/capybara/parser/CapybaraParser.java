@@ -137,6 +137,15 @@ public class CapybaraParser {
             };
         }
         if (context.ARROW() != null) {
+            if ("(".equals(context.getChild(0).getText())) {
+                var parts = context.type();
+                var returnType = type(parts.get(parts.size() - 1));
+                var functionType = returnType;
+                for (var i = parts.size() - 2; i >= 0; i--) {
+                    functionType = new FunctionType(type(parts.get(i)), functionType);
+                }
+                return functionType;
+            }
             return new FunctionType(type(context.type(0)), type(context.type(1)));
         }
         return type(context.getText());
@@ -291,7 +300,7 @@ public class CapybaraParser {
 
     private LambdaExpression lambdaExpression(FunctionalParser.LambdaExpressionContext context) {
         return new LambdaExpression(
-                context.NAME().getText(),
+                context.identifier().stream().map(CapybaraParser::identifier).toList(),
                 expressionNoLetNoPipe(context.expressionNoLetNoPipe()),
                 position(context)
         );
