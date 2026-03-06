@@ -18,6 +18,8 @@ public class ValueNameRewriter {
                     rewriteValueInLinkedLetExpression(name, uniqueName, linkedLetExpression);
             case LinkedMatchExpression linkedMatchExpression ->
                     rewriteValueInLinkedMatchExpression(name, uniqueName, linkedMatchExpression);
+            case LinkedPipeFlatMapExpression linkedPipeFlatMapExpression ->
+                    rewriteValueInLinkedPipeFlatMapExpression(name, uniqueName, linkedPipeFlatMapExpression);
             case LinkedPipeFilterOutExpression linkedPipeFilterOutExpression ->
                     rewriteValueInLinkedPipeFilterOutExpression(name, uniqueName, linkedPipeFilterOutExpression);
             case LinkedPipeExpression linkedPipeExpression ->
@@ -90,6 +92,21 @@ public class ValueNameRewriter {
                 linkedPipeExpression.argumentName(),
                 rewriteValueInExpression(name, uniqueName, linkedPipeExpression.mapper()),
                 linkedPipeExpression.type()
+        );
+    }
+
+    private static LinkedExpression rewriteValueInLinkedPipeFlatMapExpression(String name, String uniqueName,
+                                                                               LinkedPipeFlatMapExpression linkedPipeFlatMapExpression) {
+        var source = rewriteValueInExpression(name, uniqueName, linkedPipeFlatMapExpression.source());
+        if (linkedPipeFlatMapExpression.argumentName().equals(name)) {
+            return new LinkedPipeFlatMapExpression(source, linkedPipeFlatMapExpression.argumentName(),
+                    linkedPipeFlatMapExpression.mapper(), linkedPipeFlatMapExpression.type());
+        }
+        return new LinkedPipeFlatMapExpression(
+                source,
+                linkedPipeFlatMapExpression.argumentName(),
+                rewriteValueInExpression(name, uniqueName, linkedPipeFlatMapExpression.mapper()),
+                linkedPipeFlatMapExpression.type()
         );
     }
 

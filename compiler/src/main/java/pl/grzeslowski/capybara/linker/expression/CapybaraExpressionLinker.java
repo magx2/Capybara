@@ -40,7 +40,7 @@ public class CapybaraExpressionLinker {
             case InfixExpression infixExpression -> linkInfixExpression(infixExpression, scope);
             case IntValue intValue -> linkIntValue(intValue, scope);
             case LambdaExpression lambdaExpression -> withPosition(
-                    ValueOrError.error("Lambda expression can only be used as the right side of `|` or `|-`"),
+                    ValueOrError.error("Lambda expression can only be used as the right side of `|`, `|-` or `|*`"),
                     lambdaExpression.position()
             );
             case ReduceExpression reduceExpression -> withPosition(
@@ -103,6 +103,9 @@ public class CapybaraExpressionLinker {
         }
         if (expression.operator() == InfixOperator.PIPE_MINUS) {
             return linkPipeFilterOutExpression(expression, scope);
+        }
+        if (expression.operator() == InfixOperator.PIPE_FLATMAP) {
+            return linkPipeFlatMapExpression(expression, scope);
         }
         if (expression.operator() == InfixOperator.PIPE_REDUCE) {
             return linkPipeReduceExpression(expression, scope);
@@ -193,6 +196,43 @@ public class CapybaraExpressionLinker {
                 });
     }
 
+    private ValueOrError<LinkedExpression> linkPipeFlatMapExpression(InfixExpression expression, Scope scope) {
+        return linkExpression(expression.left(), scope)
+                .flatMap(left -> {
+                    var elementType = collectionElementType(left.type());
+                    if (elementType == null) {
+                        return withPosition(
+                                ValueOrError.error("Left side of `|*` has to be a collection, was `" + left.type() + "`"),
+                                expression.left().position()
+                        );
+                    }
+                    if (!(expression.right() instanceof LambdaExpression lambdaExpression)) {
+                        return withPosition(
+                                ValueOrError.error("Right side of `|*` has to be a lambda expression"),
+                                expression.right().position()
+                        );
+                    }
+
+                    var lambdaScope = scope.add(lambdaExpression.argumentName(), elementType);
+                    return linkExpression(lambdaExpression.expression(), lambdaScope)
+                            .flatMap(mapper -> {
+                                var mappedElementType = collectionElementType(mapper.type());
+                                if (mappedElementType == null) {
+                                    return withPosition(
+                                            ValueOrError.error("Lambda in `|*` has to return collection type, was `" + mapper.type() + "`"),
+                                            lambdaExpression.position()
+                                    );
+                                }
+                                return ValueOrError.success((LinkedExpression) new LinkedPipeFlatMapExpression(
+                                        left,
+                                        lambdaExpression.argumentName(),
+                                        mapper,
+                                        new LinkedList(mappedElementType)
+                                ));
+                            });
+                });
+    }
+
     private ValueOrError<LinkedExpression> linkPipeFilterOutExpression(InfixExpression expression, Scope scope) {
         return linkExpression(expression.left(), scope)
                 .flatMap(left -> {
@@ -247,7 +287,7 @@ public class CapybaraExpressionLinker {
             // bool operators
             case GT, LT, EQUAL, NOTEQUAL, LE, GE -> BOOL;
             case QUESTION -> findQuestionType(left.type(), right.type());
-            case PIPE, PIPE_MINUS, PIPE_REDUCE -> null;
+            case PIPE, PIPE_MINUS, PIPE_FLATMAP, PIPE_REDUCE -> null;
         };
         if (type == null) {
             var op = operator.symbol();

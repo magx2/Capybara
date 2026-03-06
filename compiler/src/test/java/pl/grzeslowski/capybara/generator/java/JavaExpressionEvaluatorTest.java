@@ -227,6 +227,14 @@ class JavaExpressionEvaluatorTest {
                                     l |> 0, (a, b) => a + b
                                 """,
                         "return l.stream().reduce(0, (a, b) -> ((a+b)));"
+                ),
+                Arguments.of(
+                        "pipe_flat_map",
+                        """
+                                fun pipe_flat_map(l: list[int]): list[int] =
+                                    l |* x => [x, x + 1]
+                                """,
+                        "return l.stream().flatMap(x -> (java.util.List.of(x, (x+1))).stream()).toList();"
                 )
         );
     }

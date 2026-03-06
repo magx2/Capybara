@@ -19,6 +19,7 @@ public enum InfixOperator {
     QUESTION("?"),
     PIPE("|"),
     PIPE_MINUS("|-"),
+    PIPE_FLATMAP("|*"),
     PIPE_REDUCE("|>");
 
     private final String symbol;
@@ -51,7 +52,7 @@ public enum InfixOperator {
             case GT, LT, LE, GE -> 4;
             case EQUAL, NOTEQUAL -> 3;
             case CARET, QUESTION -> 2;
-            case PIPE, PIPE_MINUS, PIPE_REDUCE -> 1;
+            case PIPE, PIPE_MINUS, PIPE_FLATMAP, PIPE_REDUCE -> 1;
         };
     }
 }

@@ -22,3 +22,11 @@ fun reduce2(l: list[int]): int =
         | x => x * 2
         |- x => x < 0
         |> 0, (a,b) => a+b
+
+fun flatMap1(l: list[int]): list[int] = l |* x => [x, x+1, x+2]
+
+fun flatMap2(l: list[int]): list[int] =
+    l
+        | x => x * 2
+        |- x => x > 0
+        |* x => [x, x+1, x+2]

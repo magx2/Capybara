@@ -110,6 +110,7 @@ infixOperator: PLUS
              | GE
              | PIPE
              | PIPE_MINUS
+             | PIPE_FLATMAP
              | PIPE_REDUCE
              | QUESTION
              | AND
@@ -154,6 +155,7 @@ BANG : '!';
 TILDE : '~';
 QUESTION : '?';
 PIPE_MINUS : '|-';
+PIPE_FLATMAP : '|*';
 PIPE_REDUCE : '|>';
 PIPE : '|';
 COLON : ':';

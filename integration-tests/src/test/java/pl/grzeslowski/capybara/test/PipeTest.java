@@ -41,4 +41,14 @@ class PipeTest {
     void reduce2() {
         assertThat(Pipe.reduce2(List.of(-1, 1, 2, 3))).isEqualTo(12);
     }
+
+    @Test
+    void flatMap1() {
+        assertThat(Pipe.flatMap1(List.of(1, 2))).isEqualTo(List.of(1, 2, 3, 2, 3, 4));
+    }
+
+    @Test
+    void flatMap2() {
+        assertThat(Pipe.flatMap2(List.of(-1, 1, 2))).isEqualTo(List.of(-2, -1, 0));
+    }
 }

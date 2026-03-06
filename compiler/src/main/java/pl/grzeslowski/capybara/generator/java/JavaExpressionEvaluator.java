@@ -33,6 +33,7 @@ public class JavaExpressionEvaluator {
             case LinkedIntValue intValue -> evaluateIntValue(intValue, scope);
             case LinkedLetExpression letExpression -> evaluateLetExpression(letExpression, scope);
             case LinkedMatchExpression matchExpression -> evaluateMatchExpression(matchExpression, scope);
+            case LinkedPipeFlatMapExpression pipeFlatMapExpression -> evaluatePipeFlatMapExpression(pipeFlatMapExpression, scope);
             case LinkedPipeFilterOutExpression pipeFilterOutExpression -> evaluatePipeFilterOutExpression(pipeFilterOutExpression, scope);
             case LinkedPipeExpression pipeExpression -> evaluatePipeExpression(pipeExpression, scope);
             case LinkedPipeReduceExpression pipeReduceExpression -> evaluatePipeReduceExpression(pipeReduceExpression, scope);
@@ -174,6 +175,11 @@ public class JavaExpressionEvaluator {
         return streamExSc.scope().addExpression(streamExSc.streamExpression() + ".toList()");
     }
 
+    private static Scope evaluatePipeFlatMapExpression(LinkedPipeFlatMapExpression pipeFlatMapExpression, Scope scope) {
+        var streamExSc = evaluatePipeFlatMapExpressionAsStream(pipeFlatMapExpression, scope);
+        return streamExSc.scope().addExpression(streamExSc.streamExpression() + ".toList()");
+    }
+
     private static Scope evaluatePipeFilterOutExpression(LinkedPipeFilterOutExpression pipeFilterOutExpression, Scope scope) {
         var streamExSc = evaluatePipeFilterOutExpressionAsStream(pipeFilterOutExpression, scope);
         return streamExSc.scope().addExpression(streamExSc.streamExpression() + ".toList()");
@@ -225,12 +231,33 @@ public class JavaExpressionEvaluator {
         );
     }
 
+    private static StreamExpressionScope evaluatePipeFlatMapExpressionAsStream(LinkedPipeFlatMapExpression pipeFlatMapExpression, Scope scope) {
+        var sourceStreamExSc = evaluateSourceAsStream(pipeFlatMapExpression.source(), scope);
+        var mapperExSc = evaluateExpression(
+                pipeFlatMapExpression.mapper(),
+                sourceStreamExSc.scope().addLocalValue(pipeFlatMapExpression.argumentName())
+        ).popExpression();
+
+        var streamExtractor = switch (pipeFlatMapExpression.mapper().type()) {
+            case pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedDict ignored -> ".values().stream()";
+            default -> ".stream()";
+        };
+        return new StreamExpressionScope(
+                sourceStreamExSc.streamExpression()
+                + ".flatMap(" + pipeFlatMapExpression.argumentName() + " -> (" + mapperExSc.expression() + ")" + streamExtractor + ")",
+                mapperExSc.scope()
+        );
+    }
+
     private static StreamExpressionScope evaluateSourceAsStream(LinkedExpression source, Scope scope) {
         if (source instanceof LinkedPipeExpression pipeExpression) {
             return evaluatePipeExpressionAsStream(pipeExpression, scope);
         }
         if (source instanceof LinkedPipeFilterOutExpression pipeFilterOutExpression) {
             return evaluatePipeFilterOutExpressionAsStream(pipeFilterOutExpression, scope);
+        }
+        if (source instanceof LinkedPipeFlatMapExpression pipeFlatMapExpression) {
+            return evaluatePipeFlatMapExpressionAsStream(pipeFlatMapExpression, scope);
         }
 
         var sourceExSc = evaluateExpression(source, scope).popExpression();
