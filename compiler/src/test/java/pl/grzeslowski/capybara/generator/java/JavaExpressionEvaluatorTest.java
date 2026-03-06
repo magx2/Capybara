@@ -10,6 +10,7 @@ import pl.grzeslowski.capybara.parser.CapybaraParser;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 import java.util.logging.Handler;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -17,6 +18,8 @@ import java.util.stream.Stream;
 
 import static java.util.stream.Collectors.joining;
 import static org.assertj.core.api.Assertions.assertThat;
+import static pl.grzeslowski.capybara.linker.LinkedExpressionPrinter.printExpression;
+import static pl.grzeslowski.capybara.linker.PrimitiveLinkedType.ANY;
 
 class JavaExpressionEvaluatorTest {
     static {
@@ -27,9 +30,49 @@ class JavaExpressionEvaluatorTest {
         }
     }
 
+    @ParameterizedTest(name = "{index}: should compile method {0} to return {2}")
+    @MethodSource
+    void returnType(String name, String fun, LinkedType expectedReturnType) {
+        // given
+        var program = compileProgram(fun);
+
+        // when
+        var returnType = findFunction(name, program).map(LinkedFunction::returnType);
+
+        // then
+        assertThat(returnType).contains(expectedReturnType);
+    }
+
+    static Stream<Arguments> returnType() {
+        return Stream.of(
+                Arguments.of(
+                        "list_of_obj",
+                        "fun list_of_obj() = []",
+                        new CollectionLinkedType.LinkedList(ANY)),
+                Arguments.of(
+                        "set_of_obj",
+                        "fun set_of_obj() = {}",
+                        new CollectionLinkedType.LinkedSet(ANY))
+        );
+    }
+
     @ParameterizedTest(name = "{index}: should `{0}`")
     @MethodSource
     void wild(String name, String fun, String expected) {
+        var program = compileProgram(fun);
+        var expression = findFunction(name, program)
+                .map(LinkedFunction::expression)
+                .orElseThrow();
+        printExpression(expression);
+
+        // when
+        var evaluated = JavaExpressionEvaluator.evaluateExpression(expression);
+
+        // then
+        assertThat(evaluated).isEqualToNormalizingNewlines(expected);
+    }
+
+    private static LinkedProgram compileProgram(String fun) {
         var functional = CapybaraParser.INSTANCE.parseFunctional(fun);
         var programValueOrError = CapybaraLinker.INSTANCE.link(new Program(List.of(new Module("test", "/foo/boo", functional))));
         if (programValueOrError instanceof ValueOrError.Error<LinkedProgram> er) {
@@ -38,23 +81,16 @@ class JavaExpressionEvaluatorTest {
                     .map(ValueOrError.Error.SingleError::message)
                     .collect(joining(", ")));
         }
-        var program = ((ValueOrError.Value<LinkedProgram>) programValueOrError).value();
-        var expression = program.modules()
+        return ((ValueOrError.Value<LinkedProgram>) programValueOrError).value();
+    }
+
+    private static Optional<LinkedFunction> findFunction(String name, LinkedProgram program) {
+        return program.modules()
                 .stream()
                 .map(LinkedModule::functions)
                 .flatMap(Collection::stream)
                 .filter(f -> f.name().equals(name))
-                .map(LinkedFunction::expression)
-                .peek(LinkedExpressionPrinter::printExpression)
-                .findAny()
-                .orElseThrow();
-
-
-        // when
-        var evaluated = JavaExpressionEvaluator.evaluateExpression(expression);
-
-        // then
-        assertThat(evaluated).isEqualToNormalizingNewlines(expected);
+                .findAny();
     }
 
     static Stream<Arguments> wild() {
@@ -132,9 +168,12 @@ class JavaExpressionEvaluatorTest {
                         """
                                 var x = (a*2);
                                 return (a+(x+1));"""
+                ),
+                Arguments.of(
+                        "list_of_obj",
+                        "fun list_of_obj() = []",
+                        "return java.util.List.of();"
                 )
         );
     }
-
-
 }
