@@ -92,7 +92,7 @@ public class CapybaraExpressionLinker {
 
     private static LinkedInfixExpression getLinkedInfixExpression(LinkedExpression left, InfixOperator operator, LinkedExpression right) {
         LinkedType type = switch (operator) {
-            case PLUS, MINUS, MUL, DIV, CARET -> findHigherType(left.type(), right.type());
+            case PLUS, MINUS, MUL, DIV, CARET, POWER -> findHigherType(left.type(), right.type());
             // bool operators
             case GT, LT, EQUAL, NOTEQUAL, LE, GE -> BOOL;
         };

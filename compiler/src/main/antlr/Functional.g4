@@ -77,6 +77,7 @@ infixOperator: PLUS
              | MUL
              | DIV
              | CARET
+             | POWER
              | GT
              | LT
              | EQUAL
@@ -123,6 +124,7 @@ DIV : '/';
 BITAND : '&';
 BITOR : '|';
 CARET : '^';
+POWER: '**';
 MOD : '%';
 ARROW : '->';
 COLONCOLON : '::';

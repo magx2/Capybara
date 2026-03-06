@@ -6,6 +6,7 @@ import java.util.logging.Logger;
 
 import static java.lang.System.lineSeparator;
 
+@SuppressWarnings("SwitchStatementWithTooFewBranches")
 public class JavaExpressionEvaluator {
     private static final Logger log = Logger.getLogger(JavaExpressionEvaluator.class.getName());
 
@@ -65,8 +66,14 @@ public class JavaExpressionEvaluator {
         var left = evaluateExpression(infixExpression.left(), scope).popExpression();
         var right = evaluateExpression(infixExpression.right(), left.scope()).popExpression();
 
-        return right.scope()
-                .addExpression('(' + left.expression() + infixExpression.operator().symbol() + right.expression() + ')');
+        var operator = infixExpression.operator();
+        var expression = switch (operator) {
+            case POWER ->
+                    "pl.grzeslowski.capybara.CapybaraUtil.power(" + left.expression() + ", " + right.expression() + ")";
+            default -> left.expression() + operator.symbol() + right.expression();
+        };
+
+        return right.scope().addExpression('(' + expression + ')');
     }
 
     private static Scope evaluateIntValue(LinkedIntValue intValue, Scope scope) {

@@ -42,12 +42,6 @@ class SimpleFunctionTest {
     }
 
     @Test
-    @DisplayName("should bring number to power of")
-    void power() {
-        assertThat(SimpleFunction.pow(5, 3)).isEqualTo(5 * 5 * 5);
-    }
-
-    @Test
     @DisplayName("should divide 2 numbers")
     void divide() {
         assertThat(SimpleFunction.divide(10, 2)).isEqualTo(5);
@@ -82,5 +76,19 @@ class SimpleFunctionTest {
     @DisplayName("orderOfExpression(3, 5) == 77")
     void orderOfExpression() {
         assertThat(SimpleFunction.orderOfExpression(3, 5)).isEqualTo(77);
+    }
+
+    @ParameterizedTest(name = "{0} ** {1} == {2}")
+    @CsvSource({
+            "2,3,8",
+            "1,100,1",
+            "0,100,0",
+            "0,-100,1",
+            "0,0,1",
+            "-4,2,16",
+            "-4,3,-64",
+    })
+    void power(int x, int y, int out) {
+        assertThat(SimpleFunction.power(x, y)).isEqualTo(out);
     }
 }

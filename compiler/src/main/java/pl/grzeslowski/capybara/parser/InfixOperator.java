@@ -8,6 +8,7 @@ public enum InfixOperator {
     MUL("*"),
     DIV("/"),
     CARET("^"),
+    POWER("**"),
     // bool
     GT(">"),
     LT("<"),
@@ -40,6 +41,7 @@ public enum InfixOperator {
 
     public int precedence() {
         return switch (this) {
+            case POWER -> 7;
             case MUL, DIV -> 6;
             case PLUS, MINUS -> 5;
             case GT, LT, LE, GE -> 4;
