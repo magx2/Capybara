@@ -19,3 +19,5 @@ fun append_dict(left: dict[int], right: dict[int]): dict[int] = left + right
 fun remove(d: dict[int]): dict[int] = d - "two"
 
 fun remove_dict(left: dict[int], right: dict[int]): dict[int] = left - right
+
+fun contains(d: dict[int], key: string): bool = d ? key

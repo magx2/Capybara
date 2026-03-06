@@ -91,6 +91,7 @@ infixOperator: PLUS
              | NOTEQUAL
              | LE
              | GE
+             | QUESTION
              | AND
              | OR;
 

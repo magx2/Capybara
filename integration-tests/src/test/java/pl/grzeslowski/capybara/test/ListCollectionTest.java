@@ -66,4 +66,10 @@ class ListCollectionTest {
         assertThat(left).isEqualTo(List.of(1, 2, 2, 3, 4));
         assertThat(right).isEqualTo(List.of(2, 4));
     }
+
+    @Test
+    void contains() {
+        assertThat(ListCollection.contains(List.of(1, 2, 3), 2)).isTrue();
+        assertThat(ListCollection.contains(List.of(1, 2, 3), 9)).isFalse();
+    }
 }

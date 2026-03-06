@@ -66,4 +66,10 @@ class SetCollectionTest {
         assertThat(left).isEqualTo(Set.of(1, 2, 3, 4));
         assertThat(right).isEqualTo(Set.of(2, 4));
     }
+
+    @Test
+    void contains() {
+        assertThat(SetCollection.contains(Set.of(1, 2, 3), 2)).isTrue();
+        assertThat(SetCollection.contains(Set.of(1, 2, 3), 9)).isFalse();
+    }
 }

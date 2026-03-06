@@ -80,4 +80,10 @@ class DictCollectionTest {
         assertThat(left).isEqualTo(Map.of("one", 1, "two", 2, "three", 3));
         assertThat(right).isEqualTo(Map.of("two", 1000, "three", 2000));
     }
+
+    @Test
+    void contains() {
+        assertThat(DictCollection.contains(EXPECTED, "two")).isTrue();
+        assertThat(DictCollection.contains(EXPECTED, "missing")).isFalse();
+    }
 }

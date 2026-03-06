@@ -15,7 +15,8 @@ public enum InfixOperator {
     EQUAL("=="),
     NOTEQUAL("!="),
     LE("<="),
-    GE(">=");
+    GE(">="),
+    QUESTION("?");
 
     private final String symbol;
 
@@ -46,7 +47,7 @@ public enum InfixOperator {
             case PLUS, MINUS -> 5;
             case GT, LT, LE, GE -> 4;
             case EQUAL, NOTEQUAL -> 3;
-            case CARET -> 2;
+            case CARET, QUESTION -> 2;
         };
     }
 }

@@ -111,6 +111,7 @@ public class CapybaraExpressionLinker {
             case MUL, DIV, CARET, POWER -> findHigherType(left.type(), right.type());
             // bool operators
             case GT, LT, EQUAL, NOTEQUAL, LE, GE -> BOOL;
+            case QUESTION -> findQuestionType(left.type(), right.type());
         };
         if (type == null) {
             var op = operator.symbol();
@@ -164,6 +165,27 @@ public class CapybaraExpressionLinker {
             return null;
         }
         return findHigherType(left, right);
+    }
+
+    private static LinkedType findQuestionType(LinkedType left, LinkedType right) {
+        if (left instanceof LinkedList leftList) {
+            if (right instanceof LinkedList) {
+                return null;
+            }
+            var elementType = findHigherType(leftList.elementType(), right);
+            return elementType == ANY ? null : BOOL;
+        }
+        if (left instanceof LinkedSet leftSet) {
+            if (right instanceof LinkedSet) {
+                return null;
+            }
+            var elementType = findHigherType(leftSet.elementType(), right);
+            return elementType == ANY ? null : BOOL;
+        }
+        if (left instanceof LinkedDict) {
+            return right == STRING ? BOOL : null;
+        }
+        return null;
     }
 
     private ValueOrError<LinkedExpression> linkIntValue(IntValue intValue, Scope scope) {

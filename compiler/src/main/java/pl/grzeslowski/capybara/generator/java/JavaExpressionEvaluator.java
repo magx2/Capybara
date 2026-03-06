@@ -97,6 +97,18 @@ public class JavaExpressionEvaluator {
                 }
                 yield left.expression() + operator.symbol() + right.expression();
             }
+            case QUESTION -> {
+                if (infixExpression.left().type() instanceof pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedList) {
+                    yield left.expression() + ".contains(" + right.expression() + ")";
+                }
+                if (infixExpression.left().type() instanceof pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedSet) {
+                    yield left.expression() + ".contains(" + right.expression() + ")";
+                }
+                if (infixExpression.left().type() instanceof pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedDict) {
+                    yield left.expression() + ".containsKey(" + right.expression() + ")";
+                }
+                yield left.expression() + operator.symbol() + right.expression();
+            }
             default -> left.expression() + operator.symbol() + right.expression();
         };
 
