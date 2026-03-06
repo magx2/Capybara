@@ -42,6 +42,7 @@ expressionNoLet: ifExpression
                | new_list
                | '(' expression ')'
                | '{' expression '}'
+               | new_set
                | expressionNoLet infixOperator expressionNoLet
                | value
                | newData
@@ -70,6 +71,7 @@ fieldPatternList: NAME (',' NAME)*;
 
 newData: type '{' fieldAssignmentList? '}';
 new_list: '[' (expression (',' expression)*)? ']';
+new_set: '{' (expression (',' expression)*)? '}';
 fieldAssignmentList: fieldAssignment (',' fieldAssignment)*;
 fieldAssignment: NAME ':' expression
                 | '"' NAME '"' ':' expression;

@@ -11,3 +11,7 @@ fun type_sum(x: int) = "age: " + x
 fun list_of_ints(x: int) = [x,x,x]
 
 fun empty_list() = []
+
+fun set_of_ints(x: int) = {x,x,x}
+
+fun empty_set() = {}

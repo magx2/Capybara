@@ -163,6 +163,9 @@ public class CapybaraParser {
         if (expression.new_list() != null) {
             return newListExpression(expression.new_list());
         }
+        if (expression.new_set() != null) {
+            return newSetExpression(expression.new_set());
+        }
 
         var value = expression.value();
         if (value != null) {
@@ -317,6 +320,13 @@ public class CapybaraParser {
 
     private Expression newListExpression(pl.grzeslowski.capybara.parser.antlr.FunctionalParser.New_listContext context) {
         return new NewListExpression(
+                context.expression().stream().map(this::expression).toList(),
+                position(context)
+        );
+    }
+
+    private Expression newSetExpression(pl.grzeslowski.capybara.parser.antlr.FunctionalParser.New_setContext context) {
+        return new NewSetExpression(
                 context.expression().stream().map(this::expression).toList(),
                 position(context)
         );

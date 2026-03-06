@@ -1,0 +1,3 @@
+fun static_set(): set[int] = {1,2,3}
+
+fun empty_static_set(): set[int] = {}

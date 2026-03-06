@@ -11,6 +11,7 @@ public sealed interface LinkedExpression permits LinkedBooleanValue,
         LinkedLetExpression,
         LinkedMatchExpression,
         LinkedNewList,
+        LinkedNewSet,
         LinkedNewData,
         LinkedStringValue,
         LinkedVariable {

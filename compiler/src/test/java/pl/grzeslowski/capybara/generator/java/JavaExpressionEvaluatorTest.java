@@ -90,7 +90,7 @@ class JavaExpressionEvaluatorTest {
                                         let x = a * 2
                                         x - 1
                                     } / {
-                                        let x = if(b!=0) b else 1
+                                        let x = if(b!=0) then b else 1
                                         x*2
                                     }
                                 """,

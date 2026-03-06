@@ -34,6 +34,7 @@ public class JavaExpressionEvaluator {
             case LinkedLetExpression letExpression -> evaluateLetExpression(letExpression, scope);
             case LinkedMatchExpression matchExpression -> evaluateMatchExpression(matchExpression, scope);
             case LinkedNewList newList -> evaluateNewList(newList, scope);
+            case LinkedNewSet newSet -> evaluateNewSet(newSet, scope);
             case LinkedNewData newData -> evaluateNewData(newData, scope);
             case LinkedStringValue stringValue -> evaluateStringValue(stringValue, scope);
             case LinkedVariable variable -> evaluateVariable(variable, scope);
@@ -102,6 +103,17 @@ public class JavaExpressionEvaluator {
             values.add(exSc.expression());
         }
         return current.addExpression("java.util.List.of(" + String.join(", ", values) + ")");
+    }
+
+    private static Scope evaluateNewSet(LinkedNewSet newSet, Scope scope) {
+        var current = scope;
+        var values = new ArrayList<String>(newSet.values().size());
+        for (var value : newSet.values()) {
+            var exSc = evaluateExpression(value, current).popExpression();
+            current = exSc.scope();
+            values.add(exSc.expression());
+        }
+        return current.addExpression("java.util.Set.of(" + String.join(", ", values) + ")");
     }
 
     private static Scope evaluateNewData(LinkedNewData newData, Scope scope) {
