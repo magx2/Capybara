@@ -41,7 +41,8 @@ class CapybaraParserTest {
                                     else "zero"
                                 """),
                 Arguments.of("list_identity", "fun list_identity(l: list[int]): list[int] = l"),
-                Arguments.of("pipe_map", "fun pipe_map(l: list[int]): list[int] = l | x => x * 2"));
+                Arguments.of("pipe_map", "fun pipe_map(l: list[int]): list[int] = l | x => x * 2"),
+                Arguments.of("pipe_filter_out", "fun pipe_filter_out(l: list[int]): list[int] = l |- x => x > 0"));
     }
 
     @Test

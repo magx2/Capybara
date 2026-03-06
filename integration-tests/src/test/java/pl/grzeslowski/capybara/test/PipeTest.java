@@ -21,4 +21,14 @@ class PipeTest {
     void map3() {
         assertThat(Pipe.map3(List.of(1, 2, 3))).isEqualTo(List.of("Hello 1", "Hello 2", "Hello 3"));
     }
+
+    @Test
+    void filter1() {
+        assertThat(Pipe.filter1(List.of(-1, 0, 1, 2))).isEqualTo(List.of(-1, 0));
+    }
+
+    @Test
+    void filter2() {
+        assertThat(Pipe.filter2(List.of(1, 2, 3, 4))).isEqualTo(List.of(2));
+    }
 }

@@ -33,6 +33,7 @@ public class JavaExpressionEvaluator {
             case LinkedIntValue intValue -> evaluateIntValue(intValue, scope);
             case LinkedLetExpression letExpression -> evaluateLetExpression(letExpression, scope);
             case LinkedMatchExpression matchExpression -> evaluateMatchExpression(matchExpression, scope);
+            case LinkedPipeFilterOutExpression pipeFilterOutExpression -> evaluatePipeFilterOutExpression(pipeFilterOutExpression, scope);
             case LinkedPipeExpression pipeExpression -> evaluatePipeExpression(pipeExpression, scope);
             case LinkedNewDict newDict -> evaluateNewDict(newDict, scope);
             case LinkedNewList newList -> evaluateNewList(newList, scope);
@@ -181,6 +182,23 @@ public class JavaExpressionEvaluator {
 
         return mapperExSc.scope().addExpression(
                 source + ".stream().map(" + pipeExpression.argumentName() + " -> (" + mapperExSc.expression() + ")).toList()"
+        );
+    }
+
+    private static Scope evaluatePipeFilterOutExpression(LinkedPipeFilterOutExpression pipeFilterOutExpression, Scope scope) {
+        var sourceExSc = evaluateExpression(pipeFilterOutExpression.source(), scope).popExpression();
+        var source = sourceExSc.expression();
+        if (pipeFilterOutExpression.source().type() instanceof pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedDict) {
+            source = source + ".values()";
+        }
+
+        var predicateExSc = evaluateExpression(
+                pipeFilterOutExpression.predicate(),
+                sourceExSc.scope().addLocalValue(pipeFilterOutExpression.argumentName())
+        ).popExpression();
+
+        return predicateExSc.scope().addExpression(
+                source + ".stream().filter(" + pipeFilterOutExpression.argumentName() + " -> !(" + predicateExSc.expression() + ")).toList()"
         );
     }
 

@@ -7,3 +7,10 @@ fun map2(l: list[int]): list[int] =
         | x => x - 1
 
 fun map3(l: list[int]): list[string] = l | x => "Hello " + x
+
+fun filter1(l: list[int]): list[int] = l |- x => x > 0
+
+fun filter2(l: list[int]): list[int] =
+    l
+        |- x => x > 2
+        |- x => x == 1

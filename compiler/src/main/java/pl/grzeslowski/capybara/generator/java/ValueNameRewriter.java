@@ -18,6 +18,8 @@ public class ValueNameRewriter {
                     rewriteValueInLinkedLetExpression(name, uniqueName, linkedLetExpression);
             case LinkedMatchExpression linkedMatchExpression ->
                     rewriteValueInLinkedMatchExpression(name, uniqueName, linkedMatchExpression);
+            case LinkedPipeFilterOutExpression linkedPipeFilterOutExpression ->
+                    rewriteValueInLinkedPipeFilterOutExpression(name, uniqueName, linkedPipeFilterOutExpression);
             case LinkedPipeExpression linkedPipeExpression ->
                     rewriteValueInLinkedPipeExpression(name, uniqueName, linkedPipeExpression);
             case LinkedNewDict linkedNewDict -> rewriteValueInLinkedNewDict(name, uniqueName, linkedNewDict);
@@ -86,6 +88,25 @@ public class ValueNameRewriter {
                 linkedPipeExpression.argumentName(),
                 rewriteValueInExpression(name, uniqueName, linkedPipeExpression.mapper()),
                 linkedPipeExpression.type()
+        );
+    }
+
+    private static LinkedExpression rewriteValueInLinkedPipeFilterOutExpression(String name, String uniqueName,
+                                                                                 LinkedPipeFilterOutExpression linkedPipeFilterOutExpression) {
+        var source = rewriteValueInExpression(name, uniqueName, linkedPipeFilterOutExpression.source());
+        if (linkedPipeFilterOutExpression.argumentName().equals(name)) {
+            return new LinkedPipeFilterOutExpression(
+                    source,
+                    linkedPipeFilterOutExpression.argumentName(),
+                    linkedPipeFilterOutExpression.predicate(),
+                    linkedPipeFilterOutExpression.type()
+            );
+        }
+        return new LinkedPipeFilterOutExpression(
+                source,
+                linkedPipeFilterOutExpression.argumentName(),
+                rewriteValueInExpression(name, uniqueName, linkedPipeFilterOutExpression.predicate()),
+                linkedPipeFilterOutExpression.type()
         );
     }
 

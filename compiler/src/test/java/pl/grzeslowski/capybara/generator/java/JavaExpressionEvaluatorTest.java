@@ -211,6 +211,14 @@ class JavaExpressionEvaluatorTest {
                                     l | x => x * 2
                                 """,
                         "return l.stream().map(x -> ((x*2))).toList();"
+                ),
+                Arguments.of(
+                        "pipe_filter_out",
+                        """
+                                fun pipe_filter_out(l: list[int]): list[int] =
+                                    l |- x => x > 2
+                                """,
+                        "return l.stream().filter(x -> !((x>2))).toList();"
                 )
         );
     }

@@ -107,6 +107,7 @@ infixOperator: PLUS
              | LE
              | GE
              | PIPE
+             | PIPE_MINUS
              | QUESTION
              | AND
              | OR;
@@ -149,6 +150,7 @@ LT : '<';
 BANG : '!';
 TILDE : '~';
 QUESTION : '?';
+PIPE_MINUS : '|-';
 PIPE : '|';
 COLON : ':';
 EQUAL : '==';
