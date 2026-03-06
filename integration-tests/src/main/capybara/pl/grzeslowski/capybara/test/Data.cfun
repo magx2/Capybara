@@ -20,3 +20,7 @@ data Boo[T] { boo: T }
 type Knight = EnglishKnight | Tom
 data EnglishKnight { power: float }
 single Tom
+
+type King[T] = FrenchKing[T] | Jerry
+data FrenchKing[T] { head: bool, foo: T }
+single Jerry

@@ -46,4 +46,16 @@ class DataTest {
         Data.Knight knight = Data.Tom.INSTANCE;
         assertThat(knight).isSameAs(Data.Tom.INSTANCE);
     }
+
+    @Test
+    void genericTypeCanIncludeSingleSubtype() {
+        Data.King king = Data.Jerry.INSTANCE;
+        assertThat(king).isSameAs(Data.Jerry.INSTANCE);
+    }
+
+    @Test
+    void genericTypeCanIncludeGenericRecordSubtype() {
+        Data.King king = new Data.FrenchKing<>(true, "baguette");
+        assertThat(king).isInstanceOf(Data.FrenchKing.class);
+    }
 }
