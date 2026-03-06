@@ -34,7 +34,7 @@ public class Compiler {
     public static final Compiler INSTANCE = new Compiler();
     private static final Logger log = Logger.getLogger(Compiler.class.getName());
     private static final Pattern IMPORT_PATTERN = Pattern.compile(
-            "^\\s*from\\s+([A-Za-z_][A-Za-z0-9_]*)\\s+import\\s*\\{\\s*([^}]*)\\s*}\\s*$"
+            "^\\s*from\\s+([A-Za-z_][A-Za-z0-9_]*)\\s+import\\s*\\{\\s*([^}]*)\\s*}(?:\\s+except\\s*\\{\\s*([^}]*)\\s*})?\\s*$"
     );
 
     public void compile(Arguments args) throws IOException {
@@ -164,20 +164,30 @@ public class Compiler {
                 );
             }
             var resolvedImportedModule = resolveModule(importedModule, modulesByName, resolved, visiting);
-            if (importDeclaration.symbols().contains("*")) {
-                resolvedImportedModule.functional().definitions().forEach(importedDefinition -> {
-                    if (!mergedDefinitions.contains(importedDefinition)) {
-                        mergedDefinitions.add(importedDefinition);
-                    }
-                });
-                continue;
+            var importedBySymbol = resolvedImportedModule.functional().definitions().stream()
+                    .collect(java.util.stream.Collectors.toMap(this::definitionSymbol, java.util.function.Function.identity(), (first, second) -> first));
+            for (var excludedSymbol : importDeclaration.excludedSymbols()) {
+                if (!importedBySymbol.containsKey(excludedSymbol)) {
+                    throw new IllegalArgumentException(
+                            "Module `" + module.name() + "` excludes unknown symbol `" + excludedSymbol
+                            + "` from module `" + importDeclaration.moduleName() + "`"
+                    );
+                }
             }
-            for (var symbol : importDeclaration.symbols()) {
-                var importedDefinitions = resolvedImportedModule.functional().definitions()
-                        .stream()
-                        .filter(definition -> definitionMatchesSymbol(definition, symbol))
-                        .toList();
-                if (importedDefinitions.isEmpty()) {
+            var selectedSymbols = importDeclaration.selectedSymbols(importedBySymbol.keySet());
+            if (!importDeclaration.isStarImport()) {
+                for (var symbol : importDeclaration.symbols()) {
+                    if (!importedBySymbol.containsKey(symbol)) {
+                        throw new IllegalArgumentException(
+                                "Module `" + module.name() + "` imports unknown symbol `" + symbol
+                                + "` from module `" + importDeclaration.moduleName() + "`"
+                        );
+                    }
+                }
+            }
+            for (var symbol : selectedSymbols) {
+                var importedDefinition = importedBySymbol.get(symbol);
+                if (importedDefinition == null) {
                     throw new IllegalArgumentException(
                             "Module `" + module.name() + "` imports unknown symbol `" + symbol
                             + "` from module `" + importDeclaration.moduleName() + "`"
@@ -188,10 +198,8 @@ public class Compiler {
                 if (localHasSymbol) {
                     continue;
                 }
-                for (var importedDefinition : importedDefinitions) {
-                    if (!mergedDefinitions.contains(importedDefinition)) {
-                        mergedDefinitions.add(importedDefinition);
-                    }
+                if (!mergedDefinitions.contains(importedDefinition)) {
+                    mergedDefinitions.add(importedDefinition);
                 }
             }
         }
@@ -259,7 +267,14 @@ public class Compiler {
                         .map(String::trim)
                         .filter(symbol -> !symbol.isBlank())
                         .toList();
-                imports.add(new ImportDeclaration(module, symbols));
+                var excludedSymbols = matcher.group(3) == null
+                        ? List.<String>of()
+                        : List.of(matcher.group(3).split(","))
+                                .stream()
+                                .map(String::trim)
+                                .filter(symbol -> !symbol.isBlank())
+                                .toList();
+                imports.add(new ImportDeclaration(module, symbols, excludedSymbols));
             } else {
                 bodyLines.add(line);
             }

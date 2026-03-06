@@ -117,11 +117,28 @@ public class CapybaraLinker {
                 return ValueOrError.error("Module `" + module.name() + "` imports unknown module `" + importDeclaration.moduleName() + "`");
             }
             var importedSignatures = signaturesByModule.get(importDeclaration.moduleName());
-            if (isStarImport(importDeclaration)) {
-                all.addAll(importedSignatures);
-                continue;
+            var availableMembers = importedSignatures.stream()
+                    .map(CapybaraExpressionLinker.FunctionSignature::name)
+                    .collect(java.util.stream.Collectors.toSet());
+            for (var excludedSymbol : importDeclaration.excludedSymbols()) {
+                if (!availableMembers.contains(excludedSymbol)) {
+                    return ValueOrError.error(
+                            "Module `" + module.name() + "` excludes unknown symbol `" + excludedSymbol
+                            + "` from module `" + importDeclaration.moduleName() + "`"
+                    );
+                }
             }
-            for (var symbol : importDeclaration.symbols()) {
+            if (!importDeclaration.isStarImport()) {
+                for (var symbol : importDeclaration.symbols()) {
+                    if (!availableMembers.contains(symbol)) {
+                        return ValueOrError.error(
+                                "Module `" + module.name() + "` imports unknown symbol `" + symbol
+                                + "` from module `" + importDeclaration.moduleName() + "`"
+                        );
+                    }
+                }
+            }
+            for (var symbol : importDeclaration.selectedSymbols(availableMembers)) {
                 var matched = importedSignatures.stream().filter(signature -> signature.name().equals(symbol)).toList();
                 if (matched.isEmpty()) {
                     return ValueOrError.error(
@@ -146,24 +163,20 @@ public class CapybaraLinker {
                 continue;
             }
             var className = importedModule.path().replace('/', '.').replace('\\', '.') + "." + importedModule.name();
-            if (isStarImport(importDeclaration)) {
+            if (importDeclaration.isStarImport() && importDeclaration.excludedSymbols().isEmpty()) {
                 imports.add(new LinkedModule.StaticImport(className, "*"));
                 continue;
             }
             var availableMembers = signaturesByModule.get(importDeclaration.moduleName()).stream()
                     .map(CapybaraExpressionLinker.FunctionSignature::name)
                     .collect(java.util.stream.Collectors.toSet());
-            for (var symbol : importDeclaration.symbols()) {
+            for (var symbol : importDeclaration.selectedSymbols(availableMembers)) {
                 if (availableMembers.contains(symbol)) {
                     imports.add(new LinkedModule.StaticImport(className, symbol));
                 }
             }
         }
         return Set.copyOf(imports);
-    }
-
-    private boolean isStarImport(ImportDeclaration importDeclaration) {
-        return importDeclaration.symbols().contains("*");
     }
 
     private List<CapybaraExpressionLinker.FunctionSignature> mergeSignatures(
