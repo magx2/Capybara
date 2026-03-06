@@ -1,6 +1,6 @@
 package pl.grzeslowski.capybara.linker;
 
-import java.util.*;
+import java.util.List;
 
 public record LinkedDataType(String name, List<LinkedField> fields) implements GenericDataType {
 

@@ -11,5 +11,6 @@ public sealed interface Generator permits JavaGenerator, JavaScriptGenerator, Py
             case PYTHON -> new PythonGenerator();
         };
     }
+
     CompiledProgram generate(LinkedProgram program);
 }

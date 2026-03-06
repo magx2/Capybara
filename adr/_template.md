@@ -1,8 +1,8 @@
 # Title
 
- - Status: [proposed | rejected | accepted | deprecated | … | superseded by ADR-0005]
- - Deciders: [list everyone involved in the decision]
- - Date: [YYYY-MM-DD when the decision was last updated]
+- Status: [proposed | rejected | accepted | deprecated | … | superseded by ADR-0005]
+- Deciders: [list everyone involved in the decision]
+- Date: [YYYY-MM-DD when the decision was last updated]
 
 ## Status
 

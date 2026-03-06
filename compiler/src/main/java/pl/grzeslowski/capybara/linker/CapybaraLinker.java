@@ -6,11 +6,7 @@ import pl.grzeslowski.capybara.linker.LinkedFunction.LinkedFunctionParameter;
 import pl.grzeslowski.capybara.linker.expression.CapybaraExpressionLinker;
 import pl.grzeslowski.capybara.parser.*;
 
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
 
 import static java.util.function.Function.identity;
 import static java.util.stream.Collectors.toMap;

@@ -3,7 +3,8 @@ package pl.grzeslowski.capybara.parser;
 import java.util.List;
 import java.util.Optional;
 
-public record MatchExpression(Expression matchWith, List<MatchCase> cases, Optional<SourcePosition> position) implements Expression {
+public record MatchExpression(Expression matchWith, List<MatchCase> cases,
+                              Optional<SourcePosition> position) implements Expression {
     public MatchExpression {
         if (cases.isEmpty()) {
             throw new IllegalArgumentException("Match expression must have at least one case");
