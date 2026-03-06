@@ -117,6 +117,10 @@ public class CapybaraLinker {
                 return ValueOrError.error("Module `" + module.name() + "` imports unknown module `" + importDeclaration.moduleName() + "`");
             }
             var importedSignatures = signaturesByModule.get(importDeclaration.moduleName());
+            if (isStarImport(importDeclaration)) {
+                all.addAll(importedSignatures);
+                continue;
+            }
             for (var symbol : importDeclaration.symbols()) {
                 var matched = importedSignatures.stream().filter(signature -> signature.name().equals(symbol)).toList();
                 if (matched.isEmpty()) {
@@ -142,6 +146,10 @@ public class CapybaraLinker {
                 continue;
             }
             var className = importedModule.path().replace('/', '.').replace('\\', '.') + "." + importedModule.name();
+            if (isStarImport(importDeclaration)) {
+                imports.add(new LinkedModule.StaticImport(className, "*"));
+                continue;
+            }
             var availableMembers = signaturesByModule.get(importDeclaration.moduleName()).stream()
                     .map(CapybaraExpressionLinker.FunctionSignature::name)
                     .collect(java.util.stream.Collectors.toSet());
@@ -152,6 +160,10 @@ public class CapybaraLinker {
             }
         }
         return Set.copyOf(imports);
+    }
+
+    private boolean isStarImport(ImportDeclaration importDeclaration) {
+        return importDeclaration.symbols().contains("*");
     }
 
     private List<CapybaraExpressionLinker.FunctionSignature> mergeSignatures(

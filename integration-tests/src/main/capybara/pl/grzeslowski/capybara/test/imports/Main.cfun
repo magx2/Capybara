@@ -1,6 +1,12 @@
-from Pck1 import { add }
+from Pck1 import { * }
 
 fun calculator(a: int, b: int, op: string) =
     if op == "+"
     then add(a,b)
+    else if op == "-"
+    then subtract(a,b)
+    else if op == "*"
+    then multiply(a,b)
+    else if op == "/"
+    then divide(a,b)
     else -1

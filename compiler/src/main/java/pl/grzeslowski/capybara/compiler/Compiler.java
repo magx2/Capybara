@@ -164,6 +164,14 @@ public class Compiler {
                 );
             }
             var resolvedImportedModule = resolveModule(importedModule, modulesByName, resolved, visiting);
+            if (importDeclaration.symbols().contains("*")) {
+                resolvedImportedModule.functional().definitions().forEach(importedDefinition -> {
+                    if (!mergedDefinitions.contains(importedDefinition)) {
+                        mergedDefinitions.add(importedDefinition);
+                    }
+                });
+                continue;
+            }
             for (var symbol : importDeclaration.symbols()) {
                 var importedDefinitions = resolvedImportedModule.functional().definitions()
                         .stream()

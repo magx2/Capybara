@@ -11,5 +11,9 @@ class ImportsTest {
                 .isEqualTo(5);
         assertThat(pl.grzeslowski.capybara.test.imports.Main.calculator(2, 3, "-"))
                 .isEqualTo(-1);
+        assertThat(pl.grzeslowski.capybara.test.imports.Main.calculator(2, 3, "*"))
+                .isEqualTo(6);
+        assertThat(pl.grzeslowski.capybara.test.imports.Main.calculator(8, 2, "/"))
+                .isEqualTo(4);
     }
 }

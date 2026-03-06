@@ -1,1 +1,4 @@
 fun add(a: int, b: int) = a+b
+fun subtract(a: int, b: int) = a-b
+fun multiply(a: int, b: int) = a*b
+fun divide(a: int, b: int) = a/b
