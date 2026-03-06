@@ -16,6 +16,7 @@ public class LinkedExpressionPrinter {
     public static String printExpression(LinkedExpression expression, int level) {
         return switch (expression) {
             case LinkedBooleanValue linkedBooleanValue -> printLinkedBooleanValue(linkedBooleanValue, level);
+            case LinkedFieldAccess linkedFieldAccess -> printLinkedFieldAccess(linkedFieldAccess, level);
             case LinkedFloatValue linkedFloatValue -> printLinkedFloatValue(linkedFloatValue, level);
             case LinkedFunctionCall linkedFunctionCall -> printLinkedFunctionCall(linkedFunctionCall, level);
             case LinkedIfExpression linkedIfExpression -> printLinkedIfExpression(linkedIfExpression, level);
@@ -44,6 +45,10 @@ public class LinkedExpressionPrinter {
 
     private static String printLinkedFloatValue(LinkedFloatValue linkedFloatValue, int level) {
         return linkedFloatValue.floatValue();
+    }
+
+    private static String printLinkedFieldAccess(LinkedFieldAccess linkedFieldAccess, int level) {
+        return printExpression(linkedFieldAccess.source(), level) + "." + linkedFieldAccess.field();
     }
 
     private static String printLinkedFunctionCall(LinkedFunctionCall linkedFunctionCall, int level) {

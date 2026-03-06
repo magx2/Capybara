@@ -225,14 +225,18 @@ public class JavaAstBuilder {
 
     private JavaRecord buildRecord(LinkedDataType type, Map<LinkedDataType, Set<JavaInterface>> subClassToInterface) {
         var javaInterface = subClassToInterface.get(type);
-        var implementInterfaces = javaInterface.stream().map(JavaInterface::name).collect(toSet());
+        var implementInterfaces = javaInterface == null
+                ? Set.<JavaType>of()
+                : javaInterface.stream().map(JavaInterface::name).collect(toSet());
 
-        var interfaceFields = javaInterface.stream()
-                .map(JavaInterface::methods)
-                .flatMap(List::stream)
-                .map(method -> new JavaRecord.JavaRecordField(
-                        method.name(),
-                        method.returnType()));
+        var interfaceFields = javaInterface == null
+                ? Stream.<JavaRecord.JavaRecordField>empty()
+                : javaInterface.stream()
+                        .map(JavaInterface::methods)
+                        .flatMap(List::stream)
+                        .map(method -> new JavaRecord.JavaRecordField(
+                                method.name(),
+                                method.returnType()));
         var recordFields = type.fields()
                 .stream()
                 .map(field -> new JavaRecord.JavaRecordField(

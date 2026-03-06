@@ -79,10 +79,7 @@ public class CapybaraLinker {
     }
 
     private ValueOrError<Map<String, GenericDataType>> types(Module module) {
-        var dataDeclarationsOrError = castList(module, DataDeclaration.class)
-                .stream()
-                .map(this::linkDataDeclaration)
-                .collect(new ValueOrErrorCollectionCollector<>());
+        var dataDeclarationsOrError = linkDataDeclarations(castList(module, DataDeclaration.class));
         var singlesDeclarationsOrError = castList(module, SingleDeclaration.class)
                 .stream()
                 .map(this::linkSingleDeclaration)
@@ -115,14 +112,68 @@ public class CapybaraLinker {
         return ValueOrError.success(map);
     }
 
-    private ValueOrError<LinkedDataType> linkDataDeclaration(DataDeclaration dataDeclaration) {
+    private ValueOrError<List<LinkedDataType>> linkDataDeclarations(List<DataDeclaration> dataDeclarations) {
+        var declarationsByName = dataDeclarations.stream()
+                .collect(toMap(DataDeclaration::name, identity(), (first, second) -> first));
+        var cache = new HashMap<String, ValueOrError<LinkedDataType>>();
+        return dataDeclarations.stream()
+                .map(dataDeclaration -> linkDataDeclaration(dataDeclaration, declarationsByName, cache, new HashSet<>()))
+                .collect(new ValueOrErrorCollectionCollector<>());
+    }
+
+    private ValueOrError<LinkedDataType> linkDataDeclaration(
+            DataDeclaration dataDeclaration,
+            Map<String, DataDeclaration> declarationsByName,
+            Map<String, ValueOrError<LinkedDataType>> cache,
+            Set<String> visiting
+    ) {
+        var cached = cache.get(dataDeclaration.name());
+        if (cached != null) {
+            return cached;
+        }
+        if (!visiting.add(dataDeclaration.name())) {
+            return withPosition(
+                    ValueOrError.error("Circular data extension detected for `" + dataDeclaration.name() + "`"),
+                    dataDeclaration.position()
+            );
+        }
+
         var genericTypes = Set.copyOf(dataDeclaration.typeParameters());
-        var linked = dataDeclaration.fields()
-                .stream()
+        var inheritedFields = dataDeclaration.extendsTypes().stream()
+                .map(parentName -> {
+                    var parent = declarationsByName.get(parentName);
+                    if (parent == null) {
+                        return ValueOrError.<List<LinkedDataType.LinkedField>>error(
+                                "Extended data type `" + parentName + "` not found"
+                        );
+                    }
+                    return linkDataDeclaration(parent, declarationsByName, cache, visiting)
+                            .map(LinkedDataType::fields);
+                })
+                .collect(new ValueOrErrorCollectionCollector<>());
+        var ownFields = dataDeclaration.fields().stream()
                 .map(field -> linkField(field, genericTypes))
-                .collect(new ValueOrErrorCollectionCollector<>())
-                .map(fields -> new LinkedDataType(dataDeclaration.name(), fields, dataDeclaration.typeParameters(), false));
-        return withPosition(linked, dataDeclaration.position());
+                .collect(new ValueOrErrorCollectionCollector<>());
+        var linked = ValueOrError.join(
+                        (List<List<LinkedDataType.LinkedField>> inherited, List<LinkedDataType.LinkedField> own) -> {
+                            var fields = inherited.stream()
+                                    .flatMap(Collection::stream)
+                                    .collect(java.util.stream.Collectors.toCollection(ArrayList::new));
+                            fields.addAll(own);
+                            return new LinkedDataType(
+                                    dataDeclaration.name(),
+                                    List.copyOf(fields),
+                                    dataDeclaration.typeParameters(),
+                                    false
+                            );
+                        },
+                        inheritedFields,
+                        ownFields
+                );
+        visiting.remove(dataDeclaration.name());
+        var withPosition = withPosition(linked, dataDeclaration.position());
+        cache.put(dataDeclaration.name(), withPosition);
+        return withPosition;
     }
 
     private ValueOrError<LinkedDataType> linkSingleDeclaration(SingleDeclaration singleDeclaration) {

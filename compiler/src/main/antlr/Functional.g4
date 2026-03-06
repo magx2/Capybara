@@ -16,11 +16,13 @@ functionDeclaration: 'fun' NAME '(' parameters? ')' functionType? '=' expression
 
 typeDeclaration: 'type' genericTypeDeclaration '=' genericTypeDeclaration (PIPE genericTypeDeclaration)*
                | 'type' genericTypeDeclaration '{' fieldDeclarationList? '}' '=' genericTypeDeclaration (PIPE genericTypeDeclaration)*;
-dataDeclaration: 'data' genericTypeDeclaration '{' fieldDeclarationList? '}';
+dataDeclaration: 'data' genericTypeDeclaration '{' fieldDeclarationList? '}'
+               | 'data' genericTypeDeclaration '=' '{' fieldDeclarationList? '}';
 singleDeclaration: 'single' TYPE;
 fieldDeclarationList: fieldDeclaration (',' fieldDeclaration)*;
 fieldDeclaration: NAME ':' type
-                | STRING_LITERAL ':' type;
+                | STRING_LITERAL ':' type
+                | SPREAD TYPE;
 genericTypeDeclaration: TYPE ('[' TYPE (',' TYPE)* ']')?;
 
 BOOL_LITERAL: 'true' | 'false';
@@ -49,6 +51,7 @@ expressionNoLet: ifExpression
                | '(' expression ')'
                | '{' expression '}'
                | new_set
+               | expressionNoLet DOT NAME
                | expressionNoLet infixOperator expressionNoLet
                | value
                | newData
@@ -61,6 +64,7 @@ expressionNoLetNoPipe: ifExpression
                      | new_dict
                      | '(' expressionNoLetNoPipe ')'
                      | new_set
+                     | expressionNoLetNoPipe DOT NAME
                      | expressionNoLetNoPipe infixOperatorNoPipe expressionNoLetNoPipe
                      | value
                      | newData
@@ -94,7 +98,8 @@ new_dict: '{' dict_entry (',' dict_entry)* ','? '}';
 dict_entry: expression ':' expression;
 fieldAssignmentList: fieldAssignment (',' fieldAssignment)*;
 fieldAssignment: NAME ':' expression
-                | STRING_LITERAL ':' expression;
+                | STRING_LITERAL ':' expression
+                | SPREAD expression;
 
 infixOperator: PLUS
              | MINUS
@@ -144,6 +149,7 @@ RBRACK : ']';
 SEMI : ';';
 COMMA : ',';
 DOT : '.';
+SPREAD : '...';
 
 // Operators
 PLUS : '+';

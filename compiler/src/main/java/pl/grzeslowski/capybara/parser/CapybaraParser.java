@@ -74,9 +74,11 @@ public class CapybaraParser {
 
     private DataDeclaration dataDeclaration(FunctionalParser.DataDeclarationContext context) {
         var declaration = context.genericTypeDeclaration();
+        var dataFields = dataFieldDeclarationList(context.fieldDeclarationList());
         return new DataDeclaration(
                 genericTypeName(declaration),
-                fieldDeclarationList(context.fieldDeclarationList()),
+                dataFields.fields(),
+                dataFields.extendsTypes(),
                 genericTypeParameters(declaration),
                 position(context)
         );
@@ -94,6 +96,9 @@ public class CapybaraParser {
     }
 
     private DataDeclaration.DataField fieldDeclaration(FunctionalParser.FieldDeclarationContext context) {
+        if (context.SPREAD() != null) {
+            throw new IllegalStateException("Spread field declaration is not allowed in this context: " + context.getText());
+        }
         return new DataDeclaration.DataField(fieldName(context.NAME(), context.STRING_LITERAL()), type(context.type()));
     }
 
@@ -234,9 +239,11 @@ public class CapybaraParser {
 
         var newData = expression.newData();
         if (newData != null) {
+            var assignments = fieldAssignments(newData.fieldAssignmentList());
             return new NewData(
                     type(newData.type()),
-                    newData.fieldAssignmentList().fieldAssignment().stream().map(this::fieldAssignment).toList(),
+                    assignments.assignments(),
+                    assignments.spreads(),
                     position(newData)
             );
         }
@@ -244,6 +251,14 @@ public class CapybaraParser {
         var matchExpression = expression.matchExpression();
         if (matchExpression != null) {
             return matchExpression(matchExpression);
+        }
+
+        if (expression.DOT() != null || isFieldAccess(expression)) {
+            return new FieldAccess(
+                    expressionNoLet(expression.expressionNoLet(0)),
+                    expression.NAME().getText(),
+                    position(expression)
+            );
         }
 
         var infixOperator = expression.infixOperator();
@@ -333,9 +348,11 @@ public class CapybaraParser {
 
         var newData = expression.newData();
         if (newData != null) {
+            var assignments = fieldAssignments(newData.fieldAssignmentList());
             return new NewData(
                     type(newData.type()),
-                    newData.fieldAssignmentList().fieldAssignment().stream().map(this::fieldAssignment).toList(),
+                    assignments.assignments(),
+                    assignments.spreads(),
                     position(newData)
             );
         }
@@ -343,6 +360,14 @@ public class CapybaraParser {
         var matchExpression = expression.matchExpression();
         if (matchExpression != null) {
             return matchExpression(matchExpression);
+        }
+
+        if (expression.DOT() != null || isFieldAccess(expression)) {
+            return new FieldAccess(
+                    expressionNoLetNoPipe(expression.expressionNoLetNoPipe(0)),
+                    expression.NAME().getText(),
+                    position(expression)
+            );
         }
 
         var infixOperator = expression.infixOperatorNoPipe();
@@ -489,7 +514,42 @@ public class CapybaraParser {
     }
 
     private NewData.FieldAssignment fieldAssignment(pl.grzeslowski.capybara.parser.antlr.FunctionalParser.FieldAssignmentContext context) {
+        if (context.SPREAD() != null) {
+            throw new IllegalStateException("Spread field assignment is not allowed in this context: " + context.getText());
+        }
         return new NewData.FieldAssignment(fieldName(context.NAME(), context.STRING_LITERAL()), expression(context.expression()));
+    }
+
+    private DataFieldDeclarations dataFieldDeclarationList(FunctionalParser.FieldDeclarationListContext context) {
+        if (context == null) {
+            return new DataFieldDeclarations(List.of(), List.of());
+        }
+        var fields = new java.util.ArrayList<DataDeclaration.DataField>();
+        var extendsTypes = new java.util.ArrayList<String>();
+        for (var declaration : context.fieldDeclaration()) {
+            if (declaration.SPREAD() != null) {
+                extendsTypes.add(declaration.TYPE().getText());
+            } else {
+                fields.add(fieldDeclaration(declaration));
+            }
+        }
+        return new DataFieldDeclarations(List.copyOf(fields), List.copyOf(extendsTypes));
+    }
+
+    private NewDataFieldAssignments fieldAssignments(FunctionalParser.FieldAssignmentListContext context) {
+        if (context == null) {
+            return new NewDataFieldAssignments(List.of(), List.of());
+        }
+        var assignments = new java.util.ArrayList<NewData.FieldAssignment>();
+        var spreads = new java.util.ArrayList<Expression>();
+        for (var assignment : context.fieldAssignment()) {
+            if (assignment.SPREAD() != null) {
+                spreads.add(expression(assignment.expression()));
+            } else {
+                assignments.add(fieldAssignment(assignment));
+            }
+        }
+        return new NewDataFieldAssignments(List.copyOf(assignments), List.copyOf(spreads));
     }
 
     private static BooleanValue boolLiteral(TerminalNode node) {
@@ -529,6 +589,20 @@ public class CapybaraParser {
 
     private static List<String> genericTypeParameters(FunctionalParser.GenericTypeDeclarationContext context) {
         return context.TYPE().stream().skip(1).map(TerminalNode::getText).toList();
+    }
+
+    private static boolean isFieldAccess(FunctionalParser.ExpressionNoLetContext expression) {
+        return expression.getChildCount() == 3 && ".".equals(expression.getChild(1).getText()) && expression.NAME() != null;
+    }
+
+    private static boolean isFieldAccess(FunctionalParser.ExpressionNoLetNoPipeContext expression) {
+        return expression.getChildCount() == 3 && ".".equals(expression.getChild(1).getText()) && expression.NAME() != null;
+    }
+
+    private record DataFieldDeclarations(List<DataDeclaration.DataField> fields, List<String> extendsTypes) {
+    }
+
+    private record NewDataFieldAssignments(List<NewData.FieldAssignment> assignments, List<Expression> spreads) {
     }
 
 }

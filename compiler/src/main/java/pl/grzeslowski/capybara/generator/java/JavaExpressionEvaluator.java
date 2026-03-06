@@ -26,6 +26,7 @@ public class JavaExpressionEvaluator {
     private static Scope evaluateExpression(LinkedExpression expression, Scope scope) {
         return switch (expression) {
             case LinkedBooleanValue booleanValue -> evaluateBooleanValue(booleanValue, scope);
+            case LinkedFieldAccess fieldAccess -> evaluateFieldAccess(fieldAccess, scope);
             case LinkedFloatValue floatValue -> evaluateFloatValue(floatValue, scope);
             case LinkedFunctionCall functionCall -> evaluateFunctionCall(functionCall, scope);
             case LinkedIfExpression ifExpression -> evaluateIfExpression(ifExpression, scope);
@@ -54,8 +55,30 @@ public class JavaExpressionEvaluator {
         return scope.addExpression(floatValue.floatValue() + "f");
     }
 
+    private static Scope evaluateFieldAccess(LinkedFieldAccess fieldAccess, Scope scope) {
+        var source = evaluateExpression(fieldAccess.source(), scope).popExpression();
+        return source.scope().addExpression("(" + source.expression() + ")." + fieldAccess.field() + "()");
+    }
+
     private static Scope evaluateFunctionCall(LinkedFunctionCall functionCall, Scope scope) {
-        throw new UnsupportedOperationException("wip");
+        var current = scope;
+        var args = new ArrayList<String>(functionCall.arguments().size());
+        for (var argument : functionCall.arguments()) {
+            var argumentScope = evaluateExpression(argument, current).popExpression();
+            current = argumentScope.scope();
+            args.add(argumentScope.expression());
+        }
+
+        var expression = switch (functionCall.name()) {
+            case "sqrt" -> {
+                if (args.size() != 1) {
+                    throw new IllegalStateException("sqrt expects exactly one argument");
+                }
+                yield "((float) java.lang.Math.sqrt(" + args.get(0) + "))";
+            }
+            default -> normalizeJavaMethodName(functionCall.name()) + "(" + String.join(", ", args) + ")";
+        };
+        return current.addExpression(expression);
     }
 
     private static Scope evaluateIfExpression(LinkedIfExpression expression, Scope scope) {
@@ -402,5 +425,32 @@ public class JavaExpressionEvaluator {
     private static Scope evaluateVariable(LinkedVariable variable, Scope scope) {
         var name = scope.findValueOverride(variable.name()).orElse(variable.name());
         return scope.addExpression(name);
+    }
+
+    private static String normalizeJavaMethodName(String name) {
+        var parts = name.split("[^A-Za-z0-9]+");
+        var result = new StringBuilder();
+        var first = true;
+        for (var part : parts) {
+            if (part.isEmpty()) {
+                continue;
+            }
+            if (first) {
+                result.append(Character.toLowerCase(part.charAt(0)));
+                if (part.length() > 1) {
+                    result.append(part.substring(1));
+                }
+                first = false;
+            } else {
+                result.append(Character.toUpperCase(part.charAt(0)));
+                if (part.length() > 1) {
+                    result.append(part.substring(1));
+                }
+            }
+        }
+        if (result.isEmpty()) {
+            return "generated";
+        }
+        return result.toString();
     }
 }

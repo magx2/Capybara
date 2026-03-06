@@ -6,6 +6,7 @@ public class ValueNameRewriter {
     public static LinkedExpression rewriteValueInExpression(String name, String uniqueName, LinkedExpression expression) {
         return switch (expression) {
             case LinkedBooleanValue linkedBooleanValue -> linkedBooleanValue;
+            case LinkedFieldAccess linkedFieldAccess -> rewriteValueInLinkedFieldAccess(name, uniqueName, linkedFieldAccess);
             case LinkedFloatValue linkedFloatValue -> linkedFloatValue;
             case LinkedFunctionCall linkedFunctionCall ->
                     rewriteValueInLinkedFunctionCall(name, uniqueName, linkedFunctionCall);
@@ -42,6 +43,14 @@ public class ValueNameRewriter {
                         .map(ar -> rewriteValueInExpression(name, uniqueName, ar))
                         .toList(),
                 expression.returnType()
+        );
+    }
+
+    private static LinkedExpression rewriteValueInLinkedFieldAccess(String name, String uniqueName, LinkedFieldAccess expression) {
+        return new LinkedFieldAccess(
+                rewriteValueInExpression(name, uniqueName, expression.source()),
+                expression.field(),
+                expression.type()
         );
     }
 

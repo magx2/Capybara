@@ -34,6 +34,7 @@ public class CapybaraExpressionLinker {
     private ValueOrError<LinkedExpression> linkExpression(Expression expression, Scope scope) {
         return switch (expression) {
             case BooleanValue booleanValue -> linkBooleanValue(booleanValue, scope);
+            case FieldAccess fieldAccess -> linkFieldAccess(fieldAccess, scope);
             case FloatValue floatValue -> linkFloatValue(floatValue, scope);
             case FunctionCall functionCall -> linkFunctionCall(functionCall, scope);
             case IfExpression ifExpression -> linkIfExpression(ifExpression, scope);
@@ -61,6 +62,27 @@ public class CapybaraExpressionLinker {
 
     private ValueOrError<LinkedExpression> linkBooleanValue(BooleanValue booleanValue, Scope scope) {
         return ValueOrError.success(booleanValue.value() ? LinkedBooleanValue.TRUE : LinkedBooleanValue.FALSE);
+    }
+
+    private ValueOrError<LinkedExpression> linkFieldAccess(FieldAccess fieldAccess, Scope scope) {
+        return linkExpression(fieldAccess.source(), scope)
+                .flatMap(source -> {
+                    if (!(source.type() instanceof GenericDataType dataType)) {
+                        return withPosition(
+                                ValueOrError.error("Field access requires data type, was `" + source.type() + "`"),
+                                fieldAccess.position()
+                        );
+                    }
+                    return dataType.fields().stream()
+                            .filter(field -> field.name().equals(fieldAccess.field()))
+                            .findFirst()
+                            .<ValueOrError<LinkedExpression>>map(field ->
+                                    ValueOrError.success(new LinkedFieldAccess(source, field.name(), field.type())))
+                            .orElseGet(() -> withPosition(
+                                    ValueOrError.error("Field `" + fieldAccess.field() + "` not found in type `" + dataType.name() + "`"),
+                                    fieldAccess.position()
+                            ));
+                });
     }
 
     private ValueOrError<LinkedExpression> linkFloatValue(FloatValue floatValue, Scope scope) {
@@ -563,11 +585,41 @@ public class CapybaraExpressionLinker {
     private ValueOrError<LinkedExpression> linkNewData(NewData newData, Scope scope) {
         return linkType(newData.type(), dataTypes)
                 .flatMap(type ->
-                        linkFieldAssignment(newData.assignments(), scope)
-                                .map(assignments ->
-                                        new LinkedNewData(
-                                                type,
-                                                assignments)));
+                        linkSpreadAssignments(newData.spreads(), scope)
+                                .flatMap(spreadAssignments ->
+                                        linkFieldAssignment(newData.assignments(), scope)
+                                                .map(assignments -> {
+                                                    var allAssignments = new java.util.ArrayList<LinkedNewData.FieldAssignment>(
+                                                            spreadAssignments.size() + assignments.size()
+                                                    );
+                                                    allAssignments.addAll(spreadAssignments);
+                                                    allAssignments.addAll(assignments);
+                                                    return new LinkedNewData(type, List.copyOf(allAssignments));
+                                                })));
+    }
+
+    private ValueOrError<List<LinkedNewData.FieldAssignment>> linkSpreadAssignments(List<Expression> spreads, Scope scope) {
+        var assignments = new java.util.ArrayList<LinkedNewData.FieldAssignment>();
+        for (var spread : spreads) {
+            var linkedSpread = linkExpression(spread, scope);
+            if (linkedSpread instanceof ValueOrError.Error<LinkedExpression> error) {
+                return ValueOrError.error(error.errors().stream().map(ValueOrError.Error.SingleError::message).toList());
+            }
+            var spreadExpression = ((ValueOrError.Value<LinkedExpression>) linkedSpread).value();
+            if (!(spreadExpression.type() instanceof GenericDataType dataType)) {
+                return withPosition(
+                        ValueOrError.error("Spread assignment requires data type, was `" + spreadExpression.type() + "`"),
+                        spread.position()
+                );
+            }
+            for (var field : dataType.fields()) {
+                assignments.add(new LinkedNewData.FieldAssignment(
+                        field.name(),
+                        new LinkedFieldAccess(spreadExpression, field.name(), field.type())
+                ));
+            }
+        }
+        return ValueOrError.success(List.copyOf(assignments));
     }
 
     private ValueOrError<List<LinkedNewData.FieldAssignment>> linkFieldAssignment(List<NewData.FieldAssignment> assignments, Scope scope) {
