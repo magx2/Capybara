@@ -1,5 +1,8 @@
 package pl.grzeslowski.capybara.parser;
 
-public record IntValue(String intValue, SourcePosition position) implements Expression {
+import java.util.Optional;
+
+public record IntValue(String intValue, Optional<SourcePosition> position) implements Expression {
 }
+
 

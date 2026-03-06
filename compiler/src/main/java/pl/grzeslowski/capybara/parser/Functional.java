@@ -10,3 +10,4 @@ public record Functional(Set<Definition> definitions) {
         return new Functional(sum);
     }
 }
+

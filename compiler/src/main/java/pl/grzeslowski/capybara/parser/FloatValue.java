@@ -1,5 +1,8 @@
 package pl.grzeslowski.capybara.parser;
 
-public record FloatValue(String floatValue, SourcePosition position) implements Expression {
+import java.util.Optional;
+
+public record FloatValue(String floatValue, Optional<SourcePosition> position) implements Expression {
 }
+
 

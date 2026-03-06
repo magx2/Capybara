@@ -19,3 +19,4 @@ public enum PrimitiveType implements Type {
         return Arrays.stream(values()).filter(x -> x.name.equals(name)).findAny();
     }
 }
+

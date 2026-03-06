@@ -1,5 +1,8 @@
 package pl.grzeslowski.capybara.parser;
 
-public record Parameter(Type type, String name, SourcePosition position) {
+import java.util.Optional;
+
+public record Parameter(Type type, String name, Optional<SourcePosition> position) {
 }
+
 

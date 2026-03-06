@@ -204,7 +204,7 @@ public class CapybaraParser {
                                                          boolean leftGrouped,
                                                          InfixOperator operator,
                                                          Expression right,
-                                                         SourcePosition position) {
+                                                         Optional<SourcePosition> position) {
         if (!leftGrouped &&
             left instanceof InfixExpression leftInfix &&
             operator.precedence() > leftInfix.operator().precedence()) {
@@ -304,12 +304,12 @@ public class CapybaraParser {
         return new Parameter(type(context.type()), context.NAME().getText(), position(context));
     }
 
-    private static SourcePosition position(ParserRuleContext context) {
-        return SourcePosition.of(context).orElse(SourcePosition.EMPTY);
+    private static Optional<SourcePosition> position(ParserRuleContext context) {
+        return SourcePosition.of(context);
     }
 
-    private static SourcePosition position(TerminalNode node) {
-        return SourcePosition.of(node);
+    private static Optional<SourcePosition> position(TerminalNode node) {
+        return Optional.of(SourcePosition.of(node));
     }
 
 }

@@ -1,4 +1,7 @@
 package pl.grzeslowski.capybara.parser;
 
-public record BooleanValue(boolean value, SourcePosition position) implements Expression {
+import java.util.Optional;
+
+public record BooleanValue(boolean value, Optional<SourcePosition> position) implements Expression {
 }
+

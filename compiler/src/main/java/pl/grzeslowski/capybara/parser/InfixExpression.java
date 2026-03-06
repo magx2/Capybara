@@ -1,8 +1,11 @@
 package pl.grzeslowski.capybara.parser;
 
+import java.util.Optional;
+
 public record InfixExpression(Expression left,
                               InfixOperator operator,
                               Expression right,
-                              SourcePosition position) implements Expression {
+                              Optional<SourcePosition> position) implements Expression {
 }
+
 
