@@ -1,54 +1,29 @@
+fun classify(x: int): string =
+    if (x > 0) then "positive" else "non-positive"
 
+fun always_true(): bool = true
+
+fun add(a: int, b: int): int = a + b
+
+fun subtract(a: int, b: int): int = a - b
+
+fun multiply(a: int, b: int): int = a * b
+
+fun pow(a: int, b: int): int =
+    if (b == 0) then 1
+    else if (b == 1) then a
+    else if (b == 2) then a * a
+    else a * a * a
 
 fun divide(a: int, b: int): int =
-    {
-        let x = a * 2
-        x
-    } / {
-        let x = if(b!=0) b else 1
+    a / {
+        let x = if (b != 0) then b else 1
         x
     }
 
-fun some_if(x: int): string =
-    if ({
-        let a = x * 2
-        a > 2
-    }) {
-        let a = x * x
-        "I'm happy " + a + " " + a
-       } else {
-        let a = x / 2
-        "I'm not happy " + a
-        }
+fun is_positive(x: int): bool = x > 0
 
-//    var _a1 = x * 2;
-//    if(x * 2 > 2) {
-//      var _a2 = x * x;
-//      return "I'm happy " + _a2 + " " + _a2;
-//    } else {
-//      var _a2 = x / 2;
-//      return "I'm not happy " + _a2;
-//    }
-//    return (_a1 > 2) ? "I'm happy " + _a2 : ;
+fun greet(name: string): string = "Hello, " + name
 
-
-// public static int divide(int a, int b) {
-//      var _x1 = a * 2;
-//      var _x2 = b!=0 ? b : 1
-//      return _x1 / _x2;
-//}
-
-// local aliases with let
-fun greeting(firstName: string, lastName: string): string =
-    let fullName = firstName + " " + lastName
-    "Hello, " + fullName
-
-//fun score_label(score: int): string =
-//    let normalized = score / 10
-//    if normalized > 8 then "great"
-//    else "ok"
-//
-//fun rectangle_area(width: float, height: float): float =
-//    let area = width * height
-//    area
-
+fun double_then_classify(x: int): string =
+    if (x * 2 > 0) then "positive" else "non-positive"

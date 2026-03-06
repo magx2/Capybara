@@ -38,7 +38,7 @@ public class JavaExpressionEvaluator {
     }
 
     private static Scope evaluateBooleanValue(LinkedBooleanValue booleanValue, Scope scope) {
-        throw new UnsupportedOperationException("wip");
+        return scope.addExpression(booleanValue.toString());
     }
 
     private static Scope evaluateFloatValue(LinkedFloatValue floatValue, Scope scope) {
@@ -50,57 +50,11 @@ public class JavaExpressionEvaluator {
     }
 
     private static Scope evaluateIfExpression(LinkedIfExpression expression, Scope scope) {
-        if (expression.condition() instanceof LinkedLetExpression letExpression) {
-            var expressionScope = evaluateExpression(letExpression.value(), scope);
-            var valueExSc = expressionScope.popExpression();
-            var lastExpression = valueExSc.expression();
-            var scopeExpression = valueExSc.scope().declareValue(letExpression.name(), lastExpression, letExpression.rest());
-
-            return evaluateIfExpression(
-                    new LinkedIfExpression(
-                            scopeExpression.expression(),
-                            expression.thenBranch(),
-                            expression.elseBranch(),
-                            expression.type()),
-                    scopeExpression.scope());
-        }
-        if (expression.thenBranch() instanceof LinkedLetExpression letExpression) {
-            var expressionScope = evaluateExpression(letExpression.value(), scope);
-            var valueExSc = expressionScope.popExpression();
-            var lastExpression = valueExSc.expression();
-            var scopeExpression = valueExSc.scope().declareValue(letExpression.name(), lastExpression, letExpression.rest());
-
-            return evaluateIfExpression(
-                    new LinkedIfExpression(
-                            expression.condition(),
-                            scopeExpression.expression(),
-                            expression.elseBranch(),
-                            expression.type()),
-                    scopeExpression.scope());
-        }
-        if (expression.elseBranch() instanceof LinkedLetExpression letExpression) {
-            var expressionScope = evaluateExpression(letExpression.value(), scope);
-            var valueExSc = expressionScope.popExpression();
-            var lastExpression = valueExSc.expression();
-            var scopeExpression = valueExSc.scope().declareValue(letExpression.name(), lastExpression, letExpression.rest());
-
-            return evaluateIfExpression(
-                    new LinkedIfExpression(
-                            expression.condition(),
-                            expression.thenBranch(),
-                            scopeExpression.expression(),
-                            expression.type()),
-                    scopeExpression.scope());
-        }
-
         var condition = evaluateExpression(expression.condition(), scope).popExpression();
-        var then = evaluateExpression(expression.thenBranch(), scope).popExpression();
-        var elseExSc = evaluateExpression(expression.elseBranch(), scope).popExpression();
+        var then = evaluateExpression(expression.thenBranch(), condition.scope()).popExpression();
+        var elseExSc = evaluateExpression(expression.elseBranch(), then.scope()).popExpression();
 
-        return scope
-//                .add(condition.scope())
-//                .add(then.scope())
-//                .add(elseExSc.scope())
+        return elseExSc.scope()
                 .addExpression("(%s) ? (%s) : (%s)".formatted(
                         condition.expression(),
                         then.expression(),
@@ -109,11 +63,9 @@ public class JavaExpressionEvaluator {
 
     private static Scope evaluateInfixExpression(LinkedInfixExpression infixExpression, Scope scope) {
         var left = evaluateExpression(infixExpression.left(), scope).popExpression();
-        var right = evaluateExpression(infixExpression.right(), scope).popExpression();
+        var right = evaluateExpression(infixExpression.right(), left.scope()).popExpression();
 
-        return scope
-//                .add(left.scope())
-//                .add(right.scope())
+        return right.scope()
                 .addExpression(left.expression() + infixExpression.operator().symbol() + right.expression());
     }
 
@@ -125,7 +77,7 @@ public class JavaExpressionEvaluator {
         var valueScope = evaluateExpression(let.value(), scope);
         var valueExSc = valueScope.popExpression();
         var scopeExpression = valueExSc.scope().declareValue(let.name(), valueExSc.expression(), let.rest());
-        return scope.add(evaluateExpression(scopeExpression.expression(), scopeExpression.scope()));
+        return evaluateExpression(scopeExpression.expression(), scopeExpression.scope());
     }
 
     private static Scope evaluateMatchExpression(LinkedMatchExpression matchExpression, Scope scope) {

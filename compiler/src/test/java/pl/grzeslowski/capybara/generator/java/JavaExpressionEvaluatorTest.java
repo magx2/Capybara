@@ -89,17 +89,54 @@ class JavaExpressionEvaluatorTest {
                                 fun wild_infix(a: int, b: int): int =
                                     {
                                         let x = a * 2
-                                        x
+                                        x - 1
                                     } / {
                                         let x = if(b!=0) b else 1
-                                        x
+                                        x*2
                                     }
                                 """,
                         """
-                                var x_j1 = a *2;
-                                var x_j2 = b!=0 ? b :1;
-                                return x_j1 / x_j2;
-                                """)
+                                var x = a*2;
+                                var x_j1 = (b!=0) ? (b) : (1);
+                                return x-1/x_j1*2;
+                                """
+                ),
+                Arguments.of(
+                        "wild_if_nested",
+                        """
+                                fun wild_if_nested(a: int, b: int): int =
+                                    if (a > 0) then {
+                                        {
+                                            let x = a * 2
+                                            x + 1
+                                        }
+                                    } else {
+                                        {
+                                            let x = b * 3
+                                            x - 1
+                                        }
+                                    }
+                                """,
+                        """
+                                var x = a*2;
+                                var x_j1 = b*3;
+                                return (a>0) ? (x+1) : (x_j1-1);
+                                """
+                ),
+                Arguments.of(
+                        "wild_infix_single_side_let",
+                        """
+                                fun wild_infix_single_side_let(a: int): int =
+                                    a + {
+                                        let x = a * 2
+                                        x + 1
+                                    }
+                                """,
+                        """
+                                var x = a*2;
+                                return a+x+1;
+                                """
+                )
         );
     }
 
