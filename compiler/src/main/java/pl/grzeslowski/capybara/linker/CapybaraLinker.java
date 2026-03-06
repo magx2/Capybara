@@ -47,12 +47,17 @@ public class CapybaraLinker {
     }
 
     private ValueOrError<LinkedFunction> linkFunction(Function function, Map<String, GenericDataType> dataTypes) {
-        return linkType(function.returnType(), dataTypes)
-                .flatMap(rtype ->
-                        linkParameters(function.parameters(), dataTypes)
-                                .flatMap(parameters ->
-                                        new CapybaraExpressionLinker(parameters, dataTypes).linkExpression(function.expression())
-                                                .map(ex ->
+        return linkParameters(function.parameters(), dataTypes)
+                .flatMap(parameters ->
+                        new CapybaraExpressionLinker(parameters, dataTypes).linkExpression(function.expression())
+                                .flatMap(ex ->
+                                        function.returnType()
+                                                .map(type -> {
+                                                    // todo check if this type matches ex.type
+                                                    return linkType(type, dataTypes);
+                                                })
+                                                .orElseGet(() -> ValueOrError.success(ex.type()))
+                                                .map(rtype ->
                                                         new LinkedFunction(
                                                                 function.name(),
                                                                 rtype,

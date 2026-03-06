@@ -8,7 +8,7 @@ import java.util.Map;
 
 public class CapybaraTypeLinker {
 
-    public static ValueOrError<? extends LinkedType> linkType(Type type, Map<String, GenericDataType> dataTypes) {
+    public static ValueOrError<LinkedType> linkType(Type type, Map<String, GenericDataType> dataTypes) {
         return switch (type) {
             case PrimitiveType primitiveType -> ValueOrError.success(linkPrimitiveType(primitiveType));
             case DataType dataType -> linkDataType(dataType, dataTypes);
@@ -16,12 +16,12 @@ public class CapybaraTypeLinker {
     }
 
     @Deprecated
-    public static ValueOrError<? extends LinkedType> linkType(Type type) {
+    public static ValueOrError<LinkedType> linkType(Type type) {
         // TODO proper mapping of types
         return linkType(type, Map.of());
     }
 
-    private static ValueOrError<? extends LinkedType> linkDataType(DataType dataType, Map<String, GenericDataType> dataTypes) {
+    private static ValueOrError<LinkedType> linkDataType(DataType dataType, Map<String, GenericDataType> dataTypes) {
         if (dataTypes.containsKey(dataType.name())) {
             return ValueOrError.success(dataTypes.get(dataType.name()));
         }

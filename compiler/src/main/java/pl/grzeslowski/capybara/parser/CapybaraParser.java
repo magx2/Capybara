@@ -87,13 +87,13 @@ public class CapybaraParser {
         return new Function(
                 functionDeclarationContext.NAME().getText(),
                 parameters,
-                functionType(functionDeclarationContext.functionType()).orElse(null),
+                functionType(functionDeclarationContext.functionType()),
                 expression(functionDeclarationContext.expression())
         );
     }
 
     private Optional<Type> functionType(pl.grzeslowski.capybara.parser.antlr.FunctionalParser.FunctionTypeContext context) {
-        return Optional.of(context)
+        return Optional.ofNullable(context)
                 .map(pl.grzeslowski.capybara.parser.antlr.FunctionalParser.FunctionTypeContext::type)
                 .map(CapybaraParser::type);
     }
