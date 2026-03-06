@@ -11,4 +11,9 @@ class ListCollectionTest {
     void staticList() {
         assertThat(ListCollection.staticList()).isEqualTo(List.of(1, 2, 3));
     }
+
+    @Test
+    void emptyStaticList() {
+        assertThat(ListCollection.emptyStaticList()).isEmpty();
+    }
 }
