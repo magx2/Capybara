@@ -28,10 +28,12 @@ genericTypeDeclaration: TYPE ('[' TYPE (',' TYPE)* ']')?;
 BOOL_LITERAL: 'true' | 'false';
 COLLECTION: 'list' | 'set' | 'dict';
 NAME : [a-z][a-zA-Z0-9_]*;
+identifier: NAME | 'fun';
 parameters: parameter (',' parameter)*;
-parameter: NAME ':' type;
+parameter: identifier ':' type;
 functionType: ':' type;
 type: COLLECTION '[' type ']'
+    | type ARROW type
     | 'int'
     | 'bool'
     | 'string'
@@ -72,9 +74,9 @@ expressionNoLetNoPipe: ifExpression
                      | newData
                      | matchExpression;
 ifExpression: 'if' expression 'then' expression 'else' expression;
-functionReference: COLON NAME;
-functionCall: NAME '(' argumentList? ')';
-value: literal | NAME;
+functionReference: COLON identifier;
+functionCall: identifier '(' argumentList? ')';
+value: literal | identifier;
 argumentList: expression (',' expression)*;
 literal: INT_LITERAL | BOOL_LITERAL | STRING_LITERAL | FLOAT_LITERAL;
 INT_LITERAL: [0-9]+;

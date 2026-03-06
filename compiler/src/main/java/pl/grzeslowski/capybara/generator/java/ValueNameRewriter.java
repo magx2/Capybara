@@ -10,11 +10,15 @@ public class ValueNameRewriter {
             case LinkedFloatValue linkedFloatValue -> linkedFloatValue;
             case LinkedFunctionCall linkedFunctionCall ->
                     rewriteValueInLinkedFunctionCall(name, uniqueName, linkedFunctionCall);
+            case LinkedFunctionInvoke linkedFunctionInvoke ->
+                    rewriteValueInLinkedFunctionInvoke(name, uniqueName, linkedFunctionInvoke);
             case LinkedIfExpression linkedIfExpression ->
                     rewriteValueInLinkedIfExpression(name, uniqueName, linkedIfExpression);
             case LinkedInfixExpression linkedInfixExpression ->
                     rewriteValueInLinkedInfixExpression(name, uniqueName, linkedInfixExpression);
             case LinkedIntValue linkedIntValue -> linkedIntValue;
+            case LinkedLambdaExpression linkedLambdaExpression ->
+                    rewriteValueInLinkedLambdaExpression(name, uniqueName, linkedLambdaExpression);
             case LinkedLetExpression linkedLetExpression ->
                     rewriteValueInLinkedLetExpression(name, uniqueName, linkedLetExpression);
             case LinkedMatchExpression linkedMatchExpression ->
@@ -46,6 +50,16 @@ public class ValueNameRewriter {
         );
     }
 
+    private static LinkedExpression rewriteValueInLinkedFunctionInvoke(String name, String uniqueName, LinkedFunctionInvoke expression) {
+        return new LinkedFunctionInvoke(
+                rewriteValueInExpression(name, uniqueName, expression.function()),
+                expression.arguments().stream()
+                        .map(ar -> rewriteValueInExpression(name, uniqueName, ar))
+                        .toList(),
+                expression.returnType()
+        );
+    }
+
     private static LinkedExpression rewriteValueInLinkedFieldAccess(String name, String uniqueName, LinkedFieldAccess expression) {
         return new LinkedFieldAccess(
                 rewriteValueInExpression(name, uniqueName, expression.source()),
@@ -69,6 +83,17 @@ public class ValueNameRewriter {
                 expression.operator(),
                 rewriteValueInExpression(name, uniqueName, expression.right()),
                 expression.type());
+    }
+
+    private static LinkedExpression rewriteValueInLinkedLambdaExpression(String name, String uniqueName, LinkedLambdaExpression expression) {
+        if (expression.argumentName().equals(name)) {
+            return expression;
+        }
+        return new LinkedLambdaExpression(
+                expression.argumentName(),
+                rewriteValueInExpression(name, uniqueName, expression.expression()),
+                expression.functionType()
+        );
     }
 
 

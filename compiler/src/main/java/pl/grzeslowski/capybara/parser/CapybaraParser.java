@@ -136,6 +136,9 @@ public class CapybaraParser {
                 default -> throw new IllegalStateException("Unknown collection type: " + collection);
             };
         }
+        if (context.ARROW() != null) {
+            return new FunctionType(type(context.type(0)), type(context.type(1)));
+        }
         return type(context.getText());
     }
 
@@ -235,8 +238,8 @@ public class CapybaraParser {
                 }
             }
 
-            if (value.NAME() != null) {
-                return new Value(value.NAME().getText(), position(value.NAME()));
+            if (value.identifier() != null) {
+                return new Value(identifier(value.identifier()), position(value.identifier()));
             }
         }
 
@@ -305,7 +308,7 @@ public class CapybaraParser {
     }
 
     private FunctionReference functionReference(FunctionalParser.FunctionReferenceContext context) {
-        return new FunctionReference(context.NAME().getText(), position(context));
+        return new FunctionReference(identifier(context.identifier()), position(context));
     }
 
     private Expression expressionNoLetNoPipe(FunctionalParser.ExpressionNoLetNoPipeContext expression) {
@@ -351,8 +354,8 @@ public class CapybaraParser {
                 }
             }
 
-            if (value.NAME() != null) {
-                return new Value(value.NAME().getText(), position(value.NAME()));
+            if (value.identifier() != null) {
+                return new Value(identifier(value.identifier()), position(value.identifier()));
             }
         }
 
@@ -490,7 +493,7 @@ public class CapybaraParser {
         var arguments = context.argumentList() == null
                 ? List.<Expression>of()
                 : context.argumentList().expression().stream().map(this::expression).toList();
-        return new FunctionCall(context.NAME().getText(), arguments, position(context));
+        return new FunctionCall(identifier(context.identifier()), arguments, position(context));
     }
 
     private Expression newListExpression(pl.grzeslowski.capybara.parser.antlr.FunctionalParser.New_listContext context) {
@@ -571,7 +574,7 @@ public class CapybaraParser {
     }
 
     private Parameter parameter(pl.grzeslowski.capybara.parser.antlr.FunctionalParser.ParameterContext context) {
-        return new Parameter(type(context.type()), context.NAME().getText(), position(context));
+        return new Parameter(type(context.type()), identifier(context.identifier()), position(context));
     }
 
     private static Optional<SourcePosition> position(ParserRuleContext context) {
@@ -597,6 +600,10 @@ public class CapybaraParser {
         return context.TYPE(0).getText();
     }
 
+    private static String identifier(FunctionalParser.IdentifierContext context) {
+        return context.getText();
+    }
+
     private static List<String> genericTypeParameters(FunctionalParser.GenericTypeDeclarationContext context) {
         return context.TYPE().stream().skip(1).map(TerminalNode::getText).toList();
     }
@@ -616,3 +623,4 @@ public class CapybaraParser {
     }
 
 }
+

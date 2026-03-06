@@ -103,6 +103,13 @@ public class JavaAstBuilder {
             case GenericDataType genericDataType -> buildGenericDataType(genericDataType);
             case PrimitiveLinkedType primitiveLinkedType -> buildPrimitiveLinkedType(primitiveLinkedType);
             case CollectionLinkedType collectionLinkedType -> buildCollectionLinkedType(collectionLinkedType);
+            case LinkedFunctionType functionType -> new JavaType(
+                    "java.util.function.Function<"
+                    + buildJavaBoxedType(functionType.argumentType())
+                    + ", "
+                    + buildJavaBoxedType(functionType.returnType())
+                    + ">"
+            );
             case LinkedGenericTypeParameter linkedGenericTypeParameter -> new JavaType(linkedGenericTypeParameter.name());
         };
     }
@@ -140,6 +147,11 @@ public class JavaAstBuilder {
             };
             case GenericDataType genericDataType -> buildClassName(genericDataType.name()).toString();
             case CollectionLinkedType collectionLinkedType -> buildCollectionLinkedType(collectionLinkedType).toString();
+            case LinkedFunctionType functionType -> "java.util.function.Function<"
+                    + buildJavaBoxedType(functionType.argumentType())
+                    + ", "
+                    + buildJavaBoxedType(functionType.returnType())
+                    + ">";
             case LinkedGenericTypeParameter linkedGenericTypeParameter -> linkedGenericTypeParameter.name();
         };
     }

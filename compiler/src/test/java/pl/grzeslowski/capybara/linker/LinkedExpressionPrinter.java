@@ -19,10 +19,12 @@ public class LinkedExpressionPrinter {
             case LinkedFieldAccess linkedFieldAccess -> printLinkedFieldAccess(linkedFieldAccess, level);
             case LinkedFloatValue linkedFloatValue -> printLinkedFloatValue(linkedFloatValue, level);
             case LinkedFunctionCall linkedFunctionCall -> printLinkedFunctionCall(linkedFunctionCall, level);
+            case LinkedFunctionInvoke linkedFunctionInvoke -> printLinkedFunctionInvoke(linkedFunctionInvoke, level);
             case LinkedIfExpression linkedIfExpression -> printLinkedIfExpression(linkedIfExpression, level);
             case LinkedInfixExpression linkedInfixExpression ->
                     printLinkedInfixExpression(linkedInfixExpression, level);
             case LinkedIntValue linkedIntValue -> printLinkedIntValue(linkedIntValue, level);
+            case LinkedLambdaExpression linkedLambdaExpression -> printLinkedLambdaExpression(linkedLambdaExpression, level);
             case LinkedLetExpression linkedLetExpression -> printLinkedLetExpression(linkedLetExpression, level);
             case LinkedMatchExpression linkedMatchExpression ->
                     printLinkedMatchExpression(linkedMatchExpression, level);
@@ -66,6 +68,13 @@ public class LinkedExpressionPrinter {
                + printExpression(linkedIfExpression.elseBranch(), level + 1);
     }
 
+    private static String printLinkedFunctionInvoke(LinkedFunctionInvoke linkedFunctionInvoke, int level) {
+        return printExpression(linkedFunctionInvoke.function(), level)
+               + "(\n"
+               + linkedFunctionInvoke.arguments().stream().map(ex -> printExpression(ex, level + 1)).collect(joining())
+               + LINE_BREAK + tabs(level + 1) + "): " + linkedFunctionInvoke.returnType();
+    }
+
     private static String printLinkedInfixExpression(LinkedInfixExpression linkedInfixExpression, int level) {
         return printExpression(linkedInfixExpression.left(), level)
                + " " + linkedInfixExpression.operator().symbol()
@@ -74,6 +83,12 @@ public class LinkedExpressionPrinter {
 
     private static String printLinkedIntValue(LinkedIntValue linkedIntValue, int level) {
         return linkedIntValue.intValue();
+    }
+
+    private static String printLinkedLambdaExpression(LinkedLambdaExpression linkedLambdaExpression, int level) {
+        return linkedLambdaExpression.argumentName()
+               + " => "
+               + printExpression(linkedLambdaExpression.expression(), level);
     }
 
     private static String printLinkedLetExpression(LinkedLetExpression linkedLetExpression, int level) {

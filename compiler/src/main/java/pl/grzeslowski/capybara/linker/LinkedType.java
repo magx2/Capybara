@@ -1,5 +1,5 @@
 package pl.grzeslowski.capybara.linker;
 
-public sealed interface LinkedType permits CollectionLinkedType, GenericDataType, PrimitiveLinkedType, LinkedGenericTypeParameter {
+public sealed interface LinkedType permits CollectionLinkedType, GenericDataType, PrimitiveLinkedType, LinkedGenericTypeParameter, LinkedFunctionType {
     String name();
 }

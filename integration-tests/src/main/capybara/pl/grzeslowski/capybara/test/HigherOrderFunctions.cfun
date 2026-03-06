@@ -1,3 +1,7 @@
 fun map(l: list[int]) = l | :double
 
 fun double(x: int) = x * x
+
+fun hof(fun: int->string) = fun(5)
+
+fun invoke_hof(s: string) = hof(x => s + " " + x)

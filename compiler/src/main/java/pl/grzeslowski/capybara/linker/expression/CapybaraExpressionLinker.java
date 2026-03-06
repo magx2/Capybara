@@ -100,34 +100,45 @@ public class CapybaraExpressionLinker {
     }
 
     private ValueOrError<LinkedExpression> linkFunctionCall(FunctionCall functionCall, Scope scope) {
-        return functionCall.arguments()
-                .stream()
-                .map((Expression expression) -> linkExpression(expression, scope))
-                .collect(new ValueOrErrorCollectionCollector<>())
-                .flatMap(args -> resolveFunctionCall(functionCall, args));
+        var functionVariable = resolveFunctionVariable(functionCall.name(), scope);
+        if (functionVariable.isPresent()) {
+            return resolveFunctionInvoke(functionCall, scope, functionVariable.get());
+        }
+        return resolveGlobalFunctionCall(functionCall, scope);
     }
 
-    private ValueOrError<LinkedExpression> resolveFunctionCall(FunctionCall functionCall, List<LinkedExpression> arguments) {
+    private ValueOrError<LinkedExpression> resolveGlobalFunctionCall(FunctionCall functionCall, Scope scope) {
         var candidates = functionSignatures.stream()
                 .filter(signature -> signature.name().equals(functionCall.name()))
-                .filter(signature -> signature.parameterTypes().size() == arguments.size())
+                .filter(signature -> signature.parameterTypes().size() == functionCall.arguments().size())
                 .toList();
         if (candidates.isEmpty()) {
-            return ValueOrError.success(new LinkedFunctionCall(functionCall.name(), arguments, ANY));
+            return functionCall.arguments()
+                    .stream()
+                    .map((Expression expression) -> linkExpression(expression, scope))
+                    .collect(new ValueOrErrorCollectionCollector<>())
+                    .map(args -> (LinkedExpression) new LinkedFunctionCall(functionCall.name(), args, ANY));
         }
 
         ResolvedFunctionCall best = null;
         for (var candidate : candidates) {
-            var resolved = coerceArguments(arguments, candidate.parameterTypes());
-            if (resolved == null) {
+            var maybeResolved = linkArgumentsForExpectedTypes(functionCall.arguments(), scope, candidate.parameterTypes());
+            if (!(maybeResolved instanceof ValueOrError.Value<CoercedArguments> resolvedValue)) {
                 continue;
             }
+            var resolved = resolvedValue.value();
             if (best == null || resolved.coercions() < best.coercions()) {
                 best = new ResolvedFunctionCall(candidate, resolved.arguments(), resolved.coercions());
             }
         }
         if (best == null) {
-            var actualTypes = arguments.stream().map(LinkedExpression::type).map(LinkedType::name).toList();
+            var actualTypes = new java.util.ArrayList<String>();
+            for (var argument : functionCall.arguments()) {
+                var linked = linkExpression(argument, scope);
+                if (linked instanceof ValueOrError.Value<LinkedExpression> value) {
+                    actualTypes.add(value.value().type().name());
+                }
+            }
             return withPosition(
                     ValueOrError.error(
                             "No matching function `" + functionCall.name() + "` for argument types " + actualTypes
@@ -142,20 +153,110 @@ public class CapybaraExpressionLinker {
         ));
     }
 
-    private CoercedArguments coerceArguments(List<LinkedExpression> arguments, List<LinkedType> expectedTypes) {
+    private Optional<LinkedVariable> resolveFunctionVariable(String name, Scope scope) {
+        if (scope.localValues().get(name) instanceof LinkedFunctionType functionType) {
+            return Optional.of(new LinkedVariable(name, functionType));
+        }
+        return parameters.stream()
+                .filter(parameter -> parameter.name().equals(name))
+                .filter(parameter -> parameter.type() instanceof LinkedFunctionType)
+                .findFirst()
+                .map(parameter -> new LinkedVariable(parameter.name(), parameter.type()));
+    }
+
+    private ValueOrError<LinkedExpression> resolveFunctionInvoke(
+            FunctionCall functionCall,
+            Scope scope,
+            LinkedVariable function
+    ) {
+        if (!(function.type() instanceof LinkedFunctionType functionType)) {
+            return withPosition(ValueOrError.error("Variable `" + function.name() + "` is not callable"), functionCall.position());
+        }
+        if (functionCall.arguments().size() != 1) {
+            return withPosition(
+                    ValueOrError.error("Function variable `" + function.name() + "` requires exactly one argument"),
+                    functionCall.position()
+            );
+        }
+
+        return linkArgumentForExpectedType(functionCall.arguments().get(0), scope, functionType.argumentType())
+                .map(coerced -> (LinkedExpression) new LinkedFunctionInvoke(
+                        function,
+                        List.of(coerced.expression()),
+                        functionType.returnType()
+                ));
+    }
+
+    private ValueOrError<CoercedArguments> linkArgumentsForExpectedTypes(
+            List<Expression> arguments,
+            Scope scope,
+            List<LinkedType> expectedTypes
+    ) {
         var coerced = new java.util.ArrayList<LinkedExpression>(arguments.size());
         var coercions = 0;
         for (var i = 0; i < arguments.size(); i++) {
             var argument = arguments.get(i);
             var expected = expectedTypes.get(i);
-            var maybeCoerced = coerceArgument(argument, expected);
-            if (maybeCoerced == null) {
-                return null;
+            var maybeCoerced = linkArgumentForExpectedType(argument, scope, expected);
+            if (maybeCoerced instanceof ValueOrError.Error<CoercedArgument>) {
+                return ValueOrError.error(List.of());
             }
-            coerced.add(maybeCoerced.expression());
-            coercions += maybeCoerced.coercions();
+            var value = ((ValueOrError.Value<CoercedArgument>) maybeCoerced).value();
+            coerced.add(value.expression());
+            coercions += value.coercions();
         }
-        return new CoercedArguments(List.copyOf(coerced), coercions);
+        return ValueOrError.success(new CoercedArguments(List.copyOf(coerced), coercions));
+    }
+
+    private ValueOrError<CoercedArgument> linkArgumentForExpectedType(Expression argument, Scope scope, LinkedType expected) {
+        if (argument instanceof LambdaExpression lambdaExpression) {
+            if (expected instanceof LinkedFunctionType functionType) {
+                return linkLambdaExpression(lambdaExpression, scope, functionType)
+                        .map(linkedLambda -> new CoercedArgument(linkedLambda, 0));
+            }
+            return withPosition(
+                    ValueOrError.error("Lambda expression can only be used where function type is expected"),
+                    argument.position()
+            );
+        }
+
+        return linkExpression(argument, scope)
+                .flatMap(linkedArgument -> {
+                    var maybeCoerced = coerceArgument(linkedArgument, expected);
+                    if (maybeCoerced == null) {
+                        return withPosition(
+                                ValueOrError.error("Expected `" + expected + "`, got `" + linkedArgument.type() + "`"),
+                                argument.position()
+                        );
+                    }
+                    return ValueOrError.success(maybeCoerced);
+                });
+    }
+
+    private ValueOrError<LinkedLambdaExpression> linkLambdaExpression(
+            LambdaExpression lambdaExpression,
+            Scope scope,
+            LinkedFunctionType expectedType
+    ) {
+        var lambdaScope = scope.add(lambdaExpression.argumentName(), expectedType.argumentType());
+        return linkExpression(lambdaExpression.expression(), lambdaScope)
+                .flatMap(linkedBody -> {
+                    var maybeCoerced = coerceArgument(linkedBody, expectedType.returnType());
+                    if (maybeCoerced == null) {
+                        return withPosition(
+                                ValueOrError.error(
+                                        "Lambda has to return `" + expectedType.returnType()
+                                        + "`, got `" + linkedBody.type() + "`"
+                                ),
+                                lambdaExpression.position()
+                        );
+                    }
+                    return ValueOrError.success(new LinkedLambdaExpression(
+                            lambdaExpression.argumentName(),
+                            maybeCoerced.expression(),
+                            expectedType
+                    ));
+                });
     }
 
     private CoercedArgument coerceArgument(LinkedExpression argument, LinkedType expected) {

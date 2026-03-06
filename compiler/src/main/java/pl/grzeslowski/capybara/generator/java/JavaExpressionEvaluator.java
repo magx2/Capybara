@@ -38,9 +38,11 @@ public class JavaExpressionEvaluator {
             case LinkedFieldAccess fieldAccess -> evaluateFieldAccess(fieldAccess, scope);
             case LinkedFloatValue floatValue -> evaluateFloatValue(floatValue, scope);
             case LinkedFunctionCall functionCall -> evaluateFunctionCall(functionCall, scope);
+            case LinkedFunctionInvoke functionInvoke -> evaluateFunctionInvoke(functionInvoke, scope);
             case LinkedIfExpression ifExpression -> evaluateIfExpression(ifExpression, scope);
             case LinkedInfixExpression infixExpression -> evaluateInfixExpression(infixExpression, scope);
             case LinkedIntValue intValue -> evaluateIntValue(intValue, scope);
+            case LinkedLambdaExpression lambdaExpression -> evaluateLambdaExpression(lambdaExpression, scope);
             case LinkedLetExpression letExpression -> evaluateLetExpression(letExpression, scope);
             case LinkedMatchExpression matchExpression -> evaluateMatchExpression(matchExpression, scope);
             case LinkedPipeFlatMapExpression pipeFlatMapExpression -> evaluatePipeFlatMapExpression(pipeFlatMapExpression, scope);
@@ -88,6 +90,18 @@ public class JavaExpressionEvaluator {
             default -> normalizeJavaMethodName(functionCall.name()) + "(" + String.join(", ", args) + ")";
         };
         return current.addExpression(expression);
+    }
+
+    private static Scope evaluateFunctionInvoke(LinkedFunctionInvoke functionInvoke, Scope scope) {
+        var functionExSc = evaluateExpression(functionInvoke.function(), scope).popExpression();
+        var current = functionExSc.scope();
+        var call = new StringBuilder(functionExSc.expression());
+        for (var argument : functionInvoke.arguments()) {
+            var argumentScope = evaluateExpression(argument, current).popExpression();
+            current = argumentScope.scope();
+            call.append(".apply(").append(argumentScope.expression()).append(")");
+        }
+        return current.addExpression(call.toString());
     }
 
     private static Scope evaluateIfExpression(LinkedIfExpression expression, Scope scope) {
@@ -200,6 +214,14 @@ public class JavaExpressionEvaluator {
 
     private static Scope evaluateIntValue(LinkedIntValue intValue, Scope scope) {
         return scope.addExpression(intValue.intValue());
+    }
+
+    private static Scope evaluateLambdaExpression(LinkedLambdaExpression lambdaExpression, Scope scope) {
+        var bodyExSc = evaluateExpression(
+                lambdaExpression.expression(),
+                scope.addLocalValue(lambdaExpression.argumentName())
+        ).popExpression();
+        return bodyExSc.scope().addExpression(lambdaExpression.argumentName() + " -> (" + bodyExSc.expression() + ")");
     }
 
     private static Scope evaluatePipeExpression(LinkedPipeExpression pipeExpression, Scope scope) {

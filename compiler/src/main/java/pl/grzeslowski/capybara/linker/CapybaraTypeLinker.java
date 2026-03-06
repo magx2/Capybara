@@ -8,6 +8,7 @@ import pl.grzeslowski.capybara.parser.CollectionType.DictType;
 import pl.grzeslowski.capybara.parser.CollectionType.ListType;
 import pl.grzeslowski.capybara.parser.CollectionType.SetType;
 import pl.grzeslowski.capybara.parser.DataType;
+import pl.grzeslowski.capybara.parser.FunctionType;
 import pl.grzeslowski.capybara.parser.PrimitiveType;
 import pl.grzeslowski.capybara.parser.Type;
 
@@ -21,6 +22,7 @@ public class CapybaraTypeLinker {
             case PrimitiveType primitiveType -> ValueOrError.success(linkPrimitiveType(primitiveType));
             case CollectionType collectionType -> linkCollectionType(collectionType);
             case DataType dataType -> linkDataType(dataType, dataTypes);
+            case FunctionType functionType -> linkFunctionType(functionType, dataTypes);
         };
     }
 
@@ -53,5 +55,13 @@ public class CapybaraTypeLinker {
             case DictType dict -> linkType(dict.valueType()).map(LinkedDict::new);
             case SetType set -> linkType(set.elementType()).map(LinkedSet::new);
         };
+    }
+
+    private static ValueOrError<LinkedType> linkFunctionType(FunctionType type, Map<String, GenericDataType> dataTypes) {
+        return ValueOrError.join(
+                (LinkedType argumentType, LinkedType returnType) -> new LinkedFunctionType(argumentType, returnType),
+                linkType(type.argumentType(), dataTypes),
+                linkType(type.returnType(), dataTypes)
+        );
     }
 }
