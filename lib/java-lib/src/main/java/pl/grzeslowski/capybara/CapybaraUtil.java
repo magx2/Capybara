@@ -1,6 +1,7 @@
 package pl.grzeslowski.capybara;
 
 public interface CapybaraUtil {
+    // todo write versions for float, double, short, byte
     static int power(int a, int b) {
         int result = 1;
 

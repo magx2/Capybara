@@ -18,7 +18,7 @@ typeDeclaration: 'type' TYPE '=' TYPE ('|' TYPE)*
 dataDeclaration: 'data' TYPE '{' fieldDeclarationList? '}';
 fieldDeclarationList: fieldDeclaration (',' fieldDeclaration)*;
 fieldDeclaration: NAME ':' type
-                | '"' NAME '"' ':' type;
+                | STRING_LITERAL ':' type;
 
 BOOL_LITERAL: 'true' | 'false';
 COLLECTION: 'list' | 'set' | 'dict';
@@ -77,7 +77,7 @@ new_dict: '{' dict_entry (',' dict_entry)* ','? '}';
 dict_entry: expression ':' expression;
 fieldAssignmentList: fieldAssignment (',' fieldAssignment)*;
 fieldAssignment: NAME ':' expression
-                | '"' NAME '"' ':' expression;
+                | STRING_LITERAL ':' expression;
 
 infixOperator: PLUS
              | MINUS

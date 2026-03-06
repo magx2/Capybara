@@ -69,6 +69,15 @@ class Scope {
         return addStatementUnchecked(statement);
     }
 
+    Scope addLocalValue(String name) {
+        if (localValues.contains(name)) {
+            return this;
+        }
+        var updated = new HashSet<>(localValues);
+        updated.add(name);
+        return new Scope(valueIdx, updated, valueNameToUniqueName, statements, expression);
+    }
+
     private Scope addStatementUnchecked(String statement) {
         var updated = new ArrayList<>(statements);
         updated.add(statement);

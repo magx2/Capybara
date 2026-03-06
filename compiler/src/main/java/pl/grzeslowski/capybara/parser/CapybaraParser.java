@@ -81,7 +81,7 @@ public class CapybaraParser {
     }
 
     private DataDeclaration.DataField fieldDeclaration(FunctionalParser.FieldDeclarationContext context) {
-        return new DataDeclaration.DataField(context.NAME().getText(), type(context.type()));
+        return new DataDeclaration.DataField(fieldName(context.NAME(), context.STRING_LITERAL()), type(context.type()));
     }
 
     private Function functionDeclaration(pl.grzeslowski.capybara.parser.antlr.FunctionalParser.FunctionDeclarationContext functionDeclarationContext) {
@@ -352,7 +352,7 @@ public class CapybaraParser {
     }
 
     private NewData.FieldAssignment fieldAssignment(pl.grzeslowski.capybara.parser.antlr.FunctionalParser.FieldAssignmentContext context) {
-        return new NewData.FieldAssignment(context.NAME().getText(), expression(context.expression()));
+        return new NewData.FieldAssignment(fieldName(context.NAME(), context.STRING_LITERAL()), expression(context.expression()));
     }
 
     private static BooleanValue boolLiteral(TerminalNode node) {
@@ -373,6 +373,17 @@ public class CapybaraParser {
 
     private static Optional<SourcePosition> position(TerminalNode node) {
         return Optional.of(SourcePosition.of(node));
+    }
+
+    private static String fieldName(TerminalNode name, TerminalNode stringLiteral) {
+        if (name != null) {
+            return name.getText();
+        }
+        if (stringLiteral != null) {
+            var raw = stringLiteral.getText();
+            return raw.substring(1, raw.length() - 1);
+        }
+        throw new IllegalStateException("Missing field name");
     }
 
 }

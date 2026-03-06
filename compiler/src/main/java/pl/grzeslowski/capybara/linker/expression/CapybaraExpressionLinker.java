@@ -193,7 +193,125 @@ public class CapybaraExpressionLinker {
     }
 
     private ValueOrError<LinkedExpression> linkMatchExpression(MatchExpression matchExpression, Scope scope) {
-        throw new UnsupportedOperationException("CapybaraExpressionLinker.linkMatchExpression(matchExpression)");
+        return linkExpression(matchExpression.matchWith(), scope)
+                .flatMap(matchWith -> matchExpression.cases().stream()
+                        .map(matchCase -> linkMatchCase(matchCase, matchWith, scope))
+                        .collect(new ValueOrErrorCollectionCollector<>())
+                        .map(cases -> {
+                            var matchType = cases.stream()
+                                    .map(LinkedMatchExpression.MatchCase::expression)
+                                    .map(LinkedExpression::type)
+                                    .reduce(CapybaraTypeFinder::findHigherType)
+                                    .orElse(ANY);
+                            return (LinkedExpression) new LinkedMatchExpression(matchWith, cases, matchType);
+                        }));
+    }
+
+    private ValueOrError<LinkedMatchExpression.MatchCase> linkMatchCase(
+            MatchExpression.MatchCase matchCase,
+            LinkedExpression matchWith,
+            Scope scope
+    ) {
+        return linkPattern(matchCase.pattern(), matchWith.type(), scope)
+                .flatMap(patternAndScope -> linkExpression(matchCase.expression(), patternAndScope.scope())
+                        .map(expression -> new LinkedMatchExpression.MatchCase(patternAndScope.pattern(), expression)));
+    }
+
+    private ValueOrError<PatternAndScope> linkPattern(MatchExpression.Pattern pattern, LinkedType matchType, Scope scope) {
+        return switch (pattern) {
+            case MatchExpression.IntPattern intPattern -> validateLiteralPattern(intPattern, matchType, scope, PrimitiveLinkedType.INT);
+            case MatchExpression.StringPattern stringPattern -> validateLiteralPattern(stringPattern, matchType, scope, PrimitiveLinkedType.STRING);
+            case MatchExpression.BoolPattern boolPattern -> validateLiteralPattern(boolPattern, matchType, scope, PrimitiveLinkedType.BOOL);
+            case MatchExpression.FloatPattern floatPattern -> validateLiteralPattern(floatPattern, matchType, scope, PrimitiveLinkedType.FLOAT);
+            case MatchExpression.VariablePattern variablePattern -> linkVariablePattern(variablePattern, matchType, scope);
+            case MatchExpression.WildcardPattern wildcardPattern ->
+                    ValueOrError.success(new PatternAndScope(LinkedMatchExpression.WildcardPattern.WILDCARD, scope));
+            case MatchExpression.ConstructorPattern constructorPattern -> linkConstructorPattern(constructorPattern, matchType, scope);
+        };
+    }
+
+    private ValueOrError<PatternAndScope> validateLiteralPattern(
+            MatchExpression.Pattern pattern,
+            LinkedType matchType,
+            Scope scope,
+            PrimitiveLinkedType expected
+    ) {
+        if (matchType != expected) {
+            return ValueOrError.error("Cannot match `" + matchType + "` with literal of type `" + expected + "`");
+        }
+        return switch (pattern) {
+            case MatchExpression.IntPattern intPattern ->
+                    ValueOrError.success(new PatternAndScope(new LinkedMatchExpression.IntPattern(intPattern.value()), scope));
+            case MatchExpression.StringPattern stringPattern ->
+                    ValueOrError.success(new PatternAndScope(new LinkedMatchExpression.StringPattern(stringPattern.value()), scope));
+            case MatchExpression.BoolPattern boolPattern ->
+                    ValueOrError.success(new PatternAndScope(new LinkedMatchExpression.BoolPattern(boolPattern.value()), scope));
+            case MatchExpression.FloatPattern floatPattern ->
+                    ValueOrError.success(new PatternAndScope(new LinkedMatchExpression.FloatPattern(floatPattern.value()), scope));
+            default -> throw new IllegalStateException("Unexpected literal pattern: " + pattern);
+        };
+    }
+
+    private ValueOrError<PatternAndScope> linkVariablePattern(
+            MatchExpression.VariablePattern variablePattern,
+            LinkedType matchType,
+            Scope scope
+    ) {
+        if (matchType instanceof LinkedDataParentType parentType) {
+            return findSubtype(variablePattern.name(), parentType)
+                    .map(ignored -> new PatternAndScope(new LinkedMatchExpression.VariablePattern(variablePattern.name()), scope));
+        }
+        if (matchType instanceof LinkedDataType dataType && dataType.name().equals(variablePattern.name())) {
+            return ValueOrError.success(new PatternAndScope(new LinkedMatchExpression.VariablePattern(variablePattern.name()), scope));
+        }
+        return ValueOrError.error("Cannot match `" + matchType + "` with constructor `" + variablePattern.name() + "`");
+    }
+
+    private ValueOrError<PatternAndScope> linkConstructorPattern(
+            MatchExpression.ConstructorPattern constructorPattern,
+            LinkedType matchType,
+            Scope scope
+    ) {
+        return findConstructorType(constructorPattern.constructorName(), matchType)
+                .flatMap(constructorType -> {
+                    if (constructorType.fields().size() != constructorPattern.names().size()) {
+                        return ValueOrError.error("Constructor `" + constructorPattern.constructorName() + "` expects "
+                                                  + constructorType.fields().size() + " argument(s), got "
+                                                  + constructorPattern.names().size());
+                    }
+                    var updatedScope = scope;
+                    for (int i = 0; i < constructorPattern.names().size(); i++) {
+                        updatedScope = updatedScope.add(constructorPattern.names().get(i), constructorType.fields().get(i).type());
+                    }
+                    return ValueOrError.success(new PatternAndScope(
+                            new LinkedMatchExpression.ConstructorPattern(
+                                    constructorPattern.constructorName(),
+                                    constructorPattern.names()
+                            ),
+                            updatedScope
+                    ));
+                });
+    }
+
+    private ValueOrError<LinkedDataType> findConstructorType(String constructorName, LinkedType matchType) {
+        if (matchType instanceof LinkedDataType linkedDataType) {
+            if (linkedDataType.name().equals(constructorName)) {
+                return ValueOrError.success(linkedDataType);
+            }
+            return ValueOrError.error("Type `" + linkedDataType.name() + "` cannot match constructor `" + constructorName + "`");
+        }
+        if (matchType instanceof LinkedDataParentType parentType) {
+            return findSubtype(constructorName, parentType);
+        }
+        return ValueOrError.error("Type `" + matchType + "` is not matchable with constructor `" + constructorName + "`");
+    }
+
+    private ValueOrError<LinkedDataType> findSubtype(String constructorName, LinkedDataParentType parentType) {
+        return parentType.subTypes().stream()
+                .filter(subType -> subType.name().equals(constructorName))
+                .findFirst()
+                .map(ValueOrError::success)
+                .orElseGet(() -> ValueOrError.error("Constructor `" + constructorName + "` not found in type `" + parentType.name() + "`"));
     }
 
     private ValueOrError<LinkedExpression> linkNewListExpression(NewListExpression expression, Scope scope) {
@@ -321,5 +439,8 @@ public class CapybaraExpressionLinker {
                     .toList());
         }
         return valueOrError;
+    }
+
+    private record PatternAndScope(LinkedMatchExpression.Pattern pattern, Scope scope) {
     }
 }

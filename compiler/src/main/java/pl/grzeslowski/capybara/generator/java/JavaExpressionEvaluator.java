@@ -47,7 +47,7 @@ public class JavaExpressionEvaluator {
     }
 
     private static Scope evaluateFloatValue(LinkedFloatValue floatValue, Scope scope) {
-        return scope.addExpression(floatValue.floatValue());
+        return scope.addExpression(floatValue.floatValue() + "f");
     }
 
     private static Scope evaluateFunctionCall(LinkedFunctionCall functionCall, Scope scope) {
@@ -174,7 +174,51 @@ public class JavaExpressionEvaluator {
     }
 
     private static Scope evaluateMatchExpression(LinkedMatchExpression matchExpression, Scope scope) {
-        throw new UnsupportedOperationException("wip");
+        var matchWithExSc = evaluateExpression(matchExpression.matchWith(), scope).popExpression();
+        var declaredValue = matchWithExSc.scope().declareValue(
+                "value",
+                matchWithExSc.expression(),
+                new LinkedVariable("value", matchExpression.matchWith().type())
+        );
+        var current = declaredValue.scope();
+        var switchTarget = current.findValueOverride("value").orElse("value");
+        var cases = new ArrayList<String>(matchExpression.cases().size());
+
+        for (var matchCase : matchExpression.cases()) {
+            var branchScope = current;
+            if (matchCase.pattern() instanceof LinkedMatchExpression.ConstructorPattern constructorPattern) {
+                for (var name : constructorPattern.names()) {
+                    branchScope = branchScope.addLocalValue(name);
+                }
+            }
+            var expressionScope = evaluateExpression(matchCase.expression(), branchScope).popExpression();
+            current = expressionScope.scope();
+            cases.add(matchCasePattern(matchCase.pattern()) + " -> (" + expressionScope.expression() + ")");
+        }
+
+        var hasWildcard = matchExpression.cases().stream()
+                .map(LinkedMatchExpression.MatchCase::pattern)
+                .anyMatch(LinkedMatchExpression.WildcardPattern.class::isInstance);
+        if (!hasWildcard) {
+            cases.add("default -> throw new java.lang.IllegalStateException(\"Unexpected value: \" + " + switchTarget + ")");
+        }
+
+        return current.addExpression("switch (" + switchTarget + ") { " + String.join("; ", cases) + "; }");
+    }
+
+    private static String matchCasePattern(LinkedMatchExpression.Pattern pattern) {
+        return switch (pattern) {
+            case LinkedMatchExpression.IntPattern intPattern -> "case " + intPattern.value();
+            case LinkedMatchExpression.StringPattern stringPattern -> "case " + stringPattern.value();
+            case LinkedMatchExpression.BoolPattern boolPattern -> "case " + boolPattern.value();
+            case LinkedMatchExpression.FloatPattern floatPattern -> "case " + floatPattern.value();
+            case LinkedMatchExpression.VariablePattern variablePattern -> "case " + variablePattern.name() + " _";
+            case LinkedMatchExpression.WildcardPattern wildcardPattern -> "default";
+            case LinkedMatchExpression.ConstructorPattern constructorPattern ->
+                    "case " + constructorPattern.constructorName() + "("
+                    + constructorPattern.names().stream().map(name -> "var " + name).reduce((a, b) -> a + ", " + b).orElse("")
+                    + ")";
+        };
     }
 
     private static Scope evaluateNewList(LinkedNewList newList, Scope scope) {
@@ -213,7 +257,29 @@ public class JavaExpressionEvaluator {
     }
 
     private static Scope evaluateNewData(LinkedNewData newData, Scope scope) {
-        throw new UnsupportedOperationException("wip");
+        if (!(newData.type() instanceof pl.grzeslowski.capybara.linker.LinkedDataType dataType)) {
+            throw new UnsupportedOperationException("Cannot instantiate non-data type: " + newData.type());
+        }
+
+        var current = scope;
+        var byName = new java.util.HashMap<String, String>();
+        for (var assignment : newData.assignments()) {
+            var expressionScope = evaluateExpression(assignment.value(), current).popExpression();
+            current = expressionScope.scope();
+            byName.put(assignment.name(), expressionScope.expression());
+        }
+
+        var args = dataType.fields().stream()
+                .map(field -> {
+                    var value = byName.get(field.name());
+                    if (value == null) {
+                        throw new IllegalStateException("Missing assignment for field `" + field.name() + "` in `" + dataType.name() + "`");
+                    }
+                    return value;
+                })
+                .toList();
+
+        return current.addExpression("new " + dataType.name() + "(" + String.join(", ", args) + ")");
     }
 
     private static Scope evaluateStringValue(LinkedStringValue stringValue, Scope scope) {

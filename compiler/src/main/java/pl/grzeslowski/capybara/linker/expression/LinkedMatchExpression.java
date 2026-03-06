@@ -1,10 +1,11 @@
 package pl.grzeslowski.capybara.linker.expression;
 
 import pl.grzeslowski.capybara.linker.LinkedType;
+import pl.grzeslowski.capybara.linker.PrimitiveLinkedType;
 
 import java.util.List;
 
-public record LinkedMatchExpression(LinkedExpression matchWith, List<MatchCase> cases) implements LinkedExpression {
+public record LinkedMatchExpression(LinkedExpression matchWith, List<MatchCase> cases, LinkedType type) implements LinkedExpression {
     public LinkedMatchExpression {
         if (cases.isEmpty()) {
             throw new IllegalArgumentException("Match expression must have at least one case");
@@ -39,8 +40,7 @@ public record LinkedMatchExpression(LinkedExpression matchWith, List<MatchCase> 
     public record ConstructorPattern(String constructorName, List<String> names) implements Pattern {
     }
 
-    @Override
-    public LinkedType type() {
-        throw new UnsupportedOperationException("WIP");
+    public LinkedMatchExpression(LinkedExpression matchWith, List<MatchCase> cases) {
+        this(matchWith, cases, PrimitiveLinkedType.ANY);
     }
 }
