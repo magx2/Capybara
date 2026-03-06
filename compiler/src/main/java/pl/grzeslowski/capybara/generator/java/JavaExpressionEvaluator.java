@@ -172,17 +172,17 @@ public class JavaExpressionEvaluator {
 
     private static Scope evaluatePipeExpression(LinkedPipeExpression pipeExpression, Scope scope) {
         var streamExSc = evaluatePipeExpressionAsStream(pipeExpression, scope);
-        return streamExSc.scope().addExpression(streamExSc.streamExpression() + ".toList()");
+        return streamExSc.scope().addExpression(streamExSc.streamExpression() + terminalCollect(pipeExpression.type()));
     }
 
     private static Scope evaluatePipeFlatMapExpression(LinkedPipeFlatMapExpression pipeFlatMapExpression, Scope scope) {
         var streamExSc = evaluatePipeFlatMapExpressionAsStream(pipeFlatMapExpression, scope);
-        return streamExSc.scope().addExpression(streamExSc.streamExpression() + ".toList()");
+        return streamExSc.scope().addExpression(streamExSc.streamExpression() + terminalCollect(pipeFlatMapExpression.type()));
     }
 
     private static Scope evaluatePipeFilterOutExpression(LinkedPipeFilterOutExpression pipeFilterOutExpression, Scope scope) {
         var streamExSc = evaluatePipeFilterOutExpressionAsStream(pipeFilterOutExpression, scope);
-        return streamExSc.scope().addExpression(streamExSc.streamExpression() + ".toList()");
+        return streamExSc.scope().addExpression(streamExSc.streamExpression() + terminalCollect(pipeFilterOutExpression.type()));
     }
 
     private static Scope evaluatePipeReduceExpression(LinkedPipeReduceExpression pipeReduceExpression, Scope scope) {
@@ -269,6 +269,14 @@ public class JavaExpressionEvaluator {
     }
 
     private record StreamExpressionScope(String streamExpression, Scope scope) {
+    }
+
+    private static String terminalCollect(pl.grzeslowski.capybara.linker.LinkedType type) {
+        return switch (type) {
+            case pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedSet ignored ->
+                    ".collect(java.util.stream.Collectors.toSet())";
+            default -> ".toList()";
+        };
     }
 
     private static Scope evaluateLetExpression(LinkedLetExpression let, Scope scope) {

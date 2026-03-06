@@ -147,7 +147,9 @@ public class CapybaraExpressionLinker {
                                     left,
                                     lambdaExpression.argumentName(),
                                     mapper,
-                                    new LinkedList(mapper.type())
+                                    left.type() instanceof LinkedSet
+                                            ? new LinkedSet(mapper.type())
+                                            : new LinkedList(mapper.type())
                             ));
                 });
     }
@@ -227,7 +229,9 @@ public class CapybaraExpressionLinker {
                                         left,
                                         lambdaExpression.argumentName(),
                                         mapper,
-                                        new LinkedList(mappedElementType)
+                                        left.type() instanceof LinkedSet
+                                                ? new LinkedSet(mappedElementType)
+                                                : new LinkedList(mappedElementType)
                                 ));
                             });
                 });
@@ -268,7 +272,9 @@ public class CapybaraExpressionLinker {
                                         left,
                                         lambdaExpression.argumentName(),
                                         predicate,
-                                        new LinkedList(elementType)
+                                        left.type() instanceof LinkedSet
+                                                ? new LinkedSet(elementType)
+                                                : new LinkedList(elementType)
                                 ));
                             });
                 });

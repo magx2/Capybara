@@ -3,6 +3,7 @@ package pl.grzeslowski.capybara.test;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -50,5 +51,25 @@ class PipeTest {
     @Test
     void flatMap2() {
         assertThat(Pipe.flatMap2(List.of(-1, 1, 2))).isEqualTo(List.of(-2, -1, 0));
+    }
+
+    @Test
+    void setMap1() {
+        assertThat(Pipe.setMap1(Set.of(1, 2, 3))).isEqualTo(Set.of(2, 4, 6));
+    }
+
+    @Test
+    void setFilter1() {
+        assertThat(Pipe.setFilter1(Set.of(-1, 0, 1, 2))).isEqualTo(Set.of(-1, 0));
+    }
+
+    @Test
+    void setReduce1() {
+        assertThat(Pipe.setReduce1(Set.of(1, 2, 3, 4))).isEqualTo(10);
+    }
+
+    @Test
+    void setFlatMap1() {
+        assertThat(Pipe.setFlatMap1(Set.of(1, 2))).isEqualTo(Set.of(1, 11, 2, 12));
     }
 }
