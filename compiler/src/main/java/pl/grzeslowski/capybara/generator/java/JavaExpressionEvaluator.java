@@ -66,7 +66,7 @@ public class JavaExpressionEvaluator {
         var right = evaluateExpression(infixExpression.right(), left.scope()).popExpression();
 
         return right.scope()
-                .addExpression(left.expression() + infixExpression.operator().symbol() + right.expression());
+                .addExpression('(' + left.expression() + infixExpression.operator().symbol() + right.expression() + ')');
     }
 
     private static Scope evaluateIntValue(LinkedIntValue intValue, Scope scope) {

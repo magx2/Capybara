@@ -167,10 +167,15 @@ public class CapybaraParser {
 
         var infixOperator = expression.infixOperator();
         if (infixOperator != null) {
-            var left = expression.expressionNoLet(0);
+            var leftContext = expression.expressionNoLet(0);
             var operator = InfixOperator.fromSymbol(infixOperator.getText());
-            var right = expression.expressionNoLet(1);
-            return new InfixExpression(expressionNoLet(left), operator, expressionNoLet(right));
+            var rightContext = expression.expressionNoLet(1);
+            return rebalanceInfixByPrecedence(
+                    expressionNoLet(leftContext),
+                    isGrouped(leftContext),
+                    operator,
+                    expressionNoLet(rightContext)
+            );
         }
 
         var subExpression = expression.expression();
@@ -179,6 +184,26 @@ public class CapybaraParser {
         }
 
         throw new IllegalStateException("Unknown expression: " + expression.getText());
+    }
+
+    private static boolean isGrouped(FunctionalParser.ExpressionNoLetContext context) {
+        return context.expression() != null;
+    }
+
+    private static Expression rebalanceInfixByPrecedence(Expression left,
+                                                         boolean leftGrouped,
+                                                         InfixOperator operator,
+                                                         Expression right) {
+        if (!leftGrouped &&
+            left instanceof InfixExpression leftInfix &&
+            operator.precedence() > leftInfix.operator().precedence()) {
+            return new InfixExpression(
+                    leftInfix.left(),
+                    leftInfix.operator(),
+                    rebalanceInfixByPrecedence(leftInfix.right(), false, operator, right)
+            );
+        }
+        return new InfixExpression(left, operator, right);
     }
 
     private MatchExpression matchExpression(FunctionalParser.MatchExpressionContext context) {

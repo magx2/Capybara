@@ -27,3 +27,12 @@ fun greet(name: string): string = "Hello, " + name
 
 fun double_then_classify(x: int): string =
     if (x * 2 > 0) then "positive" else "non-positive"
+
+fun order_of_expression(a: int, b: int): int =
+    {
+        let x = (a-1) * b
+        x + 1
+    } * {
+        let x = a + 1 * b
+        x - 1
+    }

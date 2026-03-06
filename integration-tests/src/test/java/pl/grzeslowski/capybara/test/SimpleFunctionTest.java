@@ -77,4 +77,10 @@ class SimpleFunctionTest {
     void doubleClassify(int x, String out) {
         assertThat(SimpleFunction.doubleThenClassify(x)).isEqualTo(out);
     }
+
+    @Test
+    @DisplayName("orderOfExpression(3, 5) == 77")
+    void orderOfExpression() {
+        assertThat(SimpleFunction.orderOfExpression(3, 5)).isEqualTo(77);
+    }
 }

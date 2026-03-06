@@ -37,4 +37,14 @@ public enum InfixOperator {
     public String symbol() {
         return symbol;
     }
+
+    public int precedence() {
+        return switch (this) {
+            case MUL, DIV -> 6;
+            case PLUS, MINUS -> 5;
+            case GT, LT, LE, GE -> 4;
+            case EQUAL, NOTEQUAL -> 3;
+            case CARET -> 2;
+        };
+    }
 }
