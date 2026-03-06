@@ -449,7 +449,7 @@ public class CapybaraExpressionLinker {
                     return linkExpression(ifExpression.thenBranch(), scope)
                             .flatMap(t ->
                                     linkExpression(ifExpression.elseBranch(), scope)
-                                            .map(e -> new LinkedIfExpression(c, t, e, ANY)));
+                                            .map(e -> new LinkedIfExpression(c, t, e, findHigherType(t.type(), e.type()))));
                 });
     }
 

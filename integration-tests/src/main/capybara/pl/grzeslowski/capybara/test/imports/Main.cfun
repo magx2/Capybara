@@ -1,0 +1,6 @@
+from Pck1 import { add }
+
+fun calculator(a: int, b: int, op: string) =
+    if op == "+"
+    then add(a,b)
+    else -1

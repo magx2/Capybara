@@ -2,6 +2,7 @@ package pl.grzeslowski.capybara.linker;
 
 import pl.grzeslowski.capybara.compiler.Module;
 import pl.grzeslowski.capybara.compiler.Program;
+import pl.grzeslowski.capybara.compiler.ImportDeclaration;
 import pl.grzeslowski.capybara.linker.LinkedFunction.LinkedFunctionParameter;
 import pl.grzeslowski.capybara.linker.expression.CapybaraExpressionLinker;
 import pl.grzeslowski.capybara.parser.*;
@@ -17,31 +18,155 @@ public class CapybaraLinker {
     public static final CapybaraLinker INSTANCE = new CapybaraLinker();
 
     public ValueOrError<LinkedProgram> link(Program program) {
-        return program.modules()
-                .stream()
-                .map(this::linkModule)
+        var modulesByName = program.modules().stream().collect(toMap(Module::name, identity(), (first, second) -> first));
+
+        var linkedTypesByModule = new HashMap<String, Map<String, GenericDataType>>();
+        for (var module : program.modules()) {
+            var linkedTypes = types(module);
+            if (linkedTypes instanceof ValueOrError.Error<Map<String, GenericDataType>> error) {
+                return ValueOrError.error(error.errors().stream().map(ValueOrError.Error.SingleError::message).toList());
+            }
+            linkedTypesByModule.put(module.name(), ((ValueOrError.Value<Map<String, GenericDataType>>) linkedTypes).value());
+        }
+
+        var signaturesByModule = new HashMap<String, List<CapybaraExpressionLinker.FunctionSignature>>();
+        for (var module : program.modules()) {
+            var functions = findFunctions(module.functional().definitions());
+            var signatures = linkFunctionSignatures(functions, linkedTypesByModule.get(module.name()));
+            if (signatures instanceof ValueOrError.Error<List<CapybaraExpressionLinker.FunctionSignature>> error) {
+                return ValueOrError.error(error.errors().stream().map(ValueOrError.Error.SingleError::message).toList());
+            }
+            signaturesByModule.put(module.name(), ((ValueOrError.Value<List<CapybaraExpressionLinker.FunctionSignature>>) signatures).value());
+        }
+
+        var refinedSignaturesByModule = new HashMap<>(signaturesByModule);
+        for (var module : program.modules()) {
+            var firstPassFunctions = firstPassLinkedFunctions(module, modulesByName, linkedTypesByModule, signaturesByModule);
+            if (firstPassFunctions instanceof ValueOrError.Error<List<LinkedFunction>> error) {
+                return ValueOrError.error(error.errors().stream().map(ValueOrError.Error.SingleError::message).toList());
+            }
+            var refined = mergeSignatures(
+                    signaturesByModule.get(module.name()),
+                    signaturesFromLinkedFunctions(((ValueOrError.Value<List<LinkedFunction>>) firstPassFunctions).value())
+            );
+            refinedSignaturesByModule.put(module.name(), refined);
+        }
+
+        return program.modules().stream()
+                .map(module -> linkModule(module, modulesByName, linkedTypesByModule, refinedSignaturesByModule))
                 .collect(new ValueOrErrorCollectionCollector<>())
                 .map(LinkedProgram::new);
     }
 
-    private ValueOrError<LinkedModule> linkModule(Module module) {
-        return types(module)
-                .flatMap(dataTypes -> {
-                    var functions = findFunctions(module.functional().definitions());
-                    return linkFunctionSignatures(functions, dataTypes)
-                            .flatMap(initialSignatures ->
-                                    linkFunctions(functions, dataTypes, initialSignatures)
-                                            .flatMap(firstPassFunctions -> {
-                                                var refinedSignatures = signaturesFromLinkedFunctions(firstPassFunctions);
-                                                return linkFunctions(functions, dataTypes, refinedSignatures)
-                                                        .map(linkedFunctions -> new LinkedModule(
-                                                                module.name(),
-                                                                module.path(),
-                                                                dataTypes,
-                                                                Set.copyOf(linkedFunctions)
-                                                        ));
-                                            }));
+    private ValueOrError<List<LinkedFunction>> firstPassLinkedFunctions(
+            Module module,
+            Map<String, Module> modulesByName,
+            Map<String, Map<String, GenericDataType>> linkedTypesByModule,
+            Map<String, List<CapybaraExpressionLinker.FunctionSignature>> signaturesByModule
+    ) {
+        var dataTypes = linkedTypesByModule.get(module.name());
+        var functions = findFunctions(module.functional().definitions());
+        var availableSignatures = availableSignatures(module, modulesByName, signaturesByModule);
+        if (availableSignatures instanceof ValueOrError.Error<List<CapybaraExpressionLinker.FunctionSignature>> error) {
+            return ValueOrError.error(error.errors().stream().map(ValueOrError.Error.SingleError::message).toList());
+        }
+        var initialSignatures = ((ValueOrError.Value<List<CapybaraExpressionLinker.FunctionSignature>>) availableSignatures).value();
+        return linkFunctions(functions, dataTypes, initialSignatures);
+    }
+
+    private ValueOrError<LinkedModule> linkModule(
+            Module module,
+            Map<String, Module> modulesByName,
+            Map<String, Map<String, GenericDataType>> linkedTypesByModule,
+            Map<String, List<CapybaraExpressionLinker.FunctionSignature>> signaturesByModule
+    ) {
+        var dataTypes = linkedTypesByModule.get(module.name());
+        var functions = findFunctions(module.functional().definitions());
+        var availableSignatures = availableSignatures(module, modulesByName, signaturesByModule);
+        if (availableSignatures instanceof ValueOrError.Error<List<CapybaraExpressionLinker.FunctionSignature>> error) {
+            return ValueOrError.error(error.errors().stream().map(ValueOrError.Error.SingleError::message).toList());
+        }
+        var initialSignatures = ((ValueOrError.Value<List<CapybaraExpressionLinker.FunctionSignature>>) availableSignatures).value();
+        return linkFunctions(functions, dataTypes, initialSignatures)
+                .flatMap(firstPassFunctions -> {
+                    var refinedSignatures = mergeSignatures(
+                            signaturesByModule.get(module.name()),
+                            signaturesFromLinkedFunctions(firstPassFunctions)
+                    );
+                    var refinedAvailableSignatures = mergeSignatures(initialSignatures, refinedSignatures);
+                    return linkFunctions(functions, dataTypes, refinedAvailableSignatures)
+                            .map(linkedFunctions -> new LinkedModule(
+                                    module.name(),
+                                    module.path(),
+                                    dataTypes,
+                                    Set.copyOf(linkedFunctions),
+                                    staticImports(module, modulesByName, signaturesByModule)
+                            ));
                 });
+    }
+
+    private ValueOrError<List<CapybaraExpressionLinker.FunctionSignature>> availableSignatures(
+            Module module,
+            Map<String, Module> modulesByName,
+            Map<String, List<CapybaraExpressionLinker.FunctionSignature>> signaturesByModule
+    ) {
+        var all = new ArrayList<CapybaraExpressionLinker.FunctionSignature>(signaturesByModule.get(module.name()));
+        for (var importDeclaration : module.imports()) {
+            var importedModule = modulesByName.get(importDeclaration.moduleName());
+            if (importedModule == null) {
+                return ValueOrError.error("Module `" + module.name() + "` imports unknown module `" + importDeclaration.moduleName() + "`");
+            }
+            var importedSignatures = signaturesByModule.get(importDeclaration.moduleName());
+            for (var symbol : importDeclaration.symbols()) {
+                var matched = importedSignatures.stream().filter(signature -> signature.name().equals(symbol)).toList();
+                if (matched.isEmpty()) {
+                    return ValueOrError.error(
+                            "Module `" + module.name() + "` imports unknown symbol `" + symbol + "` from module `" + importDeclaration.moduleName() + "`"
+                    );
+                }
+                all.addAll(matched);
+            }
+        }
+        return ValueOrError.success(List.copyOf(all));
+    }
+
+    private Set<LinkedModule.StaticImport> staticImports(
+            Module module,
+            Map<String, Module> modulesByName,
+            Map<String, List<CapybaraExpressionLinker.FunctionSignature>> signaturesByModule
+    ) {
+        var imports = new HashSet<LinkedModule.StaticImport>();
+        for (var importDeclaration : module.imports()) {
+            var importedModule = modulesByName.get(importDeclaration.moduleName());
+            if (importedModule == null) {
+                continue;
+            }
+            var className = importedModule.path().replace('/', '.').replace('\\', '.') + "." + importedModule.name();
+            var availableMembers = signaturesByModule.get(importDeclaration.moduleName()).stream()
+                    .map(CapybaraExpressionLinker.FunctionSignature::name)
+                    .collect(java.util.stream.Collectors.toSet());
+            for (var symbol : importDeclaration.symbols()) {
+                if (availableMembers.contains(symbol)) {
+                    imports.add(new LinkedModule.StaticImport(className, symbol));
+                }
+            }
+        }
+        return Set.copyOf(imports);
+    }
+
+    private List<CapybaraExpressionLinker.FunctionSignature> mergeSignatures(
+            List<CapybaraExpressionLinker.FunctionSignature> first,
+            List<CapybaraExpressionLinker.FunctionSignature> second
+    ) {
+        var merged = new LinkedHashMap<String, CapybaraExpressionLinker.FunctionSignature>();
+        first.forEach(signature -> merged.put(signatureKey(signature), signature));
+        second.forEach(signature -> merged.put(signatureKey(signature), signature));
+        return List.copyOf(merged.values());
+    }
+
+    private String signatureKey(CapybaraExpressionLinker.FunctionSignature signature) {
+        var parameters = signature.parameterTypes().stream().map(LinkedType::name).toList();
+        return signature.name() + "#" + parameters;
     }
 
     private List<Function> findFunctions(Set<Definition> definitions) {

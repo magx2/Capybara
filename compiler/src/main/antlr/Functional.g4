@@ -55,6 +55,7 @@ expressionNoLet: ifExpression
                | '(' expression ')'
                | '{' expression '}'
                | new_set
+               | MINUS expressionNoLet
                | expressionNoLet DOT NAME
                | expressionNoLet infixOperator expressionNoLet
                | value
@@ -70,6 +71,7 @@ expressionNoLetNoPipe: ifExpression
                      | new_dict
                      | '(' expressionNoLetNoPipe ')'
                      | new_set
+                     | MINUS expressionNoLetNoPipe
                      | expressionNoLetNoPipe DOT NAME
                      | expressionNoLetNoPipe infixOperatorNoPipe expressionNoLetNoPipe
                      | value

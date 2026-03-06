@@ -44,7 +44,12 @@ public final class JavaGenerator implements Generator {
         code.append("package ").append(javaClass.javaPackage()).append(";\n\n");
 
         // imports
-        // TODO: imports
+        javaClass.staticImports().stream()
+                .sorted()
+                .forEach(staticImport -> code.append("import static ").append(staticImport).append(";\n"));
+        if (!javaClass.staticImports().isEmpty()) {
+            code.append('\n');
+        }
 
         // generated annotation
         javaClass.annotations().forEach(annotation -> code.append(annotation).append("\n"));

@@ -6,15 +6,26 @@ import pl.grzeslowski.capybara.linker.CapybaraLinker;
 import pl.grzeslowski.capybara.linker.LinkedProgram;
 import pl.grzeslowski.capybara.linker.ValueOrError;
 import pl.grzeslowski.capybara.parser.CapybaraParser;
+import pl.grzeslowski.capybara.parser.DataDeclaration;
+import pl.grzeslowski.capybara.parser.Definition;
+import pl.grzeslowski.capybara.parser.Function;
+import pl.grzeslowski.capybara.parser.SingleDeclaration;
+import pl.grzeslowski.capybara.parser.TypeDeclaration;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.logging.Logger;
+import java.util.regex.Pattern;
 
 import static java.nio.file.Files.isRegularFile;
 import static java.util.stream.Collectors.joining;
@@ -22,6 +33,9 @@ import static java.util.stream.Collectors.joining;
 public class Compiler {
     public static final Compiler INSTANCE = new Compiler();
     private static final Logger log = Logger.getLogger(Compiler.class.getName());
+    private static final Pattern IMPORT_PATTERN = Pattern.compile(
+            "^\\s*from\\s+([A-Za-z_][A-Za-z0-9_]*)\\s+import\\s*\\{\\s*([^}]*)\\s*}\\s*$"
+    );
 
     public void compile(Arguments args) throws IOException {
         if (Files.notExists(args.output())) {
@@ -100,10 +114,102 @@ public class Compiler {
         log.info("Building module from file: " + sourceFile.path);
         var fileName = sourceFile.path.getFileName().toString();
         var fileNameWithoutExtension = fileName.substring(0, fileName.lastIndexOf('.'));
+        var parsedSource = parseSource(readFile(sourceFile.path));
         return new Module(
                 fileNameWithoutExtension,
                 findModulePath(sourceFile),
-                CapybaraParser.INSTANCE.parseFunctional(readFile(sourceFile.path)));
+                CapybaraParser.INSTANCE.parseFunctional(parsedSource.source()),
+                parsedSource.imports()
+        );
+    }
+
+    private List<Module> resolveImports(List<Module> modules) {
+        var modulesByName = new HashMap<String, Module>();
+        for (var module : modules) {
+            var previous = modulesByName.putIfAbsent(module.name(), module);
+            if (previous != null) {
+                throw new IllegalArgumentException("Duplicate module name `" + module.name() + "` for import resolution");
+            }
+        }
+
+        var resolved = new HashMap<String, Module>();
+        var visiting = new HashSet<String>();
+        for (var module : modules) {
+            resolveModule(module, modulesByName, resolved, visiting);
+        }
+        return modules.stream().map(module -> resolved.get(module.name())).toList();
+    }
+
+    private Module resolveModule(
+            Module module,
+            Map<String, Module> modulesByName,
+            Map<String, Module> resolved,
+            Set<String> visiting
+    ) {
+        var cached = resolved.get(module.name());
+        if (cached != null) {
+            return cached;
+        }
+        if (!visiting.add(module.name())) {
+            throw new IllegalArgumentException("Circular imports detected for module `" + module.name() + "`");
+        }
+
+        var mergedDefinitions = new ArrayList<Definition>(module.functional().definitions());
+
+        for (var importDeclaration : module.imports()) {
+            var importedModule = modulesByName.get(importDeclaration.moduleName());
+            if (importedModule == null) {
+                throw new IllegalArgumentException(
+                        "Module `" + module.name() + "` imports unknown module `" + importDeclaration.moduleName() + "`"
+                );
+            }
+            var resolvedImportedModule = resolveModule(importedModule, modulesByName, resolved, visiting);
+            for (var symbol : importDeclaration.symbols()) {
+                var importedDefinitions = resolvedImportedModule.functional().definitions()
+                        .stream()
+                        .filter(definition -> definitionMatchesSymbol(definition, symbol))
+                        .toList();
+                if (importedDefinitions.isEmpty()) {
+                    throw new IllegalArgumentException(
+                            "Module `" + module.name() + "` imports unknown symbol `" + symbol
+                            + "` from module `" + importDeclaration.moduleName() + "`"
+                    );
+                }
+                var localHasSymbol = mergedDefinitions.stream()
+                        .anyMatch(definition -> definitionMatchesSymbol(definition, symbol));
+                if (localHasSymbol) {
+                    continue;
+                }
+                for (var importedDefinition : importedDefinitions) {
+                    if (!mergedDefinitions.contains(importedDefinition)) {
+                        mergedDefinitions.add(importedDefinition);
+                    }
+                }
+            }
+        }
+
+        visiting.remove(module.name());
+        var mergedModule = new Module(
+                module.name(),
+                module.path(),
+                new pl.grzeslowski.capybara.parser.Functional(Set.copyOf(mergedDefinitions)),
+                List.of()
+        );
+        resolved.put(module.name(), mergedModule);
+        return mergedModule;
+    }
+
+    private String definitionSymbol(Definition definition) {
+        return switch (definition) {
+            case Function function -> function.name();
+            case TypeDeclaration typeDeclaration -> typeDeclaration.name();
+            case DataDeclaration dataDeclaration -> dataDeclaration.name();
+            case SingleDeclaration singleDeclaration -> singleDeclaration.name();
+        };
+    }
+
+    private boolean definitionMatchesSymbol(Definition definition, String symbol) {
+        return definitionSymbol(definition).equals(symbol);
     }
 
     private static String findModulePath(SourceFile sourceFile) {
@@ -131,5 +237,28 @@ public class Compiler {
     }
 
     private record SourceFile(Path rootPath, Path path) {
+    }
+
+    private ParsedSource parseSource(String source) {
+        var imports = new ArrayList<ImportDeclaration>();
+        var bodyLines = new ArrayList<String>();
+        source.lines().forEach(line -> {
+            var matcher = IMPORT_PATTERN.matcher(line);
+            if (matcher.matches()) {
+                var module = matcher.group(1);
+                var symbols = List.of(matcher.group(2).split(","))
+                        .stream()
+                        .map(String::trim)
+                        .filter(symbol -> !symbol.isBlank())
+                        .toList();
+                imports.add(new ImportDeclaration(module, symbols));
+            } else {
+                bodyLines.add(line);
+            }
+        });
+        return new ParsedSource(String.join(System.lineSeparator(), bodyLines), List.copyOf(imports));
+    }
+
+    private record ParsedSource(String source, List<ImportDeclaration> imports) {
     }
 }

@@ -7,5 +7,8 @@ public record LinkedModule(
         String name,
         String path,
         Map<String, GenericDataType> types,
-        Set<LinkedFunction> functions) {
+        Set<LinkedFunction> functions,
+        Set<StaticImport> staticImports) {
+    public record StaticImport(String className, String memberName) {
+    }
 }

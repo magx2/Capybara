@@ -276,6 +276,15 @@ public class CapybaraParser {
             );
         }
 
+        if (expression.MINUS() != null && expression.infixOperator() == null && expression.expressionNoLet().size() == 1) {
+            return new InfixExpression(
+                    new IntValue("0", position(expression)),
+                    InfixOperator.MINUS,
+                    expressionNoLet(expression.expressionNoLet(0)),
+                    position(expression)
+            );
+        }
+
         var infixOperator = expression.infixOperator();
         if (infixOperator != null) {
             var leftContext = expression.expressionNoLet(0);
@@ -388,6 +397,15 @@ public class CapybaraParser {
             return new FieldAccess(
                     expressionNoLetNoPipe(expression.expressionNoLetNoPipe(0)),
                     expression.NAME().getText(),
+                    position(expression)
+            );
+        }
+
+        if (expression.MINUS() != null && expression.infixOperatorNoPipe() == null && expression.expressionNoLetNoPipe().size() == 1) {
+            return new InfixExpression(
+                    new IntValue("0", position(expression)),
+                    InfixOperator.MINUS,
+                    expressionNoLetNoPipe(expression.expressionNoLetNoPipe(0)),
                     position(expression)
             );
         }

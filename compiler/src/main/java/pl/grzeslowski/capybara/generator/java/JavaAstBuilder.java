@@ -48,6 +48,9 @@ public class JavaAstBuilder {
                         .replaceAll("/", ".")
                         // windows
                         .replaceAll("\\\\", ".")),
+                module.staticImports().stream()
+                        .map(staticImport -> staticImport.className() + "." + staticImport.memberName())
+                        .collect(toSet()),
                 buildStaticMethods(module.functions()),
                 interfaces,
                 buildRecords(dataTypes, subClassToInterface),
