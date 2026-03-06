@@ -102,6 +102,7 @@ public class JavaAstBuilder {
             case GenericDataType genericDataType -> buildGenericDataType(genericDataType);
             case PrimitiveLinkedType primitiveLinkedType -> buildPrimitiveLinkedType(primitiveLinkedType);
             case CollectionLinkedType collectionLinkedType -> buildCollectionLinkedType(collectionLinkedType);
+            case LinkedGenericTypeParameter linkedGenericTypeParameter -> new JavaType(linkedGenericTypeParameter.name());
         };
     }
 
@@ -138,6 +139,7 @@ public class JavaAstBuilder {
             };
             case GenericDataType genericDataType -> buildClassName(genericDataType.name()).toString();
             case CollectionLinkedType collectionLinkedType -> buildCollectionLinkedType(collectionLinkedType).toString();
+            case LinkedGenericTypeParameter linkedGenericTypeParameter -> linkedGenericTypeParameter.name();
         };
     }
 
@@ -198,7 +200,8 @@ public class JavaAstBuilder {
         return new JavaSealedInterface(
                 buildClassName(type.name()),
                 buildJavaMethods(type.fields()),
-                type.subTypes().stream().map(LinkedDataType::name).toList()
+                type.subTypes().stream().map(LinkedDataType::name).toList(),
+                type.typeParameters()
         );
     }
 
@@ -238,6 +241,7 @@ public class JavaAstBuilder {
                 buildClassName(type.name()),
                 implementInterfaces,
                 fields,
+                type.typeParameters(),
                 Set.of(),
                 Set.of());
     }

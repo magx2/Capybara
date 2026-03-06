@@ -50,6 +50,7 @@ public class CapybaraParser {
     }
 
     private TypeDeclaration typeDeclaration(FunctionalParser.TypeDeclarationContext context) {
+        var declaredType = context.genericTypeDeclaration(0);
         var fieldDeclarationList = Optional.of(context)
                 .map(FunctionalParser.TypeDeclarationContext::fieldDeclarationList)
                 .map(this::fieldDeclarationList)
@@ -58,17 +59,20 @@ public class CapybaraParser {
                 .toList();
 
         return new TypeDeclaration(
-                context.TYPE().get(0).getText(),
-                context.TYPE().stream().skip(1).map(TerminalNode::getText).toList(),
+                genericTypeName(declaredType),
+                context.genericTypeDeclaration().stream().skip(1).map(CapybaraParser::genericTypeName).toList(),
                 fieldDeclarationList,
+                genericTypeParameters(declaredType),
                 position(context)
         );
     }
 
     private DataDeclaration dataDeclaration(FunctionalParser.DataDeclarationContext context) {
+        var declaration = context.genericTypeDeclaration();
         return new DataDeclaration(
-                context.TYPE().getText(),
+                genericTypeName(declaration),
                 fieldDeclarationList(context.fieldDeclarationList()),
+                genericTypeParameters(declaration),
                 position(context)
         );
     }
@@ -108,6 +112,16 @@ public class CapybaraParser {
     }
 
     private static Type type(pl.grzeslowski.capybara.parser.antlr.FunctionalParser.TypeContext context) {
+        if (context.COLLECTION() != null) {
+            var collection = context.COLLECTION().getText();
+            var inner = type(context.type(0));
+            return switch (collection) {
+                case "list" -> new CollectionType.ListType(inner);
+                case "set" -> new CollectionType.SetType(inner);
+                case "dict" -> new CollectionType.DictType(inner);
+                default -> throw new IllegalStateException("Unknown collection type: " + collection);
+            };
+        }
         return type(context.getText());
     }
 
@@ -115,6 +129,7 @@ public class CapybaraParser {
         return PrimitiveType.find(name)
                 .map(Type.class::cast)
                 .or(() -> findCollectionType(name))
+                .or(() -> findParameterizedDataType(name))
                 .orElseGet(() -> new DataType(name));
     }
 
@@ -122,6 +137,14 @@ public class CapybaraParser {
         return findCollectionType(name, COLLECTION_LIST_PATTERN, CollectionType.ListType::new)
                 .or(() -> findCollectionType(name, COLLECTION_SET_PATTERN, CollectionType.SetType::new))
                 .or(() -> findCollectionType(name, COLLECTION_DICT_PATTERN, CollectionType.DictType::new));
+    }
+
+    private static Optional<Type> findParameterizedDataType(String name) {
+        var idx = name.indexOf('[');
+        if (idx > 0 && name.endsWith("]")) {
+            return Optional.of(new DataType(name.substring(0, idx)));
+        }
+        return Optional.empty();
     }
 
     private static Optional<Type> findCollectionType(String name, Pattern pattern, java.util.function.Function<Type, CollectionType> creator) {
@@ -384,6 +407,14 @@ public class CapybaraParser {
             return raw.substring(1, raw.length() - 1);
         }
         throw new IllegalStateException("Missing field name");
+    }
+
+    private static String genericTypeName(FunctionalParser.GenericTypeDeclarationContext context) {
+        return context.TYPE(0).getText();
+    }
+
+    private static List<String> genericTypeParameters(FunctionalParser.GenericTypeDeclarationContext context) {
+        return context.TYPE().stream().skip(1).map(TerminalNode::getText).toList();
     }
 
 }

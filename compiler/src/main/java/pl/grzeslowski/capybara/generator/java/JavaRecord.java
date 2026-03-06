@@ -6,6 +6,7 @@ import java.util.Set;
 public record JavaRecord(JavaType name,
                          Set<JavaType> implementInterfaces,
                          List<JavaRecordField> fields,
+                         List<String> typeParameters,
                          Set<JavaMethod> staticMethods,
                          Set<JavaMethod> methods) {
     @Override

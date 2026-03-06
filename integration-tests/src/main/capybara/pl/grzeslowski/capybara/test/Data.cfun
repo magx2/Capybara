@@ -12,3 +12,7 @@ fun da_vinci(shape: Shape): Shape =
     match shape with
     | Circle { radius } => Rectangle { width : radius * 2, "height" : radius * 2 }
     | Rectangle { width, height } => Circle { radius : (width + height) / 4 }
+
+type Typed[T] = Foo[T] | Boo[T]
+data Foo[T] { foo: T }
+data Boo[T] { boo: T }

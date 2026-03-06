@@ -83,6 +83,9 @@ public final class JavaGenerator implements Generator {
 
     private String mapJavaRecord(JavaRecord record) {
         var fields = record.fields().stream().map(this::mapJavaRecordField).collect(joining(", "));
+        var typeParameters = record.typeParameters().isEmpty()
+                ? ""
+                : record.typeParameters().stream().collect(joining(", ", "<", ">"));
         var implementInterfaces = record.implementInterfaces().size() > 0
                 ? record.implementInterfaces().stream()
                 .map(Objects::toString)
@@ -90,7 +93,7 @@ public final class JavaGenerator implements Generator {
                 : "";
         var staticMethods = record.staticMethods().size() > 0 ? "// todo implement static methods" : "";
         var methods = record.methods().size() > 0 ? "// todo implement methods" : "";
-        return "public record " + record.name() + "(" + fields + ")" + implementInterfaces + "{" + staticMethods + "" + methods + "}\n";
+        return "public record " + record.name() + typeParameters + "(" + fields + ")" + implementInterfaces + "{" + staticMethods + "" + methods + "}\n";
     }
 
     private String mapJavaRecordField(JavaRecord.JavaRecordField field) {
@@ -116,12 +119,15 @@ public final class JavaGenerator implements Generator {
 
     private String mapJavaSealedInterface(JavaSealedInterface javaInterface) {
         var permits = join(", ", javaInterface.permits());
+        var typeParameters = javaInterface.typeParameters().isEmpty()
+                ? ""
+                : javaInterface.typeParameters().stream().collect(joining(", ", "<", ">"));
         var methods = javaInterface.methods().size() > 0
                 ? javaInterface.methods().stream()
                 .map(this::mapJavaInterfaceMethod)
                 .collect(joining("\n", "\n", ""))
                 : "";
-        return "public sealed interface " + javaInterface.name() + " permits " + permits + " {" + methods + "}\n";
+        return "public sealed interface " + javaInterface.name() + typeParameters + " permits " + permits + " {" + methods + "}\n";
     }
 
     private String mapJavaInterfaceMethod(JavaInterface.JavaInterfaceMethod method) {

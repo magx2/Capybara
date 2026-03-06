@@ -5,7 +5,8 @@ import pl.grzeslowski.capybara.linker.LinkedDataType.LinkedField;
 import java.util.List;
 
 public record LinkedDataParentType(String name, List<LinkedField> fields,
-                                   List<LinkedDataType> subTypes) implements GenericDataType {
+                                   List<LinkedDataType> subTypes,
+                                   List<String> typeParameters) implements GenericDataType {
 
     @Override
     public final boolean equals(Object o) {

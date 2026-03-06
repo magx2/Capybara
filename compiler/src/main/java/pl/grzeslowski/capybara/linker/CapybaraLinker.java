@@ -106,15 +106,19 @@ public class CapybaraLinker {
     }
 
     private ValueOrError<LinkedDataType> linkDataDeclaration(DataDeclaration dataDeclaration) {
+        var genericTypes = Set.copyOf(dataDeclaration.typeParameters());
         var linked = dataDeclaration.fields()
                 .stream()
-                .map(this::linkField)
+                .map(field -> linkField(field, genericTypes))
                 .collect(new ValueOrErrorCollectionCollector<>())
-                .map(fields -> new LinkedDataType(dataDeclaration.name(), fields));
+                .map(fields -> new LinkedDataType(dataDeclaration.name(), fields, dataDeclaration.typeParameters()));
         return withPosition(linked, dataDeclaration.position());
     }
 
-    private ValueOrError<LinkedDataType.LinkedField> linkField(DataDeclaration.DataField type) {
+    private ValueOrError<LinkedDataType.LinkedField> linkField(DataDeclaration.DataField type, Set<String> genericTypes) {
+        if (type.type() instanceof DataType dataType && genericTypes.contains(dataType.name())) {
+            return ValueOrError.success(new LinkedDataType.LinkedField(type.name(), new LinkedGenericTypeParameter(dataType.name())));
+        }
         return linkType(type.type())
                 .map(t -> new LinkedDataType.LinkedField(type.name(), t));
     }
@@ -126,13 +130,15 @@ public class CapybaraLinker {
     }
 
     private ValueOrError<LinkedDataParentType> linkedDataParentType(TypeDeclaration typeDeclaration, List<LinkedDataType> subTypes) {
+        var genericTypes = Set.copyOf(typeDeclaration.typeParameters());
         return typeDeclaration.fields()
                 .stream()
-                .map(this::linkField)
+                .map(field -> linkField(field, genericTypes))
                 .collect(new ValueOrErrorCollectionCollector<>())
                 .map(fields -> new LinkedDataParentType(typeDeclaration.name(),
                         fields,
-                        subTypes));
+                        subTypes,
+                        typeDeclaration.typeParameters()));
     }
 
     private ValueOrError<List<LinkedDataType>> findSubtypes(List<String> rawSubTypes, List<LinkedDataType> dataDeclarations) {

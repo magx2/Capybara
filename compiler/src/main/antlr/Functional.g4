@@ -13,12 +13,13 @@ definition:
 
 functionDeclaration: 'fun' NAME '(' parameters? ')' functionType? '=' expression;
 
-typeDeclaration: 'type' TYPE '=' TYPE ('|' TYPE)*
-               | 'type' TYPE '{' fieldDeclarationList? '}' '=' TYPE ('|' TYPE)*;
-dataDeclaration: 'data' TYPE '{' fieldDeclarationList? '}';
+typeDeclaration: 'type' genericTypeDeclaration '=' genericTypeDeclaration ('|' genericTypeDeclaration)*
+               | 'type' genericTypeDeclaration '{' fieldDeclarationList? '}' '=' genericTypeDeclaration ('|' genericTypeDeclaration)*;
+dataDeclaration: 'data' genericTypeDeclaration '{' fieldDeclarationList? '}';
 fieldDeclarationList: fieldDeclaration (',' fieldDeclaration)*;
 fieldDeclaration: NAME ':' type
                 | STRING_LITERAL ':' type;
+genericTypeDeclaration: TYPE ('[' TYPE (',' TYPE)* ']')?;
 
 BOOL_LITERAL: 'true' | 'false';
 COLLECTION: 'list' | 'set' | 'dict';
@@ -31,7 +32,7 @@ type: COLLECTION '[' type ']'
     | 'bool'
     | 'string'
     | 'float'
-    | TYPE;
+    | TYPE ('[' type (',' type)* ']')?;
 TYPE: [A-Z][a-zA-Z0-9]*
       | TYPE_FULL ;
 TYPE_FULL: '/' [A-Z][a-zA-Z0-9]* ( '/' [A-Z][a-zA-Z0-9]* )*;
