@@ -23,17 +23,20 @@ public class CapybaraExpressionLinker {
     private final Map<String, GenericDataType> dataTypes;
     private final List<FunctionSignature> functionSignatures;
     private final Map<String, List<FunctionSignature>> functionSignaturesByModule;
+    private final Map<String, String> moduleClassNameByModuleName;
 
     public CapybaraExpressionLinker(
             List<LinkedFunction.LinkedFunctionParameter> parameters,
             Map<String, GenericDataType> dataTypes,
             List<FunctionSignature> functionSignatures,
-            Map<String, List<FunctionSignature>> functionSignaturesByModule
+            Map<String, List<FunctionSignature>> functionSignaturesByModule,
+            Map<String, String> moduleClassNameByModuleName
     ) {
         this.parameters = parameters;
         this.dataTypes = dataTypes;
         this.functionSignatures = functionSignatures;
         this.functionSignaturesByModule = functionSignaturesByModule;
+        this.moduleClassNameByModuleName = moduleClassNameByModuleName;
     }
 
     public ValueOrError<LinkedExpression> linkExpression(Expression expression) {
@@ -114,14 +117,16 @@ public class CapybaraExpressionLinker {
     }
 
     private ValueOrError<LinkedExpression> resolveQualifiedFunctionCall(FunctionCall functionCall, Scope scope) {
-        var moduleName = functionCall.moduleName().orElseThrow();
-        var signatures = functionSignaturesByModule.get(moduleName);
-        if (signatures == null) {
+        var rawModuleName = functionCall.moduleName().orElseThrow();
+        var moduleName = normalizeQualifiedModuleName(rawModuleName);
+        var resolvedModule = resolveQualifiedModule(moduleName);
+        if (resolvedModule == null) {
             return withPosition(
-                    ValueOrError.error("Unknown module `" + moduleName + "` in call `" + moduleName + "." + functionCall.name() + "`"),
+                    ValueOrError.error("Unknown module `" + rawModuleName + "` in call `" + rawModuleName + "." + functionCall.name() + "`"),
                     functionCall.position()
             );
         }
+        var signatures = resolvedModule.signatures();
 
         var candidates = signatures.stream()
                 .filter(signature -> signature.name().equals(functionCall.name()))
@@ -165,10 +170,46 @@ public class CapybaraExpressionLinker {
         }
 
         return ValueOrError.success(new LinkedFunctionCall(
-                moduleName + "." + functionCall.name(),
+                resolvedModule.javaModuleName() + "." + functionCall.name(),
                 best.arguments(),
                 best.signature().returnType()
         ));
+    }
+
+    private ResolvedModule resolveQualifiedModule(String normalizedModuleName) {
+        var direct = functionSignaturesByModule.get(normalizedModuleName);
+        if (direct != null) {
+            return new ResolvedModule(
+                    moduleClassNameByModuleName.getOrDefault(normalizedModuleName, normalizedModuleName),
+                    direct
+            );
+        }
+        var lastSlash = normalizedModuleName.lastIndexOf('/');
+        if (lastSlash >= 0 && lastSlash < normalizedModuleName.length() - 1) {
+            var moduleName = normalizedModuleName.substring(lastSlash + 1);
+            var signatures = functionSignaturesByModule.get(moduleName);
+            if (signatures != null) {
+                return new ResolvedModule(moduleClassNameByModuleName.getOrDefault(moduleName, moduleName), signatures);
+            }
+        }
+        var lastDot = normalizedModuleName.lastIndexOf('.');
+        if (lastDot >= 0 && lastDot < normalizedModuleName.length() - 1) {
+            var moduleName = normalizedModuleName.substring(lastDot + 1);
+            var signatures = functionSignaturesByModule.get(moduleName);
+            if (signatures != null) {
+                return new ResolvedModule(moduleClassNameByModuleName.getOrDefault(moduleName, moduleName), signatures);
+            }
+        }
+        return null;
+    }
+
+    private String normalizeQualifiedModuleName(String moduleName) {
+        var normalized = moduleName.replace('\\', '/');
+        if (normalized.startsWith("/")) {
+            normalized = normalized.substring(1);
+            return normalized.replace("/", ".");
+        }
+        return normalized;
     }
 
     private ValueOrError<LinkedExpression> resolveGlobalFunctionCall(FunctionCall functionCall, Scope scope) {
@@ -472,6 +513,9 @@ public class CapybaraExpressionLinker {
     private CoercedArgument coerceArgument(LinkedExpression argument, LinkedType expected) {
         if (argument.type().equals(expected)) {
             return new CoercedArgument(argument, 0);
+        }
+        if (argument.type() == ANY) {
+            return new CoercedArgument(argument, 1);
         }
         if (expected instanceof LinkedDataType expectedDataType
             && argument.type() instanceof LinkedDataType argumentDataType
@@ -1184,5 +1228,8 @@ public class CapybaraExpressionLinker {
     }
 
     private record ResolvedFunctionReference(LinkedExpression expression, int coercions) {
+    }
+
+    private record ResolvedModule(String javaModuleName, List<FunctionSignature> signatures) {
     }
 }

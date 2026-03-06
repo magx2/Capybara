@@ -42,7 +42,7 @@ type: COLLECTION '[' type ']'
     | TYPE ('[' type (',' type)* ']')?;
 TYPE: [A-Z][a-zA-Z0-9]*
       | TYPE_FULL ;
-TYPE_FULL: '/' [A-Z][a-zA-Z0-9]* ( '/' [A-Z][a-zA-Z0-9]* )*;
+TYPE_FULL: '/' [A-Za-z_][a-zA-Z0-9_]* ( '/' [A-Za-z_][a-zA-Z0-9_]* )+;
 expression: letExpression* expressionNoLet;
 letExpression: 'let' NAME '=' expressionNoLet ';'?;
 expressionNoLet: ifExpression

@@ -1,0 +1,8 @@
+fun awesome(lvl: int) =
+    if  lvl > 9000
+    then "IT'S OVER NINE THOUSAND!!!"
+    else if lvl > 100
+    then "Not Bad B)"
+    else if lvl > 10
+    then "Keep pumping!"
+    else "Day as usual"

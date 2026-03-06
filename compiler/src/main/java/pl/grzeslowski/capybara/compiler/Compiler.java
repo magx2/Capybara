@@ -34,7 +34,7 @@ public class Compiler {
     public static final Compiler INSTANCE = new Compiler();
     private static final Logger log = Logger.getLogger(Compiler.class.getName());
     private static final Pattern IMPORT_PATTERN = Pattern.compile(
-            "^\\s*from\\s+([A-Za-z_][A-Za-z0-9_]*)\\s+import\\s*\\{\\s*([^}]*)\\s*}(?:\\s+except\\s*\\{\\s*([^}]*)\\s*})?\\s*$"
+            "^\\s*from\\s+([A-Za-z_][A-Za-z0-9_]*|/[A-Za-z_][A-Za-z0-9_]*(?:/[A-Za-z_][A-Za-z0-9_]*)+)\\s+import\\s*\\{\\s*([^}]*)\\s*}(?:\\s+except\\s*\\{\\s*([^}]*)\\s*})?\\s*$"
     );
 
     public void compile(Arguments args) throws IOException {

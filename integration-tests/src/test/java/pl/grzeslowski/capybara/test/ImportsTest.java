@@ -19,5 +19,7 @@ class ImportsTest {
                 .isEqualTo(1);
         assertThat(pl.grzeslowski.capybara.test.imports.Main.calculator(15, 0, "p3"))
                 .isEqualTo(100);
+        assertThat(pl.grzeslowski.capybara.test.imports.Main.x(2, 3, "+"))
+                .isEqualTo("Day as usual");
     }
 }

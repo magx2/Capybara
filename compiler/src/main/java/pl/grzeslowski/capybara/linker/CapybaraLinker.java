@@ -19,6 +19,12 @@ public class CapybaraLinker {
 
     public ValueOrError<LinkedProgram> link(Program program) {
         var modulesByName = program.modules().stream().collect(toMap(Module::name, identity(), (first, second) -> first));
+        var moduleClassNameByModuleName = program.modules().stream()
+                .collect(toMap(
+                        Module::name,
+                        module -> module.path().replace('/', '.').replace('\\', '.') + "." + module.name(),
+                        (first, second) -> first
+                ));
 
         var linkedTypesByModule = new HashMap<String, Map<String, GenericDataType>>();
         for (var module : program.modules()) {
@@ -41,7 +47,13 @@ public class CapybaraLinker {
 
         var refinedSignaturesByModule = new HashMap<>(signaturesByModule);
         for (var module : program.modules()) {
-            var firstPassFunctions = firstPassLinkedFunctions(module, modulesByName, linkedTypesByModule, signaturesByModule);
+            var firstPassFunctions = firstPassLinkedFunctions(
+                    module,
+                    modulesByName,
+                    linkedTypesByModule,
+                    signaturesByModule,
+                    moduleClassNameByModuleName
+            );
             if (firstPassFunctions instanceof ValueOrError.Error<List<LinkedFunction>> error) {
                 return ValueOrError.error(error.errors().stream().map(ValueOrError.Error.SingleError::message).toList());
             }
@@ -53,7 +65,13 @@ public class CapybaraLinker {
         }
 
         return program.modules().stream()
-                .map(module -> linkModule(module, modulesByName, linkedTypesByModule, refinedSignaturesByModule))
+                .map(module -> linkModule(
+                        module,
+                        modulesByName,
+                        linkedTypesByModule,
+                        refinedSignaturesByModule,
+                        moduleClassNameByModuleName
+                ))
                 .collect(new ValueOrErrorCollectionCollector<>())
                 .map(LinkedProgram::new);
     }
@@ -62,7 +80,8 @@ public class CapybaraLinker {
             Module module,
             Map<String, Module> modulesByName,
             Map<String, Map<String, GenericDataType>> linkedTypesByModule,
-            Map<String, List<CapybaraExpressionLinker.FunctionSignature>> signaturesByModule
+            Map<String, List<CapybaraExpressionLinker.FunctionSignature>> signaturesByModule,
+            Map<String, String> moduleClassNameByModuleName
     ) {
         var dataTypes = linkedTypesByModule.get(module.name());
         var functions = findFunctions(module.functional().definitions());
@@ -71,14 +90,15 @@ public class CapybaraLinker {
             return ValueOrError.error(error.errors().stream().map(ValueOrError.Error.SingleError::message).toList());
         }
         var initialSignatures = ((ValueOrError.Value<List<CapybaraExpressionLinker.FunctionSignature>>) availableSignatures).value();
-        return linkFunctions(functions, dataTypes, initialSignatures, signaturesByModule);
+        return linkFunctions(functions, dataTypes, initialSignatures, signaturesByModule, moduleClassNameByModuleName);
     }
 
     private ValueOrError<LinkedModule> linkModule(
             Module module,
             Map<String, Module> modulesByName,
             Map<String, Map<String, GenericDataType>> linkedTypesByModule,
-            Map<String, List<CapybaraExpressionLinker.FunctionSignature>> signaturesByModule
+            Map<String, List<CapybaraExpressionLinker.FunctionSignature>> signaturesByModule,
+            Map<String, String> moduleClassNameByModuleName
     ) {
         var dataTypes = linkedTypesByModule.get(module.name());
         var functions = findFunctions(module.functional().definitions());
@@ -87,14 +107,14 @@ public class CapybaraLinker {
             return ValueOrError.error(error.errors().stream().map(ValueOrError.Error.SingleError::message).toList());
         }
         var initialSignatures = ((ValueOrError.Value<List<CapybaraExpressionLinker.FunctionSignature>>) availableSignatures).value();
-        return linkFunctions(functions, dataTypes, initialSignatures, signaturesByModule)
+        return linkFunctions(functions, dataTypes, initialSignatures, signaturesByModule, moduleClassNameByModuleName)
                 .flatMap(firstPassFunctions -> {
                     var refinedSignatures = mergeSignatures(
                             signaturesByModule.get(module.name()),
                             signaturesFromLinkedFunctions(firstPassFunctions)
                     );
                     var refinedAvailableSignatures = mergeSignatures(initialSignatures, refinedSignatures);
-                    return linkFunctions(functions, dataTypes, refinedAvailableSignatures, signaturesByModule)
+                    return linkFunctions(functions, dataTypes, refinedAvailableSignatures, signaturesByModule, moduleClassNameByModuleName)
                             .map(linkedFunctions -> new LinkedModule(
                                     module.name(),
                                     module.path(),
@@ -112,11 +132,11 @@ public class CapybaraLinker {
     ) {
         var all = new ArrayList<CapybaraExpressionLinker.FunctionSignature>(signaturesByModule.get(module.name()));
         for (var importDeclaration : module.imports()) {
-            var importedModule = modulesByName.get(importDeclaration.moduleName());
+            var importedModule = resolveImportedModule(importDeclaration.moduleName(), modulesByName);
             if (importedModule == null) {
                 return ValueOrError.error("Module `" + module.name() + "` imports unknown module `" + importDeclaration.moduleName() + "`");
             }
-            var importedSignatures = signaturesByModule.get(importDeclaration.moduleName());
+            var importedSignatures = signaturesByModule.get(importedModule.name());
             var availableMembers = importedSignatures.stream()
                     .map(CapybaraExpressionLinker.FunctionSignature::name)
                     .collect(java.util.stream.Collectors.toSet());
@@ -158,7 +178,7 @@ public class CapybaraLinker {
     ) {
         var imports = new HashSet<LinkedModule.StaticImport>();
         for (var importDeclaration : module.imports()) {
-            var importedModule = modulesByName.get(importDeclaration.moduleName());
+            var importedModule = resolveImportedModule(importDeclaration.moduleName(), modulesByName);
             if (importedModule == null) {
                 continue;
             }
@@ -167,7 +187,7 @@ public class CapybaraLinker {
                 imports.add(new LinkedModule.StaticImport(className, "*"));
                 continue;
             }
-            var availableMembers = signaturesByModule.get(importDeclaration.moduleName()).stream()
+            var availableMembers = signaturesByModule.get(importedModule.name()).stream()
                     .map(CapybaraExpressionLinker.FunctionSignature::name)
                     .collect(java.util.stream.Collectors.toSet());
             for (var symbol : importDeclaration.selectedSymbols(availableMembers)) {
@@ -177,6 +197,30 @@ public class CapybaraLinker {
             }
         }
         return Set.copyOf(imports);
+    }
+
+    private Module resolveImportedModule(String rawImportedModuleName, Map<String, Module> modulesByName) {
+        var direct = modulesByName.get(rawImportedModuleName);
+        if (direct != null) {
+            return direct;
+        }
+
+        var normalized = rawImportedModuleName.replace('\\', '/');
+        var slashIdx = normalized.lastIndexOf('/');
+        if (slashIdx >= 0 && slashIdx < normalized.length() - 1) {
+            var tail = normalized.substring(slashIdx + 1);
+            var byTail = modulesByName.get(tail);
+            if (byTail != null) {
+                return byTail;
+            }
+        }
+
+        var dotIdx = normalized.lastIndexOf('.');
+        if (dotIdx >= 0 && dotIdx < normalized.length() - 1) {
+            return modulesByName.get(normalized.substring(dotIdx + 1));
+        }
+
+        return null;
     }
 
     private List<CapybaraExpressionLinker.FunctionSignature> mergeSignatures(
@@ -205,10 +249,11 @@ public class CapybaraLinker {
             List<Function> functions,
             Map<String, GenericDataType> dataTypes,
             List<CapybaraExpressionLinker.FunctionSignature> signatures,
-            Map<String, List<CapybaraExpressionLinker.FunctionSignature>> signaturesByModule
+            Map<String, List<CapybaraExpressionLinker.FunctionSignature>> signaturesByModule,
+            Map<String, String> moduleClassNameByModuleName
     ) {
         return functions.stream()
-                .map(f -> linkFunction(f, dataTypes, signatures, signaturesByModule))
+                .map(f -> linkFunction(f, dataTypes, signatures, signaturesByModule, moduleClassNameByModuleName))
                 .collect(new ValueOrErrorCollectionCollector<>());
     }
 
@@ -216,11 +261,18 @@ public class CapybaraLinker {
             Function function,
             Map<String, GenericDataType> dataTypes,
             List<CapybaraExpressionLinker.FunctionSignature> signatures,
-            Map<String, List<CapybaraExpressionLinker.FunctionSignature>> signaturesByModule
+            Map<String, List<CapybaraExpressionLinker.FunctionSignature>> signaturesByModule,
+            Map<String, String> moduleClassNameByModuleName
     ) {
         var linked = linkParameters(function.parameters(), dataTypes)
                 .flatMap(parameters ->
-                        new CapybaraExpressionLinker(parameters, dataTypes, signatures, signaturesByModule).linkExpression(function.expression())
+                        new CapybaraExpressionLinker(
+                                parameters,
+                                dataTypes,
+                                signatures,
+                                signaturesByModule,
+                                moduleClassNameByModuleName
+                        ).linkExpression(function.expression())
                                 .flatMap(ex ->
                                         function.returnType()
                                                 .map(type -> {

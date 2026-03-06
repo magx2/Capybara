@@ -49,7 +49,7 @@ public class JavaAstBuilder {
                         // windows
                         .replaceAll("\\\\", ".")),
                 module.staticImports().stream()
-                        .map(staticImport -> staticImport.className() + "." + staticImport.memberName())
+                        .map(staticImport -> staticImport.className() + "." + buildJavaStaticImportMember(staticImport.memberName()))
                         .collect(toSet()),
                 buildStaticMethods(module.functions()),
                 interfaces,
@@ -99,6 +99,13 @@ public class JavaAstBuilder {
 
     private String buildMethodName(String name) {
         return normalizeJavaIdentifier(name, false);
+    }
+
+    private String buildJavaStaticImportMember(String memberName) {
+        if ("*".equals(memberName)) {
+            return memberName;
+        }
+        return buildMethodName(memberName);
     }
 
     private JavaType buildJavaType(LinkedType type) {
