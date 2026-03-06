@@ -5,6 +5,7 @@ import pl.grzeslowski.capybara.linker.LinkedModule;
 import pl.grzeslowski.capybara.linker.LinkedProgram;
 
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
@@ -17,24 +18,57 @@ public final class JavaGenerator implements Generator {
 
     @Override
     public CompiledProgram generate(LinkedProgram program) {
-        var modules = program.modules().stream().map(this::module).toList();
+        var modules = program.modules().stream()
+                .map(this::modules)
+                .flatMap(List::stream)
+                .toList();
         return new CompiledProgram(modules);
     }
 
-    private CompiledModule module(LinkedModule module) {
-        return new CompiledModule(
-                relativePath(module),
-                code(module)
-        );
+    private List<CompiledModule> modules(LinkedModule module) {
+        var javaClass = astBuilder.build(module);
+        if (!hasTypeOrDataNameConflictWithFile(javaClass)) {
+            return List.of(new CompiledModule(relativePath(module), code(javaClass)));
+        }
+
+        var ownerInterface = javaClass.interfaces().stream()
+                .filter(javaInterface -> javaInterface.name().toString().equals(javaClass.name().toString()))
+                .findFirst();
+        if (ownerInterface.isPresent()) {
+            return List.of(new CompiledModule(
+                    Path.of(module.path(), javaClass.name() + ".java"),
+                    codeNestedInOwnerInterface(javaClass, ownerInterface.get())
+            ));
+        }
+
+        var compiled = new ArrayList<CompiledModule>();
+        for (var declaration : topLevelDeclarations(javaClass)) {
+            compiled.add(new CompiledModule(
+                    Path.of(module.path(), declaration.name() + ".java"),
+                    codeTopLevelDeclaration(javaClass, declaration.code())
+            ));
+        }
+        if (!javaClass.staticMethods().isEmpty()) {
+            var utilityClass = new JavaClass(
+                    javaClass.annotations(),
+                    new JavaType(javaClass.name() + "Module"),
+                    javaClass.javaPackage(),
+                    javaClass.staticImports(),
+                    javaClass.staticMethods(),
+                    java.util.Set.of(),
+                    java.util.Set.of(),
+                    java.util.Set.of()
+            );
+            compiled.add(new CompiledModule(
+                    Path.of(module.path(), utilityClass.name() + ".java"),
+                    code(utilityClass)
+            ));
+        }
+        return List.copyOf(compiled);
     }
 
     private Path relativePath(LinkedModule module) {
         return Path.of(module.path(), module.name() + ".java");
-    }
-
-
-    private String code(LinkedModule module) {
-        return code(astBuilder.build(module));
     }
 
     private String code(JavaClass javaClass) {
@@ -91,6 +125,118 @@ public final class JavaGenerator implements Generator {
         code.append("}");
 
         return code.toString();
+    }
+
+    private String codeNestedInOwnerInterface(JavaClass javaClass, JavaInterface ownerInterface) {
+        var code = new StringBuilder();
+        code.append("package ").append(javaClass.javaPackage()).append(";\n\n");
+        javaClass.staticImports().stream()
+                .sorted()
+                .forEach(staticImport -> code.append("import static ").append(staticImport).append(";\n"));
+        if (!javaClass.staticImports().isEmpty()) {
+            code.append('\n');
+        }
+        javaClass.annotations().forEach(annotation -> code.append(annotation).append("\n"));
+
+        code.append(mapJavaOwnerInterfaceHeader(ownerInterface)).append("{\n");
+        if (ownerInterface instanceof JavaNormalInterface normalInterface) {
+            normalInterface.methods().stream()
+                    .map(this::mapJavaInterfaceMethod)
+                    .forEach(method -> code.append(method).append('\n'));
+        }
+        if (ownerInterface instanceof JavaSealedInterface sealedInterface) {
+            sealedInterface.methods().stream()
+                    .map(this::mapJavaInterfaceMethod)
+                    .forEach(method -> code.append(method).append('\n'));
+        }
+
+        javaClass.interfaces().stream()
+                .filter(javaInterface -> javaInterface != ownerInterface)
+                .map(this::mapJavaInterface)
+                .map(this::removePublicModifier)
+                .forEach(code::append);
+        javaClass.records().stream()
+                .map(this::mapJavaRecord)
+                .map(this::removePublicModifier)
+                .forEach(code::append);
+        javaClass.enums().stream()
+                .map(this::mapJavaEnum)
+                .map(this::removePublicModifier)
+                .forEach(code::append);
+        javaClass.staticMethods().stream()
+                .map(this::mapJavaMethod)
+                .forEach(code::append);
+
+        code.append("}\n");
+        return code.toString();
+    }
+
+    private String removePublicModifier(String declaration) {
+        if (declaration.startsWith("public ")) {
+            return declaration.substring("public ".length());
+        }
+        return declaration;
+    }
+
+    private String mapJavaInterfaceHeader(JavaInterface javaInterface) {
+        return switch (javaInterface) {
+            case JavaNormalInterface javaNormalInterface -> "public interface " + javaNormalInterface.name() + " ";
+            case JavaSealedInterface javaSealedInterface -> {
+                var permits = join(", ", javaSealedInterface.permits());
+                var typeParameters = javaSealedInterface.typeParameters().isEmpty()
+                        ? ""
+                        : javaSealedInterface.typeParameters().stream().collect(joining(", ", "<", ">"));
+                yield "public sealed interface " + javaSealedInterface.name() + typeParameters + " permits " + permits + " ";
+            }
+        };
+    }
+
+    private String mapJavaOwnerInterfaceHeader(JavaInterface javaInterface) {
+        return switch (javaInterface) {
+            case JavaNormalInterface javaNormalInterface -> "public interface " + javaNormalInterface.name() + " ";
+            case JavaSealedInterface javaSealedInterface -> {
+                var ownerName = javaSealedInterface.name().toString();
+                var permits = javaSealedInterface.permits().stream()
+                        .map(permit -> ownerName + "." + permit)
+                        .collect(joining(", "));
+                var typeParameters = javaSealedInterface.typeParameters().isEmpty()
+                        ? ""
+                        : javaSealedInterface.typeParameters().stream().collect(joining(", ", "<", ">"));
+                yield "public sealed interface " + ownerName + typeParameters + " permits " + permits + " ";
+            }
+        };
+    }
+
+    private String codeTopLevelDeclaration(JavaClass javaClass, String declarationCode) {
+        var code = new StringBuilder();
+        code.append("package ").append(javaClass.javaPackage()).append(";\n\n");
+        javaClass.annotations().forEach(annotation -> code.append(annotation).append("\n"));
+        code.append(declarationCode);
+        return code.toString();
+    }
+
+    private boolean hasTypeOrDataNameConflictWithFile(JavaClass javaClass) {
+        var fileName = javaClass.name().toString();
+        return javaClass.interfaces().stream().anyMatch(javaInterface -> javaInterface.name().toString().equals(fileName))
+               || javaClass.records().stream().anyMatch(record -> record.name().toString().equals(fileName))
+               || javaClass.enums().stream().anyMatch(javaEnum -> javaEnum.name().toString().equals(fileName));
+    }
+
+    private List<TopLevelDeclaration> topLevelDeclarations(JavaClass javaClass) {
+        var declarations = new ArrayList<TopLevelDeclaration>();
+        javaClass.interfaces().forEach(javaInterface -> declarations.add(
+                new TopLevelDeclaration(javaInterface.name().toString(), mapJavaInterface(javaInterface))
+        ));
+        javaClass.records().forEach(javaRecord -> declarations.add(
+                new TopLevelDeclaration(javaRecord.name().toString(), mapJavaRecord(javaRecord))
+        ));
+        javaClass.enums().forEach(javaEnum -> declarations.add(
+                new TopLevelDeclaration(javaEnum.name().toString(), mapJavaEnum(javaEnum))
+        ));
+        return List.copyOf(declarations);
+    }
+
+    private record TopLevelDeclaration(String name, String code) {
     }
 
     private String mapJavaRecord(JavaRecord record) {
