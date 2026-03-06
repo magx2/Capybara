@@ -35,6 +35,7 @@ public class JavaExpressionEvaluator {
             case LinkedMatchExpression matchExpression -> evaluateMatchExpression(matchExpression, scope);
             case LinkedPipeFilterOutExpression pipeFilterOutExpression -> evaluatePipeFilterOutExpression(pipeFilterOutExpression, scope);
             case LinkedPipeExpression pipeExpression -> evaluatePipeExpression(pipeExpression, scope);
+            case LinkedPipeReduceExpression pipeReduceExpression -> evaluatePipeReduceExpression(pipeReduceExpression, scope);
             case LinkedNewDict newDict -> evaluateNewDict(newDict, scope);
             case LinkedNewList newList -> evaluateNewList(newList, scope);
             case LinkedNewSet newSet -> evaluateNewSet(newSet, scope);
@@ -169,37 +170,78 @@ public class JavaExpressionEvaluator {
     }
 
     private static Scope evaluatePipeExpression(LinkedPipeExpression pipeExpression, Scope scope) {
-        var sourceExSc = evaluateExpression(pipeExpression.source(), scope).popExpression();
-        var source = sourceExSc.expression();
-        if (pipeExpression.source().type() instanceof pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedDict) {
-            source = source + ".values()";
-        }
-
-        var mapperExSc = evaluateExpression(
-                pipeExpression.mapper(),
-                sourceExSc.scope().addLocalValue(pipeExpression.argumentName())
-        ).popExpression();
-
-        return mapperExSc.scope().addExpression(
-                source + ".stream().map(" + pipeExpression.argumentName() + " -> (" + mapperExSc.expression() + ")).toList()"
-        );
+        var streamExSc = evaluatePipeExpressionAsStream(pipeExpression, scope);
+        return streamExSc.scope().addExpression(streamExSc.streamExpression() + ".toList()");
     }
 
     private static Scope evaluatePipeFilterOutExpression(LinkedPipeFilterOutExpression pipeFilterOutExpression, Scope scope) {
-        var sourceExSc = evaluateExpression(pipeFilterOutExpression.source(), scope).popExpression();
-        var source = sourceExSc.expression();
-        if (pipeFilterOutExpression.source().type() instanceof pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedDict) {
-            source = source + ".values()";
-        }
+        var streamExSc = evaluatePipeFilterOutExpressionAsStream(pipeFilterOutExpression, scope);
+        return streamExSc.scope().addExpression(streamExSc.streamExpression() + ".toList()");
+    }
 
-        var predicateExSc = evaluateExpression(
-                pipeFilterOutExpression.predicate(),
-                sourceExSc.scope().addLocalValue(pipeFilterOutExpression.argumentName())
+    private static Scope evaluatePipeReduceExpression(LinkedPipeReduceExpression pipeReduceExpression, Scope scope) {
+        var sourceStreamExSc = evaluateSourceAsStream(pipeReduceExpression.source(), scope);
+        var initialExSc = evaluateExpression(pipeReduceExpression.initialValue(), sourceStreamExSc.scope()).popExpression();
+        var reducerExSc = evaluateExpression(
+                pipeReduceExpression.reducerExpression(),
+                initialExSc.scope()
+                        .addLocalValue(pipeReduceExpression.accumulatorName())
+                        .addLocalValue(pipeReduceExpression.valueName())
         ).popExpression();
 
-        return predicateExSc.scope().addExpression(
-                source + ".stream().filter(" + pipeFilterOutExpression.argumentName() + " -> !(" + predicateExSc.expression() + ")).toList()"
+        return reducerExSc.scope().addExpression(
+                sourceStreamExSc.streamExpression()
+                + ".reduce("
+                + initialExSc.expression()
+                + ", (" + pipeReduceExpression.accumulatorName()
+                + ", " + pipeReduceExpression.valueName()
+                + ") -> (" + reducerExSc.expression() + "))"
         );
+    }
+
+    private static StreamExpressionScope evaluatePipeExpressionAsStream(LinkedPipeExpression pipeExpression, Scope scope) {
+        var sourceStreamExSc = evaluateSourceAsStream(pipeExpression.source(), scope);
+        var mapperExSc = evaluateExpression(
+                pipeExpression.mapper(),
+                sourceStreamExSc.scope().addLocalValue(pipeExpression.argumentName())
+        ).popExpression();
+        return new StreamExpressionScope(
+                sourceStreamExSc.streamExpression()
+                + ".map(" + pipeExpression.argumentName() + " -> (" + mapperExSc.expression() + "))",
+                mapperExSc.scope()
+        );
+    }
+
+    private static StreamExpressionScope evaluatePipeFilterOutExpressionAsStream(LinkedPipeFilterOutExpression pipeFilterOutExpression, Scope scope) {
+        var sourceStreamExSc = evaluateSourceAsStream(pipeFilterOutExpression.source(), scope);
+        var predicateExSc = evaluateExpression(
+                pipeFilterOutExpression.predicate(),
+                sourceStreamExSc.scope().addLocalValue(pipeFilterOutExpression.argumentName())
+        ).popExpression();
+        return new StreamExpressionScope(
+                sourceStreamExSc.streamExpression()
+                + ".filter(" + pipeFilterOutExpression.argumentName() + " -> !(" + predicateExSc.expression() + "))",
+                predicateExSc.scope()
+        );
+    }
+
+    private static StreamExpressionScope evaluateSourceAsStream(LinkedExpression source, Scope scope) {
+        if (source instanceof LinkedPipeExpression pipeExpression) {
+            return evaluatePipeExpressionAsStream(pipeExpression, scope);
+        }
+        if (source instanceof LinkedPipeFilterOutExpression pipeFilterOutExpression) {
+            return evaluatePipeFilterOutExpressionAsStream(pipeFilterOutExpression, scope);
+        }
+
+        var sourceExSc = evaluateExpression(source, scope).popExpression();
+        var sourceExpression = sourceExSc.expression();
+        if (source.type() instanceof pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedDict) {
+            sourceExpression = sourceExpression + ".values()";
+        }
+        return new StreamExpressionScope(sourceExpression + ".stream()", sourceExSc.scope());
+    }
+
+    private record StreamExpressionScope(String streamExpression, Scope scope) {
     }
 
     private static Scope evaluateLetExpression(LinkedLetExpression let, Scope scope) {

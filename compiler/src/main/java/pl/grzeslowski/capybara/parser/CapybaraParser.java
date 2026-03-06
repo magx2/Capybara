@@ -192,6 +192,9 @@ public class CapybaraParser {
         if (expression.lambdaExpression() != null) {
             return lambdaExpression(expression.lambdaExpression());
         }
+        if (expression.reduceExpression() != null) {
+            return reduceExpression(expression.reduceExpression());
+        }
 
         if (expression.functionCall() != null) {
             return functionCall(expression.functionCall());
@@ -269,6 +272,16 @@ public class CapybaraParser {
         return new LambdaExpression(
                 context.NAME().getText(),
                 expressionNoLetNoPipe(context.expressionNoLetNoPipe()),
+                position(context)
+        );
+    }
+
+    private ReduceExpression reduceExpression(FunctionalParser.ReduceExpressionContext context) {
+        return new ReduceExpression(
+                expressionNoLetNoPipe(context.expressionNoLetNoPipe(0)),
+                context.NAME(0).getText(),
+                context.NAME(1).getText(),
+                expressionNoLetNoPipe(context.expressionNoLetNoPipe(1)),
                 position(context)
         );
     }

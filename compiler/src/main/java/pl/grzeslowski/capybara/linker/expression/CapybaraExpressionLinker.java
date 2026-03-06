@@ -43,6 +43,10 @@ public class CapybaraExpressionLinker {
                     ValueOrError.error("Lambda expression can only be used as the right side of `|` or `|-`"),
                     lambdaExpression.position()
             );
+            case ReduceExpression reduceExpression -> withPosition(
+                    ValueOrError.error("Reduce expression can only be used as the right side of `|>`"),
+                    reduceExpression.position()
+            );
             case MatchExpression matchExpression -> linkMatchExpression(matchExpression, scope);
             case NewDictExpression newDictExpression -> linkNewDictExpression(newDictExpression, scope);
             case NewListExpression newListExpression -> linkNewListExpression(newListExpression, scope);
@@ -100,6 +104,9 @@ public class CapybaraExpressionLinker {
         if (expression.operator() == InfixOperator.PIPE_MINUS) {
             return linkPipeFilterOutExpression(expression, scope);
         }
+        if (expression.operator() == InfixOperator.PIPE_REDUCE) {
+            return linkPipeReduceExpression(expression, scope);
+        }
         return linkExpression(expression.left(), scope)
                 .flatMap(left ->
                         linkExpression(expression.right(), scope)
@@ -139,6 +146,50 @@ public class CapybaraExpressionLinker {
                                     mapper,
                                     new LinkedList(mapper.type())
                             ));
+                });
+    }
+
+    private ValueOrError<LinkedExpression> linkPipeReduceExpression(InfixExpression expression, Scope scope) {
+        return linkExpression(expression.left(), scope)
+                .flatMap(left -> {
+                    var elementType = collectionElementType(left.type());
+                    if (elementType == null) {
+                        return withPosition(
+                                ValueOrError.error("Left side of `|>` has to be a collection, was `" + left.type() + "`"),
+                                expression.left().position()
+                        );
+                    }
+                    if (!(expression.right() instanceof ReduceExpression reduceExpression)) {
+                        return withPosition(
+                                ValueOrError.error("Right side of `|>` has to be a reduce expression"),
+                                expression.right().position()
+                        );
+                    }
+                    return linkExpression(reduceExpression.initialValue(), scope)
+                            .flatMap(initial -> {
+                                var reduceScope = scope
+                                        .add(reduceExpression.accumulatorName(), initial.type())
+                                        .add(reduceExpression.valueName(), elementType);
+                                return linkExpression(reduceExpression.reducerExpression(), reduceScope)
+                                        .flatMap(reducer -> {
+                                            if (reducer.type() != initial.type()) {
+                                                return withPosition(
+                                                        ValueOrError.error(
+                                                                "Reducer in `|>` has to return `" + initial.type() + "`, was `" + reducer.type() + "`"
+                                                        ),
+                                                        reduceExpression.position()
+                                                );
+                                            }
+                                            return ValueOrError.success((LinkedExpression) new LinkedPipeReduceExpression(
+                                                    left,
+                                                    initial,
+                                                    reduceExpression.accumulatorName(),
+                                                    reduceExpression.valueName(),
+                                                    reducer,
+                                                    initial.type()
+                                            ));
+                                        });
+                            });
                 });
     }
 
@@ -196,7 +247,7 @@ public class CapybaraExpressionLinker {
             // bool operators
             case GT, LT, EQUAL, NOTEQUAL, LE, GE -> BOOL;
             case QUESTION -> findQuestionType(left.type(), right.type());
-            case PIPE, PIPE_MINUS -> null;
+            case PIPE, PIPE_MINUS, PIPE_REDUCE -> null;
         };
         if (type == null) {
             var op = operator.symbol();
@@ -271,6 +322,15 @@ public class CapybaraExpressionLinker {
             return right == STRING ? BOOL : null;
         }
         return null;
+    }
+
+    private static LinkedType collectionElementType(LinkedType type) {
+        return switch (type) {
+            case LinkedList linkedList -> linkedList.elementType();
+            case LinkedSet linkedSet -> linkedSet.elementType();
+            case LinkedDict linkedDict -> linkedDict.valueType();
+            default -> null;
+        };
     }
 
     private ValueOrError<LinkedExpression> linkIntValue(IntValue intValue, Scope scope) {

@@ -2,7 +2,7 @@ package pl.grzeslowski.capybara.parser;
 
 import java.util.Optional;
 
-public sealed interface Expression permits BooleanValue, FloatValue, FunctionCall, IfExpression, InfixExpression, IntValue, LambdaExpression, LetExpression, MatchExpression, NewData, NewDictExpression, NewListExpression, NewSetExpression, StringValue, Value {
+public sealed interface Expression permits BooleanValue, FloatValue, FunctionCall, IfExpression, InfixExpression, IntValue, LambdaExpression, LetExpression, MatchExpression, NewData, NewDictExpression, NewListExpression, NewSetExpression, ReduceExpression, StringValue, Value {
     Optional<SourcePosition> position();
 }
 

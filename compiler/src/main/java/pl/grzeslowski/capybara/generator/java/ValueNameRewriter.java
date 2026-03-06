@@ -22,6 +22,8 @@ public class ValueNameRewriter {
                     rewriteValueInLinkedPipeFilterOutExpression(name, uniqueName, linkedPipeFilterOutExpression);
             case LinkedPipeExpression linkedPipeExpression ->
                     rewriteValueInLinkedPipeExpression(name, uniqueName, linkedPipeExpression);
+            case LinkedPipeReduceExpression linkedPipeReduceExpression ->
+                    rewriteValueInLinkedPipeReduceExpression(name, uniqueName, linkedPipeReduceExpression);
             case LinkedNewDict linkedNewDict -> rewriteValueInLinkedNewDict(name, uniqueName, linkedNewDict);
             case LinkedNewList linkedNewList -> rewriteValueInLinkedNewList(name, uniqueName, linkedNewList);
             case LinkedNewSet linkedNewSet -> rewriteValueInLinkedNewSet(name, uniqueName, linkedNewSet);
@@ -107,6 +109,30 @@ public class ValueNameRewriter {
                 linkedPipeFilterOutExpression.argumentName(),
                 rewriteValueInExpression(name, uniqueName, linkedPipeFilterOutExpression.predicate()),
                 linkedPipeFilterOutExpression.type()
+        );
+    }
+
+    private static LinkedExpression rewriteValueInLinkedPipeReduceExpression(String name, String uniqueName,
+                                                                             LinkedPipeReduceExpression linkedPipeReduceExpression) {
+        var source = rewriteValueInExpression(name, uniqueName, linkedPipeReduceExpression.source());
+        var initialValue = rewriteValueInExpression(name, uniqueName, linkedPipeReduceExpression.initialValue());
+        if (linkedPipeReduceExpression.accumulatorName().equals(name) || linkedPipeReduceExpression.valueName().equals(name)) {
+            return new LinkedPipeReduceExpression(
+                    source,
+                    initialValue,
+                    linkedPipeReduceExpression.accumulatorName(),
+                    linkedPipeReduceExpression.valueName(),
+                    linkedPipeReduceExpression.reducerExpression(),
+                    linkedPipeReduceExpression.type()
+            );
+        }
+        return new LinkedPipeReduceExpression(
+                source,
+                initialValue,
+                linkedPipeReduceExpression.accumulatorName(),
+                linkedPipeReduceExpression.valueName(),
+                rewriteValueInExpression(name, uniqueName, linkedPipeReduceExpression.reducerExpression()),
+                linkedPipeReduceExpression.type()
         );
     }
 

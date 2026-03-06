@@ -42,6 +42,7 @@ expression: letExpression* expressionNoLet;
 letExpression: 'let' NAME '=' expressionNoLet ';'?;
 expressionNoLet: ifExpression
                | lambdaExpression
+               | reduceExpression
                | functionCall
                | new_list
                | new_dict
@@ -53,6 +54,7 @@ expressionNoLet: ifExpression
                | newData
                | matchExpression;
 lambdaExpression: NAME FAT_ARROW expressionNoLetNoPipe;
+reduceExpression: expressionNoLetNoPipe COMMA LPAREN NAME COMMA NAME RPAREN FAT_ARROW expressionNoLetNoPipe;
 expressionNoLetNoPipe: ifExpression
                      | functionCall
                      | new_list
@@ -108,6 +110,7 @@ infixOperator: PLUS
              | GE
              | PIPE
              | PIPE_MINUS
+             | PIPE_REDUCE
              | QUESTION
              | AND
              | OR;
@@ -151,6 +154,7 @@ BANG : '!';
 TILDE : '~';
 QUESTION : '?';
 PIPE_MINUS : '|-';
+PIPE_REDUCE : '|>';
 PIPE : '|';
 COLON : ':';
 EQUAL : '==';

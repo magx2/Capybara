@@ -27,6 +27,7 @@ public class LinkedExpressionPrinter {
                     printLinkedMatchExpression(linkedMatchExpression, level);
             case LinkedPipeFilterOutExpression linkedPipeFilterOutExpression -> printLinkedPipeFilterOutExpression(linkedPipeFilterOutExpression, level);
             case LinkedPipeExpression linkedPipeExpression -> printLinkedPipeExpression(linkedPipeExpression, level);
+            case LinkedPipeReduceExpression linkedPipeReduceExpression -> printLinkedPipeReduceExpression(linkedPipeReduceExpression, level);
             case LinkedNewDict linkedNewDict -> printLinkedNewDict(linkedNewDict, level);
             case LinkedNewList linkedNewList -> printLinkedNewList(linkedNewList, level);
             case LinkedNewSet linkedNewSet -> printLinkedNewSet(linkedNewSet, level);
@@ -92,6 +93,16 @@ public class LinkedExpressionPrinter {
                + linkedPipeFilterOutExpression.argumentName()
                + " => "
                + printExpression(linkedPipeFilterOutExpression.predicate(), level);
+    }
+
+    private static String printLinkedPipeReduceExpression(LinkedPipeReduceExpression linkedPipeReduceExpression, int level) {
+        return printExpression(linkedPipeReduceExpression.source(), level)
+               + " |> "
+               + printExpression(linkedPipeReduceExpression.initialValue(), level)
+               + ", (" + linkedPipeReduceExpression.accumulatorName()
+               + "," + linkedPipeReduceExpression.valueName()
+               + ") => "
+               + printExpression(linkedPipeReduceExpression.reducerExpression(), level);
     }
 
     private static String printLinkedNewData(LinkedNewData linkedNewData, int level) {

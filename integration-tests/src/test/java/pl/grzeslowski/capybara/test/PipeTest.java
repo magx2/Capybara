@@ -31,4 +31,14 @@ class PipeTest {
     void filter2() {
         assertThat(Pipe.filter2(List.of(1, 2, 3, 4))).isEqualTo(List.of(2));
     }
+
+    @Test
+    void reduce1() {
+        assertThat(Pipe.reduce1(List.of(1, 2, 3, 4))).isEqualTo(10);
+    }
+
+    @Test
+    void reduce2() {
+        assertThat(Pipe.reduce2(List.of(-1, 1, 2, 3))).isEqualTo(12);
+    }
 }
