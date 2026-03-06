@@ -16,4 +16,9 @@ class ListCollectionTest {
     void emptyStaticList() {
         assertThat(ListCollection.emptyStaticList()).isEmpty();
     }
+
+    @Test
+    void staticListWithTrailingComma() {
+        assertThat(ListCollection.staticListWithTrailingComma()).isEqualTo(List.of(1, 2, 3));
+    }
 }

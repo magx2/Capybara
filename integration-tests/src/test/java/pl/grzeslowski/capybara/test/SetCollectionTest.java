@@ -16,4 +16,9 @@ class SetCollectionTest {
     void emptyStaticSet() {
         assertThat(SetCollection.emptyStaticSet()).isEmpty();
     }
+
+    @Test
+    void staticSetWithTrailingComma() {
+        assertThat(SetCollection.staticSetWithTrailingComma()).isEqualTo(Set.of(1, 2, 3));
+    }
 }

@@ -71,8 +71,8 @@ constructorPattern: TYPE '{' fieldPatternList? '}';
 fieldPatternList: NAME (',' NAME)*;
 
 newData: type '{' fieldAssignmentList? '}';
-new_list: '[' (expression (',' expression)*)? ']';
-new_set: '{' (expression (',' expression)*)? '}';
+new_list: '[' (expression (',' expression)* ','?)? ']';
+new_set: '{' (expression (',' expression)* ','?)? '}';
 new_dict: '{' dict_entry (',' dict_entry)* ','? '}';
 dict_entry: expression ':' expression;
 fieldAssignmentList: fieldAssignment (',' fieldAssignment)*;
