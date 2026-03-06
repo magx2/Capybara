@@ -7,3 +7,7 @@ fun static_set_with_trailing_comma(): set[int] = {1,2,3,}
 fun append(s: set[int]): set[int] = s + 5
 
 fun append_set(left: set[int], right: set[int]): set[int] = left + right
+
+fun remove(s: set[int]): set[int] = s - 2
+
+fun remove_set(left: set[int], right: set[int]): set[int] = left - right

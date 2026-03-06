@@ -85,6 +85,18 @@ public class JavaExpressionEvaluator {
                 }
                 yield left.expression() + operator.symbol() + right.expression();
             }
+            case MINUS -> {
+                if (infixExpression.left().type() instanceof pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedList) {
+                    yield evaluateListRemoveExpression(infixExpression, left.expression(), right.expression());
+                }
+                if (infixExpression.left().type() instanceof pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedSet) {
+                    yield evaluateSetRemoveExpression(infixExpression, left.expression(), right.expression());
+                }
+                if (infixExpression.left().type() instanceof pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedDict) {
+                    yield evaluateDictRemoveExpression(infixExpression, left.expression(), right.expression());
+                }
+                yield left.expression() + operator.symbol() + right.expression();
+            }
             default -> left.expression() + operator.symbol() + right.expression();
         };
 
@@ -111,6 +123,31 @@ public class JavaExpressionEvaluator {
         return "java.util.stream.Stream.concat(" + left + ".entrySet().stream(), " + right + ".entrySet().stream())"
                + ".collect(java.util.stream.Collectors.toUnmodifiableMap("
                + "java.util.Map.Entry::getKey, java.util.Map.Entry::getValue, (oldValue, newValue) -> newValue))";
+    }
+
+    private static String evaluateListRemoveExpression(LinkedInfixExpression infixExpression, String left, String right) {
+        if (infixExpression.right().type() instanceof pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedList) {
+            return left + ".stream().filter(v -> !" + right + ".contains(v)).toList()";
+        }
+        return left + ".stream().filter(v -> !java.util.Objects.equals(v, " + right + ")).toList()";
+    }
+
+    private static String evaluateSetRemoveExpression(LinkedInfixExpression infixExpression, String left, String right) {
+        if (infixExpression.right().type() instanceof pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedSet) {
+            return left + ".stream().filter(v -> !" + right + ".contains(v))"
+                   + ".collect(java.util.stream.Collectors.toUnmodifiableSet())";
+        }
+        return left + ".stream().filter(v -> !java.util.Objects.equals(v, " + right + "))"
+               + ".collect(java.util.stream.Collectors.toUnmodifiableSet())";
+    }
+
+    private static String evaluateDictRemoveExpression(LinkedInfixExpression infixExpression, String left, String right) {
+        if (infixExpression.right().type() instanceof pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedDict) {
+            return left + ".entrySet().stream().filter(entry -> !" + right + ".containsKey(entry.getKey()))"
+                   + ".collect(java.util.stream.Collectors.toUnmodifiableMap(java.util.Map.Entry::getKey, java.util.Map.Entry::getValue))";
+        }
+        return left + ".entrySet().stream().filter(entry -> !java.util.Objects.equals(entry.getKey(), " + right + "))"
+               + ".collect(java.util.stream.Collectors.toUnmodifiableMap(java.util.Map.Entry::getKey, java.util.Map.Entry::getValue))";
     }
 
     private static Scope evaluateIntValue(LinkedIntValue intValue, Scope scope) {

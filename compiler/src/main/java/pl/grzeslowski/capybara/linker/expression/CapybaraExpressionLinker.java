@@ -107,15 +107,14 @@ public class CapybaraExpressionLinker {
     ) {
         LinkedType type = switch (operator) {
             case PLUS -> findPlusType(left.type(), right.type());
-            case MINUS, MUL, DIV, CARET, POWER -> findHigherType(left.type(), right.type());
+            case MINUS -> findMinusType(left.type(), right.type());
+            case MUL, DIV, CARET, POWER -> findHigherType(left.type(), right.type());
             // bool operators
             case GT, LT, EQUAL, NOTEQUAL, LE, GE -> BOOL;
         };
         if (type == null) {
-            return withPosition(
-                    ValueOrError.error("Cannot apply `+` to `" + left.type() + "` and `" + right.type() + "`"),
-                    position
-            );
+            var op = operator.symbol();
+            return withPosition(ValueOrError.error("Cannot apply `" + op + "` to `" + left.type() + "` and `" + right.type() + "`"), position);
         }
         return ValueOrError.success(new LinkedInfixExpression(left, operator, right, type));
     }
@@ -136,6 +135,31 @@ public class CapybaraExpressionLinker {
         if (left instanceof LinkedDict leftDict) {
             if (right instanceof LinkedDict rightDict) {
                 return new LinkedDict(findHigherType(leftDict.valueType(), rightDict.valueType()));
+            }
+            return null;
+        }
+        return findHigherType(left, right);
+    }
+
+    private static LinkedType findMinusType(LinkedType left, LinkedType right) {
+        if (left instanceof LinkedList leftList) {
+            if (right instanceof LinkedList rightList) {
+                return new LinkedList(findHigherType(leftList.elementType(), rightList.elementType()));
+            }
+            return new LinkedList(findHigherType(leftList.elementType(), right));
+        }
+        if (left instanceof LinkedSet leftSet) {
+            if (right instanceof LinkedSet rightSet) {
+                return new LinkedSet(findHigherType(leftSet.elementType(), rightSet.elementType()));
+            }
+            return new LinkedSet(findHigherType(leftSet.elementType(), right));
+        }
+        if (left instanceof LinkedDict leftDict) {
+            if (right instanceof LinkedDict rightDict) {
+                return new LinkedDict(findHigherType(leftDict.valueType(), rightDict.valueType()));
+            }
+            if (right == STRING) {
+                return new LinkedDict(leftDict.valueType());
             }
             return null;
         }

@@ -44,4 +44,26 @@ class SetCollectionTest {
         assertThat(left).isEqualTo(Set.of(1, 2));
         assertThat(right).isEqualTo(Set.of(3, 4));
     }
+
+    @Test
+    void remove() {
+        var input = new HashSet<>(Set.of(1, 2, 3));
+
+        var result = SetCollection.remove(input);
+
+        assertThat(result).isEqualTo(Set.of(1, 3));
+        assertThat(input).isEqualTo(Set.of(1, 2, 3));
+    }
+
+    @Test
+    void removeSet() {
+        var left = new HashSet<>(Set.of(1, 2, 3, 4));
+        var right = new HashSet<>(Set.of(2, 4));
+
+        var result = SetCollection.removeSet(left, right);
+
+        assertThat(result).isEqualTo(Set.of(1, 3));
+        assertThat(left).isEqualTo(Set.of(1, 2, 3, 4));
+        assertThat(right).isEqualTo(Set.of(2, 4));
+    }
 }

@@ -55,4 +55,29 @@ class DictCollectionTest {
         assertThat(left).isEqualTo(Map.of("one", 1, "two", 2));
         assertThat(right).isEqualTo(Map.of("three", 3, "four", 4));
     }
+
+    @Test
+    void remove() {
+        var input = new HashMap<>(EXPECTED);
+
+        var result = DictCollection.remove(input);
+
+        assertThat(result).isEqualTo(Map.of(
+                "one", 1,
+                "three", 3
+        ));
+        assertThat(input).isEqualTo(EXPECTED);
+    }
+
+    @Test
+    void removeDict() {
+        var left = new HashMap<>(Map.of("one", 1, "two", 2, "three", 3));
+        var right = new HashMap<>(Map.of("two", 1000, "three", 2000));
+
+        var result = DictCollection.removeDict(left, right);
+
+        assertThat(result).isEqualTo(Map.of("one", 1));
+        assertThat(left).isEqualTo(Map.of("one", 1, "two", 2, "three", 3));
+        assertThat(right).isEqualTo(Map.of("two", 1000, "three", 2000));
+    }
 }

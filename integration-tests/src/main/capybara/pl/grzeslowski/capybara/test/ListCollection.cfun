@@ -7,3 +7,7 @@ fun static_list_with_trailing_comma(): list[int] = [1,2,3,]
 fun append(l: list[int]): list[int] = l + 5
 
 fun append_list(left: list[int], right: list[int]): list[int] = left + right
+
+fun remove(l: list[int]): list[int] = l - 2
+
+fun remove_list(left: list[int], right: list[int]): list[int] = left - right
