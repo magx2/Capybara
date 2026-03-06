@@ -9,6 +9,7 @@ import pl.grzeslowski.capybara.parser.*;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 import static java.util.function.Function.identity;
@@ -47,7 +48,7 @@ public class CapybaraLinker {
     }
 
     private ValueOrError<LinkedFunction> linkFunction(Function function, Map<String, GenericDataType> dataTypes) {
-        return linkParameters(function.parameters(), dataTypes)
+        var linked = linkParameters(function.parameters(), dataTypes)
                 .flatMap(parameters ->
                         new CapybaraExpressionLinker(parameters, dataTypes).linkExpression(function.expression())
                                 .flatMap(ex ->
@@ -63,6 +64,7 @@ public class CapybaraLinker {
                                                                 rtype,
                                                                 parameters,
                                                                 ex))));
+        return withPosition(linked, function.position());
     }
 
     private ValueOrError<List<LinkedFunctionParameter>> linkParameters(List<Parameter> parameters, Map<String, GenericDataType> dataTypes) {
@@ -72,8 +74,11 @@ public class CapybaraLinker {
     }
 
     private ValueOrError<LinkedFunctionParameter> linkParameter(Parameter parameter, Map<String, GenericDataType> dataTypes) {
-        return linkType(parameter.type(), dataTypes)
-                .map(type -> new LinkedFunctionParameter(parameter.name(), type));
+        return withPosition(
+                linkType(parameter.type(), dataTypes)
+                        .map(type -> new LinkedFunctionParameter(parameter.name(), type)),
+                parameter.position()
+        );
     }
 
     private ValueOrError<Map<String, GenericDataType>> types(Module module) {
@@ -105,11 +110,12 @@ public class CapybaraLinker {
     }
 
     private ValueOrError<LinkedDataType> linkDataDeclaration(DataDeclaration dataDeclaration) {
-        return dataDeclaration.fields()
+        var linked = dataDeclaration.fields()
                 .stream()
                 .map(this::linkField)
                 .collect(new ValueOrErrorCollectionCollector<>())
                 .map(fields -> new LinkedDataType(dataDeclaration.name(), fields));
+        return withPosition(linked, dataDeclaration.position());
     }
 
     private ValueOrError<LinkedDataType.LinkedField> linkField(DataDeclaration.DataField type) {
@@ -118,8 +124,9 @@ public class CapybaraLinker {
     }
 
     private ValueOrError<LinkedDataParentType> linkTypeDeclaration(TypeDeclaration typeDeclaration, List<LinkedDataType> dataDeclarations) {
-        return findSubtypes(typeDeclaration.subTypes(), dataDeclarations)
+        var linked = findSubtypes(typeDeclaration.subTypes(), dataDeclarations)
                 .flatMap(subTypes -> linkedDataParentType(typeDeclaration, subTypes));
+        return withPosition(linked, typeDeclaration.position());
     }
 
     private ValueOrError<LinkedDataParentType> linkedDataParentType(TypeDeclaration typeDeclaration, List<LinkedDataType> subTypes) {
@@ -143,6 +150,19 @@ public class CapybaraLinker {
                     return ValueOrError.success(dataType);
                 })
                 .collect(new ValueOrErrorCollectionCollector<>());
+    }
+
+    private static <T> ValueOrError<T> withPosition(ValueOrError<T> valueOrError, Optional<pl.grzeslowski.capybara.parser.SourcePosition> position) {
+        if (valueOrError instanceof ValueOrError.Error<T> error && position.isPresent()) {
+            var pos = position.get();
+            return new ValueOrError.Error<>(error.errors()
+                    .stream()
+                    .map(ValueOrError.Error.SingleError::message)
+                    .map(msg -> "line %d, column %d: %s".formatted(pos.line(), pos.column(), msg))
+                    .map(ValueOrError.Error.SingleError::new)
+                    .toList());
+        }
+        return valueOrError;
     }
 
     private static <T> List<T> castList(Module module, Class<T> clazz) {

@@ -5,6 +5,7 @@ import pl.grzeslowski.capybara.parser.*;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.logging.Logger;
 
 import static pl.grzeslowski.capybara.linker.CapybaraTypeLinker.linkType;
@@ -69,7 +70,10 @@ public class CapybaraExpressionLinker {
         return linkExpression(ifExpression.condition(), scope)
                 .flatMap(c -> {
                     if (c.type() != BOOL) {
-                        return ValueOrError.error("condition in if statement has to have type `" + BOOL + "`, was `" + c.type() + "`");
+                        return withPosition(
+                                ValueOrError.error("condition in if statement has to have type `" + BOOL + "`, was `" + c.type() + "`"),
+                                ifExpression.condition().position()
+                        );
                     }
                     return linkExpression(ifExpression.thenBranch(), scope)
                             .flatMap(t ->
@@ -144,7 +148,10 @@ public class CapybaraExpressionLinker {
                 .findAny()
                 .map(p -> new LinkedVariable(p.name(), p.type()))
                 .map(ValueOrError::<LinkedExpression>success)
-                .orElseGet(() -> ValueOrError.error("Variable " + value.name() + " not found"));
+                .orElseGet(() -> withPosition(
+                        ValueOrError.error("Variable " + value.name() + " not found"),
+                        value.position()
+                ));
     }
 
     private ValueOrError<LinkedExpression> linkLetExpression(LetExpression expression, Scope scope) {
@@ -157,5 +164,18 @@ public class CapybaraExpressionLinker {
                                                 value,
                                                 rest
                                         )));
+    }
+
+    private static <T> ValueOrError<T> withPosition(ValueOrError<T> valueOrError, Optional<pl.grzeslowski.capybara.parser.SourcePosition> position) {
+        if (valueOrError instanceof ValueOrError.Error<T> error && position.isPresent()) {
+            var pos = position.get();
+            return new ValueOrError.Error<>(error.errors()
+                    .stream()
+                    .map(ValueOrError.Error.SingleError::message)
+                    .map(msg -> "line %d, column %d: %s".formatted(pos.line(), pos.column(), msg))
+                    .map(ValueOrError.Error.SingleError::new)
+                    .toList());
+        }
+        return valueOrError;
     }
 }
