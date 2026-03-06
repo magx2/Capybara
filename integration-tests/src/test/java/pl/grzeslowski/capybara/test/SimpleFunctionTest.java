@@ -5,6 +5,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 
+import java.util.List;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 class SimpleFunctionTest {
@@ -90,5 +92,11 @@ class SimpleFunctionTest {
     })
     void power(int x, int y, int out) {
         assertThat(SimpleFunction.power(x, y)).isEqualTo(out);
+    }
+
+    @Test
+    @DisplayName("should return static list")
+    void staticList() {
+        assertThat(SimpleFunction.staticList()).isEqualTo(List.of(1, 2, 3));
     }
 }

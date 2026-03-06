@@ -1,5 +1,6 @@
 package pl.grzeslowski.capybara.linker.expression;
 
+import pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedList;
 import pl.grzeslowski.capybara.linker.*;
 import pl.grzeslowski.capybara.parser.*;
 
@@ -36,6 +37,7 @@ public class CapybaraExpressionLinker {
             case InfixExpression infixExpression -> linkInfixExpression(infixExpression, scope);
             case IntValue intValue -> linkIntValue(intValue, scope);
             case MatchExpression matchExpression -> linkMatchExpression(matchExpression, scope);
+            case NewListExpression newListExpression -> linkNewListExpression(newListExpression, scope);
             case NewData newData -> linkNewData(newData, scope);
             case StringValue stringValue -> linkStringValue(stringValue, scope);
             case Value value -> linkValue(value, scope);
@@ -107,6 +109,19 @@ public class CapybaraExpressionLinker {
         throw new UnsupportedOperationException("CapybaraExpressionLinker.linkMatchExpression(matchExpression)");
     }
 
+    private ValueOrError<LinkedExpression> linkNewListExpression(NewListExpression expression, Scope scope) {
+        return expression.values().stream()
+                .map(value -> linkExpression(value, scope))
+                .collect(new ValueOrErrorCollectionCollector<>())
+                .map(values -> {
+                    var elementType = values.stream()
+                            .map(LinkedExpression::type)
+                            .reduce(CapybaraTypeFinder::findHigherType)
+                            .orElse(ANY);
+                    return (LinkedExpression) new LinkedNewList(values, new LinkedList(elementType));
+                });
+    }
+
     private ValueOrError<LinkedExpression> linkNewData(NewData newData, Scope scope) {
         return linkType(newData.type(), dataTypes)
                 .flatMap(type ->
@@ -138,7 +153,7 @@ public class CapybaraExpressionLinker {
 //            if (scope.variableNameToUniqueName().containsKey(value.name())) {
 //                finalName = scope.variableNameToUniqueName().get(value.name());
 //            } else {
-                finalName = value.name();
+            finalName = value.name();
 //            }
             LOG.fine("Value `" + value.name() + "` is already defined in local scope. Renaming it to `" + finalName + "`");
             return ValueOrError.success(new LinkedVariable(finalName, scope.localValues().get(value.name())));

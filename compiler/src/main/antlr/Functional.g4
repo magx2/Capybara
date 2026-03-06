@@ -39,6 +39,7 @@ expression: letExpression* expressionNoLet;
 letExpression: 'let' NAME '=' expressionNoLet ';'?;
 expressionNoLet: ifExpression
                | functionCall
+               | new_list
                | '(' expression ')'
                | '{' expression '}'
                | expressionNoLet infixOperator expressionNoLet
@@ -68,6 +69,7 @@ constructorPattern: TYPE '{' fieldPatternList? '}';
 fieldPatternList: NAME (',' NAME)*;
 
 newData: type '{' fieldAssignmentList? '}';
+new_list: '[' expression (',' expression)* ']';
 fieldAssignmentList: fieldAssignment (',' fieldAssignment)*;
 fieldAssignment: NAME ':' expression
                 | '"' NAME '"' ':' expression;

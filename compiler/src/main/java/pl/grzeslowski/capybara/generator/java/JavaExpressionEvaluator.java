@@ -2,6 +2,7 @@ package pl.grzeslowski.capybara.generator.java;
 
 import pl.grzeslowski.capybara.linker.expression.*;
 
+import java.util.ArrayList;
 import java.util.logging.Logger;
 
 import static java.lang.System.lineSeparator;
@@ -32,6 +33,7 @@ public class JavaExpressionEvaluator {
             case LinkedIntValue intValue -> evaluateIntValue(intValue, scope);
             case LinkedLetExpression letExpression -> evaluateLetExpression(letExpression, scope);
             case LinkedMatchExpression matchExpression -> evaluateMatchExpression(matchExpression, scope);
+            case LinkedNewList newList -> evaluateNewList(newList, scope);
             case LinkedNewData newData -> evaluateNewData(newData, scope);
             case LinkedStringValue stringValue -> evaluateStringValue(stringValue, scope);
             case LinkedVariable variable -> evaluateVariable(variable, scope);
@@ -89,6 +91,17 @@ public class JavaExpressionEvaluator {
 
     private static Scope evaluateMatchExpression(LinkedMatchExpression matchExpression, Scope scope) {
         throw new UnsupportedOperationException("wip");
+    }
+
+    private static Scope evaluateNewList(LinkedNewList newList, Scope scope) {
+        var current = scope;
+        var values = new ArrayList<String>(newList.values().size());
+        for (var value : newList.values()) {
+            var exSc = evaluateExpression(value, current).popExpression();
+            current = exSc.scope();
+            values.add(exSc.expression());
+        }
+        return current.addExpression("java.util.List.of(" + String.join(", ", values) + ")");
     }
 
     private static Scope evaluateNewData(LinkedNewData newData, Scope scope) {

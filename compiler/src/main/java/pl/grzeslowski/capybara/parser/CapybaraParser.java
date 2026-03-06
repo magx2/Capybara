@@ -160,6 +160,9 @@ public class CapybaraParser {
         if (expression.functionCall() != null) {
             return functionCall(expression.functionCall());
         }
+        if (expression.new_list() != null) {
+            return newListExpression(expression.new_list());
+        }
 
         var value = expression.value();
         if (value != null) {
@@ -310,6 +313,13 @@ public class CapybaraParser {
                 ? List.<Expression>of()
                 : context.argumentList().expression().stream().map(this::expression).toList();
         return new FunctionCall(context.NAME().getText(), arguments, position(context));
+    }
+
+    private Expression newListExpression(pl.grzeslowski.capybara.parser.antlr.FunctionalParser.New_listContext context) {
+        return new NewListExpression(
+                context.expression().stream().map(this::expression).toList(),
+                position(context)
+        );
     }
 
     private NewData.FieldAssignment fieldAssignment(pl.grzeslowski.capybara.parser.antlr.FunctionalParser.FieldAssignmentContext context) {
