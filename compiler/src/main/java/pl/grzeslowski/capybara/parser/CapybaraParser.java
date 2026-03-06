@@ -163,6 +163,9 @@ public class CapybaraParser {
         if (expression.new_list() != null) {
             return newListExpression(expression.new_list());
         }
+        if (expression.new_dict() != null) {
+            return newDictExpression(expression.new_dict());
+        }
         if (expression.new_set() != null) {
             return newSetExpression(expression.new_set());
         }
@@ -322,6 +325,22 @@ public class CapybaraParser {
         return new NewListExpression(
                 context.expression().stream().map(this::expression).toList(),
                 position(context)
+        );
+    }
+
+    private Expression newDictExpression(pl.grzeslowski.capybara.parser.antlr.FunctionalParser.New_dictContext context) {
+        return new NewDictExpression(
+                context.dict_entry().stream()
+                        .map(this::dictEntry)
+                        .toList(),
+                position(context)
+        );
+    }
+
+    private NewDictExpression.Entry dictEntry(pl.grzeslowski.capybara.parser.antlr.FunctionalParser.Dict_entryContext context) {
+        return new NewDictExpression.Entry(
+                expression(context.expression(0)),
+                expression(context.expression(1))
         );
     }
 

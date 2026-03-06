@@ -68,4 +68,14 @@ class FunctionTypeInferenceTest {
         assertThat(generic.getRawType().getTypeName()).isEqualTo("java.util.Set");
         assertThat(generic.getActualTypeArguments()[0].getTypeName()).isEqualTo("java.lang.Object");
     }
+
+    @Test
+    void dictOfInts() throws NoSuchMethodException {
+        Method method = FunctionTypeInference.class.getMethod("dictOfInts");
+        assertThat(method.getGenericReturnType()).isInstanceOf(ParameterizedType.class);
+        var generic = (ParameterizedType) method.getGenericReturnType();
+        assertThat(generic.getRawType().getTypeName()).isEqualTo("java.util.Map");
+        assertThat(generic.getActualTypeArguments()[0].getTypeName()).isEqualTo("java.lang.String");
+        assertThat(generic.getActualTypeArguments()[1].getTypeName()).isEqualTo("java.lang.Integer");
+    }
 }

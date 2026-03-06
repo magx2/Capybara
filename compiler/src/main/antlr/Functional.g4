@@ -40,6 +40,7 @@ letExpression: 'let' NAME '=' expressionNoLet ';'?;
 expressionNoLet: ifExpression
                | functionCall
                | new_list
+               | new_dict
                | '(' expression ')'
                | '{' expression '}'
                | new_set
@@ -72,6 +73,8 @@ fieldPatternList: NAME (',' NAME)*;
 newData: type '{' fieldAssignmentList? '}';
 new_list: '[' (expression (',' expression)*)? ']';
 new_set: '{' (expression (',' expression)*)? '}';
+new_dict: '{' dict_entry (',' dict_entry)* ','? '}';
+dict_entry: expression ':' expression;
 fieldAssignmentList: fieldAssignment (',' fieldAssignment)*;
 fieldAssignment: NAME ':' expression
                 | '"' NAME '"' ':' expression;

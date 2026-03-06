@@ -18,6 +18,7 @@ public class ValueNameRewriter {
                     rewriteValueInLinkedLetExpression(name, uniqueName, linkedLetExpression);
             case LinkedMatchExpression linkedMatchExpression ->
                     rewriteValueInLinkedMatchExpression(name, uniqueName, linkedMatchExpression);
+            case LinkedNewDict linkedNewDict -> rewriteValueInLinkedNewDict(name, uniqueName, linkedNewDict);
             case LinkedNewList linkedNewList -> rewriteValueInLinkedNewList(name, uniqueName, linkedNewList);
             case LinkedNewSet linkedNewSet -> rewriteValueInLinkedNewSet(name, uniqueName, linkedNewSet);
             case LinkedNewData linkedNewData -> rewriteValueInLinkedNewData(name, uniqueName, linkedNewData);
@@ -88,6 +89,18 @@ public class ValueNameRewriter {
                         .map(ex -> rewriteValueInExpression(name, uniqueName, ex))
                         .toList(),
                 linkedNewSet.type()
+        );
+    }
+
+    private static LinkedExpression rewriteValueInLinkedNewDict(String name, String uniqueName, LinkedNewDict linkedNewDict) {
+        return new LinkedNewDict(
+                linkedNewDict.entries().stream()
+                        .map(entry -> new LinkedNewDict.Entry(
+                                rewriteValueInExpression(name, uniqueName, entry.key()),
+                                rewriteValueInExpression(name, uniqueName, entry.value())
+                        ))
+                        .toList(),
+                linkedNewDict.type()
         );
     }
 

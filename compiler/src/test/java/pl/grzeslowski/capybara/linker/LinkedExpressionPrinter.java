@@ -25,6 +25,7 @@ public class LinkedExpressionPrinter {
             case LinkedLetExpression linkedLetExpression -> printLinkedLetExpression(linkedLetExpression, level);
             case LinkedMatchExpression linkedMatchExpression ->
                     printLinkedMatchExpression(linkedMatchExpression, level);
+            case LinkedNewDict linkedNewDict -> printLinkedNewDict(linkedNewDict, level);
             case LinkedNewList linkedNewList -> printLinkedNewList(linkedNewList, level);
             case LinkedNewSet linkedNewSet -> printLinkedNewSet(linkedNewSet, level);
             case LinkedNewData linkedNewData -> printLinkedNewData(linkedNewData, level);
@@ -87,6 +88,12 @@ public class LinkedExpressionPrinter {
 
     private static String printLinkedNewSet(LinkedNewSet linkedNewSet, int level) {
         return "{" + linkedNewSet.values().stream().map(ex -> printExpression(ex, level + 1)).collect(joining(", ")) + "}";
+    }
+
+    private static String printLinkedNewDict(LinkedNewDict linkedNewDict, int level) {
+        return "{" + linkedNewDict.entries().stream()
+                .map(entry -> printExpression(entry.key(), level + 1) + ": " + printExpression(entry.value(), level + 1))
+                .collect(joining(", ")) + "}";
     }
 
     private static String printLinkedStringValue(LinkedStringValue linkedStringValue, int level) {

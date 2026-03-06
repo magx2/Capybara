@@ -1,6 +1,7 @@
 package pl.grzeslowski.capybara.linker.expression;
 
 import pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedList;
+import pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedDict;
 import pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedSet;
 import pl.grzeslowski.capybara.linker.*;
 import pl.grzeslowski.capybara.parser.*;
@@ -13,6 +14,7 @@ import java.util.logging.Logger;
 import static pl.grzeslowski.capybara.linker.CapybaraTypeLinker.linkType;
 import static pl.grzeslowski.capybara.linker.PrimitiveLinkedType.ANY;
 import static pl.grzeslowski.capybara.linker.PrimitiveLinkedType.BOOL;
+import static pl.grzeslowski.capybara.linker.PrimitiveLinkedType.STRING;
 import static pl.grzeslowski.capybara.linker.expression.CapybaraTypeFinder.findHigherType;
 
 public class CapybaraExpressionLinker {
@@ -38,6 +40,7 @@ public class CapybaraExpressionLinker {
             case InfixExpression infixExpression -> linkInfixExpression(infixExpression, scope);
             case IntValue intValue -> linkIntValue(intValue, scope);
             case MatchExpression matchExpression -> linkMatchExpression(matchExpression, scope);
+            case NewDictExpression newDictExpression -> linkNewDictExpression(newDictExpression, scope);
             case NewListExpression newListExpression -> linkNewListExpression(newListExpression, scope);
             case NewSetExpression newSetExpression -> linkNewSetExpression(newSetExpression, scope);
             case NewData newData -> linkNewData(newData, scope);
@@ -134,6 +137,35 @@ public class CapybaraExpressionLinker {
                             .reduce(CapybaraTypeFinder::findHigherType)
                             .orElse(ANY);
                     return (LinkedExpression) new LinkedNewSet(values, new LinkedSet(elementType));
+                });
+    }
+
+    private ValueOrError<LinkedExpression> linkNewDictExpression(NewDictExpression expression, Scope scope) {
+        return expression.entries().stream()
+                .map(entry -> ValueOrError.join(
+                        LinkedNewDict.Entry::new,
+                        linkExpression(entry.key(), scope),
+                        linkExpression(entry.value(), scope)
+                ))
+                .collect(new ValueOrErrorCollectionCollector<>())
+                .flatMap(entries -> {
+                    var invalidKey = entries.stream()
+                            .map(LinkedNewDict.Entry::key)
+                            .filter(key -> key.type() != STRING)
+                            .findFirst();
+                    if (invalidKey.isPresent()) {
+                        return withPosition(
+                                ValueOrError.error("dict keys must be of type `STRING`"),
+                                expression.position()
+                        );
+                    }
+
+                    var valueType = entries.stream()
+                            .map(LinkedNewDict.Entry::value)
+                            .map(LinkedExpression::type)
+                            .reduce(CapybaraTypeFinder::findHigherType)
+                            .orElse(ANY);
+                    return ValueOrError.success((LinkedExpression) new LinkedNewDict(entries, new LinkedDict(valueType)));
                 });
     }
 

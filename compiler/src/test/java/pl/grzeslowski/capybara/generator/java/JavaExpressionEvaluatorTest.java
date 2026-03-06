@@ -3,6 +3,7 @@ package pl.grzeslowski.capybara.generator.java;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.api.Test;
 import pl.grzeslowski.capybara.compiler.Module;
 import pl.grzeslowski.capybara.compiler.Program;
 import pl.grzeslowski.capybara.linker.*;
@@ -52,7 +53,11 @@ class JavaExpressionEvaluatorTest {
                 Arguments.of(
                         "set_of_obj",
                         "fun set_of_obj() = {}",
-                        new CollectionLinkedType.LinkedSet(ANY))
+                        new CollectionLinkedType.LinkedSet(ANY)),
+                Arguments.of(
+                        "dict_of_obj",
+                        "fun dict_of_obj() = { \"one\": 1, }",
+                        new CollectionLinkedType.LinkedDict(PrimitiveLinkedType.INT))
         );
     }
 
@@ -91,6 +96,20 @@ class JavaExpressionEvaluatorTest {
                 .flatMap(Collection::stream)
                 .filter(f -> f.name().equals(name))
                 .findAny();
+    }
+
+    @Test
+    void dictKeysMustBeStrings() {
+        var functional = CapybaraParser.INSTANCE.parseFunctional("""
+                fun invalid_dict() = {
+                    1: 1
+                }
+                """);
+        var programValueOrError = CapybaraLinker.INSTANCE.link(new Program(List.of(new Module("test", "/foo/boo", functional))));
+        assertThat(programValueOrError).isInstanceOf(ValueOrError.Error.class);
+        var error = (ValueOrError.Error<LinkedProgram>) programValueOrError;
+        assertThat(error.errors().stream().map(ValueOrError.Error.SingleError::message).collect(joining(",")))
+                .contains("dict keys must be of type `STRING`");
     }
 
     static Stream<Arguments> wild() {
@@ -173,6 +192,17 @@ class JavaExpressionEvaluatorTest {
                         "list_of_obj",
                         "fun list_of_obj() = []",
                         "return java.util.List.of();"
+                ),
+                Arguments.of(
+                        "dict_of_obj",
+                        """
+                                fun dict_of_obj() = {
+                                    "one": 1,
+                                    "two": 2,
+                                    "three": 3,
+                                }
+                                """,
+                        "return java.util.Map.of(\"one\", 1, \"two\", 2, \"three\", 3);"
                 )
         );
     }
