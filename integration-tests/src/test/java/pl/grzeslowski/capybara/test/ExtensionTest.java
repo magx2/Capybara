@@ -28,4 +28,9 @@ class ExtensionTest {
         assertThat(Extension.length(new Extension.Point(3.0f, 4.0f))).isEqualTo(5.0f);
         assertThat(Extension.length(new Extension.Point3D(1.0f, 2.0f, 2.0f))).isEqualTo(3.0f);
     }
+
+    @Test
+    void acceptsPoint3dWherePointIsRequired() {
+        assertThat(Extension.onlyPoint2d(10, 20)).isEqualTo(3.0f);
+    }
 }

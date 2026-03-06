@@ -26,9 +26,13 @@ public class CapybaraLinker {
 
     private ValueOrError<LinkedModule> linkModule(Module module) {
         return types(module)
-                .flatMap(dataTypes ->
-                        linkFunctions(findFunctions(module.functional().definitions()), dataTypes)
-                                .map(functions -> new LinkedModule(module.name(), module.path(), dataTypes, Set.copyOf(functions))));
+                .flatMap(dataTypes -> {
+                    var functions = findFunctions(module.functional().definitions());
+                    return linkFunctionSignatures(functions, dataTypes)
+                            .flatMap(signatures ->
+                                    linkFunctions(functions, dataTypes, signatures)
+                                            .map(linkedFunctions -> new LinkedModule(module.name(), module.path(), dataTypes, Set.copyOf(linkedFunctions))));
+                });
     }
 
     private List<Function> findFunctions(Set<Definition> definitions) {
@@ -38,16 +42,24 @@ public class CapybaraLinker {
                 .toList();
     }
 
-    private ValueOrError<List<LinkedFunction>> linkFunctions(List<Function> functions, Map<String, GenericDataType> dataTypes) {
+    private ValueOrError<List<LinkedFunction>> linkFunctions(
+            List<Function> functions,
+            Map<String, GenericDataType> dataTypes,
+            List<CapybaraExpressionLinker.FunctionSignature> signatures
+    ) {
         return functions.stream()
-                .map(f -> linkFunction(f, dataTypes))
+                .map(f -> linkFunction(f, dataTypes, signatures))
                 .collect(new ValueOrErrorCollectionCollector<>());
     }
 
-    private ValueOrError<LinkedFunction> linkFunction(Function function, Map<String, GenericDataType> dataTypes) {
+    private ValueOrError<LinkedFunction> linkFunction(
+            Function function,
+            Map<String, GenericDataType> dataTypes,
+            List<CapybaraExpressionLinker.FunctionSignature> signatures
+    ) {
         var linked = linkParameters(function.parameters(), dataTypes)
                 .flatMap(parameters ->
-                        new CapybaraExpressionLinker(parameters, dataTypes).linkExpression(function.expression())
+                        new CapybaraExpressionLinker(parameters, dataTypes, signatures).linkExpression(function.expression())
                                 .flatMap(ex ->
                                         function.returnType()
                                                 .map(type -> {
@@ -62,6 +74,23 @@ public class CapybaraLinker {
                                                                 parameters,
                                                                 ex))));
         return withPosition(linked, function.position());
+    }
+
+    private ValueOrError<List<CapybaraExpressionLinker.FunctionSignature>> linkFunctionSignatures(
+            List<Function> functions,
+            Map<String, GenericDataType> dataTypes
+    ) {
+        return functions.stream()
+                .map(function -> linkParameters(function.parameters(), dataTypes)
+                        .flatMap(parameters -> function.returnType()
+                                .map(type -> linkType(type, dataTypes))
+                                .orElseGet(() -> ValueOrError.success(PrimitiveLinkedType.ANY))
+                                .map(returnType -> new CapybaraExpressionLinker.FunctionSignature(
+                                        function.name(),
+                                        parameters.stream().map(LinkedFunctionParameter::type).toList(),
+                                        returnType
+                                ))))
+                .collect(new ValueOrErrorCollectionCollector<>());
     }
 
     private ValueOrError<List<LinkedFunctionParameter>> linkParameters(List<Parameter> parameters, Map<String, GenericDataType> dataTypes) {
@@ -164,6 +193,7 @@ public class CapybaraLinker {
                                     dataDeclaration.name(),
                                     List.copyOf(fields),
                                     dataDeclaration.typeParameters(),
+                                    dataDeclaration.extendsTypes(),
                                     false
                             );
                         },
@@ -177,7 +207,7 @@ public class CapybaraLinker {
     }
 
     private ValueOrError<LinkedDataType> linkSingleDeclaration(SingleDeclaration singleDeclaration) {
-        return ValueOrError.success(new LinkedDataType(singleDeclaration.name(), List.of(), List.of(), true));
+        return ValueOrError.success(new LinkedDataType(singleDeclaration.name(), List.of(), List.of(), List.of(), true));
     }
 
     private ValueOrError<LinkedDataType.LinkedField> linkField(DataDeclaration.DataField type, Set<String> genericTypes) {

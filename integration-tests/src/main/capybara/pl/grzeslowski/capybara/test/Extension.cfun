@@ -9,3 +9,9 @@ fun new_point3d(p: Point, z: float): Point3D = Point3D { ...p, "z": z }
 fun length(p: Point): float = sqrt(p.x * p.x + p.y * p.y)
 
 fun length(p: Point3D): float = sqrt(p.x * p.x + p.y * p.y + p.z * p.z)
+
+fun x_and_y(p: Point) = p.x + p.y
+
+fun only_point2d(x: int, y: int) =
+    let p = Point3D { x: 1, y: 2, z: 3}
+    x_and_y(p)

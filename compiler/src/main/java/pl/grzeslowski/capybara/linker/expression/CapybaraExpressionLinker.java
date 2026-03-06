@@ -21,10 +21,16 @@ public class CapybaraExpressionLinker {
     private static final Logger LOG = Logger.getLogger(CapybaraExpressionLinker.class.getName());
     private final List<LinkedFunction.LinkedFunctionParameter> parameters;
     private final Map<String, GenericDataType> dataTypes;
+    private final List<FunctionSignature> functionSignatures;
 
-    public CapybaraExpressionLinker(List<LinkedFunction.LinkedFunctionParameter> parameters, Map<String, GenericDataType> dataTypes) {
+    public CapybaraExpressionLinker(
+            List<LinkedFunction.LinkedFunctionParameter> parameters,
+            Map<String, GenericDataType> dataTypes,
+            List<FunctionSignature> functionSignatures
+    ) {
         this.parameters = parameters;
         this.dataTypes = dataTypes;
+        this.functionSignatures = functionSignatures;
     }
 
     public ValueOrError<LinkedExpression> linkExpression(Expression expression) {
@@ -90,17 +96,94 @@ public class CapybaraExpressionLinker {
     }
 
     private ValueOrError<LinkedExpression> linkFunctionCall(FunctionCall functionCall, Scope scope) {
-        // todo check if types matche data declaration
-        // todo check if there is enough assignments
         return functionCall.arguments()
                 .stream()
                 .map((Expression expression) -> linkExpression(expression, scope))
                 .collect(new ValueOrErrorCollectionCollector<>())
-                .map(args -> new LinkedFunctionCall(
-                        functionCall.name(),
-                        args, // todo has to check if args are correct
-                        ANY // todo has to check proper function return type
-                ));
+                .flatMap(args -> resolveFunctionCall(functionCall, args));
+    }
+
+    private ValueOrError<LinkedExpression> resolveFunctionCall(FunctionCall functionCall, List<LinkedExpression> arguments) {
+        var candidates = functionSignatures.stream()
+                .filter(signature -> signature.name().equals(functionCall.name()))
+                .filter(signature -> signature.parameterTypes().size() == arguments.size())
+                .toList();
+        if (candidates.isEmpty()) {
+            return ValueOrError.success(new LinkedFunctionCall(functionCall.name(), arguments, ANY));
+        }
+
+        ResolvedFunctionCall best = null;
+        for (var candidate : candidates) {
+            var resolved = coerceArguments(arguments, candidate.parameterTypes());
+            if (resolved == null) {
+                continue;
+            }
+            if (best == null || resolved.coercions() < best.coercions()) {
+                best = new ResolvedFunctionCall(candidate, resolved.arguments(), resolved.coercions());
+            }
+        }
+        if (best == null) {
+            var actualTypes = arguments.stream().map(LinkedExpression::type).map(LinkedType::name).toList();
+            return withPosition(
+                    ValueOrError.error(
+                            "No matching function `" + functionCall.name() + "` for argument types " + actualTypes
+                    ),
+                    functionCall.position()
+            );
+        }
+        return ValueOrError.success(new LinkedFunctionCall(
+                functionCall.name(),
+                best.arguments(),
+                best.signature().returnType()
+        ));
+    }
+
+    private CoercedArguments coerceArguments(List<LinkedExpression> arguments, List<LinkedType> expectedTypes) {
+        var coerced = new java.util.ArrayList<LinkedExpression>(arguments.size());
+        var coercions = 0;
+        for (var i = 0; i < arguments.size(); i++) {
+            var argument = arguments.get(i);
+            var expected = expectedTypes.get(i);
+            var maybeCoerced = coerceArgument(argument, expected);
+            if (maybeCoerced == null) {
+                return null;
+            }
+            coerced.add(maybeCoerced.expression());
+            coercions += maybeCoerced.coercions();
+        }
+        return new CoercedArguments(List.copyOf(coerced), coercions);
+    }
+
+    private CoercedArgument coerceArgument(LinkedExpression argument, LinkedType expected) {
+        if (argument.type().equals(expected)) {
+            return new CoercedArgument(argument, 0);
+        }
+        if (expected instanceof LinkedDataType expectedDataType
+            && argument.type() instanceof LinkedDataType argumentDataType
+            && isSubtype(argumentDataType, expectedDataType.name(), new java.util.HashSet<>())) {
+            var assignments = expectedDataType.fields().stream()
+                    .map(field -> new LinkedNewData.FieldAssignment(
+                            field.name(),
+                            new LinkedFieldAccess(argument, field.name(), field.type())
+                    ))
+                    .toList();
+            return new CoercedArgument(new LinkedNewData(expectedDataType, assignments), 1);
+        }
+        return null;
+    }
+
+    private boolean isSubtype(LinkedDataType candidate, String expectedTypeName, java.util.Set<String> visited) {
+        if (!visited.add(candidate.name())) {
+            return false;
+        }
+        if (candidate.extendedTypes().contains(expectedTypeName)) {
+            return true;
+        }
+        return candidate.extendedTypes().stream()
+                .map(dataTypes::get)
+                .filter(LinkedDataType.class::isInstance)
+                .map(LinkedDataType.class::cast)
+                .anyMatch(parent -> parent.name().equals(expectedTypeName) || isSubtype(parent, expectedTypeName, visited));
     }
 
     private ValueOrError<LinkedExpression> linkIfExpression(IfExpression ifExpression, Scope scope) {
@@ -685,5 +768,17 @@ public class CapybaraExpressionLinker {
     }
 
     private record PatternAndScope(LinkedMatchExpression.Pattern pattern, Scope scope) {
+    }
+
+    public record FunctionSignature(String name, List<LinkedType> parameterTypes, LinkedType returnType) {
+    }
+
+    private record CoercedArgument(LinkedExpression expression, int coercions) {
+    }
+
+    private record CoercedArguments(List<LinkedExpression> arguments, int coercions) {
+    }
+
+    private record ResolvedFunctionCall(FunctionSignature signature, List<LinkedExpression> arguments, int coercions) {
     }
 }
