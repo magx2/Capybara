@@ -3,6 +3,7 @@ package pl.grzeslowski.capybara.parser;
 
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;
+import org.antlr.v4.runtime.ParserRuleContext;
 import org.antlr.v4.runtime.tree.TerminalNode;
 import pl.grzeslowski.capybara.parser.antlr.FunctionalParser;
 
@@ -54,14 +55,16 @@ public class CapybaraParser {
         return new TypeDeclaration(
                 context.TYPE().get(0).getText(),
                 context.TYPE().stream().skip(1).map(TerminalNode::getText).toList(),
-                fieldDeclarationList
+                fieldDeclarationList,
+                position(context)
         );
     }
 
     private DataDeclaration dataDeclaration(FunctionalParser.DataDeclarationContext context) {
         return new DataDeclaration(
                 context.TYPE().getText(),
-                fieldDeclarationList(context.fieldDeclarationList())
+                fieldDeclarationList(context.fieldDeclarationList()),
+                position(context)
         );
     }
 
@@ -88,7 +91,8 @@ public class CapybaraParser {
                 functionDeclarationContext.NAME().getText(),
                 parameters,
                 functionType(functionDeclarationContext.functionType()),
-                expression(functionDeclarationContext.expression())
+                expression(functionDeclarationContext.expression()),
+                position(functionDeclarationContext)
         );
     }
 
@@ -113,7 +117,8 @@ public class CapybaraParser {
             result = new LetExpression(
                     letExpression.NAME().getText(),
                     expressionNoLet(letExpression.expressionNoLet()),
-                    result
+                    result,
+                    position(letExpression)
             );
         }
         return result;
@@ -125,7 +130,7 @@ public class CapybaraParser {
             var condition = expression(ifExpression.expression(0));
             var thenBranch = expression(ifExpression.expression(1));
             var elseBranch = expression(ifExpression.expression(2));
-            return new IfExpression(condition, thenBranch, elseBranch);
+            return new IfExpression(condition, thenBranch, elseBranch, position(expression));
         }
 
         if (expression.functionCall() != null) {
@@ -140,24 +145,28 @@ public class CapybaraParser {
                     return boolLiteral(literal.BOOL_LITERAL());
                 }
                 if (literal.INT_LITERAL() != null) {
-                    return new IntValue(literal.INT_LITERAL().getText());
+                    return new IntValue(literal.INT_LITERAL().getText(), position(literal.INT_LITERAL()));
                 }
                 if (literal.STRING_LITERAL() != null) {
-                    return new StringValue(literal.STRING_LITERAL().getText());
+                    return new StringValue(literal.STRING_LITERAL().getText(), position(literal.STRING_LITERAL()));
                 }
                 if (literal.FLOAT_LITERAL() != null) {
-                    return new FloatValue(literal.FLOAT_LITERAL().getText());
+                    return new FloatValue(literal.FLOAT_LITERAL().getText(), position(literal.FLOAT_LITERAL()));
                 }
             }
 
             if (value.NAME() != null) {
-                return new Value(value.NAME().getText());
+                return new Value(value.NAME().getText(), position(value.NAME()));
             }
         }
 
         var newData = expression.newData();
         if (newData != null) {
-            return new NewData(type(newData.type()), newData.fieldAssignmentList().fieldAssignment().stream().map(this::fieldAssignment).toList());
+            return new NewData(
+                    type(newData.type()),
+                    newData.fieldAssignmentList().fieldAssignment().stream().map(this::fieldAssignment).toList(),
+                    position(newData)
+            );
         }
 
         var matchExpression = expression.matchExpression();
@@ -174,7 +183,8 @@ public class CapybaraParser {
                     expressionNoLet(leftContext),
                     isGrouped(leftContext),
                     operator,
-                    expressionNoLet(rightContext)
+                    expressionNoLet(rightContext),
+                    position(expression)
             );
         }
 
@@ -193,17 +203,19 @@ public class CapybaraParser {
     private static Expression rebalanceInfixByPrecedence(Expression left,
                                                          boolean leftGrouped,
                                                          InfixOperator operator,
-                                                         Expression right) {
+                                                         Expression right,
+                                                         SourcePosition position) {
         if (!leftGrouped &&
             left instanceof InfixExpression leftInfix &&
             operator.precedence() > leftInfix.operator().precedence()) {
             return new InfixExpression(
                     leftInfix.left(),
                     leftInfix.operator(),
-                    rebalanceInfixByPrecedence(leftInfix.right(), false, operator, right)
+                    rebalanceInfixByPrecedence(leftInfix.right(), false, operator, right, leftInfix.position()),
+                    leftInfix.position()
             );
         }
-        return new InfixExpression(left, operator, right);
+        return new InfixExpression(left, operator, right, position);
     }
 
     private MatchExpression matchExpression(FunctionalParser.MatchExpressionContext context) {
@@ -214,7 +226,8 @@ public class CapybaraParser {
                         .map(FunctionalParser.MatchCaseListContext::matchCase)
                         .flatMap(Collection::stream)
                         .map(this::matchCase)
-                        .toList()
+                        .toList(),
+                position(context)
         );
     }
 
@@ -272,7 +285,7 @@ public class CapybaraParser {
         var arguments = context.argumentList() == null
                 ? List.<Expression>of()
                 : context.argumentList().expression().stream().map(this::expression).toList();
-        return new FunctionCall(context.NAME().getText(), arguments);
+        return new FunctionCall(context.NAME().getText(), arguments, position(context));
     }
 
     private NewData.FieldAssignment fieldAssignment(pl.grzeslowski.capybara.parser.antlr.FunctionalParser.FieldAssignmentContext context) {
@@ -281,14 +294,22 @@ public class CapybaraParser {
 
     private static BooleanValue boolLiteral(TerminalNode node) {
         return switch (node.getText()) {
-            case "true" -> BooleanValue.TRUE;
-            case "false" -> BooleanValue.FALSE;
+            case "true" -> new BooleanValue(true, position(node));
+            case "false" -> new BooleanValue(false, position(node));
             default -> throw new IllegalStateException("Unexpected value: " + node.getText());
         };
     }
 
     private Parameter parameter(pl.grzeslowski.capybara.parser.antlr.FunctionalParser.ParameterContext context) {
-        return new Parameter(type(context.type()), context.NAME().getText());
+        return new Parameter(type(context.type()), context.NAME().getText(), position(context));
+    }
+
+    private static SourcePosition position(ParserRuleContext context) {
+        return SourcePosition.of(context).orElse(SourcePosition.EMPTY);
+    }
+
+    private static SourcePosition position(TerminalNode node) {
+        return SourcePosition.of(node);
     }
 
 }

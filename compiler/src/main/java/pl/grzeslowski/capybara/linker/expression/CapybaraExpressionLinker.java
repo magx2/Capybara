@@ -44,11 +44,7 @@ public class CapybaraExpressionLinker {
     }
 
     private ValueOrError<LinkedExpression> linkBooleanValue(BooleanValue booleanValue, Scope scope) {
-        return ValueOrError.success(
-                switch (booleanValue) {
-                    case TRUE -> LinkedBooleanValue.TRUE;
-                    case FALSE -> LinkedBooleanValue.FALSE;
-                });
+        return ValueOrError.success(booleanValue.value() ? LinkedBooleanValue.TRUE : LinkedBooleanValue.FALSE);
     }
 
     private ValueOrError<LinkedExpression> linkFloatValue(FloatValue floatValue, Scope scope) {

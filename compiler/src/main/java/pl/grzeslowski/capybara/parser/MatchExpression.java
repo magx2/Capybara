@@ -2,8 +2,8 @@ package pl.grzeslowski.capybara.parser;
 
 import java.util.List;
 
-public record MatchExpression(Expression matchWith, List<MatchCase> cases) implements Expression {
-    public MatchExpression {
+public record MatchExpression(Expression matchWith, List<MatchCase> cases, SourcePosition position) implements Expression {
+public MatchExpression {
         if (cases.isEmpty()) {
             throw new IllegalArgumentException("Match expression must have at least one case");
         }
@@ -38,3 +38,4 @@ public record MatchExpression(Expression matchWith, List<MatchCase> cases) imple
     public record ConstructorPattern(String constructorName, List<String> names) implements Pattern {
     }
 }
+

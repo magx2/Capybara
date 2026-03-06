@@ -1,5 +1,4 @@
 package pl.grzeslowski.capybara.parser;
 
-public enum BooleanValue implements Expression {
-    TRUE, FALSE;
+public record BooleanValue(boolean value, SourcePosition position) implements Expression {
 }

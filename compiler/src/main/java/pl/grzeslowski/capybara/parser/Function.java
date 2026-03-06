@@ -4,5 +4,6 @@ import java.util.List;
 import java.util.Optional;
 
 public record Function(String name, List<Parameter> parameters, Optional<Type> returnType,
-                       Expression expression) implements Definition {
+                       Expression expression, SourcePosition position) implements Definition {
 }
+
