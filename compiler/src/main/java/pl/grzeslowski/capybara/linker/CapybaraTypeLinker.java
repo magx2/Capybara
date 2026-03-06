@@ -1,16 +1,25 @@
 package pl.grzeslowski.capybara.linker;
 
+import pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedDict;
+import pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedList;
+import pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedSet;
+import pl.grzeslowski.capybara.parser.CollectionType;
+import pl.grzeslowski.capybara.parser.CollectionType.DictType;
+import pl.grzeslowski.capybara.parser.CollectionType.ListType;
+import pl.grzeslowski.capybara.parser.CollectionType.SetType;
 import pl.grzeslowski.capybara.parser.DataType;
 import pl.grzeslowski.capybara.parser.PrimitiveType;
 import pl.grzeslowski.capybara.parser.Type;
 
 import java.util.Map;
 
+
 public class CapybaraTypeLinker {
 
     public static ValueOrError<LinkedType> linkType(Type type, Map<String, GenericDataType> dataTypes) {
         return switch (type) {
             case PrimitiveType primitiveType -> ValueOrError.success(linkPrimitiveType(primitiveType));
+            case CollectionType collectionType -> linkCollectionType(collectionType);
             case DataType dataType -> linkDataType(dataType, dataTypes);
         };
     }
@@ -35,6 +44,14 @@ public class CapybaraTypeLinker {
             case STRING -> PrimitiveLinkedType.STRING;
             case BOOL -> PrimitiveLinkedType.BOOL;
             case FLOAT -> PrimitiveLinkedType.FLOAT;
+        };
+    }
+
+    private static ValueOrError<LinkedType> linkCollectionType(CollectionType type) {
+        return switch (type) {
+            case ListType list -> linkType(list.elementType()).map(LinkedList::new);
+            case DictType dict -> linkType(dict.valueType()).map(LinkedDict::new);
+            case SetType set -> linkType(set.elementType()).map(LinkedSet::new);
         };
     }
 }

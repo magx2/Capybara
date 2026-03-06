@@ -10,11 +10,16 @@ import pl.grzeslowski.capybara.parser.antlr.FunctionalParser;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import static java.util.stream.Collectors.toSet;
 
 public class CapybaraParser {
     public static final CapybaraParser INSTANCE = new CapybaraParser();
+    private static final Pattern COLLECTION_LIST_PATTERN = Pattern.compile("list\\[(.+?)]");
+    private static final Pattern COLLECTION_SET_PATTERN = Pattern.compile("set\\[(.+?)]");
+    private static final Pattern COLLECTION_DICT_PATTERN = Pattern.compile("dict\\[(.+?)]");
 
     public Functional parseFunctional(String input) {
         var lexer = new pl.grzeslowski.capybara.parser.antlr.FunctionalLexer(CharStreams.fromString(input));
@@ -103,10 +108,29 @@ public class CapybaraParser {
     }
 
     private static Type type(pl.grzeslowski.capybara.parser.antlr.FunctionalParser.TypeContext context) {
-        var name = context.getText();
+        return type(context.getText());
+    }
+
+    private static Type type(String name) {
         return PrimitiveType.find(name)
                 .map(Type.class::cast)
+                .or(() -> findCollectionType(name))
                 .orElseGet(() -> new DataType(name));
+    }
+
+    private static Optional<Type> findCollectionType(String name) {
+        return findCollectionType(name, COLLECTION_LIST_PATTERN, CollectionType.ListType::new)
+                .or(() -> findCollectionType(name, COLLECTION_SET_PATTERN, CollectionType.SetType::new))
+                .or(() -> findCollectionType(name, COLLECTION_DICT_PATTERN, CollectionType.DictType::new));
+    }
+
+    private static Optional<Type> findCollectionType(String name, Pattern pattern, java.util.function.Function<Type, CollectionType> creator) {
+        return Optional.of(pattern)
+                .map(p -> p.matcher(name))
+                .filter(Matcher::matches)
+                .map(m -> m.group(1))
+                .map(CapybaraParser::type)
+                .map(creator);
     }
 
     private Expression expression(pl.grzeslowski.capybara.parser.antlr.FunctionalParser.ExpressionContext expression) {

@@ -2,6 +2,9 @@ package pl.grzeslowski.capybara.generator.java;
 
 import pl.grzeslowski.capybara.generator.java.JavaInterface.JavaInterfaceMethod;
 import pl.grzeslowski.capybara.linker.*;
+import pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedDict;
+import pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedList;
+import pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedSet;
 
 import java.util.List;
 import java.util.Map;
@@ -98,6 +101,7 @@ public class JavaAstBuilder {
         return switch (type) {
             case GenericDataType genericDataType -> buildGenericDataType(genericDataType);
             case PrimitiveLinkedType primitiveLinkedType -> buildPrimitiveLinkedType(primitiveLinkedType);
+            case CollectionLinkedType collectionLinkedType -> buildCollectionLinkedType(collectionLinkedType);
         };
     }
 
@@ -112,6 +116,14 @@ public class JavaAstBuilder {
             case BOOL -> new JavaType("boolean");
             case FLOAT -> new JavaType("float");
             case ANY -> new JavaType("java.lang.Object");
+        };
+    }
+
+    private JavaType buildCollectionLinkedType(CollectionLinkedType type) {
+        return switch (type) {
+            case LinkedList linkedList -> new JavaType("java.util.List");
+            case LinkedDict linkedDict -> new JavaType("java.util.Set");
+            case LinkedSet linkedSet -> new JavaType("java.util.Map");
         };
     }
 
