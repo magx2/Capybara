@@ -203,6 +203,14 @@ class JavaExpressionEvaluatorTest {
                                 }
                                 """,
                         "return java.util.Map.of(\"one\", 1, \"two\", 2, \"three\", 3);"
+                ),
+                Arguments.of(
+                        "pipe_map",
+                        """
+                                fun pipe_map(l: list[int]): list[int] =
+                                    l | x => x * 2
+                                """,
+                        "return l.stream().map(x -> ((x*2))).toList();"
                 )
         );
     }

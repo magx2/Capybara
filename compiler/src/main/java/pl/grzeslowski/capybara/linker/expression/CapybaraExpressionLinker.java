@@ -39,6 +39,10 @@ public class CapybaraExpressionLinker {
             case IfExpression ifExpression -> linkIfExpression(ifExpression, scope);
             case InfixExpression infixExpression -> linkInfixExpression(infixExpression, scope);
             case IntValue intValue -> linkIntValue(intValue, scope);
+            case LambdaExpression lambdaExpression -> withPosition(
+                    ValueOrError.error("Lambda expression can only be used as the right side of `|`"),
+                    lambdaExpression.position()
+            );
             case MatchExpression matchExpression -> linkMatchExpression(matchExpression, scope);
             case NewDictExpression newDictExpression -> linkNewDictExpression(newDictExpression, scope);
             case NewListExpression newListExpression -> linkNewListExpression(newListExpression, scope);
@@ -90,6 +94,9 @@ public class CapybaraExpressionLinker {
     }
 
     private ValueOrError<LinkedExpression> linkInfixExpression(InfixExpression expression, Scope scope) {
+        if (expression.operator() == InfixOperator.PIPE) {
+            return linkPipeExpression(expression, scope);
+        }
         return linkExpression(expression.left(), scope)
                 .flatMap(left ->
                         linkExpression(expression.right(), scope)
@@ -97,6 +104,39 @@ public class CapybaraExpressionLinker {
                                         getLinkedInfixExpression(left, expression.operator(), right, expression.position())
                                                 .map(linked -> (LinkedExpression) linked)
                                 ));
+    }
+
+    private ValueOrError<LinkedExpression> linkPipeExpression(InfixExpression expression, Scope scope) {
+        return linkExpression(expression.left(), scope)
+                .flatMap(left -> {
+                    var elementType = switch (left.type()) {
+                        case LinkedList linkedList -> linkedList.elementType();
+                        case LinkedSet linkedSet -> linkedSet.elementType();
+                        case LinkedDict linkedDict -> linkedDict.valueType();
+                        default -> null;
+                    };
+                    if (elementType == null) {
+                        return withPosition(
+                                ValueOrError.error("Left side of `|` has to be a collection, was `" + left.type() + "`"),
+                                expression.left().position()
+                        );
+                    }
+                    if (!(expression.right() instanceof LambdaExpression lambdaExpression)) {
+                        return withPosition(
+                                ValueOrError.error("Right side of `|` has to be a lambda expression"),
+                                expression.right().position()
+                        );
+                    }
+
+                    var lambdaScope = scope.add(lambdaExpression.argumentName(), elementType);
+                    return linkExpression(lambdaExpression.expression(), lambdaScope)
+                            .map(mapper -> (LinkedExpression) new LinkedPipeExpression(
+                                    left,
+                                    lambdaExpression.argumentName(),
+                                    mapper,
+                                    new LinkedList(mapper.type())
+                            ));
+                });
     }
 
     private static ValueOrError<LinkedInfixExpression> getLinkedInfixExpression(
@@ -112,6 +152,7 @@ public class CapybaraExpressionLinker {
             // bool operators
             case GT, LT, EQUAL, NOTEQUAL, LE, GE -> BOOL;
             case QUESTION -> findQuestionType(left.type(), right.type());
+            case PIPE -> null;
         };
         if (type == null) {
             var op = operator.symbol();

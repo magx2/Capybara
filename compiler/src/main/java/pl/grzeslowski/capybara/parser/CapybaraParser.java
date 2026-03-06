@@ -189,6 +189,10 @@ public class CapybaraParser {
             return new IfExpression(condition, thenBranch, elseBranch, position(expression));
         }
 
+        if (expression.lambdaExpression() != null) {
+            return lambdaExpression(expression.lambdaExpression());
+        }
+
         if (expression.functionCall() != null) {
             return functionCall(expression.functionCall());
         }
@@ -256,6 +260,94 @@ public class CapybaraParser {
         var subExpression = expression.expression();
         if (subExpression != null) {
             return expression(subExpression);
+        }
+
+        throw new IllegalStateException("Unknown expression: " + expression.getText());
+    }
+
+    private LambdaExpression lambdaExpression(FunctionalParser.LambdaExpressionContext context) {
+        return new LambdaExpression(
+                context.NAME().getText(),
+                expressionNoLetNoPipe(context.expressionNoLetNoPipe()),
+                position(context)
+        );
+    }
+
+    private Expression expressionNoLetNoPipe(FunctionalParser.ExpressionNoLetNoPipeContext expression) {
+        if (expression.ifExpression() != null) {
+            var ifExpression = expression.ifExpression();
+            var condition = expression(ifExpression.expression(0));
+            var thenBranch = expression(ifExpression.expression(1));
+            var elseBranch = expression(ifExpression.expression(2));
+            return new IfExpression(condition, thenBranch, elseBranch, position(expression));
+        }
+
+        if (expression.functionCall() != null) {
+            return functionCall(expression.functionCall());
+        }
+        if (expression.new_list() != null) {
+            return newListExpression(expression.new_list());
+        }
+        if (expression.new_dict() != null) {
+            return newDictExpression(expression.new_dict());
+        }
+        if (expression.new_set() != null) {
+            return newSetExpression(expression.new_set());
+        }
+
+        var value = expression.value();
+        if (value != null) {
+            var literal = value.literal();
+            if (literal != null) {
+                if (literal.BOOL_LITERAL() != null) {
+                    return boolLiteral(literal.BOOL_LITERAL());
+                }
+                if (literal.INT_LITERAL() != null) {
+                    return new IntValue(literal.INT_LITERAL().getText(), position(literal.INT_LITERAL()));
+                }
+                if (literal.STRING_LITERAL() != null) {
+                    return new StringValue(literal.STRING_LITERAL().getText(), position(literal.STRING_LITERAL()));
+                }
+                if (literal.FLOAT_LITERAL() != null) {
+                    return new FloatValue(literal.FLOAT_LITERAL().getText(), position(literal.FLOAT_LITERAL()));
+                }
+            }
+
+            if (value.NAME() != null) {
+                return new Value(value.NAME().getText(), position(value.NAME()));
+            }
+        }
+
+        var newData = expression.newData();
+        if (newData != null) {
+            return new NewData(
+                    type(newData.type()),
+                    newData.fieldAssignmentList().fieldAssignment().stream().map(this::fieldAssignment).toList(),
+                    position(newData)
+            );
+        }
+
+        var matchExpression = expression.matchExpression();
+        if (matchExpression != null) {
+            return matchExpression(matchExpression);
+        }
+
+        var infixOperator = expression.infixOperatorNoPipe();
+        if (infixOperator != null) {
+            var leftContext = expression.expressionNoLetNoPipe(0);
+            var operator = InfixOperator.fromSymbol(infixOperator.getText());
+            var rightContext = expression.expressionNoLetNoPipe(1);
+            return rebalanceInfixByPrecedence(
+                    expressionNoLetNoPipe(leftContext),
+                    false,
+                    operator,
+                    expressionNoLetNoPipe(rightContext),
+                    position(expression)
+            );
+        }
+
+        if (!expression.expressionNoLetNoPipe().isEmpty()) {
+            return expressionNoLetNoPipe(expression.expressionNoLetNoPipe(0));
         }
 
         throw new IllegalStateException("Unknown expression: " + expression.getText());

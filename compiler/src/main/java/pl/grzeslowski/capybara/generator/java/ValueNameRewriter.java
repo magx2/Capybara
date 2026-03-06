@@ -18,6 +18,8 @@ public class ValueNameRewriter {
                     rewriteValueInLinkedLetExpression(name, uniqueName, linkedLetExpression);
             case LinkedMatchExpression linkedMatchExpression ->
                     rewriteValueInLinkedMatchExpression(name, uniqueName, linkedMatchExpression);
+            case LinkedPipeExpression linkedPipeExpression ->
+                    rewriteValueInLinkedPipeExpression(name, uniqueName, linkedPipeExpression);
             case LinkedNewDict linkedNewDict -> rewriteValueInLinkedNewDict(name, uniqueName, linkedNewDict);
             case LinkedNewList linkedNewList -> rewriteValueInLinkedNewList(name, uniqueName, linkedNewList);
             case LinkedNewSet linkedNewSet -> rewriteValueInLinkedNewSet(name, uniqueName, linkedNewSet);
@@ -72,6 +74,19 @@ public class ValueNameRewriter {
     private static LinkedExpression rewriteValueInLinkedMatchExpression(String name, String uniqueName, LinkedMatchExpression linkedMatchExpression) {
         // todo
         return linkedMatchExpression;
+    }
+
+    private static LinkedExpression rewriteValueInLinkedPipeExpression(String name, String uniqueName, LinkedPipeExpression linkedPipeExpression) {
+        var source = rewriteValueInExpression(name, uniqueName, linkedPipeExpression.source());
+        if (linkedPipeExpression.argumentName().equals(name)) {
+            return new LinkedPipeExpression(source, linkedPipeExpression.argumentName(), linkedPipeExpression.mapper(), linkedPipeExpression.type());
+        }
+        return new LinkedPipeExpression(
+                source,
+                linkedPipeExpression.argumentName(),
+                rewriteValueInExpression(name, uniqueName, linkedPipeExpression.mapper()),
+                linkedPipeExpression.type()
+        );
     }
 
     private static LinkedExpression rewriteValueInLinkedNewList(String name, String uniqueName, LinkedNewList linkedNewList) {

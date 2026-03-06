@@ -25,6 +25,7 @@ public class LinkedExpressionPrinter {
             case LinkedLetExpression linkedLetExpression -> printLinkedLetExpression(linkedLetExpression, level);
             case LinkedMatchExpression linkedMatchExpression ->
                     printLinkedMatchExpression(linkedMatchExpression, level);
+            case LinkedPipeExpression linkedPipeExpression -> printLinkedPipeExpression(linkedPipeExpression, level);
             case LinkedNewDict linkedNewDict -> printLinkedNewDict(linkedNewDict, level);
             case LinkedNewList linkedNewList -> printLinkedNewList(linkedNewList, level);
             case LinkedNewSet linkedNewSet -> printLinkedNewSet(linkedNewSet, level);
@@ -74,6 +75,14 @@ public class LinkedExpressionPrinter {
 
     private static String printLinkedMatchExpression(LinkedMatchExpression linkedMatchExpression, int level) {
         return LINE_BREAK + tabs(level) + "match";
+    }
+
+    private static String printLinkedPipeExpression(LinkedPipeExpression linkedPipeExpression, int level) {
+        return printExpression(linkedPipeExpression.source(), level)
+               + " | "
+               + linkedPipeExpression.argumentName()
+               + " => "
+               + printExpression(linkedPipeExpression.mapper(), level);
     }
 
     private static String printLinkedNewData(LinkedNewData linkedNewData, int level) {

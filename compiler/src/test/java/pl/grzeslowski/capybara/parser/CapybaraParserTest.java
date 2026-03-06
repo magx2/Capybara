@@ -40,7 +40,8 @@ class CapybaraParserTest {
                                     else if x < 0 then "negative"
                                     else "zero"
                                 """),
-                Arguments.of("list_identity", "fun list_identity(l: list[int]): list[int] = l"));
+                Arguments.of("list_identity", "fun list_identity(l: list[int]): list[int] = l"),
+                Arguments.of("pipe_map", "fun pipe_map(l: list[int]): list[int] = l | x => x * 2"));
     }
 
     @Test

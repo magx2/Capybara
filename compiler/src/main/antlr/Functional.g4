@@ -14,8 +14,8 @@ definition:
 
 functionDeclaration: 'fun' NAME '(' parameters? ')' functionType? '=' expression;
 
-typeDeclaration: 'type' genericTypeDeclaration '=' genericTypeDeclaration ('|' genericTypeDeclaration)*
-               | 'type' genericTypeDeclaration '{' fieldDeclarationList? '}' '=' genericTypeDeclaration ('|' genericTypeDeclaration)*;
+typeDeclaration: 'type' genericTypeDeclaration '=' genericTypeDeclaration (PIPE genericTypeDeclaration)*
+               | 'type' genericTypeDeclaration '{' fieldDeclarationList? '}' '=' genericTypeDeclaration (PIPE genericTypeDeclaration)*;
 dataDeclaration: 'data' genericTypeDeclaration '{' fieldDeclarationList? '}';
 singleDeclaration: 'single' TYPE;
 fieldDeclarationList: fieldDeclaration (',' fieldDeclaration)*;
@@ -41,6 +41,7 @@ TYPE_FULL: '/' [A-Z][a-zA-Z0-9]* ( '/' [A-Z][a-zA-Z0-9]* )*;
 expression: letExpression* expressionNoLet;
 letExpression: 'let' NAME '=' expressionNoLet ';'?;
 expressionNoLet: ifExpression
+               | lambdaExpression
                | functionCall
                | new_list
                | new_dict
@@ -51,6 +52,17 @@ expressionNoLet: ifExpression
                | value
                | newData
                | matchExpression;
+lambdaExpression: NAME FAT_ARROW expressionNoLetNoPipe;
+expressionNoLetNoPipe: ifExpression
+                     | functionCall
+                     | new_list
+                     | new_dict
+                     | '(' expressionNoLetNoPipe ')'
+                     | new_set
+                     | expressionNoLetNoPipe infixOperatorNoPipe expressionNoLetNoPipe
+                     | value
+                     | newData
+                     | matchExpression;
 ifExpression: 'if' expression 'then' expression 'else' expression;
 functionCall: NAME '(' argumentList? ')';
 value: literal | NAME;
@@ -62,7 +74,7 @@ STRING_LITERAL: '"' (~["\r\n] | '\\' .)* '"';
 
 matchExpression: 'match' expression 'with' matchCaseList+;
 matchCaseList: matchCase (',' matchCase)*;
-matchCase: '|' pattern '=>' expression;
+matchCase: PIPE pattern FAT_ARROW expression;
 pattern: TYPE
         | INT_LITERAL
         | BOOL_LITERAL
@@ -94,9 +106,25 @@ infixOperator: PLUS
              | NOTEQUAL
              | LE
              | GE
+             | PIPE
              | QUESTION
              | AND
              | OR;
+infixOperatorNoPipe: PLUS
+                   | MINUS
+                   | MUL
+                   | DIV
+                   | CARET
+                   | POWER
+                   | GT
+                   | LT
+                   | EQUAL
+                   | NOTEQUAL
+                   | LE
+                   | GE
+                   | QUESTION
+                   | AND
+                   | OR;
 
 UNDERSCORE: '_';
 
@@ -121,6 +149,7 @@ LT : '<';
 BANG : '!';
 TILDE : '~';
 QUESTION : '?';
+PIPE : '|';
 COLON : ':';
 EQUAL : '==';
 LE : '<=';
@@ -133,11 +162,11 @@ DEC : '--';
 MUL : '*';
 DIV : '/';
 BITAND : '&';
-BITOR : '|';
 CARET : '^';
 POWER: '**';
 MOD : '%';
 ARROW : '->';
+FAT_ARROW : '=>';
 COLONCOLON : '::';
 
 ADD_ASSIGN : '+=';

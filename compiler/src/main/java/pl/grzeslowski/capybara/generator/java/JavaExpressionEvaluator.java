@@ -33,6 +33,7 @@ public class JavaExpressionEvaluator {
             case LinkedIntValue intValue -> evaluateIntValue(intValue, scope);
             case LinkedLetExpression letExpression -> evaluateLetExpression(letExpression, scope);
             case LinkedMatchExpression matchExpression -> evaluateMatchExpression(matchExpression, scope);
+            case LinkedPipeExpression pipeExpression -> evaluatePipeExpression(pipeExpression, scope);
             case LinkedNewDict newDict -> evaluateNewDict(newDict, scope);
             case LinkedNewList newList -> evaluateNewList(newList, scope);
             case LinkedNewSet newSet -> evaluateNewSet(newSet, scope);
@@ -164,6 +165,23 @@ public class JavaExpressionEvaluator {
 
     private static Scope evaluateIntValue(LinkedIntValue intValue, Scope scope) {
         return scope.addExpression(intValue.intValue());
+    }
+
+    private static Scope evaluatePipeExpression(LinkedPipeExpression pipeExpression, Scope scope) {
+        var sourceExSc = evaluateExpression(pipeExpression.source(), scope).popExpression();
+        var source = sourceExSc.expression();
+        if (pipeExpression.source().type() instanceof pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedDict) {
+            source = source + ".values()";
+        }
+
+        var mapperExSc = evaluateExpression(
+                pipeExpression.mapper(),
+                sourceExSc.scope().addLocalValue(pipeExpression.argumentName())
+        ).popExpression();
+
+        return mapperExSc.scope().addExpression(
+                source + ".stream().map(" + pipeExpression.argumentName() + " -> (" + mapperExSc.expression() + ")).toList()"
+        );
     }
 
     private static Scope evaluateLetExpression(LinkedLetExpression let, Scope scope) {

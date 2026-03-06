@@ -16,7 +16,8 @@ public enum InfixOperator {
     NOTEQUAL("!="),
     LE("<="),
     GE(">="),
-    QUESTION("?");
+    QUESTION("?"),
+    PIPE("|");
 
     private final String symbol;
 
@@ -48,6 +49,7 @@ public enum InfixOperator {
             case GT, LT, LE, GE -> 4;
             case EQUAL, NOTEQUAL -> 3;
             case CARET, QUESTION -> 2;
+            case PIPE -> 1;
         };
     }
 }
