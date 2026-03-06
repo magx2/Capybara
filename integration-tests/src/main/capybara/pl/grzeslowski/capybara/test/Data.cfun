@@ -24,3 +24,7 @@ single Tom
 type King[T] = FrenchKing[T] | Jerry
 data FrenchKing[T] { head: bool, foo: T }
 single Jerry
+
+type Worker {name: string, surname: string } = BlueCollar | WhiteCollar
+data BlueCollar { strength: float }
+data WhiteCollar { intelligence: float }

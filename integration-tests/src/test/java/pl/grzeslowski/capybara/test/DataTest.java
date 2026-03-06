@@ -58,4 +58,18 @@ class DataTest {
         Data.King king = new Data.FrenchKing<>(true, "baguette");
         assertThat(king).isInstanceOf(Data.FrenchKing.class);
     }
+
+    @Test
+    void parentTypeFieldsArePresentInSubtypes() {
+        Data.Worker blueCollar = new Data.BlueCollar("Jan", "Kowalski", 10.0f);
+        Data.Worker whiteCollar = new Data.WhiteCollar("Anna", "Nowak", 9.5f);
+
+        assertThat(((Data.BlueCollar) blueCollar).name()).isEqualTo("Jan");
+        assertThat(((Data.BlueCollar) blueCollar).surname()).isEqualTo("Kowalski");
+        assertThat(((Data.BlueCollar) blueCollar).strength()).isEqualTo(10.0f);
+
+        assertThat(((Data.WhiteCollar) whiteCollar).name()).isEqualTo("Anna");
+        assertThat(((Data.WhiteCollar) whiteCollar).surname()).isEqualTo("Nowak");
+        assertThat(((Data.WhiteCollar) whiteCollar).intelligence()).isEqualTo(9.5f);
+    }
 }
