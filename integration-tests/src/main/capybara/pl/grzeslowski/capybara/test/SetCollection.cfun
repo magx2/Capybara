@@ -3,3 +3,7 @@ fun static_set(): set[int] = {1,2,3}
 fun empty_static_set(): set[int] = {}
 
 fun static_set_with_trailing_comma(): set[int] = {1,2,3,}
+
+fun append(s: set[int]): set[int] = s + 5
+
+fun append_set(left: set[int], right: set[int]): set[int] = left + right

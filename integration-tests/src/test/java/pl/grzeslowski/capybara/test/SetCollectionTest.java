@@ -2,6 +2,7 @@ package pl.grzeslowski.capybara.test;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.HashSet;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -20,5 +21,27 @@ class SetCollectionTest {
     @Test
     void staticSetWithTrailingComma() {
         assertThat(SetCollection.staticSetWithTrailingComma()).isEqualTo(Set.of(1, 2, 3));
+    }
+
+    @Test
+    void append() {
+        var input = new HashSet<>(Set.of(1, 2, 3));
+
+        var result = SetCollection.append(input);
+
+        assertThat(result).isEqualTo(Set.of(1, 2, 3, 5));
+        assertThat(input).isEqualTo(Set.of(1, 2, 3));
+    }
+
+    @Test
+    void appendSet() {
+        var left = new HashSet<>(Set.of(1, 2));
+        var right = new HashSet<>(Set.of(3, 4));
+
+        var result = SetCollection.appendSet(left, right);
+
+        assertThat(result).isEqualTo(Set.of(1, 2, 3, 4));
+        assertThat(left).isEqualTo(Set.of(1, 2));
+        assertThat(right).isEqualTo(Set.of(3, 4));
     }
 }

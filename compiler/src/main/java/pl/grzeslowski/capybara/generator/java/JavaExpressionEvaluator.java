@@ -72,12 +72,45 @@ public class JavaExpressionEvaluator {
 
         var operator = infixExpression.operator();
         var expression = switch (operator) {
-            case POWER ->
-                    "pl.grzeslowski.capybara.CapybaraUtil.power(" + left.expression() + ", " + right.expression() + ")";
+            case POWER -> "pl.grzeslowski.capybara.CapybaraUtil.power(" + left.expression() + ", " + right.expression() + ")";
+            case PLUS -> {
+                if (infixExpression.left().type() instanceof pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedList) {
+                    yield evaluateListAppendExpression(infixExpression, left.expression(), right.expression());
+                }
+                if (infixExpression.left().type() instanceof pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedSet) {
+                    yield evaluateSetAppendExpression(infixExpression, left.expression(), right.expression());
+                }
+                if (infixExpression.left().type() instanceof pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedDict) {
+                    yield evaluateDictAppendExpression(left.expression(), right.expression());
+                }
+                yield left.expression() + operator.symbol() + right.expression();
+            }
             default -> left.expression() + operator.symbol() + right.expression();
         };
 
         return right.scope().addExpression('(' + expression + ')');
+    }
+
+    private static String evaluateListAppendExpression(LinkedInfixExpression infixExpression, String left, String right) {
+        if (infixExpression.right().type() instanceof pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedList) {
+            return "java.util.stream.Stream.concat(" + left + ".stream(), " + right + ".stream()).toList()";
+        }
+        return "java.util.stream.Stream.concat(" + left + ".stream(), java.util.stream.Stream.of(" + right + ")).toList()";
+    }
+
+    private static String evaluateSetAppendExpression(LinkedInfixExpression infixExpression, String left, String right) {
+        if (infixExpression.right().type() instanceof pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedSet) {
+            return "java.util.stream.Stream.concat(" + left + ".stream(), " + right + ".stream())"
+                   + ".collect(java.util.stream.Collectors.toUnmodifiableSet())";
+        }
+        return "java.util.stream.Stream.concat(" + left + ".stream(), java.util.stream.Stream.of(" + right + "))"
+               + ".collect(java.util.stream.Collectors.toUnmodifiableSet())";
+    }
+
+    private static String evaluateDictAppendExpression(String left, String right) {
+        return "java.util.stream.Stream.concat(" + left + ".entrySet().stream(), " + right + ".entrySet().stream())"
+               + ".collect(java.util.stream.Collectors.toUnmodifiableMap("
+               + "java.util.Map.Entry::getKey, java.util.Map.Entry::getValue, (oldValue, newValue) -> newValue))";
     }
 
     private static Scope evaluateIntValue(LinkedIntValue intValue, Scope scope) {

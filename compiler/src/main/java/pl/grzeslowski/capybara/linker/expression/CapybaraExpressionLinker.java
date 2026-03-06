@@ -93,17 +93,53 @@ public class CapybaraExpressionLinker {
         return linkExpression(expression.left(), scope)
                 .flatMap(left ->
                         linkExpression(expression.right(), scope)
-                                .map(right ->
-                                        getLinkedInfixExpression(left, expression.operator(), right)));
+                                .flatMap(right ->
+                                        getLinkedInfixExpression(left, expression.operator(), right, expression.position())
+                                                .map(linked -> (LinkedExpression) linked)
+                                ));
     }
 
-    private static LinkedInfixExpression getLinkedInfixExpression(LinkedExpression left, InfixOperator operator, LinkedExpression right) {
+    private static ValueOrError<LinkedInfixExpression> getLinkedInfixExpression(
+            LinkedExpression left,
+            InfixOperator operator,
+            LinkedExpression right,
+            Optional<pl.grzeslowski.capybara.parser.SourcePosition> position
+    ) {
         LinkedType type = switch (operator) {
-            case PLUS, MINUS, MUL, DIV, CARET, POWER -> findHigherType(left.type(), right.type());
+            case PLUS -> findPlusType(left.type(), right.type());
+            case MINUS, MUL, DIV, CARET, POWER -> findHigherType(left.type(), right.type());
             // bool operators
             case GT, LT, EQUAL, NOTEQUAL, LE, GE -> BOOL;
         };
-        return new LinkedInfixExpression(left, operator, right, type);
+        if (type == null) {
+            return withPosition(
+                    ValueOrError.error("Cannot apply `+` to `" + left.type() + "` and `" + right.type() + "`"),
+                    position
+            );
+        }
+        return ValueOrError.success(new LinkedInfixExpression(left, operator, right, type));
+    }
+
+    private static LinkedType findPlusType(LinkedType left, LinkedType right) {
+        if (left instanceof LinkedList leftList) {
+            if (right instanceof LinkedList rightList) {
+                return new LinkedList(findHigherType(leftList.elementType(), rightList.elementType()));
+            }
+            return new LinkedList(findHigherType(leftList.elementType(), right));
+        }
+        if (left instanceof LinkedSet leftSet) {
+            if (right instanceof LinkedSet rightSet) {
+                return new LinkedSet(findHigherType(leftSet.elementType(), rightSet.elementType()));
+            }
+            return new LinkedSet(findHigherType(leftSet.elementType(), right));
+        }
+        if (left instanceof LinkedDict leftDict) {
+            if (right instanceof LinkedDict rightDict) {
+                return new LinkedDict(findHigherType(leftDict.valueType(), rightDict.valueType()));
+            }
+            return null;
+        }
+        return findHigherType(left, right);
     }
 
     private ValueOrError<LinkedExpression> linkIntValue(IntValue intValue, Scope scope) {
