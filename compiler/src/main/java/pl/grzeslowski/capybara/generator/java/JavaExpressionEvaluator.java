@@ -18,7 +18,7 @@ public class JavaExpressionEvaluator {
         for (int idx = 0; idx <= statements.size() - 1; idx++) {
             sb.append(statements.get(idx)).append(';').append(lineSeparator());
         }
-        sb.append("return ").append(scope.getExpression()).append(';').append(lineSeparator());
+        sb.append("return ").append(scope.getExpression()).append(';');
         return sb.toString();
     }
 

@@ -80,8 +80,7 @@ class JavaExpressionEvaluatorTest {
                                 var a_j1 = (x*2);
                                 var a_j2 = (x*x);
                                 var a_j3 = (x/2);
-                                return ((a_j1>2)) ? (("I'm happy "+a_j2)) : (("I'm not happy "+a_j3));
-                                """
+                                return ((a_j1>2)) ? (("I'm happy "+a_j2)) : (("I'm not happy "+a_j3));"""
                 ),
                 Arguments.of(
                         "wild_infix",
@@ -98,8 +97,7 @@ class JavaExpressionEvaluatorTest {
                         """
                                 var x = (a*2);
                                 var x_j1 = ((b!=0)) ? (b) : (1);
-                                return ((x-1)/(x_j1*2));
-                                """
+                                return ((x-1)/(x_j1*2));"""
                 ),
                 Arguments.of(
                         "wild_if_nested",
@@ -120,8 +118,7 @@ class JavaExpressionEvaluatorTest {
                         """
                                 var x = (a*2);
                                 var x_j1 = (b*3);
-                                return ((a>0)) ? ((x+1)) : ((x_j1-1));
-                                """
+                                return ((a>0)) ? ((x+1)) : ((x_j1-1));"""
                 ),
                 Arguments.of(
                         "wild_infix_single_side_let",
@@ -134,8 +131,7 @@ class JavaExpressionEvaluatorTest {
                                 """,
                         """
                                 var x = (a*2);
-                                return (a+(x+1));
-                                """
+                                return (a+(x+1));"""
                 )
         );
     }
