@@ -9,13 +9,15 @@ program : definition+ EOF;
 definition:
     functionDeclaration
     | typeDeclaration
-    | dataDeclaration;
+    | dataDeclaration
+    | singleDeclaration;
 
 functionDeclaration: 'fun' NAME '(' parameters? ')' functionType? '=' expression;
 
 typeDeclaration: 'type' genericTypeDeclaration '=' genericTypeDeclaration ('|' genericTypeDeclaration)*
                | 'type' genericTypeDeclaration '{' fieldDeclarationList? '}' '=' genericTypeDeclaration ('|' genericTypeDeclaration)*;
 dataDeclaration: 'data' genericTypeDeclaration '{' fieldDeclarationList? '}';
+singleDeclaration: 'single' TYPE;
 fieldDeclarationList: fieldDeclaration (',' fieldDeclaration)*;
 fieldDeclaration: NAME ':' type
                 | STRING_LITERAL ':' type;

@@ -2,7 +2,7 @@ package pl.grzeslowski.capybara.linker;
 
 import java.util.List;
 
-public record LinkedDataType(String name, List<LinkedField> fields, List<String> typeParameters) implements GenericDataType {
+public record LinkedDataType(String name, List<LinkedField> fields, List<String> typeParameters, boolean singleton) implements GenericDataType {
 
     @Override
     public final boolean equals(Object o) {

@@ -41,6 +41,11 @@ public class CapybaraParser {
             return dataDeclaration(dataDeclaration);
         }
 
+        var singleDeclaration = context.singleDeclaration();
+        if (singleDeclaration != null) {
+            return singleDeclaration(singleDeclaration);
+        }
+
         var typeDeclaration = context.typeDeclaration();
         if (typeDeclaration != null) {
             return typeDeclaration(typeDeclaration);
@@ -75,6 +80,10 @@ public class CapybaraParser {
                 genericTypeParameters(declaration),
                 position(context)
         );
+    }
+
+    private SingleDeclaration singleDeclaration(FunctionalParser.SingleDeclarationContext context) {
+        return new SingleDeclaration(context.TYPE().getText(), position(context));
     }
 
     private List<DataDeclaration.DataField> fieldDeclarationList(FunctionalParser.FieldDeclarationListContext context) {

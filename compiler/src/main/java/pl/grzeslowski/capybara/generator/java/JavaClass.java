@@ -8,5 +8,6 @@ public record JavaClass(
         JavaPackage javaPackage,
         Set<JavaMethod> staticMethods,
         Set<JavaInterface> interfaces,
-        Set<JavaRecord> records) {
+        Set<JavaRecord> records,
+        Set<JavaEnum> enums) {
 }

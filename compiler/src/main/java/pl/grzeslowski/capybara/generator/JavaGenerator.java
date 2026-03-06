@@ -68,6 +68,13 @@ public final class JavaGenerator implements Generator {
                 .map(this::mapJavaRecord)
                 .forEach(code::append);
 
+        // enums
+        code.append('\n');
+        javaClass.enums()
+                .stream()
+                .map(this::mapJavaEnum)
+                .forEach(code::append);
+
         // static methods
         code.append('\n');
         javaClass.staticMethods()
@@ -98,6 +105,13 @@ public final class JavaGenerator implements Generator {
 
     private String mapJavaRecordField(JavaRecord.JavaRecordField field) {
         return field.type() + " " + field.name();
+    }
+
+    private String mapJavaEnum(JavaEnum javaEnum) {
+        var implementInterfaces = javaEnum.implementInterfaces().isEmpty()
+                ? ""
+                : javaEnum.implementInterfaces().stream().map(Objects::toString).collect(joining(", ", " implements ", " "));
+        return "public enum " + javaEnum.name() + implementInterfaces + "{INSTANCE}\n";
     }
 
 

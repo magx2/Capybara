@@ -7,6 +7,7 @@ import pl.grzeslowski.capybara.linker.expression.CapybaraExpressionLinker;
 import pl.grzeslowski.capybara.parser.*;
 
 import java.util.*;
+import java.util.stream.Stream;
 
 import static java.util.function.Function.identity;
 import static java.util.stream.Collectors.toMap;
@@ -82,15 +83,23 @@ public class CapybaraLinker {
                 .stream()
                 .map(this::linkDataDeclaration)
                 .collect(new ValueOrErrorCollectionCollector<>());
+        var singlesDeclarationsOrError = castList(module, SingleDeclaration.class)
+                .stream()
+                .map(this::linkSingleDeclaration)
+                .collect(new ValueOrErrorCollectionCollector<>());
 
         if (dataDeclarationsOrError instanceof ValueOrError.Error<?> error) {
             return ValueOrError.error(error.errors().stream().map(ValueOrError.Error.SingleError::message).toList());
         }
         var dataDeclarations = ((ValueOrError.Value<List<LinkedDataType>>) dataDeclarationsOrError).value();
+        if (singlesDeclarationsOrError instanceof ValueOrError.Error<?> error) {
+            return ValueOrError.error(error.errors().stream().map(ValueOrError.Error.SingleError::message).toList());
+        }
+        var singleDeclarations = ((ValueOrError.Value<List<LinkedDataType>>) singlesDeclarationsOrError).value();
 
         var typeDeclarationsOrError = castList(module, TypeDeclaration.class)
                 .stream()
-                .map(typeDeclaration -> linkTypeDeclaration(typeDeclaration, dataDeclarations))
+                .map(typeDeclaration -> linkTypeDeclaration(typeDeclaration, Stream.concat(dataDeclarations.stream(), singleDeclarations.stream()).toList()))
                 .collect(new ValueOrErrorCollectionCollector<>());
 
         if (typeDeclarationsOrError instanceof ValueOrError.Error<?> error) {
@@ -100,6 +109,7 @@ public class CapybaraLinker {
 
         var set = new HashSet<GenericDataType>();
         set.addAll(dataDeclarations);
+        set.addAll(singleDeclarations);
         set.addAll(typeDeclarations);
         var map = set.stream().collect(toMap(GenericDataType::name, identity()));
         return ValueOrError.success(map);
@@ -111,8 +121,12 @@ public class CapybaraLinker {
                 .stream()
                 .map(field -> linkField(field, genericTypes))
                 .collect(new ValueOrErrorCollectionCollector<>())
-                .map(fields -> new LinkedDataType(dataDeclaration.name(), fields, dataDeclaration.typeParameters()));
+                .map(fields -> new LinkedDataType(dataDeclaration.name(), fields, dataDeclaration.typeParameters(), false));
         return withPosition(linked, dataDeclaration.position());
+    }
+
+    private ValueOrError<LinkedDataType> linkSingleDeclaration(SingleDeclaration singleDeclaration) {
+        return ValueOrError.success(new LinkedDataType(singleDeclaration.name(), List.of(), List.of(), true));
     }
 
     private ValueOrError<LinkedDataType.LinkedField> linkField(DataDeclaration.DataField type, Set<String> genericTypes) {
@@ -142,7 +156,7 @@ public class CapybaraLinker {
     }
 
     private ValueOrError<List<LinkedDataType>> findSubtypes(List<String> rawSubTypes, List<LinkedDataType> dataDeclarations) {
-        var dataTypesMap = dataDeclarations.stream().collect(toMap(LinkedDataType::name, identity()));
+        var dataTypesMap = dataDeclarations.stream().collect(toMap(LinkedDataType::name, identity(), (first, second) -> first));
         return rawSubTypes.stream()
                 .map(key -> {
                     var dataType = dataTypesMap.get(key);

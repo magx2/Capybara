@@ -40,4 +40,10 @@ class DataTest {
         assertThat(fromRectangle).isInstanceOf(Data.Circle.class);
         assertThat(((Data.Circle) fromRectangle).radius()).isEqualTo(2.0f);
     }
+
+    @Test
+    void singleCreatesEnumSingleton() {
+        Data.Knight knight = Data.Tom.INSTANCE;
+        assertThat(knight).isSameAs(Data.Tom.INSTANCE);
+    }
 }

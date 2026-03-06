@@ -16,3 +16,7 @@ fun da_vinci(shape: Shape): Shape =
 type Typed[T] = Foo[T] | Boo[T]
 data Foo[T] { foo: T }
 data Boo[T] { boo: T }
+
+type Knight = EnglishKnight | Tom
+data EnglishKnight { power: float }
+single Tom

@@ -34,6 +34,12 @@ public class JavaAstBuilder {
                 .map(LinkedDataParentType.class::cast)
                 .toList());
         var subClassToInterface = findSubClassToInterface(module.types(), interfaces);
+        var dataTypes = module.types()
+                .values()
+                .stream()
+                .filter(LinkedDataType.class::isInstance)
+                .map(LinkedDataType.class::cast)
+                .toList();
         return new JavaClass(
                 Set.of(generatedAnnotation()),
                 buildClassName(module.name()),
@@ -44,13 +50,8 @@ public class JavaAstBuilder {
                         .replaceAll("\\\\", ".")),
                 buildStaticMethods(module.functions()),
                 interfaces,
-                buildRecords(module.types()
-                                .values()
-                                .stream()
-                                .filter(LinkedDataType.class::isInstance)
-                                .map(LinkedDataType.class::cast)
-                                .toList(),
-                        subClassToInterface));
+                buildRecords(dataTypes, subClassToInterface),
+                buildEnums(dataTypes, subClassToInterface));
     }
 
     private Map<LinkedDataType, Set<JavaInterface>> findSubClassToInterface(Map<String, GenericDataType> types, Set<JavaInterface> interfaces) {
@@ -217,6 +218,7 @@ public class JavaAstBuilder {
 
     private Set<JavaRecord> buildRecords(List<LinkedDataType> dataTypes, Map<LinkedDataType, Set<JavaInterface>> subClassToInterface) {
         return dataTypes.stream()
+                .filter(dt -> !dt.singleton())
                 .map(dt -> buildRecord(dt, subClassToInterface))
                 .collect(toSet());
     }
@@ -244,5 +246,20 @@ public class JavaAstBuilder {
                 type.typeParameters(),
                 Set.of(),
                 Set.of());
+    }
+
+    private Set<JavaEnum> buildEnums(List<LinkedDataType> dataTypes, Map<LinkedDataType, Set<JavaInterface>> subClassToInterface) {
+        return dataTypes.stream()
+                .filter(LinkedDataType::singleton)
+                .map(dt -> buildEnum(dt, subClassToInterface))
+                .collect(toSet());
+    }
+
+    private JavaEnum buildEnum(LinkedDataType type, Map<LinkedDataType, Set<JavaInterface>> subClassToInterface) {
+        var javaInterface = subClassToInterface.get(type);
+        var implementInterfaces = javaInterface == null
+                ? Set.<JavaType>of()
+                : javaInterface.stream().map(JavaInterface::name).collect(toSet());
+        return new JavaEnum(buildClassName(type.name()), implementInterfaces);
     }
 }
