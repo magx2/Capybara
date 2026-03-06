@@ -45,6 +45,7 @@ letExpression: 'let' NAME '=' expressionNoLet ';'?;
 expressionNoLet: ifExpression
                | lambdaExpression
                | reduceExpression
+               | functionReference
                | functionCall
                | new_list
                | new_dict
@@ -59,6 +60,7 @@ expressionNoLet: ifExpression
 lambdaExpression: NAME FAT_ARROW expressionNoLetNoPipe;
 reduceExpression: expressionNoLetNoPipe COMMA LPAREN NAME COMMA NAME RPAREN FAT_ARROW expressionNoLetNoPipe;
 expressionNoLetNoPipe: ifExpression
+                     | functionReference
                      | functionCall
                      | new_list
                      | new_dict
@@ -70,6 +72,7 @@ expressionNoLetNoPipe: ifExpression
                      | newData
                      | matchExpression;
 ifExpression: 'if' expression 'then' expression 'else' expression;
+functionReference: COLON NAME;
 functionCall: NAME '(' argumentList? ')';
 value: literal | NAME;
 argumentList: expression (',' expression)*;

@@ -10,6 +10,15 @@ import static java.lang.System.lineSeparator;
 @SuppressWarnings("SwitchStatementWithTooFewBranches")
 public class JavaExpressionEvaluator {
     private static final Logger log = Logger.getLogger(JavaExpressionEvaluator.class.getName());
+    private static final java.util.Set<String> JAVA_KEYWORDS = java.util.Set.of(
+            "abstract", "assert", "boolean", "break", "byte", "case", "catch", "char", "class",
+            "const", "continue", "default", "do", "double", "else", "enum", "extends", "final",
+            "finally", "float", "for", "goto", "if", "implements", "import", "instanceof", "int",
+            "interface", "long", "native", "new", "package", "private", "protected", "public",
+            "return", "short", "static", "strictfp", "super", "switch", "synchronized", "this",
+            "throw", "throws", "transient", "try", "void", "volatile", "while", "true", "false",
+            "null", "record", "sealed", "permits", "var", "yield"
+    );
 
     public static String evaluateExpression(LinkedExpression expression) {
         log.fine(() -> "evaluateExpression: " + expression.getClass().getSimpleName() + " -> " + expression);
@@ -234,9 +243,18 @@ public class JavaExpressionEvaluator {
                 pipeExpression.mapper(),
                 sourceStreamExSc.scope().addLocalValue(pipeExpression.argumentName())
         ).popExpression();
+        var mapperExpression = mapperExSc.expression();
+        if (pipeExpression.type() instanceof pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedList listType
+            && listType.elementType() == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.ANY) {
+            mapperExpression = "(java.lang.Object) (" + mapperExpression + ")";
+        }
+        if (pipeExpression.type() instanceof pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedSet setType
+            && setType.elementType() == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.ANY) {
+            mapperExpression = "(java.lang.Object) (" + mapperExpression + ")";
+        }
         return new StreamExpressionScope(
                 sourceStreamExSc.streamExpression()
-                + ".map(" + pipeExpression.argumentName() + " -> (" + mapperExSc.expression() + "))",
+                + ".map(" + pipeExpression.argumentName() + " -> (" + mapperExpression + "))",
                 mapperExSc.scope()
         );
     }
@@ -451,6 +469,10 @@ public class JavaExpressionEvaluator {
         if (result.isEmpty()) {
             return "generated";
         }
-        return result.toString();
+        var identifier = result.toString();
+        if (JAVA_KEYWORDS.contains(identifier)) {
+            return identifier + "_";
+        }
+        return identifier;
     }
 }

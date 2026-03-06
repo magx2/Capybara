@@ -29,9 +29,18 @@ public class CapybaraLinker {
                 .flatMap(dataTypes -> {
                     var functions = findFunctions(module.functional().definitions());
                     return linkFunctionSignatures(functions, dataTypes)
-                            .flatMap(signatures ->
-                                    linkFunctions(functions, dataTypes, signatures)
-                                            .map(linkedFunctions -> new LinkedModule(module.name(), module.path(), dataTypes, Set.copyOf(linkedFunctions))));
+                            .flatMap(initialSignatures ->
+                                    linkFunctions(functions, dataTypes, initialSignatures)
+                                            .flatMap(firstPassFunctions -> {
+                                                var refinedSignatures = signaturesFromLinkedFunctions(firstPassFunctions);
+                                                return linkFunctions(functions, dataTypes, refinedSignatures)
+                                                        .map(linkedFunctions -> new LinkedModule(
+                                                                module.name(),
+                                                                module.path(),
+                                                                dataTypes,
+                                                                Set.copyOf(linkedFunctions)
+                                                        ));
+                                            }));
                 });
     }
 
@@ -91,6 +100,16 @@ public class CapybaraLinker {
                                         returnType
                                 ))))
                 .collect(new ValueOrErrorCollectionCollector<>());
+    }
+
+    private List<CapybaraExpressionLinker.FunctionSignature> signaturesFromLinkedFunctions(List<LinkedFunction> functions) {
+        return functions.stream()
+                .map(function -> new CapybaraExpressionLinker.FunctionSignature(
+                        function.name(),
+                        function.parameters().stream().map(LinkedFunctionParameter::type).toList(),
+                        function.returnType()
+                ))
+                .toList();
     }
 
     private ValueOrError<List<LinkedFunctionParameter>> linkParameters(List<Parameter> parameters, Map<String, GenericDataType> dataTypes) {

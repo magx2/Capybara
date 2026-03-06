@@ -43,6 +43,10 @@ public class CapybaraExpressionLinker {
             case FieldAccess fieldAccess -> linkFieldAccess(fieldAccess, scope);
             case FloatValue floatValue -> linkFloatValue(floatValue, scope);
             case FunctionCall functionCall -> linkFunctionCall(functionCall, scope);
+            case FunctionReference functionReference -> withPosition(
+                    ValueOrError.error("Function reference can only be used as the right side of `|`"),
+                    functionReference.position()
+            );
             case IfExpression ifExpression -> linkIfExpression(ifExpression, scope);
             case InfixExpression infixExpression -> linkInfixExpression(infixExpression, scope);
             case IntValue intValue -> linkIntValue(intValue, scope);
@@ -240,8 +244,19 @@ public class CapybaraExpressionLinker {
                         );
                     }
                     if (!(expression.right() instanceof LambdaExpression lambdaExpression)) {
+                        if (expression.right() instanceof FunctionReference functionReference) {
+                            return resolvePipeFunctionReference(functionReference, elementType)
+                                    .map(linked -> (LinkedExpression) new LinkedPipeExpression(
+                                            left,
+                                            linked.argumentName(),
+                                            linked.expression(),
+                                            left.type() instanceof LinkedSet
+                                                    ? new LinkedSet(linked.expression().type())
+                                                    : new LinkedList(linked.expression().type())
+                                    ));
+                        }
                         return withPosition(
-                                ValueOrError.error("Right side of `|` has to be a lambda expression"),
+                                ValueOrError.error("Right side of `|` has to be a lambda expression or function reference"),
                                 expression.right().position()
                         );
                     }
@@ -257,6 +272,47 @@ public class CapybaraExpressionLinker {
                                             : new LinkedList(mapper.type())
                             ));
                 });
+    }
+
+    private ValueOrError<PipeMapper> resolvePipeFunctionReference(FunctionReference functionReference, LinkedType inputType) {
+        var argumentName = "it";
+        var argument = new LinkedVariable(argumentName, inputType);
+        var candidates = functionSignatures.stream()
+                .filter(signature -> signature.name().equals(functionReference.name()))
+                .filter(signature -> signature.parameterTypes().size() == 1)
+                .toList();
+        if (candidates.isEmpty()) {
+            return withPosition(
+                    ValueOrError.error("Function `" + functionReference.name() + "` with one argument not found"),
+                    functionReference.position()
+            );
+        }
+
+        ResolvedFunctionCall best = null;
+        for (var candidate : candidates) {
+            var coerced = coerceArgument(argument, candidate.parameterTypes().get(0));
+            if (coerced == null) {
+                continue;
+            }
+            var resolved = new ResolvedFunctionCall(
+                    candidate,
+                    List.of(coerced.expression()),
+                    coerced.coercions()
+            );
+            if (best == null || resolved.coercions() < best.coercions()) {
+                best = resolved;
+            }
+        }
+        if (best == null) {
+            return withPosition(
+                    ValueOrError.error("Function reference `" + functionReference.name() + "` is not compatible with `" + inputType + "`"),
+                    functionReference.position()
+            );
+        }
+        return ValueOrError.success(new PipeMapper(
+                argumentName,
+                new LinkedFunctionCall(functionReference.name(), best.arguments(), best.signature().returnType())
+        ));
     }
 
     private ValueOrError<LinkedExpression> linkPipeReduceExpression(InfixExpression expression, Scope scope) {
@@ -780,5 +836,8 @@ public class CapybaraExpressionLinker {
     }
 
     private record ResolvedFunctionCall(FunctionSignature signature, List<LinkedExpression> arguments, int coercions) {
+    }
+
+    private record PipeMapper(String argumentName, LinkedExpression expression) {
     }
 }

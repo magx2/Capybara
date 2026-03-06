@@ -213,6 +213,15 @@ class JavaExpressionEvaluatorTest {
                         "return l.stream().map(x -> ((x*2))).toList();"
                 ),
                 Arguments.of(
+                        "map",
+                        """
+                                fun map(l: list[int]) = l | :double
+
+                                fun double(x: int) = x * x
+                                """,
+                        "return l.stream().map(it -> (double_(it))).toList();"
+                ),
+                Arguments.of(
                         "pipe_filter_out",
                         """
                                 fun pipe_filter_out(l: list[int]): list[int] =

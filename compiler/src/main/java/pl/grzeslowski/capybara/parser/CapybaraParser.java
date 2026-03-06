@@ -200,6 +200,9 @@ public class CapybaraParser {
         if (expression.reduceExpression() != null) {
             return reduceExpression(expression.reduceExpression());
         }
+        if (expression.functionReference() != null) {
+            return functionReference(expression.functionReference());
+        }
 
         if (expression.functionCall() != null) {
             return functionCall(expression.functionCall());
@@ -301,6 +304,10 @@ public class CapybaraParser {
         );
     }
 
+    private FunctionReference functionReference(FunctionalParser.FunctionReferenceContext context) {
+        return new FunctionReference(context.NAME().getText(), position(context));
+    }
+
     private Expression expressionNoLetNoPipe(FunctionalParser.ExpressionNoLetNoPipeContext expression) {
         if (expression.ifExpression() != null) {
             var ifExpression = expression.ifExpression();
@@ -312,6 +319,9 @@ public class CapybaraParser {
 
         if (expression.functionCall() != null) {
             return functionCall(expression.functionCall());
+        }
+        if (expression.functionReference() != null) {
+            return functionReference(expression.functionReference());
         }
         if (expression.new_list() != null) {
             return newListExpression(expression.new_list());
