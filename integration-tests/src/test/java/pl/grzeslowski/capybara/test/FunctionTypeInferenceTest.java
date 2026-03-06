@@ -2,6 +2,9 @@ package pl.grzeslowski.capybara.test;
 
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Method;
+import java.lang.reflect.ParameterizedType;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 class FunctionTypeInferenceTest {
@@ -28,5 +31,23 @@ class FunctionTypeInferenceTest {
     @Test
     void typeSum() {
         assertThat(FunctionTypeInference.typeSum(1)).isExactlyInstanceOf(String.class);
+    }
+
+    @Test
+    void listOfInts() throws NoSuchMethodException {
+        Method method = FunctionTypeInference.class.getMethod("listOfInts", int.class);
+        assertThat(method.getGenericReturnType()).isInstanceOf(ParameterizedType.class);
+        var generic = (ParameterizedType) method.getGenericReturnType();
+        assertThat(generic.getRawType().getTypeName()).isEqualTo("java.util.List");
+        assertThat(generic.getActualTypeArguments()[0].getTypeName()).isEqualTo("java.lang.Integer");
+    }
+
+    @Test
+    void emptyList() throws NoSuchMethodException {
+        Method method = FunctionTypeInference.class.getMethod("emptyList");
+        assertThat(method.getGenericReturnType()).isInstanceOf(ParameterizedType.class);
+        var generic = (ParameterizedType) method.getGenericReturnType();
+        assertThat(generic.getRawType().getTypeName()).isEqualTo("java.util.List");
+        assertThat(generic.getActualTypeArguments()[0].getTypeName()).isEqualTo("java.lang.Object");
     }
 }

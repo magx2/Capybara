@@ -7,3 +7,7 @@ fun infix_operator(x: int, y: int) = x + y
 fun if_operator(x: int, y: int) = if x + y > 10 then "mucho" else "not mucho"
 
 fun type_sum(x: int) = "age: " + x
+
+fun list_of_ints(x: int) = [x,x,x]
+
+fun empty_list() = []

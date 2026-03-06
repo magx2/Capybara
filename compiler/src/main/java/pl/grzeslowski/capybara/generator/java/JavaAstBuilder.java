@@ -121,9 +121,23 @@ public class JavaAstBuilder {
 
     private JavaType buildCollectionLinkedType(CollectionLinkedType type) {
         return switch (type) {
-            case LinkedList linkedList -> new JavaType("java.util.List");
-            case LinkedDict linkedDict -> new JavaType("java.util.Set");
-            case LinkedSet linkedSet -> new JavaType("java.util.Map");
+            case LinkedList linkedList -> new JavaType("java.util.List<" + buildJavaBoxedType(linkedList.elementType()) + ">");
+            case LinkedDict linkedDict -> new JavaType("java.util.Map<java.lang.String, " + buildJavaBoxedType(linkedDict.valueType()) + ">");
+            case LinkedSet linkedSet -> new JavaType("java.util.Set<" + buildJavaBoxedType(linkedSet.elementType()) + ">");
+        };
+    }
+
+    private String buildJavaBoxedType(LinkedType type) {
+        return switch (type) {
+            case PrimitiveLinkedType primitiveLinkedType -> switch (primitiveLinkedType) {
+                case INT -> "java.lang.Integer";
+                case STRING -> "java.lang.String";
+                case BOOL -> "java.lang.Boolean";
+                case FLOAT -> "java.lang.Float";
+                case ANY -> "java.lang.Object";
+            };
+            case GenericDataType genericDataType -> buildClassName(genericDataType.name()).toString();
+            case CollectionLinkedType collectionLinkedType -> buildCollectionLinkedType(collectionLinkedType).toString();
         };
     }
 
