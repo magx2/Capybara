@@ -81,6 +81,13 @@ class PipeTest {
     }
 
     @Test
+    void reduceDict() {
+        var reduced = Pipe.reduceDict(Map.of("a", 1, "b", 2));
+        assertThat(reduced).contains("a: 1, ");
+        assertThat(reduced).contains("b: 2, ");
+    }
+
+    @Test
     void dataPipe() {
         assertThat(Pipe.dataPipe(1, 2, 3)).isEmpty();
         assertThat(Pipe.dataPipe(-1, 2, 3)).contains(new Pipe.Value(4));

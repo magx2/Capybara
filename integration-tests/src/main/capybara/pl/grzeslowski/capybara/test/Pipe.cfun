@@ -43,6 +43,8 @@ fun mapDict(d: dict[int]): dict[string] = d | (k,v) => v + ""
 
 fun filterDict(d: dict[int]): dict[int] = d |- (k,v) => k != "" & v > 0
 
+fun reduceDict(d: dict[int]): string = d |> "", (acc, key, value) => acc + key + ": " + value + ", "
+
 data Value { x: int }
 
 fun add(v: Value, x: int): Value = Value { x: v.x + x }

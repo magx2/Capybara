@@ -227,6 +227,12 @@ public class JavaExpressionEvaluator {
                           + operator.javaSymbol()
                           + toBooleanExpression(right.expression(), infixExpression.right().type());
                 }
+                if (isStringComparison(infixExpression)) {
+                    var equalsExpression = "java.util.Objects.equals(" + left.expression() + ", " + right.expression() + ")";
+                    yield operator == pl.grzeslowski.capybara.parser.InfixOperator.EQUAL
+                            ? equalsExpression
+                            : "!(" + equalsExpression + ")";
+                }
                 yield left.expression() + operator.javaSymbol() + right.expression();
             }
             default -> left.expression() + operator.javaSymbol() + right.expression();
@@ -282,6 +288,11 @@ public class JavaExpressionEvaluator {
         var rightIsBool = rightType == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.BOOL;
         return (leftIsBool && isBooleanConvertibleType(rightType))
                || (rightIsBool && isBooleanConvertibleType(leftType));
+    }
+
+    private static boolean isStringComparison(LinkedInfixExpression infixExpression) {
+        return infixExpression.left().type() == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.STRING
+               || infixExpression.right().type() == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.STRING;
     }
 
     private static boolean isBooleanConvertibleType(pl.grzeslowski.capybara.linker.LinkedType type) {
@@ -503,6 +514,30 @@ public class JavaExpressionEvaluator {
     }
 
     private static Scope evaluatePipeReduceExpression(LinkedPipeReduceExpression pipeReduceExpression, Scope scope) {
+        if (pipeReduceExpression.source().type() instanceof pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedDict
+            && pipeReduceExpression.keyName().isPresent()) {
+            var sourceExSc = evaluateExpression(pipeReduceExpression.source(), scope).popExpression();
+            var initialExSc = evaluateExpression(pipeReduceExpression.initialValue(), sourceExSc.scope()).popExpression();
+            var entryVar = "__entry";
+            var keyName = pipeReduceExpression.keyName().orElseThrow();
+            var reducerExSc = evaluateExpression(
+                    pipeReduceExpression.reducerExpression(),
+                    initialExSc.scope()
+                            .addLocalValue(pipeReduceExpression.accumulatorName())
+                            .addValueOverride(keyName, entryVar + ".getKey()")
+                            .addValueOverride(pipeReduceExpression.valueName(), entryVar + ".getValue()")
+            ).popExpression();
+            return reducerExSc.scope().addExpression(
+                    sourceExSc.expression()
+                    + ".entrySet().stream().reduce("
+                    + initialExSc.expression()
+                    + ", (" + pipeReduceExpression.accumulatorName()
+                    + ", " + entryVar
+                    + ") -> (" + reducerExSc.expression() + ")"
+                    + ", (left, right) -> left)"
+            );
+        }
+
         var sourceStreamExSc = evaluateSourceAsStream(pipeReduceExpression.source(), scope);
         var initialExSc = evaluateExpression(pipeReduceExpression.initialValue(), sourceStreamExSc.scope()).popExpression();
         var reducerExSc = evaluateExpression(
