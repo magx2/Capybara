@@ -77,4 +77,18 @@ class PipeTest {
     void dataPipe() {
         assertThat(Pipe.dataPipe(1, 2, 3).x()).isEqualTo(6);
     }
+
+    @Test
+    void typePipeLambda() {
+        var result = Pipe.typePipeLambda(5);
+        assertThat(result).isInstanceOf(Pipe.IntBox.class);
+        assertThat(((Pipe.IntBox) result).intValue()).isEqualTo(6);
+    }
+
+    @Test
+    void typePipeRef() {
+        var result = Pipe.typePipeRef(7);
+        assertThat(result).isInstanceOf(Pipe.IntBox.class);
+        assertThat(((Pipe.IntBox) result).intValue()).isEqualTo(8);
+    }
 }

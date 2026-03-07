@@ -622,6 +622,11 @@ public class CapybaraExpressionLinker {
                     .toList();
             return new CoercedArgument(new LinkedNewData(expectedDataType, assignments), 1);
         }
+        if (expected instanceof LinkedDataParentType expectedParentType
+            && argument.type() instanceof LinkedDataType argumentDataType
+            && isSubtypeOfParent(argumentDataType, expectedParentType)) {
+            return new CoercedArgument(argument, 1);
+        }
         return null;
     }
 
@@ -637,6 +642,11 @@ public class CapybaraExpressionLinker {
                 .filter(LinkedDataType.class::isInstance)
                 .map(LinkedDataType.class::cast)
                 .anyMatch(parent -> parent.name().equals(expectedTypeName) || isSubtype(parent, expectedTypeName, visited));
+    }
+
+    private boolean isSubtypeOfParent(LinkedDataType candidate, LinkedDataParentType expectedParentType) {
+        return expectedParentType.subTypes().stream()
+                .anyMatch(subType -> subType.name().equals(candidate.name()));
     }
 
     private ValueOrError<LinkedExpression> linkIfExpression(IfExpression ifExpression, Scope scope) {

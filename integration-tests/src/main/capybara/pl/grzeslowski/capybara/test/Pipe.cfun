@@ -47,3 +47,24 @@ fun data_pipe(a: int, b: int, c: int): Value =
     Value { x: a }
         | v => add(v, b)
         | v => add(v, c)
+
+type Boxed = IntBox | LongBox
+data IntBox { int_value: int }
+data LongBox { long_value: long }
+
+fun keep_boxed(boxed: Boxed): Boxed = boxed
+
+fun add_to_boxed(boxed: Boxed): Boxed =
+    match boxed with
+    | IntBox { int_value } => IntBox { int_value: int_value + 1 }
+    | LongBox { long_value } => LongBox { long_value: long_value + 1L }
+
+fun type_pipe_lambda(x: int): Boxed =
+    IntBox { int_value: x }
+        | b => keep_boxed(b)
+        | b => add_to_boxed(b)
+
+fun type_pipe_ref(x: int): Boxed =
+    IntBox { int_value: x }
+        | :keep_boxed
+        | :add_to_boxed
