@@ -72,4 +72,9 @@ class PipeTest {
     void setFlatMap1() {
         assertThat(Pipe.setFlatMap1(Set.of(1, 2))).isEqualTo(Set.of(1, 11, 2, 12));
     }
+
+    @Test
+    void dataPipe() {
+        assertThat(Pipe.dataPipe(1, 2, 3).x()).isEqualTo(6);
+    }
 }

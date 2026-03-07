@@ -741,47 +741,89 @@ public class CapybaraExpressionLinker {
                         default -> null;
                     };
                     if (elementType == null) {
-                        return withPosition(
-                                ValueOrError.error("Left side of `|` has to be a collection, was `" + left.type() + "`"),
-                                expression.left().position()
-                        );
+                        return linkScalarPipeExpression(expression, scope, left);
                     }
-                    if (!(expression.right() instanceof LambdaExpression lambdaExpression)) {
-                        if (expression.right() instanceof FunctionReference functionReference) {
-                            return resolvePipeFunctionReference(functionReference, elementType)
-                                    .map(linked -> (LinkedExpression) new LinkedPipeExpression(
-                                            left,
-                                            linked.argumentName(),
-                                            linked.expression(),
-                                            left.type() instanceof LinkedSet
-                                                    ? new LinkedSet(linked.expression().type())
-                                                    : new LinkedList(linked.expression().type())
-                                    ));
-                        }
-                        return withPosition(
-                                ValueOrError.error("Right side of `|` has to be a lambda expression or function reference"),
-                                expression.right().position()
-                        );
-                    }
-                    var lambdaArgumentName = singleLambdaArgument(lambdaExpression)
-                            .orElse(null);
-                    if (lambdaArgumentName == null) {
-                        return withPosition(
-                                ValueOrError.error("Right side lambda of `|` has to have exactly one argument"),
-                                lambdaExpression.position()
-                        );
-                    }
-                    var lambdaScope = scope.add(lambdaArgumentName, elementType);
-                    return linkExpression(lambdaExpression.expression(), lambdaScope)
-                            .map(mapper -> (LinkedExpression) new LinkedPipeExpression(
-                                    left,
-                                    lambdaArgumentName,
-                                    mapper,
-                                    left.type() instanceof LinkedSet
-                                            ? new LinkedSet(mapper.type())
-                                            : new LinkedList(mapper.type())
-                            ));
+                    return linkCollectionPipeExpression(expression, scope, left, elementType);
                 });
+    }
+
+    private ValueOrError<LinkedExpression> linkCollectionPipeExpression(
+            InfixExpression expression,
+            Scope scope,
+            LinkedExpression left,
+            LinkedType elementType
+    ) {
+        if (!(expression.right() instanceof LambdaExpression lambdaExpression)) {
+            if (expression.right() instanceof FunctionReference functionReference) {
+                return resolvePipeFunctionReference(functionReference, elementType)
+                        .map(linked -> (LinkedExpression) new LinkedPipeExpression(
+                                left,
+                                linked.argumentName(),
+                                linked.expression(),
+                                left.type() instanceof LinkedSet
+                                        ? new LinkedSet(linked.expression().type())
+                                        : new LinkedList(linked.expression().type())
+                        ));
+            }
+            return withPosition(
+                    ValueOrError.error("Right side of `|` has to be a lambda expression or function reference"),
+                    expression.right().position()
+            );
+        }
+        var lambdaArgumentName = singleLambdaArgument(lambdaExpression)
+                .orElse(null);
+        if (lambdaArgumentName == null) {
+            return withPosition(
+                    ValueOrError.error("Right side lambda of `|` has to have exactly one argument"),
+                    lambdaExpression.position()
+            );
+        }
+        var lambdaScope = scope.add(lambdaArgumentName, elementType);
+        return linkExpression(lambdaExpression.expression(), lambdaScope)
+                .map(mapper -> (LinkedExpression) new LinkedPipeExpression(
+                        left,
+                        lambdaArgumentName,
+                        mapper,
+                        left.type() instanceof LinkedSet
+                                ? new LinkedSet(mapper.type())
+                                : new LinkedList(mapper.type())
+                ));
+    }
+
+    private ValueOrError<LinkedExpression> linkScalarPipeExpression(
+            InfixExpression expression,
+            Scope scope,
+            LinkedExpression left
+    ) {
+        if (!(expression.right() instanceof LambdaExpression lambdaExpression)) {
+            if (expression.right() instanceof FunctionReference functionReference) {
+                return resolvePipeFunctionReference(functionReference, left.type())
+                        .map(linked -> (LinkedExpression) new LinkedLetExpression(
+                                linked.argumentName(),
+                                left,
+                                linked.expression()
+                        ));
+            }
+            return withPosition(
+                    ValueOrError.error("Right side of `|` has to be a lambda expression or function reference"),
+                    expression.right().position()
+            );
+        }
+        var lambdaArgumentName = singleLambdaArgument(lambdaExpression)
+                .orElse(null);
+        if (lambdaArgumentName == null) {
+            return withPosition(
+                    ValueOrError.error("Right side lambda of `|` has to have exactly one argument"),
+                    lambdaExpression.position()
+            );
+        }
+        var lambdaScope = scope.add(lambdaArgumentName, left.type());
+        return linkExpression(lambdaExpression.expression(), lambdaScope)
+                .map(mapper -> (LinkedExpression) new LinkedLetExpression(
+                        lambdaArgumentName,
+                        left,
+                        mapper
+                ));
     }
 
     private ValueOrError<PipeMapper> resolvePipeFunctionReference(FunctionReference functionReference, LinkedType inputType) {
