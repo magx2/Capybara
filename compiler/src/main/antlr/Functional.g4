@@ -13,7 +13,8 @@ definition:
     | singleDeclaration;
 
 functionDeclaration: 'fun' functionNameDeclaration '(' parameters? ')' functionType? '=' expression;
-functionNameDeclaration: identifier | TYPE DOT identifier;
+functionNameDeclaration: identifier | TYPE DOT methodIdentifier;
+methodIdentifier: identifier | INFIX_METHOD_LITERAL;
 
 typeDeclaration: 'type' genericTypeDeclaration '=' genericTypeDeclaration (PIPE genericTypeDeclaration)*
                | 'type' genericTypeDeclaration '{' fieldDeclarationList? '}' '=' genericTypeDeclaration (PIPE genericTypeDeclaration)*;
@@ -49,6 +50,7 @@ qualifiedType: TYPE (DOT TYPE)*;
 TYPE: [A-Z][a-zA-Z0-9_]*
       | TYPE_FULL ;
 TYPE_FULL: '/' [A-Za-z_][a-zA-Z0-9_]* ( '/' [A-Za-z_][a-zA-Z0-9_]* )+;
+INFIX_METHOD_LITERAL: '`' [+\-*/\\^%$#@~!:<>]+ '`';
 expression: letExpression* expressionNoLet;
 letExpression: 'let' NAME '=' expressionNoLet ';'?;
 expressionNoLet: ifExpression
@@ -64,7 +66,7 @@ expressionNoLet: ifExpression
                | BANG expressionNoLet
                | BITWISE_NOT expressionNoLet
                | MINUS expressionNoLet
-               | expressionNoLet DOT identifier LPAREN argumentList? RPAREN
+               | expressionNoLet DOT methodIdentifier LPAREN argumentList? RPAREN
                | expressionNoLet DOT NAME
                | expressionNoLet infixOperator expressionNoLet
                | value
@@ -83,7 +85,7 @@ expressionNoLetNoPipe: ifExpression
                      | BANG expressionNoLetNoPipe
                      | BITWISE_NOT expressionNoLetNoPipe
                      | MINUS expressionNoLetNoPipe
-                     | expressionNoLetNoPipe DOT identifier LPAREN argumentList? RPAREN
+                     | expressionNoLetNoPipe DOT methodIdentifier LPAREN argumentList? RPAREN
                      | expressionNoLetNoPipe DOT NAME
                      | expressionNoLetNoPipe infixOperatorNoPipe expressionNoLetNoPipe
                      | value

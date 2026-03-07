@@ -662,13 +662,57 @@ public class JavaExpressionEvaluator {
             }
         }
         if (result.isEmpty()) {
-            return "generated";
+            return encodeSymbolicMethodName(name);
         }
         var identifier = result.toString();
         if (JAVA_KEYWORDS.contains(identifier)) {
             return identifier + "_";
         }
         return identifier;
+    }
+
+    private static String encodeSymbolicMethodName(String raw) {
+        var parts = new ArrayList<String>(raw.length());
+        for (var i = 0; i < raw.length(); i++) {
+            parts.add(symbolName(raw.charAt(i)));
+        }
+        if (parts.isEmpty()) {
+            return "generated";
+        }
+        var result = new StringBuilder();
+        for (var i = 0; i < parts.size(); i++) {
+            var part = parts.get(i);
+            if (i == 0) {
+                result.append(part);
+            } else {
+                result.append(Character.toUpperCase(part.charAt(0)));
+                if (part.length() > 1) {
+                    result.append(part.substring(1));
+                }
+            }
+        }
+        return result.toString();
+    }
+
+    private static String symbolName(char symbol) {
+        return switch (symbol) {
+            case '+' -> "plus";
+            case '-' -> "minus";
+            case '*' -> "star";
+            case '/' -> "slash";
+            case '\\' -> "backslash";
+            case '^' -> "power";
+            case '%' -> "mod";
+            case '$' -> "dollar";
+            case '#' -> "hash";
+            case '@' -> "at";
+            case '~' -> "tilde";
+            case '!' -> "bang";
+            case ':' -> "colon";
+            case '<' -> "less";
+            case '>' -> "greater";
+            default -> "op" + Integer.toHexString(symbol);
+        };
     }
 
     private static String normalizeFunctionCallTarget(String target) {

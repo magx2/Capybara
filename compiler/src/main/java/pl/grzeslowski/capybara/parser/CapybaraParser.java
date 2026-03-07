@@ -107,7 +107,7 @@ public class CapybaraParser {
     private Function functionDeclaration(pl.grzeslowski.capybara.parser.antlr.FunctionalParser.FunctionDeclarationContext functionDeclarationContext) {
         var functionNameDeclaration = functionDeclarationContext.functionNameDeclaration();
         var methodOwner = functionNameDeclaration.TYPE();
-        var methodName = identifier(functionNameDeclaration.identifier());
+        var methodName = functionName(functionNameDeclaration);
         var parameters = functionDeclarationContext.parameters() == null
                 ? List.<Parameter>of()
                 : functionDeclarationContext.parameters()
@@ -304,7 +304,7 @@ public class CapybaraParser {
 
         if (isMethodCall(expression)) {
             var receiver = expressionNoLet(expression.expressionNoLet(0));
-            var methodName = identifier(expression.identifier());
+            var methodName = methodIdentifier(expression.methodIdentifier());
             var args = expression.argumentList() == null
                     ? new java.util.ArrayList<Expression>()
                     : new java.util.ArrayList<>(expression.argumentList().expression().stream().map(this::expression).toList());
@@ -469,7 +469,7 @@ public class CapybaraParser {
 
         if (isMethodCall(expression)) {
             var receiver = expressionNoLetNoPipe(expression.expressionNoLetNoPipe(0));
-            var methodName = identifier(expression.identifier());
+            var methodName = methodIdentifier(expression.methodIdentifier());
             var args = expression.argumentList() == null
                     ? new java.util.ArrayList<Expression>()
                     : new java.util.ArrayList<>(expression.argumentList().expression().stream().map(this::expression).toList());
@@ -726,6 +726,37 @@ public class CapybaraParser {
         return context.getText();
     }
 
+    private static String functionName(FunctionalParser.FunctionNameDeclarationContext context) {
+        if (context.identifier() != null) {
+            return identifier(context.identifier());
+        }
+        var methodIdentifier = context.methodIdentifier();
+        if (methodIdentifier == null) {
+            throw new IllegalStateException("Missing function name");
+        }
+        if (methodIdentifier.identifier() != null) {
+            return identifier(methodIdentifier.identifier());
+        }
+        var infixLiteral = methodIdentifier.INFIX_METHOD_LITERAL();
+        if (infixLiteral != null) {
+            var text = infixLiteral.getText();
+            return text.substring(1, text.length() - 1);
+        }
+        throw new IllegalStateException("Unknown function name declaration: " + context.getText());
+    }
+
+    private static String methodIdentifier(FunctionalParser.MethodIdentifierContext context) {
+        if (context.identifier() != null) {
+            return identifier(context.identifier());
+        }
+        var infixLiteral = context.INFIX_METHOD_LITERAL();
+        if (infixLiteral != null) {
+            var text = infixLiteral.getText();
+            return text.substring(1, text.length() - 1);
+        }
+        throw new IllegalStateException("Unknown method identifier: " + context.getText());
+    }
+
     private static List<String> genericTypeParameters(FunctionalParser.GenericTypeDeclarationContext context) {
         return context.TYPE().stream().skip(1).map(TerminalNode::getText).toList();
     }
@@ -740,7 +771,7 @@ public class CapybaraParser {
 
     private static boolean isMethodCall(FunctionalParser.ExpressionNoLetContext expression) {
         return expression.DOT() != null
-               && expression.identifier() != null
+               && expression.methodIdentifier() != null
                && expression.LPAREN() != null
                && expression.RPAREN() != null
                && expression.expressionNoLet().size() == 1;
@@ -748,7 +779,7 @@ public class CapybaraParser {
 
     private static boolean isMethodCall(FunctionalParser.ExpressionNoLetNoPipeContext expression) {
         return expression.DOT() != null
-               && expression.identifier() != null
+               && expression.methodIdentifier() != null
                && expression.LPAREN() != null
                && expression.RPAREN() != null
                && expression.expressionNoLetNoPipe().size() == 1;

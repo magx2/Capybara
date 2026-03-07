@@ -671,10 +671,64 @@ public class CapybaraExpressionLinker {
         return linkExpression(expression.left(), scope)
                 .flatMap(left ->
                         linkExpression(expression.right(), scope)
-                                .flatMap(right ->
-                                        getLinkedInfixExpression(left, expression.operator(), right, expression.position())
-                                                .map(linked -> (LinkedExpression) linked)
-                                ));
+                                .flatMap(right -> {
+                                    if (left.type() instanceof GenericDataType) {
+                                        var methodCall = resolveMethodInfixCall(expression.operator().symbol(), left, right, expression.position());
+                                        if (methodCall instanceof ValueOrError.Value<LinkedExpression> value) {
+                                            return value;
+                                        }
+                                    }
+                                    return getLinkedInfixExpression(left, expression.operator(), right, expression.position())
+                                            .map(linked -> (LinkedExpression) linked);
+                                }));
+    }
+
+    private ValueOrError<LinkedExpression> resolveMethodInfixCall(
+            String operatorSymbol,
+            LinkedExpression left,
+            LinkedExpression right,
+            Optional<pl.grzeslowski.capybara.parser.SourcePosition> position
+    ) {
+        var ownerName = left.type().name();
+        var methodName = METHOD_DECL_PREFIX + ownerName + "__" + operatorSymbol;
+        var candidates = functionSignatures.stream()
+                .filter(signature -> signature.name().equals(methodName))
+                .filter(signature -> signature.parameterTypes().size() == 2)
+                .toList();
+        if (candidates.isEmpty()) {
+            return ValueOrError.error(List.of());
+        }
+
+        ResolvedFunctionCall best = null;
+        for (var candidate : candidates) {
+            var maybeReceiver = coerceArgument(left, candidate.parameterTypes().get(0));
+            if (maybeReceiver == null) {
+                continue;
+            }
+            var maybeArgument = coerceArgument(right, candidate.parameterTypes().get(1));
+            if (maybeArgument == null) {
+                continue;
+            }
+            var arguments = List.of(maybeReceiver.expression(), maybeArgument.expression());
+            var coercions = maybeReceiver.coercions() + maybeArgument.coercions();
+            if (best == null || coercions < best.coercions()) {
+                best = new ResolvedFunctionCall(candidate, arguments, coercions);
+            }
+        }
+        if (best == null) {
+            return withPosition(
+                    ValueOrError.error(
+                            "No matching method `" + operatorSymbol + "` for argument types ["
+                            + left.type().name() + ", " + right.type().name() + "]"
+                    ),
+                    position
+            );
+        }
+        return ValueOrError.success(new LinkedFunctionCall(
+                best.signature().name(),
+                best.arguments(),
+                best.signature().returnType()
+        ));
     }
 
     private ValueOrError<LinkedExpression> linkPipeExpression(InfixExpression expression, Scope scope) {

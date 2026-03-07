@@ -255,7 +255,7 @@ public class JavaAstBuilder {
 
         var base = new StringBuilder();
         if (parts.isEmpty()) {
-            base.append(upperCamel ? "Generated" : "generated");
+            base.append(encodeSymbolicIdentifier(name, upperCamel));
         } else {
             for (var i = 0; i < parts.size(); i++) {
                 var part = parts.get(i);
@@ -278,6 +278,50 @@ public class JavaAstBuilder {
             identifier = identifier + "_";
         }
         return identifier;
+    }
+
+    private static String encodeSymbolicIdentifier(String raw, boolean upperCamel) {
+        var parts = new java.util.ArrayList<String>(raw.length());
+        for (var i = 0; i < raw.length(); i++) {
+            parts.add(symbolName(raw.charAt(i)));
+        }
+        if (parts.isEmpty()) {
+            return upperCamel ? "Generated" : "generated";
+        }
+        var result = new StringBuilder();
+        for (var i = 0; i < parts.size(); i++) {
+            var part = parts.get(i);
+            if (i == 0 && !upperCamel) {
+                result.append(part);
+            } else {
+                result.append(Character.toUpperCase(part.charAt(0)));
+                if (part.length() > 1) {
+                    result.append(part.substring(1));
+                }
+            }
+        }
+        return result.toString();
+    }
+
+    private static String symbolName(char symbol) {
+        return switch (symbol) {
+            case '+' -> "plus";
+            case '-' -> "minus";
+            case '*' -> "star";
+            case '/' -> "slash";
+            case '\\' -> "backslash";
+            case '^' -> "power";
+            case '%' -> "mod";
+            case '$' -> "dollar";
+            case '#' -> "hash";
+            case '@' -> "at";
+            case '~' -> "tilde";
+            case '!' -> "bang";
+            case ':' -> "colon";
+            case '<' -> "less";
+            case '>' -> "greater";
+            default -> "op" + Integer.toHexString(symbol);
+        };
     }
 
     private Set<JavaInterface> buildInterfaces(List<LinkedDataParentType> dataParentTypes) {
