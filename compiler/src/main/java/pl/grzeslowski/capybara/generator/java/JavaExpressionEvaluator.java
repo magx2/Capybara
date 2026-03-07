@@ -625,6 +625,16 @@ public class JavaExpressionEvaluator {
                 })
                 .toList();
 
+        if (isOptionSomeTypeName(dataType.name())) {
+            if (args.size() != 1) {
+                throw new IllegalStateException("`Some` expects a single `value` argument");
+            }
+            return current.addExpression("java.util.Optional.of(" + args.get(0) + ")");
+        }
+        if (isOptionNoneTypeName(dataType.name())) {
+            return current.addExpression("java.util.Optional.empty()");
+        }
+
         return current.addExpression("new " + normalizeJavaTypeReference(dataType.name()) + "(" + String.join(", ", args) + ")");
     }
 
@@ -785,6 +795,24 @@ public class JavaExpressionEvaluator {
             return literal;
         }
         return literal + "f";
+    }
+
+    private static boolean isOptionSomeTypeName(String typeName) {
+        var normalized = normalizeQualifiedTypeName(typeName);
+        return normalized.equals("/capy/lang/Option.Some");
+    }
+
+    private static boolean isOptionNoneTypeName(String typeName) {
+        var normalized = normalizeQualifiedTypeName(typeName);
+        return normalized.equals("/capy/lang/Option.None");
+    }
+
+    private static String normalizeQualifiedTypeName(String typeName) {
+        var normalized = typeName.replace('\\', '/');
+        if (!normalized.startsWith("/")) {
+            normalized = "/" + normalized;
+        }
+        return normalized;
     }
 
 }

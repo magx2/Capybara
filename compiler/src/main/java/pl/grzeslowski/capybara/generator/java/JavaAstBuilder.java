@@ -133,6 +133,9 @@ public class JavaAstBuilder {
     }
 
     private JavaType buildGenericDataType(GenericDataType type) {
+        if (isOptionTypeName(type.name())) {
+            return new JavaType("java.util.Optional");
+        }
         if (type.name().contains("/") && type.name().contains(".")) {
             var dotIndex = type.name().lastIndexOf('.');
             var slashIndex = type.name().lastIndexOf('/');
@@ -188,7 +191,7 @@ public class JavaAstBuilder {
                 case NOTHING -> "java.lang.Object";
                 case ANY -> "java.lang.Object";
             };
-            case GenericDataType genericDataType -> buildClassName(genericDataType.name()).toString();
+            case GenericDataType genericDataType -> buildGenericDataType(genericDataType).toString();
             case CollectionLinkedType collectionLinkedType -> buildCollectionLinkedType(collectionLinkedType).toString();
             case LinkedFunctionType functionType -> "java.util.function.Function<"
                     + buildJavaBoxedType(functionType.argumentType())
@@ -197,6 +200,22 @@ public class JavaAstBuilder {
                     + ">";
             case LinkedGenericTypeParameter linkedGenericTypeParameter -> linkedGenericTypeParameter.name();
         };
+    }
+
+    private boolean isOptionTypeName(String name) {
+        var normalized = normalizeQualifiedTypeName(name);
+        return normalized.equals("/cap/lang/Option")
+               || normalized.equals("/cap/lang/Option.Option")
+               || normalized.equals("/capy/lang/Option")
+               || normalized.equals("/capy/lang/Option.Option");
+    }
+
+    private String normalizeQualifiedTypeName(String name) {
+        var normalized = name.replace('\\', '/');
+        if (!normalized.startsWith("/")) {
+            normalized = "/" + normalized;
+        }
+        return normalized;
     }
 
     private List<JavaMethod.JavaFunctionParameter> buildJavaFunctionParameters(List<LinkedFunction.LinkedFunctionParameter> parameters) {

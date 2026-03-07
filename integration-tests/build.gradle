@@ -20,6 +20,7 @@ test {
 }
 
 def capybaraSourceDir = layout.projectDirectory.dir('src/main/capybara')
+def capybaraLibSourceDir = project(':lib:capybara-lib').layout.projectDirectory.dir('src/main/capybara')
 def generatedJavaDir = layout.buildDirectory.dir('generated/sources/capybara/java/main')
 
 tasks.register('generateJavaFromCapybara', JavaExec) {
@@ -27,13 +28,17 @@ tasks.register('generateJavaFromCapybara', JavaExec) {
     description = 'Compiles Capybara files from src/main/capybara into generated Java sources.'
 
     inputs.dir(capybaraSourceDir)
+    inputs.dir(capybaraLibSourceDir)
     outputs.dir(generatedJavaDir)
 
     classpath = project(':app').sourceSets.main.runtimeClasspath
     mainClass = 'pl.grzeslowski.capybara.App'
 
     doFirst {
-        args '--debug', 'JAVA', capybaraSourceDir.asFile.absolutePath, generatedJavaDir.get().asFile.absolutePath
+        args '--debug', 'JAVA',
+                capybaraSourceDir.asFile.absolutePath,
+                capybaraLibSourceDir.asFile.absolutePath,
+                generatedJavaDir.get().asFile.absolutePath
     }
 }
 
