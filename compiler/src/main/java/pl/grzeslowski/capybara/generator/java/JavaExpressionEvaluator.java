@@ -150,7 +150,7 @@ public class JavaExpressionEvaluator {
 
         var operator = infixExpression.operator();
         var expression = switch (operator) {
-            case POWER -> "pl.grzeslowski.capybara.CapybaraUtil.power(" + left.expression() + ", " + right.expression() + ")";
+            case POWER -> evaluatePowerExpression(infixExpression, left.expression(), right.expression());
             case PLUS -> {
                 if (infixExpression.left().type() instanceof pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedList) {
                     yield evaluateListAppendExpression(infixExpression, left.expression(), right.expression());
@@ -173,6 +173,15 @@ public class JavaExpressionEvaluator {
                 if (infixExpression.left().type() instanceof pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedDict) {
                     yield evaluateDictRemoveExpression(infixExpression, left.expression(), right.expression());
                 }
+                if (isStringLeftNumericRight(infixExpression)) {
+                    yield left.expression() + "+" + right.expression();
+                }
+                yield left.expression() + operator.symbol() + right.expression();
+            }
+            case MUL, DIV, CARET -> {
+                if (isStringLeftNumericRight(infixExpression)) {
+                    yield left.expression() + "+" + right.expression();
+                }
                 yield left.expression() + operator.symbol() + right.expression();
             }
             case QUESTION -> {
@@ -190,7 +199,47 @@ public class JavaExpressionEvaluator {
             default -> left.expression() + operator.symbol() + right.expression();
         };
 
-        return right.scope().addExpression('(' + expression + ')');
+        return right.scope().addExpression('(' + castIfNeeded(infixExpression.type(), expression) + ')');
+    }
+
+    private static String evaluatePowerExpression(LinkedInfixExpression infixExpression, String left, String right) {
+        if (isStringLeftNumericRight(infixExpression)) {
+            return left + "+" + right;
+        }
+        if (infixExpression.type() == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.INT
+            && infixExpression.left().type() == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.INT
+            && infixExpression.right().type() == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.INT) {
+            return "pl.grzeslowski.capybara.CapybaraUtil.power(" + left + ", " + right + ")";
+        }
+        return switch (infixExpression.type()) {
+            case pl.grzeslowski.capybara.linker.PrimitiveLinkedType.BYTE -> "((byte) java.lang.Math.pow(" + left + ", " + right + "))";
+            case pl.grzeslowski.capybara.linker.PrimitiveLinkedType.INT -> "((int) java.lang.Math.pow(" + left + ", " + right + "))";
+            case pl.grzeslowski.capybara.linker.PrimitiveLinkedType.LONG -> "((long) java.lang.Math.pow(" + left + ", " + right + "))";
+            case pl.grzeslowski.capybara.linker.PrimitiveLinkedType.FLOAT -> "((float) java.lang.Math.pow(" + left + ", " + right + "))";
+            case pl.grzeslowski.capybara.linker.PrimitiveLinkedType.DOUBLE -> "java.lang.Math.pow(" + left + ", " + right + ")";
+            default -> "java.lang.Math.pow(" + left + ", " + right + ")";
+        };
+    }
+
+    private static String castIfNeeded(pl.grzeslowski.capybara.linker.LinkedType type, String expression) {
+        if (type == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.BYTE) {
+            return "((byte) (" + expression + "))";
+        }
+        return expression;
+    }
+
+    private static boolean isStringLeftNumericRight(LinkedInfixExpression infixExpression) {
+        if (infixExpression.left().type() != pl.grzeslowski.capybara.linker.PrimitiveLinkedType.STRING) {
+            return false;
+        }
+        return switch (infixExpression.right().type()) {
+            case pl.grzeslowski.capybara.linker.PrimitiveLinkedType.BYTE,
+                 pl.grzeslowski.capybara.linker.PrimitiveLinkedType.INT,
+                 pl.grzeslowski.capybara.linker.PrimitiveLinkedType.LONG,
+                 pl.grzeslowski.capybara.linker.PrimitiveLinkedType.FLOAT,
+                 pl.grzeslowski.capybara.linker.PrimitiveLinkedType.DOUBLE -> true;
+            default -> false;
+        };
     }
 
     private static String evaluateListAppendExpression(LinkedInfixExpression infixExpression, String left, String right) {

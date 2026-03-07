@@ -877,7 +877,7 @@ public class CapybaraExpressionLinker {
         LinkedType type = switch (operator) {
             case PLUS -> findPlusType(left.type(), right.type());
             case MINUS -> findMinusType(left.type(), right.type());
-            case MUL, DIV, CARET, POWER -> findHigherType(left.type(), right.type());
+            case MUL, DIV, CARET, POWER -> findMathType(left.type(), right.type());
             // bool operators
             case GT, LT, EQUAL, NOTEQUAL, LE, GE -> BOOL;
             case QUESTION -> findQuestionType(left.type(), right.type());
@@ -909,6 +909,9 @@ public class CapybaraExpressionLinker {
             }
             return null;
         }
+        if (left instanceof PrimitiveLinkedType leftPrimitive && right instanceof PrimitiveLinkedType rightPrimitive) {
+            return findPlusPrimitiveType(leftPrimitive, rightPrimitive);
+        }
         return findHigherType(left, right);
     }
 
@@ -934,7 +937,72 @@ public class CapybaraExpressionLinker {
             }
             return null;
         }
+        if (left instanceof PrimitiveLinkedType leftPrimitive && right instanceof PrimitiveLinkedType rightPrimitive) {
+            return findMathPrimitiveType(leftPrimitive, rightPrimitive);
+        }
+        return findMathType(left, right);
+    }
+
+    private static LinkedType findMathType(LinkedType left, LinkedType right) {
+        if (left instanceof PrimitiveLinkedType leftPrimitive && right instanceof PrimitiveLinkedType rightPrimitive) {
+            return findMathPrimitiveType(leftPrimitive, rightPrimitive);
+        }
         return findHigherType(left, right);
+    }
+
+    private static LinkedType findPlusPrimitiveType(PrimitiveLinkedType left, PrimitiveLinkedType right) {
+        if (left == BOOL || right == BOOL) {
+            return null;
+        }
+        if (left == STRING) {
+            return isNumericPrimitive(right) || right == STRING ? STRING : null;
+        }
+        if (right == STRING) {
+            return isNumericPrimitive(left) ? STRING : null;
+        }
+        if (isNumericPrimitive(left) && isNumericPrimitive(right)) {
+            return promoteNumeric(left, right);
+        }
+        return null;
+    }
+
+    private static LinkedType findMathPrimitiveType(PrimitiveLinkedType left, PrimitiveLinkedType right) {
+        if (left == BOOL || right == BOOL) {
+            return null;
+        }
+        if (left == STRING) {
+            return isNumericPrimitive(right) ? STRING : null;
+        }
+        if (right == STRING) {
+            return null;
+        }
+        if (isNumericPrimitive(left) && isNumericPrimitive(right)) {
+            return promoteNumeric(left, right);
+        }
+        return null;
+    }
+
+    private static boolean isNumericPrimitive(PrimitiveLinkedType type) {
+        return switch (type) {
+            case BYTE, INT, LONG, FLOAT, DOUBLE -> true;
+            default -> false;
+        };
+    }
+
+    private static PrimitiveLinkedType promoteNumeric(PrimitiveLinkedType left, PrimitiveLinkedType right) {
+        if (left == PrimitiveLinkedType.DOUBLE || right == PrimitiveLinkedType.DOUBLE) {
+            return PrimitiveLinkedType.DOUBLE;
+        }
+        if (left == PrimitiveLinkedType.FLOAT || right == PrimitiveLinkedType.FLOAT) {
+            return PrimitiveLinkedType.FLOAT;
+        }
+        if (left == PrimitiveLinkedType.LONG || right == PrimitiveLinkedType.LONG) {
+            return PrimitiveLinkedType.LONG;
+        }
+        if (left == PrimitiveLinkedType.INT || right == PrimitiveLinkedType.INT) {
+            return PrimitiveLinkedType.INT;
+        }
+        return PrimitiveLinkedType.BYTE;
     }
 
     private static LinkedType findQuestionType(LinkedType left, LinkedType right) {
