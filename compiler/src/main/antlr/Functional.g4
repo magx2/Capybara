@@ -129,6 +129,7 @@ infixOperator: PLUS
              | MINUS
              | MUL
              | DIV
+             | MOD
              | POWER
              | BITWISE_AND
              | BITWISE_NAND
@@ -151,6 +152,7 @@ infixOperatorNoPipe: PLUS
                    | MINUS
                    | MUL
                    | DIV
+                   | MOD
                    | POWER
                    | BITWISE_AND
                    | BITWISE_NAND

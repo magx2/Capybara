@@ -877,7 +877,7 @@ public class CapybaraExpressionLinker {
         LinkedType type = switch (operator) {
             case PLUS -> findPlusType(left.type(), right.type());
             case MINUS -> findMinusType(left.type(), right.type());
-            case MUL, DIV, POWER -> findMathType(left.type(), right.type());
+            case MUL, DIV, MOD, POWER -> findMathType(left.type(), right.type());
             case BITWISE_AND, BITWISE_NAND, BITWISE_OR, BITWISE_XOR -> findBitwiseType(left.type(), right.type());
             case BITWISE_NOT -> findBitwiseNotType(left.type());
             // bool operators

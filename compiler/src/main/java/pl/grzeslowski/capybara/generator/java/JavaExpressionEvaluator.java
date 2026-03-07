@@ -179,7 +179,7 @@ public class JavaExpressionEvaluator {
                 }
                 yield left.expression() + operator.symbol() + right.expression();
             }
-            case MUL, DIV -> {
+            case MUL, DIV, MOD -> {
                 if (isStringLeftNumericRight(infixExpression)) {
                     yield left.expression() + "+" + right.expression();
                 }

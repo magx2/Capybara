@@ -7,6 +7,7 @@ public enum InfixOperator {
     MINUS("-"),
     MUL("*"),
     DIV("/"),
+    MOD("%"),
     POWER("^"),
     BITWISE_AND(".and."),
     BITWISE_NAND(".nand."),
@@ -64,7 +65,7 @@ public enum InfixOperator {
         return switch (this) {
             case BITWISE_NOT -> 8;
             case POWER -> 7;
-            case MUL, DIV -> 6;
+            case MUL, DIV, MOD -> 6;
             case PLUS, MINUS, BITWISE_AND, BITWISE_NAND, BITWISE_OR, BITWISE_XOR -> 5;
             case GT, LT, LE, GE -> 4;
             case EQUAL, NOTEQUAL -> 3;
