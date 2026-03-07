@@ -312,6 +312,17 @@ public class CapybaraParser {
             return new FunctionCall(Optional.empty(), METHOD_INVOKE_PREFIX + methodName, List.copyOf(args), position(expression));
         }
 
+        if (expression.INFIX_METHOD_LITERAL() != null && expression.expressionNoLet().size() == 2) {
+            var text = expression.INFIX_METHOD_LITERAL().getText();
+            var methodName = text.substring(1, text.length() - 1);
+            return new FunctionCall(
+                    Optional.empty(),
+                    METHOD_INVOKE_PREFIX + methodName,
+                    List.of(expressionNoLet(expression.expressionNoLet(0)), expressionNoLet(expression.expressionNoLet(1))),
+                    position(expression)
+            );
+        }
+
         if (expression.BANG() != null && expression.infixOperator() == null && expression.expressionNoLet().size() == 1) {
             return new InfixExpression(
                     expressionNoLet(expression.expressionNoLet(0)),
@@ -475,6 +486,20 @@ public class CapybaraParser {
                     : new java.util.ArrayList<>(expression.argumentList().expression().stream().map(this::expression).toList());
             args.add(0, receiver);
             return new FunctionCall(Optional.empty(), METHOD_INVOKE_PREFIX + methodName, List.copyOf(args), position(expression));
+        }
+
+        if (expression.INFIX_METHOD_LITERAL() != null && expression.expressionNoLetNoPipe().size() == 2) {
+            var text = expression.INFIX_METHOD_LITERAL().getText();
+            var methodName = text.substring(1, text.length() - 1);
+            return new FunctionCall(
+                    Optional.empty(),
+                    METHOD_INVOKE_PREFIX + methodName,
+                    List.of(
+                            expressionNoLetNoPipe(expression.expressionNoLetNoPipe(0)),
+                            expressionNoLetNoPipe(expression.expressionNoLetNoPipe(1))
+                    ),
+                    position(expression)
+            );
         }
 
         if (expression.BANG() != null && expression.infixOperatorNoPipe() == null && expression.expressionNoLetNoPipe().size() == 1) {

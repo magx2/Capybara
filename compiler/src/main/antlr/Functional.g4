@@ -67,6 +67,7 @@ expressionNoLet: ifExpression
                | BITWISE_NOT expressionNoLet
                | MINUS expressionNoLet
                | expressionNoLet DOT methodIdentifier LPAREN argumentList? RPAREN
+               | expressionNoLet INFIX_METHOD_LITERAL expressionNoLet
                | expressionNoLet DOT NAME
                | expressionNoLet infixOperator expressionNoLet
                | value
@@ -86,6 +87,7 @@ expressionNoLetNoPipe: ifExpression
                      | BITWISE_NOT expressionNoLetNoPipe
                      | MINUS expressionNoLetNoPipe
                      | expressionNoLetNoPipe DOT methodIdentifier LPAREN argumentList? RPAREN
+                     | expressionNoLetNoPipe INFIX_METHOD_LITERAL expressionNoLetNoPipe
                      | expressionNoLetNoPipe DOT NAME
                      | expressionNoLetNoPipe infixOperatorNoPipe expressionNoLetNoPipe
                      | value

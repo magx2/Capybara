@@ -9,7 +9,7 @@ fun Sum.`$-`(x: int) = Sum { value: this.value - x - 1 }
 
 fun add(sum: Sum, x: int) = sum.add(x)
 fun plus(sum: Sum, x: int) = sum + x
-fun plus_minus(sum: Sum, x: int) = sum.`+-`(x)
+fun plus_minus(sum: Sum, x: int) = sum `+-` x
 fun mul(sum: Sum, x: int) = sum * x
-fun slash_slash(sum: Sum, x: int) = sum.`//`(x)
-fun dollar_minus(sum: Sum, x: int) = sum.`$-`(x)
+fun slash_slash(sum: Sum, x: int) = sum `//` x
+fun dollar_minus(sum: Sum, x: int) = sum `$-` x
