@@ -41,7 +41,7 @@ type: COLLECTION '[' type ']'
     | 'float'
     | qualifiedType ('[' type (',' type)* ']')?;
 qualifiedType: TYPE (DOT TYPE)*;
-TYPE: [A-Z][a-zA-Z0-9]*
+TYPE: [A-Z][a-zA-Z0-9_]*
       | TYPE_FULL ;
 TYPE_FULL: '/' [A-Za-z_][a-zA-Z0-9_]* ( '/' [A-Za-z_][a-zA-Z0-9_]* )+;
 expression: letExpression* expressionNoLet;

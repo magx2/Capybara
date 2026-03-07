@@ -128,6 +128,17 @@ public class JavaAstBuilder {
     }
 
     private JavaType buildGenericDataType(GenericDataType type) {
+        if (type.name().contains("/") && type.name().contains(".")) {
+            var dotIndex = type.name().lastIndexOf('.');
+            var slashIndex = type.name().lastIndexOf('/');
+            if (slashIndex > 0 && slashIndex < dotIndex) {
+                var startIdx = type.name().startsWith("/") ? 1 : 0;
+                var modulePath = type.name().substring(startIdx, slashIndex).replace('/', '.');
+                var moduleName = buildClassName(type.name().substring(slashIndex + 1, dotIndex));
+                var nestedType = buildClassName(type.name().substring(dotIndex + 1));
+                return new JavaType(modulePath + "." + moduleName + "." + nestedType);
+            }
+        }
         if (type.name().contains(".")) {
             var qualifiedName = Stream.of(type.name().split("\\."))
                     .map(part -> normalizeJavaIdentifier(part, true))
@@ -267,7 +278,7 @@ public class JavaAstBuilder {
         return new JavaSealedInterface(
                 buildClassName(type.name()),
                 buildJavaMethods(type.fields()),
-                type.subTypes().stream().map(LinkedDataType::name).toList(),
+                type.subTypes().stream().map(LinkedDataType::name).map(name -> buildClassName(name).toString()).toList(),
                 type.typeParameters()
         );
     }

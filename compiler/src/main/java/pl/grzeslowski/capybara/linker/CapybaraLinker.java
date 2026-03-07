@@ -37,7 +37,7 @@ public class CapybaraLinker {
 
         var visibleTypesByModule = new HashMap<String, Map<String, GenericDataType>>();
         for (var module : program.modules()) {
-            var visibleTypes = availableTypes(module, modulesByName, linkedTypesByModule);
+            var visibleTypes = availableTypes(module, modulesByName, linkedTypesByModule, program.modules());
             if (visibleTypes instanceof ValueOrError.Error<Map<String, GenericDataType>> error) {
                 return ValueOrError.error(error.errors().stream().map(ValueOrError.Error.SingleError::message).toList());
             }
@@ -187,18 +187,19 @@ public class CapybaraLinker {
     private ValueOrError<Map<String, GenericDataType>> availableTypes(
             Module module,
             Map<String, Module> modulesByName,
-            Map<String, Map<String, GenericDataType>> linkedTypesByModule
+            Map<String, Map<String, GenericDataType>> linkedTypesByModule,
+            List<Module> allModules
     ) {
         var localTypes = linkedTypesByModule.get(module.name());
         var all = new LinkedHashMap<String, GenericDataType>(localTypes);
-        addQualifiedTypeAliases(all, module.name(), localTypes);
+        addQualifiedTypeAliases(all, module, localTypes);
         for (var importDeclaration : module.imports()) {
             var importedModule = resolveImportedModule(importDeclaration.moduleName(), modulesByName);
             if (importedModule == null) {
                 return ValueOrError.error("Module `" + module.name() + "` imports unknown module `" + importDeclaration.moduleName() + "`");
             }
             var importedTypes = linkedTypesByModule.get(importedModule.name());
-            addQualifiedTypeAliases(all, importedModule.name(), importedTypes);
+            addQualifiedTypeAliases(all, importedModule, importedTypes);
             if (importDeclaration.isStarImport() && importDeclaration.excludedSymbols().isEmpty()) {
                 importedTypes.forEach(all::put);
                 continue;
@@ -212,11 +213,21 @@ public class CapybaraLinker {
                 }
             }
         }
+        allModules.forEach(knownModule -> addQualifiedTypeAliases(all, knownModule, linkedTypesByModule.get(knownModule.name())));
         return ValueOrError.success(Map.copyOf(all));
     }
 
-    private void addQualifiedTypeAliases(Map<String, GenericDataType> all, String moduleName, Map<String, GenericDataType> importedTypes) {
-        importedTypes.forEach((typeName, type) -> all.put(moduleName + "." + typeName, type));
+    private void addQualifiedTypeAliases(Map<String, GenericDataType> all, Module module, Map<String, GenericDataType> importedTypes) {
+        importedTypes.forEach((typeName, type) -> all.put(module.name() + "." + typeName, type));
+        addPathQualifiedTypeAliases(all, module, importedTypes);
+    }
+
+    private void addPathQualifiedTypeAliases(Map<String, GenericDataType> all, Module module, Map<String, GenericDataType> importedTypes) {
+        var modulePath = module.path().replace('\\', '/') + "/" + module.name();
+        importedTypes.forEach((typeName, type) -> {
+            all.put(modulePath + "." + typeName, type);
+            all.put("/" + modulePath + "." + typeName, type);
+        });
     }
 
     private Set<LinkedModule.StaticImport> staticImports(

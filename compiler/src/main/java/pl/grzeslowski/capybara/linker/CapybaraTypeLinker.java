@@ -36,8 +36,43 @@ public class CapybaraTypeLinker {
         if (dataTypes.containsKey(dataType.name())) {
             return ValueOrError.success(withQualifiedNameIfNeeded(dataTypes.get(dataType.name()), dataType.name()));
         }
+        var matchedQualified = matchQualifiedByModuleTail(dataType.name(), dataTypes);
+        if (matchedQualified != null) {
+            return ValueOrError.success(withQualifiedNameIfNeeded(dataTypes.get(matchedQualified), matchedQualified));
+        }
+        var normalized = normalizeQualifiedName(dataType.name());
+        if (normalized != null && dataTypes.containsKey(normalized)) {
+            return ValueOrError.success(withQualifiedNameIfNeeded(dataTypes.get(normalized), normalized));
+        }
 
         return ValueOrError.error("Data type \"" + dataType.name() + "\" not found");
+    }
+
+    private static String matchQualifiedByModuleTail(String rawName, Map<String, GenericDataType> dataTypes) {
+        if (!rawName.startsWith("/")) {
+            return null;
+        }
+        var slashIdx = rawName.lastIndexOf('/');
+        if (slashIdx < 0 || slashIdx >= rawName.length() - 1) {
+            return null;
+        }
+        var moduleAndTypeTail = rawName.substring(slashIdx + 1);
+        return dataTypes.keySet().stream()
+                .filter(key -> key.endsWith("/" + moduleAndTypeTail))
+                .findFirst()
+                .orElse(null);
+    }
+
+    private static String normalizeQualifiedName(String rawName) {
+        if (!rawName.startsWith("/")) {
+            return null;
+        }
+        var dotIdx = rawName.lastIndexOf('.');
+        var slashIdx = rawName.lastIndexOf('/');
+        if (dotIdx < 0 || slashIdx < 0 || slashIdx >= dotIdx) {
+            return null;
+        }
+        return rawName.substring(slashIdx + 1);
     }
 
     private static LinkedType withQualifiedNameIfNeeded(GenericDataType type, String requestedName) {

@@ -471,7 +471,7 @@ public class JavaExpressionEvaluator {
                 })
                 .toList();
 
-        return current.addExpression("new " + dataType.name() + "(" + String.join(", ", args) + ")");
+        return current.addExpression("new " + normalizeJavaTypeReference(dataType.name()) + "(" + String.join(", ", args) + ")");
     }
 
     private static Scope evaluateStringValue(LinkedStringValue stringValue, Scope scope) {
@@ -522,6 +522,54 @@ public class JavaExpressionEvaluator {
         var qualifier = target.substring(0, lastDot);
         var methodName = target.substring(lastDot + 1);
         return qualifier + "." + normalizeJavaMethodName(methodName);
+    }
+
+    private static String normalizeJavaTypeReference(String typeName) {
+        if (typeName.contains("/") && typeName.contains(".")) {
+            var dotIndex = typeName.lastIndexOf('.');
+            var slashIndex = typeName.lastIndexOf('/');
+            if (slashIndex > 0 && slashIndex < dotIndex) {
+                var startIdx = typeName.startsWith("/") ? 1 : 0;
+                var packageName = typeName.substring(startIdx, slashIndex).replace('/', '.');
+                var outer = normalizeJavaClassName(typeName.substring(slashIndex + 1, dotIndex));
+                var inner = normalizeJavaClassName(typeName.substring(dotIndex + 1));
+                return packageName + "." + outer + "." + inner;
+            }
+        }
+        if (!typeName.contains(".")) {
+            return normalizeJavaClassName(typeName);
+        }
+        var parts = typeName.split("\\.");
+        var normalized = new ArrayList<String>(parts.length);
+        for (var part : parts) {
+            normalized.add(normalizeJavaClassName(part));
+        }
+        return String.join(".", normalized);
+    }
+
+    private static String normalizeJavaClassName(String rawName) {
+        var parts = rawName.split("[^A-Za-z0-9]+");
+        var result = new StringBuilder();
+        for (var part : parts) {
+            if (part.isEmpty()) {
+                continue;
+            }
+            result.append(Character.toUpperCase(part.charAt(0)));
+            if (part.length() > 1) {
+                result.append(part.substring(1));
+            }
+        }
+        if (result.isEmpty()) {
+            return "Generated";
+        }
+        var identifier = result.toString();
+        if (!Character.isJavaIdentifierStart(identifier.charAt(0))) {
+            identifier = "T" + identifier;
+        }
+        if (JAVA_KEYWORDS.contains(identifier)) {
+            identifier = identifier + "_";
+        }
+        return identifier;
     }
 
 }
