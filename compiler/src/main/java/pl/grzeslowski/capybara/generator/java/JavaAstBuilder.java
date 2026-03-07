@@ -95,6 +95,7 @@ public class JavaAstBuilder {
     private JavaMethod buildStaticMethod(LinkedFunction function) {
         return new JavaMethod(
                 buildMethodName(function.name()),
+                function.name().startsWith("_"),
                 buildJavaReturnType(function),
                 buildJavaFunctionParameters(function.parameters()),
                 function.expression(),
@@ -476,6 +477,7 @@ public class JavaAstBuilder {
         var parameters = function.parameters().stream().skip(1).toList();
         return new JavaMethod(
                 buildMethodName(methodName),
+                methodName.startsWith("_"),
                 buildJavaReturnType(function),
                 buildJavaFunctionParameters(parameters),
                 function.expression(),

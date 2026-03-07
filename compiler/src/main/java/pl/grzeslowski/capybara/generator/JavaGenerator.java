@@ -309,14 +309,14 @@ public final class JavaGenerator implements Generator {
 
     private String mapJavaMethod(JavaMethod method) {
         return mapJavaDoc(method.comments())
-               + "public static " + method.returnType() + " " + mapMethodName(method.name()) + "(" + mapFunctionParameters(method.parameters()) + ") {\n"
+               + (method.isPrivate() ? "private" : "public") + " static " + method.returnType() + " " + mapMethodName(method.name()) + "(" + mapFunctionParameters(method.parameters()) + ") {\n"
                + evaluateExpression(method.expression(), method.parameters())
                + "\n}\n";
     }
 
     private String mapJavaRecordMethod(JavaMethod method) {
         return mapJavaDoc(method.comments())
-               + "public " + method.returnType() + " " + mapMethodName(method.name()) + "(" + mapFunctionParameters(method.parameters()) + ") {\n"
+               + (method.isPrivate() ? "private" : "public") + " " + method.returnType() + " " + mapMethodName(method.name()) + "(" + mapFunctionParameters(method.parameters()) + ") {\n"
                + evaluateExpression(method.expression(), method.parameters())
                + "\n}\n";
     }

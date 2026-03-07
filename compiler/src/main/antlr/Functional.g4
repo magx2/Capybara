@@ -30,7 +30,7 @@ genericTypeDeclaration: TYPE ('[' TYPE (',' TYPE)* ']')?;
 
 BOOL_LITERAL: 'true' | 'false';
 COLLECTION: 'list' | 'set' | 'dict';
-NAME : [a-z][a-zA-Z0-9_]*;
+NAME : [a-z][a-zA-Z0-9_]* | '_' [a-zA-Z0-9_]+;
 identifier: NAME | 'fun' | 'byte' | 'int' | 'long' | 'double' | 'bool' | 'string' | 'float' | 'nothing';
 parameters: parameter (',' parameter)*;
 parameter: identifier ':' type;
