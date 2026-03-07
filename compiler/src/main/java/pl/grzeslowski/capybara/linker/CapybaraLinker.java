@@ -2,7 +2,6 @@ package pl.grzeslowski.capybara.linker;
 
 import pl.grzeslowski.capybara.compiler.Module;
 import pl.grzeslowski.capybara.compiler.Program;
-import pl.grzeslowski.capybara.compiler.ImportDeclaration;
 import pl.grzeslowski.capybara.linker.LinkedFunction.LinkedFunctionParameter;
 import pl.grzeslowski.capybara.linker.expression.CapybaraExpressionLinker;
 import pl.grzeslowski.capybara.parser.*;
@@ -14,6 +13,7 @@ import static java.util.function.Function.identity;
 import static java.util.stream.Collectors.toMap;
 import static pl.grzeslowski.capybara.linker.CapybaraTypeLinker.linkType;
 
+@SuppressWarnings("OptionalUsedAsFieldOrParameterType")
 public class CapybaraLinker {
     public static final CapybaraLinker INSTANCE = new CapybaraLinker();
 
@@ -28,18 +28,20 @@ public class CapybaraLinker {
 
         var linkedTypesByModule = new HashMap<String, Map<String, GenericDataType>>();
         for (var module : program.modules()) {
-            var linkedTypes = types(module);
+            var sourceFile = moduleSourceFile(module);
+            var linkedTypes = withFile(types(module), sourceFile);
             if (linkedTypes instanceof ValueOrError.Error<Map<String, GenericDataType>> error) {
-                return ValueOrError.error(error.errors().stream().map(ValueOrError.Error.SingleError::message).toList());
+                return new ValueOrError.Error<>(error.errors());
             }
             linkedTypesByModule.put(module.name(), ((ValueOrError.Value<Map<String, GenericDataType>>) linkedTypes).value());
         }
 
         var visibleTypesByModule = new HashMap<String, Map<String, GenericDataType>>();
         for (var module : program.modules()) {
-            var visibleTypes = availableTypes(module, modulesByName, linkedTypesByModule, program.modules());
+            var sourceFile = moduleSourceFile(module);
+            var visibleTypes = withFile(availableTypes(module, modulesByName, linkedTypesByModule, program.modules()), sourceFile);
             if (visibleTypes instanceof ValueOrError.Error<Map<String, GenericDataType>> error) {
-                return ValueOrError.error(error.errors().stream().map(ValueOrError.Error.SingleError::message).toList());
+                return new ValueOrError.Error<>(error.errors());
             }
             visibleTypesByModule.put(module.name(), ((ValueOrError.Value<Map<String, GenericDataType>>) visibleTypes).value());
         }
@@ -47,9 +49,10 @@ public class CapybaraLinker {
         var signaturesByModule = new HashMap<String, List<CapybaraExpressionLinker.FunctionSignature>>();
         for (var module : program.modules()) {
             var functions = findFunctions(module.functional().definitions());
-            var signatures = linkFunctionSignatures(functions, visibleTypesByModule.get(module.name()));
+            var sourceFile = moduleSourceFile(module);
+            var signatures = withFile(linkFunctionSignatures(functions, visibleTypesByModule.get(module.name())), sourceFile);
             if (signatures instanceof ValueOrError.Error<List<CapybaraExpressionLinker.FunctionSignature>> error) {
-                return ValueOrError.error(error.errors().stream().map(ValueOrError.Error.SingleError::message).toList());
+                return new ValueOrError.Error<>(error.errors());
             }
             signaturesByModule.put(module.name(), ((ValueOrError.Value<List<CapybaraExpressionLinker.FunctionSignature>>) signatures).value());
         }
@@ -64,8 +67,9 @@ public class CapybaraLinker {
                     signaturesByModule,
                     moduleClassNameByModuleName
             );
+            firstPassFunctions = withFile(firstPassFunctions, moduleSourceFile(module));
             if (firstPassFunctions instanceof ValueOrError.Error<List<LinkedFunction>> error) {
-                return ValueOrError.error(error.errors().stream().map(ValueOrError.Error.SingleError::message).toList());
+                return new ValueOrError.Error<>(error.errors());
             }
             var refined = mergeSignatures(
                     signaturesByModule.get(module.name()),
@@ -97,12 +101,13 @@ public class CapybaraLinker {
     ) {
         var dataTypes = visibleTypesByModule.get(module.name());
         var functions = findFunctions(module.functional().definitions());
+        var moduleSourceFile = moduleSourceFile(module);
         var availableSignatures = availableSignatures(module, modulesByName, linkedTypesByModule, signaturesByModule);
         if (availableSignatures instanceof ValueOrError.Error<List<CapybaraExpressionLinker.FunctionSignature>> error) {
-            return ValueOrError.error(error.errors().stream().map(ValueOrError.Error.SingleError::message).toList());
+            return withFile(new ValueOrError.Error<>(error.errors()), moduleSourceFile);
         }
         var initialSignatures = ((ValueOrError.Value<List<CapybaraExpressionLinker.FunctionSignature>>) availableSignatures).value();
-        return linkFunctions(functions, dataTypes, initialSignatures, signaturesByModule, moduleClassNameByModuleName, moduleSourceFile(module));
+        return withFile(linkFunctions(functions, dataTypes, initialSignatures, signaturesByModule, moduleClassNameByModuleName, moduleSourceFile), moduleSourceFile);
     }
 
     private ValueOrError<LinkedModule> linkModule(
@@ -116,19 +121,20 @@ public class CapybaraLinker {
         var localTypes = linkedTypesByModule.get(module.name());
         var visibleTypes = visibleTypesByModule.get(module.name());
         var functions = findFunctions(module.functional().definitions());
+        var moduleSourceFile = moduleSourceFile(module);
         var availableSignatures = availableSignatures(module, modulesByName, linkedTypesByModule, signaturesByModule);
         if (availableSignatures instanceof ValueOrError.Error<List<CapybaraExpressionLinker.FunctionSignature>> error) {
-            return ValueOrError.error(error.errors().stream().map(ValueOrError.Error.SingleError::message).toList());
+            return withFile(new ValueOrError.Error<>(error.errors()), moduleSourceFile);
         }
         var initialSignatures = ((ValueOrError.Value<List<CapybaraExpressionLinker.FunctionSignature>>) availableSignatures).value();
-        return linkFunctions(functions, visibleTypes, initialSignatures, signaturesByModule, moduleClassNameByModuleName, moduleSourceFile(module))
+        return withFile(linkFunctions(functions, visibleTypes, initialSignatures, signaturesByModule, moduleClassNameByModuleName, moduleSourceFile)
                 .flatMap(firstPassFunctions -> {
                     var refinedSignatures = mergeSignatures(
                             signaturesByModule.get(module.name()),
                             signaturesFromLinkedFunctions(firstPassFunctions)
                     );
                     var refinedAvailableSignatures = mergeSignatures(initialSignatures, refinedSignatures);
-                    return linkFunctions(functions, visibleTypes, refinedAvailableSignatures, signaturesByModule, moduleClassNameByModuleName, moduleSourceFile(module))
+                    return linkFunctions(functions, visibleTypes, refinedAvailableSignatures, signaturesByModule, moduleClassNameByModuleName, moduleSourceFile)
                             .map(linkedFunctions -> new LinkedModule(
                                     module.name(),
                                     module.path(),
@@ -136,7 +142,7 @@ public class CapybaraLinker {
                                     deduplicateFunctions(linkedFunctions),
                                     staticImports(module, modulesByName, linkedTypesByModule, signaturesByModule)
                             ));
-                });
+                }), moduleSourceFile);
     }
 
     private ValueOrError<List<CapybaraExpressionLinker.FunctionSignature>> availableSignatures(
@@ -364,7 +370,8 @@ public class CapybaraLinker {
                                                                 parameters,
                                                                 enrichNothing(ex, function.name(), moduleSourceFile),
                                                                 function.comments()))));
-        return withPosition(linked, function.position());
+        var normalizedFile = normalizeFile(moduleSourceFile);
+        return withPosition(linked, function.position(), normalizedFile);
     }
 
     private String moduleSourceFile(Module module) {
@@ -526,33 +533,34 @@ public class CapybaraLinker {
         return withPosition(
                 linkType(parameter.type(), dataTypes)
                         .map(type -> new LinkedFunctionParameter(parameter.name(), type)),
-                parameter.position()
-        );
+                parameter.position(),
+                "");
     }
 
     private ValueOrError<Map<String, GenericDataType>> types(Module module) {
-        var dataDeclarationsOrError = linkDataDeclarations(castList(module, DataDeclaration.class));
+        var normalizedFile = normalizeFile(moduleSourceFile(module));
+        var dataDeclarationsOrError = linkDataDeclarations(castList(module, DataDeclaration.class), normalizedFile);
         var singlesDeclarationsOrError = castList(module, SingleDeclaration.class)
                 .stream()
                 .map(this::linkSingleDeclaration)
                 .collect(new ValueOrErrorCollectionCollector<>());
 
         if (dataDeclarationsOrError instanceof ValueOrError.Error<?> error) {
-            return ValueOrError.error(error.errors().stream().map(ValueOrError.Error.SingleError::message).toList());
+            return new ValueOrError.Error<>(error.errors());
         }
         var dataDeclarations = ((ValueOrError.Value<List<LinkedDataType>>) dataDeclarationsOrError).value();
         if (singlesDeclarationsOrError instanceof ValueOrError.Error<?> error) {
-            return ValueOrError.error(error.errors().stream().map(ValueOrError.Error.SingleError::message).toList());
+            return new ValueOrError.Error<>(error.errors());
         }
         var singleDeclarations = ((ValueOrError.Value<List<LinkedDataType>>) singlesDeclarationsOrError).value();
 
         var typeDeclarationsOrError = castList(module, TypeDeclaration.class)
                 .stream()
-                .map(typeDeclaration -> linkTypeDeclaration(typeDeclaration, Stream.concat(dataDeclarations.stream(), singleDeclarations.stream()).toList()))
+                .map(typeDeclaration -> linkTypeDeclaration(typeDeclaration, Stream.concat(dataDeclarations.stream(), singleDeclarations.stream()).toList(), normalizedFile))
                 .collect(new ValueOrErrorCollectionCollector<>());
 
         if (typeDeclarationsOrError instanceof ValueOrError.Error<?> error) {
-            return ValueOrError.error(error.errors().stream().map(ValueOrError.Error.SingleError::message).toList());
+            return new ValueOrError.Error<>(error.errors());
         }
         var typeDeclarations = ((ValueOrError.Value<List<LinkedDataParentType>>) typeDeclarationsOrError).value();
 
@@ -565,11 +573,15 @@ public class CapybaraLinker {
     }
 
     private ValueOrError<List<LinkedDataType>> linkDataDeclarations(List<DataDeclaration> dataDeclarations) {
+        return linkDataDeclarations(dataDeclarations, "");
+    }
+
+    private ValueOrError<List<LinkedDataType>> linkDataDeclarations(List<DataDeclaration> dataDeclarations, String normalizedFile) {
         var declarationsByName = dataDeclarations.stream()
                 .collect(toMap(DataDeclaration::name, identity(), (first, second) -> first));
         var cache = new HashMap<String, ValueOrError<LinkedDataType>>();
         return dataDeclarations.stream()
-                .map(dataDeclaration -> linkDataDeclaration(dataDeclaration, declarationsByName, cache, new HashSet<>()))
+                .map(dataDeclaration -> linkDataDeclaration(dataDeclaration, declarationsByName, cache, new HashSet<>(), normalizedFile))
                 .collect(new ValueOrErrorCollectionCollector<>());
     }
 
@@ -577,7 +589,8 @@ public class CapybaraLinker {
             DataDeclaration dataDeclaration,
             Map<String, DataDeclaration> declarationsByName,
             Map<String, ValueOrError<LinkedDataType>> cache,
-            Set<String> visiting
+            Set<String> visiting,
+            String normalizedFile
     ) {
         var cached = cache.get(dataDeclaration.name());
         if (cached != null) {
@@ -586,8 +599,8 @@ public class CapybaraLinker {
         if (!visiting.add(dataDeclaration.name())) {
             return withPosition(
                     ValueOrError.error("Circular data extension detected for `" + dataDeclaration.name() + "`"),
-                    dataDeclaration.position()
-            );
+                    dataDeclaration.position(),
+                    normalizedFile);
         }
 
         var genericTypes = Set.copyOf(dataDeclaration.typeParameters());
@@ -599,7 +612,7 @@ public class CapybaraLinker {
                                 "Extended data type `" + parentName + "` not found"
                         );
                     }
-                    return linkDataDeclaration(parent, declarationsByName, cache, visiting)
+                    return linkDataDeclaration(parent, declarationsByName, cache, visiting, normalizedFile)
                             .map(LinkedDataType::fields);
                 })
                 .collect(new ValueOrErrorCollectionCollector<>());
@@ -624,7 +637,7 @@ public class CapybaraLinker {
                         ownFields
                 );
         visiting.remove(dataDeclaration.name());
-        var withPosition = withPosition(linked, dataDeclaration.position());
+        var withPosition = withPosition(linked, dataDeclaration.position(), normalizedFile);
         cache.put(dataDeclaration.name(), withPosition);
         return withPosition;
     }
@@ -641,10 +654,10 @@ public class CapybaraLinker {
                 .map(t -> new LinkedDataType.LinkedField(type.name(), t));
     }
 
-    private ValueOrError<LinkedDataParentType> linkTypeDeclaration(TypeDeclaration typeDeclaration, List<LinkedDataType> dataDeclarations) {
+    private ValueOrError<LinkedDataParentType> linkTypeDeclaration(TypeDeclaration typeDeclaration, List<LinkedDataType> dataDeclarations, String normalizedFile) {
         var linked = findSubtypes(typeDeclaration.subTypes(), dataDeclarations)
                 .flatMap(subTypes -> linkedDataParentType(typeDeclaration, subTypes));
-        return withPosition(linked, typeDeclaration.position());
+        return withPosition(linked, typeDeclaration.position(), normalizedFile);
     }
 
     private ValueOrError<LinkedDataParentType> linkedDataParentType(TypeDeclaration typeDeclaration, List<LinkedDataType> subTypes) {
@@ -672,17 +685,38 @@ public class CapybaraLinker {
                 .collect(new ValueOrErrorCollectionCollector<>());
     }
 
-    private static <T> ValueOrError<T> withPosition(ValueOrError<T> valueOrError, Optional<pl.grzeslowski.capybara.parser.SourcePosition> position) {
+    private static <T> ValueOrError<T> withPosition(ValueOrError<T> valueOrError, Optional<SourcePosition> position, String file) {
         if (valueOrError instanceof ValueOrError.Error<T> error && position.isPresent()) {
             var pos = position.get();
             return new ValueOrError.Error<>(error.errors()
                     .stream()
-                    .map(ValueOrError.Error.SingleError::message)
-                    .map(msg -> "line %d, column %d: %s".formatted(pos.line(), pos.column(), msg))
-                    .map(ValueOrError.Error.SingleError::new)
+                    .map(singleError -> new ValueOrError.Error.SingleError(
+                            pos.line(),
+                            pos.column(),
+                            singleError.file().isBlank() ? file : singleError.file(),
+                            singleError.message()))
                     .toList());
         }
         return valueOrError;
+    }
+
+    private static <T> ValueOrError<T> withFile(ValueOrError<T> valueOrError, String moduleSourceFile) {
+        if (!(valueOrError instanceof ValueOrError.Error<T> error)) {
+            return valueOrError;
+        }
+        var normalizedFile = normalizeFile(moduleSourceFile);
+        return new ValueOrError.Error<>(error.errors().stream()
+                .map(singleError -> new ValueOrError.Error.SingleError(
+                        singleError.line(),
+                        singleError.column(),
+                        singleError.file().isBlank() ? normalizedFile : singleError.file(),
+                        singleError.message()))
+                .toList());
+    }
+
+    private static String normalizeFile(String moduleSourceFile) {
+        var normalized = moduleSourceFile.replace('\\', '/');
+        return normalized.startsWith("/") ? normalized : "/" + normalized;
     }
 
     private static <T> List<T> castList(Module module, Class<T> clazz) {

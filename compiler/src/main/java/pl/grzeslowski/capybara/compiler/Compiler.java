@@ -59,8 +59,8 @@ public class Compiler {
         // 2. Perform semantic analysis on the AST (e.g., type checking, scope resolution)
         var linkingResult = CapybaraLinker.INSTANCE.link(program);
         if (linkingResult instanceof ValueOrError.Error<?> le) {
-            log.severe("Linking failed with " + le.errors().size() + " error(s):");
-            le.errors().forEach(error -> log.severe(error.toString()));
+            System.err.println("Linking failed with " + le.errors().size() + " error(s):");
+            le.errors().forEach(System.err::println);
             return 100;
         }
         var linkedProgram = ((ValueOrError.Value<LinkedProgram>) linkingResult).value();

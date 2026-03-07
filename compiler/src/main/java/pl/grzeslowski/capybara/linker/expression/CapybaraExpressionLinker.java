@@ -1725,9 +1725,11 @@ public class CapybaraExpressionLinker {
             var pos = position.get();
             return new ValueOrError.Error<>(error.errors()
                     .stream()
-                    .map(ValueOrError.Error.SingleError::message)
-                    .map(msg -> "line %d, column %d: %s".formatted(pos.line(), pos.column(), msg))
-                    .map(ValueOrError.Error.SingleError::new)
+                    .map(singleError -> new ValueOrError.Error.SingleError(
+                            pos.line(),
+                            pos.column(),
+                            singleError.file(),
+                            singleError.message()))
                     .toList());
         }
         return valueOrError;

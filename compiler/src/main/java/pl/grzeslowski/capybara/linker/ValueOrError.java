@@ -1,15 +1,15 @@
 package pl.grzeslowski.capybara.linker;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
+import java.util.*;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.stream.Stream;
 
+import static java.util.Collections.unmodifiableSortedSet;
+
 public sealed interface ValueOrError<T> {
     static <T> ValueOrError<T> error(List<String> msgs) {
-        return new Error<>(msgs.stream().map(Error.SingleError::new).toList());
+        return new Error<>(msgs.stream().map(msg -> new Error.SingleError(0, 0, "", msg)).toList());
     }
 
     static <T> ValueOrError<T> error(String... msgs) {
@@ -87,13 +87,12 @@ public sealed interface ValueOrError<T> {
     }
 
     public record Error<T>(
-            List<SingleError> errors) implements ValueOrError<T> {
+            SortedSet<SingleError> errors) implements ValueOrError<T> {
         public Error(SingleError error) {
-            this(List.of(error));
+            this(unmodifiableSortedSet(new TreeSet<>(Set.of(error))));
         }
-
-        public Error(String error) {
-            this(new SingleError(error));
+        public Error(Collection<SingleError> errors) {
+            this(unmodifiableSortedSet(new TreeSet<>(Set.copyOf(errors))));
         }
 
         @Override
@@ -106,14 +105,32 @@ public sealed interface ValueOrError<T> {
             return new Error<>(errors);
         }
 
-        public record SingleError(String message) {
+        public record SingleError(int line, int column, String file, String message) implements Comparable<SingleError> {
+            public SingleError(String message) {
+                this(0, 0, "", message);
+            }
+
+            @Override
+            public int compareTo(SingleError o) {
+                return Comparator
+                        .comparing(SingleError::file)
+                        .thenComparing(SingleError::line)
+                        .thenComparing(SingleError::column)
+                        .thenComparing(SingleError::message)
+                        .compare(this, o);
+            }
+
+            @Override
+            public String toString() {
+                return "%s %d:%s: %s".formatted(file, line, column, message);
+            }
         }
 
-        public static <T> Error<T> join(List<SingleError> a, List<SingleError> b) {
-            var errors = new ArrayList<SingleError>(a.size() + b.size());
+        public static <T> Error<T> join(Collection<SingleError> a, Collection<SingleError> b) {
+            var errors = new TreeSet<SingleError>();
             errors.addAll(a);
             errors.addAll(b);
-            return new Error<>(List.copyOf(errors));
+            return new Error<>(errors);
         }
     }
 
