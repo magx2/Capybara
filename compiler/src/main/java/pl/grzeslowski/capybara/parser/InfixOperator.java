@@ -16,6 +16,8 @@ public enum InfixOperator {
     NOTEQUAL("!="),
     LE("<="),
     GE(">="),
+    AND("&&"),
+    OR("||"),
     QUESTION("?"),
     PIPE("|"),
     PIPE_MINUS("|-"),
@@ -51,6 +53,8 @@ public enum InfixOperator {
             case PLUS, MINUS -> 5;
             case GT, LT, LE, GE -> 4;
             case EQUAL, NOTEQUAL -> 3;
+            case AND -> 2;
+            case OR -> 1;
             case CARET, QUESTION -> 2;
             case PIPE, PIPE_MINUS, PIPE_FLATMAP, PIPE_REDUCE -> 1;
         };

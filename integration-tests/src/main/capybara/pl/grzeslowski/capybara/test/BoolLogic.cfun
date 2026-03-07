@@ -1,0 +1,11 @@
+fun and_logic(a: bool, b: bool): bool = a && b
+
+fun or_logic(a: bool, b: bool): bool = a || b
+
+fun equal_logic(a: bool, b: bool): bool = a == b
+
+fun not_equal_logic(a: bool, b: bool): bool = a != b
+
+fun not_logic(a: bool): bool = !a
+
+fun complex_logic(a: bool, b: bool): bool = (!a && b) || (a == b)

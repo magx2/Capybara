@@ -880,6 +880,7 @@ public class CapybaraExpressionLinker {
             case MUL, DIV, CARET, POWER -> findMathType(left.type(), right.type());
             // bool operators
             case GT, LT, EQUAL, NOTEQUAL, LE, GE -> BOOL;
+            case AND, OR -> findLogicalType(left.type(), right.type());
             case QUESTION -> findQuestionType(left.type(), right.type());
             case PIPE, PIPE_MINUS, PIPE_FLATMAP, PIPE_REDUCE -> null;
         };
@@ -948,6 +949,13 @@ public class CapybaraExpressionLinker {
             return findMathPrimitiveType(leftPrimitive, rightPrimitive);
         }
         return findHigherType(left, right);
+    }
+
+    private static LinkedType findLogicalType(LinkedType left, LinkedType right) {
+        if (left == BOOL && right == BOOL) {
+            return BOOL;
+        }
+        return null;
     }
 
     private static LinkedType findPlusPrimitiveType(PrimitiveLinkedType left, PrimitiveLinkedType right) {
