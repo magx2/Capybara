@@ -12,7 +12,7 @@ definition:
     | dataDeclaration
     | singleDeclaration;
 
-functionDeclaration: 'fun' NAME '(' parameters? ')' functionType? '=' expression;
+functionDeclaration: 'fun' identifier '(' parameters? ')' functionType? '=' expression;
 
 typeDeclaration: 'type' genericTypeDeclaration '=' genericTypeDeclaration (PIPE genericTypeDeclaration)*
                | 'type' genericTypeDeclaration '{' fieldDeclarationList? '}' '=' genericTypeDeclaration (PIPE genericTypeDeclaration)*;
@@ -28,14 +28,17 @@ genericTypeDeclaration: TYPE ('[' TYPE (',' TYPE)* ']')?;
 BOOL_LITERAL: 'true' | 'false';
 COLLECTION: 'list' | 'set' | 'dict';
 NAME : [a-z][a-zA-Z0-9_]*;
-identifier: NAME | 'fun';
+identifier: NAME | 'fun' | 'byte' | 'int' | 'long' | 'double' | 'bool' | 'string' | 'float' | 'nothing';
 parameters: parameter (',' parameter)*;
 parameter: identifier ':' type;
 functionType: ':' type;
 type: COLLECTION '[' type ']'
     | LPAREN type (COMMA type)+ RPAREN ARROW type
     | type ARROW type
+    | 'byte'
     | 'int'
+    | 'long'
+    | 'double'
     | 'bool'
     | 'string'
     | 'float'
@@ -85,9 +88,13 @@ functionCall: identifier '(' argumentList? ')'
             | TYPE DOT identifier '(' argumentList? ')';
 value: literal | identifier;
 argumentList: expression (',' expression)*;
-literal: INT_LITERAL | BOOL_LITERAL | STRING_LITERAL | FLOAT_LITERAL | NOTHING_LITERAL;
+literal: BYTE_LITERAL | LONG_LITERAL | DOUBLE_LITERAL | INT_LITERAL | BOOL_LITERAL | STRING_LITERAL | FLOAT_LITERAL | NOTHING_LITERAL;
+BYTE_LITERAL: '0' [xX] [0-9a-fA-F]+;
+LONG_LITERAL: [0-9]+ [lL];
+DOUBLE_LITERAL: ([0-9]+ '.' [0-9]* EXPONENT? | [0-9]+ EXPONENT) [dD];
+FLOAT_LITERAL: [0-9]+ '.' [0-9]* EXPONENT? [fF]? | [0-9]+ EXPONENT [fF];
 INT_LITERAL: [0-9]+;
-FLOAT_LITERAL: [0-9]+ '.' [0-9]+;
+fragment EXPONENT: [eE] [+\-]? [0-9]+;
 STRING_LITERAL: '"' (~["\r\n] | '\\' .)* '"';
 NOTHING_LITERAL: '???';
 

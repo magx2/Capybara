@@ -98,7 +98,10 @@ public class CapybaraTypeLinker {
 
     private static LinkedType linkPrimitiveType(PrimitiveType primitiveType) {
         return switch (primitiveType) {
+            case BYTE -> PrimitiveLinkedType.BYTE;
             case INT -> PrimitiveLinkedType.INT;
+            case LONG -> PrimitiveLinkedType.LONG;
+            case DOUBLE -> PrimitiveLinkedType.DOUBLE;
             case STRING -> PrimitiveLinkedType.STRING;
             case BOOL -> PrimitiveLinkedType.BOOL;
             case FLOAT -> PrimitiveLinkedType.FLOAT;

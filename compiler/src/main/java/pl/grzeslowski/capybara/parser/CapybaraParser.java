@@ -111,7 +111,7 @@ public class CapybaraParser {
                 .map(this::parameter)
                 .toList();
         return new Function(
-                functionDeclarationContext.NAME().getText(),
+                identifier(functionDeclarationContext.identifier()),
                 parameters,
                 functionType(functionDeclarationContext.functionType()),
                 expression(functionDeclarationContext.expression()),
@@ -236,8 +236,17 @@ public class CapybaraParser {
                 if (literal.BOOL_LITERAL() != null) {
                     return boolLiteral(literal.BOOL_LITERAL());
                 }
+                if (literal.BYTE_LITERAL() != null) {
+                    return new ByteValue(literal.BYTE_LITERAL().getText(), position(literal.BYTE_LITERAL()));
+                }
                 if (literal.INT_LITERAL() != null) {
                     return new IntValue(literal.INT_LITERAL().getText(), position(literal.INT_LITERAL()));
+                }
+                if (literal.LONG_LITERAL() != null) {
+                    return new LongValue(literal.LONG_LITERAL().getText(), position(literal.LONG_LITERAL()));
+                }
+                if (literal.DOUBLE_LITERAL() != null) {
+                    return new DoubleValue(literal.DOUBLE_LITERAL().getText(), position(literal.DOUBLE_LITERAL()));
                 }
                 if (literal.STRING_LITERAL() != null) {
                     return new StringValue(literal.STRING_LITERAL().getText(), position(literal.STRING_LITERAL()));
@@ -364,8 +373,17 @@ public class CapybaraParser {
                 if (literal.BOOL_LITERAL() != null) {
                     return boolLiteral(literal.BOOL_LITERAL());
                 }
+                if (literal.BYTE_LITERAL() != null) {
+                    return new ByteValue(literal.BYTE_LITERAL().getText(), position(literal.BYTE_LITERAL()));
+                }
                 if (literal.INT_LITERAL() != null) {
                     return new IntValue(literal.INT_LITERAL().getText(), position(literal.INT_LITERAL()));
+                }
+                if (literal.LONG_LITERAL() != null) {
+                    return new LongValue(literal.LONG_LITERAL().getText(), position(literal.LONG_LITERAL()));
+                }
+                if (literal.DOUBLE_LITERAL() != null) {
+                    return new DoubleValue(literal.DOUBLE_LITERAL().getText(), position(literal.DOUBLE_LITERAL()));
                 }
                 if (literal.STRING_LITERAL() != null) {
                     return new StringValue(literal.STRING_LITERAL().getText(), position(literal.STRING_LITERAL()));

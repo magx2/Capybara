@@ -51,6 +51,8 @@ public class JavaExpressionEvaluator {
     private static Scope evaluateExpression(LinkedExpression expression, Scope scope) {
         return switch (expression) {
             case LinkedBooleanValue booleanValue -> evaluateBooleanValue(booleanValue, scope);
+            case LinkedByteValue byteValue -> evaluateByteValue(byteValue, scope);
+            case LinkedDoubleValue doubleValue -> evaluateDoubleValue(doubleValue, scope);
             case LinkedFieldAccess fieldAccess -> evaluateFieldAccess(fieldAccess, scope);
             case LinkedFloatValue floatValue -> evaluateFloatValue(floatValue, scope);
             case LinkedFunctionCall functionCall -> evaluateFunctionCall(functionCall, scope);
@@ -60,6 +62,7 @@ public class JavaExpressionEvaluator {
             case LinkedIntValue intValue -> evaluateIntValue(intValue, scope);
             case LinkedLambdaExpression lambdaExpression -> evaluateLambdaExpression(lambdaExpression, scope);
             case LinkedLetExpression letExpression -> evaluateLetExpression(letExpression, scope);
+            case LinkedLongValue longValue -> evaluateLongValue(longValue, scope);
             case LinkedMatchExpression matchExpression -> evaluateMatchExpression(matchExpression, scope);
             case LinkedNothingValue nothingValue -> evaluateNothingValue(nothingValue, scope);
             case LinkedPipeFlatMapExpression pipeFlatMapExpression -> evaluatePipeFlatMapExpression(pipeFlatMapExpression, scope);
@@ -79,8 +82,16 @@ public class JavaExpressionEvaluator {
         return scope.addExpression(booleanValue.toString());
     }
 
+    private static Scope evaluateByteValue(LinkedByteValue byteValue, Scope scope) {
+        return scope.addExpression("((byte) " + byteValue.byteValue() + ")");
+    }
+
+    private static Scope evaluateDoubleValue(LinkedDoubleValue doubleValue, Scope scope) {
+        return scope.addExpression(doubleValue.doubleValue());
+    }
+
     private static Scope evaluateFloatValue(LinkedFloatValue floatValue, Scope scope) {
-        return scope.addExpression(floatValue.floatValue() + "f");
+        return scope.addExpression(ensureFloatSuffix(floatValue.floatValue()));
     }
 
     private static Scope evaluateFieldAccess(LinkedFieldAccess fieldAccess, Scope scope) {
@@ -231,6 +242,10 @@ public class JavaExpressionEvaluator {
 
     private static Scope evaluateIntValue(LinkedIntValue intValue, Scope scope) {
         return scope.addExpression(intValue.intValue());
+    }
+
+    private static Scope evaluateLongValue(LinkedLongValue longValue, Scope scope) {
+        return scope.addExpression(longValue.longValue());
     }
 
     private static Scope evaluateLambdaExpression(LinkedLambdaExpression lambdaExpression, Scope scope) {
@@ -581,6 +596,13 @@ public class JavaExpressionEvaluator {
         return value
                 .replace("\\", "\\\\")
                 .replace("\"", "\\\"");
+    }
+
+    private static String ensureFloatSuffix(String literal) {
+        if (literal.endsWith("f") || literal.endsWith("F")) {
+            return literal;
+        }
+        return literal + "f";
     }
 
 }

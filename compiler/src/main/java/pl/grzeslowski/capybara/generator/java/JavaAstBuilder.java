@@ -150,7 +150,10 @@ public class JavaAstBuilder {
 
     private JavaType buildPrimitiveLinkedType(PrimitiveLinkedType type) {
         return switch (type) {
+            case BYTE -> new JavaType("byte");
             case INT -> new JavaType("int");
+            case LONG -> new JavaType("long");
+            case DOUBLE -> new JavaType("double");
             case STRING -> new JavaType("java.lang.String");
             case BOOL -> new JavaType("boolean");
             case FLOAT -> new JavaType("float");
@@ -170,7 +173,10 @@ public class JavaAstBuilder {
     private String buildJavaBoxedType(LinkedType type) {
         return switch (type) {
             case PrimitiveLinkedType primitiveLinkedType -> switch (primitiveLinkedType) {
+                case BYTE -> "java.lang.Byte";
                 case INT -> "java.lang.Integer";
+                case LONG -> "java.lang.Long";
+                case DOUBLE -> "java.lang.Double";
                 case STRING -> "java.lang.String";
                 case BOOL -> "java.lang.Boolean";
                 case FLOAT -> "java.lang.Float";

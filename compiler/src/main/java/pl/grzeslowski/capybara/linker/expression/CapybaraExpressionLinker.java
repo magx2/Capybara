@@ -6,6 +6,7 @@ import pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedSet;
 import pl.grzeslowski.capybara.linker.*;
 import pl.grzeslowski.capybara.parser.*;
 
+import java.math.BigInteger;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -47,6 +48,8 @@ public class CapybaraExpressionLinker {
     private ValueOrError<LinkedExpression> linkExpression(Expression expression, Scope scope) {
         return switch (expression) {
             case BooleanValue booleanValue -> linkBooleanValue(booleanValue, scope);
+            case ByteValue byteValue -> linkByteValue(byteValue, scope);
+            case DoubleValue doubleValue -> linkDoubleValue(doubleValue, scope);
             case FieldAccess fieldAccess -> linkFieldAccess(fieldAccess, scope);
             case FloatValue floatValue -> linkFloatValue(floatValue, scope);
             case FunctionCall functionCall -> linkFunctionCall(functionCall, scope);
@@ -75,6 +78,7 @@ public class CapybaraExpressionLinker {
             case Value value -> linkValue(value, scope);
             //
             case LetExpression letExpression -> linkLetExpression(letExpression, scope);
+            case LongValue longValue -> linkLongValue(longValue, scope);
         };
     }
 
@@ -104,7 +108,49 @@ public class CapybaraExpressionLinker {
     }
 
     private ValueOrError<LinkedExpression> linkFloatValue(FloatValue floatValue, Scope scope) {
+        try {
+            var value = floatValue.floatValue();
+            var normalized = value.endsWith("f") || value.endsWith("F")
+                    ? value.substring(0, value.length() - 1)
+                    : value;
+            var parsed = Float.parseFloat(normalized);
+            if (!Float.isFinite(parsed)) {
+                return withPosition(ValueOrError.error("Float literal out of range: `" + value + "`"), floatValue.position());
+            }
+        } catch (NumberFormatException e) {
+            return withPosition(ValueOrError.error("Invalid float literal: `" + floatValue.floatValue() + "`"), floatValue.position());
+        }
         return ValueOrError.success(new LinkedFloatValue(floatValue.floatValue()));
+    }
+
+    private ValueOrError<LinkedExpression> linkByteValue(ByteValue byteValue, Scope scope) {
+        try {
+            var raw = byteValue.byteValue();
+            var digits = raw.substring(2);
+            var parsed = new BigInteger(digits, 16);
+            if (parsed.compareTo(BigInteger.ZERO) < 0 || parsed.compareTo(BigInteger.valueOf(255)) > 0) {
+                return withPosition(ValueOrError.error("Byte literal out of range: `" + raw + "`"), byteValue.position());
+            }
+        } catch (RuntimeException e) {
+            return withPosition(ValueOrError.error("Invalid byte literal: `" + byteValue.byteValue() + "`"), byteValue.position());
+        }
+        return ValueOrError.success(new LinkedByteValue(byteValue.byteValue()));
+    }
+
+    private ValueOrError<LinkedExpression> linkDoubleValue(DoubleValue doubleValue, Scope scope) {
+        try {
+            var raw = doubleValue.doubleValue();
+            var normalized = raw.endsWith("d") || raw.endsWith("D")
+                    ? raw.substring(0, raw.length() - 1)
+                    : raw;
+            var parsed = Double.parseDouble(normalized);
+            if (!Double.isFinite(parsed)) {
+                return withPosition(ValueOrError.error("Double literal out of range: `" + raw + "`"), doubleValue.position());
+            }
+        } catch (NumberFormatException e) {
+            return withPosition(ValueOrError.error("Invalid double literal: `" + doubleValue.doubleValue() + "`"), doubleValue.position());
+        }
+        return ValueOrError.success(new LinkedDoubleValue(doubleValue.doubleValue()));
     }
 
     private ValueOrError<LinkedExpression> linkFunctionCall(FunctionCall functionCall, Scope scope) {
@@ -929,7 +975,33 @@ public class CapybaraExpressionLinker {
     }
 
     private ValueOrError<LinkedExpression> linkIntValue(IntValue intValue, Scope scope) {
+        try {
+            var parsed = new BigInteger(intValue.intValue(), 10);
+            if (parsed.compareTo(BigInteger.valueOf(Integer.MIN_VALUE)) < 0
+                || parsed.compareTo(BigInteger.valueOf(Integer.MAX_VALUE)) > 0) {
+                return withPosition(ValueOrError.error("Int literal out of range: `" + intValue.intValue() + "`"), intValue.position());
+            }
+        } catch (NumberFormatException e) {
+            return withPosition(ValueOrError.error("Invalid int literal: `" + intValue.intValue() + "`"), intValue.position());
+        }
         return ValueOrError.success(new LinkedIntValue(intValue.intValue()));
+    }
+
+    private ValueOrError<LinkedExpression> linkLongValue(LongValue longValue, Scope scope) {
+        try {
+            var raw = longValue.longValue();
+            var normalized = raw.endsWith("l") || raw.endsWith("L")
+                    ? raw.substring(0, raw.length() - 1)
+                    : raw;
+            var parsed = new BigInteger(normalized, 10);
+            if (parsed.compareTo(BigInteger.valueOf(Long.MIN_VALUE)) < 0
+                || parsed.compareTo(BigInteger.valueOf(Long.MAX_VALUE)) > 0) {
+                return withPosition(ValueOrError.error("Long literal out of range: `" + raw + "`"), longValue.position());
+            }
+        } catch (NumberFormatException e) {
+            return withPosition(ValueOrError.error("Invalid long literal: `" + longValue.longValue() + "`"), longValue.position());
+        }
+        return ValueOrError.success(new LinkedLongValue(longValue.longValue()));
     }
 
     private ValueOrError<LinkedExpression> linkMatchExpression(MatchExpression matchExpression, Scope scope) {

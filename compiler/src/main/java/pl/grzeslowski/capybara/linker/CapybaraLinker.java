@@ -377,6 +377,8 @@ public class CapybaraLinker {
     ) {
         return switch (expression) {
             case pl.grzeslowski.capybara.linker.expression.LinkedBooleanValue value -> value;
+            case pl.grzeslowski.capybara.linker.expression.LinkedByteValue value -> value;
+            case pl.grzeslowski.capybara.linker.expression.LinkedDoubleValue value -> value;
             case pl.grzeslowski.capybara.linker.expression.LinkedFieldAccess value -> new pl.grzeslowski.capybara.linker.expression.LinkedFieldAccess(
                     enrichNothing(value.source(), functionName, moduleSourceFile),
                     value.field(),
@@ -416,6 +418,7 @@ public class CapybaraLinker {
                     enrichNothing(value.value(), functionName, moduleSourceFile),
                     enrichNothing(value.rest(), functionName, moduleSourceFile)
             );
+            case pl.grzeslowski.capybara.linker.expression.LinkedLongValue value -> value;
             case pl.grzeslowski.capybara.linker.expression.LinkedMatchExpression value -> new pl.grzeslowski.capybara.linker.expression.LinkedMatchExpression(
                     enrichNothing(value.matchWith(), functionName, moduleSourceFile),
                     value.cases().stream().map(matchCase -> new pl.grzeslowski.capybara.linker.expression.LinkedMatchExpression.MatchCase(

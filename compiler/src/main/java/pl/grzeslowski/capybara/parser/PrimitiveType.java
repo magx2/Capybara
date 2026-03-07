@@ -4,7 +4,10 @@ import java.util.Arrays;
 import java.util.Optional;
 
 public enum PrimitiveType implements Type {
+    BYTE("byte"),
     INT("int"),
+    LONG("long"),
+    DOUBLE("double"),
     STRING("string"),
     BOOL("bool"),
     FLOAT("float"),

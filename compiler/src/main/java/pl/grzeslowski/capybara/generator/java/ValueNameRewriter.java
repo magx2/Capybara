@@ -6,6 +6,8 @@ public class ValueNameRewriter {
     public static LinkedExpression rewriteValueInExpression(String name, String uniqueName, LinkedExpression expression) {
         return switch (expression) {
             case LinkedBooleanValue linkedBooleanValue -> linkedBooleanValue;
+            case LinkedByteValue linkedByteValue -> linkedByteValue;
+            case LinkedDoubleValue linkedDoubleValue -> linkedDoubleValue;
             case LinkedFieldAccess linkedFieldAccess -> rewriteValueInLinkedFieldAccess(name, uniqueName, linkedFieldAccess);
             case LinkedFloatValue linkedFloatValue -> linkedFloatValue;
             case LinkedFunctionCall linkedFunctionCall ->
@@ -21,6 +23,7 @@ public class ValueNameRewriter {
                     rewriteValueInLinkedLambdaExpression(name, uniqueName, linkedLambdaExpression);
             case LinkedLetExpression linkedLetExpression ->
                     rewriteValueInLinkedLetExpression(name, uniqueName, linkedLetExpression);
+            case LinkedLongValue linkedLongValue -> linkedLongValue;
             case LinkedMatchExpression linkedMatchExpression ->
                     rewriteValueInLinkedMatchExpression(name, uniqueName, linkedMatchExpression);
             case LinkedNothingValue linkedNothingValue -> linkedNothingValue;

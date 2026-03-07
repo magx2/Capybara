@@ -3,6 +3,8 @@ package pl.grzeslowski.capybara.linker.expression;
 import pl.grzeslowski.capybara.linker.LinkedType;
 
 public sealed interface LinkedExpression permits LinkedBooleanValue,
+        LinkedByteValue,
+        LinkedDoubleValue,
         LinkedFieldAccess,
         LinkedFloatValue,
         LinkedFunctionCall,
@@ -12,6 +14,7 @@ public sealed interface LinkedExpression permits LinkedBooleanValue,
         LinkedIntValue,
         LinkedLambdaExpression,
         LinkedLetExpression,
+        LinkedLongValue,
         LinkedMatchExpression,
         LinkedNothingValue,
         LinkedPipeFlatMapExpression,

@@ -16,6 +16,8 @@ public class LinkedExpressionPrinter {
     public static String printExpression(LinkedExpression expression, int level) {
         return switch (expression) {
             case LinkedBooleanValue linkedBooleanValue -> printLinkedBooleanValue(linkedBooleanValue, level);
+            case LinkedByteValue linkedByteValue -> printLinkedByteValue(linkedByteValue, level);
+            case LinkedDoubleValue linkedDoubleValue -> printLinkedDoubleValue(linkedDoubleValue, level);
             case LinkedFieldAccess linkedFieldAccess -> printLinkedFieldAccess(linkedFieldAccess, level);
             case LinkedFloatValue linkedFloatValue -> printLinkedFloatValue(linkedFloatValue, level);
             case LinkedFunctionCall linkedFunctionCall -> printLinkedFunctionCall(linkedFunctionCall, level);
@@ -26,6 +28,7 @@ public class LinkedExpressionPrinter {
             case LinkedIntValue linkedIntValue -> printLinkedIntValue(linkedIntValue, level);
             case LinkedLambdaExpression linkedLambdaExpression -> printLinkedLambdaExpression(linkedLambdaExpression, level);
             case LinkedLetExpression linkedLetExpression -> printLinkedLetExpression(linkedLetExpression, level);
+            case LinkedLongValue linkedLongValue -> printLinkedLongValue(linkedLongValue, level);
             case LinkedMatchExpression linkedMatchExpression ->
                     printLinkedMatchExpression(linkedMatchExpression, level);
             case LinkedNothingValue linkedNothingValue -> printLinkedNothingValue(linkedNothingValue, level);
@@ -44,6 +47,14 @@ public class LinkedExpressionPrinter {
 
     private static String printLinkedBooleanValue(LinkedBooleanValue linkedBooleanValue, int level) {
         return linkedBooleanValue.name();
+    }
+
+    private static String printLinkedByteValue(LinkedByteValue linkedByteValue, int level) {
+        return linkedByteValue.byteValue();
+    }
+
+    private static String printLinkedDoubleValue(LinkedDoubleValue linkedDoubleValue, int level) {
+        return linkedDoubleValue.doubleValue();
     }
 
     private static String printLinkedFloatValue(LinkedFloatValue linkedFloatValue, int level) {
@@ -84,6 +95,10 @@ public class LinkedExpressionPrinter {
 
     private static String printLinkedIntValue(LinkedIntValue linkedIntValue, int level) {
         return linkedIntValue.intValue();
+    }
+
+    private static String printLinkedLongValue(LinkedLongValue linkedLongValue, int level) {
+        return linkedLongValue.longValue();
     }
 
     private static String printLinkedLambdaExpression(LinkedLambdaExpression linkedLambdaExpression, int level) {

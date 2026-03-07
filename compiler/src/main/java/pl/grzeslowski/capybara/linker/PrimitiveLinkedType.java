@@ -4,8 +4,11 @@ import java.util.Arrays;
 import java.util.Optional;
 
 public enum PrimitiveLinkedType implements LinkedType {
+    BYTE,
     INT,
+    LONG,
     FLOAT,
+    DOUBLE,
     STRING,
     BOOL,
     /**
