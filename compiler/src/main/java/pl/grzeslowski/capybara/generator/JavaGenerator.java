@@ -8,6 +8,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 
 import static java.lang.String.join;
 import static java.util.stream.Collectors.joining;
@@ -29,7 +30,7 @@ public final class JavaGenerator implements Generator {
     private List<CompiledModule> modules(LinkedModule module) {
         var javaClass = astBuilder.build(module);
         if (!hasTypeOrDataNameConflictWithFile(javaClass)) {
-            return List.of(new CompiledModule(relativePath(module), code(javaClass)));
+            return List.of(new CompiledModule(relativePath(javaClass, javaClass.name().toString()), code(javaClass)));
         }
 
         var ownerInterface = javaClass.interfaces().stream()
@@ -37,7 +38,7 @@ public final class JavaGenerator implements Generator {
                 .findFirst();
         if (ownerInterface.isPresent()) {
             return List.of(new CompiledModule(
-                    Path.of(module.path(), javaClass.name() + ".java"),
+                    relativePath(javaClass, javaClass.name().toString()),
                     codeNestedInOwnerInterface(javaClass, ownerInterface.get())
             ));
         }
@@ -45,7 +46,7 @@ public final class JavaGenerator implements Generator {
         var compiled = new ArrayList<CompiledModule>();
         for (var declaration : topLevelDeclarations(javaClass)) {
             compiled.add(new CompiledModule(
-                    Path.of(module.path(), declaration.name() + ".java"),
+                    relativePath(javaClass, declaration.name()),
                     codeTopLevelDeclaration(javaClass, declaration.code())
             ));
         }
@@ -61,15 +62,19 @@ public final class JavaGenerator implements Generator {
                     java.util.Set.of()
             );
             compiled.add(new CompiledModule(
-                    Path.of(module.path(), utilityClass.name() + ".java"),
+                    relativePath(javaClass, utilityClass.name().toString()),
                     code(utilityClass)
             ));
         }
         return List.copyOf(compiled);
     }
 
-    private Path relativePath(LinkedModule module) {
-        return Path.of(module.path(), module.name() + ".java");
+    private Path relativePath(JavaClass javaClass, String simpleName) {
+        var packageName = javaClass.javaPackage().toString();
+        if (packageName.isBlank()) {
+            return Path.of(simpleName + ".java");
+        }
+        return Path.of(packageName.replace('.', '/'), simpleName + ".java");
     }
 
     private String code(JavaClass javaClass) {
@@ -79,9 +84,7 @@ public final class JavaGenerator implements Generator {
         code.append("package ").append(javaClass.javaPackage()).append(";\n\n");
 
         // imports
-        javaClass.staticImports().stream()
-                .sorted()
-                .forEach(staticImport -> code.append("import static ").append(staticImport).append(";\n"));
+        appendImports(code, javaClass.staticImports());
         if (!javaClass.staticImports().isEmpty()) {
             code.append('\n');
         }
@@ -132,9 +135,7 @@ public final class JavaGenerator implements Generator {
     private String codeNestedInOwnerInterface(JavaClass javaClass, JavaInterface ownerInterface) {
         var code = new StringBuilder();
         code.append("package ").append(javaClass.javaPackage()).append(";\n\n");
-        javaClass.staticImports().stream()
-                .sorted()
-                .forEach(staticImport -> code.append("import static ").append(staticImport).append(";\n"));
+        appendImports(code, javaClass.staticImports());
         if (!javaClass.staticImports().isEmpty()) {
             code.append('\n');
         }
@@ -145,11 +146,17 @@ public final class JavaGenerator implements Generator {
             normalInterface.methods().stream()
                     .map(this::mapJavaInterfaceMethod)
                     .forEach(method -> code.append(method).append('\n'));
+            normalInterface.defaultMethods().stream()
+                    .map(this::mapJavaInterfaceDefaultMethod)
+                    .forEach(code::append);
         }
         if (ownerInterface instanceof JavaSealedInterface sealedInterface) {
             sealedInterface.methods().stream()
                     .map(this::mapJavaInterfaceMethod)
                     .forEach(method -> code.append(method).append('\n'));
+            sealedInterface.defaultMethods().stream()
+                    .map(this::mapJavaInterfaceDefaultMethod)
+                    .forEach(code::append);
         }
 
         javaClass.interfaces().stream()
@@ -216,6 +223,30 @@ public final class JavaGenerator implements Generator {
         javaClass.annotations().forEach(annotation -> code.append(annotation).append("\n"));
         code.append(declarationCode);
         return code.toString();
+    }
+
+    private void appendImports(StringBuilder code, Set<String> staticImports) {
+        var classImports = staticImports.stream()
+                .map(this::extractClassNameFromStaticImport)
+                .filter(className -> !className.isBlank())
+                .distinct()
+                .sorted()
+                .toList();
+        classImports.forEach(classImport -> code.append("import ").append(classImport).append(";\n"));
+        staticImports.stream()
+                .sorted()
+                .forEach(staticImport -> code.append("import static ").append(staticImport).append(";\n"));
+    }
+
+    private String extractClassNameFromStaticImport(String staticImport) {
+        if (staticImport.endsWith(".*")) {
+            return staticImport.substring(0, staticImport.length() - 2);
+        }
+        var lastDot = staticImport.lastIndexOf('.');
+        if (lastDot <= 0) {
+            return "";
+        }
+        return staticImport.substring(0, lastDot);
     }
 
     private boolean hasTypeOrDataNameConflictWithFile(JavaClass javaClass) {
@@ -287,7 +318,10 @@ public final class JavaGenerator implements Generator {
                 .map(this::mapJavaInterfaceMethod)
                 .collect(joining("\n", "\n", ""))
                 : "";
-        return "public interface " + javaInterface.name() + " {" + methods + "}\n";
+        var defaultMethods = javaInterface.defaultMethods().stream()
+                .map(this::mapJavaInterfaceDefaultMethod)
+                .collect(joining());
+        return "public interface " + javaInterface.name() + " {" + methods + defaultMethods + "}\n";
     }
 
     private String mapJavaSealedInterface(JavaSealedInterface javaInterface) {
@@ -300,14 +334,28 @@ public final class JavaGenerator implements Generator {
                 .map(this::mapJavaInterfaceMethod)
                 .collect(joining("\n", "\n", ""))
                 : "";
-        return "public sealed interface " + javaInterface.name() + typeParameters + " permits " + permits + " {" + methods + "}\n";
+        var defaultMethods = javaInterface.defaultMethods().stream()
+                .map(this::mapJavaInterfaceDefaultMethod)
+                .collect(joining());
+        return "public sealed interface " + javaInterface.name() + typeParameters + " permits " + permits + " {" + methods + defaultMethods + "}\n";
     }
 
     private String mapJavaInterfaceMethod(JavaInterface.JavaInterfaceMethod method) {
         return method.returnType() + " " + method.name() + "();";
     }
 
+    private String mapJavaInterfaceDefaultMethod(JavaMethod method) {
+        var prefix = method.isPrivate() ? "private" : "default";
+        return mapJavaDoc(method.comments())
+               + prefix + " " + method.returnType() + " " + mapMethodName(method.name()) + "(" + mapFunctionParameters(method.parameters()) + ") {\n"
+               + evaluateExpression(method.expression(), method.parameters())
+               + "\n}\n";
+    }
+
     private String mapJavaMethod(JavaMethod method) {
+        if (method.programMain()) {
+            return mapJavaProgramMainMethod(method);
+        }
         return mapJavaDoc(method.comments())
                + (method.isPrivate() ? "private" : "public") + " static " + method.returnType() + " " + mapMethodName(method.name()) + "(" + mapFunctionParameters(method.parameters()) + ") {\n"
                + evaluateExpression(method.expression(), method.parameters())
@@ -319,6 +367,44 @@ public final class JavaGenerator implements Generator {
                + (method.isPrivate() ? "private" : "public") + " " + method.returnType() + " " + mapMethodName(method.name()) + "(" + mapFunctionParameters(method.parameters()) + ") {\n"
                + evaluateExpression(method.expression(), method.parameters())
                + "\n}\n";
+    }
+
+    private String mapJavaProgramMainMethod(JavaMethod method) {
+        var rewrittenParameters = method.parameters().isEmpty()
+                ? method.parameters()
+                : List.of(new JavaMethod.JavaFunctionParameter(
+                        method.parameters().getFirst().type(),
+                        method.parameters().getFirst().sourceName(),
+                        "__capybaraArgsList"
+                ));
+        var programComputation = evaluateExpression(method.expression(), rewrittenParameters)
+                .replaceFirst("\\s*return\\s+", "var program = ");
+        var programType = normalizeProgramTypeReference(method.returnType().toString());
+        var successType = programType + ".Success";
+        var failedType = programType + ".Failed";
+        return mapJavaDoc(method.comments())
+               + "public static void main(java.lang.String[] args) {\n"
+               + "var __capybaraArgsList = java.util.List.of(args);\n"
+               + programComputation + "\n"
+               + "switch (program) {\n"
+               + "case " + successType + "(var __capybaraResults) -> {\n"
+               + "__capybaraResults.forEach(System.out::println);\n"
+               + "}\n"
+               + "case " + failedType + "(var __capybaraExitCode, var __capybaraErrors) -> {\n"
+               + "__capybaraErrors.forEach(System.err::println);\n"
+               + "System.exit(__capybaraExitCode);\n"
+               + "}\n"
+               + "default -> throw new java.lang.IllegalStateException(\"Unexpected value: \" + program);\n"
+               + "}\n"
+               + "}\n";
+    }
+
+    private String normalizeProgramTypeReference(String typeName) {
+        var parts = typeName.split("\\.");
+        if (parts.length >= 2 && parts[parts.length - 1].equals(parts[parts.length - 2])) {
+            return String.join(".", java.util.Arrays.copyOf(parts, parts.length - 1));
+        }
+        return typeName;
     }
 
     private String mapJavaDoc(List<String> comments) {

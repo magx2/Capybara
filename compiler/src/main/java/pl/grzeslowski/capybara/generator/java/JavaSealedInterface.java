@@ -4,7 +4,8 @@ import java.util.List;
 
 public record JavaSealedInterface(JavaType name, List<JavaInterfaceMethod> methods,
                                   List<String> permits,
-                                  List<String> typeParameters) implements JavaInterface {
+                                  List<String> typeParameters,
+                                  List<JavaMethod> defaultMethods) implements JavaInterface {
     @Override
     public final boolean equals(Object o) {
         if (!(o instanceof JavaSealedInterface that)) return false;

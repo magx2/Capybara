@@ -2,7 +2,7 @@ package pl.grzeslowski.capybara.generator.java;
 
 import java.util.List;
 
-public record JavaNormalInterface(JavaType name, List<JavaInterfaceMethod> methods) implements JavaInterface {
+public record JavaNormalInterface(JavaType name, List<JavaInterfaceMethod> methods, List<JavaMethod> defaultMethods) implements JavaInterface {
     @Override
     public final boolean equals(Object o) {
         if (!(o instanceof JavaNormalInterface that)) return false;

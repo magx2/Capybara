@@ -8,6 +8,7 @@ import java.util.List;
 public record JavaMethod(
         String name,
         boolean isPrivate,
+        boolean programMain,
         JavaType returnType,
         List<JavaFunctionParameter> parameters,
         LinkedExpression expression,

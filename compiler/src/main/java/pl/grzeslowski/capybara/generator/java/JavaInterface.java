@@ -7,6 +7,8 @@ public sealed interface JavaInterface permits JavaNormalInterface, JavaSealedInt
 
     List<JavaInterfaceMethod> methods();
 
+    List<JavaMethod> defaultMethods();
+
     public record JavaInterfaceMethod(String name, JavaType returnType) {
     }
 }

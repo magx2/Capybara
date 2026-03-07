@@ -33,7 +33,7 @@ public class JavaAstBuilder {
                 .stream()
                 .filter(LinkedDataParentType.class::isInstance)
                 .map(LinkedDataParentType.class::cast)
-                .toList());
+                .toList(), module.functions());
         var subClassToInterface = findSubClassToInterface(module.types(), interfaces);
         var dataTypes = module.types()
                 .values()
@@ -44,13 +44,9 @@ public class JavaAstBuilder {
         return new JavaClass(
                 Set.of(generatedAnnotation()),
                 buildClassName(module.name()),
-                new JavaPackage(module.path()
-                        // Linux and macOS
-                        .replaceAll("/", ".")
-                        // windows
-                        .replaceAll("\\\\", ".")),
+                new JavaPackage(buildJavaPackageName(module.path())),
                 module.staticImports().stream()
-                        .map(staticImport -> staticImport.className() + "." + buildJavaStaticImportMember(staticImport.memberName()))
+                        .map(staticImport -> normalizeJavaClassReference(staticImport.className()) + "." + buildJavaStaticImportMember(staticImport.memberName()))
                         .collect(toSet()),
                 buildStaticMethods(module.functions()),
                 interfaces,
@@ -96,6 +92,7 @@ public class JavaAstBuilder {
         return new JavaMethod(
                 buildMethodName(function.name()),
                 function.name().startsWith("_"),
+                function.programMain(),
                 buildJavaReturnType(function),
                 buildJavaFunctionParameters(function.parameters()),
                 function.expression(),
@@ -104,7 +101,25 @@ public class JavaAstBuilder {
     }
 
     private String buildMethodName(String name) {
-        return normalizeJavaIdentifier(name, false);
+        return normalizeJavaMethodIdentifier(name);
+    }
+
+    private String normalizeJavaMethodIdentifier(String rawName) {
+        var leadingUnderscores = countLeadingUnderscores(rawName);
+        var suffix = rawName.substring(leadingUnderscores);
+        var normalized = normalizeJavaIdentifier(suffix, false);
+        if (leadingUnderscores == 0) {
+            return normalized;
+        }
+        return "_".repeat(leadingUnderscores) + normalized;
+    }
+
+    private int countLeadingUnderscores(String value) {
+        var count = 0;
+        while (count < value.length() && value.charAt(count) == '_') {
+            count++;
+        }
+        return count;
     }
 
     private String buildJavaStaticImportMember(String memberName) {
@@ -115,6 +130,46 @@ public class JavaAstBuilder {
             return buildClassName(memberName).toString();
         }
         return buildMethodName(memberName);
+    }
+
+    private String buildJavaPackageName(String rawPath) {
+        var normalized = rawPath.replace('\\', '/');
+        return Stream.of(normalized.split("/"))
+                .filter(part -> !part.isBlank())
+                .map(this::normalizeJavaPackageSegment)
+                .collect(joining("."));
+    }
+
+    private String normalizeJavaClassReference(String classReference) {
+        var parts = Stream.of(classReference.split("\\."))
+                .filter(part -> !part.isBlank())
+                .toList();
+        if (parts.isEmpty()) {
+            return classReference;
+        }
+        var normalized = new StringBuilder();
+        for (int i = 0; i < parts.size(); i++) {
+            if (i > 0) {
+                normalized.append('.');
+            }
+            if (i == parts.size() - 1) {
+                normalized.append(buildClassName(parts.get(i)));
+            } else {
+                normalized.append(normalizeJavaPackageSegment(parts.get(i)));
+            }
+        }
+        return normalized.toString();
+    }
+
+    private String normalizeJavaPackageSegment(String rawSegment) {
+        var normalized = normalizeJavaIdentifier(rawSegment, false);
+        if (!Character.isJavaIdentifierStart(normalized.charAt(0))) {
+            normalized = "p" + normalized;
+        }
+        if (JAVA_KEYWORDS.contains(normalized)) {
+            return normalized + "_";
+        }
+        return normalized;
     }
 
     private JavaType buildJavaType(LinkedType type) {
@@ -149,10 +204,24 @@ public class JavaAstBuilder {
                 if (!isOptionType(filterOutExpression.type())) {
                     yield PrimitiveLinkedType.ANY;
                 }
-                if (isOptionType(filterOutExpression.source().type())) {
-                    yield inferOptionElementType(filterOutExpression.source());
+                var inferredSource = inferOptionElementType(filterOutExpression.source());
+                if (!(inferredSource instanceof PrimitiveLinkedType primitiveLinkedType)
+                    || primitiveLinkedType != PrimitiveLinkedType.ANY) {
+                    yield inferredSource;
                 }
                 yield filterOutExpression.source().type();
+            }
+            case pl.grzeslowski.capybara.linker.expression.LinkedNewData newDataExpression -> {
+                if (!(newDataExpression.type() instanceof GenericDataType genericDataType)
+                    || !isOptionSomeTypeName(genericDataType.name())) {
+                    yield PrimitiveLinkedType.ANY;
+                }
+                yield newDataExpression.assignments().stream()
+                        .filter(assignment -> "value".equals(assignment.name()))
+                        .map(pl.grzeslowski.capybara.linker.expression.LinkedNewData.FieldAssignment::value)
+                        .map(pl.grzeslowski.capybara.linker.expression.LinkedExpression::type)
+                        .findFirst()
+                        .orElse(PrimitiveLinkedType.ANY);
             }
             case pl.grzeslowski.capybara.linker.expression.LinkedLetExpression letExpression ->
                     inferOptionElementType(letExpression.rest());
@@ -184,7 +253,7 @@ public class JavaAstBuilder {
     }
 
     private JavaType buildGenericDataType(GenericDataType type) {
-        if (isOptionTypeName(type.name())) {
+        if ("Option".equals(type.name()) || isOptionTypeName(type.name())) {
             return new JavaType("java.util.Optional");
         }
         if (type.name().contains("/") && type.name().contains(".")) {
@@ -259,6 +328,12 @@ public class JavaAstBuilder {
                || normalized.equals("/cap/lang/Option.Option")
                || normalized.equals("/capy/lang/Option")
                || normalized.equals("/capy/lang/Option.Option");
+    }
+
+    private boolean isOptionSomeTypeName(String name) {
+        var normalized = normalizeQualifiedTypeName(name);
+        return normalized.equals("/cap/lang/Option.Some")
+               || normalized.equals("/capy/lang/Option.Some");
     }
 
     private String normalizeQualifiedTypeName(String name) {
@@ -395,18 +470,41 @@ public class JavaAstBuilder {
         };
     }
 
-    private Set<JavaInterface> buildInterfaces(List<LinkedDataParentType> dataParentTypes) {
+    private Set<JavaInterface> buildInterfaces(List<LinkedDataParentType> dataParentTypes, Set<LinkedFunction> functions) {
         return dataParentTypes.stream()
-                .map(this::buildInterface)
+                .map(parentType -> buildInterface(parentType, functions))
                 .collect(toSet());
     }
 
-    private JavaInterface buildInterface(LinkedDataParentType type) {
+    private JavaInterface buildInterface(LinkedDataParentType type, Set<LinkedFunction> functions) {
         return new JavaSealedInterface(
                 buildClassName(type.name()),
                 buildJavaMethods(type.fields()),
                 type.subTypes().stream().map(LinkedDataType::name).map(name -> buildClassName(name).toString()).toList(),
-                type.typeParameters()
+                type.typeParameters(),
+                buildInterfaceMethods(type, functions)
+        );
+    }
+
+    private List<JavaMethod> buildInterfaceMethods(LinkedDataParentType type, Set<LinkedFunction> functions) {
+        var ownerPrefix = METHOD_DECL_PREFIX + type.name() + "__";
+        return functions.stream()
+                .filter(function -> function.name().startsWith(ownerPrefix))
+                .map(function -> buildInterfaceMethod(function, ownerPrefix))
+                .toList();
+    }
+
+    private JavaMethod buildInterfaceMethod(LinkedFunction function, String ownerPrefix) {
+        var methodName = function.name().substring(ownerPrefix.length());
+        var parameters = function.parameters().stream().skip(1).toList();
+        return new JavaMethod(
+                buildMethodName(methodName),
+                methodName.startsWith("_"),
+                false,
+                buildJavaReturnType(function),
+                buildJavaFunctionParameters(parameters),
+                function.expression(),
+                function.comments()
         );
     }
 
@@ -454,7 +552,9 @@ public class JavaAstBuilder {
                 .map(field -> new JavaRecord.JavaRecordField(
                         field.name(),
                         buildJavaType(field.type())));
-        var fields = Stream.concat(interfaceFields, recordFields).toList();
+        var fieldsByName = new java.util.LinkedHashMap<String, JavaRecord.JavaRecordField>();
+        Stream.concat(interfaceFields, recordFields).forEach(field -> fieldsByName.put(field.name(), field));
+        var fields = List.copyOf(fieldsByName.values());
         return new JavaRecord(
                 buildClassName(type.name()),
                 implementInterfaces,
@@ -478,6 +578,7 @@ public class JavaAstBuilder {
         return new JavaMethod(
                 buildMethodName(methodName),
                 methodName.startsWith("_"),
+                false,
                 buildJavaReturnType(function),
                 buildJavaFunctionParameters(parameters),
                 function.expression(),

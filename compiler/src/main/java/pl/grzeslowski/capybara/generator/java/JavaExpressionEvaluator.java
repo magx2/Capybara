@@ -11,6 +11,7 @@ import static java.lang.System.lineSeparator;
 @SuppressWarnings("SwitchStatementWithTooFewBranches")
 public class JavaExpressionEvaluator {
     private static final Logger log = Logger.getLogger(JavaExpressionEvaluator.class.getName());
+    private static final String DICT_PIPE_ARGS_SEPARATOR = "::";
     private static final String METHOD_DECL_PREFIX = "__method__";
     private static final java.util.Set<String> JAVA_KEYWORDS = java.util.Set.of(
             "abstract", "assert", "boolean", "break", "byte", "case", "catch", "char", "class",
@@ -397,8 +398,36 @@ public class JavaExpressionEvaluator {
         if (isOptionType(pipeExpression.type())) {
             return evaluateOptionPipeExpression(pipeExpression, scope);
         }
+        if (pipeExpression.type() instanceof pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedDict
+            && pipeExpression.source().type() instanceof pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedDict) {
+            return evaluateDictPipeExpression(pipeExpression, scope);
+        }
         var streamExSc = evaluatePipeExpressionAsStream(pipeExpression, scope);
         return streamExSc.scope().addExpression(streamExSc.streamExpression() + terminalCollect(pipeExpression.type()));
+    }
+
+    private static Scope evaluateDictPipeExpression(LinkedPipeExpression pipeExpression, Scope scope) {
+        var sourceExSc = evaluateExpression(pipeExpression.source(), scope).popExpression();
+        var entryVar = "__entry";
+        var dictArgs = parseDictPipeArguments(pipeExpression.argumentName());
+
+        Scope mapperScope;
+        if (dictArgs.length == 2) {
+            mapperScope = sourceExSc.scope()
+                    .addValueOverride(dictArgs[0], entryVar + ".getKey()")
+                    .addValueOverride(dictArgs[1], entryVar + ".getValue()");
+        } else {
+            mapperScope = sourceExSc.scope()
+                    .addValueOverride(pipeExpression.argumentName(), entryVar + ".getValue()");
+        }
+
+        var mapperExSc = evaluateExpression(pipeExpression.mapper(), mapperScope).popExpression();
+        return mapperExSc.scope().addExpression(
+                sourceExSc.expression()
+                + ".entrySet().stream().collect(java.util.stream.Collectors.toMap("
+                + entryVar + " -> " + entryVar + ".getKey(), "
+                + entryVar + " -> (" + mapperExSc.expression() + ")))"
+        );
     }
 
     private static Scope evaluatePipeFlatMapExpression(LinkedPipeFlatMapExpression pipeFlatMapExpression, Scope scope) {
@@ -410,8 +439,37 @@ public class JavaExpressionEvaluator {
         if (isOptionType(pipeFilterOutExpression.type())) {
             return evaluateOptionPipeFilterOutExpression(pipeFilterOutExpression, scope);
         }
+        if (pipeFilterOutExpression.type() instanceof pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedDict
+            && pipeFilterOutExpression.source().type() instanceof pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedDict) {
+            return evaluateDictPipeFilterOutExpression(pipeFilterOutExpression, scope);
+        }
         var streamExSc = evaluatePipeFilterOutExpressionAsStream(pipeFilterOutExpression, scope);
         return streamExSc.scope().addExpression(streamExSc.streamExpression() + terminalCollect(pipeFilterOutExpression.type()));
+    }
+
+    private static Scope evaluateDictPipeFilterOutExpression(LinkedPipeFilterOutExpression pipeFilterOutExpression, Scope scope) {
+        var sourceExSc = evaluateExpression(pipeFilterOutExpression.source(), scope).popExpression();
+        var entryVar = "__entry";
+        var dictArgs = parseDictPipeArguments(pipeFilterOutExpression.argumentName());
+
+        Scope predicateScope;
+        if (dictArgs.length == 2) {
+            predicateScope = sourceExSc.scope()
+                    .addValueOverride(dictArgs[0], entryVar + ".getKey()")
+                    .addValueOverride(dictArgs[1], entryVar + ".getValue()");
+        } else {
+            predicateScope = sourceExSc.scope()
+                    .addValueOverride(pipeFilterOutExpression.argumentName(), entryVar + ".getValue()");
+        }
+        var predicateExSc = evaluateExpression(pipeFilterOutExpression.predicate(), predicateScope).popExpression();
+        return predicateExSc.scope().addExpression(
+                sourceExSc.expression()
+                + ".entrySet().stream()"
+                + ".filter(" + entryVar + " -> !(" + predicateExSc.expression() + "))"
+                + ".collect(java.util.stream.Collectors.toMap("
+                + entryVar + " -> " + entryVar + ".getKey(), "
+                + entryVar + " -> " + entryVar + ".getValue()))"
+        );
     }
 
     private static Scope evaluateOptionPipeExpression(LinkedPipeExpression pipeExpression, Scope scope) {
@@ -434,6 +492,7 @@ public class JavaExpressionEvaluator {
         ).popExpression();
 
         var sourceExpression = isOptionType(pipeFilterOutExpression.source().type())
+                               || isOptionConstructor(pipeFilterOutExpression.source())
                 ? sourceExSc.expression()
                 : "java.util.Optional.of(" + sourceExSc.expression() + ")";
 
@@ -453,14 +512,39 @@ public class JavaExpressionEvaluator {
                         .addLocalValue(pipeReduceExpression.valueName())
         ).popExpression();
 
+        var maybeElementType = streamElementType(pipeReduceExpression.source().type());
+        if (maybeElementType.isPresent() && maybeElementType.get().equals(pipeReduceExpression.initialValue().type())) {
+            return reducerExSc.scope().addExpression(
+                    sourceStreamExSc.streamExpression()
+                    + ".reduce("
+                    + initialExSc.expression()
+                    + ", (" + pipeReduceExpression.accumulatorName()
+                    + ", " + pipeReduceExpression.valueName()
+                    + ") -> (" + reducerExSc.expression() + "))"
+            );
+        }
+
         return reducerExSc.scope().addExpression(
                 sourceStreamExSc.streamExpression()
                 + ".reduce("
                 + initialExSc.expression()
                 + ", (" + pipeReduceExpression.accumulatorName()
                 + ", " + pipeReduceExpression.valueName()
-                + ") -> (" + reducerExSc.expression() + "))"
+                + ") -> (" + reducerExSc.expression() + ")"
+                + ", (left, right) -> left)"
         );
+    }
+
+    private static java.util.Optional<pl.grzeslowski.capybara.linker.LinkedType> streamElementType(pl.grzeslowski.capybara.linker.LinkedType sourceType) {
+        return switch (sourceType) {
+            case pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedList linkedList ->
+                    java.util.Optional.of(linkedList.elementType());
+            case pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedSet linkedSet ->
+                    java.util.Optional.of(linkedSet.elementType());
+            case pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedDict linkedDict ->
+                    java.util.Optional.of(linkedDict.valueType());
+            default -> java.util.Optional.empty();
+        };
     }
 
     private static StreamExpressionScope evaluatePipeExpressionAsStream(LinkedPipeExpression pipeExpression, Scope scope) {
@@ -593,7 +677,7 @@ public class JavaExpressionEvaluator {
             case LinkedMatchExpression.StringPattern stringPattern -> "case " + stringPattern.value();
             case LinkedMatchExpression.BoolPattern boolPattern -> "case " + boolPattern.value();
             case LinkedMatchExpression.FloatPattern floatPattern -> "case " + floatPattern.value();
-            case LinkedMatchExpression.VariablePattern variablePattern -> "case " + variablePattern.name() + " _";
+            case LinkedMatchExpression.VariablePattern variablePattern -> "case " + variablePattern.name() + " __ignored";
             case LinkedMatchExpression.WildcardPattern wildcardPattern -> "default";
             case LinkedMatchExpression.ConstructorPattern constructorPattern ->
                     "case " + constructorPattern.constructorName() + "("
@@ -687,7 +771,9 @@ public class JavaExpressionEvaluator {
     }
 
     private static String normalizeJavaMethodName(String name) {
-        var parts = name.split("[^A-Za-z0-9]+");
+        var leadingUnderscores = countLeadingUnderscores(name);
+        var coreName = name.substring(leadingUnderscores);
+        var parts = coreName.split("[^A-Za-z0-9]+");
         var result = new StringBuilder();
         var first = true;
         for (var part : parts) {
@@ -708,13 +794,21 @@ public class JavaExpressionEvaluator {
             }
         }
         if (result.isEmpty()) {
-            return encodeSymbolicMethodName(name);
+            result.append(encodeSymbolicMethodName(coreName));
         }
-        var identifier = result.toString();
+        var identifier = "_".repeat(leadingUnderscores) + result;
         if (JAVA_KEYWORDS.contains(identifier)) {
             return identifier + "_";
         }
         return identifier;
+    }
+
+    private static int countLeadingUnderscores(String value) {
+        var count = 0;
+        while (count < value.length() && value.charAt(count) == '_') {
+            count++;
+        }
+        return count;
     }
 
     private static String encodeSymbolicMethodName(String raw) {
@@ -768,7 +862,57 @@ public class JavaExpressionEvaluator {
         }
         var qualifier = target.substring(0, lastDot);
         var methodName = target.substring(lastDot + 1);
-        return qualifier + "." + normalizeJavaMethodName(methodName);
+        return normalizeJavaQualifier(qualifier) + "." + normalizeJavaMethodName(methodName);
+    }
+
+    private static String normalizeJavaQualifier(String qualifier) {
+        var parts = qualifier.split("\\.");
+        var normalized = new ArrayList<String>(parts.length);
+        for (var part : parts) {
+            if (part.isBlank()) {
+                continue;
+            }
+            if (Character.isUpperCase(part.charAt(0))) {
+                normalized.add(normalizeJavaClassName(part));
+            } else {
+                normalized.add(normalizeJavaPackageSegment(part));
+            }
+        }
+        return String.join(".", normalized);
+    }
+
+    private static String normalizeJavaPackageSegment(String rawName) {
+        var parts = rawName.split("[^A-Za-z0-9]+");
+        var result = new StringBuilder();
+        var first = true;
+        for (var part : parts) {
+            if (part.isEmpty()) {
+                continue;
+            }
+            if (first) {
+                result.append(Character.toLowerCase(part.charAt(0)));
+                if (part.length() > 1) {
+                    result.append(part.substring(1));
+                }
+                first = false;
+            } else {
+                result.append(Character.toUpperCase(part.charAt(0)));
+                if (part.length() > 1) {
+                    result.append(part.substring(1));
+                }
+            }
+        }
+        if (result.isEmpty()) {
+            result.append("pkg");
+        }
+        if (!Character.isJavaIdentifierStart(result.charAt(0))) {
+            result.insert(0, 'p');
+        }
+        var identifier = result.toString();
+        if (JAVA_KEYWORDS.contains(identifier)) {
+            return identifier + "_";
+        }
+        return identifier;
     }
 
     private static String normalizeJavaTypeReference(String typeName) {
@@ -825,6 +969,17 @@ public class JavaExpressionEvaluator {
                 .replace("\"", "\\\"");
     }
 
+    private static String[] parseDictPipeArguments(String argumentName) {
+        if (!argumentName.contains(DICT_PIPE_ARGS_SEPARATOR)) {
+            return new String[0];
+        }
+        var parts = argumentName.split(java.util.regex.Pattern.quote(DICT_PIPE_ARGS_SEPARATOR), -1);
+        if (parts.length != 2 || parts[0].isBlank() || parts[1].isBlank()) {
+            return new String[0];
+        }
+        return parts;
+    }
+
     private static String ensureFloatSuffix(String literal) {
         if (literal.endsWith("f") || literal.endsWith("F")) {
             return literal;
@@ -860,6 +1015,14 @@ public class JavaExpressionEvaluator {
         return "Option".equals(genericDataType.name())
                || normalized.endsWith("/Option.Option")
                || normalized.endsWith("/Option");
+    }
+
+    private static boolean isOptionConstructor(LinkedExpression expression) {
+        if (!(expression instanceof LinkedNewData linkedNewData)
+            || !(linkedNewData.type() instanceof pl.grzeslowski.capybara.linker.GenericDataType dataType)) {
+            return false;
+        }
+        return isOptionSomeTypeName(dataType.name()) || isOptionNoneTypeName(dataType.name());
     }
 
 }
