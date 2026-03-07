@@ -33,7 +33,7 @@ public class ValueOrErrorCollectionCollector<T>
 
         ValueOrError<List<T>> finish() {
             if (!errors.isEmpty()) {
-                return ValueOrError.error(errors.stream().map(ValueOrError.Error.SingleError::message).toList());
+                return new ValueOrError.Error<>(errors);
             }
 
             return ValueOrError.success(List.copyOf(values));

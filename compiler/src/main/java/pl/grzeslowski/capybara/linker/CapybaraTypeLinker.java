@@ -20,7 +20,7 @@ public class CapybaraTypeLinker {
     public static ValueOrError<LinkedType> linkType(Type type, Map<String, GenericDataType> dataTypes) {
         return switch (type) {
             case PrimitiveType primitiveType -> ValueOrError.success(linkPrimitiveType(primitiveType));
-            case CollectionType collectionType -> linkCollectionType(collectionType);
+            case CollectionType collectionType -> linkCollectionType(collectionType, dataTypes);
             case DataType dataType -> linkDataType(dataType, dataTypes);
             case FunctionType functionType -> linkFunctionType(functionType, dataTypes);
         };
@@ -109,11 +109,11 @@ public class CapybaraTypeLinker {
         };
     }
 
-    private static ValueOrError<LinkedType> linkCollectionType(CollectionType type) {
+    private static ValueOrError<LinkedType> linkCollectionType(CollectionType type, Map<String, GenericDataType> dataTypes) {
         return switch (type) {
-            case ListType list -> linkType(list.elementType()).map(LinkedList::new);
-            case DictType dict -> linkType(dict.valueType()).map(LinkedDict::new);
-            case SetType set -> linkType(set.elementType()).map(LinkedSet::new);
+            case ListType list -> linkType(list.elementType(), dataTypes).map(LinkedList::new);
+            case DictType dict -> linkType(dict.valueType(), dataTypes).map(LinkedDict::new);
+            case SetType set -> linkType(set.elementType(), dataTypes).map(LinkedSet::new);
         };
     }
 

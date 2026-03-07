@@ -369,9 +369,40 @@ public class CapybaraLinker {
                                                                 rtype,
                                                                 parameters,
                                                                 enrichNothing(ex, function.name(), moduleSourceFile),
-                                                                function.comments()))));
+                                                                function.comments(),
+                                                                isProgramMain(function.name(), rtype, parameters)))));
         var normalizedFile = normalizeFile(moduleSourceFile);
         return withPosition(linked, function.position(), normalizedFile);
+    }
+
+    private boolean isProgramMain(String name, LinkedType returnType, List<LinkedFunctionParameter> parameters) {
+        if (!"main".equals(name)) {
+            return false;
+        }
+        if (parameters.size() != 1) {
+            return false;
+        }
+        if (!(parameters.getFirst().type() instanceof CollectionLinkedType.LinkedList listType)
+            || listType.elementType() != PrimitiveLinkedType.STRING) {
+            return false;
+        }
+        if (!(returnType instanceof GenericDataType genericDataType)) {
+            return false;
+        }
+        var normalized = normalizeQualifiedTypeName(genericDataType.name());
+        return "Program".equals(genericDataType.name())
+               || normalized.equals("/capy/lang/Program")
+               || normalized.equals("/capy/lang/Program.Program")
+               || normalized.equals("/cap/lang/Program")
+               || normalized.equals("/cap/lang/Program.Program");
+    }
+
+    private String normalizeQualifiedTypeName(String typeName) {
+        var normalized = typeName.replace('\\', '/');
+        if (!normalized.startsWith("/")) {
+            normalized = "/" + normalized;
+        }
+        return normalized;
     }
 
     private String moduleSourceFile(Module module) {
@@ -539,7 +570,10 @@ public class CapybaraLinker {
 
     private ValueOrError<Map<String, GenericDataType>> types(Module module) {
         var normalizedFile = normalizeFile(moduleSourceFile(module));
-        var dataDeclarationsOrError = linkDataDeclarations(castList(module, DataDeclaration.class), normalizedFile);
+        var rawTypeDeclarations = castList(module, TypeDeclaration.class);
+        var rawTypeDeclarationsByName = rawTypeDeclarations.stream()
+                .collect(toMap(TypeDeclaration::name, identity(), (first, second) -> first));
+        var dataDeclarationsOrError = linkDataDeclarations(castList(module, DataDeclaration.class), rawTypeDeclarationsByName, normalizedFile);
         var singlesDeclarationsOrError = castList(module, SingleDeclaration.class)
                 .stream()
                 .map(this::linkSingleDeclaration)
@@ -553,10 +587,18 @@ public class CapybaraLinker {
             return new ValueOrError.Error<>(error.errors());
         }
         var singleDeclarations = ((ValueOrError.Value<List<LinkedDataType>>) singlesDeclarationsOrError).value();
+        Map<String, GenericDataType> knownDataTypes = new HashMap<>();
+        dataDeclarations.forEach(dataType -> knownDataTypes.put(dataType.name(), dataType));
+        singleDeclarations.forEach(dataType -> knownDataTypes.put(dataType.name(), dataType));
 
-        var typeDeclarationsOrError = castList(module, TypeDeclaration.class)
+        var typeDeclarationsOrError = rawTypeDeclarations
                 .stream()
-                .map(typeDeclaration -> linkTypeDeclaration(typeDeclaration, Stream.concat(dataDeclarations.stream(), singleDeclarations.stream()).toList(), normalizedFile))
+                .map(typeDeclaration -> linkTypeDeclaration(
+                        typeDeclaration,
+                        Stream.concat(dataDeclarations.stream(), singleDeclarations.stream()).toList(),
+                        rawTypeDeclarationsByName,
+                        knownDataTypes,
+                        normalizedFile))
                 .collect(new ValueOrErrorCollectionCollector<>());
 
         if (typeDeclarationsOrError instanceof ValueOrError.Error<?> error) {
@@ -569,25 +611,37 @@ public class CapybaraLinker {
         set.addAll(singleDeclarations);
         set.addAll(typeDeclarations);
         var map = set.stream().collect(toMap(GenericDataType::name, identity()));
+        typeDeclarations.forEach(parentType -> parentType.subTypes().forEach(subType -> map.put(subType.name(), subType)));
         return ValueOrError.success(map);
     }
 
     private ValueOrError<List<LinkedDataType>> linkDataDeclarations(List<DataDeclaration> dataDeclarations) {
-        return linkDataDeclarations(dataDeclarations, "");
+        return linkDataDeclarations(dataDeclarations, Map.of(), "");
     }
 
-    private ValueOrError<List<LinkedDataType>> linkDataDeclarations(List<DataDeclaration> dataDeclarations, String normalizedFile) {
+    private ValueOrError<List<LinkedDataType>> linkDataDeclarations(
+            List<DataDeclaration> dataDeclarations,
+            Map<String, TypeDeclaration> rawTypeDeclarationsByName,
+            String normalizedFile
+    ) {
         var declarationsByName = dataDeclarations.stream()
                 .collect(toMap(DataDeclaration::name, identity(), (first, second) -> first));
         var cache = new HashMap<String, ValueOrError<LinkedDataType>>();
         return dataDeclarations.stream()
-                .map(dataDeclaration -> linkDataDeclaration(dataDeclaration, declarationsByName, cache, new HashSet<>(), normalizedFile))
+                .map(dataDeclaration -> linkDataDeclaration(
+                        dataDeclaration,
+                        declarationsByName,
+                        rawTypeDeclarationsByName,
+                        cache,
+                        new HashSet<>(),
+                        normalizedFile))
                 .collect(new ValueOrErrorCollectionCollector<>());
     }
 
     private ValueOrError<LinkedDataType> linkDataDeclaration(
             DataDeclaration dataDeclaration,
             Map<String, DataDeclaration> declarationsByName,
+            Map<String, TypeDeclaration> rawTypeDeclarationsByName,
             Map<String, ValueOrError<LinkedDataType>> cache,
             Set<String> visiting,
             String normalizedFile
@@ -612,12 +666,19 @@ public class CapybaraLinker {
                                 "Extended data type `" + parentName + "` not found"
                         );
                     }
-                    return linkDataDeclaration(parent, declarationsByName, cache, visiting, normalizedFile)
+                    return linkDataDeclaration(parent, declarationsByName, rawTypeDeclarationsByName, cache, visiting, normalizedFile)
                             .map(LinkedDataType::fields);
                 })
                 .collect(new ValueOrErrorCollectionCollector<>());
         var ownFields = dataDeclaration.fields().stream()
-                .map(field -> linkField(field, genericTypes))
+                .map(field -> linkField(
+                        field,
+                        genericTypes,
+                        declarationsByName,
+                        rawTypeDeclarationsByName,
+                        cache,
+                        visiting,
+                        normalizedFile))
                 .collect(new ValueOrErrorCollectionCollector<>());
         var linked = ValueOrError.join(
                         (List<List<LinkedDataType.LinkedField>> inherited, List<LinkedDataType.LinkedField> own) -> {
@@ -646,43 +707,147 @@ public class CapybaraLinker {
         return ValueOrError.success(new LinkedDataType(singleDeclaration.name(), List.of(), List.of(), List.of(), true));
     }
 
-    private ValueOrError<LinkedDataType.LinkedField> linkField(DataDeclaration.DataField type, Set<String> genericTypes) {
+    private ValueOrError<LinkedDataType.LinkedField> linkField(
+            DataDeclaration.DataField type,
+            Set<String> genericTypes,
+            Map<String, DataDeclaration> declarationsByName,
+            Map<String, TypeDeclaration> rawTypeDeclarationsByName,
+            Map<String, ValueOrError<LinkedDataType>> cache,
+            Set<String> visiting,
+            String normalizedFile
+    ) {
         if (type.type() instanceof DataType dataType && genericTypes.contains(dataType.name())) {
             return ValueOrError.success(new LinkedDataType.LinkedField(type.name(), new LinkedGenericTypeParameter(dataType.name())));
         }
-        return linkType(type.type())
+        if (type.type() instanceof DataType dataType && declarationsByName.containsKey(dataType.name())) {
+            return linkDataDeclaration(
+                    declarationsByName.get(dataType.name()),
+                    declarationsByName,
+                    rawTypeDeclarationsByName,
+                    cache,
+                    visiting,
+                    normalizedFile)
+                    .map(linkedDataType -> new LinkedDataType.LinkedField(type.name(), linkedDataType));
+        }
+        var knownDataTypes = new HashMap<String, GenericDataType>();
+        declarationsByName.forEach((name, declaration) -> {
+            var cached = cache.get(name);
+            if (cached instanceof ValueOrError.Value<LinkedDataType> value) {
+                knownDataTypes.put(name, value.value());
+            } else {
+                knownDataTypes.put(name, new LinkedDataType(
+                        declaration.name(),
+                        List.of(),
+                        declaration.typeParameters(),
+                        declaration.extendsTypes(),
+                        false
+                ));
+            }
+        });
+        rawTypeDeclarationsByName.forEach((name, declaration) -> knownDataTypes.putIfAbsent(
+                name,
+                new LinkedDataParentType(name, List.of(), List.of(), declaration.typeParameters())
+        ));
+        return linkType(type.type(), knownDataTypes)
                 .map(t -> new LinkedDataType.LinkedField(type.name(), t));
     }
 
-    private ValueOrError<LinkedDataParentType> linkTypeDeclaration(TypeDeclaration typeDeclaration, List<LinkedDataType> dataDeclarations, String normalizedFile) {
-        var linked = findSubtypes(typeDeclaration.subTypes(), dataDeclarations)
-                .flatMap(subTypes -> linkedDataParentType(typeDeclaration, subTypes));
+    private ValueOrError<LinkedDataParentType> linkTypeDeclaration(
+            TypeDeclaration typeDeclaration,
+            List<LinkedDataType> dataDeclarations,
+            Map<String, TypeDeclaration> rawTypeDeclarationsByName,
+            Map<String, GenericDataType> knownDataTypes,
+            String normalizedFile
+    ) {
+        var linked = findSubtypes(typeDeclaration.subTypes(), dataDeclarations, rawTypeDeclarationsByName, new HashSet<>())
+                .flatMap(subTypes -> linkedDataParentType(typeDeclaration, subTypes, knownDataTypes));
         return withPosition(linked, typeDeclaration.position(), normalizedFile);
     }
 
-    private ValueOrError<LinkedDataParentType> linkedDataParentType(TypeDeclaration typeDeclaration, List<LinkedDataType> subTypes) {
+    private ValueOrError<LinkedDataParentType> linkedDataParentType(
+            TypeDeclaration typeDeclaration,
+            List<LinkedDataType> subTypes,
+            Map<String, GenericDataType> knownDataTypes
+    ) {
         var genericTypes = Set.copyOf(typeDeclaration.typeParameters());
         return typeDeclaration.fields()
                 .stream()
-                .map(field -> linkField(field, genericTypes))
+                .map(field -> linkField(field, genericTypes, knownDataTypes))
                 .collect(new ValueOrErrorCollectionCollector<>())
-                .map(fields -> new LinkedDataParentType(typeDeclaration.name(),
-                        fields,
-                        subTypes,
-                        typeDeclaration.typeParameters()));
+                .map(fields -> {
+                    var inheritedSubtypes = subTypes.stream()
+                            .map(subType -> new LinkedDataType(
+                                    subType.name(),
+                                    mergeParentFields(fields, subType.fields()),
+                                    subType.typeParameters(),
+                                    subType.extendedTypes(),
+                                    subType.singleton()
+                            ))
+                            .toList();
+                    return new LinkedDataParentType(
+                            typeDeclaration.name(),
+                            fields,
+                            inheritedSubtypes,
+                            typeDeclaration.typeParameters()
+                    );
+                });
     }
 
-    private ValueOrError<List<LinkedDataType>> findSubtypes(List<String> rawSubTypes, List<LinkedDataType> dataDeclarations) {
+    private List<LinkedDataType.LinkedField> mergeParentFields(
+            List<LinkedDataType.LinkedField> parentFields,
+            List<LinkedDataType.LinkedField> childFields
+    ) {
+        var merged = new ArrayList<LinkedDataType.LinkedField>(parentFields);
+        var childFieldNames = childFields.stream()
+                .map(LinkedDataType.LinkedField::name)
+                .collect(java.util.stream.Collectors.toSet());
+        for (var parentField : parentFields) {
+            if (childFieldNames.contains(parentField.name())) {
+                merged.removeIf(field -> field.name().equals(parentField.name()));
+            }
+        }
+        merged.addAll(childFields);
+        return List.copyOf(merged);
+    }
+
+    private ValueOrError<LinkedDataType.LinkedField> linkField(
+            DataDeclaration.DataField type,
+            Set<String> genericTypes,
+            Map<String, GenericDataType> knownDataTypes
+    ) {
+        if (type.type() instanceof DataType dataType && genericTypes.contains(dataType.name())) {
+            return ValueOrError.success(new LinkedDataType.LinkedField(type.name(), new LinkedGenericTypeParameter(dataType.name())));
+        }
+        return linkType(type.type(), knownDataTypes)
+                .map(t -> new LinkedDataType.LinkedField(type.name(), t));
+    }
+
+    private ValueOrError<List<LinkedDataType>> findSubtypes(
+            List<String> rawSubTypes,
+            List<LinkedDataType> dataDeclarations,
+            Map<String, TypeDeclaration> rawTypeDeclarationsByName,
+            Set<String> visitingTypes
+    ) {
         var dataTypesMap = dataDeclarations.stream().collect(toMap(LinkedDataType::name, identity(), (first, second) -> first));
         return rawSubTypes.stream()
                 .map(key -> {
                     var dataType = dataTypesMap.get(key);
-                    if (dataType == null) {
-                        return ValueOrError.<LinkedDataType>error("Type " + key + " not found");
+                    if (dataType != null) {
+                        return ValueOrError.success(List.of(dataType));
                     }
-                    return ValueOrError.success(dataType);
+                    var typeDeclaration = rawTypeDeclarationsByName.get(key);
+                    if (typeDeclaration == null) {
+                        return ValueOrError.<List<LinkedDataType>>error("Type " + key + " not found");
+                    }
+                    if (!visitingTypes.add(key)) {
+                        return ValueOrError.<List<LinkedDataType>>error("Circular type hierarchy detected for `" + key + "`");
+                    }
+                    var nested = findSubtypes(typeDeclaration.subTypes(), dataDeclarations, rawTypeDeclarationsByName, visitingTypes);
+                    visitingTypes.remove(key);
+                    return nested;
                 })
-                .collect(new ValueOrErrorCollectionCollector<>());
+                .collect(new ValueOrErrorCollectionCollector<List<LinkedDataType>>())
+                .map(list -> list.stream().flatMap(Collection::stream).toList());
     }
 
     private static <T> ValueOrError<T> withPosition(ValueOrError<T> valueOrError, Optional<SourcePosition> position, String file) {
@@ -690,11 +855,12 @@ public class CapybaraLinker {
             var pos = position.get();
             return new ValueOrError.Error<>(error.errors()
                     .stream()
-                    .map(singleError -> new ValueOrError.Error.SingleError(
-                            pos.line(),
-                            pos.column(),
-                            singleError.file().isBlank() ? file : singleError.file(),
-                            singleError.message()))
+                    .map(singleError -> {
+                        var line = singleError.line() > 0 ? singleError.line() : pos.line();
+                        var column = singleError.column() > 0 ? singleError.column() : pos.column();
+                        var sourceFile = singleError.file().isBlank() ? file : singleError.file();
+                        return new ValueOrError.Error.SingleError(line, column, sourceFile, singleError.message());
+                    })
                     .toList());
         }
         return valueOrError;

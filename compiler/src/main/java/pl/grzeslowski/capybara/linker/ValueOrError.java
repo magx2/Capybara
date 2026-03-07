@@ -59,7 +59,7 @@ public sealed interface ValueOrError<T> {
         }
 
         if (single instanceof ValueOrError.Error<?>) {
-            return ValueOrError.error(((ValueOrError.Error<?>) single).errors().stream().map(ValueOrError.Error.SingleError::message).toList());
+            return new Error<>(((ValueOrError.Error<?>) single).errors());
         }
 
         var listValue = ((ValueOrError.Value<List<T>>) list).value();

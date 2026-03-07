@@ -23,6 +23,7 @@ public class CapybaraExpressionLinker {
     private static final Logger LOG = Logger.getLogger(CapybaraExpressionLinker.class.getName());
     private static final String METHOD_DECL_PREFIX = "__method__";
     private static final String METHOD_INVOKE_PREFIX = "__invoke__";
+    private static final String DICT_PIPE_ARGS_SEPARATOR = "::";
     private final List<LinkedFunction.LinkedFunctionParameter> parameters;
     private final Map<String, GenericDataType> dataTypes;
     private final List<FunctionSignature> functionSignatures;
@@ -91,6 +92,17 @@ public class CapybaraExpressionLinker {
     private ValueOrError<LinkedExpression> linkFieldAccess(FieldAccess fieldAccess, Scope scope) {
         return linkExpression(fieldAccess.source(), scope)
                 .flatMap(source -> {
+                    if (source.type() instanceof LinkedList
+                        || source.type() instanceof LinkedSet
+                        || source.type() instanceof LinkedDict) {
+                        if ("size".equals(fieldAccess.field())) {
+                            return ValueOrError.success(new LinkedFieldAccess(source, "size", PrimitiveLinkedType.INT));
+                        }
+                        return withPosition(
+                                ValueOrError.error("Field `" + fieldAccess.field() + "` not found in type `" + source.type() + "`"),
+                                fieldAccess.position()
+                        );
+                    }
                     if (!(source.type() instanceof GenericDataType dataType)) {
                         return withPosition(
                                 ValueOrError.error("Field access requires data type, was `" + source.type() + "`"),
@@ -385,7 +397,7 @@ public class CapybaraExpressionLinker {
             }
             var linked = linkArgumentForExpectedType(argument, scope, currentFunctionType.argumentType());
             if (linked instanceof ValueOrError.Error<CoercedArgument> error) {
-                return withPosition(ValueOrError.error(error.errors().stream().map(ValueOrError.Error.SingleError::message).toList()), argument.position());
+                return withPosition(new ValueOrError.Error<>(error.errors()), argument.position());
             }
             var coerced = ((ValueOrError.Value<CoercedArgument>) linked).value();
             coercedArguments.add(coerced.expression());
@@ -805,6 +817,9 @@ public class CapybaraExpressionLinker {
             LinkedExpression left,
             LinkedType elementType
     ) {
+        if (left.type() instanceof LinkedDict dictType) {
+            return linkDictPipeExpression(expression, scope, left, dictType);
+        }
         if (!(expression.right() instanceof LambdaExpression lambdaExpression)) {
             if (expression.right() instanceof FunctionReference functionReference) {
                 return resolvePipeFunctionReference(functionReference, elementType)
@@ -840,6 +855,59 @@ public class CapybaraExpressionLinker {
                                 ? new LinkedSet(mapper.type())
                                 : new LinkedList(mapper.type())
                 ));
+    }
+
+    private ValueOrError<LinkedExpression> linkDictPipeExpression(
+            InfixExpression expression,
+            Scope scope,
+            LinkedExpression left,
+            LinkedDict dictType
+    ) {
+        if (!(expression.right() instanceof LambdaExpression lambdaExpression)) {
+            if (expression.right() instanceof FunctionReference functionReference) {
+                return resolvePipeFunctionReference(functionReference, dictType.valueType())
+                        .map(linked -> (LinkedExpression) new LinkedPipeExpression(
+                                left,
+                                linked.argumentName(),
+                                linked.expression(),
+                                new LinkedDict(linked.expression().type())
+                        ));
+            }
+            return withPosition(
+                    ValueOrError.error("Right side of `|` has to be a lambda expression or function reference"),
+                    expression.right().position()
+            );
+        }
+        var argumentNames = lambdaExpression.argumentNames();
+        if (argumentNames.size() == 1) {
+            var valueName = argumentNames.get(0);
+            var lambdaScope = scope.add(valueName, dictType.valueType());
+            return linkExpression(lambdaExpression.expression(), lambdaScope)
+                    .map(mapper -> (LinkedExpression) new LinkedPipeExpression(
+                            left,
+                            valueName,
+                            mapper,
+                            new LinkedDict(mapper.type())
+                    ));
+        }
+        if (argumentNames.size() == 2) {
+            var keyName = argumentNames.get(0);
+            var valueName = argumentNames.get(1);
+            var lambdaScope = scope
+                    .add(keyName, STRING)
+                    .add(valueName, dictType.valueType());
+            return linkExpression(lambdaExpression.expression(), lambdaScope)
+                    .map(mapper -> (LinkedExpression) new LinkedPipeExpression(
+                            left,
+                            encodeDictPipeArguments(keyName, valueName),
+                            mapper,
+                            new LinkedDict(mapper.type())
+                    ));
+        }
+        return withPosition(
+                ValueOrError.error("Right side lambda of `|` for dict has to have one or two arguments"),
+                lambdaExpression.position()
+        );
     }
 
     private ValueOrError<LinkedExpression> linkScalarPipeExpression(
@@ -1012,6 +1080,9 @@ public class CapybaraExpressionLinker {
     private ValueOrError<LinkedExpression> linkPipeFilterOutExpression(InfixExpression expression, Scope scope) {
         return linkExpression(expression.left(), scope)
                 .flatMap(left -> {
+                    if (left.type() instanceof LinkedDict dictType) {
+                        return linkDictPipeFilterOutExpression(expression, scope, left, dictType);
+                    }
                     if (isOptionType(left.type())) {
                         return linkOptionPipeFilterOutExpression(expression, scope, left, optionElementType(left), left.type());
                     }
@@ -1070,6 +1141,66 @@ public class CapybaraExpressionLinker {
                                 ));
                             });
                 });
+    }
+
+    private ValueOrError<LinkedExpression> linkDictPipeFilterOutExpression(
+            InfixExpression expression,
+            Scope scope,
+            LinkedExpression left,
+            LinkedDict dictType
+    ) {
+        if (!(expression.right() instanceof LambdaExpression lambdaExpression)) {
+            return withPosition(
+                    ValueOrError.error("Right side of `|-` has to be a lambda expression"),
+                    expression.right().position()
+            );
+        }
+        var argumentNames = lambdaExpression.argumentNames();
+        if (argumentNames.size() == 1) {
+            var valueName = argumentNames.get(0);
+            var lambdaScope = scope.add(valueName, dictType.valueType());
+            return linkExpression(lambdaExpression.expression(), lambdaScope)
+                    .flatMap(predicate -> {
+                        if (predicate.type() != BOOL) {
+                            return withPosition(
+                                    ValueOrError.error("Lambda in `|-` has to return `BOOL`, was `" + predicate.type() + "`"),
+                                    lambdaExpression.position()
+                            );
+                        }
+                        return ValueOrError.success((LinkedExpression) new LinkedPipeFilterOutExpression(
+                                left,
+                                valueName,
+                                predicate,
+                                new LinkedDict(dictType.valueType())
+                        ));
+                    });
+        }
+        if (argumentNames.size() == 2) {
+            var keyName = argumentNames.get(0);
+            var valueName = argumentNames.get(1);
+            var lambdaScope = scope
+                    .add(keyName, STRING)
+                    .add(valueName, dictType.valueType());
+            return linkExpression(lambdaExpression.expression(), lambdaScope)
+                    .flatMap(predicate -> {
+                        if (predicate.type() != BOOL) {
+                            return withPosition(
+                                    ValueOrError.error("Lambda in `|-` has to return `BOOL`, was `" + predicate.type() + "`"),
+                                    lambdaExpression.position()
+                            );
+                        }
+                        return ValueOrError.success((LinkedExpression) new LinkedPipeFilterOutExpression(
+                                left,
+                                encodeDictPipeArguments(keyName, valueName),
+                                predicate,
+                                new LinkedDict(dictType.valueType())
+                        ));
+                    });
+        }
+        return withPosition(
+                ValueOrError.error("Right side lambda of `|-` for dict has to have one or two arguments"),
+                lambdaExpression.position()
+        );
     }
 
     private ValueOrError<LinkedExpression> linkOptionPipeFilterOutExpression(
@@ -1251,14 +1382,14 @@ public class CapybaraExpressionLinker {
     }
 
     private static LinkedType findPlusPrimitiveType(PrimitiveLinkedType left, PrimitiveLinkedType right) {
-        if (left == BOOL || right == BOOL) {
-            return null;
-        }
         if (left == STRING) {
-            return isNumericPrimitive(right) || right == STRING ? STRING : null;
+            return isNumericPrimitive(right) || right == STRING || right == BOOL ? STRING : null;
         }
         if (right == STRING) {
-            return isNumericPrimitive(left) ? STRING : null;
+            return isNumericPrimitive(left) || left == BOOL ? STRING : null;
+        }
+        if (left == BOOL || right == BOOL) {
+            return null;
         }
         if (isNumericPrimitive(left) && isNumericPrimitive(right)) {
             return promoteNumeric(left, right);
@@ -1413,6 +1544,10 @@ public class CapybaraExpressionLinker {
             return Optional.empty();
         }
         return Optional.of(lambdaExpression.argumentNames().get(0));
+    }
+
+    private static String encodeDictPipeArguments(String keyName, String valueName) {
+        return keyName + DICT_PIPE_ARGS_SEPARATOR + valueName;
     }
 
     private ValueOrError<LinkedExpression> linkIntValue(IntValue intValue, Scope scope) {
@@ -1643,7 +1778,7 @@ public class CapybaraExpressionLinker {
         for (var spread : spreads) {
             var linkedSpread = linkExpression(spread, scope);
             if (linkedSpread instanceof ValueOrError.Error<LinkedExpression> error) {
-                return ValueOrError.error(error.errors().stream().map(ValueOrError.Error.SingleError::message).toList());
+                return new ValueOrError.Error<>(error.errors());
             }
             var spreadExpression = ((ValueOrError.Value<LinkedExpression>) linkedSpread).value();
             if (!(spreadExpression.type() instanceof GenericDataType dataType)) {
