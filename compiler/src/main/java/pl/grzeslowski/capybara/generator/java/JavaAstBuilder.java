@@ -95,7 +95,7 @@ public class JavaAstBuilder {
     private JavaMethod buildStaticMethod(LinkedFunction function) {
         return new JavaMethod(
                 buildMethodName(function.name()),
-                buildJavaType(function.returnType()),
+                buildJavaReturnType(function),
                 buildJavaFunctionParameters(function.parameters()),
                 function.expression(),
                 function.comments()
@@ -130,6 +130,56 @@ public class JavaAstBuilder {
             );
             case LinkedGenericTypeParameter linkedGenericTypeParameter -> new JavaType(linkedGenericTypeParameter.name());
         };
+    }
+
+    private JavaType buildJavaReturnType(LinkedFunction function) {
+        if (function.returnType() instanceof GenericDataType genericDataType && isOptionTypeName(genericDataType.name())) {
+            var elementType = inferOptionElementType(function.expression());
+            return new JavaType("java.util.Optional<" + buildJavaBoxedType(elementType) + ">");
+        }
+        return buildJavaType(function.returnType());
+    }
+
+    private LinkedType inferOptionElementType(pl.grzeslowski.capybara.linker.expression.LinkedExpression expression) {
+        return switch (expression) {
+            case pl.grzeslowski.capybara.linker.expression.LinkedPipeExpression pipeExpression ->
+                    isOptionType(pipeExpression.type()) ? pipeExpression.mapper().type() : PrimitiveLinkedType.ANY;
+            case pl.grzeslowski.capybara.linker.expression.LinkedPipeFilterOutExpression filterOutExpression -> {
+                if (!isOptionType(filterOutExpression.type())) {
+                    yield PrimitiveLinkedType.ANY;
+                }
+                if (isOptionType(filterOutExpression.source().type())) {
+                    yield inferOptionElementType(filterOutExpression.source());
+                }
+                yield filterOutExpression.source().type();
+            }
+            case pl.grzeslowski.capybara.linker.expression.LinkedLetExpression letExpression ->
+                    inferOptionElementType(letExpression.rest());
+            case pl.grzeslowski.capybara.linker.expression.LinkedIfExpression ifExpression ->
+                    pl.grzeslowski.capybara.linker.expression.CapybaraTypeFinder.findHigherType(
+                            inferOptionElementType(ifExpression.thenBranch()),
+                            inferOptionElementType(ifExpression.elseBranch()));
+            case pl.grzeslowski.capybara.linker.expression.LinkedMatchExpression matchExpression ->
+                    matchExpression.cases().stream()
+                            .map(pl.grzeslowski.capybara.linker.expression.LinkedMatchExpression.MatchCase::expression)
+                            .map(this::inferOptionElementType)
+                            .reduce(pl.grzeslowski.capybara.linker.expression.CapybaraTypeFinder::findHigherType)
+                            .orElse(PrimitiveLinkedType.ANY);
+            default -> PrimitiveLinkedType.ANY;
+        };
+    }
+
+    private boolean isOptionType(LinkedType type) {
+        if (!(type instanceof GenericDataType genericDataType)) {
+            return false;
+        }
+        if ("Option".equals(genericDataType.name())) {
+            return true;
+        }
+        var normalized = normalizeQualifiedTypeName(genericDataType.name());
+        return normalized.endsWith("/Option")
+               || normalized.endsWith("/Option.Option")
+               || isOptionTypeName(genericDataType.name());
     }
 
     private JavaType buildGenericDataType(GenericDataType type) {
@@ -426,7 +476,7 @@ public class JavaAstBuilder {
         var parameters = function.parameters().stream().skip(1).toList();
         return new JavaMethod(
                 buildMethodName(methodName),
-                buildJavaType(function.returnType()),
+                buildJavaReturnType(function),
                 buildJavaFunctionParameters(parameters),
                 function.expression(),
                 function.comments()
