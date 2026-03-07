@@ -744,6 +744,9 @@ public class CapybaraExpressionLinker {
     private ValueOrError<LinkedExpression> linkPipeExpression(InfixExpression expression, Scope scope) {
         return linkExpression(expression.left(), scope)
                 .flatMap(left -> {
+                    if (isOptionType(left.type())) {
+                        return linkOptionPipeExpression(expression, scope, left, optionElementType(left));
+                    }
                     var elementType = switch (left.type()) {
                         case LinkedList linkedList -> linkedList.elementType();
                         case LinkedSet linkedSet -> linkedSet.elementType();
@@ -755,6 +758,45 @@ public class CapybaraExpressionLinker {
                     }
                     return linkCollectionPipeExpression(expression, scope, left, elementType);
                 });
+    }
+
+    private ValueOrError<LinkedExpression> linkOptionPipeExpression(
+            InfixExpression expression,
+            Scope scope,
+            LinkedExpression left,
+            LinkedType elementType
+    ) {
+        if (!(expression.right() instanceof LambdaExpression lambdaExpression)) {
+            if (expression.right() instanceof FunctionReference functionReference) {
+                return resolvePipeFunctionReference(functionReference, elementType)
+                        .map(linked -> (LinkedExpression) new LinkedPipeExpression(
+                                left,
+                                linked.argumentName(),
+                                linked.expression(),
+                                left.type()
+                        ));
+            }
+            return withPosition(
+                    ValueOrError.error("Right side of `|` has to be a lambda expression or function reference"),
+                    expression.right().position()
+            );
+        }
+        var lambdaArgumentName = singleLambdaArgument(lambdaExpression)
+                .orElse(null);
+        if (lambdaArgumentName == null) {
+            return withPosition(
+                    ValueOrError.error("Right side lambda of `|` has to have exactly one argument"),
+                    lambdaExpression.position()
+            );
+        }
+        var lambdaScope = scope.add(lambdaArgumentName, elementType);
+        return linkExpression(lambdaExpression.expression(), lambdaScope)
+                .map(mapper -> (LinkedExpression) new LinkedPipeExpression(
+                        left,
+                        lambdaArgumentName,
+                        mapper,
+                        left.type()
+                ));
     }
 
     private ValueOrError<LinkedExpression> linkCollectionPipeExpression(
@@ -970,6 +1012,9 @@ public class CapybaraExpressionLinker {
     private ValueOrError<LinkedExpression> linkPipeFilterOutExpression(InfixExpression expression, Scope scope) {
         return linkExpression(expression.left(), scope)
                 .flatMap(left -> {
+                    if (isOptionType(left.type())) {
+                        return linkOptionPipeFilterOutExpression(expression, scope, left, optionElementType(left), left.type());
+                    }
                     var elementType = switch (left.type()) {
                         case LinkedList linkedList -> linkedList.elementType();
                         case LinkedSet linkedSet -> linkedSet.elementType();
@@ -977,15 +1022,25 @@ public class CapybaraExpressionLinker {
                         default -> null;
                     };
                     if (elementType == null) {
+                        if (left.type() instanceof GenericDataType) {
+                            var optionType = findOptionType();
+                            if (optionType == null) {
+                                return withPosition(
+                                        ValueOrError.error("`|-` on data/type requires `Option` type to be available"),
+                                        expression.left().position()
+                                );
+                            }
+                            return linkOptionPipeFilterOutExpression(expression, scope, left, left.type(), optionType);
+                        }
                         return withPosition(
-                                ValueOrError.error("Left side of `|-` has to be a collection, was `" + left.type() + "`"),
+                                ValueOrError.error("Left side of `|-` has to be a collection or data/type, was `" + left.type() + "`"),
                                 expression.left().position()
                         );
                     }
                     if (!(expression.right() instanceof LambdaExpression lambdaExpression)) {
                         return withPosition(
-                                ValueOrError.error("Right side of `|-` has to be a lambda expression"),
-                                expression.right().position()
+                            ValueOrError.error("Right side of `|-` has to be a lambda expression"),
+                            expression.right().position()
                         );
                     }
                     var lambdaArgumentName = singleLambdaArgument(lambdaExpression)
@@ -1014,6 +1069,62 @@ public class CapybaraExpressionLinker {
                                                 : new LinkedList(elementType)
                                 ));
                             });
+                });
+    }
+
+    private ValueOrError<LinkedExpression> linkOptionPipeFilterOutExpression(
+            InfixExpression expression,
+            Scope scope,
+            LinkedExpression left,
+            LinkedType elementType,
+            LinkedType optionType
+    ) {
+        if (!(expression.right() instanceof LambdaExpression lambdaExpression)) {
+            if (expression.right() instanceof FunctionReference functionReference) {
+                return resolvePipeFunctionReference(functionReference, elementType)
+                        .flatMap(linked -> {
+                            if (linked.expression().type() != BOOL) {
+                                return withPosition(
+                                        ValueOrError.error("Lambda in `|-` has to return `BOOL`, was `" + linked.expression().type() + "`"),
+                                        expression.right().position()
+                                );
+                            }
+                            return ValueOrError.success((LinkedExpression) new LinkedPipeFilterOutExpression(
+                                    left,
+                                    linked.argumentName(),
+                                    linked.expression(),
+                                    optionType
+                            ));
+                        });
+            }
+            return withPosition(
+                    ValueOrError.error("Right side of `|-` has to be a lambda expression or function reference"),
+                    expression.right().position()
+            );
+        }
+        var lambdaArgumentName = singleLambdaArgument(lambdaExpression)
+                .orElse(null);
+        if (lambdaArgumentName == null) {
+            return withPosition(
+                    ValueOrError.error("Right side lambda of `|-` has to have exactly one argument"),
+                    lambdaExpression.position()
+            );
+        }
+        var lambdaScope = scope.add(lambdaArgumentName, elementType);
+        return linkExpression(lambdaExpression.expression(), lambdaScope)
+                .flatMap(predicate -> {
+                    if (predicate.type() != BOOL) {
+                        return withPosition(
+                                ValueOrError.error("Lambda in `|-` has to return `BOOL`, was `" + predicate.type() + "`"),
+                                lambdaExpression.position()
+                        );
+                    }
+                    return ValueOrError.success((LinkedExpression) new LinkedPipeFilterOutExpression(
+                            left,
+                            lambdaArgumentName,
+                            predicate,
+                            optionType
+                    ));
                 });
     }
 
@@ -1242,6 +1353,59 @@ public class CapybaraExpressionLinker {
             case LinkedDict linkedDict -> linkedDict.valueType();
             default -> null;
         };
+    }
+
+    private LinkedDataParentType findOptionType() {
+        return dataTypes.entrySet().stream()
+                .filter(entry -> isOptionTypeKey(entry.getKey()))
+                .map(Map.Entry::getValue)
+                .filter(LinkedDataParentType.class::isInstance)
+                .map(LinkedDataParentType.class::cast)
+                .findFirst()
+                .orElseGet(() -> dataTypes.values().stream()
+                        .filter(LinkedDataParentType.class::isInstance)
+                        .map(LinkedDataParentType.class::cast)
+                        .filter(type -> "Option".equals(type.name()))
+                        .findFirst()
+                        .orElse(null));
+    }
+
+    private boolean isOptionType(LinkedType type) {
+        if (!(type instanceof GenericDataType genericDataType)) {
+            return false;
+        }
+        var normalized = normalizeTypeName(genericDataType.name());
+        return "Option".equals(genericDataType.name())
+               || normalized.endsWith("/Option.Option")
+               || normalized.endsWith("/Option");
+    }
+
+    private LinkedType optionElementType(LinkedExpression expression) {
+        if (expression instanceof LinkedPipeExpression pipeExpression && isOptionType(pipeExpression.type())) {
+            return pipeExpression.mapper().type();
+        }
+        if (expression instanceof LinkedPipeFilterOutExpression filterOutExpression && isOptionType(filterOutExpression.type())) {
+            return optionElementType(filterOutExpression.source());
+        }
+        if (isOptionType(expression.type())) {
+            return ANY;
+        }
+        return expression.type();
+    }
+
+    private boolean isOptionTypeKey(String key) {
+        var normalized = normalizeTypeName(key);
+        return normalized.endsWith("/capy/lang/Option.Option")
+               || normalized.endsWith("/cap/lang/Option.Option")
+               || normalized.endsWith("/Option.Option");
+    }
+
+    private String normalizeTypeName(String name) {
+        var normalized = name.replace('\\', '/');
+        if (!normalized.startsWith("/")) {
+            normalized = "/" + normalized;
+        }
+        return normalized;
     }
 
     private Optional<String> singleLambdaArgument(LambdaExpression lambdaExpression) {

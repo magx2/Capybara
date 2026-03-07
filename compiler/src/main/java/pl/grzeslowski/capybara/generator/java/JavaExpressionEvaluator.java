@@ -394,6 +394,9 @@ public class JavaExpressionEvaluator {
     }
 
     private static Scope evaluatePipeExpression(LinkedPipeExpression pipeExpression, Scope scope) {
+        if (isOptionType(pipeExpression.type())) {
+            return evaluateOptionPipeExpression(pipeExpression, scope);
+        }
         var streamExSc = evaluatePipeExpressionAsStream(pipeExpression, scope);
         return streamExSc.scope().addExpression(streamExSc.streamExpression() + terminalCollect(pipeExpression.type()));
     }
@@ -404,8 +407,40 @@ public class JavaExpressionEvaluator {
     }
 
     private static Scope evaluatePipeFilterOutExpression(LinkedPipeFilterOutExpression pipeFilterOutExpression, Scope scope) {
+        if (isOptionType(pipeFilterOutExpression.type())) {
+            return evaluateOptionPipeFilterOutExpression(pipeFilterOutExpression, scope);
+        }
         var streamExSc = evaluatePipeFilterOutExpressionAsStream(pipeFilterOutExpression, scope);
         return streamExSc.scope().addExpression(streamExSc.streamExpression() + terminalCollect(pipeFilterOutExpression.type()));
+    }
+
+    private static Scope evaluateOptionPipeExpression(LinkedPipeExpression pipeExpression, Scope scope) {
+        var sourceExSc = evaluateExpression(pipeExpression.source(), scope).popExpression();
+        var mapperExSc = evaluateExpression(
+                pipeExpression.mapper(),
+                sourceExSc.scope().addLocalValue(pipeExpression.argumentName())
+        ).popExpression();
+        return mapperExSc.scope().addExpression(
+                sourceExSc.expression()
+                + ".map(" + pipeExpression.argumentName() + " -> (" + mapperExSc.expression() + "))"
+        );
+    }
+
+    private static Scope evaluateOptionPipeFilterOutExpression(LinkedPipeFilterOutExpression pipeFilterOutExpression, Scope scope) {
+        var sourceExSc = evaluateExpression(pipeFilterOutExpression.source(), scope).popExpression();
+        var predicateExSc = evaluateExpression(
+                pipeFilterOutExpression.predicate(),
+                sourceExSc.scope().addLocalValue(pipeFilterOutExpression.argumentName())
+        ).popExpression();
+
+        var sourceExpression = isOptionType(pipeFilterOutExpression.source().type())
+                ? sourceExSc.expression()
+                : "java.util.Optional.of(" + sourceExSc.expression() + ")";
+
+        return predicateExSc.scope().addExpression(
+                sourceExpression
+                + ".filter(" + pipeFilterOutExpression.argumentName() + " -> !(" + predicateExSc.expression() + "))"
+        );
     }
 
     private static Scope evaluatePipeReduceExpression(LinkedPipeReduceExpression pipeReduceExpression, Scope scope) {
@@ -799,12 +834,14 @@ public class JavaExpressionEvaluator {
 
     private static boolean isOptionSomeTypeName(String typeName) {
         var normalized = normalizeQualifiedTypeName(typeName);
-        return normalized.equals("/capy/lang/Option.Some");
+        return normalized.equals("/cap/lang/Option.Some")
+               || normalized.equals("/capy/lang/Option.Some");
     }
 
     private static boolean isOptionNoneTypeName(String typeName) {
         var normalized = normalizeQualifiedTypeName(typeName);
-        return normalized.equals("/capy/lang/Option.None");
+        return normalized.equals("/cap/lang/Option.None")
+               || normalized.equals("/capy/lang/Option.None");
     }
 
     private static String normalizeQualifiedTypeName(String typeName) {
@@ -813,6 +850,16 @@ public class JavaExpressionEvaluator {
             normalized = "/" + normalized;
         }
         return normalized;
+    }
+
+    private static boolean isOptionType(pl.grzeslowski.capybara.linker.LinkedType type) {
+        if (!(type instanceof pl.grzeslowski.capybara.linker.GenericDataType genericDataType)) {
+            return false;
+        }
+        var normalized = normalizeQualifiedTypeName(genericDataType.name());
+        return "Option".equals(genericDataType.name())
+               || normalized.endsWith("/Option.Option")
+               || normalized.endsWith("/Option");
     }
 
 }

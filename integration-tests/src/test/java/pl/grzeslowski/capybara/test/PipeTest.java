@@ -3,6 +3,7 @@ package pl.grzeslowski.capybara.test;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -75,7 +76,8 @@ class PipeTest {
 
     @Test
     void dataPipe() {
-        assertThat(Pipe.dataPipe(1, 2, 3).x()).isEqualTo(6);
+        assertThat(Pipe.dataPipe(1, 2, 3)).isEmpty();
+        assertThat(Pipe.dataPipe(-1, 2, 3)).contains(new Pipe.Value(4));
     }
 
     @Test
@@ -90,5 +92,16 @@ class PipeTest {
         var result = Pipe.typePipeRef(7);
         assertThat(result).isInstanceOf(Pipe.IntBox.class);
         assertThat(((Pipe.IntBox) result).value()).isEqualTo(8);
+    }
+
+    @Test
+    void typePipeOptional() {
+        Optional<Pipe.Boxed> positive = Pipe.typePipeOptional(5);
+        Optional<Pipe.Boxed> nonPositive = Pipe.typePipeOptional(0);
+
+        assertThat(positive).isEmpty();
+        assertThat(nonPositive).isPresent();
+        assertThat(nonPositive.get()).isInstanceOf(Pipe.IntBox.class);
+        assertThat(((Pipe.IntBox) nonPositive.get()).value()).isEqualTo(1);
     }
 }
