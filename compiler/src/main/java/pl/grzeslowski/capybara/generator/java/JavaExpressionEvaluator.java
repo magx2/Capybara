@@ -519,14 +519,15 @@ public class JavaExpressionEvaluator {
     }
 
     private static Scope evaluateMatchExpression(LinkedMatchExpression matchExpression, Scope scope) {
+        var matchSelectorName = "__matchValue";
         var matchWithExSc = evaluateExpression(matchExpression.matchWith(), scope).popExpression();
         var declaredValue = matchWithExSc.scope().declareValue(
-                "value",
+                matchSelectorName,
                 matchWithExSc.expression(),
-                new LinkedVariable("value", matchExpression.matchWith().type())
+                new LinkedVariable(matchSelectorName, matchExpression.matchWith().type())
         );
         var current = declaredValue.scope();
-        var switchTarget = current.findValueOverride("value").orElse("value");
+        var switchTarget = current.findValueOverride(matchSelectorName).orElse(matchSelectorName);
         var cases = new ArrayList<String>(matchExpression.cases().size());
 
         for (var matchCase : matchExpression.cases()) {
