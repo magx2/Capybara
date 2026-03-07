@@ -35,10 +35,19 @@ public class CapybaraLinker {
             linkedTypesByModule.put(module.name(), ((ValueOrError.Value<Map<String, GenericDataType>>) linkedTypes).value());
         }
 
+        var visibleTypesByModule = new HashMap<String, Map<String, GenericDataType>>();
+        for (var module : program.modules()) {
+            var visibleTypes = availableTypes(module, modulesByName, linkedTypesByModule);
+            if (visibleTypes instanceof ValueOrError.Error<Map<String, GenericDataType>> error) {
+                return ValueOrError.error(error.errors().stream().map(ValueOrError.Error.SingleError::message).toList());
+            }
+            visibleTypesByModule.put(module.name(), ((ValueOrError.Value<Map<String, GenericDataType>>) visibleTypes).value());
+        }
+
         var signaturesByModule = new HashMap<String, List<CapybaraExpressionLinker.FunctionSignature>>();
         for (var module : program.modules()) {
             var functions = findFunctions(module.functional().definitions());
-            var signatures = linkFunctionSignatures(functions, linkedTypesByModule.get(module.name()));
+            var signatures = linkFunctionSignatures(functions, visibleTypesByModule.get(module.name()));
             if (signatures instanceof ValueOrError.Error<List<CapybaraExpressionLinker.FunctionSignature>> error) {
                 return ValueOrError.error(error.errors().stream().map(ValueOrError.Error.SingleError::message).toList());
             }
@@ -51,6 +60,7 @@ public class CapybaraLinker {
                     module,
                     modulesByName,
                     linkedTypesByModule,
+                    visibleTypesByModule,
                     signaturesByModule,
                     moduleClassNameByModuleName
             );
@@ -69,6 +79,7 @@ public class CapybaraLinker {
                         module,
                         modulesByName,
                         linkedTypesByModule,
+                        visibleTypesByModule,
                         refinedSignaturesByModule,
                         moduleClassNameByModuleName
                 ))
@@ -80,12 +91,13 @@ public class CapybaraLinker {
             Module module,
             Map<String, Module> modulesByName,
             Map<String, Map<String, GenericDataType>> linkedTypesByModule,
+            Map<String, Map<String, GenericDataType>> visibleTypesByModule,
             Map<String, List<CapybaraExpressionLinker.FunctionSignature>> signaturesByModule,
             Map<String, String> moduleClassNameByModuleName
     ) {
-        var dataTypes = linkedTypesByModule.get(module.name());
+        var dataTypes = visibleTypesByModule.get(module.name());
         var functions = findFunctions(module.functional().definitions());
-        var availableSignatures = availableSignatures(module, modulesByName, signaturesByModule);
+        var availableSignatures = availableSignatures(module, modulesByName, linkedTypesByModule, signaturesByModule);
         if (availableSignatures instanceof ValueOrError.Error<List<CapybaraExpressionLinker.FunctionSignature>> error) {
             return ValueOrError.error(error.errors().stream().map(ValueOrError.Error.SingleError::message).toList());
         }
@@ -97,28 +109,30 @@ public class CapybaraLinker {
             Module module,
             Map<String, Module> modulesByName,
             Map<String, Map<String, GenericDataType>> linkedTypesByModule,
+            Map<String, Map<String, GenericDataType>> visibleTypesByModule,
             Map<String, List<CapybaraExpressionLinker.FunctionSignature>> signaturesByModule,
             Map<String, String> moduleClassNameByModuleName
     ) {
-        var dataTypes = linkedTypesByModule.get(module.name());
+        var localTypes = linkedTypesByModule.get(module.name());
+        var visibleTypes = visibleTypesByModule.get(module.name());
         var functions = findFunctions(module.functional().definitions());
-        var availableSignatures = availableSignatures(module, modulesByName, signaturesByModule);
+        var availableSignatures = availableSignatures(module, modulesByName, linkedTypesByModule, signaturesByModule);
         if (availableSignatures instanceof ValueOrError.Error<List<CapybaraExpressionLinker.FunctionSignature>> error) {
             return ValueOrError.error(error.errors().stream().map(ValueOrError.Error.SingleError::message).toList());
         }
         var initialSignatures = ((ValueOrError.Value<List<CapybaraExpressionLinker.FunctionSignature>>) availableSignatures).value();
-        return linkFunctions(functions, dataTypes, initialSignatures, signaturesByModule, moduleClassNameByModuleName)
+        return linkFunctions(functions, visibleTypes, initialSignatures, signaturesByModule, moduleClassNameByModuleName)
                 .flatMap(firstPassFunctions -> {
                     var refinedSignatures = mergeSignatures(
                             signaturesByModule.get(module.name()),
                             signaturesFromLinkedFunctions(firstPassFunctions)
                     );
                     var refinedAvailableSignatures = mergeSignatures(initialSignatures, refinedSignatures);
-                    return linkFunctions(functions, dataTypes, refinedAvailableSignatures, signaturesByModule, moduleClassNameByModuleName)
+                    return linkFunctions(functions, visibleTypes, refinedAvailableSignatures, signaturesByModule, moduleClassNameByModuleName)
                             .map(linkedFunctions -> new LinkedModule(
                                     module.name(),
                                     module.path(),
-                                    dataTypes,
+                                    localTypes,
                                     Set.copyOf(linkedFunctions),
                                     staticImports(module, modulesByName, signaturesByModule)
                             ));
@@ -128,6 +142,7 @@ public class CapybaraLinker {
     private ValueOrError<List<CapybaraExpressionLinker.FunctionSignature>> availableSignatures(
             Module module,
             Map<String, Module> modulesByName,
+            Map<String, Map<String, GenericDataType>> linkedTypesByModule,
             Map<String, List<CapybaraExpressionLinker.FunctionSignature>> signaturesByModule
     ) {
         var all = new ArrayList<CapybaraExpressionLinker.FunctionSignature>(signaturesByModule.get(module.name()));
@@ -137,9 +152,12 @@ public class CapybaraLinker {
                 return ValueOrError.error("Module `" + module.name() + "` imports unknown module `" + importDeclaration.moduleName() + "`");
             }
             var importedSignatures = signaturesByModule.get(importedModule.name());
-            var availableMembers = importedSignatures.stream()
+            var availableFunctionMembers = importedSignatures.stream()
                     .map(CapybaraExpressionLinker.FunctionSignature::name)
                     .collect(java.util.stream.Collectors.toSet());
+            var availableTypeMembers = linkedTypesByModule.get(importedModule.name()).keySet();
+            var availableMembers = new HashSet<String>(availableFunctionMembers);
+            availableMembers.addAll(availableTypeMembers);
             for (var excludedSymbol : importDeclaration.excludedSymbols()) {
                 if (!availableMembers.contains(excludedSymbol)) {
                     return ValueOrError.error(
@@ -160,15 +178,38 @@ public class CapybaraLinker {
             }
             for (var symbol : importDeclaration.selectedSymbols(availableMembers)) {
                 var matched = importedSignatures.stream().filter(signature -> signature.name().equals(symbol)).toList();
-                if (matched.isEmpty()) {
-                    return ValueOrError.error(
-                            "Module `" + module.name() + "` imports unknown symbol `" + symbol + "` from module `" + importDeclaration.moduleName() + "`"
-                    );
-                }
                 all.addAll(matched);
             }
         }
         return ValueOrError.success(List.copyOf(all));
+    }
+
+    private ValueOrError<Map<String, GenericDataType>> availableTypes(
+            Module module,
+            Map<String, Module> modulesByName,
+            Map<String, Map<String, GenericDataType>> linkedTypesByModule
+    ) {
+        var all = new LinkedHashMap<String, GenericDataType>(linkedTypesByModule.get(module.name()));
+        for (var importDeclaration : module.imports()) {
+            var importedModule = resolveImportedModule(importDeclaration.moduleName(), modulesByName);
+            if (importedModule == null) {
+                return ValueOrError.error("Module `" + module.name() + "` imports unknown module `" + importDeclaration.moduleName() + "`");
+            }
+            var importedTypes = linkedTypesByModule.get(importedModule.name());
+            if (importDeclaration.isStarImport() && importDeclaration.excludedSymbols().isEmpty()) {
+                importedTypes.forEach(all::put);
+                continue;
+            }
+
+            var selected = importDeclaration.selectedSymbols(importedTypes.keySet());
+            for (var symbol : selected) {
+                var imported = importedTypes.get(symbol);
+                if (imported != null) {
+                    all.put(symbol, imported);
+                }
+            }
+        }
+        return ValueOrError.success(Map.copyOf(all));
     }
 
     private Set<LinkedModule.StaticImport> staticImports(

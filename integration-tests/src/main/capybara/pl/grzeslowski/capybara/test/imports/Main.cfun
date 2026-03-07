@@ -2,6 +2,8 @@ from Pck1 import { * }
 from Pck2 import { * } except { add }
 from /pl/grzeslowski/capybara/imports2/Pck5 import { lvl_multiplier }
 
+from Types1 import { * }
+
 fun calculator(a: int, b: int, op: string) =
     if op == "+"
     then add(a,b)
@@ -20,3 +22,5 @@ fun what_to_do(x: int) = Pck3.foo_boo(x>10, x<20)
 fun x(a: int, b: int, op: string) = /pl/grzeslowski/capybara/imports2/Pck4.awesome(calculator(a,b,op))
 
 fun y(a: int, b: int, op: string) = /pl/grzeslowski/capybara/imports2/Pck4.awesome(lvl_multiplier(calculator(a,b,op)))
+
+fun t1(x: int): T1 = D1 { foo: x }
