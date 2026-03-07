@@ -13,3 +13,5 @@ fun remove(s: set[int]): set[int] = s - 2
 fun remove_set(left: set[int], right: set[int]): set[int] = left - right
 
 fun contains(s: set[int], value: int): bool = s ? value
+
+fun size(s: set[int]): int = s.size

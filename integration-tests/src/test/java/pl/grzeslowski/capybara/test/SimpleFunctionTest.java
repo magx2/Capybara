@@ -99,4 +99,9 @@ class SimpleFunctionTest {
     void staticList() {
         assertThat(SimpleFunction.staticList()).isEqualTo(List.of(1, 2, 3));
     }
+
+    @Test
+    void privateUnderscoreFunctionNameIsPreserved() {
+        assertThat(SimpleFunction.callPrivateAndPublic(3)).isEqualTo(9);
+    }
 }

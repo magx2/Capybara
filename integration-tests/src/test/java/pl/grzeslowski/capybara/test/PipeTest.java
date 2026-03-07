@@ -3,6 +3,7 @@ package pl.grzeslowski.capybara.test;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -72,6 +73,11 @@ class PipeTest {
     @Test
     void setFlatMap1() {
         assertThat(Pipe.setFlatMap1(Set.of(1, 2))).isEqualTo(Set.of(1, 11, 2, 12));
+    }
+
+    @Test
+    void mapDict() {
+        assertThat(Pipe.mapDict(Map.of("a", 1, "b", 2))).isEqualTo(Map.of("a", "1", "b", "2"));
     }
 
     @Test

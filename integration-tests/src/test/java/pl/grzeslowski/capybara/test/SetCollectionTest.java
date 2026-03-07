@@ -72,4 +72,10 @@ class SetCollectionTest {
         assertThat(SetCollection.contains(Set.of(1, 2, 3), 2)).isTrue();
         assertThat(SetCollection.contains(Set.of(1, 2, 3), 9)).isFalse();
     }
+
+    @Test
+    void size() {
+        assertThat(SetCollection.size(Set.of(1, 2, 3))).isEqualTo(3);
+        assertThat(SetCollection.size(Set.of())).isEqualTo(0);
+    }
 }

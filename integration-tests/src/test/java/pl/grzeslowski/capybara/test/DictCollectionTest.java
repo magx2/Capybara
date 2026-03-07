@@ -86,4 +86,10 @@ class DictCollectionTest {
         assertThat(DictCollection.contains(EXPECTED, "two")).isTrue();
         assertThat(DictCollection.contains(EXPECTED, "missing")).isFalse();
     }
+
+    @Test
+    void size() {
+        assertThat(DictCollection.size(EXPECTED)).isEqualTo(3);
+        assertThat(DictCollection.size(Map.of())).isEqualTo(0);
+    }
 }

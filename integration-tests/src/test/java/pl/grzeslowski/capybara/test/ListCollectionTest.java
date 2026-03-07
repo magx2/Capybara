@@ -72,4 +72,10 @@ class ListCollectionTest {
         assertThat(ListCollection.contains(List.of(1, 2, 3), 2)).isTrue();
         assertThat(ListCollection.contains(List.of(1, 2, 3), 9)).isFalse();
     }
+
+    @Test
+    void size() {
+        assertThat(ListCollection.size(List.of(1, 2, 3))).isEqualTo(3);
+        assertThat(ListCollection.size(List.of())).isEqualTo(0);
+    }
 }

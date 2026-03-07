@@ -13,3 +13,5 @@ fun remove(l: list[int]): list[int] = l - 2
 fun remove_list(left: list[int], right: list[int]): list[int] = left - right
 
 fun contains(l: list[int], value: int): bool = l ? value
+
+fun size(l: list[int]): int = l.size
