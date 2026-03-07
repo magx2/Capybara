@@ -5,25 +5,14 @@ import pl.grzeslowski.capybara.generator.Generator;
 import pl.grzeslowski.capybara.linker.CapybaraLinker;
 import pl.grzeslowski.capybara.linker.LinkedProgram;
 import pl.grzeslowski.capybara.linker.ValueOrError;
-import pl.grzeslowski.capybara.parser.CapybaraParser;
-import pl.grzeslowski.capybara.parser.DataDeclaration;
-import pl.grzeslowski.capybara.parser.Definition;
-import pl.grzeslowski.capybara.parser.Function;
-import pl.grzeslowski.capybara.parser.SingleDeclaration;
-import pl.grzeslowski.capybara.parser.TypeDeclaration;
+import pl.grzeslowski.capybara.parser.*;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.logging.Logger;
 import java.util.regex.Pattern;
 
@@ -37,7 +26,7 @@ public class Compiler {
             "^\\s*from\\s+([A-Za-z_][A-Za-z0-9_]*|/[A-Za-z_][A-Za-z0-9_]*(?:/[A-Za-z_][A-Za-z0-9_]*)+)\\s+import\\s*\\{\\s*([^}]*)\\s*}(?:\\s+except\\s*\\{\\s*([^}]*)\\s*})?\\s*$"
     );
 
-    public void compile(Arguments args) throws IOException {
+    public int compile(Arguments args) throws IOException {
         if (Files.notExists(args.output())) {
             log.info("Creating output directory: " + args.output());
             Files.createDirectories(args.output());
@@ -72,7 +61,7 @@ public class Compiler {
         if (linkingResult instanceof ValueOrError.Error<?> le) {
             log.severe("Linking failed with " + le.errors().size() + " error(s):");
             le.errors().forEach(error -> log.severe(error.toString()));
-            return;
+            return 100;
         }
         var linkedProgram = ((ValueOrError.Value<LinkedProgram>) linkingResult).value();
 
@@ -88,6 +77,7 @@ public class Compiler {
         log.info("Writing compiled program to output directory: " + args.output());
         compiledProgram.modules()
                 .forEach(module -> write(args.output(), module));
+        return 0;
     }
 
     private void write(Path output, CompiledModule module) {

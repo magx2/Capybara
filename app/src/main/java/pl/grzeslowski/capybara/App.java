@@ -21,7 +21,8 @@ public class App {
             enableDebugLogging();
         }
 
-        Compiler.INSTANCE.compile(parseArguments(filteredArgs));
+        var exitCode = Compiler.INSTANCE.compile(parseArguments(filteredArgs));
+        System.exit(exitCode);
     }
 
     private static Arguments parseArguments(String[] args) {
