@@ -12,9 +12,10 @@ definition:
     | dataDeclaration
     | singleDeclaration;
 
-functionDeclaration: 'fun' functionNameDeclaration '(' parameters? ')' functionType? '=' expression;
+functionDeclaration: docComment* 'fun' functionNameDeclaration '(' parameters? ')' functionType? '=' expression;
 functionNameDeclaration: identifier | TYPE DOT methodIdentifier;
 methodIdentifier: identifier | INFIX_METHOD_LITERAL;
+docComment: DOC_COMMENT;
 
 typeDeclaration: 'type' genericTypeDeclaration '=' genericTypeDeclaration (PIPE genericTypeDeclaration)*
                | 'type' genericTypeDeclaration '{' fieldDeclarationList? '}' '=' genericTypeDeclaration (PIPE genericTypeDeclaration)*;
@@ -236,5 +237,6 @@ LSHIFT_ASSIGN : '<<=';
 RSHIFT_ASSIGN : '>>=';
 URSHIFT_ASSIGN : '>>>=';
 
+DOC_COMMENT : '///' ~[\r\n]*;
 LINE_COMMENT : '//' ~[\r\n]* -> skip;
 WS : [ \t\r\n]+ -> skip;

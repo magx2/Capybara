@@ -97,7 +97,8 @@ public class JavaAstBuilder {
                 buildMethodName(function.name()),
                 buildJavaType(function.returnType()),
                 buildJavaFunctionParameters(function.parameters()),
-                function.expression()
+                function.expression(),
+                function.comments()
         );
     }
 
@@ -408,7 +409,8 @@ public class JavaAstBuilder {
                 buildMethodName(methodName),
                 buildJavaType(function.returnType()),
                 buildJavaFunctionParameters(parameters),
-                function.expression()
+                function.expression(),
+                function.comments()
         );
     }
 

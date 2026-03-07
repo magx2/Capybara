@@ -9,7 +9,8 @@ public record JavaMethod(
         String name,
         JavaType returnType,
         List<JavaFunctionParameter> parameters,
-        LinkedExpression expression) {
+        LinkedExpression expression,
+        List<String> comments) {
     public record JavaFunctionParameter(JavaType type, String sourceName, String generatedName) {
     }
 }

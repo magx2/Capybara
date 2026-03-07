@@ -308,15 +308,27 @@ public final class JavaGenerator implements Generator {
     }
 
     private String mapJavaMethod(JavaMethod method) {
-        return "public static " + method.returnType() + " " + mapMethodName(method.name()) + "(" + mapFunctionParameters(method.parameters()) + ") {\n"
+        return mapJavaDoc(method.comments())
+               + "public static " + method.returnType() + " " + mapMethodName(method.name()) + "(" + mapFunctionParameters(method.parameters()) + ") {\n"
                + evaluateExpression(method.expression(), method.parameters())
                + "\n}\n";
     }
 
     private String mapJavaRecordMethod(JavaMethod method) {
-        return "public " + method.returnType() + " " + mapMethodName(method.name()) + "(" + mapFunctionParameters(method.parameters()) + ") {\n"
+        return mapJavaDoc(method.comments())
+               + "public " + method.returnType() + " " + mapMethodName(method.name()) + "(" + mapFunctionParameters(method.parameters()) + ") {\n"
                + evaluateExpression(method.expression(), method.parameters())
                + "\n}\n";
+    }
+
+    private String mapJavaDoc(List<String> comments) {
+        if (comments == null || comments.isEmpty()) {
+            return "";
+        }
+        var body = comments.stream()
+                .map(line -> " * " + line)
+                .collect(joining("\n"));
+        return "/**\n" + body + "\n */\n";
     }
 
     private String mapMethodName(String name) {

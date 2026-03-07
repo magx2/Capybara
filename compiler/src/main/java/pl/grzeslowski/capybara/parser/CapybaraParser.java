@@ -129,6 +129,9 @@ public class CapybaraParser {
                 parameters,
                 functionType(functionDeclarationContext.functionType()),
                 expression(functionDeclarationContext.expression()),
+                functionDeclarationContext.docComment().stream()
+                        .map(comment -> stripDocComment(comment.getText()))
+                        .toList(),
                 position(functionDeclarationContext)
         );
     }
@@ -768,6 +771,14 @@ public class CapybaraParser {
             return text.substring(1, text.length() - 1);
         }
         throw new IllegalStateException("Unknown function name declaration: " + context.getText());
+    }
+
+    private static String stripDocComment(String text) {
+        if (!text.startsWith("///")) {
+            return text;
+        }
+        var raw = text.substring(3);
+        return raw.startsWith(" ") ? raw.substring(1) : raw;
     }
 
     private static String methodIdentifier(FunctionalParser.MethodIdentifierContext context) {

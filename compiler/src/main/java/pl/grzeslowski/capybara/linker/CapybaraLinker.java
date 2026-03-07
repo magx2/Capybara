@@ -362,7 +362,8 @@ public class CapybaraLinker {
                                                                 function.name(),
                                                                 rtype,
                                                                 parameters,
-                                                                enrichNothing(ex, function.name(), moduleSourceFile)))));
+                                                                enrichNothing(ex, function.name(), moduleSourceFile),
+                                                                function.comments()))));
         return withPosition(linked, function.position());
     }
 
