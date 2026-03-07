@@ -1,0 +1,7 @@
+fun nothing1(x: int): int = ???
+
+fun nothing2(x: int) = ???
+
+fun eval1(x: int): int = nothing1(x)
+
+fun eval2(x: int) = nothing2(x)

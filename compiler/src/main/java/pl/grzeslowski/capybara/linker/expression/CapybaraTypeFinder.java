@@ -4,10 +4,13 @@ import pl.grzeslowski.capybara.linker.LinkedType;
 import pl.grzeslowski.capybara.linker.PrimitiveLinkedType;
 
 import static pl.grzeslowski.capybara.linker.PrimitiveLinkedType.ANY;
+import static pl.grzeslowski.capybara.linker.PrimitiveLinkedType.NOTHING;
 
 public class CapybaraTypeFinder {
     public static LinkedType findHigherType(LinkedType left, LinkedType right) {
         if (left == right) return left;
+        if (left == NOTHING) return right;
+        if (right == NOTHING) return left;
         if (left == ANY || right == ANY) return ANY;
 
         if (left instanceof PrimitiveLinkedType leftPt) {
@@ -69,6 +72,15 @@ public class CapybaraTypeFinder {
     /// @return higher type
     ///
     public static LinkedType findHigherType(PrimitiveLinkedType left, PrimitiveLinkedType right) {
+        if (left == NOTHING) {
+            return right;
+        }
+        if (right == NOTHING) {
+            return left;
+        }
+        if (left == ANY || right == ANY) {
+            return ANY;
+        }
         if (left.ordinal() < right.ordinal()) {
             return right;
         }

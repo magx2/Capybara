@@ -61,6 +61,7 @@ public class JavaExpressionEvaluator {
             case LinkedLambdaExpression lambdaExpression -> evaluateLambdaExpression(lambdaExpression, scope);
             case LinkedLetExpression letExpression -> evaluateLetExpression(letExpression, scope);
             case LinkedMatchExpression matchExpression -> evaluateMatchExpression(matchExpression, scope);
+            case LinkedNothingValue nothingValue -> evaluateNothingValue(nothingValue, scope);
             case LinkedPipeFlatMapExpression pipeFlatMapExpression -> evaluatePipeFlatMapExpression(pipeFlatMapExpression, scope);
             case LinkedPipeFilterOutExpression pipeFilterOutExpression -> evaluatePipeFilterOutExpression(pipeFilterOutExpression, scope);
             case LinkedPipeExpression pipeExpression -> evaluatePipeExpression(pipeExpression, scope);
@@ -478,6 +479,10 @@ public class JavaExpressionEvaluator {
         return scope.addExpression(stringValue.toString());
     }
 
+    private static Scope evaluateNothingValue(LinkedNothingValue nothingValue, Scope scope) {
+        return scope.addExpression("__capybaraUnsupported(\"" + escapeJavaString(nothingValue.message()) + "\")");
+    }
+
     private static Scope evaluateVariable(LinkedVariable variable, Scope scope) {
         var name = scope.findValueOverride(variable.name()).orElse(variable.name());
         return scope.addExpression(name);
@@ -570,6 +575,12 @@ public class JavaExpressionEvaluator {
             identifier = identifier + "_";
         }
         return identifier;
+    }
+
+    private static String escapeJavaString(String value) {
+        return value
+                .replace("\\", "\\\\")
+                .replace("\"", "\\\"");
     }
 
 }

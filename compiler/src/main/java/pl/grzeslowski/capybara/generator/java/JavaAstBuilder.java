@@ -154,6 +154,7 @@ public class JavaAstBuilder {
             case STRING -> new JavaType("java.lang.String");
             case BOOL -> new JavaType("boolean");
             case FLOAT -> new JavaType("float");
+            case NOTHING -> new JavaType("java.lang.Object");
             case ANY -> new JavaType("java.lang.Object");
         };
     }
@@ -173,6 +174,7 @@ public class JavaAstBuilder {
                 case STRING -> "java.lang.String";
                 case BOOL -> "java.lang.Boolean";
                 case FLOAT -> "java.lang.Float";
+                case NOTHING -> "java.lang.Object";
                 case ANY -> "java.lang.Object";
             };
             case GenericDataType genericDataType -> buildClassName(genericDataType.name()).toString();

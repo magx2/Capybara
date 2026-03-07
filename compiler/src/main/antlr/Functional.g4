@@ -39,6 +39,7 @@ type: COLLECTION '[' type ']'
     | 'bool'
     | 'string'
     | 'float'
+    | 'nothing'
     | qualifiedType ('[' type (',' type)* ']')?;
 qualifiedType: TYPE (DOT TYPE)*;
 TYPE: [A-Z][a-zA-Z0-9_]*
@@ -84,10 +85,11 @@ functionCall: identifier '(' argumentList? ')'
             | TYPE DOT identifier '(' argumentList? ')';
 value: literal | identifier;
 argumentList: expression (',' expression)*;
-literal: INT_LITERAL | BOOL_LITERAL | STRING_LITERAL | FLOAT_LITERAL;
+literal: INT_LITERAL | BOOL_LITERAL | STRING_LITERAL | FLOAT_LITERAL | NOTHING_LITERAL;
 INT_LITERAL: [0-9]+;
 FLOAT_LITERAL: [0-9]+ '.' [0-9]+;
 STRING_LITERAL: '"' (~["\r\n] | '\\' .)* '"';
+NOTHING_LITERAL: '???';
 
 matchExpression: 'match' expression 'with' matchCaseList+;
 matchCaseList: matchCase (',' matchCase)*;

@@ -28,6 +28,7 @@ public class LinkedExpressionPrinter {
             case LinkedLetExpression linkedLetExpression -> printLinkedLetExpression(linkedLetExpression, level);
             case LinkedMatchExpression linkedMatchExpression ->
                     printLinkedMatchExpression(linkedMatchExpression, level);
+            case LinkedNothingValue linkedNothingValue -> printLinkedNothingValue(linkedNothingValue, level);
             case LinkedPipeFlatMapExpression linkedPipeFlatMapExpression -> printLinkedPipeFlatMapExpression(linkedPipeFlatMapExpression, level);
             case LinkedPipeFilterOutExpression linkedPipeFilterOutExpression -> printLinkedPipeFilterOutExpression(linkedPipeFilterOutExpression, level);
             case LinkedPipeExpression linkedPipeExpression -> printLinkedPipeExpression(linkedPipeExpression, level);
@@ -160,6 +161,10 @@ public class LinkedExpressionPrinter {
 
     private static String printLinkedVariable(LinkedVariable linkedVariable, int level) {
         return "(" + linkedVariable.name() + ": " + linkedVariable.type() + ")";
+    }
+
+    private static String printLinkedNothingValue(LinkedNothingValue linkedNothingValue, int level) {
+        return "??? (" + linkedNothingValue.message() + linkedNothingValue.position().map(p -> " @ " + p.line() + ":" + p.column()).orElse("") + ")";
     }
 
     private static String tabs(int level) {

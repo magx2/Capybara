@@ -14,6 +14,7 @@ import java.util.logging.Logger;
 import static pl.grzeslowski.capybara.linker.CapybaraTypeLinker.linkType;
 import static pl.grzeslowski.capybara.linker.PrimitiveLinkedType.ANY;
 import static pl.grzeslowski.capybara.linker.PrimitiveLinkedType.BOOL;
+import static pl.grzeslowski.capybara.linker.PrimitiveLinkedType.NOTHING;
 import static pl.grzeslowski.capybara.linker.PrimitiveLinkedType.STRING;
 import static pl.grzeslowski.capybara.linker.expression.CapybaraTypeFinder.findHigherType;
 
@@ -69,6 +70,7 @@ public class CapybaraExpressionLinker {
             case NewListExpression newListExpression -> linkNewListExpression(newListExpression, scope);
             case NewSetExpression newSetExpression -> linkNewSetExpression(newSetExpression, scope);
             case NewData newData -> linkNewData(newData, scope);
+            case NothingValue nothingValue -> linkNothingValue(nothingValue);
             case StringValue stringValue -> linkStringValue(stringValue, scope);
             case Value value -> linkValue(value, scope);
             //
@@ -512,6 +514,9 @@ public class CapybaraExpressionLinker {
 
     private CoercedArgument coerceArgument(LinkedExpression argument, LinkedType expected) {
         if (argument.type().equals(expected)) {
+            return new CoercedArgument(argument, 0);
+        }
+        if (argument.type() == NOTHING) {
             return new CoercedArgument(argument, 0);
         }
         if (argument.type() == ANY) {
@@ -1155,6 +1160,10 @@ public class CapybaraExpressionLinker {
 
     private ValueOrError<LinkedExpression> linkStringValue(StringValue value, Scope scope) {
         return ValueOrError.success(new LinkedStringValue(value.stringValue()));
+    }
+
+    private ValueOrError<LinkedExpression> linkNothingValue(NothingValue value) {
+        return ValueOrError.success(new LinkedNothingValue(value.position(), "Encountered `???`"));
     }
 
     private ValueOrError<LinkedExpression> linkValue(Value value, Scope scope) {

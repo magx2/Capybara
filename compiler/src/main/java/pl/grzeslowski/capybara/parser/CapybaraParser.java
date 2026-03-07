@@ -245,6 +245,9 @@ public class CapybaraParser {
                 if (literal.FLOAT_LITERAL() != null) {
                     return new FloatValue(literal.FLOAT_LITERAL().getText(), position(literal.FLOAT_LITERAL()));
                 }
+                if (literal.NOTHING_LITERAL() != null) {
+                    return new NothingValue(position(literal.NOTHING_LITERAL()));
+                }
             }
 
             if (value.identifier() != null) {
@@ -369,6 +372,9 @@ public class CapybaraParser {
                 }
                 if (literal.FLOAT_LITERAL() != null) {
                     return new FloatValue(literal.FLOAT_LITERAL().getText(), position(literal.FLOAT_LITERAL()));
+                }
+                if (literal.NOTHING_LITERAL() != null) {
+                    return new NothingValue(position(literal.NOTHING_LITERAL()));
                 }
             }
 
@@ -651,4 +657,5 @@ public class CapybaraParser {
     }
 
 }
+
 

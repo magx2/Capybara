@@ -102,7 +102,7 @@ public class CapybaraLinker {
             return ValueOrError.error(error.errors().stream().map(ValueOrError.Error.SingleError::message).toList());
         }
         var initialSignatures = ((ValueOrError.Value<List<CapybaraExpressionLinker.FunctionSignature>>) availableSignatures).value();
-        return linkFunctions(functions, dataTypes, initialSignatures, signaturesByModule, moduleClassNameByModuleName);
+        return linkFunctions(functions, dataTypes, initialSignatures, signaturesByModule, moduleClassNameByModuleName, moduleSourceFile(module));
     }
 
     private ValueOrError<LinkedModule> linkModule(
@@ -121,14 +121,14 @@ public class CapybaraLinker {
             return ValueOrError.error(error.errors().stream().map(ValueOrError.Error.SingleError::message).toList());
         }
         var initialSignatures = ((ValueOrError.Value<List<CapybaraExpressionLinker.FunctionSignature>>) availableSignatures).value();
-        return linkFunctions(functions, visibleTypes, initialSignatures, signaturesByModule, moduleClassNameByModuleName)
+        return linkFunctions(functions, visibleTypes, initialSignatures, signaturesByModule, moduleClassNameByModuleName, moduleSourceFile(module))
                 .flatMap(firstPassFunctions -> {
                     var refinedSignatures = mergeSignatures(
                             signaturesByModule.get(module.name()),
                             signaturesFromLinkedFunctions(firstPassFunctions)
                     );
                     var refinedAvailableSignatures = mergeSignatures(initialSignatures, refinedSignatures);
-                    return linkFunctions(functions, visibleTypes, refinedAvailableSignatures, signaturesByModule, moduleClassNameByModuleName)
+                    return linkFunctions(functions, visibleTypes, refinedAvailableSignatures, signaturesByModule, moduleClassNameByModuleName, moduleSourceFile(module))
                             .map(linkedFunctions -> new LinkedModule(
                                     module.name(),
                                     module.path(),
@@ -325,10 +325,11 @@ public class CapybaraLinker {
             Map<String, GenericDataType> dataTypes,
             List<CapybaraExpressionLinker.FunctionSignature> signatures,
             Map<String, List<CapybaraExpressionLinker.FunctionSignature>> signaturesByModule,
-            Map<String, String> moduleClassNameByModuleName
+            Map<String, String> moduleClassNameByModuleName,
+            String moduleSourceFile
     ) {
         return functions.stream()
-                .map(f -> linkFunction(f, dataTypes, signatures, signaturesByModule, moduleClassNameByModuleName))
+                .map(f -> linkFunction(f, dataTypes, signatures, signaturesByModule, moduleClassNameByModuleName, moduleSourceFile))
                 .collect(new ValueOrErrorCollectionCollector<>());
     }
 
@@ -337,7 +338,8 @@ public class CapybaraLinker {
             Map<String, GenericDataType> dataTypes,
             List<CapybaraExpressionLinker.FunctionSignature> signatures,
             Map<String, List<CapybaraExpressionLinker.FunctionSignature>> signaturesByModule,
-            Map<String, String> moduleClassNameByModuleName
+            Map<String, String> moduleClassNameByModuleName,
+            String moduleSourceFile
     ) {
         var linked = linkParameters(function.parameters(), dataTypes)
                 .flatMap(parameters ->
@@ -360,8 +362,127 @@ public class CapybaraLinker {
                                                                 function.name(),
                                                                 rtype,
                                                                 parameters,
-                                                                ex))));
+                                                                enrichNothing(ex, function.name(), moduleSourceFile)))));
         return withPosition(linked, function.position());
+    }
+
+    private String moduleSourceFile(Module module) {
+        return module.path().replace('\\', '/') + "/" + module.name() + ".cfun";
+    }
+
+    private pl.grzeslowski.capybara.linker.expression.LinkedExpression enrichNothing(
+            pl.grzeslowski.capybara.linker.expression.LinkedExpression expression,
+            String functionName,
+            String moduleSourceFile
+    ) {
+        return switch (expression) {
+            case pl.grzeslowski.capybara.linker.expression.LinkedBooleanValue value -> value;
+            case pl.grzeslowski.capybara.linker.expression.LinkedFieldAccess value -> new pl.grzeslowski.capybara.linker.expression.LinkedFieldAccess(
+                    enrichNothing(value.source(), functionName, moduleSourceFile),
+                    value.field(),
+                    value.type()
+            );
+            case pl.grzeslowski.capybara.linker.expression.LinkedFloatValue value -> value;
+            case pl.grzeslowski.capybara.linker.expression.LinkedFunctionCall value -> new pl.grzeslowski.capybara.linker.expression.LinkedFunctionCall(
+                    value.name(),
+                    value.arguments().stream().map(argument -> enrichNothing(argument, functionName, moduleSourceFile)).toList(),
+                    value.returnType()
+            );
+            case pl.grzeslowski.capybara.linker.expression.LinkedFunctionInvoke value -> new pl.grzeslowski.capybara.linker.expression.LinkedFunctionInvoke(
+                    enrichNothing(value.function(), functionName, moduleSourceFile),
+                    value.arguments().stream().map(argument -> enrichNothing(argument, functionName, moduleSourceFile)).toList(),
+                    value.returnType()
+            );
+            case pl.grzeslowski.capybara.linker.expression.LinkedIfExpression value -> new pl.grzeslowski.capybara.linker.expression.LinkedIfExpression(
+                    enrichNothing(value.condition(), functionName, moduleSourceFile),
+                    enrichNothing(value.thenBranch(), functionName, moduleSourceFile),
+                    enrichNothing(value.elseBranch(), functionName, moduleSourceFile),
+                    value.type()
+            );
+            case pl.grzeslowski.capybara.linker.expression.LinkedInfixExpression value -> new pl.grzeslowski.capybara.linker.expression.LinkedInfixExpression(
+                    enrichNothing(value.left(), functionName, moduleSourceFile),
+                    value.operator(),
+                    enrichNothing(value.right(), functionName, moduleSourceFile),
+                    value.type()
+            );
+            case pl.grzeslowski.capybara.linker.expression.LinkedIntValue value -> value;
+            case pl.grzeslowski.capybara.linker.expression.LinkedLambdaExpression value -> new pl.grzeslowski.capybara.linker.expression.LinkedLambdaExpression(
+                    value.argumentName(),
+                    enrichNothing(value.expression(), functionName, moduleSourceFile),
+                    value.functionType()
+            );
+            case pl.grzeslowski.capybara.linker.expression.LinkedLetExpression value -> new pl.grzeslowski.capybara.linker.expression.LinkedLetExpression(
+                    value.name(),
+                    enrichNothing(value.value(), functionName, moduleSourceFile),
+                    enrichNothing(value.rest(), functionName, moduleSourceFile)
+            );
+            case pl.grzeslowski.capybara.linker.expression.LinkedMatchExpression value -> new pl.grzeslowski.capybara.linker.expression.LinkedMatchExpression(
+                    enrichNothing(value.matchWith(), functionName, moduleSourceFile),
+                    value.cases().stream().map(matchCase -> new pl.grzeslowski.capybara.linker.expression.LinkedMatchExpression.MatchCase(
+                            matchCase.pattern(),
+                            enrichNothing(matchCase.expression(), functionName, moduleSourceFile)
+                    )).toList(),
+                    value.type()
+            );
+            case pl.grzeslowski.capybara.linker.expression.LinkedNothingValue value -> {
+                var line = value.position().map(pl.grzeslowski.capybara.parser.SourcePosition::line).orElse(-1);
+                var column = value.position().map(pl.grzeslowski.capybara.parser.SourcePosition::column).orElse(-1);
+                var normalizedFile = moduleSourceFile.startsWith("/") ? moduleSourceFile : "/" + moduleSourceFile;
+                var message = "line " + line + ", column " + column + ", file " + normalizedFile
+                              + ": the function `" + functionName + "` is not yet implemented";
+                yield new pl.grzeslowski.capybara.linker.expression.LinkedNothingValue(value.position(), message);
+            }
+            case pl.grzeslowski.capybara.linker.expression.LinkedPipeFlatMapExpression value -> new pl.grzeslowski.capybara.linker.expression.LinkedPipeFlatMapExpression(
+                    enrichNothing(value.source(), functionName, moduleSourceFile),
+                    value.argumentName(),
+                    enrichNothing(value.mapper(), functionName, moduleSourceFile),
+                    value.type()
+            );
+            case pl.grzeslowski.capybara.linker.expression.LinkedPipeFilterOutExpression value -> new pl.grzeslowski.capybara.linker.expression.LinkedPipeFilterOutExpression(
+                    enrichNothing(value.source(), functionName, moduleSourceFile),
+                    value.argumentName(),
+                    enrichNothing(value.predicate(), functionName, moduleSourceFile),
+                    value.type()
+            );
+            case pl.grzeslowski.capybara.linker.expression.LinkedPipeExpression value -> new pl.grzeslowski.capybara.linker.expression.LinkedPipeExpression(
+                    enrichNothing(value.source(), functionName, moduleSourceFile),
+                    value.argumentName(),
+                    enrichNothing(value.mapper(), functionName, moduleSourceFile),
+                    value.type()
+            );
+            case pl.grzeslowski.capybara.linker.expression.LinkedPipeReduceExpression value -> new pl.grzeslowski.capybara.linker.expression.LinkedPipeReduceExpression(
+                    enrichNothing(value.source(), functionName, moduleSourceFile),
+                    enrichNothing(value.initialValue(), functionName, moduleSourceFile),
+                    value.accumulatorName(),
+                    value.valueName(),
+                    enrichNothing(value.reducerExpression(), functionName, moduleSourceFile),
+                    value.type()
+            );
+            case pl.grzeslowski.capybara.linker.expression.LinkedNewDict value -> new pl.grzeslowski.capybara.linker.expression.LinkedNewDict(
+                    value.entries().stream().map(entry -> new pl.grzeslowski.capybara.linker.expression.LinkedNewDict.Entry(
+                            enrichNothing(entry.key(), functionName, moduleSourceFile),
+                            enrichNothing(entry.value(), functionName, moduleSourceFile)
+                    )).toList(),
+                    value.type()
+            );
+            case pl.grzeslowski.capybara.linker.expression.LinkedNewList value -> new pl.grzeslowski.capybara.linker.expression.LinkedNewList(
+                    value.values().stream().map(argument -> enrichNothing(argument, functionName, moduleSourceFile)).toList(),
+                    value.type()
+            );
+            case pl.grzeslowski.capybara.linker.expression.LinkedNewSet value -> new pl.grzeslowski.capybara.linker.expression.LinkedNewSet(
+                    value.values().stream().map(argument -> enrichNothing(argument, functionName, moduleSourceFile)).toList(),
+                    value.type()
+            );
+            case pl.grzeslowski.capybara.linker.expression.LinkedNewData value -> new pl.grzeslowski.capybara.linker.expression.LinkedNewData(
+                    value.type(),
+                    value.assignments().stream().map(assignment -> new pl.grzeslowski.capybara.linker.expression.LinkedNewData.FieldAssignment(
+                            assignment.name(),
+                            enrichNothing(assignment.value(), functionName, moduleSourceFile)
+                    )).toList()
+            );
+            case pl.grzeslowski.capybara.linker.expression.LinkedStringValue value -> value;
+            case pl.grzeslowski.capybara.linker.expression.LinkedVariable value -> value;
+        };
     }
 
     private ValueOrError<List<CapybaraExpressionLinker.FunctionSignature>> linkFunctionSignatures(

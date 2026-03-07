@@ -120,6 +120,7 @@ public final class JavaGenerator implements Generator {
                 .stream()
                 .map(this::mapJavaMethod)
                 .forEach(code::append);
+        code.append('\n').append(unsupportedHelperMethod());
 
         // close object declaration
         code.append("}");
@@ -166,6 +167,7 @@ public final class JavaGenerator implements Generator {
         javaClass.staticMethods().stream()
                 .map(this::mapJavaMethod)
                 .forEach(code::append);
+        code.append('\n').append(unsupportedHelperMethod());
 
         code.append("}\n");
         return code.toString();
@@ -314,5 +316,11 @@ public final class JavaGenerator implements Generator {
 
     private String mapFunctionParameter(JavaMethod.JavaFunctionParameter parameter) {
         return parameter.type() + " " + parameter.generatedName();
+    }
+
+    private String unsupportedHelperMethod() {
+        return "private static <T> T __capybaraUnsupported(String message) {\n"
+               + "throw new java.lang.UnsupportedOperationException(message);\n"
+               + "}\n";
     }
 }

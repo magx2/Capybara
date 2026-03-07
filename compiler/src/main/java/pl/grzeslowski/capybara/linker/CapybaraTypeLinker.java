@@ -102,6 +102,7 @@ public class CapybaraTypeLinker {
             case STRING -> PrimitiveLinkedType.STRING;
             case BOOL -> PrimitiveLinkedType.BOOL;
             case FLOAT -> PrimitiveLinkedType.FLOAT;
+            case NOTHING -> PrimitiveLinkedType.NOTHING;
         };
     }
 

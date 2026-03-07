@@ -7,7 +7,8 @@ public enum PrimitiveType implements Type {
     INT("int"),
     STRING("string"),
     BOOL("bool"),
-    FLOAT("float");
+    FLOAT("float"),
+    NOTHING("nothing");
 
     private final String name;
 

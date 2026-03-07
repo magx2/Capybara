@@ -23,6 +23,7 @@ public class ValueNameRewriter {
                     rewriteValueInLinkedLetExpression(name, uniqueName, linkedLetExpression);
             case LinkedMatchExpression linkedMatchExpression ->
                     rewriteValueInLinkedMatchExpression(name, uniqueName, linkedMatchExpression);
+            case LinkedNothingValue linkedNothingValue -> linkedNothingValue;
             case LinkedPipeFlatMapExpression linkedPipeFlatMapExpression ->
                     rewriteValueInLinkedPipeFlatMapExpression(name, uniqueName, linkedPipeFlatMapExpression);
             case LinkedPipeFilterOutExpression linkedPipeFilterOutExpression ->

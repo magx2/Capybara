@@ -9,6 +9,10 @@ public enum PrimitiveLinkedType implements LinkedType {
     STRING,
     BOOL,
     /**
+     * Bottom-like type that can be assigned to any other type.
+     */
+    NOTHING,
+    /**
      * Top type for all types
      */
     ANY;
