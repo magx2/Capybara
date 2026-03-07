@@ -31,6 +31,6 @@ fun order_of_expression(a: int, b: int): int =
         x - 1
     }
 
-fun power(x: int, y: int): int = x ** y
+fun power(x: int, y: int): int = x ^ y
 
 fun static_list(): list[int] = [1,2,3]

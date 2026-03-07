@@ -61,6 +61,7 @@ expressionNoLet: ifExpression
                | '{' expression '}'
                | new_set
                | BANG expressionNoLet
+               | BITWISE_NOT expressionNoLet
                | MINUS expressionNoLet
                | expressionNoLet DOT NAME
                | expressionNoLet infixOperator expressionNoLet
@@ -78,6 +79,7 @@ expressionNoLetNoPipe: ifExpression
                      | '(' expressionNoLetNoPipe ')'
                      | new_set
                      | BANG expressionNoLetNoPipe
+                     | BITWISE_NOT expressionNoLetNoPipe
                      | MINUS expressionNoLetNoPipe
                      | expressionNoLetNoPipe DOT NAME
                      | expressionNoLetNoPipe infixOperatorNoPipe expressionNoLetNoPipe
@@ -127,8 +129,11 @@ infixOperator: PLUS
              | MINUS
              | MUL
              | DIV
-             | CARET
              | POWER
+             | BITWISE_AND
+             | BITWISE_NAND
+             | BITWISE_OR
+             | BITWISE_XOR
              | GT
              | LT
              | EQUAL
@@ -141,13 +146,16 @@ infixOperator: PLUS
              | PIPE_REDUCE
              | QUESTION
              | AND
-             | OR;
+             | PIPE;
 infixOperatorNoPipe: PLUS
                    | MINUS
                    | MUL
                    | DIV
-                   | CARET
                    | POWER
+                   | BITWISE_AND
+                   | BITWISE_NAND
+                   | BITWISE_OR
+                   | BITWISE_XOR
                    | GT
                    | LT
                    | EQUAL
@@ -156,7 +164,7 @@ infixOperatorNoPipe: PLUS
                    | GE
                    | QUESTION
                    | AND
-                   | OR;
+                   | PIPE;
 
 UNDERSCORE: '_';
 
@@ -182,6 +190,11 @@ LT : '<';
 BANG : '!';
 TILDE : '~';
 QUESTION : '?';
+BITWISE_AND : '.and.';
+BITWISE_NAND : '.nand.';
+BITWISE_OR : '.or.';
+BITWISE_XOR : '.xor.';
+BITWISE_NOT : '.not.';
 PIPE_MINUS : '|-';
 PIPE_FLATMAP : '|*';
 PIPE_REDUCE : '|>';
@@ -191,15 +204,12 @@ EQUAL : '==';
 LE : '<=';
 GE : '>=';
 NOTEQUAL : '!=';
-AND : '&&';
-OR : '||';
+AND : '&';
 INC : '++';
 DEC : '--';
 MUL : '*';
 DIV : '/';
-BITAND : '&';
-CARET : '^';
-POWER: '**';
+POWER: '^';
 MOD : '%';
 ARROW : '->';
 FAT_ARROW : '=>';

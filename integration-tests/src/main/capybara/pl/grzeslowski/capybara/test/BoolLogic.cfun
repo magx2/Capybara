@@ -1,6 +1,6 @@
-fun and_logic(a: bool, b: bool): bool = a && b
+fun and_logic(a: bool, b: bool): bool = a & b
 
-fun or_logic(a: bool, b: bool): bool = a || b
+fun or_logic(a: bool, b: bool): bool = a | b
 
 fun equal_logic(a: bool, b: bool): bool = a == b
 
@@ -8,7 +8,7 @@ fun not_equal_logic(a: bool, b: bool): bool = a != b
 
 fun not_logic(a: bool): bool = !a
 
-fun complex_logic(a: bool, b: bool): bool = (!a && b) || (a == b)
+fun complex_logic(a: bool, b: bool): bool = (!a & b) | (a == b)
 
 fun byte_to_bool(v: byte): bool = if v then true else false
 
@@ -28,9 +28,9 @@ fun set_to_bool(v: set[int]): bool = if v then true else false
 
 fun dict_to_bool(v: dict[int]): bool = if v then true else false
 
-fun and_int(a: int, b: int): bool = a && b
+fun and_int(a: int, b: int): bool = a & b
 
-fun or_string(a: string, b: string): bool = a || b
+fun or_string(a: string, b: string): bool = a | b
 
 fun not_int(v: int): bool = !v
 

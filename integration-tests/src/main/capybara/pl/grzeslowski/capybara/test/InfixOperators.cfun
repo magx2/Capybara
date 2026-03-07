@@ -136,43 +136,43 @@ fun div_string_long(a: string, b: long): string = a / b
 fun div_string_float(a: string, b: float): string = a / b
 fun div_string_double(a: string, b: double): string = a / b
 
-// POW (**)
-fun pow_byte_byte(a: byte, b: byte): byte = a ** b
-fun pow_byte_int(a: byte, b: int): int = a ** b
-fun pow_byte_long(a: byte, b: long): long = a ** b
-fun pow_byte_float(a: byte, b: float): float = a ** b
-fun pow_byte_double(a: byte, b: double): double = a ** b
-fun pow_int_byte(a: int, b: byte): int = a ** b
-fun pow_int_int(a: int, b: int): int = a ** b
-fun pow_int_long(a: int, b: long): long = a ** b
-fun pow_int_float(a: int, b: float): float = a ** b
-fun pow_int_double(a: int, b: double): double = a ** b
-fun pow_long_byte(a: long, b: byte): long = a ** b
-fun pow_long_int(a: long, b: int): long = a ** b
-fun pow_long_long(a: long, b: long): long = a ** b
-fun pow_long_float(a: long, b: float): float = a ** b
-fun pow_long_double(a: long, b: double): double = a ** b
-fun pow_float_byte(a: float, b: byte): float = a ** b
-fun pow_float_int(a: float, b: int): float = a ** b
-fun pow_float_long(a: float, b: long): float = a ** b
-fun pow_float_float(a: float, b: float): float = a ** b
-fun pow_float_double(a: float, b: double): double = a ** b
-fun pow_double_byte(a: double, b: byte): double = a ** b
-fun pow_double_int(a: double, b: int): double = a ** b
-fun pow_double_long(a: double, b: long): double = a ** b
-fun pow_double_float(a: double, b: float): double = a ** b
-fun pow_double_double(a: double, b: double): double = a ** b
-fun pow_string_byte(a: string, b: byte): string = a ** b
-fun pow_string_int(a: string, b: int): string = a ** b
-fun pow_string_long(a: string, b: long): string = a ** b
-fun pow_string_float(a: string, b: float): string = a ** b
-fun pow_string_double(a: string, b: double): string = a ** b
+// POW (^)
+fun pow_byte_byte(a: byte, b: byte): byte = a ^ b
+fun pow_byte_int(a: byte, b: int): int = a ^ b
+fun pow_byte_long(a: byte, b: long): long = a ^ b
+fun pow_byte_float(a: byte, b: float): float = a ^ b
+fun pow_byte_double(a: byte, b: double): double = a ^ b
+fun pow_int_byte(a: int, b: byte): int = a ^ b
+fun pow_int_int(a: int, b: int): int = a ^ b
+fun pow_int_long(a: int, b: long): long = a ^ b
+fun pow_int_float(a: int, b: float): float = a ^ b
+fun pow_int_double(a: int, b: double): double = a ^ b
+fun pow_long_byte(a: long, b: byte): long = a ^ b
+fun pow_long_int(a: long, b: int): long = a ^ b
+fun pow_long_long(a: long, b: long): long = a ^ b
+fun pow_long_float(a: long, b: float): float = a ^ b
+fun pow_long_double(a: long, b: double): double = a ^ b
+fun pow_float_byte(a: float, b: byte): float = a ^ b
+fun pow_float_int(a: float, b: int): float = a ^ b
+fun pow_float_long(a: float, b: long): float = a ^ b
+fun pow_float_float(a: float, b: float): float = a ^ b
+fun pow_float_double(a: float, b: double): double = a ^ b
+fun pow_double_byte(a: double, b: byte): double = a ^ b
+fun pow_double_int(a: double, b: int): double = a ^ b
+fun pow_double_long(a: double, b: long): double = a ^ b
+fun pow_double_float(a: double, b: float): double = a ^ b
+fun pow_double_double(a: double, b: double): double = a ^ b
+fun pow_string_byte(a: string, b: byte): string = a ^ b
+fun pow_string_int(a: string, b: int): string = a ^ b
+fun pow_string_long(a: string, b: long): string = a ^ b
+fun pow_string_float(a: string, b: float): string = a ^ b
+fun pow_string_double(a: string, b: double): string = a ^ b
 
 // Unsupported combinations (should fail linking/type-checking if enabled as negative tests):
 // PLUS unsupported:
 // - any combination with bool, except none are supported by spec
 // - examples: byte+bool, bool+int, string+bool, bool+string, bool+bool
-// -,*,/,** unsupported:
+// -,*,/,^ unsupported:
 // - any combination with bool
 // - numeric with string on right (byte/int/long/float/double op string)
 // - string op string

@@ -613,7 +613,7 @@ public class CapybaraExpressionLinker {
     }
 
     private ValueOrError<LinkedExpression> linkInfixExpression(InfixExpression expression, Scope scope) {
-        if (expression.operator() == InfixOperator.PIPE) {
+        if (expression.operator() == InfixOperator.PIPE && isPipeMapExpression(expression)) {
             return linkPipeExpression(expression, scope);
         }
         if (expression.operator() == InfixOperator.PIPE_MINUS) {
@@ -877,12 +877,14 @@ public class CapybaraExpressionLinker {
         LinkedType type = switch (operator) {
             case PLUS -> findPlusType(left.type(), right.type());
             case MINUS -> findMinusType(left.type(), right.type());
-            case MUL, DIV, CARET, POWER -> findMathType(left.type(), right.type());
+            case MUL, DIV, POWER -> findMathType(left.type(), right.type());
+            case BITWISE_AND, BITWISE_NAND, BITWISE_OR, BITWISE_XOR -> findBitwiseType(left.type(), right.type());
+            case BITWISE_NOT -> findBitwiseNotType(left.type());
             // bool operators
             case GT, LT, EQUAL, NOTEQUAL, LE, GE -> BOOL;
-            case AND, OR -> findLogicalType(left.type(), right.type());
+            case AND, PIPE -> findLogicalType(left.type(), right.type());
             case QUESTION -> findQuestionType(left.type(), right.type());
-            case PIPE, PIPE_MINUS, PIPE_FLATMAP, PIPE_REDUCE -> null;
+            case PIPE_MINUS, PIPE_FLATMAP, PIPE_REDUCE -> null;
         };
         if (type == null) {
             var op = operator.symbol();
@@ -951,6 +953,23 @@ public class CapybaraExpressionLinker {
         return findHigherType(left, right);
     }
 
+    private static LinkedType findBitwiseType(LinkedType left, LinkedType right) {
+        if (left instanceof PrimitiveLinkedType leftPrimitive && right instanceof PrimitiveLinkedType rightPrimitive) {
+            return findBitwisePrimitiveType(leftPrimitive, rightPrimitive);
+        }
+        return null;
+    }
+
+    private static LinkedType findBitwiseNotType(LinkedType left) {
+        if (left instanceof PrimitiveLinkedType leftPrimitive) {
+            return switch (leftPrimitive) {
+                case BYTE, INT, LONG -> leftPrimitive;
+                default -> null;
+            };
+        }
+        return null;
+    }
+
     private static LinkedType findLogicalType(LinkedType left, LinkedType right) {
         if (isBooleanConvertibleType(left) && isBooleanConvertibleType(right)) {
             return BOOL;
@@ -1006,6 +1025,26 @@ public class CapybaraExpressionLinker {
     private static boolean isNumericPrimitive(PrimitiveLinkedType type) {
         return switch (type) {
             case BYTE, INT, LONG, FLOAT, DOUBLE -> true;
+            default -> false;
+        };
+    }
+
+    private static LinkedType findBitwisePrimitiveType(PrimitiveLinkedType left, PrimitiveLinkedType right) {
+        if (!isBitwisePrimitive(left) || !isBitwisePrimitive(right)) {
+            return null;
+        }
+        if (left == PrimitiveLinkedType.LONG || right == PrimitiveLinkedType.LONG) {
+            return PrimitiveLinkedType.LONG;
+        }
+        if (left == PrimitiveLinkedType.INT || right == PrimitiveLinkedType.INT) {
+            return PrimitiveLinkedType.INT;
+        }
+        return PrimitiveLinkedType.BYTE;
+    }
+
+    private static boolean isBitwisePrimitive(PrimitiveLinkedType type) {
+        return switch (type) {
+            case BYTE, INT, LONG -> true;
             default -> false;
         };
     }
@@ -1360,7 +1399,12 @@ public class CapybaraExpressionLinker {
                                                 expression.name(),
                                                 value,
                                                 rest
-                                        )));
+                                )));
+    }
+
+    private boolean isPipeMapExpression(InfixExpression expression) {
+        return expression.right() instanceof LambdaExpression
+               || expression.right() instanceof FunctionReference;
     }
 
     private static <T> ValueOrError<T> withPosition(ValueOrError<T> valueOrError, Optional<pl.grzeslowski.capybara.parser.SourcePosition> position) {

@@ -179,7 +179,7 @@ public class JavaExpressionEvaluator {
                 }
                 yield left.expression() + operator.symbol() + right.expression();
             }
-            case MUL, DIV, CARET -> {
+            case MUL, DIV -> {
                 if (isStringLeftNumericRight(infixExpression)) {
                     yield left.expression() + "+" + right.expression();
                 }
@@ -197,18 +197,24 @@ public class JavaExpressionEvaluator {
                 }
                 yield left.expression() + operator.symbol() + right.expression();
             }
-            case AND, OR -> toBooleanExpression(left.expression(), infixExpression.left().type())
-                            + operator.symbol()
+            case BITWISE_AND, BITWISE_OR, BITWISE_XOR ->
+                    left.expression() + operator.javaSymbol() + right.expression();
+            case BITWISE_NAND ->
+                    "~(" + left.expression() + operator.javaSymbol() + right.expression() + ")";
+            case BITWISE_NOT ->
+                    operator.javaSymbol() + left.expression();
+            case AND, PIPE -> toBooleanExpression(left.expression(), infixExpression.left().type())
+                            + operator.javaSymbol()
                             + toBooleanExpression(right.expression(), infixExpression.right().type());
             case EQUAL, NOTEQUAL -> {
                 if (isBooleanCoercionComparison(infixExpression)) {
                     yield toBooleanExpression(left.expression(), infixExpression.left().type())
-                          + operator.symbol()
+                          + operator.javaSymbol()
                           + toBooleanExpression(right.expression(), infixExpression.right().type());
                 }
-                yield left.expression() + operator.symbol() + right.expression();
+                yield left.expression() + operator.javaSymbol() + right.expression();
             }
-            default -> left.expression() + operator.symbol() + right.expression();
+            default -> left.expression() + operator.javaSymbol() + right.expression();
         };
 
         return right.scope().addExpression('(' + castIfNeeded(infixExpression.type(), expression) + ')');
