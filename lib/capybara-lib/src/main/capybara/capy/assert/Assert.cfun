@@ -1,0 +1,31 @@
+data Assertion { result: bool, message: string }
+
+type Assert { assertions: list[Assertion] }= StringAssertion
+
+data StringAssertion { value: string }
+
+fun StringAssertion.is_equal_to(other: string): StringAssertion =
+    let assertion = Assertion {
+        result: this.value == other,
+        message: "Expected string\n" + this.value + "\nto be equal to\n" + other
+    }
+    StringAssertion {
+        value: this.value,
+        assertions: this.assertions + assertion
+    }
+
+fun StringAssertion.starts_with(other: string): StringAssertion = ??? // todo do not have capabilities to do this
+
+fun assert_that(value: string) = StringAssertion { value: value, assertions: [] }
+
+fun Assert.check(): list[string] =
+    this.assertions
+        |- a =>  a.result
+        | a => a.message
+        | m => "❌ " + m
+
+fun run_tests(asserts: list[Assert]) =
+    let errors = asserts |* a => a.check()
+    if errors.size == 0
+    then /capy/lang/Program.Success { results: ["✅ All tests (" + asserts.size + ") passed"] }
+    else /capy/lang/Program.Failed { exitCode: 2, errors: ["❌ Some test failed " + errors.size * 100.0 / asserts.size + "% (" + errors.size + "/" + asserts.size + ")"] + errors }

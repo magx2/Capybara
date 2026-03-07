@@ -1,0 +1,28 @@
+from /capy/lang/Option import { * }
+
+type Json = JsonObject | JsonArray | JsonValue
+data JsonObject { value: dict[Json] }
+data JsonArray { array: list[Json] }
+
+type JsonValue = JsonString | JsonNumber | JsonValueObject | JsonValueArray | JsonBool | JsonNull
+data JsonString { value: string }
+data JsonNumber { value: double }
+data JsonValueObject { value: JsonObject }
+data JsonValueArray { value: JsonArray }
+data JsonBool { value: bool }
+single JsonNull
+
+fun serialize(obj: JsonObject) = _serialize(obj)
+
+fun _serialize(json: Json): string =
+    match json with
+    | JsonObject { value } => "{" + (value |> "", (acc, k, v) => acc + "\"" + k +"\":" + _serialize(v)) + "}"
+    | JsonArray { array } =>  "[" + (array |> "", (acc, item) => acc + _serialize(item)) + "]"
+    | JsonString { value } => "\"" + value + "\""
+    | JsonNumber { value } => value + ""
+    | JsonValueObject { value } => _serialize(value)
+    | JsonValueArray { value } => _serialize(value)
+    | JsonBool { value } => value + ""
+    | JsonNull => "null"
+
+fun deserialize(json: string): Option[JsonObject] = ???

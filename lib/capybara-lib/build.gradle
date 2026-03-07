@@ -1,3 +1,76 @@
 plugins {
     id 'buildlogic.java-library-conventions'
 }
+
+def capybaraMainSourceDir = layout.projectDirectory.dir('src/main/capybara')
+def capybaraTestSourceDir = layout.projectDirectory.dir('src/test/capybara')
+def capybaraGeneratedMainDir = layout.buildDirectory.dir('generated/sources/capybara/java/main')
+def capybaraGeneratedTestDir = layout.buildDirectory.dir('generated/sources/capybara/java/test')
+
+tasks.register('compileCapybara', JavaExec) {
+    group = 'build'
+    description = 'Compiles Capybara files from src/main/capybara.'
+
+    inputs.dir(capybaraMainSourceDir)
+    outputs.dir(capybaraGeneratedMainDir)
+
+    classpath = project(':app').sourceSets.main.runtimeClasspath
+    mainClass = 'pl.grzeslowski.capybara.App'
+
+    doFirst {
+        args '--debug', 'JAVA',
+                capybaraMainSourceDir.asFile.absolutePath,
+                capybaraGeneratedMainDir.get().asFile.absolutePath
+    }
+}
+
+tasks.register('compileTestCapybara', JavaExec) {
+    group = 'verification'
+    description = 'Compiles Capybara files from src/main/capybara and src/test/capybara.'
+    dependsOn tasks.named('compileCapybara')
+
+    inputs.dir(capybaraMainSourceDir)
+    inputs.dir(capybaraTestSourceDir)
+    outputs.dir(capybaraGeneratedTestDir)
+
+    classpath = project(':app').sourceSets.main.runtimeClasspath
+    mainClass = 'pl.grzeslowski.capybara.App'
+
+    doFirst {
+        def inputDirs = [capybaraMainSourceDir.asFile, capybaraTestSourceDir.asFile]
+                .findAll { it.exists() && it.isDirectory() }
+                .collect { it.absolutePath }
+        args '--debug', 'JAVA', * inputDirs , capybaraGeneratedTestDir.get().asFile.absolutePath
+    }
+}
+
+tasks.register('testCapybara', JavaExec) {
+    group = 'verification'
+    description = 'Runs generated Capybara JsonTest main function.'
+    dependsOn tasks.named('compileTestCapybara')
+
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'lang.serialization.JsonTest'
+}
+
+sourceSets {
+    main {
+        java.srcDir capybaraGeneratedMainDir
+    }
+    test {
+        java.srcDir capybaraGeneratedTestDir
+    }
+}
+
+tasks.named('compileJava') {
+    dependsOn tasks.named('compileCapybara')
+}
+
+tasks.named('compileTestJava') {
+    dependsOn tasks.named('compileTestCapybara')
+}
+
+tasks.named('test') {
+    dependsOn tasks.named('testCapybara')
+    failOnNoDiscoveredTests = false
+}
