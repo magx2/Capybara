@@ -22,4 +22,17 @@ class ImportsTest {
         assertThat(pl.grzeslowski.capybara.test.imports.Main.x(2, 3, "+"))
                 .isEqualTo("Day as usual");
     }
+
+    @Test
+    void supportsQualifiedImportedTypes() {
+        var value = pl.grzeslowski.capybara.test.imports.Main.t1(7);
+        assertThat(value).isInstanceOf(pl.grzeslowski.capybara.test.imports.Types2.TD1.class);
+    }
+
+    @Test
+    void supportsQualifiedImportedDataTypeConstruction() {
+        var value = pl.grzeslowski.capybara.test.imports.Main.xyz(1, 2, 3);
+        assertThat(value).isInstanceOf(pl.grzeslowski.capybara.test.imports.Types2.DataX.class);
+        assertThat(value.xyz()).isEqualTo("123");
+    }
 }

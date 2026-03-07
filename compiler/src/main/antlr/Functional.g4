@@ -39,7 +39,8 @@ type: COLLECTION '[' type ']'
     | 'bool'
     | 'string'
     | 'float'
-    | TYPE ('[' type (',' type)* ']')?;
+    | qualifiedType ('[' type (',' type)* ']')?;
+qualifiedType: TYPE (DOT TYPE)*;
 TYPE: [A-Z][a-zA-Z0-9]*
       | TYPE_FULL ;
 TYPE_FULL: '/' [A-Za-z_][a-zA-Z0-9_]* ( '/' [A-Za-z_][a-zA-Z0-9_]* )+;

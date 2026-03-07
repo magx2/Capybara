@@ -105,6 +105,9 @@ public class JavaAstBuilder {
         if ("*".equals(memberName)) {
             return memberName;
         }
+        if (!memberName.isEmpty() && Character.isUpperCase(memberName.charAt(0))) {
+            return buildClassName(memberName).toString();
+        }
         return buildMethodName(memberName);
     }
 
@@ -125,6 +128,12 @@ public class JavaAstBuilder {
     }
 
     private JavaType buildGenericDataType(GenericDataType type) {
+        if (type.name().contains(".")) {
+            var qualifiedName = Stream.of(type.name().split("\\."))
+                    .map(part -> normalizeJavaIdentifier(part, true))
+                    .collect(joining("."));
+            return new JavaType(qualifiedName);
+        }
         return buildClassName(type.name());
     }
 

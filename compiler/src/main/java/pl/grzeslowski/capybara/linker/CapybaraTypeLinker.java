@@ -34,10 +34,31 @@ public class CapybaraTypeLinker {
 
     private static ValueOrError<LinkedType> linkDataType(DataType dataType, Map<String, GenericDataType> dataTypes) {
         if (dataTypes.containsKey(dataType.name())) {
-            return ValueOrError.success(dataTypes.get(dataType.name()));
+            return ValueOrError.success(withQualifiedNameIfNeeded(dataTypes.get(dataType.name()), dataType.name()));
         }
 
         return ValueOrError.error("Data type \"" + dataType.name() + "\" not found");
+    }
+
+    private static LinkedType withQualifiedNameIfNeeded(GenericDataType type, String requestedName) {
+        if (!requestedName.contains(".")) {
+            return type;
+        }
+        return switch (type) {
+            case LinkedDataType linkedDataType -> new LinkedDataType(
+                    requestedName,
+                    linkedDataType.fields(),
+                    linkedDataType.typeParameters(),
+                    linkedDataType.extendedTypes(),
+                    linkedDataType.singleton()
+            );
+            case LinkedDataParentType linkedDataParentType -> new LinkedDataParentType(
+                    requestedName,
+                    linkedDataParentType.fields(),
+                    linkedDataParentType.subTypes(),
+                    linkedDataParentType.typeParameters()
+            );
+        };
     }
 
     private static LinkedType linkPrimitiveType(PrimitiveType primitiveType) {

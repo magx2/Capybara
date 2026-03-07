@@ -133,8 +133,8 @@ public class CapybaraLinker {
                                     module.name(),
                                     module.path(),
                                     localTypes,
-                                    Set.copyOf(linkedFunctions),
-                                    staticImports(module, modulesByName, signaturesByModule)
+                                    deduplicateFunctions(linkedFunctions),
+                                    staticImports(module, modulesByName, linkedTypesByModule, signaturesByModule)
                             ));
                 });
     }
@@ -189,13 +189,16 @@ public class CapybaraLinker {
             Map<String, Module> modulesByName,
             Map<String, Map<String, GenericDataType>> linkedTypesByModule
     ) {
-        var all = new LinkedHashMap<String, GenericDataType>(linkedTypesByModule.get(module.name()));
+        var localTypes = linkedTypesByModule.get(module.name());
+        var all = new LinkedHashMap<String, GenericDataType>(localTypes);
+        addQualifiedTypeAliases(all, module.name(), localTypes);
         for (var importDeclaration : module.imports()) {
             var importedModule = resolveImportedModule(importDeclaration.moduleName(), modulesByName);
             if (importedModule == null) {
                 return ValueOrError.error("Module `" + module.name() + "` imports unknown module `" + importDeclaration.moduleName() + "`");
             }
             var importedTypes = linkedTypesByModule.get(importedModule.name());
+            addQualifiedTypeAliases(all, importedModule.name(), importedTypes);
             if (importDeclaration.isStarImport() && importDeclaration.excludedSymbols().isEmpty()) {
                 importedTypes.forEach(all::put);
                 continue;
@@ -212,9 +215,14 @@ public class CapybaraLinker {
         return ValueOrError.success(Map.copyOf(all));
     }
 
+    private void addQualifiedTypeAliases(Map<String, GenericDataType> all, String moduleName, Map<String, GenericDataType> importedTypes) {
+        importedTypes.forEach((typeName, type) -> all.put(moduleName + "." + typeName, type));
+    }
+
     private Set<LinkedModule.StaticImport> staticImports(
             Module module,
             Map<String, Module> modulesByName,
+            Map<String, Map<String, GenericDataType>> linkedTypesByModule,
             Map<String, List<CapybaraExpressionLinker.FunctionSignature>> signaturesByModule
     ) {
         var imports = new HashSet<LinkedModule.StaticImport>();
@@ -228,9 +236,12 @@ public class CapybaraLinker {
                 imports.add(new LinkedModule.StaticImport(className, "*"));
                 continue;
             }
-            var availableMembers = signaturesByModule.get(importedModule.name()).stream()
+            var availableFunctionMembers = signaturesByModule.get(importedModule.name()).stream()
                     .map(CapybaraExpressionLinker.FunctionSignature::name)
                     .collect(java.util.stream.Collectors.toSet());
+            var availableTypeMembers = new HashSet<>(linkedTypesByModule.get(importedModule.name()).keySet());
+            var availableMembers = new HashSet<String>(availableFunctionMembers);
+            availableMembers.addAll(availableTypeMembers);
             for (var symbol : importDeclaration.selectedSymbols(availableMembers)) {
                 if (availableMembers.contains(symbol)) {
                     imports.add(new LinkedModule.StaticImport(className, symbol));
@@ -238,6 +249,15 @@ public class CapybaraLinker {
             }
         }
         return Set.copyOf(imports);
+    }
+
+    private Set<LinkedFunction> deduplicateFunctions(List<LinkedFunction> linkedFunctions) {
+        var byKey = new LinkedHashMap<String, LinkedFunction>();
+        for (var function : linkedFunctions) {
+            var parameters = function.parameters().stream().map(parameter -> parameter.type().name()).toList();
+            byKey.put(function.name() + "#" + parameters, function);
+        }
+        return Set.copyOf(byKey.values());
     }
 
     private Module resolveImportedModule(String rawImportedModuleName, Map<String, Module> modulesByName) {
@@ -283,6 +303,9 @@ public class CapybaraLinker {
         return definitions.stream()
                 .filter(Function.class::isInstance)
                 .map(Function.class::cast)
+                .sorted(Comparator
+                        .comparingInt((Function function) -> function.position().map(pl.grzeslowski.capybara.parser.SourcePosition::line).orElse(Integer.MAX_VALUE))
+                        .thenComparingInt(function -> function.position().map(pl.grzeslowski.capybara.parser.SourcePosition::column).orElse(Integer.MAX_VALUE)))
                 .toList();
     }
 
