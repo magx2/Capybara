@@ -45,6 +45,7 @@ class CapybaraParserTest {
                 Arguments.of("map", "fun map(l: list[int]) = l | :double\nfun double(x: int) = x * x"),
                 Arguments.of("pipe_filter_out", "fun pipe_filter_out(l: list[int]): list[int] = l |- x => x > 0"),
                 Arguments.of("pipe_reduce", "fun pipe_reduce(l: list[int]): int = l |> 0, (a, b) => a + b"),
+                Arguments.of("pipe_reduce_dict", "fun pipe_reduce_dict(d: dict[int]): string = d |> \"\", (a, k, v) => a + k + v"),
                 Arguments.of("pipe_flat_map", "fun pipe_flat_map(l: list[int]): list[int] = l |* x => [x, x + 1]"),
                 Arguments.of(
                         "invoke_multi",

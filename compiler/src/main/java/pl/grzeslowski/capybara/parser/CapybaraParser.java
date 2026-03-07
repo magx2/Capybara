@@ -384,10 +384,18 @@ public class CapybaraParser {
     }
 
     private ReduceExpression reduceExpression(FunctionalParser.ReduceExpressionContext context) {
+        var names = context.NAME();
+        if (names.size() < 2 || names.size() > 3) {
+            throw new IllegalStateException("Reduce expression has to define two or three arguments");
+        }
+        var accumulatorName = names.get(0).getText();
+        var keyName = names.size() == 3 ? Optional.of(names.get(1).getText()) : Optional.<String>empty();
+        var valueName = names.size() == 3 ? names.get(2).getText() : names.get(1).getText();
         return new ReduceExpression(
                 expressionNoLetNoPipe(context.expressionNoLetNoPipe(0)),
-                context.NAME(0).getText(),
-                context.NAME(1).getText(),
+                accumulatorName,
+                keyName,
+                valueName,
                 expressionNoLetNoPipe(context.expressionNoLetNoPipe(1)),
                 position(context)
         );

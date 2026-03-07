@@ -496,6 +496,7 @@ public class CapybaraLinker {
                     enrichNothing(value.source(), functionName, moduleSourceFile),
                     enrichNothing(value.initialValue(), functionName, moduleSourceFile),
                     value.accumulatorName(),
+                    value.keyName(),
                     value.valueName(),
                     enrichNothing(value.reducerExpression(), functionName, moduleSourceFile),
                     value.type()

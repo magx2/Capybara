@@ -1006,8 +1006,17 @@ public class CapybaraExpressionLinker {
                     return linkExpression(reduceExpression.initialValue(), scope)
                             .flatMap(initial -> {
                                 var reduceScope = scope
-                                        .add(reduceExpression.accumulatorName(), initial.type())
-                                        .add(reduceExpression.valueName(), elementType);
+                                        .add(reduceExpression.accumulatorName(), initial.type());
+                                if (reduceExpression.keyName().isPresent()) {
+                                    if (!(left.type() instanceof LinkedDict)) {
+                                        return withPosition(
+                                                ValueOrError.error("Reducer in `|>` with key argument can only be used for `dict`"),
+                                                reduceExpression.position()
+                                        );
+                                    }
+                                    reduceScope = reduceScope.add(reduceExpression.keyName().orElseThrow(), STRING);
+                                }
+                                reduceScope = reduceScope.add(reduceExpression.valueName(), elementType);
                                 return linkExpression(reduceExpression.reducerExpression(), reduceScope)
                                         .flatMap(reducer -> {
                                             if (reducer.type() != initial.type()) {
@@ -1022,6 +1031,7 @@ public class CapybaraExpressionLinker {
                                                     left,
                                                     initial,
                                                     reduceExpression.accumulatorName(),
+                                                    reduceExpression.keyName(),
                                                     reduceExpression.valueName(),
                                                     reducer,
                                                     initial.type()

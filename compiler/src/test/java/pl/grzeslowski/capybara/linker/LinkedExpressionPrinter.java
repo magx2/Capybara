@@ -141,12 +141,13 @@ public class LinkedExpressionPrinter {
     }
 
     private static String printLinkedPipeReduceExpression(LinkedPipeReduceExpression linkedPipeReduceExpression, int level) {
+        var args = linkedPipeReduceExpression.keyName()
+                .map(keyName -> linkedPipeReduceExpression.accumulatorName() + "," + keyName + "," + linkedPipeReduceExpression.valueName())
+                .orElse(linkedPipeReduceExpression.accumulatorName() + "," + linkedPipeReduceExpression.valueName());
         return printExpression(linkedPipeReduceExpression.source(), level)
                + " |> "
                + printExpression(linkedPipeReduceExpression.initialValue(), level)
-               + ", (" + linkedPipeReduceExpression.accumulatorName()
-               + "," + linkedPipeReduceExpression.valueName()
-               + ") => "
+               + ", (" + args + ") => "
                + printExpression(linkedPipeReduceExpression.reducerExpression(), level);
     }
 

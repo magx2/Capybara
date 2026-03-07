@@ -171,11 +171,14 @@ public class ValueNameRewriter {
                                                                              LinkedPipeReduceExpression linkedPipeReduceExpression) {
         var source = rewriteValueInExpression(name, uniqueName, linkedPipeReduceExpression.source());
         var initialValue = rewriteValueInExpression(name, uniqueName, linkedPipeReduceExpression.initialValue());
-        if (linkedPipeReduceExpression.accumulatorName().equals(name) || linkedPipeReduceExpression.valueName().equals(name)) {
+        if (linkedPipeReduceExpression.accumulatorName().equals(name)
+            || linkedPipeReduceExpression.valueName().equals(name)
+            || linkedPipeReduceExpression.keyName().filter(name::equals).isPresent()) {
             return new LinkedPipeReduceExpression(
                     source,
                     initialValue,
                     linkedPipeReduceExpression.accumulatorName(),
+                    linkedPipeReduceExpression.keyName(),
                     linkedPipeReduceExpression.valueName(),
                     linkedPipeReduceExpression.reducerExpression(),
                     linkedPipeReduceExpression.type()
@@ -185,6 +188,7 @@ public class ValueNameRewriter {
                 source,
                 initialValue,
                 linkedPipeReduceExpression.accumulatorName(),
+                linkedPipeReduceExpression.keyName(),
                 linkedPipeReduceExpression.valueName(),
                 rewriteValueInExpression(name, uniqueName, linkedPipeReduceExpression.reducerExpression()),
                 linkedPipeReduceExpression.type()
