@@ -16,6 +16,7 @@ import static java.util.stream.Collectors.*;
 import static pl.grzeslowski.capybara.generator.java.JavaAnnotation.generatedAnnotation;
 
 public class JavaAstBuilder {
+    private static final String METHOD_DECL_PREFIX = "__method__";
     private static final Set<String> JAVA_KEYWORDS = Set.of(
             "abstract", "assert", "boolean", "break", "byte", "case", "catch", "char", "class",
             "const", "continue", "default", "do", "double", "else", "enum", "extends", "final",
@@ -53,7 +54,7 @@ public class JavaAstBuilder {
                         .collect(toSet()),
                 buildStaticMethods(module.functions()),
                 interfaces,
-                buildRecords(dataTypes, subClassToInterface),
+                buildRecords(dataTypes, subClassToInterface, module.functions()),
                 buildEnums(dataTypes, subClassToInterface));
     }
 
@@ -85,7 +86,10 @@ public class JavaAstBuilder {
     }
 
     private Set<JavaMethod> buildStaticMethods(Set<LinkedFunction> functions) {
-        return functions.stream().map(this::buildStaticMethod).collect(toSet());
+        return functions.stream()
+                .filter(function -> !function.name().startsWith(METHOD_DECL_PREFIX))
+                .map(this::buildStaticMethod)
+                .collect(toSet());
     }
 
     private JavaMethod buildStaticMethod(LinkedFunction function) {
@@ -301,14 +305,22 @@ public class JavaAstBuilder {
                 buildJavaType(field.type()));
     }
 
-    private Set<JavaRecord> buildRecords(List<LinkedDataType> dataTypes, Map<LinkedDataType, Set<JavaInterface>> subClassToInterface) {
+    private Set<JavaRecord> buildRecords(
+            List<LinkedDataType> dataTypes,
+            Map<LinkedDataType, Set<JavaInterface>> subClassToInterface,
+            Set<LinkedFunction> functions
+    ) {
         return dataTypes.stream()
                 .filter(dt -> !dt.singleton())
-                .map(dt -> buildRecord(dt, subClassToInterface))
+                .map(dt -> buildRecord(dt, subClassToInterface, functions))
                 .collect(toSet());
     }
 
-    private JavaRecord buildRecord(LinkedDataType type, Map<LinkedDataType, Set<JavaInterface>> subClassToInterface) {
+    private JavaRecord buildRecord(
+            LinkedDataType type,
+            Map<LinkedDataType, Set<JavaInterface>> subClassToInterface,
+            Set<LinkedFunction> functions
+    ) {
         var javaInterface = subClassToInterface.get(type);
         var implementInterfaces = javaInterface == null
                 ? Set.<JavaType>of()
@@ -334,7 +346,26 @@ public class JavaAstBuilder {
                 fields,
                 type.typeParameters(),
                 Set.of(),
-                Set.of());
+                buildRecordMethods(type, functions));
+    }
+
+    private Set<JavaMethod> buildRecordMethods(LinkedDataType type, Set<LinkedFunction> functions) {
+        var ownerPrefix = METHOD_DECL_PREFIX + type.name() + "__";
+        return functions.stream()
+                .filter(function -> function.name().startsWith(ownerPrefix))
+                .map(function -> buildRecordMethod(function, ownerPrefix))
+                .collect(toSet());
+    }
+
+    private JavaMethod buildRecordMethod(LinkedFunction function, String ownerPrefix) {
+        var methodName = function.name().substring(ownerPrefix.length());
+        var parameters = function.parameters().stream().skip(1).toList();
+        return new JavaMethod(
+                buildMethodName(methodName),
+                buildJavaType(function.returnType()),
+                buildJavaFunctionParameters(parameters),
+                function.expression()
+        );
     }
 
     private Set<JavaEnum> buildEnums(List<LinkedDataType> dataTypes, Map<LinkedDataType, Set<JavaInterface>> subClassToInterface) {

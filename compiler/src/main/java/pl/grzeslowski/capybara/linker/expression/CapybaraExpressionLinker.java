@@ -21,6 +21,8 @@ import static pl.grzeslowski.capybara.linker.expression.CapybaraTypeFinder.findH
 
 public class CapybaraExpressionLinker {
     private static final Logger LOG = Logger.getLogger(CapybaraExpressionLinker.class.getName());
+    private static final String METHOD_DECL_PREFIX = "__method__";
+    private static final String METHOD_INVOKE_PREFIX = "__invoke__";
     private final List<LinkedFunction.LinkedFunctionParameter> parameters;
     private final Map<String, GenericDataType> dataTypes;
     private final List<FunctionSignature> functionSignatures;
@@ -261,6 +263,9 @@ public class CapybaraExpressionLinker {
     }
 
     private ValueOrError<LinkedExpression> resolveGlobalFunctionCall(FunctionCall functionCall, Scope scope) {
+        if (functionCall.name().startsWith(METHOD_INVOKE_PREFIX)) {
+            return resolveMethodInvokeCall(functionCall, scope);
+        }
         var candidates = functionSignatures.stream()
                 .filter(signature -> signature.name().equals(functionCall.name()))
                 .filter(signature -> signature.parameterTypes().size() == functionCall.arguments().size())
@@ -301,6 +306,44 @@ public class CapybaraExpressionLinker {
         }
         return ValueOrError.success(new LinkedFunctionCall(
                 functionCall.name(),
+                best.arguments(),
+                best.signature().returnType()
+        ));
+    }
+
+    private ValueOrError<LinkedExpression> resolveMethodInvokeCall(FunctionCall functionCall, Scope scope) {
+        var methodName = functionCall.name().substring(METHOD_INVOKE_PREFIX.length());
+        var candidates = functionSignatures.stream()
+                .filter(signature -> signature.name().startsWith(METHOD_DECL_PREFIX))
+                .filter(signature -> signature.name().endsWith("__" + methodName))
+                .filter(signature -> signature.parameterTypes().size() == functionCall.arguments().size())
+                .toList();
+        if (candidates.isEmpty()) {
+            return withPosition(
+                    ValueOrError.error("No method `" + methodName + "` with " + functionCall.arguments().size() + " argument(s)"),
+                    functionCall.position()
+            );
+        }
+
+        ResolvedFunctionCall best = null;
+        for (var candidate : candidates) {
+            var maybeResolved = linkArgumentsForExpectedTypes(functionCall.arguments(), scope, candidate.parameterTypes());
+            if (!(maybeResolved instanceof ValueOrError.Value<CoercedArguments> resolvedValue)) {
+                continue;
+            }
+            var resolved = resolvedValue.value();
+            if (best == null || resolved.coercions() < best.coercions()) {
+                best = new ResolvedFunctionCall(candidate, resolved.arguments(), resolved.coercions());
+            }
+        }
+        if (best == null) {
+            return withPosition(
+                    ValueOrError.error("No matching method `" + methodName + "` for provided arguments"),
+                    functionCall.position()
+            );
+        }
+        return ValueOrError.success(new LinkedFunctionCall(
+                best.signature().name(),
                 best.arguments(),
                 best.signature().returnType()
         ));

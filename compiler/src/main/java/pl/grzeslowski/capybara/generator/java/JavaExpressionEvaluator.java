@@ -11,6 +11,7 @@ import static java.lang.System.lineSeparator;
 @SuppressWarnings("SwitchStatementWithTooFewBranches")
 public class JavaExpressionEvaluator {
     private static final Logger log = Logger.getLogger(JavaExpressionEvaluator.class.getName());
+    private static final String METHOD_DECL_PREFIX = "__method__";
     private static final java.util.Set<String> JAVA_KEYWORDS = java.util.Set.of(
             "abstract", "assert", "boolean", "break", "byte", "case", "catch", "char", "class",
             "const", "continue", "default", "do", "double", "else", "enum", "extends", "final",
@@ -106,6 +107,19 @@ public class JavaExpressionEvaluator {
             var argumentScope = evaluateExpression(argument, current).popExpression();
             current = argumentScope.scope();
             args.add(argumentScope.expression());
+        }
+
+        if (functionCall.name().startsWith(METHOD_DECL_PREFIX)) {
+            if (args.isEmpty()) {
+                throw new IllegalStateException("Method call requires receiver argument: " + functionCall.name());
+            }
+            var idx = functionCall.name().lastIndexOf("__");
+            var methodName = idx >= 0 && idx + 2 < functionCall.name().length()
+                    ? functionCall.name().substring(idx + 2)
+                    : functionCall.name();
+            var receiver = args.get(0);
+            var invokeArgs = args.size() > 1 ? String.join(", ", args.subList(1, args.size())) : "";
+            return current.addExpression(receiver + "." + normalizeJavaMethodName(methodName) + "(" + invokeArgs + ")");
         }
 
         var expression = switch (functionCall.name()) {

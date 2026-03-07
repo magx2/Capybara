@@ -12,7 +12,8 @@ definition:
     | dataDeclaration
     | singleDeclaration;
 
-functionDeclaration: 'fun' identifier '(' parameters? ')' functionType? '=' expression;
+functionDeclaration: 'fun' functionNameDeclaration '(' parameters? ')' functionType? '=' expression;
+functionNameDeclaration: identifier | TYPE DOT identifier;
 
 typeDeclaration: 'type' genericTypeDeclaration '=' genericTypeDeclaration (PIPE genericTypeDeclaration)*
                | 'type' genericTypeDeclaration '{' fieldDeclarationList? '}' '=' genericTypeDeclaration (PIPE genericTypeDeclaration)*;
@@ -63,6 +64,7 @@ expressionNoLet: ifExpression
                | BANG expressionNoLet
                | BITWISE_NOT expressionNoLet
                | MINUS expressionNoLet
+               | expressionNoLet DOT identifier LPAREN argumentList? RPAREN
                | expressionNoLet DOT NAME
                | expressionNoLet infixOperator expressionNoLet
                | value
@@ -81,6 +83,7 @@ expressionNoLetNoPipe: ifExpression
                      | BANG expressionNoLetNoPipe
                      | BITWISE_NOT expressionNoLetNoPipe
                      | MINUS expressionNoLetNoPipe
+                     | expressionNoLetNoPipe DOT identifier LPAREN argumentList? RPAREN
                      | expressionNoLetNoPipe DOT NAME
                      | expressionNoLetNoPipe infixOperatorNoPipe expressionNoLetNoPipe
                      | value

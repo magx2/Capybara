@@ -15,6 +15,7 @@ import static pl.grzeslowski.capybara.generator.java.JavaExpressionEvaluator.eva
 
 public final class JavaGenerator implements Generator {
     private final JavaAstBuilder astBuilder = new JavaAstBuilder();
+    private static final String METHOD_DECL_PREFIX = "__method__";
 
     @Override
     public CompiledProgram generate(LinkedProgram program) {
@@ -251,9 +252,14 @@ public final class JavaGenerator implements Generator {
                 .map(Objects::toString)
                 .collect(joining(", ", " implements ", " "))
                 : "";
-        var staticMethods = record.staticMethods().size() > 0 ? "// todo implement static methods" : "";
-        var methods = record.methods().size() > 0 ? "// todo implement methods" : "";
-        return "public record " + record.name() + typeParameters + "(" + fields + ")" + implementInterfaces + "{" + staticMethods + "" + methods + "}\n";
+        var staticMethods = record.staticMethods().stream()
+                .map(this::mapJavaMethod)
+                .collect(joining("\n"));
+        var methods = record.methods().stream()
+                .map(this::mapJavaRecordMethod)
+                .collect(joining("\n"));
+        return "public record " + record.name() + typeParameters + "(" + fields + ")" + implementInterfaces + "{"
+               + staticMethods + methods + "}\n";
     }
 
     private String mapJavaRecordField(JavaRecord.JavaRecordField field) {
@@ -302,10 +308,25 @@ public final class JavaGenerator implements Generator {
     }
 
     private String mapJavaMethod(JavaMethod method) {
-        return "public static " + method.returnType() + " " + method.name()
-               + "(" + mapFunctionParameters(method.parameters()) + ") {\n"
+        return "public static " + method.returnType() + " " + mapMethodName(method.name()) + "(" + mapFunctionParameters(method.parameters()) + ") {\n"
                + evaluateExpression(method.expression(), method.parameters())
                + "\n}\n";
+    }
+
+    private String mapJavaRecordMethod(JavaMethod method) {
+        return "public " + method.returnType() + " " + mapMethodName(method.name()) + "(" + mapFunctionParameters(method.parameters()) + ") {\n"
+               + evaluateExpression(method.expression(), method.parameters())
+               + "\n}\n";
+    }
+
+    private String mapMethodName(String name) {
+        if (name.startsWith(METHOD_DECL_PREFIX)) {
+            var idx = name.lastIndexOf("__");
+            if (idx >= 0 && idx + 2 < name.length()) {
+                return name.substring(idx + 2);
+            }
+        }
+        return name;
     }
 
     private String mapFunctionParameters(List<JavaMethod.JavaFunctionParameter> parameters) {

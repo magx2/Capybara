@@ -17,6 +17,8 @@ import static java.util.stream.Collectors.toSet;
 
 public class CapybaraParser {
     public static final CapybaraParser INSTANCE = new CapybaraParser();
+    private static final String METHOD_DECL_PREFIX = "__method__";
+    private static final String METHOD_INVOKE_PREFIX = "__invoke__";
     private static final Pattern COLLECTION_LIST_PATTERN = Pattern.compile("list\\[(.+?)]");
     private static final Pattern COLLECTION_SET_PATTERN = Pattern.compile("set\\[(.+?)]");
     private static final Pattern COLLECTION_DICT_PATTERN = Pattern.compile("dict\\[(.+?)]");
@@ -103,6 +105,9 @@ public class CapybaraParser {
     }
 
     private Function functionDeclaration(pl.grzeslowski.capybara.parser.antlr.FunctionalParser.FunctionDeclarationContext functionDeclarationContext) {
+        var functionNameDeclaration = functionDeclarationContext.functionNameDeclaration();
+        var methodOwner = functionNameDeclaration.TYPE();
+        var methodName = identifier(functionNameDeclaration.identifier());
         var parameters = functionDeclarationContext.parameters() == null
                 ? List.<Parameter>of()
                 : functionDeclarationContext.parameters()
@@ -110,8 +115,17 @@ public class CapybaraParser {
                 .stream()
                 .map(this::parameter)
                 .toList();
+        if (methodOwner != null) {
+            var ownerType = new DataType(methodOwner.getText());
+            var thisParameter = new Parameter(ownerType, "this", position(functionNameDeclaration));
+            var methodParameters = new java.util.ArrayList<Parameter>(parameters.size() + 1);
+            methodParameters.add(thisParameter);
+            methodParameters.addAll(parameters);
+            parameters = List.copyOf(methodParameters);
+            methodName = METHOD_DECL_PREFIX + methodOwner.getText() + "__" + methodName;
+        }
         return new Function(
-                identifier(functionDeclarationContext.identifier()),
+                methodName,
                 parameters,
                 functionType(functionDeclarationContext.functionType()),
                 expression(functionDeclarationContext.expression()),
@@ -280,12 +294,22 @@ public class CapybaraParser {
             return matchExpression(matchExpression);
         }
 
-        if (expression.DOT() != null || isFieldAccess(expression)) {
+        if (isFieldAccess(expression)) {
             return new FieldAccess(
                     expressionNoLet(expression.expressionNoLet(0)),
                     expression.NAME().getText(),
                     position(expression)
             );
+        }
+
+        if (isMethodCall(expression)) {
+            var receiver = expressionNoLet(expression.expressionNoLet(0));
+            var methodName = identifier(expression.identifier());
+            var args = expression.argumentList() == null
+                    ? new java.util.ArrayList<Expression>()
+                    : new java.util.ArrayList<>(expression.argumentList().expression().stream().map(this::expression).toList());
+            args.add(0, receiver);
+            return new FunctionCall(Optional.empty(), METHOD_INVOKE_PREFIX + methodName, List.copyOf(args), position(expression));
         }
 
         if (expression.BANG() != null && expression.infixOperator() == null && expression.expressionNoLet().size() == 1) {
@@ -435,12 +459,22 @@ public class CapybaraParser {
             return matchExpression(matchExpression);
         }
 
-        if (expression.DOT() != null || isFieldAccess(expression)) {
+        if (isFieldAccess(expression)) {
             return new FieldAccess(
                     expressionNoLetNoPipe(expression.expressionNoLetNoPipe(0)),
                     expression.NAME().getText(),
                     position(expression)
             );
+        }
+
+        if (isMethodCall(expression)) {
+            var receiver = expressionNoLetNoPipe(expression.expressionNoLetNoPipe(0));
+            var methodName = identifier(expression.identifier());
+            var args = expression.argumentList() == null
+                    ? new java.util.ArrayList<Expression>()
+                    : new java.util.ArrayList<>(expression.argumentList().expression().stream().map(this::expression).toList());
+            args.add(0, receiver);
+            return new FunctionCall(Optional.empty(), METHOD_INVOKE_PREFIX + methodName, List.copyOf(args), position(expression));
         }
 
         if (expression.BANG() != null && expression.infixOperatorNoPipe() == null && expression.expressionNoLetNoPipe().size() == 1) {
@@ -702,6 +736,22 @@ public class CapybaraParser {
 
     private static boolean isFieldAccess(FunctionalParser.ExpressionNoLetNoPipeContext expression) {
         return expression.getChildCount() == 3 && ".".equals(expression.getChild(1).getText()) && expression.NAME() != null;
+    }
+
+    private static boolean isMethodCall(FunctionalParser.ExpressionNoLetContext expression) {
+        return expression.DOT() != null
+               && expression.identifier() != null
+               && expression.LPAREN() != null
+               && expression.RPAREN() != null
+               && expression.expressionNoLet().size() == 1;
+    }
+
+    private static boolean isMethodCall(FunctionalParser.ExpressionNoLetNoPipeContext expression) {
+        return expression.DOT() != null
+               && expression.identifier() != null
+               && expression.LPAREN() != null
+               && expression.RPAREN() != null
+               && expression.expressionNoLetNoPipe().size() == 1;
     }
 
     private record DataFieldDeclarations(List<DataDeclaration.DataField> fields, List<String> extendsTypes) {

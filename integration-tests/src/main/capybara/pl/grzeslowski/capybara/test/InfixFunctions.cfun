@@ -1,0 +1,5 @@
+data Sum { value: int }
+
+fun Sum.add(x: int) = Sum { value: this.value + x }
+
+fun add(sum: Sum, x: int) = sum.add(x)
