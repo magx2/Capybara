@@ -9,3 +9,29 @@ fun not_equal_logic(a: bool, b: bool): bool = a != b
 fun not_logic(a: bool): bool = !a
 
 fun complex_logic(a: bool, b: bool): bool = (!a && b) || (a == b)
+
+fun byte_to_bool(v: byte): bool = if v then true else false
+
+fun int_to_bool(v: int): bool = if v then true else false
+
+fun long_to_bool(v: long): bool = if v then true else false
+
+fun float_to_bool(v: float): bool = if v then true else false
+
+fun double_to_bool(v: double): bool = if v then true else false
+
+fun string_to_bool(v: string): bool = if v then true else false
+
+fun list_to_bool(v: list[int]): bool = if v then true else false
+
+fun set_to_bool(v: set[int]): bool = if v then true else false
+
+fun dict_to_bool(v: dict[int]): bool = if v then true else false
+
+fun and_int(a: int, b: int): bool = a && b
+
+fun or_string(a: string, b: string): bool = a || b
+
+fun not_int(v: int): bool = !v
+
+fun not_list(v: list[int]): bool = !v

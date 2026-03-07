@@ -137,9 +137,10 @@ public class JavaExpressionEvaluator {
         var then = evaluateExpression(expression.thenBranch(), condition.scope()).popExpression();
         var elseExSc = evaluateExpression(expression.elseBranch(), then.scope()).popExpression();
 
+        var conditionBoolean = toBooleanExpression(condition.expression(), expression.condition().type());
         return elseExSc.scope()
                 .addExpression("(%s) ? (%s) : (%s)".formatted(
-                        condition.expression(),
+                        conditionBoolean,
                         then.expression(),
                         elseExSc.expression()));
     }
@@ -196,6 +197,17 @@ public class JavaExpressionEvaluator {
                 }
                 yield left.expression() + operator.symbol() + right.expression();
             }
+            case AND, OR -> toBooleanExpression(left.expression(), infixExpression.left().type())
+                            + operator.symbol()
+                            + toBooleanExpression(right.expression(), infixExpression.right().type());
+            case EQUAL, NOTEQUAL -> {
+                if (isBooleanCoercionComparison(infixExpression)) {
+                    yield toBooleanExpression(left.expression(), infixExpression.left().type())
+                          + operator.symbol()
+                          + toBooleanExpression(right.expression(), infixExpression.right().type());
+                }
+                yield left.expression() + operator.symbol() + right.expression();
+            }
             default -> left.expression() + operator.symbol() + right.expression();
         };
 
@@ -240,6 +252,62 @@ public class JavaExpressionEvaluator {
                  pl.grzeslowski.capybara.linker.PrimitiveLinkedType.DOUBLE -> true;
             default -> false;
         };
+    }
+
+    private static boolean isBooleanCoercionComparison(LinkedInfixExpression infixExpression) {
+        var leftType = infixExpression.left().type();
+        var rightType = infixExpression.right().type();
+        var leftIsBool = leftType == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.BOOL;
+        var rightIsBool = rightType == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.BOOL;
+        return (leftIsBool && isBooleanConvertibleType(rightType))
+               || (rightIsBool && isBooleanConvertibleType(leftType));
+    }
+
+    private static boolean isBooleanConvertibleType(pl.grzeslowski.capybara.linker.LinkedType type) {
+        if (type == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.BOOL) {
+            return true;
+        }
+        if (type == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.STRING) {
+            return true;
+        }
+        if (type instanceof pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedList
+            || type instanceof pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedSet
+            || type instanceof pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedDict) {
+            return true;
+        }
+        return type == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.BYTE
+               || type == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.INT
+               || type == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.LONG
+               || type == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.FLOAT
+               || type == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.DOUBLE;
+    }
+
+    private static String toBooleanExpression(String expression, pl.grzeslowski.capybara.linker.LinkedType type) {
+        if (type == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.BOOL) {
+            return expression;
+        }
+        if (type == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.STRING) {
+            return "(!(" + expression + ").isEmpty())";
+        }
+        if (type instanceof pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedList
+            || type instanceof pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedSet
+            || type instanceof pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedDict) {
+            return "(!(" + expression + ").isEmpty())";
+        }
+        if (type == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.BYTE
+            || type == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.INT) {
+            return "((" + expression + ") != 0)";
+        }
+        if (type == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.LONG) {
+            return "((" + expression + ") != 0L)";
+        }
+        if (type == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.FLOAT) {
+            return "((" + expression + ") != 0f)";
+        }
+        if (type == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.DOUBLE) {
+            return "((" + expression + ") != 0d)";
+        }
+        return "(" + expression + ")";
     }
 
     private static String evaluateListAppendExpression(LinkedInfixExpression infixExpression, String left, String right) {

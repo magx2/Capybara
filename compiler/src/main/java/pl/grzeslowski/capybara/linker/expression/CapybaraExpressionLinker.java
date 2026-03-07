@@ -599,7 +599,7 @@ public class CapybaraExpressionLinker {
     private ValueOrError<LinkedExpression> linkIfExpression(IfExpression ifExpression, Scope scope) {
         return linkExpression(ifExpression.condition(), scope)
                 .flatMap(c -> {
-                    if (c.type() != BOOL) {
+                    if (!isBooleanConvertibleType(c.type())) {
                         return withPosition(
                                 ValueOrError.error("condition in if statement has to have type `" + BOOL + "`, was `" + c.type() + "`"),
                                 ifExpression.condition().position()
@@ -952,10 +952,23 @@ public class CapybaraExpressionLinker {
     }
 
     private static LinkedType findLogicalType(LinkedType left, LinkedType right) {
-        if (left == BOOL && right == BOOL) {
+        if (isBooleanConvertibleType(left) && isBooleanConvertibleType(right)) {
             return BOOL;
         }
         return null;
+    }
+
+    private static boolean isBooleanConvertibleType(LinkedType type) {
+        if (type == BOOL) {
+            return true;
+        }
+        if (type == STRING) {
+            return true;
+        }
+        if (type instanceof LinkedList || type instanceof LinkedSet || type instanceof LinkedDict) {
+            return true;
+        }
+        return type instanceof PrimitiveLinkedType primitive && isNumericPrimitive(primitive);
     }
 
     private static LinkedType findPlusPrimitiveType(PrimitiveLinkedType left, PrimitiveLinkedType right) {

@@ -50,4 +50,46 @@ class BoolLogicTest {
         assertThat(BoolLogic.complexLogic(false, true)).isTrue();
         assertThat(BoolLogic.complexLogic(false, false)).isTrue();
     }
+
+    @Test
+    void numberToBool() {
+        assertThat(BoolLogic.byteToBool((byte) 0x00)).isFalse();
+        assertThat(BoolLogic.byteToBool((byte) 0x01)).isTrue();
+        assertThat(BoolLogic.intToBool(0)).isFalse();
+        assertThat(BoolLogic.intToBool(2)).isTrue();
+        assertThat(BoolLogic.longToBool(0L)).isFalse();
+        assertThat(BoolLogic.longToBool(2L)).isTrue();
+        assertThat(BoolLogic.floatToBool(0f)).isFalse();
+        assertThat(BoolLogic.floatToBool(0.5f)).isTrue();
+        assertThat(BoolLogic.doubleToBool(0d)).isFalse();
+        assertThat(BoolLogic.doubleToBool(0.5d)).isTrue();
+    }
+
+    @Test
+    void stringAndCollectionsToBool() {
+        assertThat(BoolLogic.stringToBool("")).isFalse();
+        assertThat(BoolLogic.stringToBool("x")).isTrue();
+        assertThat(BoolLogic.listToBool(java.util.List.of())).isFalse();
+        assertThat(BoolLogic.listToBool(java.util.List.of(1))).isTrue();
+        assertThat(BoolLogic.setToBool(java.util.Set.of())).isFalse();
+        assertThat(BoolLogic.setToBool(java.util.Set.of(1))).isTrue();
+        assertThat(BoolLogic.dictToBool(java.util.Map.of())).isFalse();
+        assertThat(BoolLogic.dictToBool(java.util.Map.of("a", 1))).isTrue();
+    }
+
+    @Test
+    void logicalOperatorsWithAutoBoolCoercion() {
+        assertThat(BoolLogic.andInt(0, 1)).isFalse();
+        assertThat(BoolLogic.andInt(2, 1)).isTrue();
+        assertThat(BoolLogic.orString("", "")).isFalse();
+        assertThat(BoolLogic.orString("x", "")).isTrue();
+    }
+
+    @Test
+    void notWithAutoBoolCoercion() {
+        assertThat(BoolLogic.notInt(0)).isTrue();
+        assertThat(BoolLogic.notInt(3)).isFalse();
+        assertThat(BoolLogic.notList(java.util.List.of())).isTrue();
+        assertThat(BoolLogic.notList(java.util.List.of(1))).isFalse();
+    }
 }
