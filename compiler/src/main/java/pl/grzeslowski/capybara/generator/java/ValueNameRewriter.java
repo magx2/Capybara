@@ -171,7 +171,11 @@ public class ValueNameRewriter {
                                                                              LinkedPipeReduceExpression linkedPipeReduceExpression) {
         var source = rewriteValueInExpression(name, uniqueName, linkedPipeReduceExpression.source());
         var initialValue = rewriteValueInExpression(name, uniqueName, linkedPipeReduceExpression.initialValue());
+        var dictReduceArgs = linkedPipeReduceExpression.accumulatorName().contains("::")
+                ? linkedPipeReduceExpression.accumulatorName().split("::", 2)
+                : new String[0];
         if (linkedPipeReduceExpression.accumulatorName().equals(name)
+            || (dictReduceArgs.length == 2 && (dictReduceArgs[0].equals(name) || dictReduceArgs[1].equals(name)))
             || linkedPipeReduceExpression.valueName().equals(name)
             || linkedPipeReduceExpression.keyName().filter(name::equals).isPresent()) {
             return new LinkedPipeReduceExpression(

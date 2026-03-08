@@ -76,7 +76,7 @@ expressionNoLet: ifExpression
                | matchExpression;
 lambdaExpression: identifier FAT_ARROW expressionNoLetNoPipe
                 | LPAREN identifier (COMMA identifier)+ RPAREN FAT_ARROW expressionNoLetNoPipe;
-reduceExpression: expressionNoLetNoPipe COMMA LPAREN NAME COMMA NAME (COMMA NAME)? RPAREN FAT_ARROW expressionNoLetNoPipe;
+reduceExpression: expressionNoLetNoPipe COMMA LPAREN NAME COMMA NAME (COMMA NAME (COMMA NAME)?)? RPAREN FAT_ARROW expressionNoLetNoPipe;
 expressionNoLetNoPipe: ifExpression
                      | functionReference
                      | functionCall

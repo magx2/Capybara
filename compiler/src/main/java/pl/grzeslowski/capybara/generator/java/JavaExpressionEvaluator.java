@@ -531,6 +531,98 @@ public class JavaExpressionEvaluator {
             var initialExSc = evaluateExpression(pipeReduceExpression.initialValue(), sourceExSc.scope()).popExpression();
             var entryVar = "__entry";
             var keyName = pipeReduceExpression.keyName().orElseThrow();
+            if (pipeReduceExpression.accumulatorName().contains("::")
+                && pipeReduceExpression.initialValue().type() == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.STRING) {
+                var dictArgs = parseDictPipeArguments(pipeReduceExpression.accumulatorName());
+                var leftKeyName = dictArgs[0];
+                var leftValueName = dictArgs[1];
+                var leftStateVar = "__capybaraLeftState";
+                var rightStateVar = "__capybaraRightState";
+                var leftAccumulatedVar = "__capybaraLeftAccumulated";
+                var combinedValueVar = "__capybaraCombinedValue";
+                var reducedStateVar = "__capybaraReducedState";
+                var reducedValueVar = "__capybaraReducedValue";
+                var reduceResultVar = "__capybaraReduceResult";
+                var stateEntryType = "java.util.Map.Entry<java.lang.String, java.util.Map.Entry<java.lang.Object, java.lang.String>>";
+                var reducerExSc = evaluateExpression(
+                        pipeReduceExpression.reducerExpression(),
+                        initialExSc.scope()
+                                .addValueOverride(leftKeyName, leftStateVar + ".getKey()")
+                                .addValueOverride(leftValueName, leftStateVar + ".getValue().getKey()")
+                                .addValueOverride(keyName, rightStateVar + ".getKey()")
+                                .addValueOverride(pipeReduceExpression.valueName(), rightStateVar + ".getValue().getKey()")
+                ).popExpression();
+
+                return reducerExSc.scope().addExpression(
+                        "((java.lang.String)("
+                        + sourceExSc.expression()
+                        + ".entrySet().stream()"
+                        + ".map(__capybaraEntry -> java.util.Map.entry(__capybaraEntry.getKey(), "
+                        + "java.util.Map.entry((java.lang.Object)__capybaraEntry.getValue(), \"\")))"
+                        + ".reduce((" + stateEntryType + " " + leftStateVar + ", " + stateEntryType + " " + rightStateVar + ") -> {"
+                        + "var " + leftAccumulatedVar + " = " + leftStateVar + ".getValue().getValue();"
+                        + "var " + reduceResultVar + " = (" + reducerExSc.expression() + ");"
+                        + "var " + combinedValueVar + " = " + leftAccumulatedVar + " + " + reduceResultVar + ";"
+                        + "return java.util.Map.entry(" + rightStateVar + ".getKey(), "
+                        + "java.util.Map.entry(" + rightStateVar + ".getValue().getKey(), " + combinedValueVar + "));"
+                        + "})"
+                        + ".map(" + reducedStateVar + " -> " + reducedStateVar + ".getValue().getValue())"
+                        + ".map(" + reducedValueVar + " -> (" + initialExSc.expression() + " + " + reducedValueVar + "))"
+                        + ".orElse(" + initialExSc.expression() + ")"
+                        + "))"
+                );
+            }
+            if (pipeReduceExpression.accumulatorName().contains("::")) {
+                var dictArgs = parseDictPipeArguments(pipeReduceExpression.accumulatorName());
+                var leftKeyName = dictArgs[0];
+                var leftValueName = dictArgs[1];
+                var leftStateVar = "__capybaraLeftState";
+                var rightEntryVar = "__capybaraRightEntry";
+                var dictValueType = ((pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedDict) pipeReduceExpression.source().type())
+                        .valueType();
+                var leftKeyExpression = valueFieldOrFallback(
+                        dictValueType,
+                        leftStateVar + ".getValue()",
+                        stripNumericSuffix(leftKeyName),
+                        leftStateVar + ".getKey()"
+                );
+                var leftValueExpression = valueFieldOrFallback(
+                        dictValueType,
+                        leftStateVar + ".getValue()",
+                        stripNumericSuffix(leftValueName),
+                        leftStateVar + ".getValue()"
+                );
+                var rightKeyExpression = valueFieldOrFallback(
+                        dictValueType,
+                        rightEntryVar + ".getValue()",
+                        stripNumericSuffix(keyName),
+                        rightEntryVar + ".getKey()"
+                );
+                var rightValueExpression = valueFieldOrFallback(
+                        dictValueType,
+                        rightEntryVar + ".getValue()",
+                        stripNumericSuffix(pipeReduceExpression.valueName()),
+                        rightEntryVar + ".getValue()"
+                );
+                var reducerExSc = evaluateExpression(
+                        pipeReduceExpression.reducerExpression(),
+                        initialExSc.scope()
+                                .addValueOverride(leftKeyName, leftKeyExpression)
+                                .addValueOverride(leftValueName, leftValueExpression)
+                                .addValueOverride(keyName, rightKeyExpression)
+                                .addValueOverride(pipeReduceExpression.valueName(), rightValueExpression)
+                ).popExpression();
+                return reducerExSc.scope().addExpression(
+                        sourceExSc.expression()
+                        + ".entrySet().stream()"
+                        + ".reduce("
+                        + "java.util.Map.entry(\"\", " + initialExSc.expression() + ")"
+                        + ", (" + leftStateVar + ", " + rightEntryVar + ") -> "
+                        + "java.util.Map.entry(" + rightEntryVar + ".getKey(), (" + reducerExSc.expression() + "))"
+                        + ", (left, right) -> right)"
+                        + ".getValue()"
+                );
+            }
             if (pipeReduceExpression.initialValue().type() == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.STRING) {
                 var perEntryReducerExSc = evaluateExpression(
                         pipeReduceExpression.reducerExpression(),
@@ -540,16 +632,21 @@ public class JavaExpressionEvaluator {
                                 .addValueOverride(pipeReduceExpression.valueName(), entryVar + ".getValue()")
                 ).popExpression();
                 var reducedValueName = "__capybaraReducedValue";
-                var entryValueName = "__capybaraEntryValue";
+                var maybeTrimLeadingComma = "\"\"".equals(initialExSc.expression())
+                        ? ""
+                        : ".map(" + reducedValueName + " -> ("
+                          + reducedValueName + ".startsWith(\", \") ? " + reducedValueName + ".substring(2) : ("
+                          + reducedValueName + ".startsWith(\",\") ? " + reducedValueName + ".substring(1) : " + reducedValueName + ")))";
+                var maybeMapPrefix = "\"\"".equals(initialExSc.expression())
+                        ? ""
+                        : ".map(" + reducedValueName + " -> (" + initialExSc.expression() + "+" + reducedValueName + "))";
                 return perEntryReducerExSc.scope().addExpression(
                         sourceExSc.expression()
                         + ".entrySet().stream()"
                         + ".map(" + entryVar + " -> (" + perEntryReducerExSc.expression() + "))"
-                        + ".map(" + entryValueName + " -> ("
-                        + entryValueName + ".startsWith(\", \") ? "
-                        + entryValueName + ".substring(2) : " + entryValueName + "))"
                         + ".reduce((left, right) -> ((left+\", \")+right))"
-                        + ".map(" + reducedValueName + " -> (" + initialExSc.expression() + "+" + reducedValueName + "))"
+                        + maybeTrimLeadingComma
+                        + maybeMapPrefix
                         + ".orElseGet(() -> " + initialExSc.expression() + ")"
                 );
             }
@@ -584,6 +681,7 @@ public class JavaExpressionEvaluator {
         if (maybeElementType.isPresent() && maybeElementType.get().equals(pipeReduceExpression.initialValue().type())) {
             var reducedValueName = "__capybaraReducedValue";
             var maybeMapPrefix = pipeReduceExpression.initialValue().type() == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.STRING
+                    && !"\"\"".equals(initialExSc.expression())
                     ? ".map(" + reducedValueName + " -> (" + initialExSc.expression() + "+" + reducedValueName + "))"
                     : "";
             return reducerExSc.scope().addExpression(
@@ -1081,6 +1179,27 @@ public class JavaExpressionEvaluator {
             return new String[0];
         }
         return parts;
+    }
+
+    private static String stripNumericSuffix(String value) {
+        return value.replaceFirst("\\d+$", "");
+    }
+
+    private static String valueFieldOrFallback(pl.grzeslowski.capybara.linker.LinkedType valueType,
+                                               String valueExpression,
+                                               String fieldName,
+                                               String fallbackExpression) {
+        return switch (valueType) {
+            case pl.grzeslowski.capybara.linker.LinkedDataType linkedDataType ->
+                    linkedDataType.fields().stream().anyMatch(field -> field.name().equals(fieldName))
+                            ? "(" + valueExpression + ")." + fieldName + "()"
+                            : fallbackExpression;
+            case pl.grzeslowski.capybara.linker.LinkedDataParentType linkedDataParentType ->
+                    linkedDataParentType.fields().stream().anyMatch(field -> field.name().equals(fieldName))
+                            ? "(" + valueExpression + ")." + fieldName + "()"
+                            : fallbackExpression;
+            default -> fallbackExpression;
+        };
     }
 
     private static String ensureFloatSuffix(String literal) {
