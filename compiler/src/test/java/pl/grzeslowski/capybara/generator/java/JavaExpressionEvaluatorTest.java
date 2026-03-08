@@ -202,7 +202,7 @@ class JavaExpressionEvaluatorTest {
                                     "three": 3,
                                 }
                                 """,
-                        "return java.util.Map.of(\"one\", 1, \"two\", 2, \"three\", 3);"
+                        "return java.util.stream.Stream.of(java.util.Map.entry(\"one\", 1), java.util.Map.entry(\"two\", 2), java.util.Map.entry(\"three\", 3)).collect(java.util.stream.Collectors.toMap(java.util.Map.Entry::getKey, java.util.Map.Entry::getValue, (oldValue, newValue) -> newValue, java.util.LinkedHashMap::new));"
                 ),
                 Arguments.of(
                         "single_quote_string",
