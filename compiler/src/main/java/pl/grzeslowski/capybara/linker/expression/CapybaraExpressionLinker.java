@@ -1039,6 +1039,39 @@ public class CapybaraExpressionLinker {
                                 expression.left().position()
                         );
                     }
+                    if (left.type() instanceof LinkedDict dictType
+                        && expression.right() instanceof LambdaExpression lambdaExpression) {
+                        var argumentNames = lambdaExpression.argumentNames();
+                        if (argumentNames.size() == 1) {
+                            var valueName = argumentNames.get(0);
+                            var lambdaScope = scope.add(valueName, dictType.valueType());
+                            return linkExpression(lambdaExpression.expression(), lambdaScope)
+                                    .map(mapper -> (LinkedExpression) new LinkedPipeExpression(
+                                            left,
+                                            valueName,
+                                            mapper,
+                                            new LinkedSet(mapper.type())
+                                    ));
+                        }
+                        if (argumentNames.size() == 2) {
+                            var keyName = argumentNames.get(0);
+                            var valueName = argumentNames.get(1);
+                            var lambdaScope = scope
+                                    .add(keyName, STRING)
+                                    .add(valueName, dictType.valueType());
+                            return linkExpression(lambdaExpression.expression(), lambdaScope)
+                                    .map(mapper -> (LinkedExpression) new LinkedPipeExpression(
+                                            left,
+                                            encodeDictPipeArguments(keyName, valueName),
+                                            mapper,
+                                            new LinkedSet(mapper.type())
+                                    ));
+                        }
+                        return withPosition(
+                                ValueOrError.error("Right side lambda of `|>` for dict has to have one or two arguments"),
+                                lambdaExpression.position()
+                        );
+                    }
                     if (!(expression.right() instanceof ReduceExpression reduceExpression)) {
                         return withPosition(
                                 ValueOrError.error("Right side of `|>` has to be a reduce expression"),
@@ -1047,8 +1080,15 @@ public class CapybaraExpressionLinker {
                     }
                     return linkExpression(reduceExpression.initialValue(), scope)
                             .flatMap(initial -> {
-                                var reduceScope = scope
-                                        .add(reduceExpression.accumulatorName(), initial.type());
+                                var reduceScope = scope;
+                                if (reduceExpression.accumulatorName().contains("::") && reduceExpression.keyName().isPresent()) {
+                                    return withPosition(
+                                            ValueOrError.error("Reducer with four arguments is not supported for `dict`. Use `|>` mapper and then a standard reduce."),
+                                            reduceExpression.position()
+                                    );
+                                } else {
+                                    reduceScope = reduceScope.add(reduceExpression.accumulatorName(), initial.type());
+                                }
                                 if (reduceExpression.keyName().isPresent()) {
                                     if (!(left.type() instanceof LinkedDict)) {
                                         return withPosition(

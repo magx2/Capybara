@@ -2,11 +2,7 @@ package pl.grzeslowski.capybara.test;
 
 import org.junit.jupiter.api.Test;
 
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -76,12 +72,15 @@ class PipeTest {
         var dict = new LinkedHashMap<String, String>();
         dict.put("a", "1");
         dict.put("b", "2");
-        assertThat(Pipe.reduceToData(dict)).isEqualTo(new Pipe.Entry("ab", "12"));
+        assertThat(Pipe.reduceToData(dict)).isEqualTo(Set.of(
+                new Pipe.Entry("a", "1"),
+                new Pipe.Entry("b", "2")
+        ));
     }
 
     @Test
     void reduceToDataDictEmpty() {
-        assertThat(Pipe.reduceToData(Map.of())).isEqualTo(new Pipe.Entry("", ""));
+        assertThat(Pipe.reduceToData(Map.of())).isEqualTo(Set.of());
     }
 
     @Test
@@ -131,11 +130,14 @@ class PipeTest {
 
     @Test
     void reduceDict() {
-        var reduced = Pipe.reduceDict(Map.of("a", 1, "b", 2));
+        var reduced = Pipe.reduceDict(Map.of("a", 1, "b", 2, "c", 3, "d", 4));
         assertThat(reduced)
                 .startsWith("start: ")
+                .doesNotStartWith("start: ,")
                 .contains("(a:1)")
-                .contains("(b:2)");
+                .contains("(b:2)")
+                .contains("(c:3)")
+                .contains("(d:4)");
     }
 
     @Test

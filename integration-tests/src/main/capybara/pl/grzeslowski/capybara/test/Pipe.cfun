@@ -54,12 +54,13 @@ fun mapDict(d: dict[int]): dict[string] = d | (k,v) => v + ""
 
 fun filterDict(d: dict[int]): dict[int] = d |- (k,v) => k != "" & v > 0
 
-fun reduceDict(d: dict[int]): string = d |> "start: ", (acc, key, value) => acc + ", (" + key + ": " + value + ")"
+fun reduceDict(d: dict[int]): string = d
+    |> (k, v) => "(" + k + ":" + v + ")"
+    |> "start: ", (acc, e) => acc + ", " + e
 
 data Entry { key: string, value: string }
-fun reduce_to_data(l: dict[string]): Entry = l
-    | (k,v) => Entry {key:k,value:v}
-    |> Entry {key: "", value:""}, (acc, v) => Entry { key: acc.key + v.key, value: acc.value + v.value }
+fun reduce_to_data(l: dict[string]): set[Entry] = l
+    |> (k,v) => Entry {key:k,value:v}
 
 fun dict_reduce_string2(d: dict[string]): string = d |> "start: ", (acc, v) => acc + " " + v
 
