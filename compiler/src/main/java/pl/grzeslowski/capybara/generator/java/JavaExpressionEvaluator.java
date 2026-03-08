@@ -831,6 +831,7 @@ public class JavaExpressionEvaluator {
 
     private static Scope evaluateMatchExpression(LinkedMatchExpression matchExpression, Scope scope) {
         var matchSelectorName = "__matchValue";
+        var optionMatch = isOptionType(matchExpression.matchWith().type());
         var matchWithExSc = evaluateExpression(matchExpression.matchWith(), scope).popExpression();
         var declaredValue = matchWithExSc.scope().declareValue(
                 matchSelectorName,
@@ -841,11 +842,20 @@ public class JavaExpressionEvaluator {
         var switchTarget = current.findValueOverride(matchSelectorName).orElse(matchSelectorName);
         var cases = new ArrayList<String>(matchExpression.cases().size());
 
-        for (var matchCase : matchExpression.cases()) {
+        for (int caseIndex = 0; caseIndex < matchExpression.cases().size(); caseIndex++) {
+            var matchCase = matchExpression.cases().get(caseIndex);
             var branchScope = current;
+            var optionCaseVar = "__capybaraOptionCase" + caseIndex;
             if (matchCase.pattern() instanceof LinkedMatchExpression.ConstructorPattern constructorPattern) {
                 for (var name : constructorPattern.names()) {
                     branchScope = branchScope.addLocalValue(name);
+                }
+                if (optionMatch && isOptionSomePattern(constructorPattern.constructorName()) && constructorPattern.names().size() == 1) {
+                    var valueName = constructorPattern.names().getFirst();
+                    branchScope = branchScope.addValueOverride(
+                            valueName,
+                            optionSomeBindingExpression(optionCaseVar + ".orElse(null)")
+                    );
                 }
             }
             if (matchCase.pattern() instanceof LinkedMatchExpression.TypedPattern typedPattern
@@ -856,7 +866,17 @@ public class JavaExpressionEvaluator {
             }
             var expressionScope = evaluateExpression(matchCase.expression(), branchScope).popExpression();
             current = expressionScope.scope();
-            cases.add(matchCasePattern(matchCase.pattern()) + " -> (" + expressionScope.expression() + ")");
+            var caseExpression = expressionScope.expression();
+            if (optionMatch) {
+                caseExpression = castMatchCaseExpression(caseExpression, matchExpression.type());
+                if (isDirectOptionSomeVariableCase(matchCase)) {
+                    var inferredType = inferConcreteCaseType(matchExpression, caseIndex);
+                    if (inferredType != null) {
+                        caseExpression = "((" + javaPatternType(inferredType) + ") (" + caseExpression + "))";
+                    }
+                }
+            }
+            cases.add(matchCasePattern(matchCase.pattern(), matchExpression.matchWith().type(), optionCaseVar) + " -> (" + caseExpression + ")");
         }
 
         var hasWildcard = matchExpression.cases().stream()
@@ -869,14 +889,37 @@ public class JavaExpressionEvaluator {
         return current.addExpression("switch (" + switchTarget + ") { " + String.join("; ", cases) + "; }");
     }
 
-    private static String matchCasePattern(LinkedMatchExpression.Pattern pattern) {
+    private static String matchCasePattern(
+            LinkedMatchExpression.Pattern pattern,
+            pl.grzeslowski.capybara.linker.LinkedType matchType,
+            String optionCaseVar
+    ) {
+        if (isOptionType(matchType)) {
+            return switch (pattern) {
+                case LinkedMatchExpression.VariablePattern variablePattern when isOptionNonePattern(variablePattern.name()) ->
+                        "case java.util.Optional " + optionCaseVar + " when " + optionCaseVar + ".isEmpty()";
+                case LinkedMatchExpression.TypedPattern typedPattern when isOptionSomePattern(typedPattern.type().name()) ->
+                        "case java.util.Optional " + typedPattern.name() + " when " + typedPattern.name() + ".isPresent()";
+                case LinkedMatchExpression.TypedPattern typedPattern when isOptionNonePattern(typedPattern.type().name()) ->
+                        "case java.util.Optional " + typedPattern.name() + " when " + typedPattern.name() + ".isEmpty()";
+                case LinkedMatchExpression.ConstructorPattern constructorPattern when isOptionSomePattern(constructorPattern.constructorName()) ->
+                        "case java.util.Optional " + optionCaseVar + " when " + optionCaseVar + ".isPresent()";
+                case LinkedMatchExpression.ConstructorPattern constructorPattern when isOptionNonePattern(constructorPattern.constructorName()) ->
+                        "case java.util.Optional " + optionCaseVar + " when " + optionCaseVar + ".isEmpty()";
+                default -> "default";
+            };
+        }
         return switch (pattern) {
             case LinkedMatchExpression.IntPattern intPattern -> "case " + intPattern.value();
             case LinkedMatchExpression.StringPattern stringPattern -> "case " + stringPattern.value();
             case LinkedMatchExpression.BoolPattern boolPattern -> "case " + boolPattern.value();
             case LinkedMatchExpression.FloatPattern floatPattern -> "case " + floatPattern.value();
-            case LinkedMatchExpression.TypedPattern typedPattern ->
-                    "case " + javaPatternType(typedPattern.type()) + " " + typedPattern.name();
+            case LinkedMatchExpression.TypedPattern typedPattern -> {
+                if (typedPattern.type() == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.DATA) {
+                    yield "case java.lang.Object " + typedPattern.name() + " when " + dataGuard(typedPattern.name());
+                }
+                yield "case " + javaPatternType(typedPattern.type()) + " " + typedPattern.name();
+            }
             case LinkedMatchExpression.VariablePattern variablePattern -> "case " + variablePattern.name() + " __ignored";
             case LinkedMatchExpression.WildcardPattern wildcardPattern -> "default";
             case LinkedMatchExpression.ConstructorPattern constructorPattern ->
@@ -884,6 +927,78 @@ public class JavaExpressionEvaluator {
                     + constructorPattern.names().stream().map(name -> "var " + name).reduce((a, b) -> a + ", " + b).orElse("")
                     + ")";
         };
+    }
+
+    private static boolean isOptionSomePattern(String name) {
+        var normalized = normalizeQualifiedTypeName(name);
+        return "Some".equals(name)
+               || normalized.endsWith("/Option.Some")
+               || normalized.endsWith(".Some");
+    }
+
+    private static boolean isOptionNonePattern(String name) {
+        var normalized = normalizeQualifiedTypeName(name);
+        return "None".equals(name)
+               || normalized.endsWith("/Option.None")
+               || normalized.endsWith(".None");
+    }
+
+    private static String optionSomeBindingExpression(String rawValueExpression) {
+        return rawValueExpression;
+    }
+
+    private static boolean isDirectOptionSomeVariableCase(LinkedMatchExpression.MatchCase matchCase) {
+        if (!(matchCase.pattern() instanceof LinkedMatchExpression.ConstructorPattern constructorPattern)) {
+            return false;
+        }
+        if (!isOptionSomePattern(constructorPattern.constructorName()) || constructorPattern.names().size() != 1) {
+            return false;
+        }
+        return matchCase.expression() instanceof LinkedVariable variable
+               && variable.name().equals(constructorPattern.names().getFirst());
+    }
+
+    private static pl.grzeslowski.capybara.linker.LinkedType inferConcreteCaseType(
+            LinkedMatchExpression matchExpression,
+            int currentCaseIndex
+    ) {
+        for (int idx = 0; idx < matchExpression.cases().size(); idx++) {
+            if (idx == currentCaseIndex) {
+                continue;
+            }
+            var type = matchExpression.cases().get(idx).expression().type();
+            if (type instanceof pl.grzeslowski.capybara.linker.LinkedGenericTypeParameter) {
+                continue;
+            }
+            if (type == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.ANY
+                || type == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.DATA
+                || type == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.NOTHING) {
+                continue;
+            }
+            return type;
+        }
+        return null;
+    }
+
+    private static String dataGuard(String varName) {
+        return "!("
+               + varName + " instanceof java.lang.Number"
+               + " || " + varName + " instanceof java.lang.Boolean"
+               + " || " + varName + " instanceof java.lang.String"
+               + " || " + varName + " instanceof java.util.List"
+               + " || " + varName + " instanceof java.util.Set"
+               + " || " + varName + " instanceof java.util.Map"
+               + ")";
+    }
+
+    private static String castMatchCaseExpression(String expression, pl.grzeslowski.capybara.linker.LinkedType resultType) {
+        if (resultType == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.ANY
+            || resultType == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.DATA
+            || resultType == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.NOTHING
+            || resultType instanceof pl.grzeslowski.capybara.linker.LinkedGenericTypeParameter) {
+            return expression;
+        }
+        return "((" + javaPatternType(resultType) + ") (" + expression + "))";
     }
 
     private static String javaPatternType(pl.grzeslowski.capybara.linker.LinkedType type) {
@@ -896,7 +1011,7 @@ public class JavaExpressionEvaluator {
                 case STRING -> "java.lang.String";
                 case BOOL -> "java.lang.Boolean";
                 case FLOAT -> "java.lang.Float";
-                case NOTHING, ANY -> "java.lang.Object";
+                case NOTHING, ANY, DATA -> "java.lang.Object";
             };
             case pl.grzeslowski.capybara.linker.LinkedDataType dataType -> dataType.name();
             case pl.grzeslowski.capybara.linker.LinkedDataParentType dataParentType -> dataParentType.name();

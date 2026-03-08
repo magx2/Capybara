@@ -1,0 +1,24 @@
+fun string_option(value: Option[string]): string =
+    match value with
+        | Some { value } => value,
+        | None => "<empty>"
+
+fun int_option(value: Option[int]): int =
+    match value with
+        | Some { value } => value,
+        | None => -1
+
+fun bool_option(value: Option[bool]): bool =
+    match value with
+        | Some { value } => value,
+        | None => false
+
+fun option_to_message(value: Option[string]): string =
+    match value with
+        | Some { value } => "value=" + value,
+        | None => "missing"
+
+fun int_option_to_message(value: Option[int]): string =
+    match value with
+        | Some { value } => "value=" + value,
+        | None => "missing"
