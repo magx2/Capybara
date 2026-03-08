@@ -16,6 +16,6 @@ This folder contains a TextMate grammar for Capybara (`*.cfun`) that can be impo
 ## Notes
 
 - The grammar is intentionally lightweight and focuses on readability.
-- It highlights keywords, types, functions, comments (`//`, `///`), numbers, strings, and operators.
+- It highlights keywords, types, functions, comments (`//`, `///`, `/* ... */`), numbers, strings (`"` and `'`), and operators.
 
 Alternative import path (recommended for IntelliJ TextMate): Intellij/Capybara.tmBundle
