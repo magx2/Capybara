@@ -120,8 +120,20 @@ pattern: TYPE
         | BOOL_LITERAL
         | STRING_LITERAL
         | FLOAT_LITERAL
+        | typedPattern
         | UNDERSCORE // wildcard pattern
         | constructorPattern;
+typedPattern: patternType NAME;
+patternType: 'byte'
+           | 'int'
+           | 'long'
+           | 'double'
+           | 'bool'
+           | 'string'
+           | 'float'
+           | 'any'
+           | 'nothing'
+           | TYPE;
 constructorPattern: TYPE '{' fieldPatternList? '}';
 fieldPatternList: NAME (',' NAME)*;
 

@@ -3,6 +3,14 @@ data Assertion { result: bool, message: string }
 type Assert { assertions: list[Assertion] }= StringAssertion
 
 data StringAssertion { value: string }
+data IntAssertion { value: int }
+data LongAssertion { value: long }
+data DoubleAssertion { value: double }
+data FloatAssertion { value: float }
+data BoolAssertion { value: bool }
+//data ListAssertion[T] { value: list[T] }
+//data SetAssertion[T] { value: set[T] }
+//data DictAssertion[T] { value: dict[T] }
 
 fun StringAssertion.is_equal_to(other: string): StringAssertion =
     let assertion = Assertion {
@@ -54,7 +62,17 @@ fun StringAssertion.contains(other: string): StringAssertion =
        assertions: this.assertions + assertion
     }
 
-fun assert_that(value: string) = StringAssertion { value: value, assertions: [] }
+fun assert_that(value: any) =
+    match value with
+        | string s => StringAssertion { value: value, assertions: [] }
+        | int i => IntAssertion { value: i }
+        | long l => LongAssertion { value: l }
+        | double d => DoubleAssertion { value: d }
+        | float f => FloatAssertion { value: f }
+        | bool b => BoolAssertion { value: b }
+        //|  => ListAssertion { value: }
+        //|  => SetAssertion { value: }
+        //|  => DictAssertion { value: }
 
 fun Assert.check(): list[string] =
     this.assertions

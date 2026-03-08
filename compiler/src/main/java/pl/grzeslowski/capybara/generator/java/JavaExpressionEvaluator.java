@@ -848,6 +848,12 @@ public class JavaExpressionEvaluator {
                     branchScope = branchScope.addLocalValue(name);
                 }
             }
+            if (matchCase.pattern() instanceof LinkedMatchExpression.TypedPattern typedPattern
+                && matchExpression.matchWith() instanceof LinkedVariable matchedVariable) {
+                branchScope = branchScope
+                        .addLocalValue(typedPattern.name())
+                        .addValueOverride(matchedVariable.name(), typedPattern.name());
+            }
             var expressionScope = evaluateExpression(matchCase.expression(), branchScope).popExpression();
             current = expressionScope.scope();
             cases.add(matchCasePattern(matchCase.pattern()) + " -> (" + expressionScope.expression() + ")");
@@ -869,12 +875,32 @@ public class JavaExpressionEvaluator {
             case LinkedMatchExpression.StringPattern stringPattern -> "case " + stringPattern.value();
             case LinkedMatchExpression.BoolPattern boolPattern -> "case " + boolPattern.value();
             case LinkedMatchExpression.FloatPattern floatPattern -> "case " + floatPattern.value();
+            case LinkedMatchExpression.TypedPattern typedPattern ->
+                    "case " + javaPatternType(typedPattern.type()) + " " + typedPattern.name();
             case LinkedMatchExpression.VariablePattern variablePattern -> "case " + variablePattern.name() + " __ignored";
             case LinkedMatchExpression.WildcardPattern wildcardPattern -> "default";
             case LinkedMatchExpression.ConstructorPattern constructorPattern ->
                     "case " + constructorPattern.constructorName() + "("
                     + constructorPattern.names().stream().map(name -> "var " + name).reduce((a, b) -> a + ", " + b).orElse("")
                     + ")";
+        };
+    }
+
+    private static String javaPatternType(pl.grzeslowski.capybara.linker.LinkedType type) {
+        return switch (type) {
+            case pl.grzeslowski.capybara.linker.PrimitiveLinkedType primitiveType -> switch (primitiveType) {
+                case BYTE -> "java.lang.Byte";
+                case INT -> "java.lang.Integer";
+                case LONG -> "java.lang.Long";
+                case DOUBLE -> "java.lang.Double";
+                case STRING -> "java.lang.String";
+                case BOOL -> "java.lang.Boolean";
+                case FLOAT -> "java.lang.Float";
+                case NOTHING, ANY -> "java.lang.Object";
+            };
+            case pl.grzeslowski.capybara.linker.LinkedDataType dataType -> dataType.name();
+            case pl.grzeslowski.capybara.linker.LinkedDataParentType dataParentType -> dataParentType.name();
+            default -> "java.lang.Object";
         };
     }
 

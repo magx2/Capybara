@@ -640,6 +640,14 @@ public class CapybaraParser {
             return new MatchExpression.FloatPattern(floatLiteral.getText());
         }
 
+        var typedPattern = context.typedPattern();
+        if (typedPattern != null) {
+            return new MatchExpression.TypedPattern(
+                    type(typedPattern.patternType().getText()),
+                    typedPattern.NAME().getText()
+            );
+        }
+
         var wildcard = context.UNDERSCORE();
         if (wildcard != null) {
             return MatchExpression.WildcardPattern.WILDCARD;

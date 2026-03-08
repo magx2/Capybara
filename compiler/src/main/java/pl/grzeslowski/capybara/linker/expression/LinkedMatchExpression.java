@@ -30,6 +30,9 @@ public record LinkedMatchExpression(LinkedExpression matchWith, List<MatchCase> 
     public record FloatPattern(String value) implements Pattern {
     }
 
+    public record TypedPattern(LinkedType type, String name) implements Pattern {
+    }
+
     public record VariablePattern(String name) implements Pattern {
     }
 

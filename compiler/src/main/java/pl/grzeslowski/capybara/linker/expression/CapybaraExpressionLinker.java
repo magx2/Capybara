@@ -1716,8 +1716,16 @@ public class CapybaraExpressionLinker {
             Scope scope
     ) {
         return linkPattern(matchCase.pattern(), matchWith.type(), scope)
-                .flatMap(patternAndScope -> linkExpression(matchCase.expression(), patternAndScope.scope())
-                        .map(expression -> new LinkedMatchExpression.MatchCase(patternAndScope.pattern(), expression)));
+                .flatMap(patternAndScope -> {
+                    var caseScope = patternAndScope.scope();
+                    if (patternAndScope.pattern() instanceof LinkedMatchExpression.TypedPattern typedPattern
+                        && matchWith instanceof LinkedVariable matchedVariable) {
+                        // Flow typing: inside a typed match branch, treat the matched variable as narrowed too.
+                        caseScope = caseScope.add(matchedVariable.name(), typedPattern.type());
+                    }
+                    return linkExpression(matchCase.expression(), caseScope)
+                            .map(expression -> new LinkedMatchExpression.MatchCase(patternAndScope.pattern(), expression));
+                });
     }
 
     private ValueOrError<PatternAndScope> linkPattern(MatchExpression.Pattern pattern, LinkedType matchType, Scope scope) {
@@ -1726,6 +1734,7 @@ public class CapybaraExpressionLinker {
             case MatchExpression.StringPattern stringPattern -> validateLiteralPattern(stringPattern, matchType, scope, PrimitiveLinkedType.STRING);
             case MatchExpression.BoolPattern boolPattern -> validateLiteralPattern(boolPattern, matchType, scope, PrimitiveLinkedType.BOOL);
             case MatchExpression.FloatPattern floatPattern -> validateLiteralPattern(floatPattern, matchType, scope, PrimitiveLinkedType.FLOAT);
+            case MatchExpression.TypedPattern typedPattern -> linkTypedPattern(typedPattern, matchType, scope);
             case MatchExpression.VariablePattern variablePattern -> linkVariablePattern(variablePattern, matchType, scope);
             case MatchExpression.WildcardPattern wildcardPattern ->
                     ValueOrError.success(new PatternAndScope(LinkedMatchExpression.WildcardPattern.WILDCARD, scope));
@@ -1768,6 +1777,41 @@ public class CapybaraExpressionLinker {
             return ValueOrError.success(new PatternAndScope(new LinkedMatchExpression.VariablePattern(variablePattern.name()), scope));
         }
         return ValueOrError.error("Cannot match `" + matchType + "` with constructor `" + variablePattern.name() + "`");
+    }
+
+    private ValueOrError<PatternAndScope> linkTypedPattern(
+            MatchExpression.TypedPattern typedPattern,
+            LinkedType matchType,
+            Scope scope
+    ) {
+        return linkType(typedPattern.type(), dataTypes)
+                .flatMap(patternType -> {
+                    if (!isTypedPatternCompatible(matchType, patternType)) {
+                        return ValueOrError.error("Cannot match `" + matchType + "` with typed pattern `" + patternType + "`");
+                    }
+                    return ValueOrError.success(new PatternAndScope(
+                            new LinkedMatchExpression.TypedPattern(patternType, typedPattern.name()),
+                            scope.add(typedPattern.name(), patternType)
+                    ));
+                });
+    }
+
+    private boolean isTypedPatternCompatible(LinkedType matchType, LinkedType patternType) {
+        if (matchType == ANY || patternType == ANY) {
+            return true;
+        }
+        if (matchType.equals(patternType)) {
+            return true;
+        }
+        if (patternType instanceof LinkedDataType patternDataType
+            && matchType instanceof LinkedDataParentType parentType) {
+            return parentType.subTypes().stream().anyMatch(subType -> subType.name().equals(patternDataType.name()));
+        }
+        if (patternType instanceof LinkedDataParentType patternParentType
+            && matchType instanceof LinkedDataType matchDataType) {
+            return isSubtypeOfParent(matchDataType, patternParentType);
+        }
+        return false;
     }
 
     private ValueOrError<PatternAndScope> linkConstructorPattern(
