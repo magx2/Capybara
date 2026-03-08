@@ -5,7 +5,6 @@ import org.junit.jupiter.api.Test;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -112,6 +111,6 @@ class DictCollectionTest {
     @Test
     void dictToString() {
         var result = DictCollection.dictToString(EXPECTED);
-        assertThat(result).isEqualTo("one 1,two 2,three 3");
+        assertThat(result).isEqualTo("one 1, two 2, three 3");
     }
 }
