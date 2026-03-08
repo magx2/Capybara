@@ -545,7 +545,6 @@ public class JavaExpressionEvaluator {
                 return perEntryReducerExSc.scope().addExpression(
                         sourceExSc.expression()
                         + ".entrySet().stream()"
-                        + ".sorted(java.util.Map.Entry.comparingByKey())"
                         + ".map(" + entryVar + " -> (" + perEntryReducerExSc.expression() + "))"
                         + ".map(" + entryValueName + " -> ("
                         + entryValueName + ".startsWith(\", \") ? "
