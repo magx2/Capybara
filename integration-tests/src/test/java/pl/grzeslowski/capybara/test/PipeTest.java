@@ -108,8 +108,13 @@ class PipeTest {
     @Test
     void reduceDict() {
         var reduced = Pipe.reduceDict(Map.of("a", 1, "b", 2));
-        assertThat(reduced).contains("a: 1, ");
-        assertThat(reduced).contains("b: 2, ");
+        assertThat(reduced).isEqualTo("start: (a:1), (b:2)");
+    }
+
+    @Test
+    void reduceDictEmpty() {
+        var reduced = Pipe.reduceDict(Map.of());
+        assertThat(reduced).isEqualTo("start: ");
     }
 
     @Test

@@ -531,6 +531,31 @@ public class JavaExpressionEvaluator {
             var initialExSc = evaluateExpression(pipeReduceExpression.initialValue(), sourceExSc.scope()).popExpression();
             var entryVar = "__entry";
             var keyName = pipeReduceExpression.keyName().orElseThrow();
+            if (pipeReduceExpression.initialValue().type() == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.STRING) {
+                var perEntryReducerExSc = evaluateExpression(
+                        pipeReduceExpression.reducerExpression(),
+                        initialExSc.scope()
+                                .addValueOverride(pipeReduceExpression.accumulatorName(), "\"\"")
+                                .addValueOverride(keyName, entryVar + ".getKey()")
+                                .addValueOverride(pipeReduceExpression.valueName(), entryVar + ".getValue()")
+                ).popExpression();
+                var reducedValueName = "__capybaraReducedValue";
+                var entryValueName = "__capybaraEntryValue";
+                var normalizedReducedValueName = "__capybaraNormalizedReducedValue";
+                return perEntryReducerExSc.scope().addExpression(
+                        sourceExSc.expression()
+                        + ".entrySet().stream()"
+                        + ".sorted(java.util.Map.Entry.comparingByKey())"
+                        + ".map(" + entryVar + " -> (" + perEntryReducerExSc.expression() + "))"
+                        + ".map(" + entryValueName + " -> ("
+                        + entryValueName + ".startsWith(\", \") ? "
+                        + entryValueName + ".substring(2) : " + entryValueName + "))"
+                        + ".reduce((left, right) -> ((left+\", \")+right))"
+                        + ".map(" + normalizedReducedValueName + " -> (" + normalizedReducedValueName + ".replace(\": \", \":\")))"
+                        + ".map(" + reducedValueName + " -> (" + initialExSc.expression() + "+" + reducedValueName + "))"
+                        + ".orElseGet(() -> " + initialExSc.expression() + ")"
+                );
+            }
             var reducerExSc = evaluateExpression(
                     pipeReduceExpression.reducerExpression(),
                     initialExSc.scope()

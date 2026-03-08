@@ -49,7 +49,7 @@ fun mapDict(d: dict[int]): dict[string] = d | (k,v) => v + ""
 
 fun filterDict(d: dict[int]): dict[int] = d |- (k,v) => k != "" & v > 0
 
-fun reduceDict(d: dict[int]): string = d |> "", (acc, key, value) => acc + key + ": " + value + ", "
+fun reduceDict(d: dict[int]): string = d |> "start: ", (acc, key, value) => acc + ", (" + key + ": " + value + ")"
 
 fun dict_reduce_string2(d: dict[string]): string = d |> "start: ", (acc, v) => acc + " " + v
 
