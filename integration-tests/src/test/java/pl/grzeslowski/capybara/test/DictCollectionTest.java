@@ -25,6 +25,16 @@ class DictCollectionTest {
     }
 
     @Test
+    void emptyStaticDict() {
+        assertThat(DictCollection.emptyStaticDict()).isEmpty();
+    }
+
+    @Test
+    void emptyStaticDictWithSpaces() {
+        assertThat(DictCollection.emptyStaticDictWithSpaces()).isEmpty();
+    }
+
+    @Test
     void staticDictWithTrailingComma() {
         assertThat(DictCollection.staticDictWithTrailingComma()).isEqualTo(EXPECTED);
     }

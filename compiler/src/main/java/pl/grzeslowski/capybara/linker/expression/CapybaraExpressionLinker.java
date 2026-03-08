@@ -659,6 +659,26 @@ public class CapybaraExpressionLinker {
         if (argument.type().equals(expected)) {
             return new CoercedArgument(argument, 0);
         }
+        if (expected instanceof LinkedList expectedList
+            && argument instanceof LinkedNewList linkedNewList
+            && linkedNewList.values().isEmpty()) {
+            return new CoercedArgument(new LinkedNewList(List.of(), new LinkedList(expectedList.elementType())), 1);
+        }
+        if (expected instanceof LinkedSet expectedSet
+            && argument instanceof LinkedNewSet linkedNewSet
+            && linkedNewSet.values().isEmpty()) {
+            return new CoercedArgument(new LinkedNewSet(List.of(), new LinkedSet(expectedSet.elementType())), 1);
+        }
+        if (expected instanceof LinkedDict expectedDict
+            && argument instanceof LinkedNewSet linkedNewSet
+            && linkedNewSet.values().isEmpty()) {
+            return new CoercedArgument(new LinkedNewDict(List.of(), new LinkedDict(expectedDict.valueType())), 1);
+        }
+        if (expected instanceof LinkedDict expectedDict
+            && argument instanceof LinkedNewDict linkedNewDict
+            && linkedNewDict.entries().isEmpty()) {
+            return new CoercedArgument(new LinkedNewDict(List.of(), new LinkedDict(expectedDict.valueType())), 1);
+        }
         if (argument.type() == NOTHING) {
             return new CoercedArgument(argument, 0);
         }
@@ -1854,18 +1874,18 @@ public class CapybaraExpressionLinker {
 
     private ValueOrError<LinkedExpression> linkNewData(NewData newData, Scope scope) {
         return linkType(newData.type(), dataTypes)
-                .flatMap(type ->
-                        linkSpreadAssignments(newData.spreads(), scope)
-                                .flatMap(spreadAssignments ->
-                                        linkFieldAssignment(newData.assignments(), scope)
-                                                .map(assignments -> {
-                                                    var allAssignments = new java.util.ArrayList<LinkedNewData.FieldAssignment>(
-                                                            spreadAssignments.size() + assignments.size()
-                                                    );
-                                                    allAssignments.addAll(spreadAssignments);
-                                                    allAssignments.addAll(assignments);
-                                                    return new LinkedNewData(type, List.copyOf(allAssignments));
-                                                })));
+                .flatMap(type -> linkSpreadAssignments(newData.spreads(), scope)
+                        .flatMap(spreadAssignments ->
+                                linkFieldAssignment(newData.assignments(), scope)
+                                        .map(assignments -> {
+                                            var allAssignments = new java.util.ArrayList<LinkedNewData.FieldAssignment>(
+                                                    spreadAssignments.size() + assignments.size()
+                                            );
+                                            allAssignments.addAll(spreadAssignments);
+                                            allAssignments.addAll(assignments);
+                                            var coercedAssignments = coerceAssignmentsForType(type, allAssignments);
+                                            return new LinkedNewData(type, List.copyOf(coercedAssignments));
+                                        })));
     }
 
     private ValueOrError<List<LinkedNewData.FieldAssignment>> linkSpreadAssignments(List<Expression> spreads, Scope scope) {
@@ -1893,12 +1913,38 @@ public class CapybaraExpressionLinker {
     }
 
     private ValueOrError<List<LinkedNewData.FieldAssignment>> linkFieldAssignment(List<NewData.FieldAssignment> assignments, Scope scope) {
-        // todo check if types matche data declaration
-        // todo check if there is enough assignments
         return assignments.stream()
                 .map(a -> linkExpression(a.value(), scope)
                         .map(ex -> new LinkedNewData.FieldAssignment(a.name(), ex)))
                 .collect(new ValueOrErrorCollectionCollector<>());
+    }
+
+    private List<LinkedNewData.FieldAssignment> coerceAssignmentsForType(
+            LinkedType type,
+            List<LinkedNewData.FieldAssignment> assignments
+    ) {
+        if (!(type instanceof GenericDataType genericDataType)) {
+            return assignments;
+        }
+        var fieldsByName = genericDataType.fields().stream()
+                .collect(java.util.stream.Collectors.toMap(
+                        LinkedDataType.LinkedField::name,
+                        LinkedDataType.LinkedField::type,
+                        (a, b) -> a
+                ));
+        return assignments.stream()
+                .map(assignment -> {
+                    var expectedType = fieldsByName.get(assignment.name());
+                    if (expectedType == null) {
+                        return assignment;
+                    }
+                    var coerced = coerceArgument(assignment.value(), expectedType);
+                    if (coerced == null) {
+                        return assignment;
+                    }
+                    return new LinkedNewData.FieldAssignment(assignment.name(), coerced.expression());
+                })
+                .toList();
     }
 
     private ValueOrError<LinkedExpression> linkStringValue(StringValue value, Scope scope) {

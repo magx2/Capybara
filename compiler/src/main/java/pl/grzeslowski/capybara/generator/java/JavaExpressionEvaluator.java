@@ -910,7 +910,7 @@ public class JavaExpressionEvaluator {
             entries.add("java.util.Map.entry(" + keyExSc.expression() + ", " + valueExSc.expression() + ")");
         }
         if (entries.isEmpty()) {
-            return current.addExpression("new java.util.LinkedHashMap<>()");
+            return current.addExpression("java.util.Map.of()");
         }
         return current.addExpression(
                 "java.util.stream.Stream.of(" + String.join(", ", entries) + ")"

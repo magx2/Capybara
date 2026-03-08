@@ -19,6 +19,11 @@ class SetCollectionTest {
     }
 
     @Test
+    void emptyStaticSetWithSpaces() {
+        assertThat(SetCollection.emptyStaticSetWithSpaces()).isEmpty();
+    }
+
+    @Test
     void staticSetWithTrailingComma() {
         assertThat(SetCollection.staticSetWithTrailingComma()).isEqualTo(Set.of(1, 2, 3));
     }

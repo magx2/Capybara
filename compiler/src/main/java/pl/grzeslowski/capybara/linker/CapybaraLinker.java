@@ -368,11 +368,26 @@ public class CapybaraLinker {
                                                                 function.name(),
                                                                 rtype,
                                                                 parameters,
-                                                                enrichNothing(ex, function.name(), moduleSourceFile),
+                                                                enrichNothing(coerceReturnExpression(ex, rtype), function.name(), moduleSourceFile),
                                                                 function.comments(),
                                                                 isProgramMain(function.name(), rtype, parameters)))));
         var normalizedFile = normalizeFile(moduleSourceFile);
         return withPosition(linked, function.position(), normalizedFile);
+    }
+
+    private pl.grzeslowski.capybara.linker.expression.LinkedExpression coerceReturnExpression(
+            pl.grzeslowski.capybara.linker.expression.LinkedExpression expression,
+            LinkedType returnType
+    ) {
+        if (returnType instanceof CollectionLinkedType.LinkedDict dictType
+            && expression instanceof pl.grzeslowski.capybara.linker.expression.LinkedNewSet linkedNewSet
+            && linkedNewSet.values().isEmpty()) {
+            return new pl.grzeslowski.capybara.linker.expression.LinkedNewDict(
+                    List.of(),
+                    new CollectionLinkedType.LinkedDict(dictType.valueType())
+            );
+        }
+        return expression;
     }
 
     private boolean isProgramMain(String name, LinkedType returnType, List<LinkedFunctionParameter> parameters) {
