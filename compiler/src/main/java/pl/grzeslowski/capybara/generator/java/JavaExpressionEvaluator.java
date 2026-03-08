@@ -541,7 +541,6 @@ public class JavaExpressionEvaluator {
                 ).popExpression();
                 var reducedValueName = "__capybaraReducedValue";
                 var entryValueName = "__capybaraEntryValue";
-                var normalizedReducedValueName = "__capybaraNormalizedReducedValue";
                 return perEntryReducerExSc.scope().addExpression(
                         sourceExSc.expression()
                         + ".entrySet().stream()"
@@ -550,7 +549,6 @@ public class JavaExpressionEvaluator {
                         + entryValueName + ".startsWith(\", \") ? "
                         + entryValueName + ".substring(2) : " + entryValueName + "))"
                         + ".reduce((left, right) -> ((left+\", \")+right))"
-                        + ".map(" + normalizedReducedValueName + " -> (" + normalizedReducedValueName + ".replace(\": \", \":\")))"
                         + ".map(" + reducedValueName + " -> (" + initialExSc.expression() + "+" + reducedValueName + "))"
                         + ".orElseGet(() -> " + initialExSc.expression() + ")"
                 );
