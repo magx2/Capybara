@@ -788,6 +788,9 @@ public class JavaExpressionEvaluator {
         if (isOptionNoneTypeName(dataType.name())) {
             return current.addExpression("java.util.Optional.empty()");
         }
+        if (dataType.singleton()) {
+            return current.addExpression(normalizeJavaTypeReference(dataType.name()) + ".INSTANCE");
+        }
 
         return current.addExpression("new " + normalizeJavaTypeReference(dataType.name()) + "(" + String.join(", ", args) + ")");
     }

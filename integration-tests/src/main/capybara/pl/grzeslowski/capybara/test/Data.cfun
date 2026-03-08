@@ -21,9 +21,23 @@ type Knight = EnglishKnight | Tom
 data EnglishKnight { power: float }
 single Tom
 
+fun summon_tom(): Knight = Tom {}
+
+fun is_tom(knight: Knight): bool =
+    match knight with
+    | Tom => true
+    | EnglishKnight { power } => power > 10.0
+
 type King[T] = FrenchKing[T] | Jerry
 data FrenchKing[T] { head: bool, foo: T }
 single Jerry
+
+fun summon_jerry(): King[int] = Jerry {}
+
+fun jerry_or_french(king: King[int]): string =
+    match king with
+    | Jerry => "jerry"
+    | FrenchKing { head, foo } => head + ":" + foo
 
 type Worker {name: string, surname: string } = BlueCollar | WhiteCollar
 data BlueCollar { strength: float }
