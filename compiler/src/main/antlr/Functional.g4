@@ -107,7 +107,8 @@ DOUBLE_LITERAL: ([0-9]+ '.' [0-9]* EXPONENT? | [0-9]+ EXPONENT) [dD];
 FLOAT_LITERAL: [0-9]+ '.' [0-9]* EXPONENT? [fF]? | [0-9]+ EXPONENT [fF];
 INT_LITERAL: [0-9]+;
 fragment EXPONENT: [eE] [+\-]? [0-9]+;
-STRING_LITERAL: '"' (~["\r\n] | '\\' .)* '"';
+STRING_LITERAL: '"' (~["\r\n] | '\\' .)* '"'
+              | '\'' (~['\r\n] | '\\' .)* '\'';
 NOTHING_LITERAL: '???';
 
 matchExpression: 'match' expression 'with' matchCaseList+;

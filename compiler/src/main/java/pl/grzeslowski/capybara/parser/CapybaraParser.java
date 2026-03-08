@@ -266,7 +266,7 @@ public class CapybaraParser {
                     return new DoubleValue(literal.DOUBLE_LITERAL().getText(), position(literal.DOUBLE_LITERAL()));
                 }
                 if (literal.STRING_LITERAL() != null) {
-                    return new StringValue(literal.STRING_LITERAL().getText(), position(literal.STRING_LITERAL()));
+                    return new StringValue(normalizeStringLiteral(literal.STRING_LITERAL().getText()), position(literal.STRING_LITERAL()));
                 }
                 if (literal.FLOAT_LITERAL() != null) {
                     return new FloatValue(literal.FLOAT_LITERAL().getText(), position(literal.FLOAT_LITERAL()));
@@ -450,7 +450,7 @@ public class CapybaraParser {
                     return new DoubleValue(literal.DOUBLE_LITERAL().getText(), position(literal.DOUBLE_LITERAL()));
                 }
                 if (literal.STRING_LITERAL() != null) {
-                    return new StringValue(literal.STRING_LITERAL().getText(), position(literal.STRING_LITERAL()));
+                    return new StringValue(normalizeStringLiteral(literal.STRING_LITERAL().getText()), position(literal.STRING_LITERAL()));
                 }
                 if (literal.FLOAT_LITERAL() != null) {
                     return new FloatValue(literal.FLOAT_LITERAL().getText(), position(literal.FLOAT_LITERAL()));
@@ -622,7 +622,7 @@ public class CapybaraParser {
 
         var stringLiteral = context.STRING_LITERAL();
         if (stringLiteral != null) {
-            return new MatchExpression.StringPattern(stringLiteral.getText());
+            return new MatchExpression.StringPattern(normalizeStringLiteral(stringLiteral.getText()));
         }
 
         var floatLiteral = context.FLOAT_LITERAL();
@@ -752,6 +752,21 @@ public class CapybaraParser {
             return raw.substring(1, raw.length() - 1);
         }
         throw new IllegalStateException("Missing field name");
+    }
+
+    private static String normalizeStringLiteral(String raw) {
+        if (raw.length() < 2) {
+            return raw;
+        }
+        if (raw.charAt(0) == '"' && raw.charAt(raw.length() - 1) == '"') {
+            return raw;
+        }
+        if (raw.charAt(0) == '\'' && raw.charAt(raw.length() - 1) == '\'') {
+            var content = raw.substring(1, raw.length() - 1)
+                    .replace("\"", "\\\"");
+            return "\"" + content + "\"";
+        }
+        return raw;
     }
 
     private static String genericTypeName(FunctionalParser.GenericTypeDeclarationContext context) {

@@ -205,6 +205,21 @@ class JavaExpressionEvaluatorTest {
                         "return java.util.Map.of(\"one\", 1, \"two\", 2, \"three\", 3);"
                 ),
                 Arguments.of(
+                        "single_quote_string",
+                        "fun single_quote_string(): string = 'hello'",
+                        "return \"hello\";"
+                ),
+                Arguments.of(
+                        "summon_tom",
+                        """
+                                type Knight = EnglishKnight | Tom
+                                data EnglishKnight { power: float }
+                                single Tom
+                                fun summon_tom(): Knight = Tom {}
+                                """,
+                        "return Tom.INSTANCE;"
+                ),
+                Arguments.of(
                         "pipe_map",
                         """
                                 fun pipe_map(l: list[int]): list[int] =
