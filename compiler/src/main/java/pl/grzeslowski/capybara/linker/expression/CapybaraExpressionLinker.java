@@ -331,10 +331,11 @@ public class CapybaraExpressionLinker {
                 .filter(signature -> signature.parameterTypes().size() == functionCall.arguments().size())
                 .toList();
         if (candidates.isEmpty()) {
-            return withPosition(
-                    ValueOrError.error("No method `" + methodName + "` with " + functionCall.arguments().size() + " argument(s)"),
-                    functionCall.position()
-            );
+            return resolveBuiltinMethodInvoke(functionCall, scope, methodName)
+                    .orElseGet(() -> withPosition(
+                            ValueOrError.error("No method `" + methodName + "` with " + functionCall.arguments().size() + " argument(s)"),
+                            functionCall.position()
+                    ));
         }
 
         ResolvedFunctionCall best = null;
@@ -349,16 +350,41 @@ public class CapybaraExpressionLinker {
             }
         }
         if (best == null) {
-            return withPosition(
-                    ValueOrError.error("No matching method `" + methodName + "` for provided arguments"),
-                    functionCall.position()
-            );
+            return resolveBuiltinMethodInvoke(functionCall, scope, methodName)
+                    .orElseGet(() -> withPosition(
+                            ValueOrError.error("No matching method `" + methodName + "` for provided arguments"),
+                            functionCall.position()
+                    ));
         }
         return ValueOrError.success(new LinkedFunctionCall(
                 best.signature().name(),
                 best.arguments(),
                 best.signature().returnType()
         ));
+    }
+
+    private Optional<ValueOrError<LinkedExpression>> resolveBuiltinMethodInvoke(FunctionCall functionCall, Scope scope, String methodName) {
+        if (!"contains".equals(methodName) || functionCall.arguments().size() != 2) {
+            return Optional.empty();
+        }
+        var linkedArguments = functionCall.arguments().stream()
+                .map(argument -> linkExpression(argument, scope))
+                .collect(new ValueOrErrorCollectionCollector<>());
+        if (!(linkedArguments instanceof ValueOrError.Value<java.util.List<LinkedExpression>> value)) {
+            if (linkedArguments instanceof ValueOrError.Error<java.util.List<LinkedExpression>> error) {
+                return Optional.of(new ValueOrError.Error<>(error.errors()));
+            }
+            return Optional.empty();
+        }
+        var args = value.value();
+        if (args.get(0).type() != STRING || args.get(1).type() != STRING) {
+            return Optional.empty();
+        }
+        return Optional.of(ValueOrError.success(new LinkedFunctionCall(
+                METHOD_DECL_PREFIX + "String__contains",
+                args,
+                BOOL
+        )));
     }
 
     private Optional<LinkedVariable> resolveFunctionVariable(String name, Scope scope) {
@@ -1482,6 +1508,9 @@ public class CapybaraExpressionLinker {
             return elementType == ANY ? null : BOOL;
         }
         if (left instanceof LinkedDict) {
+            return right == STRING ? BOOL : null;
+        }
+        if (left == STRING) {
             return right == STRING ? BOOL : null;
         }
         return null;

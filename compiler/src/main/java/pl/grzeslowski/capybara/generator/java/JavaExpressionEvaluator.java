@@ -210,6 +210,10 @@ public class JavaExpressionEvaluator {
                 if (infixExpression.left().type() instanceof pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedDict) {
                     yield left.expression() + ".containsKey(" + right.expression() + ")";
                 }
+                if (infixExpression.left().type() == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.STRING
+                    && infixExpression.right().type() == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.STRING) {
+                    yield left.expression() + ".contains(" + right.expression() + ")";
+                }
                 yield left.expression() + operator.symbol() + right.expression();
             }
             case BITWISE_AND, BITWISE_OR, BITWISE_XOR ->
