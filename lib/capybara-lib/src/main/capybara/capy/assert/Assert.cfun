@@ -7,14 +7,52 @@ data StringAssertion { value: string }
 fun StringAssertion.is_equal_to(other: string): StringAssertion =
     let assertion = Assertion {
         result: this.value == other,
-        message: "Expected string\n" + this.value + "\nto be equal to\n" + other
+        message: "Expected string:\n" + this.value + "\nto be equal to:\n" + other
     }
     StringAssertion {
         value: this.value,
         assertions: this.assertions + assertion
     }
 
-fun StringAssertion.starts_with(other: string): StringAssertion = ??? // todo do not have capabilities to do this
+fun StringAssertion.starts_with(other: string): StringAssertion =
+    let assertion = Assertion {
+       result: this.value.starts_with(other),
+       message: "Expected string:\n" + this.value + "\nto start with:\n" + other
+    }
+    StringAssertion {
+       value: this.value,
+       assertions: this.assertions + assertion
+    }
+
+fun StringAssertion.does_not_start_with(other: string): StringAssertion =
+    let assertion = Assertion {
+       result: this.value.starts_with(other) != true,
+       message: "Expected string:\n" + this.value + "\nnot to start with:\n" + other
+    }
+    StringAssertion {
+       value: this.value,
+       assertions: this.assertions + assertion
+    }
+
+fun StringAssertion.contains(other: string): StringAssertion =
+    let assertion = Assertion {
+       result: this.value ? other,
+       message: "Expected string:\n" + this.value + "\nto contain:\n" + other
+    }
+    StringAssertion {
+       value: this.value,
+       assertions: this.assertions + assertion
+    }
+
+fun StringAssertion.contains(other: string): StringAssertion =
+    let assertion = Assertion {
+       result: this.value ? other,
+       message: "Expected string:\n" + this.value + "\nto contain:\n" + other
+    }
+    StringAssertion {
+       value: this.value,
+       assertions: this.assertions + assertion
+    }
 
 fun assert_that(value: string) = StringAssertion { value: value, assertions: [] }
 

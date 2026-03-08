@@ -5,6 +5,9 @@ from /capy/lang/Program import { * }
 fun main(args: list[string]): /capy/lang/Program.Program =
     run_tests([
         test_serialize_simple_object(),
+        test_empty(),
+        test_serialize_object_with_primitive_types(),
+        test_serialize_object_with_list(),
     ])
 
 fun test_serialize_simple_object(): Assert =
@@ -12,3 +15,40 @@ fun test_serialize_simple_object(): Assert =
     let ser = serialize(json)
     assert_that(ser).is_equal_to("{\"foo\":\"boo\"}")
 
+fun test_empty(): Assert =
+    let json = JsonObject { value: {  } }
+    let ser = serialize(json)
+    assert_that(ser).is_equal_to("{}")
+
+fun test_serialize_object_with_primitive_types(): Assert =
+    let json = JsonObject { value: {
+        "name": JsonString { value: "Tom" },
+        "age" : JsonNumberLong { value: 50 },
+        "ageLong" : JsonNumberLong { value: 50L },
+        "ageDouble" : JsonNumberDouble { value: 50.5 },
+        "ageFloat" : JsonNumberDouble { value: 60.5f },
+        "married" : JsonBool { value: true },
+        "car" : JsonNull {},
+    }}
+    let ser = serialize(json)
+    assert_that(ser)
+        .starts_with("{")
+        .does_not_start_with("{,")
+        .contains('"name":"Tom"')
+        .contains('"age":50')
+        .contains('"ageLong":50')
+        .contains('"ageDouble":50.5')
+        .contains('"ageFloat":60.5')
+        .contains('"married":true')
+        .contains('"car":null')
+
+fun test_serialize_object_with_list(): Assert =
+    let json = JsonObject { value: {
+        "cars": JsonArray { value: [
+            JsonString { value: "name" },
+            JsonNumberLong { value: 2010L },
+        ] },
+    }}
+    let ser = serialize(json)
+    assert_that(ser)
+        .contains('"cars":["name",2010]')
