@@ -3,16 +3,22 @@ package pl.grzeslowski.capybara.test;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 class DictCollectionTest {
-    private static final Map<String, Integer> EXPECTED = Map.of(
-            "one", 1,
-            "two", 2,
-            "three", 3
-    );
+    private static final Map<String, Integer> EXPECTED = expected();
+
+    private static Map<String, Integer> expected() {
+        var map = new LinkedHashMap<String, Integer>();
+        map.put("one", 1);
+        map.put("two", 2);
+        map.put("three", 3);
+        return map;
+    }
 
     @Test
     void staticDict() {
@@ -91,5 +97,21 @@ class DictCollectionTest {
     void size() {
         assertThat(DictCollection.size(EXPECTED)).isEqualTo(3);
         assertThat(DictCollection.size(Map.of())).isEqualTo(0);
+    }
+
+    @Test
+    void dictToList() {
+        assertThat(DictCollection.dictToList(EXPECTED))
+                .containsExactlyInAnyOrder(
+                        new DictCollection.Entry("one", 1),
+                        new DictCollection.Entry("two", 2),
+                        new DictCollection.Entry("three", 3)
+                );
+    }
+
+    @Test
+    void dictToString() {
+        var result = DictCollection.dictToString(EXPECTED);
+        assertThat(result).isEqualTo("one 1,two 2,three 3");
     }
 }

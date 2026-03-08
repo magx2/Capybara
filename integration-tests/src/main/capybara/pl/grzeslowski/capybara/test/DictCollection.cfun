@@ -23,3 +23,14 @@ fun remove_dict(left: dict[int], right: dict[int]): dict[int] = left - right
 fun contains(d: dict[int], key: string): bool = d ? key
 
 fun size(d: dict[int]): int = d.size
+
+data Entry {k: string, v: int}
+fun dict_to_list(d: dict[int]): list[Entry] =
+    d |> [], (acc, k, v) => acc + Entry {k:k, v:v}
+
+fun dict_to_string(d: dict[int]): string =
+    d
+        |> "", (acc, k, v) =>
+            if acc == ""
+            then k + " " + v
+            else acc + "," + k + " " + v

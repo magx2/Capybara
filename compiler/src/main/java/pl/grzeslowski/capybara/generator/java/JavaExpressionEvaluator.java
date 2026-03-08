@@ -360,8 +360,8 @@ public class JavaExpressionEvaluator {
 
     private static String evaluateDictAppendExpression(String left, String right) {
         return "java.util.stream.Stream.concat(" + left + ".entrySet().stream(), " + right + ".entrySet().stream())"
-               + ".collect(java.util.stream.Collectors.toUnmodifiableMap("
-               + "java.util.Map.Entry::getKey, java.util.Map.Entry::getValue, (oldValue, newValue) -> newValue))";
+               + ".collect(java.util.stream.Collectors.toMap("
+               + "java.util.Map.Entry::getKey, java.util.Map.Entry::getValue, (oldValue, newValue) -> newValue, java.util.LinkedHashMap::new))";
     }
 
     private static String evaluateListRemoveExpression(LinkedInfixExpression infixExpression, String left, String right) {
@@ -383,10 +383,12 @@ public class JavaExpressionEvaluator {
     private static String evaluateDictRemoveExpression(LinkedInfixExpression infixExpression, String left, String right) {
         if (infixExpression.right().type() instanceof pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedDict) {
             return left + ".entrySet().stream().filter(entry -> !" + right + ".containsKey(entry.getKey()))"
-                   + ".collect(java.util.stream.Collectors.toUnmodifiableMap(java.util.Map.Entry::getKey, java.util.Map.Entry::getValue))";
+                   + ".collect(java.util.stream.Collectors.toMap("
+                   + "java.util.Map.Entry::getKey, java.util.Map.Entry::getValue, (oldValue, newValue) -> newValue, java.util.LinkedHashMap::new))";
         }
         return left + ".entrySet().stream().filter(entry -> !java.util.Objects.equals(entry.getKey(), " + right + "))"
-               + ".collect(java.util.stream.Collectors.toUnmodifiableMap(java.util.Map.Entry::getKey, java.util.Map.Entry::getValue))";
+               + ".collect(java.util.stream.Collectors.toMap("
+               + "java.util.Map.Entry::getKey, java.util.Map.Entry::getValue, (oldValue, newValue) -> newValue, java.util.LinkedHashMap::new))";
     }
 
     private static Scope evaluateIntValue(LinkedIntValue intValue, Scope scope) {
@@ -437,7 +439,8 @@ public class JavaExpressionEvaluator {
                 sourceExSc.expression()
                 + ".entrySet().stream().collect(java.util.stream.Collectors.toMap("
                 + entryVar + " -> " + entryVar + ".getKey(), "
-                + entryVar + " -> (" + mapperExSc.expression() + ")))"
+                + entryVar + " -> (" + mapperExSc.expression() + "), "
+                + "(oldValue, newValue) -> newValue, java.util.LinkedHashMap::new))"
         );
     }
 
@@ -479,7 +482,8 @@ public class JavaExpressionEvaluator {
                 + ".filter(" + entryVar + " -> !(" + predicateExSc.expression() + "))"
                 + ".collect(java.util.stream.Collectors.toMap("
                 + entryVar + " -> " + entryVar + ".getKey(), "
-                + entryVar + " -> " + entryVar + ".getValue()))"
+                + entryVar + " -> " + entryVar + ".getValue(), "
+                + "(oldValue, newValue) -> newValue, java.util.LinkedHashMap::new))"
         );
     }
 
@@ -745,15 +749,21 @@ public class JavaExpressionEvaluator {
 
     private static Scope evaluateNewDict(LinkedNewDict newDict, Scope scope) {
         var current = scope;
-        var values = new ArrayList<String>(newDict.entries().size() * 2);
+        var entries = new ArrayList<String>(newDict.entries().size());
         for (var entry : newDict.entries()) {
             var keyExSc = evaluateExpression(entry.key(), current).popExpression();
             var valueExSc = evaluateExpression(entry.value(), keyExSc.scope()).popExpression();
             current = valueExSc.scope();
-            values.add(keyExSc.expression());
-            values.add(valueExSc.expression());
+            entries.add("java.util.Map.entry(" + keyExSc.expression() + ", " + valueExSc.expression() + ")");
         }
-        return current.addExpression("java.util.Map.of(" + String.join(", ", values) + ")");
+        if (entries.isEmpty()) {
+            return current.addExpression("new java.util.LinkedHashMap<>()");
+        }
+        return current.addExpression(
+                "java.util.stream.Stream.of(" + String.join(", ", entries) + ")"
+                + ".collect(java.util.stream.Collectors.toMap("
+                + "java.util.Map.Entry::getKey, java.util.Map.Entry::getValue, (oldValue, newValue) -> newValue, java.util.LinkedHashMap::new))"
+        );
     }
 
     private static Scope evaluateNewData(LinkedNewData newData, Scope scope) {

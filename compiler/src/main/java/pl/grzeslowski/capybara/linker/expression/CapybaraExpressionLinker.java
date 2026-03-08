@@ -1019,7 +1019,7 @@ public class CapybaraExpressionLinker {
                                 reduceScope = reduceScope.add(reduceExpression.valueName(), elementType);
                                 return linkExpression(reduceExpression.reducerExpression(), reduceScope)
                                         .flatMap(reducer -> {
-                                            if (reducer.type() != initial.type()) {
+                                            if (!reducer.type().equals(initial.type())) {
                                                 return withPosition(
                                                         ValueOrError.error(
                                                                 "Reducer in `|>` has to return `" + initial.type() + "`, was `" + reducer.type() + "`"
