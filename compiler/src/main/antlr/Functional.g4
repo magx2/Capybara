@@ -31,7 +31,7 @@ genericTypeDeclaration: TYPE ('[' TYPE (',' TYPE)* ']')?;
 BOOL_LITERAL: 'true' | 'false';
 COLLECTION: 'list' | 'set' | 'dict';
 NAME : [a-z][a-zA-Z0-9_]* | '_' [a-zA-Z0-9_]+;
-identifier: NAME | 'fun' | 'byte' | 'int' | 'long' | 'double' | 'bool' | 'string' | 'float' | 'nothing';
+identifier: NAME | COLLECTION | 'fun' | 'byte' | 'int' | 'long' | 'double' | 'bool' | 'string' | 'float' | 'nothing' | 'any';
 parameters: parameter (',' parameter)*;
 parameter: identifier ':' type;
 functionType: ':' type;
@@ -45,6 +45,7 @@ type: COLLECTION '[' type ']'
     | 'bool'
     | 'string'
     | 'float'
+    | 'any'
     | 'nothing'
     | qualifiedType ('[' type (',' type)* ']')?;
 qualifiedType: TYPE (DOT TYPE)*;

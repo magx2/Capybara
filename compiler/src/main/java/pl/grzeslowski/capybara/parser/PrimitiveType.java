@@ -11,6 +11,7 @@ public enum PrimitiveType implements Type {
     STRING("string"),
     BOOL("bool"),
     FLOAT("float"),
+    ANY("any"),
     NOTHING("nothing");
 
     private final String name;
