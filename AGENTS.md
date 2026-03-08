@@ -1,0 +1,43 @@
+# Repository Guidelines
+
+## Project Structure & Module Organization
+This repository is a Gradle multi-project build (`settings.gradle`) with these main modules:
+- `compiler/`: Capybara parser, linker, and Java generator (`src/main/antlr/Functional.g4`, Java sources, unit tests).
+- `app/`: CLI entrypoint (`pl.grzeslowski.capybara.App`) used by generation tasks.
+- `integration-tests/`: `.cfun` examples and Java integration tests. Capybara files in `src/main/capybara` are compiled into generated Java.
+- `lib/java-lib/`: shared Java helpers.
+- `lib/capybara-lib/`: standard library written in Capybara (`src/main/capybara`) plus generated Java tests.
+- `Intellij/`: editor syntax bundle and related docs.
+
+Do not edit generated outputs under `build/generated/...`; change source `.cfun`/`.java`/grammar files instead.
+
+## Build, Test, and Development Commands
+Use the wrapper from repository root:
+- `./gradlew.bat clean test`: full build and test for all modules.
+- `./gradlew.bat :compiler:test`: run compiler unit tests only.
+- `./gradlew.bat :integration-tests:test`: run integration suite.
+- `./gradlew.bat :lib:capybara-lib:compileCapybara`: compile library Capybara sources to Java.
+- `./gradlew.bat :lib:capybara-lib:testCapybara`: compile test Capybara sources and run generated `JsonTest` main.
+
+## Coding Style & Naming Conventions
+- Java toolchain is 21 (configured in `buildSrc` conventions).
+- Use 4-space indentation and standard Java naming: `UpperCamelCase` for types, `lowerCamelCase` for methods/fields.
+- In `.cfun`, keep snake_case function names; Java generator maps exported names as needed.
+- Private Capybara functions start with `_` and should remain distinct in generated code.
+- Keep grammar changes in `compiler/src/main/antlr/Functional.g4` with matching parser/linker/generator updates.
+
+## Testing Guidelines
+- Frameworks: JUnit 5 + AssertJ.
+- Add/update tests with every behavior change:
+  - compiler behavior: `compiler/src/test/...`
+  - language/integration behavior: `integration-tests/src/main/capybara/...` + `integration-tests/src/test/java/...`
+- Prefer focused test names (e.g., `reduceDict`, `should_dict_of_obj`).
+
+## Commit & Pull Request Guidelines
+- Follow concise conventional-style commits seen in history: `feat: ...`, `fix: ...`, `test: ...`, `chore: ...`.
+- Keep commits logically scoped (grammar, linker, generator, tests).
+- PRs should include:
+  - what changed and why,
+  - impacted modules,
+  - commands run (for example `./gradlew.bat clean test`),
+  - sample `.cfun` snippet/output when behavior changes.
