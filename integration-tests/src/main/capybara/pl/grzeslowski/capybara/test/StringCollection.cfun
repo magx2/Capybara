@@ -1,3 +1,9 @@
 fun contains(s: string, part: string): bool = s ? part
 
 fun contains_method(s: string, part: string): bool = s.contains(part)
+
+fun starts_with_method(s: string, part: string): bool = s.starts_with(part)
+
+fun end_with_method(s: string, part: string): bool = s.end_with(part)
+
+fun trim_method(s: string): string = s.trim()

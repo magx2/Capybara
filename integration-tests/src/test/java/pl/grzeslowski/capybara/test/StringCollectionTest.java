@@ -22,4 +22,22 @@ class StringCollectionTest {
         assertThat(StringCollection.contains("capybara", "")).isTrue();
         assertThat(StringCollection.contains("", "")).isTrue();
     }
+
+    @Test
+    void startsWithMethod() {
+        assertThat(StringCollection.startsWithMethod("capybara", "cap")).isTrue();
+        assertThat(StringCollection.startsWithMethod("capybara", "bara")).isFalse();
+    }
+
+    @Test
+    void endWithMethod() {
+        assertThat(StringCollection.endWithMethod("capybara", "bara")).isTrue();
+        assertThat(StringCollection.endWithMethod("capybara", "cap")).isFalse();
+    }
+
+    @Test
+    void trimMethod() {
+        assertThat(StringCollection.trimMethod("  capybara  ")).isEqualTo("capybara");
+        assertThat(StringCollection.trimMethod("capybara")).isEqualTo("capybara");
+    }
 }

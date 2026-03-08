@@ -118,6 +118,9 @@ public class JavaExpressionEvaluator {
             var methodName = idx >= 0 && idx + 2 < functionCall.name().length()
                     ? functionCall.name().substring(idx + 2)
                     : functionCall.name();
+            if ("end_with".equals(methodName)) {
+                methodName = "ends_with";
+            }
             var receiver = args.get(0);
             var invokeArgs = args.size() > 1 ? String.join(", ", args.subList(1, args.size())) : "";
             return current.addExpression(receiver + "." + normalizeJavaMethodName(methodName) + "(" + invokeArgs + ")");

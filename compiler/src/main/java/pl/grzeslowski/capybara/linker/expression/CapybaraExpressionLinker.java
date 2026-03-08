@@ -364,7 +364,13 @@ public class CapybaraExpressionLinker {
     }
 
     private Optional<ValueOrError<LinkedExpression>> resolveBuiltinMethodInvoke(FunctionCall functionCall, Scope scope, String methodName) {
-        if (!"contains".equals(methodName) || functionCall.arguments().size() != 2) {
+        var supportsTwoStrings = "contains".equals(methodName)
+                || "starts_with".equals(methodName)
+                || "end_with".equals(methodName);
+        var supportsTrim = "trim".equals(methodName);
+        if ((!supportsTwoStrings && !supportsTrim)
+                || (supportsTwoStrings && functionCall.arguments().size() != 2)
+                || (supportsTrim && functionCall.arguments().size() != 1)) {
             return Optional.empty();
         }
         var linkedArguments = functionCall.arguments().stream()
@@ -377,13 +383,23 @@ public class CapybaraExpressionLinker {
             return Optional.empty();
         }
         var args = value.value();
-        if (args.get(0).type() != STRING || args.get(1).type() != STRING) {
+        if (supportsTwoStrings) {
+            if (args.get(0).type() != STRING || args.get(1).type() != STRING) {
+                return Optional.empty();
+            }
+            return Optional.of(ValueOrError.success(new LinkedFunctionCall(
+                    METHOD_DECL_PREFIX + "String__" + methodName,
+                    args,
+                    BOOL
+            )));
+        }
+        if (args.get(0).type() != STRING) {
             return Optional.empty();
         }
         return Optional.of(ValueOrError.success(new LinkedFunctionCall(
-                METHOD_DECL_PREFIX + "String__contains",
+                METHOD_DECL_PREFIX + "String__trim",
                 args,
-                BOOL
+                STRING
         )));
     }
 
