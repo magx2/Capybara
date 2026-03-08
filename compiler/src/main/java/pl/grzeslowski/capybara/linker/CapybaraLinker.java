@@ -220,6 +220,7 @@ public class CapybaraLinker {
             }
         }
         allModules.forEach(knownModule -> addQualifiedTypeAliases(all, knownModule, linkedTypesByModule.get(knownModule.name())));
+        resolveQualifiedExternalFieldTypes(all);
         return ValueOrError.success(Map.copyOf(all));
     }
 
@@ -234,6 +235,87 @@ public class CapybaraLinker {
             all.put(modulePath + "." + typeName, type);
             all.put("/" + modulePath + "." + typeName, type);
         });
+    }
+
+    private void resolveQualifiedExternalFieldTypes(Map<String, GenericDataType> all) {
+        var resolved = new HashMap<String, GenericDataType>();
+        for (var entry : all.entrySet()) {
+            resolved.put(entry.getKey(), resolveGenericDataType(entry.getValue(), all));
+        }
+        all.putAll(resolved);
+    }
+
+    private GenericDataType resolveGenericDataType(GenericDataType type, Map<String, GenericDataType> all) {
+        return switch (type) {
+            case LinkedDataType linkedDataType -> new LinkedDataType(
+                    linkedDataType.name(),
+                    linkedDataType.fields().stream()
+                            .map(field -> new LinkedDataType.LinkedField(field.name(), resolveLinkedType(field.type(), all)))
+                            .toList(),
+                    linkedDataType.typeParameters(),
+                    linkedDataType.extendedTypes(),
+                    linkedDataType.singleton()
+            );
+            case LinkedDataParentType linkedDataParentType -> new LinkedDataParentType(
+                    linkedDataParentType.name(),
+                    linkedDataParentType.fields().stream()
+                            .map(field -> new LinkedDataType.LinkedField(field.name(), resolveLinkedType(field.type(), all)))
+                            .toList(),
+                    linkedDataParentType.subTypes().stream()
+                            .map(subType -> (LinkedDataType) resolveGenericDataType(subType, all))
+                            .toList(),
+                    linkedDataParentType.typeParameters()
+            );
+        };
+    }
+
+    private LinkedType resolveLinkedType(LinkedType type, Map<String, GenericDataType> all) {
+        return switch (type) {
+            case LinkedDataType linkedDataType -> resolveGenericDataType(linkedDataType, all);
+            case LinkedDataParentType linkedDataParentType -> {
+                if (isQualifiedExternalPlaceholder(linkedDataParentType)) {
+                    var resolved = all.get(linkedDataParentType.name());
+                    if (resolved != null) {
+                        yield withRequestedName(resolveGenericDataType(resolved, all), linkedDataParentType.name());
+                    }
+                }
+                yield resolveGenericDataType(linkedDataParentType, all);
+            }
+            case CollectionLinkedType.LinkedList linkedList -> new CollectionLinkedType.LinkedList(resolveLinkedType(linkedList.elementType(), all));
+            case CollectionLinkedType.LinkedSet linkedSet -> new CollectionLinkedType.LinkedSet(resolveLinkedType(linkedSet.elementType(), all));
+            case CollectionLinkedType.LinkedDict linkedDict -> new CollectionLinkedType.LinkedDict(resolveLinkedType(linkedDict.valueType(), all));
+            case LinkedFunctionType linkedFunctionType -> new LinkedFunctionType(
+                    resolveLinkedType(linkedFunctionType.argumentType(), all),
+                    resolveLinkedType(linkedFunctionType.returnType(), all)
+            );
+            default -> type;
+        };
+    }
+
+    private boolean isQualifiedExternalPlaceholder(LinkedDataParentType type) {
+        return type.name().startsWith("/")
+               && type.name().contains(".")
+               && type.fields().isEmpty()
+               && type.subTypes().isEmpty()
+               && type.typeParameters().isEmpty();
+    }
+
+    private GenericDataType withRequestedName(GenericDataType type, String requestedName) {
+        return switch (type) {
+            case LinkedDataType linkedDataType -> new LinkedDataType(
+                    requestedName,
+                    linkedDataType.fields(),
+                    linkedDataType.typeParameters(),
+                    linkedDataType.extendedTypes(),
+                    linkedDataType.singleton()
+            );
+            case LinkedDataParentType linkedDataParentType -> new LinkedDataParentType(
+                    requestedName,
+                    linkedDataParentType.fields(),
+                    linkedDataParentType.subTypes(),
+                    linkedDataParentType.typeParameters()
+            );
+        };
     }
 
     private Set<LinkedModule.StaticImport> staticImports(
@@ -745,6 +827,12 @@ public class CapybaraLinker {
                     normalizedFile)
                     .map(linkedDataType -> new LinkedDataType.LinkedField(type.name(), linkedDataType));
         }
+        if (type.type() instanceof DataType dataType && isQualifiedExternalTypeName(dataType.name())) {
+            return ValueOrError.success(new LinkedDataType.LinkedField(
+                    type.name(),
+                    new LinkedDataParentType(dataType.name(), List.of(), List.of(), List.of())
+            ));
+        }
         var knownDataTypes = new HashMap<String, GenericDataType>();
         declarationsByName.forEach((name, declaration) -> {
             var cached = cache.get(name);
@@ -766,6 +854,10 @@ public class CapybaraLinker {
         ));
         return linkType(type.type(), knownDataTypes)
                 .map(t -> new LinkedDataType.LinkedField(type.name(), t));
+    }
+
+    private boolean isQualifiedExternalTypeName(String typeName) {
+        return typeName.startsWith("/") && typeName.contains(".");
     }
 
     private ValueOrError<LinkedDataParentType> linkTypeDeclaration(

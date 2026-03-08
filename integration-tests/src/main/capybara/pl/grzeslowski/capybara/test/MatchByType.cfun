@@ -7,3 +7,16 @@ fun match_int(value: any): int =
     match value with
     | int i => i + 1
     | string s => 0
+
+data Person { name: string }
+type Entity = Person
+
+fun is_data(value: any): bool =
+    match value with
+    | data d => true
+    | _ => false
+
+fun is_data_from_entity(value: Entity): bool =
+    match value with
+    | data d => true
+    | _ => false

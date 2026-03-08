@@ -46,6 +46,7 @@ type: COLLECTION '[' type ']'
     | 'string'
     | 'float'
     | 'any'
+    | 'data'
     | 'nothing'
     | qualifiedType ('[' type (',' type)* ']')?;
 qualifiedType: TYPE (DOT TYPE)*;
@@ -132,6 +133,7 @@ patternType: 'byte'
            | 'string'
            | 'float'
            | 'any'
+           | 'data'
            | 'nothing'
            | TYPE;
 constructorPattern: TYPE '{' fieldPatternList? '}';

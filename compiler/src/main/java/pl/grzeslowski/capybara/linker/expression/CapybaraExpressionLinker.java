@@ -350,9 +350,16 @@ public class CapybaraExpressionLinker {
             }
         }
         if (best == null) {
+            var actualTypes = new java.util.ArrayList<String>();
+            for (var argument : functionCall.arguments()) {
+                var linked = linkExpression(argument, scope);
+                if (linked instanceof ValueOrError.Value<LinkedExpression> value) {
+                    actualTypes.add(value.value().type().name());
+                }
+            }
             return resolveBuiltinMethodInvoke(functionCall, scope, methodName)
                     .orElseGet(() -> withPosition(
-                            ValueOrError.error("No matching method `" + methodName + "` for provided arguments"),
+                            ValueOrError.error("No matching method `" + methodName + "` for argument types " + actualTypes),
                             functionCall.position()
                     ));
         }
@@ -659,6 +666,9 @@ public class CapybaraExpressionLinker {
         if (argument.type().equals(expected)) {
             return new CoercedArgument(argument, 0);
         }
+        if (expected == ANY) {
+            return new CoercedArgument(argument, 1);
+        }
         if (expected instanceof LinkedList expectedList
             && argument instanceof LinkedNewList linkedNewList
             && linkedNewList.values().isEmpty()) {
@@ -681,6 +691,20 @@ public class CapybaraExpressionLinker {
         }
         if (argument.type() == NOTHING) {
             return new CoercedArgument(argument, 0);
+        }
+        if (expected == PrimitiveLinkedType.DATA
+            && argument.type() instanceof GenericDataType) {
+            return new CoercedArgument(argument, 1);
+        }
+        if (expected instanceof LinkedDataParentType expectedParent
+            && argument.type() instanceof LinkedDataParentType argumentParent
+            && sameRawTypeName(expectedParent.name(), argumentParent.name())) {
+            return new CoercedArgument(argument, 1);
+        }
+        if (expected instanceof LinkedDataType expectedData
+            && argument.type() instanceof LinkedDataType argumentData
+            && sameRawTypeName(expectedData.name(), argumentData.name())) {
+            return new CoercedArgument(argument, 1);
         }
         if (argument.type() == ANY) {
             return new CoercedArgument(argument, 1);
@@ -721,6 +745,16 @@ public class CapybaraExpressionLinker {
     private boolean isSubtypeOfParent(LinkedDataType candidate, LinkedDataParentType expectedParentType) {
         return expectedParentType.subTypes().stream()
                 .anyMatch(subType -> subType.name().equals(candidate.name()));
+    }
+
+    private static boolean sameRawTypeName(String left, String right) {
+        return normalizeTypeAlias(left).equals(normalizeTypeAlias(right));
+    }
+
+    private static String normalizeTypeAlias(String typeName) {
+        return typeName
+                .replace("/capy/lang/Option", "/cap/lang/Option")
+                .replace(".capy.lang.Option", ".cap.lang.Option");
     }
 
     private ValueOrError<LinkedExpression> linkIfExpression(IfExpression ifExpression, Scope scope) {
@@ -1397,6 +1431,12 @@ public class CapybaraExpressionLinker {
     }
 
     private static LinkedType findPlusType(LinkedType left, LinkedType right) {
+        if (left == STRING && isDataLikeType(right)) {
+            return STRING;
+        }
+        if (right == STRING && isDataLikeType(left)) {
+            return STRING;
+        }
         if (left instanceof LinkedList leftList) {
             if (right instanceof LinkedList rightList) {
                 return new LinkedList(findHigherType(leftList.elementType(), rightList.elementType()));
@@ -1495,10 +1535,17 @@ public class CapybaraExpressionLinker {
 
     private static LinkedType findPlusPrimitiveType(PrimitiveLinkedType left, PrimitiveLinkedType right) {
         if (left == STRING) {
-            return isNumericPrimitive(right) || right == STRING || right == BOOL ? STRING : null;
+            return isNumericPrimitive(right)
+                   || right == STRING
+                   || right == BOOL
+                   || right == PrimitiveLinkedType.DATA
+                   || right == PrimitiveLinkedType.ANY ? STRING : null;
         }
         if (right == STRING) {
-            return isNumericPrimitive(left) || left == BOOL ? STRING : null;
+            return isNumericPrimitive(left)
+                   || left == BOOL
+                   || left == PrimitiveLinkedType.DATA
+                   || left == PrimitiveLinkedType.ANY ? STRING : null;
         }
         if (left == BOOL || right == BOOL) {
             return null;
@@ -1507,6 +1554,10 @@ public class CapybaraExpressionLinker {
             return promoteNumeric(left, right);
         }
         return null;
+    }
+
+    private static boolean isDataLikeType(LinkedType type) {
+        return type == PrimitiveLinkedType.DATA || type instanceof GenericDataType;
     }
 
     private static LinkedType findMathPrimitiveType(PrimitiveLinkedType left, PrimitiveLinkedType right) {
@@ -1798,6 +1849,12 @@ public class CapybaraExpressionLinker {
 
     private boolean isTypedPatternCompatible(LinkedType matchType, LinkedType patternType) {
         if (matchType == ANY || patternType == ANY) {
+            return true;
+        }
+        if (patternType == PrimitiveLinkedType.DATA && matchType instanceof GenericDataType) {
+            return true;
+        }
+        if (matchType == PrimitiveLinkedType.DATA && patternType instanceof GenericDataType) {
             return true;
         }
         if (matchType.equals(patternType)) {

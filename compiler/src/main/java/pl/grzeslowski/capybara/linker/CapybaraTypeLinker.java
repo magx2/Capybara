@@ -36,6 +36,10 @@ public class CapybaraTypeLinker {
         if (dataTypes.containsKey(dataType.name())) {
             return ValueOrError.success(withQualifiedNameIfNeeded(dataTypes.get(dataType.name()), dataType.name()));
         }
+        var matchedBySimpleName = matchBySimpleTypeName(dataType.name(), dataTypes);
+        if (matchedBySimpleName != null) {
+            return ValueOrError.success(withQualifiedNameIfNeeded(dataTypes.get(matchedBySimpleName), dataType.name()));
+        }
         var matchedQualified = matchQualifiedByModuleTail(dataType.name(), dataTypes);
         if (matchedQualified != null) {
             return ValueOrError.success(withQualifiedNameIfNeeded(dataTypes.get(matchedQualified), matchedQualified));
@@ -46,6 +50,38 @@ public class CapybaraTypeLinker {
         }
 
         return ValueOrError.error("Data type \"" + dataType.name() + "\" not found");
+    }
+
+    private static String matchBySimpleTypeName(String rawName, Map<String, GenericDataType> dataTypes) {
+        if (rawName.startsWith("/")) {
+            return null;
+        }
+        if (dataTypes.containsKey(rawName)) {
+            return rawName;
+        }
+        var qualifiedPathCandidates = dataTypes.keySet().stream()
+                .filter(key -> key.endsWith("/" + rawName + "." + rawName))
+                .distinct()
+                .sorted()
+                .toList();
+        if (!qualifiedPathCandidates.isEmpty()) {
+            return qualifiedPathCandidates.getFirst();
+        }
+        var moduleQualifiedCandidates = dataTypes.keySet().stream()
+                .filter(key -> key.endsWith("." + rawName))
+                .distinct()
+                .sorted()
+                .toList();
+        var pathQualifiedCandidates = moduleQualifiedCandidates.stream()
+                .filter(key -> key.startsWith("/"))
+                .toList();
+        if (!pathQualifiedCandidates.isEmpty()) {
+            return pathQualifiedCandidates.getFirst();
+        }
+        if (moduleQualifiedCandidates.size() == 1) {
+            return moduleQualifiedCandidates.getFirst();
+        }
+        return null;
     }
 
     private static String matchQualifiedByModuleTail(String rawName, Map<String, GenericDataType> dataTypes) {
@@ -106,6 +142,7 @@ public class CapybaraTypeLinker {
             case BOOL -> PrimitiveLinkedType.BOOL;
             case FLOAT -> PrimitiveLinkedType.FLOAT;
             case ANY -> PrimitiveLinkedType.ANY;
+            case DATA -> PrimitiveLinkedType.DATA;
             case NOTHING -> PrimitiveLinkedType.NOTHING;
         };
     }

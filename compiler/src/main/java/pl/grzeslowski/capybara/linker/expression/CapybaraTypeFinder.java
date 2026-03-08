@@ -4,6 +4,7 @@ import pl.grzeslowski.capybara.linker.LinkedType;
 import pl.grzeslowski.capybara.linker.PrimitiveLinkedType;
 
 import static pl.grzeslowski.capybara.linker.PrimitiveLinkedType.ANY;
+import static pl.grzeslowski.capybara.linker.PrimitiveLinkedType.DATA;
 import static pl.grzeslowski.capybara.linker.PrimitiveLinkedType.NOTHING;
 
 public class CapybaraTypeFinder {
@@ -12,6 +13,8 @@ public class CapybaraTypeFinder {
         if (left == NOTHING) return right;
         if (right == NOTHING) return left;
         if (left == ANY || right == ANY) return ANY;
+        if (left == DATA && !(right instanceof PrimitiveLinkedType)) return DATA;
+        if (right == DATA && !(left instanceof PrimitiveLinkedType)) return DATA;
 
         if (left instanceof PrimitiveLinkedType leftPt) {
             if (right instanceof PrimitiveLinkedType rightPt) {
@@ -80,6 +83,9 @@ public class CapybaraTypeFinder {
         }
         if (left == ANY || right == ANY) {
             return ANY;
+        }
+        if (left == DATA || right == DATA) {
+            return left == DATA && right == DATA ? DATA : ANY;
         }
         if (left.ordinal() < right.ordinal()) {
             return right;

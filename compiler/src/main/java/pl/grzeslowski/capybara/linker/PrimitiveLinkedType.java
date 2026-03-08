@@ -18,7 +18,11 @@ public enum PrimitiveLinkedType implements LinkedType {
     /**
      * Top type for all types
      */
-    ANY;
+    ANY,
+    /**
+     * Super type for all user-defined data/type declarations.
+     */
+    DATA;
 
     public static Optional<PrimitiveLinkedType> find(String name) {
         return Arrays.stream(values()).filter(x -> x.name().equals(name)).findAny();

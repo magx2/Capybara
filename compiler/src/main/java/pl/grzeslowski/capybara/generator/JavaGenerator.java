@@ -289,12 +289,58 @@ public final class JavaGenerator implements Generator {
         var methods = record.methods().stream()
                 .map(this::mapJavaRecordMethod)
                 .collect(joining("\n"));
+        var toStringMethod = mapJavaRecordToString(record);
         return "public record " + record.name() + typeParameters + "(" + fields + ")" + implementInterfaces + "{"
-               + staticMethods + methods + "}\n";
+               + staticMethods + methods + toStringMethod + "}\n";
     }
 
     private String mapJavaRecordField(JavaRecord.JavaRecordField field) {
         return field.type() + " " + field.name();
+    }
+
+    private String mapJavaRecordToString(JavaRecord record) {
+        if (record.fields().isEmpty()) {
+            return "@Override public java.lang.String toString() { return \"" + record.name() + " { }\"; }\n";
+        }
+        var body = new StringBuilder();
+        body.append("@Override public java.lang.String toString() { return \"")
+                .append(record.name())
+                .append(" { \"");
+        for (int i = 0; i < record.fields().size(); i++) {
+            var field = record.fields().get(i);
+            if (i > 0) {
+                body.append(" + \", \"");
+            }
+            body.append(" + \"\\\"")
+                    .append(field.name())
+                    .append("\\\": \" + ")
+                    .append(mapRecordFieldToStringValue(field));
+        }
+        body.append(" + \" }\"; }\n");
+        return body.toString();
+    }
+
+    private String mapRecordFieldToStringValue(JavaRecord.JavaRecordField field) {
+        var fieldName = field.name();
+        var fieldType = field.type().toString();
+        if ("java.lang.String".equals(fieldType)) {
+            return "\"\\\"\" + " + fieldName + ".replace(\"\\\\\", \"\\\\\\\\\").replace(\"\\\"\", \"\\\\\\\"\") + \"\\\"\"";
+        }
+        if (isJavaPrimitive(fieldType)) {
+            return "java.lang.String.valueOf(" + fieldName + ")";
+        }
+        return "(((java.lang.Object) " + fieldName + ") instanceof java.lang.String __capybaraStringValue"
+               + " ? \"\\\"\" + __capybaraStringValue.replace(\"\\\\\", \"\\\\\\\\\").replace(\"\\\"\", \"\\\\\\\"\") + \"\\\"\""
+               + " : java.lang.String.valueOf(" + fieldName + "))";
+    }
+
+    private boolean isJavaPrimitive(String type) {
+        return "byte".equals(type)
+               || "int".equals(type)
+               || "long".equals(type)
+               || "float".equals(type)
+               || "double".equals(type)
+               || "boolean".equals(type);
     }
 
     private String mapJavaEnum(JavaEnum javaEnum) {

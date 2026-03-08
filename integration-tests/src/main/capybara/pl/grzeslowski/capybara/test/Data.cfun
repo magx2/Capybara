@@ -42,3 +42,14 @@ fun jerry_or_french(king: King[int]): string =
 type Worker {name: string, surname: string } = BlueCollar | WhiteCollar
 data BlueCollar { strength: float }
 data WhiteCollar { intelligence: float }
+
+data PrintableData { foo: string, boo: int }
+
+fun printable_data_to_string(): string =
+    PrintableData { foo: "abc", boo: 123 } + ""
+
+fun string_plus_data_left(): string =
+    "prefix=" + PrintableData { foo: "abc", boo: 123 }
+
+fun string_plus_data_right(): string =
+    PrintableData { foo: "abc", boo: 123 } + "=suffix"

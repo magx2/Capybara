@@ -72,4 +72,18 @@ class DataTest {
         assertThat(((Data.WhiteCollar) whiteCollar).surname()).isEqualTo("Nowak");
         assertThat(((Data.WhiteCollar) whiteCollar).intelligence()).isEqualTo(9.5f);
     }
+
+    @Test
+    void dataToStringUsesJsonLikeFieldRendering() {
+        assertThat(Data.printableDataToString())
+                .isEqualTo("PrintableData { \"foo\": \"abc\", \"boo\": 123 }");
+    }
+
+    @Test
+    void stringPlusDataWorksInBothDirections() {
+        assertThat(Data.stringPlusDataLeft())
+                .isEqualTo("prefix=PrintableData { \"foo\": \"abc\", \"boo\": 123 }");
+        assertThat(Data.stringPlusDataRight())
+                .isEqualTo("PrintableData { \"foo\": \"abc\", \"boo\": 123 }=suffix");
+    }
 }
