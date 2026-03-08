@@ -27,6 +27,11 @@ fun reduce_string1(l: list[string]): string = l |> "", (acc, v) => acc + v
 
 fun reduce_string2(l: list[string]): string = l |> "start: ", (acc, v) => acc + " " + v
 
+data Foo { value: string }
+fun reduce_to_data(l: list[string]): Foo = l
+    | v => Foo {value:v}
+    |> Foo {value:""}, (acc, v) => Foo { value: acc.value + v.value }
+
 fun flatMap1(l: list[int]): list[int] = l |* x => [x, x+1, x+2]
 
 fun flatMap2(l: list[int]): list[int] =
@@ -50,6 +55,11 @@ fun mapDict(d: dict[int]): dict[string] = d | (k,v) => v + ""
 fun filterDict(d: dict[int]): dict[int] = d |- (k,v) => k != "" & v > 0
 
 fun reduceDict(d: dict[int]): string = d |> "start: ", (acc, key, value) => acc + ", (" + key + ": " + value + ")"
+
+data Entry { key: string, value: string }
+fun reduce_to_data(l: dict[string]): Entry = l
+    | (k,v) => Entry {key:k,value:v}
+    |> Entry {key: "", value:""}, (acc, v) => Entry { key: acc.key + v.key, value: acc.value + v.value }
 
 fun dict_reduce_string2(d: dict[string]): string = d |> "start: ", (acc, v) => acc + " " + v
 

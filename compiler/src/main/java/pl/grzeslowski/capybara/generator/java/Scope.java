@@ -174,6 +174,10 @@ class Scope {
         return Optional.ofNullable(valueNameToUniqueName.get(name));
     }
 
+    Scope withoutValueOverrides() {
+        return new Scope(valueIdx, localValues, Map.of(), statements, expression);
+    }
+
     record ScopeExpression(Scope scope, LinkedExpression expression) {
     }
 

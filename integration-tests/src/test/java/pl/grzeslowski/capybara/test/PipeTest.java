@@ -2,6 +2,7 @@ package pl.grzeslowski.capybara.test;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -58,6 +59,29 @@ class PipeTest {
     @Test
     void reduceString2Empty() {
         assertThat(Pipe.reduceString2(List.of())).isEqualTo("start: ");
+    }
+
+    @Test
+    void reduceToData() {
+        assertThat(Pipe.reduceToData(List.of("capy", "bara"))).isEqualTo(new Pipe.Foo("capybara"));
+    }
+
+    @Test
+    void reduceToDataEmpty() {
+        assertThat(Pipe.reduceToData(List.of())).isEqualTo(new Pipe.Foo(""));
+    }
+
+    @Test
+    void reduceToDataDict() {
+        var dict = new LinkedHashMap<String, String>();
+        dict.put("a", "1");
+        dict.put("b", "2");
+        assertThat(Pipe.reduceToData(dict)).isEqualTo(new Pipe.Entry("ab", "12"));
+    }
+
+    @Test
+    void reduceToDataDictEmpty() {
+        assertThat(Pipe.reduceToData(Map.of())).isEqualTo(new Pipe.Entry("", ""));
     }
 
     @Test

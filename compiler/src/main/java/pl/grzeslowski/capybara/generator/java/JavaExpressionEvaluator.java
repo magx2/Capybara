@@ -625,6 +625,25 @@ public class JavaExpressionEvaluator {
     }
 
     private static StreamExpressionScope evaluatePipeExpressionAsStream(LinkedPipeExpression pipeExpression, Scope scope) {
+        if (pipeExpression.source().type() instanceof pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedDict
+            && pipeExpression.argumentName().contains("::")) {
+            var sourceExSc = evaluateExpression(pipeExpression.source(), scope).popExpression();
+            var dictArgs = parseDictPipeArguments(pipeExpression.argumentName());
+            var keyName = dictArgs[0];
+            var valueName = dictArgs[1];
+            var entryVar = "__entry";
+            var mapperExSc = evaluateExpression(
+                    pipeExpression.mapper(),
+                    sourceExSc.scope()
+                            .addValueOverride(keyName, entryVar + ".getKey()")
+                            .addValueOverride(valueName, entryVar + ".getValue()")
+            ).popExpression();
+            return new StreamExpressionScope(
+                    sourceExSc.expression() + ".entrySet().stream().map(" + entryVar + " -> (" + mapperExSc.expression() + "))",
+                    mapperExSc.scope().withoutValueOverrides()
+            );
+        }
+
         var sourceStreamExSc = evaluateSourceAsStream(pipeExpression.source(), scope);
         var mapperExSc = evaluateExpression(
                 pipeExpression.mapper(),
@@ -642,7 +661,7 @@ public class JavaExpressionEvaluator {
         return new StreamExpressionScope(
                 sourceStreamExSc.streamExpression()
                 + ".map(" + pipeExpression.argumentName() + " -> (" + mapperExpression + "))",
-                mapperExSc.scope()
+                mapperExSc.scope().withoutValueOverrides()
         );
     }
 
@@ -655,7 +674,7 @@ public class JavaExpressionEvaluator {
         return new StreamExpressionScope(
                 sourceStreamExSc.streamExpression()
                 + ".filter(" + pipeFilterOutExpression.argumentName() + " -> !(" + predicateExSc.expression() + "))",
-                predicateExSc.scope()
+                predicateExSc.scope().withoutValueOverrides()
         );
     }
 
@@ -673,7 +692,7 @@ public class JavaExpressionEvaluator {
         return new StreamExpressionScope(
                 sourceStreamExSc.streamExpression()
                 + ".flatMap(" + pipeFlatMapExpression.argumentName() + " -> (" + mapperExSc.expression() + ")" + streamExtractor + ")",
-                mapperExSc.scope()
+                mapperExSc.scope().withoutValueOverrides()
         );
     }
 
