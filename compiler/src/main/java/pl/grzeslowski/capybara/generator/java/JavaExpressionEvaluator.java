@@ -560,13 +560,20 @@ public class JavaExpressionEvaluator {
 
         var maybeElementType = streamElementType(pipeReduceExpression.source().type());
         if (maybeElementType.isPresent() && maybeElementType.get().equals(pipeReduceExpression.initialValue().type())) {
+            var reducedValueName = "__capybaraReducedValue";
+            var maybeMapPrefix = pipeReduceExpression.initialValue().type() == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.STRING
+                    ? ".map(" + reducedValueName + " -> (" + initialExSc.expression() + "+" + reducedValueName + "))"
+                    : "";
             return reducerExSc.scope().addExpression(
                     sourceStreamExSc.streamExpression()
                     + ".reduce("
-                    + initialExSc.expression()
-                    + ", (" + pipeReduceExpression.accumulatorName()
+                    + "(" + pipeReduceExpression.accumulatorName()
                     + ", " + pipeReduceExpression.valueName()
                     + ") -> (" + reducerExSc.expression() + "))"
+                    + maybeMapPrefix
+                    + ".orElse("
+                    + initialExSc.expression()
+                    + ")"
             );
         }
 

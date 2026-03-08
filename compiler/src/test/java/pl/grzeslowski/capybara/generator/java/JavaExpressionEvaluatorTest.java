@@ -250,7 +250,7 @@ class JavaExpressionEvaluatorTest {
                                 fun pipe_reduce(l: list[int]): int =
                                     l |> 0, (a, b) => a + b
                                 """,
-                        "return l.stream().reduce(0, (a, b) -> ((a+b)));"
+                        "return l.stream().reduce((a, b) -> ((a+b))).orElse(0);"
                 ),
                 Arguments.of(
                         "pipe_flat_map",

@@ -23,6 +23,10 @@ fun reduce2(l: list[int]): int =
         |- x => x < 0
         |> 0, (a,b) => a+b
 
+fun reduce_string1(l: list[string]): string = l |> "", (acc, v) => acc + v
+
+fun reduce_string2(l: list[string]): string = l |> "start: ", (acc, v) => acc + " " + v
+
 fun flatMap1(l: list[int]): list[int] = l |* x => [x, x+1, x+2]
 
 fun flatMap2(l: list[int]): list[int] =
@@ -37,6 +41,8 @@ fun setFilter1(s: set[int]): set[int] = s |- x => x > 0
 
 fun setReduce1(s: set[int]): int = s |> 0, (a,b) => a+b
 
+fun set_reduce_string2(s: set[string]): string = s |> "start: ", (acc, v) => acc + " " + v
+
 fun setFlatMap1(s: set[int]): set[int] = s |* x => {x, x+10}
 
 fun mapDict(d: dict[int]): dict[string] = d | (k,v) => v + ""
@@ -44,6 +50,8 @@ fun mapDict(d: dict[int]): dict[string] = d | (k,v) => v + ""
 fun filterDict(d: dict[int]): dict[int] = d |- (k,v) => k != "" & v > 0
 
 fun reduceDict(d: dict[int]): string = d |> "", (acc, key, value) => acc + key + ": " + value + ", "
+
+fun dict_reduce_string2(d: dict[string]): string = d |> "start: ", (acc, v) => acc + " " + v
 
 data Value { x: int }
 

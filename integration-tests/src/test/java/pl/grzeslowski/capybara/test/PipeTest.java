@@ -46,6 +46,21 @@ class PipeTest {
     }
 
     @Test
+    void reduceString1() {
+        assertThat(Pipe.reduceString1(List.of("capy", "bara"))).isEqualTo("capybara");
+    }
+
+    @Test
+    void reduceString2() {
+        assertThat(Pipe.reduceString2(List.of("a", "b", "c"))).isEqualTo("start: a b c");
+    }
+
+    @Test
+    void reduceString2Empty() {
+        assertThat(Pipe.reduceString2(List.of())).isEqualTo("start: ");
+    }
+
+    @Test
     void flatMap1() {
         assertThat(Pipe.flatMap1(List.of(1, 2))).isEqualTo(List.of(1, 2, 3, 2, 3, 4));
     }
@@ -71,6 +86,16 @@ class PipeTest {
     }
 
     @Test
+    void setReduceString2() {
+        assertThat(Pipe.setReduceString2(Set.of("a"))).isEqualTo("start: a");
+    }
+
+    @Test
+    void setReduceString2Empty() {
+        assertThat(Pipe.setReduceString2(Set.of())).isEqualTo("start: ");
+    }
+
+    @Test
     void setFlatMap1() {
         assertThat(Pipe.setFlatMap1(Set.of(1, 2))).isEqualTo(Set.of(1, 11, 2, 12));
     }
@@ -85,6 +110,16 @@ class PipeTest {
         var reduced = Pipe.reduceDict(Map.of("a", 1, "b", 2));
         assertThat(reduced).contains("a: 1, ");
         assertThat(reduced).contains("b: 2, ");
+    }
+
+    @Test
+    void dictReduceString2() {
+        assertThat(Pipe.dictReduceString2(Map.of("k", "v"))).isEqualTo("start: v");
+    }
+
+    @Test
+    void dictReduceString2Empty() {
+        assertThat(Pipe.dictReduceString2(Map.of())).isEqualTo("start: ");
     }
 
     @Test
