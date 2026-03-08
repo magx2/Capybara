@@ -1,0 +1,30 @@
+﻿{
+  "name": "capybara-language",
+  "displayName": "Capybara",
+  "version": "0.1.0",
+  "publisher": "capybara",
+  "engines": {
+    "vscode": "^1.0.0"
+  },
+  "contributes": {
+    "languages": [
+      {
+        "id": "capybara",
+        "aliases": [
+          "Capybara",
+          "capybara"
+        ],
+        "extensions": [
+          ".cfun"
+        ]
+      }
+    ],
+    "grammars": [
+      {
+        "language": "capybara",
+        "scopeName": "source.capybara",
+        "path": "./syntaxes/capybara.tmLanguage.json"
+      }
+    ]
+  }
+}

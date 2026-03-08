@@ -1,0 +1,168 @@
+﻿{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Capybara",
+  "scopeName": "source.capybara",
+  "patterns": [
+    {
+      "include": "#comments"
+    },
+    {
+      "include": "#strings"
+    },
+    {
+      "include": "#numbers"
+    },
+    {
+      "include": "#keywords"
+    },
+    {
+      "include": "#types"
+    },
+    {
+      "include": "#declarations"
+    },
+    {
+      "include": "#operators"
+    },
+    {
+      "include": "#constants"
+    }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.block.documentation.capybara",
+          "match": "///.*$"
+        },
+        {
+          "name": "comment.line.double-slash.capybara",
+          "match": "//.*$"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.capybara",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            {
+              "name": "constant.character.escape.capybara",
+              "match": "\\\\."
+            }
+          ]
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.byte.capybara",
+          "match": "\\b0[xX][0-9a-fA-F]+\\b"
+        },
+        {
+          "name": "constant.numeric.long.capybara",
+          "match": "\\b\\d+[lL]\\b"
+        },
+        {
+          "name": "constant.numeric.float.capybara",
+          "match": "\\b(?:\\d+\\.\\d*(?:[eE][+\\-]?\\d+)?|\\d+[eE][+\\-]?\\d+)[fF]\\b"
+        },
+        {
+          "name": "constant.numeric.double.capybara",
+          "match": "\\b(?:\\d+\\.\\d*(?:[eE][+\\-]?\\d+)?|\\d+[eE][+\\-]?\\d+)(?:[dD])?\\b"
+        },
+        {
+          "name": "constant.numeric.int.capybara",
+          "match": "\\b\\d+\\b"
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.capybara",
+          "match": "\\b(fun|type|data|single|match|with|if|then|else|let|from|import|except)\\b"
+        },
+        {
+          "name": "keyword.other.capybara",
+          "match": "\\b(this|new)\\b"
+        }
+      ]
+    },
+    "types": {
+      "patterns": [
+        {
+          "name": "support.type.primitive.capybara",
+          "match": "\\b(byte|int|long|float|double|bool|string|nothing|list|set|dict)\\b"
+        },
+        {
+          "name": "entity.name.type.capybara",
+          "match": "\\b[A-Z][A-Za-z0-9_]*\\b"
+        },
+        {
+          "name": "entity.name.type.qualified.capybara",
+          "match": "/[A-Za-z_][A-Za-z0-9_]*(?:/[A-Za-z_][A-Za-z0-9_]*)+"
+        }
+      ]
+    },
+    "declarations": {
+      "patterns": [
+        {
+          "name": "meta.function.capybara",
+          "match": "\\b(fun)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": {
+              "name": "keyword.control.capybara"
+            },
+            "2": {
+              "name": "entity.name.function.capybara"
+            }
+          }
+        },
+        {
+          "name": "meta.type.capybara",
+          "match": "\\b(type|data|single)\\s+([A-Z][A-Za-z0-9_]*)",
+          "captures": {
+            "1": {
+              "name": "keyword.control.capybara"
+            },
+            "2": {
+              "name": "entity.name.type.capybara"
+            }
+          }
+        }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        {
+          "name": "keyword.operator.capybara",
+          "match": "\\|>|\\|\\*|\\|-|\\|"
+        },
+        {
+          "name": "keyword.operator.capybara",
+          "match": "\\.and\\.|\\.nand\\.|\\.or\\.|\\.xor\\.|\\.not\\."
+        },
+        {
+          "name": "keyword.operator.capybara",
+          "match": "==|!=|<=|>=|=>|->|\\+|\\-|\\*|/|%|\\^|<|>|=|&|\\?|:"
+        }
+      ]
+    },
+    "constants": {
+      "patterns": [
+        {
+          "name": "constant.language.boolean.capybara",
+          "match": "\\b(true|false)\\b"
+        },
+        {
+          "name": "constant.language.unimplemented.capybara",
+          "match": "\\?\\?\\?"
+        }
+      ]
+    }
+  }
+}

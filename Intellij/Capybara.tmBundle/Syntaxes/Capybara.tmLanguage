@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>name</key>
+  <string>Capybara</string>
+  <key>scopeName</key>
+  <string>source.capybara</string>
+  <key>fileTypes</key>
+  <array>
+    <string>cfun</string>
+  </array>
+  <key>patterns</key>
+  <array>
+    <dict><key>name</key><string>comment.block.documentation.capybara</string><key>match</key><string>///.*$</string></dict>
+    <dict><key>name</key><string>comment.line.double-slash.capybara</string><key>match</key><string>//.*$</string></dict>
+    <dict><key>name</key><string>string.quoted.double.capybara</string><key>begin</key><string>"</string><key>end</key><string>"</string></dict>
+    <dict><key>name</key><string>keyword.control.capybara</string><key>match</key><string>\b(fun|type|data|single|match|with|if|then|else|let|from|import|except)\b</string></dict>
+    <dict><key>name</key><string>support.type.primitive.capybara</string><key>match</key><string>\b(byte|int|long|float|double|bool|string|nothing|list|set|dict)\b</string></dict>
+    <dict><key>name</key><string>constant.numeric.capybara</string><key>match</key><string>\b(?:0[xX][0-9a-fA-F]+|\d+[lL]|\d+\.\d*(?:[eE][+\-]?\d+)?[fFdD]?|\d+[eE][+\-]?\d+[fFdD]?|\d+)\b</string></dict>
+    <dict><key>name</key><string>constant.language.boolean.capybara</string><key>match</key><string>\b(true|false)\b</string></dict>
+    <dict><key>name</key><string>constant.language.unimplemented.capybara</string><key>match</key><string>\?\?\?</string></dict>
+    <dict><key>name</key><string>entity.name.type.capybara</string><key>match</key><string>\b[A-Z][A-Za-z0-9_]*\b</string></dict>
+    <dict><key>name</key><string>entity.name.function.capybara</string><key>match</key><string>\bfun\s+([A-Za-z_][A-Za-z0-9_]*)</string></dict>
+    <dict><key>name</key><string>keyword.operator.capybara</string><key>match</key><string>\|>|\|\*|\|-|\||\.and\.|\.nand\.|\.or\.|\.xor\.|\.not\.|==|!=|&lt;=|&gt;=|=&gt;|-&gt;|\+|\-|\*|/|%|\^|&lt;|&gt;|=|&amp;|\?|:</string></dict>
+  </array>
+</dict>
+</plist>
