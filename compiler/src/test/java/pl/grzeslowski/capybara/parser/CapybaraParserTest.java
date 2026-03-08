@@ -49,6 +49,16 @@ class CapybaraParserTest {
                 Arguments.of("pipe_flat_map", "fun pipe_flat_map(l: list[int]): list[int] = l |* x => [x, x + 1]"),
                 Arguments.of("single_quote_string", "fun single_quote_string(): string = 'hello'"),
                 Arguments.of(
+                        "block_comment",
+                        """
+                                /*
+                                 this is
+                                 multiline comment
+                                */
+                                fun block_comment(): int = 1
+                                """
+                ),
+                Arguments.of(
                         "invoke_multi",
                         "fun run(f: (int, int) -> int): int = f(1, 2)\nfun invoke_multi(): int = run((a, b) => a + b)"
                 ));
