@@ -177,6 +177,7 @@ public class JavaAstBuilder {
             case GenericDataType genericDataType -> buildGenericDataType(genericDataType);
             case PrimitiveLinkedType primitiveLinkedType -> buildPrimitiveLinkedType(primitiveLinkedType);
             case CollectionLinkedType collectionLinkedType -> buildCollectionLinkedType(collectionLinkedType);
+            case LinkedTupleType linkedTupleType -> new JavaType("java.util.List<java.lang.Object>");
             case LinkedFunctionType functionType -> new JavaType(
                     "java.util.function.Function<"
                     + buildJavaBoxedType(functionType.argumentType())
@@ -318,6 +319,7 @@ public class JavaAstBuilder {
             };
             case GenericDataType genericDataType -> buildGenericDataType(genericDataType).toString();
             case CollectionLinkedType collectionLinkedType -> buildCollectionLinkedType(collectionLinkedType).toString();
+            case LinkedTupleType linkedTupleType -> "java.util.List<java.lang.Object>";
             case LinkedFunctionType functionType -> "java.util.function.Function<"
                     + buildJavaBoxedType(functionType.argumentType())
                     + ", "
@@ -335,10 +337,30 @@ public class JavaAstBuilder {
                || normalized.equals("/capy/lang/Option.Option");
     }
 
+    private boolean isResultErrorTypeName(String name) {
+        var normalized = normalizeQualifiedTypeName(name);
+        return "Error".equals(name)
+               || normalized.equals("/cap/lang/Result.Error")
+               || normalized.equals("/capy/lang/Result.Error")
+               || normalized.endsWith("/Result.Error");
+    }
+
+    private boolean isResultErrorDataType(LinkedDataType type) {
+        if (!isResultErrorTypeName(type.name())) {
+            return false;
+        }
+        return type.fields().size() == 1
+               && "message".equals(type.fields().getFirst().name())
+               && type.fields().getFirst().type() == PrimitiveLinkedType.STRING;
+    }
+
     private boolean isOptionSomeTypeName(String name) {
         var normalized = normalizeQualifiedTypeName(name);
-        return normalized.equals("/cap/lang/Option.Some")
-               || normalized.equals("/capy/lang/Option.Some");
+        return "Some".equals(name)
+               || normalized.equals("/cap/lang/Option.Some")
+               || normalized.equals("/capy/lang/Option.Some")
+               || normalized.endsWith("/Option.Some")
+               || normalized.endsWith(".Some");
     }
 
     private String normalizeQualifiedTypeName(String name) {
@@ -552,11 +574,14 @@ public class JavaAstBuilder {
                         .map(method -> new JavaRecord.JavaRecordField(
                                 method.name(),
                                 method.returnType()));
-        var recordFields = type.fields()
-                .stream()
-                .map(field -> new JavaRecord.JavaRecordField(
-                        field.name(),
-                        buildJavaType(field.type())));
+        var recordFields = isResultErrorDataType(type)
+                ? Stream.of(new JavaRecord.JavaRecordField(
+                        "ex",
+                        new JavaType("pl.grzeslowski.capybara.CapybaraException")))
+                : type.fields().stream()
+                        .map(field -> new JavaRecord.JavaRecordField(
+                                field.name(),
+                                buildJavaType(field.type())));
         var fieldsByName = new java.util.LinkedHashMap<String, JavaRecord.JavaRecordField>();
         Stream.concat(interfaceFields, recordFields).forEach(field -> fieldsByName.put(field.name(), field));
         var fields = List.copyOf(fieldsByName.values());

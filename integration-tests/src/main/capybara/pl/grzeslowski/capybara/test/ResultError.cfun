@@ -1,0 +1,5 @@
+from /capy/lang/Result import { * }
+
+fun success_result(): Result[int] = Success { value: 7 }
+
+fun fail_result(): Result[int] = Error { message: "boom" }

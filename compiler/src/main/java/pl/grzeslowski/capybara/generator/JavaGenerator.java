@@ -311,13 +311,23 @@ public final class JavaGenerator implements Generator {
             if (i > 0) {
                 body.append(" + \", \"");
             }
+            var displayFieldName = mapRecordFieldDisplayName(record, field);
             body.append(" + \"\\\"")
-                    .append(field.name())
+                    .append(displayFieldName)
                     .append("\\\": \" + ")
                     .append(mapRecordFieldToStringValue(field));
         }
         body.append(" + \" }\"; }\n");
         return body.toString();
+    }
+
+    private String mapRecordFieldDisplayName(JavaRecord record, JavaRecord.JavaRecordField field) {
+        if ("Error".equals(record.name().toString())
+            && "ex".equals(field.name())
+            && "pl.grzeslowski.capybara.CapybaraException".equals(field.type().toString())) {
+            return "message";
+        }
+        return field.name();
     }
 
     private String mapRecordFieldToStringValue(JavaRecord.JavaRecordField field) {
@@ -488,4 +498,5 @@ public final class JavaGenerator implements Generator {
                + "throw new java.lang.UnsupportedOperationException(message);\n"
                + "}\n";
     }
+
 }

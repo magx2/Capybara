@@ -69,6 +69,8 @@ public class JavaExpressionEvaluator {
             case LinkedLongValue longValue -> evaluateLongValue(longValue, scope);
             case LinkedMatchExpression matchExpression -> evaluateMatchExpression(matchExpression, scope);
             case LinkedNothingValue nothingValue -> evaluateNothingValue(nothingValue, scope);
+            case LinkedPipeAllExpression pipeAllExpression -> evaluatePipeMatchExpression(pipeAllExpression.source(), pipeAllExpression.argumentName(), pipeAllExpression.predicate(), scope, "allMatch");
+            case LinkedPipeAnyExpression pipeAnyExpression -> evaluatePipeMatchExpression(pipeAnyExpression.source(), pipeAnyExpression.argumentName(), pipeAnyExpression.predicate(), scope, "anyMatch");
             case LinkedPipeFlatMapExpression pipeFlatMapExpression -> evaluatePipeFlatMapExpression(pipeFlatMapExpression, scope);
             case LinkedPipeFilterOutExpression pipeFilterOutExpression -> evaluatePipeFilterOutExpression(pipeFilterOutExpression, scope);
             case LinkedPipeExpression pipeExpression -> evaluatePipeExpression(pipeExpression, scope);
@@ -470,6 +472,38 @@ public class JavaExpressionEvaluator {
         }
         var streamExSc = evaluatePipeFilterOutExpressionAsStream(pipeFilterOutExpression, scope);
         return streamExSc.scope().addExpression(streamExSc.streamExpression() + terminalCollect(pipeFilterOutExpression.type()));
+    }
+
+    private static Scope evaluatePipeMatchExpression(
+            LinkedExpression source,
+            String argumentName,
+            LinkedExpression predicate,
+            Scope scope,
+            String matchMethod
+    ) {
+        if (source.type() instanceof pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedDict
+            && argumentName.contains(DICT_PIPE_ARGS_SEPARATOR)) {
+            var sourceExSc = evaluateExpression(source, scope).popExpression();
+            var entryVar = "__entry";
+            var dictArgs = parseDictPipeArguments(argumentName);
+            var predicateScope = sourceExSc.scope()
+                    .addValueOverride(dictArgs[0], entryVar + ".getKey()")
+                    .addValueOverride(dictArgs[1], entryVar + ".getValue()");
+            var predicateExSc = evaluateExpression(predicate, predicateScope).popExpression();
+            return predicateExSc.scope().addExpression(
+                    sourceExSc.expression()
+                    + ".entrySet().stream()." + matchMethod + "(" + entryVar + " -> (" + predicateExSc.expression() + "))"
+            );
+        }
+
+        var sourceStreamExSc = evaluateSourceAsStream(source, scope);
+        var predicateExSc = evaluateExpression(
+                predicate,
+                sourceStreamExSc.scope().addLocalValue(argumentName)
+        ).popExpression();
+        return predicateExSc.scope().addExpression(
+                sourceStreamExSc.streamExpression() + "." + matchMethod + "(" + argumentName + " -> (" + predicateExSc.expression() + "))"
+        );
     }
 
     private static Scope evaluateDictPipeFilterOutExpression(LinkedPipeFilterOutExpression pipeFilterOutExpression, Scope scope) {
@@ -1195,6 +1229,13 @@ public class JavaExpressionEvaluator {
         if (isOptionNoneTypeName(dataType.name())) {
             return current.addExpression("java.util.Optional.empty()");
         }
+        if (isResultErrorDataType(dataType)) {
+            if (args.size() != 1) {
+                throw new IllegalStateException("`Result.Error` expects a single `message` argument");
+            }
+            return current.addExpression("new " + resultErrorJavaTypeReference(dataType.name())
+                                         + "(new pl.grzeslowski.capybara.CapybaraException(" + args.get(0) + "))");
+        }
         if (dataType.singleton()) {
             return current.addExpression(normalizeJavaTypeReference(dataType.name()) + ".INSTANCE");
         }
@@ -1469,6 +1510,31 @@ public class JavaExpressionEvaluator {
                || normalized.equals("/capy/lang/Option.None")
                || normalized.endsWith("/Option.None")
                || normalized.endsWith(".None");
+    }
+
+    private static boolean isResultErrorDataType(pl.grzeslowski.capybara.linker.LinkedDataType dataType) {
+        var normalized = normalizeQualifiedTypeName(dataType.name());
+        if (normalized.equals("/cap/lang/Result.Error") || normalized.equals("/capy/lang/Result.Error")) {
+            return true;
+        }
+        return "Error".equals(dataType.name())
+               && dataType.fields().size() == 1
+               && "message".equals(dataType.fields().getFirst().name())
+               && dataType.fields().getFirst().type() == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.STRING;
+    }
+
+    private static String resultErrorJavaTypeReference(String typeName) {
+        var normalized = normalizeQualifiedTypeName(typeName);
+        if (normalized.equals("/cap/lang/Result.Error") || normalized.endsWith("/cap/lang/Result.Error")) {
+            return "cap.lang.Result.Error";
+        }
+        if (normalized.equals("/capy/lang/Result.Error") || normalized.endsWith("/capy/lang/Result.Error")) {
+            return "capy.lang.Result.Error";
+        }
+        if ("Error".equals(typeName)) {
+            return "capy.lang.Result.Error";
+        }
+        return normalizeJavaTypeReference(typeName);
     }
 
     private static String normalizeQualifiedTypeName(String typeName) {
