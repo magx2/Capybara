@@ -80,6 +80,7 @@ public class CapybaraExpressionLinker {
             case NewData newData -> linkNewData(newData, scope);
             case NothingValue nothingValue -> linkNothingValue(nothingValue);
             case StringValue stringValue -> linkStringValue(stringValue, scope);
+            case TupleExpression tupleExpression -> linkTupleExpression(tupleExpression, scope);
             case Value value -> linkValue(value, scope);
             //
             case LetExpression letExpression -> linkLetExpression(letExpression, scope);
@@ -90,29 +91,33 @@ public class CapybaraExpressionLinker {
     private ValueOrError<LinkedExpression> linkSliceExpression(SliceExpression expression, Scope scope) {
         return linkExpression(expression.source(), scope)
                 .flatMap(source -> {
-                    if (!(source.type() instanceof LinkedList) && source.type() != STRING) {
+                    if (!(source.type() instanceof LinkedList)
+                        && source.type() != STRING
+                        && !(source.type() instanceof LinkedTupleType)) {
                         return withPosition(
-                                ValueOrError.error("Slice source has to be `list` or `string`, was `" + source.type() + "`"),
+                                ValueOrError.error("Slice source has to be `list`, `string` or `Tuple`, was `" + source.type() + "`"),
                                 expression.position()
                         );
                     }
                     return linkSliceBound(expression.start(), scope, "start")
                             .flatMap(start -> linkSliceBound(expression.end(), scope, "end")
-                                    .map(end -> (LinkedExpression) new LinkedSliceExpression(source, start, end, source.type())));
+                                    .map(end -> (LinkedExpression) new LinkedSliceExpression(
+                                            source,
+                                            start,
+                                            end,
+                                            slicedType(source.type(), start, end)
+                                    )));
                 });
     }
 
     private ValueOrError<LinkedExpression> linkIndexExpression(IndexExpression expression, Scope scope) {
         return linkExpression(expression.source(), scope)
                 .flatMap(source -> {
-                    var elementType = switch (source.type()) {
-                        case LinkedList linkedList -> linkedList.elementType();
-                        case PrimitiveLinkedType primitive when primitive == STRING -> STRING;
-                        default -> null;
-                    };
-                    if (elementType == null) {
+                    if (!(source.type() instanceof LinkedList)
+                        && source.type() != STRING
+                        && !(source.type() instanceof LinkedTupleType)) {
                         return withPosition(
-                                ValueOrError.error("Index source has to be `list` or `string`, was `" + source.type() + "`"),
+                                ValueOrError.error("Index source has to be `list`, `string` or `Tuple`, was `" + source.type() + "`"),
                                 expression.position()
                         );
                     }
@@ -124,12 +129,40 @@ public class CapybaraExpressionLinker {
                                             expression.index().position()
                                     );
                                 }
-                                var optionType = optionTypeFor(elementType);
+                                var elementType = switch (source.type()) {
+                                    case LinkedList linkedList -> ValueOrError.success(linkedList.elementType());
+                                    case PrimitiveLinkedType primitive when primitive == STRING -> ValueOrError.<LinkedType>success(STRING);
+                                    case LinkedTupleType tupleType -> tupleElementType(tupleType, index, expression.index().position());
+                                    default -> ValueOrError.<LinkedType>error("Unsupported index source `" + source.type() + "`");
+                                };
+                                if (elementType instanceof ValueOrError.Error<LinkedType> error) {
+                                    return withPosition(new ValueOrError.Error<>(error.errors()), expression.position());
+                                }
+                                var resolvedElementType = ((ValueOrError.Value<LinkedType>) elementType).value();
+                                if (source.type() instanceof LinkedTupleType) {
+                                    return ValueOrError.success((LinkedExpression) new LinkedIndexExpression(
+                                            source,
+                                            index,
+                                            resolvedElementType,
+                                            resolvedElementType
+                                    ));
+                                }
+                                var optionType = optionTypeFor(resolvedElementType);
                                 if (optionType == null) {
                                     return withPosition(ValueOrError.error("Option type not found"), expression.position());
                                 }
-                                return ValueOrError.success((LinkedExpression) new LinkedIndexExpression(source, index, elementType, optionType));
+                                return ValueOrError.success((LinkedExpression) new LinkedIndexExpression(source, index, resolvedElementType, optionType));
                             });
+                });
+    }
+
+    private ValueOrError<LinkedExpression> linkTupleExpression(TupleExpression expression, Scope scope) {
+        return expression.values().stream()
+                .map(value -> linkExpression(value, scope))
+                .collect(new ValueOrErrorCollectionCollector<>())
+                .map(values -> {
+                    var tupleType = new LinkedTupleType(values.stream().map(LinkedExpression::type).toList());
+                    return (LinkedExpression) new LinkedTupleExpression(values, tupleType);
                 });
     }
 
@@ -842,6 +875,10 @@ public class CapybaraExpressionLinker {
     }
 
     private ValueOrError<LinkedExpression> linkInfixExpression(InfixExpression expression, Scope scope) {
+        var normalizedExpression = normalizePipeAssociativity(expression);
+        if (normalizedExpression != expression) {
+            return linkInfixExpression(normalizedExpression, scope);
+        }
         if (expression.operator() == InfixOperator.PIPE && isPipeMapExpression(expression)) {
             return linkPipeExpression(expression, scope);
         }
@@ -867,6 +904,37 @@ public class CapybaraExpressionLinker {
                                     return getLinkedInfixExpression(left, expression.operator(), right, expression.position())
                                             .map(linked -> (LinkedExpression) linked);
                                 }));
+    }
+
+    private InfixExpression normalizePipeAssociativity(InfixExpression expression) {
+        if (!isPipeOperator(expression.operator()) || !(expression.right() instanceof InfixExpression rightInfix)) {
+            return expression;
+        }
+        if (!isPipeOperator(rightInfix.operator())
+            || !(rightInfix.left() instanceof LambdaExpression
+                 || rightInfix.left() instanceof FunctionReference
+                 || rightInfix.left() instanceof ReduceExpression)) {
+            return expression;
+        }
+        var leftAssociated = new InfixExpression(
+                expression.left(),
+                expression.operator(),
+                rightInfix.left(),
+                expression.position()
+        );
+        return new InfixExpression(
+                leftAssociated,
+                rightInfix.operator(),
+                rightInfix.right(),
+                rightInfix.position()
+        );
+    }
+
+    private static boolean isPipeOperator(InfixOperator operator) {
+        return operator == InfixOperator.PIPE
+               || operator == InfixOperator.PIPE_MINUS
+               || operator == InfixOperator.PIPE_FLATMAP
+               || operator == InfixOperator.PIPE_REDUCE;
     }
 
     private ValueOrError<LinkedExpression> resolveMethodInfixCall(
@@ -918,6 +986,10 @@ public class CapybaraExpressionLinker {
     }
 
     private ValueOrError<LinkedExpression> linkPipeExpression(InfixExpression expression, Scope scope) {
+        var reAssociated = reAssociatePipeChain(expression);
+        if (reAssociated != expression) {
+            return linkInfixExpression(reAssociated, scope);
+        }
         return linkExpression(expression.left(), scope)
                 .flatMap(left -> {
                     if (isOptionType(left.type())) {
@@ -1152,6 +1224,10 @@ public class CapybaraExpressionLinker {
     }
 
     private ValueOrError<LinkedExpression> linkPipeReduceExpression(InfixExpression expression, Scope scope) {
+        var reAssociated = reAssociatePipeChain(expression);
+        if (reAssociated != expression) {
+            return linkInfixExpression(reAssociated, scope);
+        }
         return linkExpression(expression.left(), scope)
                 .flatMap(left -> {
                     var elementType = collectionElementType(left.type());
@@ -1716,8 +1792,53 @@ public class CapybaraExpressionLinker {
             case LinkedList linkedList -> linkedList.elementType();
             case LinkedSet linkedSet -> linkedSet.elementType();
             case LinkedDict linkedDict -> linkedDict.valueType();
+            case LinkedTupleType tupleType -> tupleType.elementTypes().isEmpty() ? ANY : tupleType.elementTypes().getFirst();
             default -> null;
         };
+    }
+
+    private LinkedType slicedType(
+            LinkedType sourceType,
+            Optional<LinkedExpression> start,
+            Optional<LinkedExpression> end
+    ) {
+        if (!(sourceType instanceof LinkedTupleType tupleType)) {
+            return sourceType;
+        }
+        var size = tupleType.elementTypes().size();
+        var startIndex = start.map(this::intLiteralValue).map(idx -> normalizeTupleIndex(idx, size)).orElse(0);
+        var endIndex = end.map(this::intLiteralValue).map(idx -> normalizeTupleIndex(idx, size)).orElse(size);
+        var normalizedStart = Math.max(0, Math.min(size, startIndex));
+        var normalizedEnd = Math.max(normalizedStart, Math.min(size, endIndex));
+        return new LinkedTupleType(tupleType.elementTypes().subList(normalizedStart, normalizedEnd));
+    }
+
+    private ValueOrError<LinkedType> tupleElementType(
+            LinkedTupleType tupleType,
+            LinkedExpression index,
+            Optional<pl.grzeslowski.capybara.parser.SourcePosition> position
+    ) {
+        var size = tupleType.elementTypes().size();
+        var indexValue = intLiteralValue(index);
+        var normalized = normalizeTupleIndex(indexValue, size);
+        if (normalized < 0 || normalized >= size) {
+            return withPosition(
+                    ValueOrError.error("Tuple index `" + indexValue + "` out of bounds for tuple size `" + size + "`"),
+                    position
+            );
+        }
+        return ValueOrError.success(tupleType.elementTypes().get(normalized));
+    }
+
+    private int intLiteralValue(LinkedExpression expression) {
+        if (expression instanceof LinkedIntValue intValue) {
+            return Integer.parseInt(intValue.intValue());
+        }
+        throw new IllegalStateException("Expected int literal expression, got: " + expression);
+    }
+
+    private int normalizeTupleIndex(int index, int size) {
+        return index < 0 ? size + index : index;
     }
 
     private LinkedDataParentType findOptionType() {
@@ -1856,6 +1977,31 @@ public class CapybaraExpressionLinker {
                     return linkExpression(matchCase.expression(), caseScope)
                             .map(expression -> new LinkedMatchExpression.MatchCase(patternAndScope.pattern(), expression));
                 });
+    }
+
+    private InfixExpression reAssociatePipeChain(InfixExpression expression) {
+        if (!(expression.right() instanceof InfixExpression rightInfix)
+            || !isPipeOperator(expression.operator())
+            || !isPipeOperator(rightInfix.operator())) {
+            return expression;
+        }
+        if (!(rightInfix.left() instanceof LambdaExpression
+              || rightInfix.left() instanceof FunctionReference
+              || rightInfix.left() instanceof ReduceExpression)) {
+            return expression;
+        }
+        var leftAssociated = new InfixExpression(
+                expression.left(),
+                expression.operator(),
+                rightInfix.left(),
+                expression.position()
+        );
+        return new InfixExpression(
+                leftAssociated,
+                rightInfix.operator(),
+                rightInfix.right(),
+                rightInfix.position()
+        );
     }
 
     private ValueOrError<PatternAndScope> linkPattern(MatchExpression.Pattern pattern, LinkedType matchType, Scope scope) {

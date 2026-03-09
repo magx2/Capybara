@@ -143,6 +143,9 @@ public class CapybaraParser {
     }
 
     private static Type type(pl.grzeslowski.capybara.parser.antlr.FunctionalParser.TypeContext context) {
+        if (context.getChildCount() > 0 && "Tuple".equals(context.getChild(0).getText())) {
+            return new TupleType(context.type().stream().map(CapybaraParser::type).toList());
+        }
         if (context.COLLECTION() != null) {
             var collection = context.COLLECTION().getText();
             var inner = type(context.type(0));
@@ -241,6 +244,9 @@ public class CapybaraParser {
         }
         if (expression.new_dict() != null) {
             return newDictExpression(expression.new_dict());
+        }
+        if (expression.tupleLiteral() != null) {
+            return tupleExpression(expression.tupleLiteral());
         }
         if (expression.new_set() != null) {
             return newSetExpression(expression.new_set());
@@ -443,6 +449,9 @@ public class CapybaraParser {
         }
         if (expression.new_dict() != null) {
             return newDictExpression(expression.new_dict());
+        }
+        if (expression.tupleLiteral() != null) {
+            return tupleExpression(expression.tupleLiteral());
         }
         if (expression.new_set() != null) {
             return newSetExpression(expression.new_set());
@@ -716,6 +725,47 @@ public class CapybaraParser {
                 context.expression().stream().map(this::expression).toList(),
                 position(context)
         );
+    }
+
+    private Expression tupleExpression(pl.grzeslowski.capybara.parser.antlr.FunctionalParser.TupleLiteralContext context) {
+        var values = context.expression().stream().map(this::expression).toList();
+        if (values.size() == 2
+            && values.get(0) instanceof InfixExpression first
+            && first.operator() == InfixOperator.PIPE_REDUCE
+            && !(first.right() instanceof ReduceExpression)
+            && values.get(1) instanceof LambdaExpression lambda
+            && lambda.argumentNames().size() >= 2
+            && lambda.argumentNames().size() <= 4) {
+            var names = lambda.argumentNames();
+            var accumulatorName = names.size() == 4
+                    ? names.get(0) + "::" + names.get(1)
+                    : names.get(0);
+            var keyName = names.size() == 3
+                    ? Optional.of(names.get(1))
+                    : names.size() == 4
+                        ? Optional.of(names.get(2))
+                        : Optional.<String>empty();
+            var valueName = names.size() == 2
+                    ? names.get(1)
+                    : names.size() == 3
+                        ? names.get(2)
+                        : names.get(3);
+            var reduce = new ReduceExpression(
+                    first.right(),
+                    accumulatorName,
+                    keyName,
+                    valueName,
+                    lambda.expression(),
+                    lambda.position()
+            );
+            return new InfixExpression(
+                    first.left(),
+                    InfixOperator.PIPE_REDUCE,
+                    reduce,
+                    position(context)
+            );
+        }
+        return new TupleExpression(values, position(context));
     }
 
     private NewData.FieldAssignment fieldAssignment(pl.grzeslowski.capybara.parser.antlr.FunctionalParser.FieldAssignmentContext context) {
