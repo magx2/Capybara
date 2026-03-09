@@ -38,6 +38,30 @@ class PipeTest {
     }
 
     @Test
+    void anyPositive() {
+        assertThat(Pipe.anyPositive(List.of(-1, 0, 2))).isTrue();
+        assertThat(Pipe.anyPositive(List.of(-3, -2, 0))).isFalse();
+    }
+
+    @Test
+    void allPositive() {
+        assertThat(Pipe.allPositive(List.of(1, 2, 3))).isTrue();
+        assertThat(Pipe.allPositive(List.of(1, 0, 3))).isFalse();
+    }
+
+    @Test
+    void anyPositiveRef() {
+        assertThat(Pipe.anyPositiveRef(List.of(-1, 0, 2))).isTrue();
+        assertThat(Pipe.anyPositiveRef(List.of(-3, -2, 0))).isFalse();
+    }
+
+    @Test
+    void allPositiveRef() {
+        assertThat(Pipe.allPositiveRef(List.of(1, 2, 3))).isTrue();
+        assertThat(Pipe.allPositiveRef(List.of(1, 0, 3))).isFalse();
+    }
+
+    @Test
     void reduce2() {
         assertThat(Pipe.reduce2(List.of(-1, 1, 2, 3))).isEqualTo(12);
     }

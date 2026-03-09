@@ -17,6 +17,16 @@ fun filter2(l: list[int]): list[int] =
 
 fun reduce1(l: list[int]): int = l |> 0, (a,b) => a+b
 
+/// returns if any of the ints in the list is positive
+fun any_positive(l: list[int]): bool = l |any? x => x > 0
+
+/// returns if all of the ints in the list is positive
+fun all_positive(l: list[int]): bool = l |all? x => x > 0
+
+fun _is_positive(x: int): bool = x > 0
+fun any_positive_ref(l: list[int]): bool = l |any? :_is_positive
+fun all_positive_ref(l: list[int]): bool = l |all? :_is_positive
+
 fun reduce2(l: list[int]): int =
     l
         | x => x * 2

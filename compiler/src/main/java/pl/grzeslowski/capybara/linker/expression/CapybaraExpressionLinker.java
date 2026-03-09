@@ -1477,8 +1477,24 @@ public class CapybaraExpressionLinker {
                         );
                     }
                     if (!(expression.right() instanceof LambdaExpression lambdaExpression)) {
+                        if (expression.right() instanceof FunctionReference functionReference) {
+                            return resolvePipeFunctionReference(functionReference, elementType)
+                                    .flatMap(linked -> {
+                                        if (linked.expression().type() != BOOL) {
+                                            return withPosition(
+                                                    ValueOrError.error("Function reference in `" + expression.operator().symbol() + "` has to return `BOOL`, was `" + linked.expression().type() + "`"),
+                                                    functionReference.position()
+                                            );
+                                        }
+                                        return ValueOrError.success(
+                                                any
+                                                        ? (LinkedExpression) new LinkedPipeAnyExpression(left, linked.argumentName(), linked.expression(), BOOL)
+                                                        : (LinkedExpression) new LinkedPipeAllExpression(left, linked.argumentName(), linked.expression(), BOOL)
+                                        );
+                                    });
+                        }
                         return withPosition(
-                                ValueOrError.error("Right side of `" + expression.operator().symbol() + "` has to be a lambda expression"),
+                                ValueOrError.error("Right side of `" + expression.operator().symbol() + "` has to be a lambda expression or function reference"),
                                 expression.right().position()
                         );
                     }
@@ -1515,8 +1531,24 @@ public class CapybaraExpressionLinker {
             boolean any
     ) {
         if (!(expression.right() instanceof LambdaExpression lambdaExpression)) {
+            if (expression.right() instanceof FunctionReference functionReference) {
+                return resolvePipeFunctionReference(functionReference, dictType.valueType())
+                        .flatMap(linked -> {
+                            if (linked.expression().type() != BOOL) {
+                                return withPosition(
+                                        ValueOrError.error("Function reference in `" + expression.operator().symbol() + "` has to return `BOOL`, was `" + linked.expression().type() + "`"),
+                                        functionReference.position()
+                                );
+                            }
+                            return ValueOrError.success(
+                                    any
+                                            ? (LinkedExpression) new LinkedPipeAnyExpression(left, linked.argumentName(), linked.expression(), BOOL)
+                                            : (LinkedExpression) new LinkedPipeAllExpression(left, linked.argumentName(), linked.expression(), BOOL)
+                            );
+                        });
+            }
             return withPosition(
-                    ValueOrError.error("Right side of `" + expression.operator().symbol() + "` has to be a lambda expression"),
+                    ValueOrError.error("Right side of `" + expression.operator().symbol() + "` has to be a lambda expression or function reference"),
                     expression.right().position()
             );
         }
