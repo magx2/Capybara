@@ -25,6 +25,9 @@
       "include": "#operators"
     },
     {
+      "include": "#slicing"
+    },
+    {
       "include": "#constants"
     }
   ],
@@ -112,7 +115,7 @@
       "patterns": [
         {
           "name": "support.type.primitive.capybara",
-          "match": "\\b(byte|int|long|float|double|bool|string|nothing|list|set|dict)\\b"
+          "match": "\\b(byte|int|long|float|double|bool|string|any|data|nothing|list|set|dict)\\b"
         },
         {
           "name": "entity.name.type.capybara",
@@ -183,6 +186,25 @@
         {
           "name": "keyword.operator.capybara",
           "match": "==|!=|<=|>=|=>|->|\\+|\\-|\\*|/|%|\\^|<|>|=|&|\\?|:"
+        }
+      ]
+    },
+    "slicing": {
+      "patterns": [
+        {
+          "name": "meta.slice.capybara",
+          "begin": "\\[",
+          "end": "\\]",
+          "patterns": [
+            {
+              "name": "keyword.operator.capybara",
+              "match": ":"
+            },
+            {
+              "name": "constant.numeric.int.capybara",
+              "match": "-?\\d+"
+            }
+          ]
         }
       ]
     },
