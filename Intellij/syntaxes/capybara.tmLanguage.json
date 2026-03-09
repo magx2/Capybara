@@ -107,7 +107,7 @@
         },
         {
           "name": "keyword.other.capybara",
-          "match": "\\b(this)\\b"
+          "match": "\\b(this|is_empty)\\b"
         }
       ]
     },
@@ -177,7 +177,7 @@
       "patterns": [
         {
           "name": "keyword.operator.pipe.capybara",
-          "match": "\\|>|\\|\\*|\\|-|\\|"
+          "match": "\\|all\\?|\\|any\\?|\\|>|\\|\\*|\\|-|\\|"
         },
         {
           "name": "keyword.operator.capybara",

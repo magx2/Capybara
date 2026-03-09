@@ -65,7 +65,7 @@ public class CapybaraExpressionLinker {
             case InfixExpression infixExpression -> linkInfixExpression(infixExpression, scope);
             case IntValue intValue -> linkIntValue(intValue, scope);
             case LambdaExpression lambdaExpression -> withPosition(
-                    ValueOrError.error("Lambda expression can only be used as the right side of `|`, `|-` or `|*`"),
+                    ValueOrError.error("Lambda expression can only be used as the right side of `|`, `|-`, `|*`, `|all?` or `|any?`"),
                     lambdaExpression.position()
             );
             case ReduceExpression reduceExpression -> withPosition(
@@ -476,9 +476,11 @@ public class CapybaraExpressionLinker {
                 || "starts_with".equals(methodName)
                 || "end_with".equals(methodName);
         var supportsTrim = "trim".equals(methodName);
-        if ((!supportsTwoStrings && !supportsTrim)
+        var supportsIsEmpty = "is_empty".equals(methodName);
+        if ((!supportsTwoStrings && !supportsTrim && !supportsIsEmpty)
                 || (supportsTwoStrings && functionCall.arguments().size() != 2)
-                || (supportsTrim && functionCall.arguments().size() != 1)) {
+                || (supportsTrim && functionCall.arguments().size() != 1)
+                || (supportsIsEmpty && functionCall.arguments().size() != 1)) {
             return Optional.empty();
         }
         var linkedArguments = functionCall.arguments().stream()
@@ -503,6 +505,13 @@ public class CapybaraExpressionLinker {
         }
         if (args.get(0).type() != STRING) {
             return Optional.empty();
+        }
+        if (supportsIsEmpty) {
+            return Optional.of(ValueOrError.success(new LinkedFunctionCall(
+                    METHOD_DECL_PREFIX + "String__is_empty",
+                    args,
+                    BOOL
+            )));
         }
         return Optional.of(ValueOrError.success(new LinkedFunctionCall(
                 METHOD_DECL_PREFIX + "String__trim",
@@ -891,6 +900,12 @@ public class CapybaraExpressionLinker {
         if (expression.operator() == InfixOperator.PIPE_REDUCE) {
             return linkPipeReduceExpression(expression, scope);
         }
+        if (expression.operator() == InfixOperator.PIPE_ANY) {
+            return linkPipeAnyAllExpression(expression, scope, true);
+        }
+        if (expression.operator() == InfixOperator.PIPE_ALL) {
+            return linkPipeAnyAllExpression(expression, scope, false);
+        }
         return linkExpression(expression.left(), scope)
                 .flatMap(left ->
                         linkExpression(expression.right(), scope)
@@ -934,7 +949,9 @@ public class CapybaraExpressionLinker {
         return operator == InfixOperator.PIPE
                || operator == InfixOperator.PIPE_MINUS
                || operator == InfixOperator.PIPE_FLATMAP
-               || operator == InfixOperator.PIPE_REDUCE;
+               || operator == InfixOperator.PIPE_REDUCE
+               || operator == InfixOperator.PIPE_ANY
+               || operator == InfixOperator.PIPE_ALL;
     }
 
     private ValueOrError<LinkedExpression> resolveMethodInfixCall(
@@ -1435,6 +1452,119 @@ public class CapybaraExpressionLinker {
                 });
     }
 
+    private ValueOrError<LinkedExpression> linkPipeAnyAllExpression(
+            InfixExpression expression,
+            Scope scope,
+            boolean any
+    ) {
+        return linkExpression(expression.left(), scope)
+                .flatMap(left -> {
+                    if (left.type() instanceof LinkedDict dictType) {
+                        return linkDictPipeAnyAllExpression(expression, scope, left, dictType, any);
+                    }
+                    var elementType = switch (left.type()) {
+                        case LinkedList linkedList -> linkedList.elementType();
+                        case LinkedSet linkedSet -> linkedSet.elementType();
+                        case PrimitiveLinkedType primitive when primitive == STRING -> STRING;
+                        default -> null;
+                    };
+                    if (elementType == null) {
+                        return withPosition(
+                                ValueOrError.error("Left side of `" + expression.operator().symbol() + "` has to be a collection or string, was `" + left.type() + "`"),
+                                expression.left().position()
+                        );
+                    }
+                    if (!(expression.right() instanceof LambdaExpression lambdaExpression)) {
+                        return withPosition(
+                                ValueOrError.error("Right side of `" + expression.operator().symbol() + "` has to be a lambda expression"),
+                                expression.right().position()
+                        );
+                    }
+                    var lambdaArgumentName = singleLambdaArgument(lambdaExpression).orElse(null);
+                    if (lambdaArgumentName == null) {
+                        return withPosition(
+                                ValueOrError.error("Right side lambda of `" + expression.operator().symbol() + "` has to have exactly one argument"),
+                                lambdaExpression.position()
+                        );
+                    }
+                    var lambdaScope = scope.add(lambdaArgumentName, elementType);
+                    return linkExpression(lambdaExpression.expression(), lambdaScope)
+                            .flatMap(predicate -> {
+                                if (predicate.type() != BOOL) {
+                                    return withPosition(
+                                            ValueOrError.error("Lambda in `" + expression.operator().symbol() + "` has to return `BOOL`, was `" + predicate.type() + "`"),
+                                            lambdaExpression.position()
+                                    );
+                                }
+                                return ValueOrError.success(
+                                        any
+                                                ? (LinkedExpression) new LinkedPipeAnyExpression(left, lambdaArgumentName, predicate, BOOL)
+                                                : (LinkedExpression) new LinkedPipeAllExpression(left, lambdaArgumentName, predicate, BOOL)
+                                );
+                            });
+                });
+    }
+
+    private ValueOrError<LinkedExpression> linkDictPipeAnyAllExpression(
+            InfixExpression expression,
+            Scope scope,
+            LinkedExpression left,
+            LinkedDict dictType,
+            boolean any
+    ) {
+        if (!(expression.right() instanceof LambdaExpression lambdaExpression)) {
+            return withPosition(
+                    ValueOrError.error("Right side of `" + expression.operator().symbol() + "` has to be a lambda expression"),
+                    expression.right().position()
+            );
+        }
+        var argumentNames = lambdaExpression.argumentNames();
+        if (argumentNames.size() == 1) {
+            var valueName = argumentNames.get(0);
+            var lambdaScope = scope.add(valueName, dictType.valueType());
+            return linkExpression(lambdaExpression.expression(), lambdaScope)
+                    .flatMap(predicate -> {
+                        if (predicate.type() != BOOL) {
+                            return withPosition(
+                                    ValueOrError.error("Lambda in `" + expression.operator().symbol() + "` has to return `BOOL`, was `" + predicate.type() + "`"),
+                                    lambdaExpression.position()
+                            );
+                        }
+                        return ValueOrError.success(
+                                any
+                                        ? (LinkedExpression) new LinkedPipeAnyExpression(left, valueName, predicate, BOOL)
+                                        : (LinkedExpression) new LinkedPipeAllExpression(left, valueName, predicate, BOOL)
+                        );
+                    });
+        }
+        if (argumentNames.size() == 2) {
+            var keyName = argumentNames.get(0);
+            var valueName = argumentNames.get(1);
+            var lambdaScope = scope
+                    .add(keyName, STRING)
+                    .add(valueName, dictType.valueType());
+            return linkExpression(lambdaExpression.expression(), lambdaScope)
+                    .flatMap(predicate -> {
+                        if (predicate.type() != BOOL) {
+                            return withPosition(
+                                    ValueOrError.error("Lambda in `" + expression.operator().symbol() + "` has to return `BOOL`, was `" + predicate.type() + "`"),
+                                    lambdaExpression.position()
+                            );
+                        }
+                        var encodedArgName = encodeDictPipeArguments(keyName, valueName);
+                        return ValueOrError.success(
+                                any
+                                        ? (LinkedExpression) new LinkedPipeAnyExpression(left, encodedArgName, predicate, BOOL)
+                                        : (LinkedExpression) new LinkedPipeAllExpression(left, encodedArgName, predicate, BOOL)
+                        );
+                    });
+        }
+        return withPosition(
+                ValueOrError.error("Right side lambda of `" + expression.operator().symbol() + "` for dict has to have one or two arguments"),
+                lambdaExpression.position()
+        );
+    }
+
     private ValueOrError<LinkedExpression> linkDictPipeFilterOutExpression(
             InfixExpression expression,
             Scope scope,
@@ -1567,7 +1697,7 @@ public class CapybaraExpressionLinker {
             case GT, LT, EQUAL, NOTEQUAL, LE, GE -> BOOL;
             case AND, PIPE -> findLogicalType(left.type(), right.type());
             case QUESTION -> findQuestionType(left.type(), right.type());
-            case PIPE_MINUS, PIPE_FLATMAP, PIPE_REDUCE -> null;
+            case PIPE_MINUS, PIPE_FLATMAP, PIPE_REDUCE, PIPE_ANY, PIPE_ALL -> null;
         };
         if (type == null) {
             var op = operator.symbol();

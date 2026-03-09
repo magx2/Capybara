@@ -7,3 +7,5 @@ fun starts_with_method(s: string, part: string): bool = s.starts_with(part)
 fun end_with_method(s: string, part: string): bool = s.end_with(part)
 
 fun trim_method(s: string): string = s.trim()
+
+fun is_empty_method(s: string): bool = s.is_empty()

@@ -40,4 +40,10 @@ class StringCollectionTest {
         assertThat(StringCollection.trimMethod("  capybara  ")).isEqualTo("capybara");
         assertThat(StringCollection.trimMethod("capybara")).isEqualTo("capybara");
     }
+
+    @Test
+    void isEmptyMethod() {
+        assertThat(StringCollection.isEmptyMethod("")).isTrue();
+        assertThat(StringCollection.isEmptyMethod("capybara")).isFalse();
+    }
 }

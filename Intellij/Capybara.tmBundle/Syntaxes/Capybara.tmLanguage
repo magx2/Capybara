@@ -34,6 +34,7 @@
       </array>
     </dict>
     <dict><key>name</key><string>keyword.control.capybara</string><key>match</key><string>\b(fun|type|data|single|match|with|if|then|else|let|from|import|except)\b</string></dict>
+    <dict><key>name</key><string>keyword.other.capybara</string><key>match</key><string>\b(this|is_empty)\b</string></dict>
     <dict><key>name</key><string>support.type.primitive.capybara</string><key>match</key><string>\b(byte|int|long|float|double|bool|string|any|data|nothing|list|set|dict|Tuple)\b</string></dict>
     <dict><key>name</key><string>constant.numeric.capybara</string><key>match</key><string>\b(?:0[xX][0-9a-fA-F]+|\d+[lL]|\d+\.\d*(?:[eE][+\-]?\d+)?[fFdD]?|\d+[eE][+\-]?\d+[fFdD]?|\d+)\b</string></dict>
     <dict><key>name</key><string>constant.language.boolean.capybara</string><key>match</key><string>\b(true|false)\b</string></dict>
@@ -42,7 +43,7 @@
     <dict><key>name</key><string>entity.name.function.capybara</string><key>match</key><string>\bfun\s+([A-Za-z_][A-Za-z0-9_]*)</string></dict>
     <dict><key>name</key><string>entity.name.function.capybara</string><key>match</key><string>:([A-Za-z_][A-Za-z0-9_]*)\b</string></dict>
     <dict><key>name</key><string>entity.name.function.capybara</string><key>match</key><string>\b([A-Za-z_][A-Za-z0-9_]*)\s*(?=\()</string></dict>
-    <dict><key>name</key><string>keyword.operator.pipe.capybara</string><key>match</key><string>\|>|\|\*|\|-|\||\.and\.|\.nand\.|\.or\.|\.xor\.|\.not\.|==|!=|&lt;=|&gt;=|=&gt;|-&gt;|\+|\-|\*|/|%|\^|&lt;|&gt;|=|&amp;|\?|:</string></dict>
+    <dict><key>name</key><string>keyword.operator.pipe.capybara</string><key>match</key><string>\|all\?|\|any\?|\|>|\|\*|\|-|\||\.and\.|\.nand\.|\.or\.|\.xor\.|\.not\.|==|!=|&lt;=|&gt;=|=&gt;|-&gt;|\+|\-|\*|/|%|\^|&lt;|&gt;|=|&amp;|\?|:</string></dict>
     <dict>
       <key>name</key><string>meta.index.capybara</string>
       <key>begin</key><string>\[</string>
