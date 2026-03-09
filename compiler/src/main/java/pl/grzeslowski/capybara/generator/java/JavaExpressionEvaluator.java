@@ -74,6 +74,7 @@ public class JavaExpressionEvaluator {
             case LinkedPipeExpression pipeExpression -> evaluatePipeExpression(pipeExpression, scope);
             case LinkedPipeReduceExpression pipeReduceExpression -> evaluatePipeReduceExpression(pipeReduceExpression, scope);
             case LinkedSliceExpression sliceExpression -> evaluateSliceExpression(sliceExpression, scope);
+            case LinkedTupleExpression tupleExpression -> evaluateTupleExpression(tupleExpression, scope);
             case LinkedNewDict newDict -> evaluateNewDict(newDict, scope);
             case LinkedNewList newList -> evaluateNewList(newList, scope);
             case LinkedNewSet newSet -> evaluateNewSet(newSet, scope);
@@ -719,6 +720,8 @@ public class JavaExpressionEvaluator {
                     java.util.Optional.of(linkedSet.elementType());
             case pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedDict linkedDict ->
                     java.util.Optional.of(linkedDict.valueType());
+            case pl.grzeslowski.capybara.linker.PrimitiveLinkedType primitive when primitive == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.STRING ->
+                    java.util.Optional.of(pl.grzeslowski.capybara.linker.PrimitiveLinkedType.STRING);
             default -> java.util.Optional.empty();
         };
     }
@@ -808,6 +811,12 @@ public class JavaExpressionEvaluator {
 
         var sourceExSc = evaluateExpression(source, scope).popExpression();
         var sourceExpression = sourceExSc.expression();
+        if (source.type() == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.STRING) {
+            return new StreamExpressionScope(
+                    sourceExpression + ".chars().mapToObj(__capybaraChar -> java.lang.String.valueOf((char) __capybaraChar))",
+                    sourceExSc.scope()
+            );
+        }
         if (source.type() instanceof pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedDict) {
             sourceExpression = sourceExpression + ".values()";
         }
@@ -863,6 +872,9 @@ public class JavaExpressionEvaluator {
         var slice = isString
                 ? source + ".substring(" + startExpression + ", " + endExpression + ")"
                 : source + ".subList(" + startExpression + ", " + endExpression + ")";
+        if (expression.type() instanceof pl.grzeslowski.capybara.linker.LinkedTupleType) {
+            slice = "new java.util.ArrayList<java.lang.Object>(" + slice + ")";
+        }
         return current.addExpression(slice);
     }
 
@@ -871,9 +883,13 @@ public class JavaExpressionEvaluator {
         var indexExSc = evaluateExpression(expression.index(), sourceExSc.scope()).popExpression();
         var source = sourceExSc.expression();
         var index = indexExSc.expression();
-        var isString = expression.elementType() == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.STRING;
+        var isString = expression.source().type() == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.STRING;
         var sizeExpression = "(" + source + ")." + (isString ? "length()" : "size()");
         var normalizedIndex = normalizeSliceIndex(index, sizeExpression);
+        if (expression.source().type() instanceof pl.grzeslowski.capybara.linker.LinkedTupleType) {
+            var castType = javaCastType(expression.type());
+            return indexExSc.scope().addExpression("((" + castType + ") (" + source + ").get(" + normalizedIndex + "))");
+        }
         var inRange = "(" + normalizedIndex + " >= 0 && " + normalizedIndex + " < " + sizeExpression + ")";
         var value = isString
                 ? "java.lang.String.valueOf((" + source + ").charAt(" + normalizedIndex + "))"
@@ -881,8 +897,39 @@ public class JavaExpressionEvaluator {
         return indexExSc.scope().addExpression("(" + inRange + " ? java.util.Optional.of(" + value + ") : java.util.Optional.empty())");
     }
 
+    private static Scope evaluateTupleExpression(LinkedTupleExpression expression, Scope scope) {
+        var current = scope;
+        var values = new ArrayList<String>(expression.values().size());
+        for (var value : expression.values()) {
+            var valueExSc = evaluateExpression(value, current).popExpression();
+            current = valueExSc.scope();
+            values.add(valueExSc.expression());
+        }
+        return current.addExpression("java.util.List.of(" + String.join(", ", values) + ")");
+    }
+
     private static String normalizeSliceIndex(String indexExpression, String sizeExpression) {
         return "((" + indexExpression + ") < 0 ? (" + sizeExpression + " + (" + indexExpression + ")) : (" + indexExpression + "))";
+    }
+
+    private static String javaCastType(pl.grzeslowski.capybara.linker.LinkedType type) {
+        return switch (type) {
+            case pl.grzeslowski.capybara.linker.PrimitiveLinkedType primitive -> switch (primitive) {
+                case BYTE -> "java.lang.Byte";
+                case INT -> "java.lang.Integer";
+                case LONG -> "java.lang.Long";
+                case DOUBLE -> "java.lang.Double";
+                case STRING -> "java.lang.String";
+                case BOOL -> "java.lang.Boolean";
+                case FLOAT -> "java.lang.Float";
+                case NOTHING, ANY, DATA -> "java.lang.Object";
+            };
+            case pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedList ignored -> "java.util.List";
+            case pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedSet ignored -> "java.util.Set";
+            case pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedDict ignored -> "java.util.Map";
+            case pl.grzeslowski.capybara.linker.LinkedTupleType ignored -> "java.util.List";
+            default -> "java.lang.Object";
+        };
     }
 
     private static Scope evaluateMatchExpression(LinkedMatchExpression matchExpression, Scope scope) {
@@ -1408,14 +1455,20 @@ public class JavaExpressionEvaluator {
 
     private static boolean isOptionSomeTypeName(String typeName) {
         var normalized = normalizeQualifiedTypeName(typeName);
-        return normalized.equals("/cap/lang/Option.Some")
-               || normalized.equals("/capy/lang/Option.Some");
+        return "Some".equals(typeName)
+               || normalized.equals("/cap/lang/Option.Some")
+               || normalized.equals("/capy/lang/Option.Some")
+               || normalized.endsWith("/Option.Some")
+               || normalized.endsWith(".Some");
     }
 
     private static boolean isOptionNoneTypeName(String typeName) {
         var normalized = normalizeQualifiedTypeName(typeName);
-        return normalized.equals("/cap/lang/Option.None")
-               || normalized.equals("/capy/lang/Option.None");
+        return "None".equals(typeName)
+               || normalized.equals("/cap/lang/Option.None")
+               || normalized.equals("/capy/lang/Option.None")
+               || normalized.endsWith("/Option.None")
+               || normalized.endsWith(".None");
     }
 
     private static String normalizeQualifiedTypeName(String typeName) {

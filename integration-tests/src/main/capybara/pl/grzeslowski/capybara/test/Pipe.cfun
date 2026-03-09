@@ -27,6 +27,12 @@ fun reduce_string1(l: list[string]): string = l |> "", (acc, v) => acc + v
 
 fun reduce_string2(l: list[string]): string = l |> "start: ", (acc, v) => acc + " " + v
 
+fun string_map(s: string): list[string] = s | ch => "[" + ch + "]"
+
+fun string_filter(s: string): list[string] = s |- ch => ch == "b"
+
+fun string_reduce(s: string): string = s |> "", (acc, ch) => acc + ch
+
 data Foo { value: string }
 fun reduce_to_data(l: list[string]): Foo = l
     | v => Foo {value:v}

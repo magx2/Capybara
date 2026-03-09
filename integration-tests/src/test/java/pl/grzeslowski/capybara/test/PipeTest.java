@@ -58,6 +58,26 @@ class PipeTest {
     }
 
     @Test
+    void stringMap() {
+        assertThat(Pipe.stringMap("abc")).isEqualTo(List.of("[a]", "[b]", "[c]"));
+    }
+
+    @Test
+    void stringFilter() {
+        assertThat(Pipe.stringFilter("abc")).isEqualTo(List.of("a", "c"));
+    }
+
+    @Test
+    void stringReduce() {
+        assertThat(Pipe.stringReduce("abc")).isEqualTo("abc");
+    }
+
+    @Test
+    void stringReduceEmpty() {
+        assertThat(Pipe.stringReduce("")).isEqualTo("");
+    }
+
+    @Test
     void reduceToData() {
         assertThat(Pipe.reduceToData(List.of("capy", "bara"))).isEqualTo(new Pipe.Foo("capybara"));
     }

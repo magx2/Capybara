@@ -1,4 +1,4 @@
-﻿{
+{
   "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
   "name": "Capybara",
   "scopeName": "source.capybara",
@@ -115,7 +115,7 @@
       "patterns": [
         {
           "name": "support.type.primitive.capybara",
-          "match": "\\b(byte|int|long|float|double|bool|string|any|data|nothing|list|set|dict)\\b"
+          "match": "\\b(byte|int|long|float|double|bool|string|any|data|nothing|list|set|dict|Tuple)\\b"
         },
         {
           "name": "entity.name.type.capybara",
@@ -176,7 +176,7 @@
     "operators": {
       "patterns": [
         {
-          "name": "keyword.operator.capybara",
+          "name": "keyword.operator.pipe.capybara",
           "match": "\\|>|\\|\\*|\\|-|\\|"
         },
         {
@@ -222,3 +222,5 @@
     }
   }
 }
+
+

@@ -999,6 +999,7 @@ public class CapybaraExpressionLinker {
                         case LinkedList linkedList -> linkedList.elementType();
                         case LinkedSet linkedSet -> linkedSet.elementType();
                         case LinkedDict linkedDict -> linkedDict.valueType();
+                        case PrimitiveLinkedType primitive when primitive == STRING -> STRING;
                         default -> null;
                     };
                     if (elementType == null) {
@@ -1230,7 +1231,7 @@ public class CapybaraExpressionLinker {
         }
         return linkExpression(expression.left(), scope)
                 .flatMap(left -> {
-                    var elementType = collectionElementType(left.type());
+                    var elementType = left.type() == STRING ? STRING : collectionElementType(left.type());
                     if (elementType == null) {
                         return withPosition(
                                 ValueOrError.error("Left side of `|>` has to be a collection, was `" + left.type() + "`"),
@@ -1380,6 +1381,7 @@ public class CapybaraExpressionLinker {
                         case LinkedList linkedList -> linkedList.elementType();
                         case LinkedSet linkedSet -> linkedSet.elementType();
                         case LinkedDict linkedDict -> linkedDict.valueType();
+                        case PrimitiveLinkedType primitive when primitive == STRING -> STRING;
                         default -> null;
                     };
                     if (elementType == null) {
