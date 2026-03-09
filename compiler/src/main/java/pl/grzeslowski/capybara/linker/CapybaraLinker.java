@@ -284,6 +284,9 @@ public class CapybaraLinker {
             case CollectionLinkedType.LinkedList linkedList -> new CollectionLinkedType.LinkedList(resolveLinkedType(linkedList.elementType(), all));
             case CollectionLinkedType.LinkedSet linkedSet -> new CollectionLinkedType.LinkedSet(resolveLinkedType(linkedSet.elementType(), all));
             case CollectionLinkedType.LinkedDict linkedDict -> new CollectionLinkedType.LinkedDict(resolveLinkedType(linkedDict.valueType(), all));
+            case LinkedTupleType linkedTupleType -> new LinkedTupleType(
+                    linkedTupleType.elementTypes().stream().map(element -> resolveLinkedType(element, all)).toList()
+            );
             case LinkedFunctionType linkedFunctionType -> new LinkedFunctionType(
                     resolveLinkedType(linkedFunctionType.argumentType(), all),
                     resolveLinkedType(linkedFunctionType.returnType(), all)
@@ -454,7 +457,8 @@ public class CapybaraLinker {
                                                                 function.comments(),
                                                                 isProgramMain(function.name(), rtype, parameters)))));
         var normalizedFile = normalizeFile(moduleSourceFile);
-        return withPosition(linked, function.position(), normalizedFile);
+        var fallbackPosition = function.expression().position().or(() -> function.position());
+        return withPosition(linked, fallbackPosition, normalizedFile);
     }
 
     private pl.grzeslowski.capybara.linker.expression.LinkedExpression coerceReturnExpression(
@@ -577,6 +581,18 @@ public class CapybaraLinker {
                               + ": the function `" + functionName + "` is not yet implemented";
                 yield new pl.grzeslowski.capybara.linker.expression.LinkedNothingValue(value.position(), message);
             }
+            case pl.grzeslowski.capybara.linker.expression.LinkedPipeAllExpression value -> new pl.grzeslowski.capybara.linker.expression.LinkedPipeAllExpression(
+                    enrichNothing(value.source(), functionName, moduleSourceFile),
+                    value.argumentName(),
+                    enrichNothing(value.predicate(), functionName, moduleSourceFile),
+                    value.type()
+            );
+            case pl.grzeslowski.capybara.linker.expression.LinkedPipeAnyExpression value -> new pl.grzeslowski.capybara.linker.expression.LinkedPipeAnyExpression(
+                    enrichNothing(value.source(), functionName, moduleSourceFile),
+                    value.argumentName(),
+                    enrichNothing(value.predicate(), functionName, moduleSourceFile),
+                    value.type()
+            );
             case pl.grzeslowski.capybara.linker.expression.LinkedPipeFlatMapExpression value -> new pl.grzeslowski.capybara.linker.expression.LinkedPipeFlatMapExpression(
                     enrichNothing(value.source(), functionName, moduleSourceFile),
                     value.argumentName(),
@@ -630,6 +646,10 @@ public class CapybaraLinker {
                     enrichNothing(value.source(), functionName, moduleSourceFile),
                     value.start().map(v -> enrichNothing(v, functionName, moduleSourceFile)),
                     value.end().map(v -> enrichNothing(v, functionName, moduleSourceFile)),
+                    value.type()
+            );
+            case pl.grzeslowski.capybara.linker.expression.LinkedTupleExpression value -> new pl.grzeslowski.capybara.linker.expression.LinkedTupleExpression(
+                    value.values().stream().map(v -> enrichNothing(v, functionName, moduleSourceFile)).toList(),
                     value.type()
             );
             case pl.grzeslowski.capybara.linker.expression.LinkedStringValue value -> value;
@@ -976,8 +996,9 @@ public class CapybaraLinker {
             return new ValueOrError.Error<>(error.errors()
                     .stream()
                     .map(singleError -> {
-                        var line = singleError.line() > 0 ? singleError.line() : pos.line();
-                        var column = singleError.column() > 0 ? singleError.column() : pos.column();
+                        var hasKnownPosition = singleError.line() > 0;
+                        var line = hasKnownPosition ? singleError.line() : pos.line();
+                        var column = hasKnownPosition ? singleError.column() : pos.column();
                         var sourceFile = singleError.file().isBlank() ? file : singleError.file();
                         return new ValueOrError.Error.SingleError(line, column, sourceFile, singleError.message());
                     })

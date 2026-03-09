@@ -11,6 +11,7 @@ import pl.grzeslowski.capybara.parser.DataType;
 import pl.grzeslowski.capybara.parser.FunctionType;
 import pl.grzeslowski.capybara.parser.PrimitiveType;
 import pl.grzeslowski.capybara.parser.Type;
+import pl.grzeslowski.capybara.parser.TupleType;
 
 import java.util.Map;
 
@@ -23,6 +24,7 @@ public class CapybaraTypeLinker {
             case CollectionType collectionType -> linkCollectionType(collectionType, dataTypes);
             case DataType dataType -> linkDataType(dataType, dataTypes);
             case FunctionType functionType -> linkFunctionType(functionType, dataTypes);
+            case TupleType tupleType -> linkTupleType(tupleType, dataTypes);
         };
     }
 
@@ -161,5 +163,12 @@ public class CapybaraTypeLinker {
                 linkType(type.argumentType(), dataTypes),
                 linkType(type.returnType(), dataTypes)
         );
+    }
+
+    private static ValueOrError<LinkedType> linkTupleType(TupleType type, Map<String, GenericDataType> dataTypes) {
+        return type.elementTypes().stream()
+                .map(elementType -> linkType(elementType, dataTypes))
+                .collect(new ValueOrErrorCollectionCollector<>())
+                .map(LinkedTupleType::new);
     }
 }

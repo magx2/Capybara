@@ -1,6 +1,7 @@
+from /capy/lang/Option import { * }
 data Assertion { result: bool, message: string }
 
-type Assert { assertions: list[Assertion] }= StringAssertion
+type Assert { assertions: list[Assertion] } = StringAssertion | IntAssertion | LongAssertion | DoubleAssertion | FloatAssertion | BoolAssertion | DataAssertion | OptionAssertion
 
 data StringAssertion { value: string }
 data IntAssertion { value: int }
@@ -8,6 +9,8 @@ data LongAssertion { value: long }
 data DoubleAssertion { value: double }
 data FloatAssertion { value: float }
 data BoolAssertion { value: bool }
+data DataAssertion { value: data }
+data OptionAssertion { value: /capy/lang/Option.Option[any] }
 //data ListAssertion[T] { value: list[T] }
 //data SetAssertion[T] { value: set[T] }
 //data DictAssertion[T] { value: dict[T] }
@@ -62,17 +65,68 @@ fun StringAssertion.contains(other: string): StringAssertion =
        assertions: this.assertions + assertion
     }
 
-fun assert_that(value: any) =
-    match value with
-        | string s => StringAssertion { value: value, assertions: [] }
-        | int i => IntAssertion { value: i }
-        | long l => LongAssertion { value: l }
-        | double d => DoubleAssertion { value: d }
-        | float f => FloatAssertion { value: f }
-        | bool b => BoolAssertion { value: b }
-        //|  => ListAssertion { value: }
-        //|  => SetAssertion { value: }
-        //|  => DictAssertion { value: }
+fun DataAssertion.is_equal_to(other: data): DataAssertion =
+    let assertion = Assertion {
+        result: this.value == other,
+        message: "Expected data:\n" + this.value + "\nto be equal to:\n" + other
+    }
+    DataAssertion {
+        value: this.value,
+        assertions: this.assertions + assertion
+    }
+
+fun DataAssertion.contains(other: any): DataAssertion =
+    let assertion = Assertion {
+        result: this.value == other,
+        message: "Expected data:\n" + this.value + "\nto contain:\n" + other
+    }
+    DataAssertion {
+        value: this.value,
+        assertions: this.assertions + assertion
+    }
+
+fun OptionAssertion.is_equal_to(other: Option[any]): OptionAssertion =
+    let assertion = Assertion {
+        result: this.value == other,
+        message: "Expected data:\n" + this.value + "\nto be equal to:\n" + other
+    }
+    OptionAssertion {
+        value: this.value,
+        assertions: this.assertions + assertion
+    }
+
+fun OptionAssertion.contains(other: any): OptionAssertion =
+    let assertion = Assertion {
+        result: match this.value with
+            | Some s => s == other
+            | _ => false,
+        message: "Expected option:\n" + this.value + "\nto contains:\n" + other
+    }
+    OptionAssertion {
+        value: this.value,
+        assertions: this.assertions + assertion
+    }
+
+fun OptionAssertion.is_empty(): OptionAssertion =
+    let assertion = Assertion {
+        result: match this.value with
+            | None => true
+            | _ => false,
+        message: "Expected option:\n" + this.value + "\nto be empty"
+    }
+    OptionAssertion {
+        value: this.value,
+        assertions: this.assertions + assertion
+    }
+
+fun assert_that(value: string) = StringAssertion { value: value, assertions: [] }
+fun assert_that(value: int) = IntAssertion { value: value, assertions: [] }
+fun assert_that(value: long) = LongAssertion { value: value, assertions: [] }
+fun assert_that(value: double) = DoubleAssertion { value: value, assertions: [] }
+fun assert_that(value: float) = FloatAssertion { value: value, assertions: [] }
+fun assert_that(value: bool) = BoolAssertion { value: value, assertions: [] }
+fun assert_that(value: /capy/lang/Option.Option[any]) = OptionAssertion { value: value, assertions: [] }
+fun assert_that(value: data) = DataAssertion { value: value, assertions: [] }
 
 fun Assert.check(): list[string] =
     this.assertions

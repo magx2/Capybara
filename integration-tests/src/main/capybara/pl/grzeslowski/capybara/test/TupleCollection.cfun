@@ -1,0 +1,18 @@
+fun static_tuple(): Tuple[int, string, double] = (1, "foo", 5.0)
+
+fun static_tuple_option(): Tuple[int, Option[string], double] = (1, Some { value: "foo" }, 5.0)
+
+fun tuple_if(x: int): Tuple[int, string, float, string] =
+    (5, if x > 4 then "big" else "small", 5.1f, "foo")
+
+fun tuple_index_1(): string = (1, "foo", 5.0)[1]
+
+fun tuple_index_minus_1(): double = (1, "foo", 5.0)[-1]
+
+fun tuple_index_on_var(t: Tuple[int, string, double]): string = t[1]
+
+fun tuple_slice_from_1(): Tuple[string, double] = (1, "foo", 5.0)[1:]
+
+fun tuple_slice_to_minus_1(): Tuple[int, string] = (1, "foo", 5.0)[:-1]
+
+fun tuple_slice_on_var(t: Tuple[int, string, double]): Tuple[string, double] = t[1:]

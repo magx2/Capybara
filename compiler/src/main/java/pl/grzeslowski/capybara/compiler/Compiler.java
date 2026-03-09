@@ -248,7 +248,7 @@ public class Compiler {
     private ParsedSource parseSource(String source) {
         var imports = new ArrayList<ImportDeclaration>();
         var bodyLines = new ArrayList<String>();
-        source.lines().forEach(line -> {
+        Arrays.stream(source.split("\\R", -1)).forEach(line -> {
             var matcher = IMPORT_PATTERN.matcher(line);
             if (matcher.matches()) {
                 var module = matcher.group(1);
@@ -265,7 +265,10 @@ public class Compiler {
                                 .filter(symbol -> !symbol.isBlank())
                                 .toList();
                 imports.add(new ImportDeclaration(module, symbols, excludedSymbols));
+                // Keep source line numbers stable for parser/linker diagnostics.
+                bodyLines.add("");
             } else {
+                // Keep non-import lines untouched, including comment lines.
                 bodyLines.add(line);
             }
         });

@@ -29,6 +29,10 @@ public class ValueNameRewriter {
             case LinkedMatchExpression linkedMatchExpression ->
                     rewriteValueInLinkedMatchExpression(name, uniqueName, linkedMatchExpression);
             case LinkedNothingValue linkedNothingValue -> linkedNothingValue;
+            case LinkedPipeAllExpression linkedPipeAllExpression ->
+                    rewriteValueInLinkedPipeAllExpression(name, uniqueName, linkedPipeAllExpression);
+            case LinkedPipeAnyExpression linkedPipeAnyExpression ->
+                    rewriteValueInLinkedPipeAnyExpression(name, uniqueName, linkedPipeAnyExpression);
             case LinkedPipeFlatMapExpression linkedPipeFlatMapExpression ->
                     rewriteValueInLinkedPipeFlatMapExpression(name, uniqueName, linkedPipeFlatMapExpression);
             case LinkedPipeFilterOutExpression linkedPipeFilterOutExpression ->
@@ -39,6 +43,8 @@ public class ValueNameRewriter {
                     rewriteValueInLinkedPipeReduceExpression(name, uniqueName, linkedPipeReduceExpression);
             case LinkedSliceExpression linkedSliceExpression ->
                     rewriteValueInLinkedSliceExpression(name, uniqueName, linkedSliceExpression);
+            case LinkedTupleExpression linkedTupleExpression ->
+                    rewriteValueInLinkedTupleExpression(name, uniqueName, linkedTupleExpression);
             case LinkedNewDict linkedNewDict -> rewriteValueInLinkedNewDict(name, uniqueName, linkedNewDict);
             case LinkedNewList linkedNewList -> rewriteValueInLinkedNewList(name, uniqueName, linkedNewList);
             case LinkedNewSet linkedNewSet -> rewriteValueInLinkedNewSet(name, uniqueName, linkedNewSet);
@@ -251,6 +257,50 @@ public class ValueNameRewriter {
         return linkedNewData;
     }
 
+    private static LinkedExpression rewriteValueInLinkedPipeAnyExpression(
+            String name,
+            String uniqueName,
+            LinkedPipeAnyExpression linkedPipeAnyExpression
+    ) {
+        var source = rewriteValueInExpression(name, uniqueName, linkedPipeAnyExpression.source());
+        if (linkedPipeAnyExpression.argumentName().equals(name)) {
+            return new LinkedPipeAnyExpression(
+                    source,
+                    linkedPipeAnyExpression.argumentName(),
+                    linkedPipeAnyExpression.predicate(),
+                    linkedPipeAnyExpression.type()
+            );
+        }
+        return new LinkedPipeAnyExpression(
+                source,
+                linkedPipeAnyExpression.argumentName(),
+                rewriteValueInExpression(name, uniqueName, linkedPipeAnyExpression.predicate()),
+                linkedPipeAnyExpression.type()
+        );
+    }
+
+    private static LinkedExpression rewriteValueInLinkedPipeAllExpression(
+            String name,
+            String uniqueName,
+            LinkedPipeAllExpression linkedPipeAllExpression
+    ) {
+        var source = rewriteValueInExpression(name, uniqueName, linkedPipeAllExpression.source());
+        if (linkedPipeAllExpression.argumentName().equals(name)) {
+            return new LinkedPipeAllExpression(
+                    source,
+                    linkedPipeAllExpression.argumentName(),
+                    linkedPipeAllExpression.predicate(),
+                    linkedPipeAllExpression.type()
+            );
+        }
+        return new LinkedPipeAllExpression(
+                source,
+                linkedPipeAllExpression.argumentName(),
+                rewriteValueInExpression(name, uniqueName, linkedPipeAllExpression.predicate()),
+                linkedPipeAllExpression.type()
+        );
+    }
+
     private static LinkedExpression rewriteValueInLinkedSliceExpression(
             String name,
             String uniqueName,
@@ -261,6 +311,19 @@ public class ValueNameRewriter {
                 linkedSliceExpression.start().map(ex -> rewriteValueInExpression(name, uniqueName, ex)),
                 linkedSliceExpression.end().map(ex -> rewriteValueInExpression(name, uniqueName, ex)),
                 linkedSliceExpression.type()
+        );
+    }
+
+    private static LinkedExpression rewriteValueInLinkedTupleExpression(
+            String name,
+            String uniqueName,
+            LinkedTupleExpression linkedTupleExpression
+    ) {
+        return new LinkedTupleExpression(
+                linkedTupleExpression.values().stream()
+                        .map(ex -> rewriteValueInExpression(name, uniqueName, ex))
+                        .toList(),
+                linkedTupleExpression.type()
         );
     }
 

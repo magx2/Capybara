@@ -6,6 +6,8 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -103,5 +105,28 @@ class SimpleFunctionTest {
     @Test
     void privateUnderscoreFunctionNameIsPreserved() {
         assertThat(SimpleFunction.callPrivateAndPublic(3)).isEqualTo(9);
+    }
+
+    @Test
+    void typedLetString() {
+        assertThat(SimpleFunction.typedLetString()).isEqualTo("d");
+    }
+
+    @Test
+    void typedLetTuple() {
+        assertThat(SimpleFunction.typedLetTupleString()).isEqualTo("d");
+        assertThat(SimpleFunction.typedLetTupleInt()).isEqualTo(1);
+    }
+
+    @Test
+    void typedLetPrimitivesAndCollections() {
+        assertThat(SimpleFunction.typedLetBool()).isTrue();
+        assertThat(SimpleFunction.typedLetInt()).isEqualTo(7);
+        assertThat(SimpleFunction.typedLetLong()).isEqualTo(7L);
+        assertThat(SimpleFunction.typedLetFloat()).isEqualTo(1.5f);
+        assertThat(SimpleFunction.typedLetDouble()).isEqualTo(1.5d);
+        assertThat(SimpleFunction.typedLetList()).isEqualTo(List.of(1, 2, 3));
+        assertThat(SimpleFunction.typedLetSet()).isEqualTo(Set.of(1, 2, 3));
+        assertThat(SimpleFunction.typedLetDict()).isEqualTo(Map.of("a", 1, "b", 2));
     }
 }

@@ -1420,8 +1420,27 @@ public class CapybaraExpressionLinker {
                         );
                     }
                     if (!(expression.right() instanceof LambdaExpression lambdaExpression)) {
+                        if (expression.right() instanceof FunctionReference functionReference) {
+                            return resolvePipeFunctionReference(functionReference, elementType)
+                                    .flatMap(linked -> {
+                                        if (linked.expression().type() != BOOL) {
+                                            return withPosition(
+                                                    ValueOrError.error("Function reference in `|-` has to return `BOOL`, was `" + linked.expression().type() + "`"),
+                                                    functionReference.position()
+                                            );
+                                        }
+                                        return ValueOrError.success((LinkedExpression) new LinkedPipeFilterOutExpression(
+                                                left,
+                                                linked.argumentName(),
+                                                linked.expression(),
+                                                left.type() instanceof LinkedSet
+                                                        ? new LinkedSet(elementType)
+                                                        : new LinkedList(elementType)
+                                        ));
+                                    });
+                        }
                         return withPosition(
-                            ValueOrError.error("Right side of `|-` has to be a lambda expression"),
+                            ValueOrError.error("Right side of `|-` has to be a lambda expression or function reference"),
                             expression.right().position()
                         );
                     }
@@ -1606,8 +1625,25 @@ public class CapybaraExpressionLinker {
             LinkedDict dictType
     ) {
         if (!(expression.right() instanceof LambdaExpression lambdaExpression)) {
+            if (expression.right() instanceof FunctionReference functionReference) {
+                return resolvePipeFunctionReference(functionReference, dictType.valueType())
+                        .flatMap(linked -> {
+                            if (linked.expression().type() != BOOL) {
+                                return withPosition(
+                                        ValueOrError.error("Function reference in `|-` has to return `BOOL`, was `" + linked.expression().type() + "`"),
+                                        functionReference.position()
+                                );
+                            }
+                            return ValueOrError.success((LinkedExpression) new LinkedPipeFilterOutExpression(
+                                    left,
+                                    linked.argumentName(),
+                                    linked.expression(),
+                                    new LinkedDict(dictType.valueType())
+                            ));
+                        });
+            }
             return withPosition(
-                    ValueOrError.error("Right side of `|-` has to be a lambda expression"),
+                    ValueOrError.error("Right side of `|-` has to be a lambda expression or function reference"),
                     expression.right().position()
             );
         }
@@ -2473,14 +2509,35 @@ public class CapybaraExpressionLinker {
 
     private ValueOrError<LinkedExpression> linkLetExpression(LetExpression expression, Scope scope) {
         return linkExpression(expression.value(), scope)
-                .flatMap(value ->
-                        linkExpression(expression.rest(), scope.add(expression.name(), value.type()))
-                                .map(rest ->
-                                        new LinkedLetExpression(
-                                                expression.name(),
-                                                value,
-                                                rest
-                                )));
+                .flatMap(value -> expression.declaredType()
+                        .map(declaredType -> linkType(declaredType, dataTypes)
+                                .flatMap(linkedDeclaredType -> {
+                                    var coerced = coerceArgument(value, linkedDeclaredType);
+                                    if (coerced == null) {
+                                        return withPosition(
+                                                ValueOrError.error(
+                                                        "Cannot assign let `" + expression.name() + "` of type `"
+                                                        + linkedDeclaredType + "` from `" + value.type() + "`"
+                                                ),
+                                                expression.position()
+                                        );
+                                    }
+                                    var typedValue = coerced.expression();
+                                    return linkExpression(expression.rest(), scope.add(expression.name(), linkedDeclaredType))
+                                            .map(rest -> new LinkedLetExpression(
+                                                    expression.name(),
+                                                    typedValue,
+                                                    rest
+                                            ));
+                                }))
+                        .orElseGet(() ->
+                                linkExpression(expression.rest(), scope.add(expression.name(), value.type()))
+                                        .map(rest ->
+                                                new LinkedLetExpression(
+                                                        expression.name(),
+                                                        value,
+                                                        rest
+                                                ))));
     }
 
     private boolean isPipeMapExpression(InfixExpression expression) {
@@ -2494,8 +2551,8 @@ public class CapybaraExpressionLinker {
             return new ValueOrError.Error<>(error.errors()
                     .stream()
                     .map(singleError -> new ValueOrError.Error.SingleError(
-                            pos.line(),
-                            pos.column(),
+                            singleError.line() > 0 ? singleError.line() : pos.line(),
+                            singleError.line() > 0 ? singleError.column() : pos.column(),
                             singleError.file(),
                             singleError.message()))
                     .toList());

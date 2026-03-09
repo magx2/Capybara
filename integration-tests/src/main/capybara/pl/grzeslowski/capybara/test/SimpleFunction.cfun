@@ -40,3 +40,69 @@ fun foo(x: int): int = x + 1
 fun _foo(x: int): int = x + 2
 
 fun call_private_and_public(x: int): int = foo(x) + _foo(x)
+
+fun typed_let_string(): string =
+    {
+        let s: string = 'd'
+        s
+    }
+
+fun typed_let_tuple_string(): string =
+    {
+        let tuple: Tuple[string, int] = ("d", 1)
+        tuple[0]
+    }
+
+fun typed_let_tuple_int(): int =
+    {
+        let tuple: Tuple[string, int] = ("d", 1)
+        tuple[1]
+    }
+
+fun typed_let_bool(): bool =
+    {
+        let v: bool = true
+        v
+    }
+
+fun typed_let_int(): int =
+    {
+        let v: int = 7
+        v
+    }
+
+fun typed_let_long(): long =
+    {
+        let v: long = 7L
+        v
+    }
+
+fun typed_let_float(): float =
+    {
+        let v: float = 1.5f
+        v
+    }
+
+fun typed_let_double(): double =
+    {
+        let v: double = 1.5d
+        v
+    }
+
+fun typed_let_list(): list[int] =
+    {
+        let v: list[int] = [1, 2, 3]
+        v
+    }
+
+fun typed_let_set(): set[int] =
+    {
+        let v: set[int] = {1, 2, 3}
+        v
+    }
+
+fun typed_let_dict(): dict[int] =
+    {
+        let v: dict[int] = {"a": 1, "b": 2}
+        v
+    }

@@ -36,6 +36,7 @@ parameters: parameter (',' parameter)*;
 parameter: identifier ':' type;
 functionType: ':' type;
 type: COLLECTION '[' type ']'
+    | 'Tuple' '[' type (COMMA type)+ ']'
     | LPAREN type (COMMA type)+ RPAREN ARROW type
     | type ARROW type
     | 'byte'
@@ -55,7 +56,7 @@ TYPE: [A-Z][a-zA-Z0-9_]*
 TYPE_FULL: '/' [A-Za-z_][a-zA-Z0-9_]* ( '/' [A-Za-z_][a-zA-Z0-9_]* )+;
 INFIX_METHOD_LITERAL: '`' [+\-*/\\^%$#@~!:<>]+ '`';
 expression: letExpression* expressionNoLet;
-letExpression: 'let' NAME '=' expressionNoLet ';'?;
+letExpression: 'let' NAME (':' type)? '=' expressionNoLet ';'?;
 expressionNoLet: ifExpression
                | lambdaExpression
                | reduceExpression
@@ -63,6 +64,7 @@ expressionNoLet: ifExpression
                | functionCall
                | new_list
                | new_dict
+               | tupleLiteral
                | '(' expression ')'
                | '{' expression '}'
                | new_set
@@ -88,6 +90,7 @@ expressionNoLetNoPipe: ifExpression
                      | functionCall
                      | new_list
                      | new_dict
+                     | tupleLiteral
                      | '(' expressionNoLetNoPipe ')'
                      | new_set
                      | BANG expressionNoLetNoPipe
@@ -104,6 +107,8 @@ expressionNoLetNoPipe: ifExpression
                      | matchExpression;
 indexNoPipeLiteral: MINUS? INT_LITERAL;
 sliceIndexNoPipeLiteral: MINUS? INT_LITERAL;
+tupleLiteral: LPAREN expression (COMMA expression)+ RPAREN;
+
 ifExpression: 'if' expression 'then' expression 'else' expression;
 functionReference: COLON identifier;
 functionCall: identifier '(' argumentList? ')'
@@ -177,6 +182,8 @@ infixOperator: PLUS
              | PIPE_MINUS
              | PIPE_FLATMAP
              | PIPE_REDUCE
+             | PIPE_ANY
+             | PIPE_ALL
              | QUESTION
              | AND
              | PIPE;
@@ -232,6 +239,8 @@ BITWISE_NOT : '.not.';
 PIPE_MINUS : '|-';
 PIPE_FLATMAP : '|*';
 PIPE_REDUCE : '|>';
+PIPE_ANY : '|any?';
+PIPE_ALL : '|all?';
 PIPE : '|';
 COLON : ':';
 EQUAL : '==';

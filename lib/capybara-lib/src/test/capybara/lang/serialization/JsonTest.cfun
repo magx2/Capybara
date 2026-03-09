@@ -4,10 +4,13 @@ from /capy/lang/Program import { * }
 
 fun main(args: list[string]): /capy/lang/Program.Program =
     run_tests([
+    // ser
         test_serialize_simple_object(),
         test_empty(),
         test_serialize_object_with_primitive_types(),
         test_serialize_object_with_list(),
+        // deser
+        should_deserialize_simple_object(),
     ])
 
 fun test_serialize_simple_object(): Assert =
@@ -52,3 +55,10 @@ fun test_serialize_object_with_list(): Assert =
     let ser = serialize(json)
     assert_that(ser)
         .contains('"cars":["name",2010]')
+
+fun should_deserialize_simple_object(): Assert =
+    assert_that(deserialize('{"foo": "boo"'))
+        .contains(JsonObject { value: {
+            "foo": JsonString { value: "boo" }
+        }})
+

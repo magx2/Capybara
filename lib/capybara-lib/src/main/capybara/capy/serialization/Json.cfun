@@ -1,4 +1,5 @@
 from /capy/lang/Option import { * }
+from /capy/lang/Result import { * }
 
 type Json = JsonObject | JsonArray | JsonValue
 data JsonObject { value: dict[Json] }
@@ -34,6 +35,66 @@ fun _serialize(json: Json): string =
     | JsonBool { value } => value + ""
     | JsonNull => "null"
 
-fun deserialize(json: string): Option[JsonObject] = ???
+fun deserialize(json: string): Result[JsonObject] = _deserializeObject(json)
 
-fun deserialize(dict: dict[any]): JsonObject = ???
+fun _deserializeObject(json: string): Result[JsonObject] =
+    match json with
+    | "" => Error { "message": "Cannot parse JSON object from empty string!" }
+    | _  =>
+        let first_char = json[0]
+        match first_char with
+        | Some { v } =>
+            if v == "{"
+            then Success { value: JsonObject { value: _deserializeKeyValues(json[1:]) }}
+            else Error { message: "JSON object has to start with `{`, was `" + v + "`."}
+        | None => Error { message: "parse_string: Expected `{`, but got end of string." }
+fun _deserializeKeyValues(json: string): dict[Json] = ???
+//fun _deserializeKeyValue(json: string): = ???
+
+/// Parses JSON string, the quotation marks `"` are not included in final string
+/// Supports escape character `\`:
+/// - `\"` - quotation mark
+/// - `\\` - reverse solidus
+/// - `\/` - solidus
+/// - `\b` - backspace
+/// - `\f` - formfeed
+/// - `\n` - linefeed
+/// - `\r` - carriage return
+/// - `\t` - horizontal tab
+/// - `\\uXXXX` - 4 HEX digits
+fun _parse_string_until_quotation(strings: Tuple[string, string], escape: bool): Result[Tuple[string, string]] =
+    Error { message: "not implemented" }
+  /*
+   if escape
+    then
+        let s1 = strings[0] + /*strings[1][0]'x'
+        let tuple =  (s1, strings[1][1:])
+        _parse_string_until_quotation(tuple, false) // todo support escape
+    else
+        // no escape
+        let first_char = strings[1][0]
+        match first_char with
+        | Some { v } =>
+            match v with
+            | '\\' => _parse_string_until_quotation(, true)
+            | '"'  => (strings[0], strings[1][1:]) // quotation mark found, ending
+            | _    =>
+                let tuple = (strings[0] + v, strings[1][1:])
+                _parse_string_until_quotation(tuple, false) // quotation mark not found, parsing...
+        | None => Error { message: "parse_string: Expected `\"`, but got end of string." }
+        */
+fun _parse_string(json: string): Result[Tuple[string, string]] =
+    match json[0] with
+    | Some { v } =>
+        if v == '"'
+        then Success { value: _parse_string_until_quotation(("", json[1:]), false) }
+        else Error { message: "parse_string: Expected `\"`, but got `" + v + "`." }
+    | None => Error { message: "parse_string: Expected JSON string, got end of string." }
+
+fun _is_white_space(s: string): bool =
+    match s.size with
+    | 0 => true
+    | 1 => { " ", "\r", "\n", "\t" } ? s
+    | _ => s |all? :_is_white_space
+
+fun deserialize(dict: dict[any]): Result[JsonObject] = ???

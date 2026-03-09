@@ -26,7 +26,9 @@ public enum InfixOperator {
     PIPE("|"),
     PIPE_MINUS("|-"),
     PIPE_FLATMAP("|*"),
-    PIPE_REDUCE("|>");
+    PIPE_REDUCE("|>"),
+    PIPE_ANY("|any?"),
+    PIPE_ALL("|all?");
 
     private final String symbol;
 
@@ -71,7 +73,7 @@ public enum InfixOperator {
             case EQUAL, NOTEQUAL -> 3;
             case AND -> 2;
             case QUESTION -> 2;
-            case PIPE, PIPE_MINUS, PIPE_FLATMAP, PIPE_REDUCE -> 1;
+            case PIPE, PIPE_MINUS, PIPE_FLATMAP, PIPE_REDUCE, PIPE_ANY, PIPE_ALL -> 1;
         };
     }
 }

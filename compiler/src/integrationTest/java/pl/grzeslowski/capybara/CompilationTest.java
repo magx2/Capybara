@@ -115,6 +115,20 @@ class CompilationTest {
                                 type Person { name: string, age: int } = Student | Teacher
                                 data Student { grade: int }
                                 data Teacher { subject: string }
+                                """,
+                        """
+                                type Option[T] = Some[T] | None
+                                data Some[T] { value: T }
+                                single None
+
+                                fun tuple(): Tuple[int, string, double] = (1, "foo", 5.0)
+                                fun tuple2(): Tuple[int, Option[string], double] = (1, Some { value: "foo" }, 5.0)
+                                fun tuple_index(): Option[string] = (1, "foo", 5.0)[1]
+                                fun tuple_index_negative(): Option[string] = (1, "foo", 5.0)[-2]
+                                fun tuple_slice(): Tuple[string, double] = (1, "foo", 5.0)[1:]
+                                fun tuple_slice_negative(): Tuple[int, string] = (1, "foo", 5.0)[:-1]
+                                fun tuple_if(x: int): Tuple[int, string, float, string] =
+                                    (5, if x > 4 then "big" else "small", 5.1f, "foo")
                                 """)
         );
     }

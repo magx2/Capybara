@@ -209,6 +209,7 @@ public class CapybaraParser {
             var letExpression = letExpressions.get(i);
             result = new LetExpression(
                     letExpression.NAME().getText(),
+                    Optional.ofNullable(letExpression.type()).map(CapybaraParser::type),
                     expressionNoLet(letExpression.expressionNoLet()),
                     result,
                     position(letExpression)
