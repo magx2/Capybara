@@ -107,7 +107,7 @@
         },
         {
           "name": "keyword.other.capybara",
-          "match": "\\b(this|is_empty)\\b"
+          "match": "\\b(this|is_empty|size)\\b"
         }
       ]
     },

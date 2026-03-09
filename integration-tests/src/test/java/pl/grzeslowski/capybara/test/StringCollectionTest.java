@@ -46,4 +46,10 @@ class StringCollectionTest {
         assertThat(StringCollection.isEmptyMethod("")).isTrue();
         assertThat(StringCollection.isEmptyMethod("capybara")).isFalse();
     }
+
+    @Test
+    void size() {
+        assertThat(StringCollection.size("capybara")).isEqualTo(8);
+        assertThat(StringCollection.size("")).isZero();
+    }
 }

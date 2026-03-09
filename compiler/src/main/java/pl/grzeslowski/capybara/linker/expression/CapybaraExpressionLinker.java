@@ -195,9 +195,11 @@ public class CapybaraExpressionLinker {
                 .flatMap(source -> {
                     if (source.type() instanceof LinkedList
                         || source.type() instanceof LinkedSet
-                        || source.type() instanceof LinkedDict) {
+                        || source.type() instanceof LinkedDict
+                        || source.type() == STRING) {
                         if ("size".equals(fieldAccess.field())) {
-                            return ValueOrError.success(new LinkedFieldAccess(source, "size", PrimitiveLinkedType.INT));
+                            var javaField = source.type() == STRING ? "length" : "size";
+                            return ValueOrError.success(new LinkedFieldAccess(source, javaField, PrimitiveLinkedType.INT));
                         }
                         return withPosition(
                                 ValueOrError.error("Field `" + fieldAccess.field() + "` not found in type `" + source.type() + "`"),

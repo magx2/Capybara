@@ -34,7 +34,7 @@
       </array>
     </dict>
     <dict><key>name</key><string>keyword.control.capybara</string><key>match</key><string>\b(fun|type|data|single|match|with|if|then|else|let|from|import|except)\b</string></dict>
-    <dict><key>name</key><string>keyword.other.capybara</string><key>match</key><string>\b(this|is_empty)\b</string></dict>
+    <dict><key>name</key><string>keyword.other.capybara</string><key>match</key><string>\b(this|is_empty|size)\b</string></dict>
     <dict><key>name</key><string>support.type.primitive.capybara</string><key>match</key><string>\b(byte|int|long|float|double|bool|string|any|data|nothing|list|set|dict|Tuple)\b</string></dict>
     <dict><key>name</key><string>constant.numeric.capybara</string><key>match</key><string>\b(?:0[xX][0-9a-fA-F]+|\d+[lL]|\d+\.\d*(?:[eE][+\-]?\d+)?[fFdD]?|\d+[eE][+\-]?\d+[fFdD]?|\d+)\b</string></dict>
     <dict><key>name</key><string>constant.language.boolean.capybara</string><key>match</key><string>\b(true|false)\b</string></dict>
