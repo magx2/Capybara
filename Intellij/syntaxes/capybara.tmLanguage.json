@@ -25,7 +25,7 @@
       "include": "#operators"
     },
     {
-      "include": "#slicing"
+      "include": "#indexing"
     },
     {
       "include": "#constants"
@@ -189,10 +189,10 @@
         }
       ]
     },
-    "slicing": {
+    "indexing": {
       "patterns": [
         {
-          "name": "meta.slice.capybara",
+          "name": "meta.index.capybara",
           "begin": "\\[",
           "end": "\\]",
           "patterns": [

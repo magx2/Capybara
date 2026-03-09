@@ -61,6 +61,7 @@ public class CapybaraExpressionLinker {
                     functionReference.position()
             );
             case IfExpression ifExpression -> linkIfExpression(ifExpression, scope);
+            case IndexExpression indexExpression -> linkIndexExpression(indexExpression, scope);
             case InfixExpression infixExpression -> linkInfixExpression(infixExpression, scope);
             case IntValue intValue -> linkIntValue(intValue, scope);
             case LambdaExpression lambdaExpression -> withPosition(
@@ -71,6 +72,7 @@ public class CapybaraExpressionLinker {
                     ValueOrError.error("Reduce expression can only be used as the right side of `|>`"),
                     reduceExpression.position()
             );
+            case SliceExpression sliceExpression -> linkSliceExpression(sliceExpression, scope);
             case MatchExpression matchExpression -> linkMatchExpression(matchExpression, scope);
             case NewDictExpression newDictExpression -> linkNewDictExpression(newDictExpression, scope);
             case NewListExpression newListExpression -> linkNewListExpression(newListExpression, scope);
@@ -83,6 +85,72 @@ public class CapybaraExpressionLinker {
             case LetExpression letExpression -> linkLetExpression(letExpression, scope);
             case LongValue longValue -> linkLongValue(longValue, scope);
         };
+    }
+
+    private ValueOrError<LinkedExpression> linkSliceExpression(SliceExpression expression, Scope scope) {
+        return linkExpression(expression.source(), scope)
+                .flatMap(source -> {
+                    if (!(source.type() instanceof LinkedList) && source.type() != STRING) {
+                        return withPosition(
+                                ValueOrError.error("Slice source has to be `list` or `string`, was `" + source.type() + "`"),
+                                expression.position()
+                        );
+                    }
+                    return linkSliceBound(expression.start(), scope, "start")
+                            .flatMap(start -> linkSliceBound(expression.end(), scope, "end")
+                                    .map(end -> (LinkedExpression) new LinkedSliceExpression(source, start, end, source.type())));
+                });
+    }
+
+    private ValueOrError<LinkedExpression> linkIndexExpression(IndexExpression expression, Scope scope) {
+        return linkExpression(expression.source(), scope)
+                .flatMap(source -> {
+                    var elementType = switch (source.type()) {
+                        case LinkedList linkedList -> linkedList.elementType();
+                        case PrimitiveLinkedType primitive when primitive == STRING -> STRING;
+                        default -> null;
+                    };
+                    if (elementType == null) {
+                        return withPosition(
+                                ValueOrError.error("Index source has to be `list` or `string`, was `" + source.type() + "`"),
+                                expression.position()
+                        );
+                    }
+                    return linkExpression(expression.index(), scope)
+                            .flatMap(index -> {
+                                if (index.type() != PrimitiveLinkedType.INT) {
+                                    return withPosition(
+                                            ValueOrError.error("Index has to be `int`, was `" + index.type() + "`"),
+                                            expression.index().position()
+                                    );
+                                }
+                                var optionType = optionTypeFor(elementType);
+                                if (optionType == null) {
+                                    return withPosition(ValueOrError.error("Option type not found"), expression.position());
+                                }
+                                return ValueOrError.success((LinkedExpression) new LinkedIndexExpression(source, index, elementType, optionType));
+                            });
+                });
+    }
+
+    private ValueOrError<Optional<LinkedExpression>> linkSliceBound(
+            Optional<Expression> bound,
+            Scope scope,
+            String name
+    ) {
+        if (bound.isEmpty()) {
+            return ValueOrError.success(Optional.empty());
+        }
+        return linkExpression(bound.get(), scope)
+                .flatMap(linked -> {
+                    if (linked.type() != PrimitiveLinkedType.INT) {
+                        return withPosition(
+                                ValueOrError.error("Slice " + name + " index has to be `int`, was `" + linked.type() + "`"),
+                                bound.get().position()
+                        );
+                    }
+                    return ValueOrError.success(Optional.of(linked));
+                });
     }
 
     private ValueOrError<LinkedExpression> linkBooleanValue(BooleanValue booleanValue, Scope scope) {
@@ -1665,6 +1733,17 @@ public class CapybaraExpressionLinker {
                         .filter(type -> "Option".equals(type.name()))
                         .findFirst()
                         .orElse(null));
+    }
+
+    private LinkedDataParentType optionTypeFor(LinkedType elementType) {
+        var optionType = findOptionType();
+        if (optionType == null) {
+            return null;
+        }
+        var typeParameters = optionType.typeParameters().isEmpty()
+                ? List.<String>of()
+                : List.of(elementType.toString());
+        return new LinkedDataParentType(optionType.name(), optionType.fields(), optionType.subTypes(), typeParameters);
     }
 
     private boolean isOptionType(LinkedType type) {

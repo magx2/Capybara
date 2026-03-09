@@ -69,6 +69,8 @@ expressionNoLet: ifExpression
                | BANG expressionNoLet
                | BITWISE_NOT expressionNoLet
                | MINUS expressionNoLet
+               | expressionNoLet LBRACK indexLiteral RBRACK
+               | expressionNoLet LBRACK sliceIndexLiteral? COLON sliceIndexLiteral? RBRACK
                | expressionNoLet DOT methodIdentifier LPAREN argumentList? RPAREN
                | expressionNoLet INFIX_METHOD_LITERAL expressionNoLet
                | expressionNoLet DOT NAME
@@ -76,6 +78,8 @@ expressionNoLet: ifExpression
                | value
                | newData
                | matchExpression;
+indexLiteral: MINUS? INT_LITERAL;
+sliceIndexLiteral: MINUS? INT_LITERAL;
 lambdaExpression: identifier FAT_ARROW expressionNoLetNoPipe
                 | LPAREN identifier (COMMA identifier)+ RPAREN FAT_ARROW expressionNoLetNoPipe;
 reduceExpression: expressionNoLetNoPipe COMMA LPAREN NAME COMMA NAME (COMMA NAME (COMMA NAME)?)? RPAREN FAT_ARROW expressionNoLetNoPipe;
@@ -89,6 +93,8 @@ expressionNoLetNoPipe: ifExpression
                      | BANG expressionNoLetNoPipe
                      | BITWISE_NOT expressionNoLetNoPipe
                      | MINUS expressionNoLetNoPipe
+                     | expressionNoLetNoPipe LBRACK indexNoPipeLiteral RBRACK
+                     | expressionNoLetNoPipe LBRACK sliceIndexNoPipeLiteral? COLON sliceIndexNoPipeLiteral? RBRACK
                      | expressionNoLetNoPipe DOT methodIdentifier LPAREN argumentList? RPAREN
                      | expressionNoLetNoPipe INFIX_METHOD_LITERAL expressionNoLetNoPipe
                      | expressionNoLetNoPipe DOT NAME
@@ -96,6 +102,8 @@ expressionNoLetNoPipe: ifExpression
                      | value
                      | newData
                      | matchExpression;
+indexNoPipeLiteral: MINUS? INT_LITERAL;
+sliceIndexNoPipeLiteral: MINUS? INT_LITERAL;
 ifExpression: 'if' expression 'then' expression 'else' expression;
 functionReference: COLON identifier;
 functionCall: identifier '(' argumentList? ')'

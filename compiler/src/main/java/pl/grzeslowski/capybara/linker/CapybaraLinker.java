@@ -537,6 +537,12 @@ public class CapybaraLinker {
                     enrichNothing(value.elseBranch(), functionName, moduleSourceFile),
                     value.type()
             );
+            case pl.grzeslowski.capybara.linker.expression.LinkedIndexExpression value -> new pl.grzeslowski.capybara.linker.expression.LinkedIndexExpression(
+                    enrichNothing(value.source(), functionName, moduleSourceFile),
+                    enrichNothing(value.index(), functionName, moduleSourceFile),
+                    value.elementType(),
+                    value.type()
+            );
             case pl.grzeslowski.capybara.linker.expression.LinkedInfixExpression value -> new pl.grzeslowski.capybara.linker.expression.LinkedInfixExpression(
                     enrichNothing(value.left(), functionName, moduleSourceFile),
                     value.operator(),
@@ -619,6 +625,12 @@ public class CapybaraLinker {
                             assignment.name(),
                             enrichNothing(assignment.value(), functionName, moduleSourceFile)
                     )).toList()
+            );
+            case pl.grzeslowski.capybara.linker.expression.LinkedSliceExpression value -> new pl.grzeslowski.capybara.linker.expression.LinkedSliceExpression(
+                    enrichNothing(value.source(), functionName, moduleSourceFile),
+                    value.start().map(v -> enrichNothing(v, functionName, moduleSourceFile)),
+                    value.end().map(v -> enrichNothing(v, functionName, moduleSourceFile)),
+                    value.type()
             );
             case pl.grzeslowski.capybara.linker.expression.LinkedStringValue value -> value;
             case pl.grzeslowski.capybara.linker.expression.LinkedVariable value -> value;

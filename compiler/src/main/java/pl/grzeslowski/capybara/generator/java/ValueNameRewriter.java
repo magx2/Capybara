@@ -16,6 +16,8 @@ public class ValueNameRewriter {
                     rewriteValueInLinkedFunctionInvoke(name, uniqueName, linkedFunctionInvoke);
             case LinkedIfExpression linkedIfExpression ->
                     rewriteValueInLinkedIfExpression(name, uniqueName, linkedIfExpression);
+            case LinkedIndexExpression linkedIndexExpression ->
+                    rewriteValueInLinkedIndexExpression(name, uniqueName, linkedIndexExpression);
             case LinkedInfixExpression linkedInfixExpression ->
                     rewriteValueInLinkedInfixExpression(name, uniqueName, linkedInfixExpression);
             case LinkedIntValue linkedIntValue -> linkedIntValue;
@@ -35,6 +37,8 @@ public class ValueNameRewriter {
                     rewriteValueInLinkedPipeExpression(name, uniqueName, linkedPipeExpression);
             case LinkedPipeReduceExpression linkedPipeReduceExpression ->
                     rewriteValueInLinkedPipeReduceExpression(name, uniqueName, linkedPipeReduceExpression);
+            case LinkedSliceExpression linkedSliceExpression ->
+                    rewriteValueInLinkedSliceExpression(name, uniqueName, linkedSliceExpression);
             case LinkedNewDict linkedNewDict -> rewriteValueInLinkedNewDict(name, uniqueName, linkedNewDict);
             case LinkedNewList linkedNewList -> rewriteValueInLinkedNewList(name, uniqueName, linkedNewList);
             case LinkedNewSet linkedNewSet -> rewriteValueInLinkedNewSet(name, uniqueName, linkedNewSet);
@@ -87,6 +91,19 @@ public class ValueNameRewriter {
                 expression.operator(),
                 rewriteValueInExpression(name, uniqueName, expression.right()),
                 expression.type());
+    }
+
+    private static LinkedExpression rewriteValueInLinkedIndexExpression(
+            String name,
+            String uniqueName,
+            LinkedIndexExpression expression
+    ) {
+        return new LinkedIndexExpression(
+                rewriteValueInExpression(name, uniqueName, expression.source()),
+                rewriteValueInExpression(name, uniqueName, expression.index()),
+                expression.elementType(),
+                expression.type()
+        );
     }
 
     private static LinkedExpression rewriteValueInLinkedLambdaExpression(String name, String uniqueName, LinkedLambdaExpression expression) {
@@ -232,6 +249,19 @@ public class ValueNameRewriter {
     private static LinkedExpression rewriteValueInLinkedNewData(String name, String uniqueName, LinkedNewData linkedNewData) {
         // todo
         return linkedNewData;
+    }
+
+    private static LinkedExpression rewriteValueInLinkedSliceExpression(
+            String name,
+            String uniqueName,
+            LinkedSliceExpression linkedSliceExpression
+    ) {
+        return new LinkedSliceExpression(
+                rewriteValueInExpression(name, uniqueName, linkedSliceExpression.source()),
+                linkedSliceExpression.start().map(ex -> rewriteValueInExpression(name, uniqueName, ex)),
+                linkedSliceExpression.end().map(ex -> rewriteValueInExpression(name, uniqueName, ex)),
+                linkedSliceExpression.type()
+        );
     }
 
     private static LinkedExpression rewriteValueInLinkedVariable(String name, String uniqueName, LinkedVariable linkedVariable) {

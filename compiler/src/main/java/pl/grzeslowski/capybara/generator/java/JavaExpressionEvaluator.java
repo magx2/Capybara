@@ -4,6 +4,7 @@ import pl.grzeslowski.capybara.linker.expression.*;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.logging.Logger;
 
 import static java.lang.System.lineSeparator;
@@ -60,6 +61,7 @@ public class JavaExpressionEvaluator {
             case LinkedFunctionCall functionCall -> evaluateFunctionCall(functionCall, scope);
             case LinkedFunctionInvoke functionInvoke -> evaluateFunctionInvoke(functionInvoke, scope);
             case LinkedIfExpression ifExpression -> evaluateIfExpression(ifExpression, scope);
+            case LinkedIndexExpression indexExpression -> evaluateIndexExpression(indexExpression, scope);
             case LinkedInfixExpression infixExpression -> evaluateInfixExpression(infixExpression, scope);
             case LinkedIntValue intValue -> evaluateIntValue(intValue, scope);
             case LinkedLambdaExpression lambdaExpression -> evaluateLambdaExpression(lambdaExpression, scope);
@@ -71,6 +73,7 @@ public class JavaExpressionEvaluator {
             case LinkedPipeFilterOutExpression pipeFilterOutExpression -> evaluatePipeFilterOutExpression(pipeFilterOutExpression, scope);
             case LinkedPipeExpression pipeExpression -> evaluatePipeExpression(pipeExpression, scope);
             case LinkedPipeReduceExpression pipeReduceExpression -> evaluatePipeReduceExpression(pipeReduceExpression, scope);
+            case LinkedSliceExpression sliceExpression -> evaluateSliceExpression(sliceExpression, scope);
             case LinkedNewDict newDict -> evaluateNewDict(newDict, scope);
             case LinkedNewList newList -> evaluateNewList(newList, scope);
             case LinkedNewSet newSet -> evaluateNewSet(newSet, scope);
@@ -827,6 +830,59 @@ public class JavaExpressionEvaluator {
         var valueExSc = valueScope.popExpression();
         var scopeExpression = valueExSc.scope().declareValue(let.name(), valueExSc.expression(), let.rest());
         return evaluateExpression(scopeExpression.expression(), scopeExpression.scope());
+    }
+
+    private static Scope evaluateSliceExpression(LinkedSliceExpression expression, Scope scope) {
+        var sourceExSc = evaluateExpression(expression.source(), scope).popExpression();
+        var current = sourceExSc.scope();
+
+        Optional<String> start = Optional.empty();
+        if (expression.start().isPresent()) {
+            var startExSc = evaluateExpression(expression.start().orElseThrow(), current).popExpression();
+            current = startExSc.scope();
+            start = Optional.of(startExSc.expression());
+        }
+
+        Optional<String> end = Optional.empty();
+        if (expression.end().isPresent()) {
+            var endExSc = evaluateExpression(expression.end().orElseThrow(), current).popExpression();
+            current = endExSc.scope();
+            end = Optional.of(endExSc.expression());
+        }
+
+        var source = sourceExSc.expression();
+        var isString = expression.type() == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.STRING;
+        var sizeExpression = "(" + source + ")." + (isString ? "length()" : "size()");
+        var startExpression = start
+                .map(idx -> normalizeSliceIndex(idx, sizeExpression))
+                .orElse("0");
+        var endExpression = end
+                .map(idx -> normalizeSliceIndex(idx, sizeExpression))
+                .orElse(sizeExpression);
+
+        var slice = isString
+                ? source + ".substring(" + startExpression + ", " + endExpression + ")"
+                : source + ".subList(" + startExpression + ", " + endExpression + ")";
+        return current.addExpression(slice);
+    }
+
+    private static Scope evaluateIndexExpression(LinkedIndexExpression expression, Scope scope) {
+        var sourceExSc = evaluateExpression(expression.source(), scope).popExpression();
+        var indexExSc = evaluateExpression(expression.index(), sourceExSc.scope()).popExpression();
+        var source = sourceExSc.expression();
+        var index = indexExSc.expression();
+        var isString = expression.elementType() == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.STRING;
+        var sizeExpression = "(" + source + ")." + (isString ? "length()" : "size()");
+        var normalizedIndex = normalizeSliceIndex(index, sizeExpression);
+        var inRange = "(" + normalizedIndex + " >= 0 && " + normalizedIndex + " < " + sizeExpression + ")";
+        var value = isString
+                ? "java.lang.String.valueOf((" + source + ").charAt(" + normalizedIndex + "))"
+                : "(" + source + ").get(" + normalizedIndex + ")";
+        return indexExSc.scope().addExpression("(" + inRange + " ? java.util.Optional.of(" + value + ") : java.util.Optional.empty())");
+    }
+
+    private static String normalizeSliceIndex(String indexExpression, String sizeExpression) {
+        return "((" + indexExpression + ") < 0 ? (" + sizeExpression + " + (" + indexExpression + ")) : (" + indexExpression + "))";
     }
 
     private static Scope evaluateMatchExpression(LinkedMatchExpression matchExpression, Scope scope) {

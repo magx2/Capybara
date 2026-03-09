@@ -297,6 +297,14 @@ public class CapybaraParser {
             return matchExpression(matchExpression);
         }
 
+        if (isIndex(expression)) {
+            return indexExpression(expression);
+        }
+
+        if (isSlice(expression)) {
+            return sliceExpression(expression);
+        }
+
         if (isFieldAccess(expression)) {
             return new FieldAccess(
                     expressionNoLet(expression.expressionNoLet(0)),
@@ -489,6 +497,14 @@ public class CapybaraParser {
         var matchExpression = expression.matchExpression();
         if (matchExpression != null) {
             return matchExpression(matchExpression);
+        }
+
+        if (isIndex(expression)) {
+            return indexExpression(expression);
+        }
+
+        if (isSlice(expression)) {
+            return sliceExpression(expression);
         }
 
         if (isFieldAccess(expression)) {
@@ -862,10 +878,113 @@ public class CapybaraParser {
                && expression.expressionNoLetNoPipe().size() == 1;
     }
 
+    private SliceExpression sliceExpression(FunctionalParser.ExpressionNoLetContext expression) {
+        var source = expressionNoLet(expression.expressionNoLet(0));
+        var bounds = parseSliceBounds(
+                expression.sliceIndexLiteral().stream().map(this::sliceIndexExpression).toList(),
+                expression.sliceIndexLiteral().stream().map(index -> index.start.getTokenIndex()).toList(),
+                expression.COLON().getSymbol().getTokenIndex()
+        );
+        return new SliceExpression(source, bounds.start(), bounds.end(), position(expression));
+    }
+
+    private IndexExpression indexExpression(FunctionalParser.ExpressionNoLetContext expression) {
+        var source = expressionNoLet(expression.expressionNoLet(0));
+        var index = indexExpression(expression.indexLiteral());
+        return new IndexExpression(source, index, position(expression));
+    }
+
+    private IndexExpression indexExpression(FunctionalParser.ExpressionNoLetNoPipeContext expression) {
+        var source = expressionNoLetNoPipe(expression.expressionNoLetNoPipe(0));
+        var index = indexExpression(expression.indexNoPipeLiteral());
+        return new IndexExpression(source, index, position(expression));
+    }
+
+    private Expression indexExpression(FunctionalParser.IndexLiteralContext index) {
+        var sign = index.MINUS() == null ? "" : "-";
+        return new IntValue(sign + index.INT_LITERAL().getText(), position(index));
+    }
+
+    private Expression indexExpression(FunctionalParser.IndexNoPipeLiteralContext index) {
+        var sign = index.MINUS() == null ? "" : "-";
+        return new IntValue(sign + index.INT_LITERAL().getText(), position(index));
+    }
+
+    private SliceExpression sliceExpression(FunctionalParser.ExpressionNoLetNoPipeContext expression) {
+        var source = expressionNoLetNoPipe(expression.expressionNoLetNoPipe(0));
+        var bounds = parseSliceBounds(
+                expression.sliceIndexNoPipeLiteral().stream().map(this::sliceIndexExpression).toList(),
+                expression.sliceIndexNoPipeLiteral().stream().map(index -> index.start.getTokenIndex()).toList(),
+                expression.COLON().getSymbol().getTokenIndex()
+        );
+        return new SliceExpression(source, bounds.start(), bounds.end(), position(expression));
+    }
+
+    private Expression sliceIndexExpression(FunctionalParser.SliceIndexLiteralContext index) {
+        var sign = index.MINUS() == null ? "" : "-";
+        return new IntValue(sign + index.INT_LITERAL().getText(), position(index));
+    }
+
+    private Expression sliceIndexExpression(FunctionalParser.SliceIndexNoPipeLiteralContext index) {
+        var sign = index.MINUS() == null ? "" : "-";
+        return new IntValue(sign + index.INT_LITERAL().getText(), position(index));
+    }
+
+    private static SliceBounds parseSliceBounds(
+            List<Expression> indexes,
+            List<Integer> tokenIndexes,
+            int colonTokenIndex
+    ) {
+        if (indexes.isEmpty()) {
+            return new SliceBounds(Optional.empty(), Optional.empty());
+        }
+        if (indexes.size() == 1) {
+            return tokenIndexes.getFirst() < colonTokenIndex
+                    ? new SliceBounds(Optional.of(indexes.getFirst()), Optional.empty())
+                    : new SliceBounds(Optional.empty(), Optional.of(indexes.getFirst()));
+        }
+        return new SliceBounds(Optional.of(indexes.get(0)), Optional.of(indexes.get(1)));
+    }
+
+    private static boolean isSlice(FunctionalParser.ExpressionNoLetContext expression) {
+        return expression.LBRACK() != null
+               && expression.RBRACK() != null
+               && expression.COLON() != null
+               && expression.expressionNoLet().size() == 1
+               && expression.sliceIndexLiteral().size() <= 2;
+    }
+
+    private static boolean isIndex(FunctionalParser.ExpressionNoLetContext expression) {
+        return expression.LBRACK() != null
+               && expression.RBRACK() != null
+               && expression.COLON() == null
+               && expression.expressionNoLet().size() == 1
+               && expression.indexLiteral() != null;
+    }
+
+    private static boolean isSlice(FunctionalParser.ExpressionNoLetNoPipeContext expression) {
+        return expression.LBRACK() != null
+               && expression.RBRACK() != null
+               && expression.COLON() != null
+               && expression.expressionNoLetNoPipe().size() == 1
+               && expression.sliceIndexNoPipeLiteral().size() <= 2;
+    }
+
+    private static boolean isIndex(FunctionalParser.ExpressionNoLetNoPipeContext expression) {
+        return expression.LBRACK() != null
+               && expression.RBRACK() != null
+               && expression.COLON() == null
+               && expression.expressionNoLetNoPipe().size() == 1
+               && expression.indexNoPipeLiteral() != null;
+    }
+
     private record DataFieldDeclarations(List<DataDeclaration.DataField> fields, List<String> extendsTypes) {
     }
 
     private record NewDataFieldAssignments(List<NewData.FieldAssignment> assignments, List<Expression> spreads) {
+    }
+
+    private record SliceBounds(Optional<Expression> start, Optional<Expression> end) {
     }
 
 }

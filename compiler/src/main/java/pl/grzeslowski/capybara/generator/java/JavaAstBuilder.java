@@ -189,7 +189,8 @@ public class JavaAstBuilder {
     }
 
     private JavaType buildJavaReturnType(LinkedFunction function) {
-        if (function.returnType() instanceof GenericDataType genericDataType && isOptionTypeName(genericDataType.name())) {
+        if (function.returnType() instanceof GenericDataType genericDataType
+            && ("Option".equals(genericDataType.name()) || isOptionTypeName(genericDataType.name()))) {
             var elementType = inferOptionElementType(function.expression());
             return new JavaType("java.util.Optional<" + buildJavaBoxedType(elementType) + ">");
         }
@@ -229,6 +230,8 @@ public class JavaAstBuilder {
                     pl.grzeslowski.capybara.linker.expression.CapybaraTypeFinder.findHigherType(
                             inferOptionElementType(ifExpression.thenBranch()),
                             inferOptionElementType(ifExpression.elseBranch()));
+            case pl.grzeslowski.capybara.linker.expression.LinkedIndexExpression indexExpression ->
+                    indexExpression.elementType();
             case pl.grzeslowski.capybara.linker.expression.LinkedMatchExpression matchExpression ->
                     matchExpression.cases().stream()
                             .map(pl.grzeslowski.capybara.linker.expression.LinkedMatchExpression.MatchCase::expression)

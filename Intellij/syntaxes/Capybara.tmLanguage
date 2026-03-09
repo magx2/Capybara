@@ -44,7 +44,7 @@
     <dict><key>name</key><string>entity.name.function.capybara</string><key>match</key><string>\b([A-Za-z_][A-Za-z0-9_]*)\s*(?=\()</string></dict>
     <dict><key>name</key><string>keyword.operator.capybara</string><key>match</key><string>\|>|\|\*|\|-|\||\.and\.|\.nand\.|\.or\.|\.xor\.|\.not\.|==|!=|&lt;=|&gt;=|=&gt;|-&gt;|\+|\-|\*|/|%|\^|&lt;|&gt;|=|&amp;|\?|:</string></dict>
     <dict>
-      <key>name</key><string>meta.slice.capybara</string>
+      <key>name</key><string>meta.index.capybara</string>
       <key>begin</key><string>\[</string>
       <key>end</key><string>\]</string>
       <key>patterns</key>
