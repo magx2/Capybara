@@ -2065,7 +2065,7 @@ public class CapybaraExpressionLinker {
         }
         var typeParameters = optionType.typeParameters().isEmpty()
                 ? List.<String>of()
-                : List.of(elementType.toString());
+                : List.of(linkedTypeDescriptor(elementType));
         return new LinkedDataParentType(optionType.name(), optionType.fields(), optionType.subTypes(), typeParameters);
     }
 
@@ -2305,14 +2305,15 @@ public class CapybaraExpressionLinker {
     ) {
         return findConstructorType(constructorPattern.constructorName(), matchType)
                 .flatMap(constructorType -> {
-                    if (constructorType.fields().size() != constructorPattern.names().size()) {
+                    var resolvedFields = resolveConstructorFields(constructorType, matchType);
+                    if (resolvedFields.size() != constructorPattern.names().size()) {
                         return ValueOrError.error("Constructor `" + constructorPattern.constructorName() + "` expects "
-                                                  + constructorType.fields().size() + " argument(s), got "
+                                                  + resolvedFields.size() + " argument(s), got "
                                                   + constructorPattern.names().size());
                     }
                     var updatedScope = scope;
                     for (int i = 0; i < constructorPattern.names().size(); i++) {
-                        updatedScope = updatedScope.add(constructorPattern.names().get(i), constructorType.fields().get(i).type());
+                        updatedScope = updatedScope.add(constructorPattern.names().get(i), resolvedFields.get(i).type());
                     }
                     return ValueOrError.success(new PatternAndScope(
                             new LinkedMatchExpression.ConstructorPattern(
@@ -2322,6 +2323,170 @@ public class CapybaraExpressionLinker {
                             updatedScope
                     ));
                 });
+    }
+
+    private List<LinkedDataType.LinkedField> resolveConstructorFields(LinkedDataType constructorType, LinkedType matchType) {
+        if (!(matchType instanceof LinkedDataParentType parentType)) {
+            return constructorType.fields();
+        }
+        if (constructorType.typeParameters().isEmpty() || parentType.typeParameters().isEmpty()) {
+            if (parentType.typeParameters().isEmpty()) {
+                return constructorType.fields();
+            }
+        }
+        var substitutions = new java.util.HashMap<String, LinkedType>();
+        var constructorTypeParameters = constructorType.typeParameters().isEmpty()
+                ? inferGenericParameterNames(constructorType.fields())
+                : constructorType.typeParameters();
+        var max = Math.min(constructorTypeParameters.size(), parentType.typeParameters().size());
+        for (int i = 0; i < max; i++) {
+            var typeParameterName = constructorTypeParameters.get(i);
+            parseLinkedTypeDescriptor(parentType.typeParameters().get(i))
+                    .ifPresent(type -> substitutions.put(typeParameterName, type));
+        }
+        if (substitutions.isEmpty()) {
+            return constructorType.fields();
+        }
+        return constructorType.fields().stream()
+                .map(field -> new LinkedDataType.LinkedField(field.name(), substituteTypeParameters(field.type(), substitutions)))
+                .toList();
+    }
+
+    private List<String> inferGenericParameterNames(List<LinkedDataType.LinkedField> fields) {
+        var names = new java.util.LinkedHashSet<String>();
+        fields.forEach(field -> collectGenericParameterNames(field.type(), names));
+        return List.copyOf(names);
+    }
+
+    private void collectGenericParameterNames(LinkedType type, java.util.Set<String> names) {
+        switch (type) {
+            case LinkedGenericTypeParameter genericTypeParameter -> names.add(genericTypeParameter.name());
+            case LinkedList linkedList -> collectGenericParameterNames(linkedList.elementType(), names);
+            case LinkedSet linkedSet -> collectGenericParameterNames(linkedSet.elementType(), names);
+            case LinkedDict linkedDict -> collectGenericParameterNames(linkedDict.valueType(), names);
+            case LinkedFunctionType functionType -> {
+                collectGenericParameterNames(functionType.argumentType(), names);
+                collectGenericParameterNames(functionType.returnType(), names);
+            }
+            case LinkedTupleType linkedTupleType ->
+                    linkedTupleType.elementTypes().forEach(elementType -> collectGenericParameterNames(elementType, names));
+            default -> {
+            }
+        }
+    }
+
+    private LinkedType substituteTypeParameters(LinkedType type, Map<String, LinkedType> substitutions) {
+        if (type instanceof LinkedGenericTypeParameter genericTypeParameter) {
+            return substitutions.getOrDefault(genericTypeParameter.name(), type);
+        }
+        return switch (type) {
+            case LinkedList linkedList -> new LinkedList(substituteTypeParameters(linkedList.elementType(), substitutions));
+            case LinkedSet linkedSet -> new LinkedSet(substituteTypeParameters(linkedSet.elementType(), substitutions));
+            case LinkedDict linkedDict -> new LinkedDict(substituteTypeParameters(linkedDict.valueType(), substitutions));
+            case LinkedFunctionType functionType -> new LinkedFunctionType(
+                    substituteTypeParameters(functionType.argumentType(), substitutions),
+                    substituteTypeParameters(functionType.returnType(), substitutions)
+            );
+            case LinkedTupleType linkedTupleType -> new LinkedTupleType(
+                    linkedTupleType.elementTypes().stream()
+                            .map(elementType -> substituteTypeParameters(elementType, substitutions))
+                            .toList()
+            );
+            default -> type;
+        };
+    }
+
+    private Optional<LinkedType> parseLinkedTypeDescriptor(String descriptor) {
+        var normalizedDescriptor = descriptor == null ? "" : descriptor.trim();
+        if (normalizedDescriptor.isEmpty()) {
+            return Optional.empty();
+        }
+        if (normalizedDescriptor.startsWith("list[") && normalizedDescriptor.endsWith("]")) {
+            return parseLinkedTypeDescriptor(normalizedDescriptor.substring(5, normalizedDescriptor.length() - 1))
+                    .map(LinkedList::new);
+        }
+        if (normalizedDescriptor.startsWith("set[") && normalizedDescriptor.endsWith("]")) {
+            return parseLinkedTypeDescriptor(normalizedDescriptor.substring(4, normalizedDescriptor.length() - 1))
+                    .map(LinkedSet::new);
+        }
+        if (normalizedDescriptor.startsWith("dict[") && normalizedDescriptor.endsWith("]")) {
+            return parseLinkedTypeDescriptor(normalizedDescriptor.substring(5, normalizedDescriptor.length() - 1))
+                    .map(LinkedDict::new);
+        }
+        if (normalizedDescriptor.startsWith("Tuple[") && normalizedDescriptor.endsWith("]")) {
+            var inner = normalizedDescriptor.substring(6, normalizedDescriptor.length() - 1);
+            var elementTypes = splitTopLevelTypeDescriptors(inner).stream()
+                    .map(this::parseLinkedTypeDescriptor)
+                    .toList();
+            if (elementTypes.stream().anyMatch(Optional::isEmpty)) {
+                return Optional.empty();
+            }
+            return Optional.of(new LinkedTupleType(elementTypes.stream().map(Optional::orElseThrow).toList()));
+        }
+        try {
+            return Optional.of(PrimitiveLinkedType.valueOf(normalizedDescriptor.toUpperCase(java.util.Locale.ROOT)));
+        } catch (IllegalArgumentException ignored) {
+            // Not a primitive descriptor.
+        }
+        var direct = dataTypes.get(normalizedDescriptor);
+        if (direct != null) {
+            return Optional.of(direct);
+        }
+        return dataTypes.entrySet().stream()
+                .filter(entry -> entry.getKey().endsWith("." + normalizedDescriptor) || entry.getKey().endsWith("/" + normalizedDescriptor))
+                .map(Map.Entry::getValue)
+                .findFirst()
+                .map(LinkedType.class::cast);
+    }
+
+    private List<String> splitTopLevelTypeDescriptors(String text) {
+        var values = new java.util.ArrayList<String>();
+        var depth = 0;
+        var current = new StringBuilder();
+        for (int i = 0; i < text.length(); i++) {
+            var ch = text.charAt(i);
+            if (ch == '[') {
+                depth++;
+                current.append(ch);
+                continue;
+            }
+            if (ch == ']') {
+                depth = Math.max(0, depth - 1);
+                current.append(ch);
+                continue;
+            }
+            if (ch == ',' && depth == 0) {
+                var token = current.toString().trim();
+                if (!token.isEmpty()) {
+                    values.add(token);
+                }
+                current.setLength(0);
+                continue;
+            }
+            current.append(ch);
+        }
+        var token = current.toString().trim();
+        if (!token.isEmpty()) {
+            values.add(token);
+        }
+        return List.copyOf(values);
+    }
+
+    private String linkedTypeDescriptor(LinkedType type) {
+        return switch (type) {
+            case PrimitiveLinkedType primitive -> primitive.name().toLowerCase();
+            case LinkedList linkedList -> "list[" + linkedTypeDescriptor(linkedList.elementType()) + "]";
+            case LinkedSet linkedSet -> "set[" + linkedTypeDescriptor(linkedSet.elementType()) + "]";
+            case LinkedDict linkedDict -> "dict[" + linkedTypeDescriptor(linkedDict.valueType()) + "]";
+            case LinkedTupleType linkedTupleType -> "Tuple[" + linkedTupleType.elementTypes().stream()
+                    .map(this::linkedTypeDescriptor)
+                    .collect(java.util.stream.Collectors.joining(", ")) + "]";
+            case LinkedFunctionType linkedFunctionType ->
+                    "(" + linkedTypeDescriptor(linkedFunctionType.argumentType()) + " -> " + linkedTypeDescriptor(linkedFunctionType.returnType()) + ")";
+            case LinkedDataType linkedDataType -> linkedDataType.name();
+            case LinkedDataParentType linkedDataParentType -> linkedDataParentType.name();
+            case LinkedGenericTypeParameter linkedGenericTypeParameter -> linkedGenericTypeParameter.name();
+        };
     }
 
     private ValueOrError<LinkedDataType> findConstructorType(String constructorName, LinkedType matchType) {
@@ -2405,15 +2570,25 @@ public class CapybaraExpressionLinker {
                 .flatMap(type -> linkSpreadAssignments(newData.spreads(), scope)
                         .flatMap(spreadAssignments ->
                                 linkFieldAssignment(newData.assignments(), scope)
-                                        .map(assignments -> {
+                                        .flatMap(assignments ->
+                                                linkPositionalArguments(newData.positionalArguments(), scope)
+                                        .flatMap(positionalArguments -> {
                                             var allAssignments = new java.util.ArrayList<LinkedNewData.FieldAssignment>(
-                                                    spreadAssignments.size() + assignments.size()
+                                                    spreadAssignments.size() + assignments.size() + positionalArguments.size()
                                             );
                                             allAssignments.addAll(spreadAssignments);
                                             allAssignments.addAll(assignments);
-                                            var coercedAssignments = coerceAssignmentsForType(type, allAssignments);
-                                            return new LinkedNewData(type, List.copyOf(coercedAssignments));
-                                        })));
+                                            var positionalAssignments = mapPositionalArguments(type, allAssignments, positionalArguments, newData);
+                                            if (positionalAssignments instanceof ValueOrError.Error<List<LinkedNewData.FieldAssignment>> error) {
+                                                return new ValueOrError.Error<LinkedExpression>(error.errors());
+                                            }
+                                            allAssignments.addAll(((ValueOrError.Value<List<LinkedNewData.FieldAssignment>>) positionalAssignments).value());
+                                            return coerceAssignmentsForType(type, allAssignments, newData)
+                                                    .map(coercedAssignments -> (LinkedExpression) new LinkedNewData(
+                                                            type,
+                                                            List.copyOf(coercedAssignments)
+                                                    ));
+                                        }))));
     }
 
     private ValueOrError<List<LinkedNewData.FieldAssignment>> linkSpreadAssignments(List<Expression> spreads, Scope scope) {
@@ -2447,12 +2622,62 @@ public class CapybaraExpressionLinker {
                 .collect(new ValueOrErrorCollectionCollector<>());
     }
 
-    private List<LinkedNewData.FieldAssignment> coerceAssignmentsForType(
+    private ValueOrError<List<LinkedExpression>> linkPositionalArguments(List<Expression> positionalArguments, Scope scope) {
+        return positionalArguments.stream()
+                .map(argument -> linkExpression(argument, scope))
+                .collect(new ValueOrErrorCollectionCollector<>());
+    }
+
+    private ValueOrError<List<LinkedNewData.FieldAssignment>> mapPositionalArguments(
             LinkedType type,
-            List<LinkedNewData.FieldAssignment> assignments
+            List<LinkedNewData.FieldAssignment> existingAssignments,
+            List<LinkedExpression> positionalArguments,
+            NewData source
+    ) {
+        if (positionalArguments.isEmpty()) {
+            return ValueOrError.success(List.of());
+        }
+        if (!(type instanceof GenericDataType genericDataType)) {
+            return withPosition(
+                    ValueOrError.error("Positional data arguments require data type, was `" + type + "`"),
+                    source.position()
+            );
+        }
+
+        var assignedNames = existingAssignments.stream()
+                .map(LinkedNewData.FieldAssignment::name)
+                .collect(java.util.stream.Collectors.toSet());
+        var availableFields = genericDataType.fields().stream()
+                .filter(field -> !assignedNames.contains(field.name()))
+                .toList();
+
+        if (positionalArguments.size() > availableFields.size()) {
+            return withPosition(
+                    ValueOrError.error(
+                            "Too many positional arguments for `" + genericDataType.name() + "`: expected at most "
+                            + availableFields.size() + ", got " + positionalArguments.size()
+                    ),
+                    source.position()
+            );
+        }
+
+        var mapped = new java.util.ArrayList<LinkedNewData.FieldAssignment>(positionalArguments.size());
+        for (var i = 0; i < positionalArguments.size(); i++) {
+            mapped.add(new LinkedNewData.FieldAssignment(
+                    availableFields.get(i).name(),
+                    positionalArguments.get(i)
+            ));
+        }
+        return ValueOrError.success(List.copyOf(mapped));
+    }
+
+    private ValueOrError<List<LinkedNewData.FieldAssignment>> coerceAssignmentsForType(
+            LinkedType type,
+            List<LinkedNewData.FieldAssignment> assignments,
+            NewData source
     ) {
         if (!(type instanceof GenericDataType genericDataType)) {
-            return assignments;
+            return ValueOrError.success(assignments);
         }
         var fieldsByName = genericDataType.fields().stream()
                 .collect(java.util.stream.Collectors.toMap(
@@ -2460,19 +2685,68 @@ public class CapybaraExpressionLinker {
                         LinkedDataType.LinkedField::type,
                         (a, b) -> a
                 ));
-        return assignments.stream()
-                .map(assignment -> {
-                    var expectedType = fieldsByName.get(assignment.name());
-                    if (expectedType == null) {
-                        return assignment;
-                    }
-                    var coerced = coerceArgument(assignment.value(), expectedType);
-                    if (coerced == null) {
-                        return assignment;
-                    }
-                    return new LinkedNewData.FieldAssignment(assignment.name(), coerced.expression());
-                })
-                .toList();
+        var coercedAssignments = new java.util.ArrayList<LinkedNewData.FieldAssignment>(assignments.size());
+        for (var assignment : assignments) {
+            var expectedType = fieldsByName.get(assignment.name());
+            if (expectedType == null) {
+                coercedAssignments.add(assignment);
+                continue;
+            }
+            var coerced = coerceArgument(assignment.value(), expectedType);
+            if (coerced == null) {
+                if (isHardFieldTypeMismatch(expectedType, assignment.value().type())) {
+                    return withPosition(
+                            ValueOrError.error(
+                                    "Cannot assign field `" + assignment.name() + "` of type `"
+                                    + expectedType + "` from `" + assignment.value().type() + "`"
+                            ),
+                            source.position()
+                    );
+                }
+                coercedAssignments.add(assignment);
+                continue;
+            }
+            coercedAssignments.add(new LinkedNewData.FieldAssignment(assignment.name(), coerced.expression()));
+        }
+        return ValueOrError.success(List.copyOf(coercedAssignments));
+    }
+
+    private boolean isHardFieldTypeMismatch(LinkedType expected, LinkedType actual) {
+        if (expected.equals(actual) || expected == ANY || actual == ANY || actual == NOTHING) {
+            return false;
+        }
+
+        if (expected instanceof LinkedList) {
+            return !(actual instanceof LinkedList);
+        }
+        if (expected instanceof LinkedSet) {
+            return !(actual instanceof LinkedSet);
+        }
+        if (expected instanceof LinkedDict) {
+            return !(actual instanceof LinkedDict);
+        }
+        if (expected instanceof LinkedTupleType) {
+            return !(actual instanceof LinkedTupleType);
+        }
+        if (expected instanceof LinkedFunctionType) {
+            return !(actual instanceof LinkedFunctionType);
+        }
+
+        if (expected instanceof PrimitiveLinkedType expectedPrimitive) {
+            if (actual instanceof PrimitiveLinkedType actualPrimitive) {
+                if (isNumericPrimitive(expectedPrimitive) && isNumericPrimitive(actualPrimitive)) {
+                    return false;
+                }
+                return expectedPrimitive != actualPrimitive;
+            }
+            return true;
+        }
+
+        if (expected instanceof GenericDataType) {
+            return actual instanceof PrimitiveLinkedType;
+        }
+
+        return false;
     }
 
     private ValueOrError<LinkedExpression> linkStringValue(StringValue value, Scope scope) {
@@ -2493,7 +2767,6 @@ public class CapybaraExpressionLinker {
 //            } else {
             finalName = value.name();
 //            }
-            LOG.fine("Value `" + value.name() + "` is already defined in local scope. Renaming it to `" + finalName + "`");
             return ValueOrError.success(new LinkedVariable(finalName, scope.localValues().get(value.name())));
         }
         return parameters.stream()

@@ -44,6 +44,7 @@ data BlueCollar { strength: float }
 data WhiteCollar { intelligence: float }
 
 data PrintableData { foo: string, boo: int }
+data PositionalData { text: string, number: int }
 
 fun printable_data_to_string(): string =
     PrintableData { foo: "abc", boo: 123 } + ""
@@ -53,3 +54,11 @@ fun string_plus_data_left(): string =
 
 fun string_plus_data_right(): string =
     PrintableData { foo: "abc", boo: 123 } + "=suffix"
+
+fun create_positional_data(text: string, number: int): PositionalData =
+    PositionalData { text, number }
+
+fun create_positional_data_expr(text: string, number: int): PositionalData =
+    let new_text = text + "!"
+    let new_number = number + 1
+    PositionalData { new_text, new_number }

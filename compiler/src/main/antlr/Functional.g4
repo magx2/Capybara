@@ -163,7 +163,8 @@ dict_entry: expression ':' expression;
 fieldAssignmentList: fieldAssignment (',' fieldAssignment)*;
 fieldAssignment: NAME ':' expression
                 | STRING_LITERAL ':' expression
-                | SPREAD expression;
+                | SPREAD expression
+                | NAME;
 
 infixOperator: PLUS
              | MINUS

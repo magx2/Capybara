@@ -86,4 +86,18 @@ class DataTest {
         assertThat(Data.stringPlusDataRight())
                 .isEqualTo("PrintableData { \"foo\": \"abc\", \"boo\": 123 }=suffix");
     }
+
+    @Test
+    void canCreateDataWithPositionalArguments() {
+        var value = Data.createPositionalData("abc", 10);
+        assertThat(value.text()).isEqualTo("abc");
+        assertThat(value.number()).isEqualTo(10);
+    }
+
+    @Test
+    void positionalArgumentsCanBeExpressions() {
+        var value = Data.createPositionalDataExpr("abc", 10);
+        assertThat(value.text()).isEqualTo("abc!");
+        assertThat(value.number()).isEqualTo(11);
+    }
 }

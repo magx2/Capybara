@@ -188,7 +188,7 @@ public class CapybaraParser {
     private static Optional<Type> findParameterizedDataType(String name) {
         var idx = name.indexOf('[');
         if (idx > 0 && name.endsWith("]")) {
-            return Optional.of(new DataType(name.substring(0, idx)));
+            return Optional.of(new DataType(name));
         }
         return Optional.empty();
     }
@@ -294,6 +294,7 @@ public class CapybaraParser {
             return new NewData(
                     type(newData.type()),
                     assignments.assignments(),
+                    assignments.positionalArguments(),
                     assignments.spreads(),
                     position(newData)
             );
@@ -499,6 +500,7 @@ public class CapybaraParser {
             return new NewData(
                     type(newData.type()),
                     assignments.assignments(),
+                    assignments.positionalArguments(),
                     assignments.spreads(),
                     position(newData)
             );
@@ -794,18 +796,27 @@ public class CapybaraParser {
 
     private NewDataFieldAssignments fieldAssignments(FunctionalParser.FieldAssignmentListContext context) {
         if (context == null) {
-            return new NewDataFieldAssignments(List.of(), List.of());
+            return new NewDataFieldAssignments(List.of(), List.of(), List.of());
         }
         var assignments = new java.util.ArrayList<NewData.FieldAssignment>();
+        var positionalArguments = new java.util.ArrayList<Expression>();
         var spreads = new java.util.ArrayList<Expression>();
         for (var assignment : context.fieldAssignment()) {
             if (assignment.SPREAD() != null) {
                 spreads.add(expression(assignment.expression()));
-            } else {
+            } else if ((assignment.NAME() != null || assignment.STRING_LITERAL() != null) && assignment.expression() != null) {
                 assignments.add(fieldAssignment(assignment));
+            } else if (assignment.NAME() != null) {
+                positionalArguments.add(new Value(assignment.NAME().getText(), position(assignment.NAME())));
+            } else {
+                positionalArguments.add(expression(assignment.expression()));
             }
         }
-        return new NewDataFieldAssignments(List.copyOf(assignments), List.copyOf(spreads));
+        return new NewDataFieldAssignments(
+                List.copyOf(assignments),
+                List.copyOf(positionalArguments),
+                List.copyOf(spreads)
+        );
     }
 
     private static BooleanValue boolLiteral(TerminalNode node) {
@@ -1032,7 +1043,11 @@ public class CapybaraParser {
     private record DataFieldDeclarations(List<DataDeclaration.DataField> fields, List<String> extendsTypes) {
     }
 
-    private record NewDataFieldAssignments(List<NewData.FieldAssignment> assignments, List<Expression> spreads) {
+    private record NewDataFieldAssignments(
+            List<NewData.FieldAssignment> assignments,
+            List<Expression> positionalArguments,
+            List<Expression> spreads
+    ) {
     }
 
     private record SliceBounds(Optional<Expression> start, Optional<Expression> end) {
