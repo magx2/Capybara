@@ -170,6 +170,42 @@
               "name": "entity.name.type.capybara"
             }
           }
+        },
+        {
+          "name": "meta.match.typed-pattern.capybara",
+          "match": "(\\|)\\s*([A-Z][A-Za-z0-9_]*)\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*(=>)",
+          "captures": {
+            "1": {
+              "name": "keyword.operator.capybara"
+            },
+            "2": {
+              "name": "entity.name.type.capybara"
+            },
+            "3": {
+              "name": "variable.parameter.capybara"
+            },
+            "4": {
+              "name": "keyword.operator.capybara"
+            }
+          }
+        },
+        {
+          "name": "meta.match.constructor-pattern.capybara",
+          "match": "(\\|)\\s*([A-Z][A-Za-z0-9_]*)\\s*(\\{)\\s*([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": {
+              "name": "keyword.operator.capybara"
+            },
+            "2": {
+              "name": "entity.name.type.capybara"
+            },
+            "3": {
+              "name": "punctuation.section.block.begin.capybara"
+            },
+            "4": {
+              "name": "variable.parameter.capybara"
+            }
+          }
         }
       ]
     },
