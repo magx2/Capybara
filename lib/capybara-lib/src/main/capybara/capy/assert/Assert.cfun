@@ -122,7 +122,7 @@ fun OptionAssertion.is_empty(): OptionAssertion =
 
 fun ResultAssertion.contains(other: /capy/lang/Result.Success[any]): ResultAssertion =
     let assertion = Assertion {
-        result: this.value == other,
+        result: (this.value + "") ? (other + ""),
         message: "Expected result:\n" + this.value + "\nto contains:\n" + other
     }
     ResultAssertion {

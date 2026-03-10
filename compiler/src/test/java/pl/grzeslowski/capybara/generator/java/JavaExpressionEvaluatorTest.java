@@ -135,7 +135,7 @@ class JavaExpressionEvaluatorTest {
                                 var a_j1 = (x*2);
                                 var a_j2 = (x*x);
                                 var a_j3 = (x/2);
-                                return ((a_j1>2)) ? (("I'm happy "+a_j2)) : (("I'm not happy "+a_j3));"""
+                                return ((a_j1>2)) ? (("I'm happy "+java.lang.String.valueOf(a_j2))) : (("I'm not happy "+java.lang.String.valueOf(a_j3)));"""
                 ),
                 Arguments.of(
                         "wild_infix",
