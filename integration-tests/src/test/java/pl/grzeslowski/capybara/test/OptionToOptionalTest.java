@@ -36,4 +36,14 @@ class OptionToOptionalTest {
         assertThat(OptionToOptional.intOptionToMessage(Optional.of(10))).isEqualTo("value=10");
         assertThat(OptionToOptional.intOptionToMessage(Optional.empty())).isEqualTo("missing");
     }
+
+    @Test
+    void matchDeserializePassesThroughErrorTypedPattern() {
+        assertThat(OptionToOptional.matchDeserialize("bad")).isEqualTo("failed: bad");
+    }
+
+    @Test
+    void matchDeserializeDestructuresSuccessConstructorPattern() {
+        assertThat(OptionToOptional.matchDeserialize("ok")).isEqualTo("prefix:json:7");
+    }
 }

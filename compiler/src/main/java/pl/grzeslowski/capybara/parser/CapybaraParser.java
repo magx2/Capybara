@@ -676,6 +676,11 @@ public class CapybaraParser {
             );
         }
 
+        var name = context.NAME();
+        if (name != null) {
+            return new MatchExpression.VariablePattern(name.getText());
+        }
+
         var wildcard = context.UNDERSCORE();
         if (wildcard != null) {
             return MatchExpression.WildcardPattern.WILDCARD;
@@ -685,7 +690,11 @@ public class CapybaraParser {
         if (constructorPattern != null) {
             return new MatchExpression.ConstructorPattern(
                     constructorPattern.TYPE().getText(),
-                    constructorPattern.fieldPatternList().NAME().stream().map(TerminalNode::getText).toList()
+                    constructorPattern.fieldPatternList() == null
+                            ? List.of()
+                            : constructorPattern.fieldPatternList().pattern().stream()
+                                    .map(this::matchExpressionPattern)
+                                    .toList()
             );
         }
 
@@ -772,10 +781,14 @@ public class CapybaraParser {
     }
 
     private NewData.FieldAssignment fieldAssignment(pl.grzeslowski.capybara.parser.antlr.FunctionalParser.FieldAssignmentContext context) {
-        if (context.SPREAD() != null) {
+        if (context.spreadFieldAssignment() != null) {
             throw new IllegalStateException("Spread field assignment is not allowed in this context: " + context.getText());
         }
-        return new NewData.FieldAssignment(fieldName(context.NAME(), context.STRING_LITERAL()), expression(context.expression()));
+        var named = context.namedFieldAssignment();
+        if (named == null) {
+            throw new IllegalStateException("Named field assignment is not available in this context: " + context.getText());
+        }
+        return new NewData.FieldAssignment(fieldName(named.NAME(), named.STRING_LITERAL()), expression(named.expression()));
     }
 
     private DataFieldDeclarations dataFieldDeclarationList(FunctionalParser.FieldDeclarationListContext context) {
@@ -802,14 +815,12 @@ public class CapybaraParser {
         var positionalArguments = new java.util.ArrayList<Expression>();
         var spreads = new java.util.ArrayList<Expression>();
         for (var assignment : context.fieldAssignment()) {
-            if (assignment.SPREAD() != null) {
-                spreads.add(expression(assignment.expression()));
-            } else if ((assignment.NAME() != null || assignment.STRING_LITERAL() != null) && assignment.expression() != null) {
+            if (assignment.spreadFieldAssignment() != null) {
+                spreads.add(expression(assignment.spreadFieldAssignment().expression()));
+            } else if (assignment.namedFieldAssignment() != null) {
                 assignments.add(fieldAssignment(assignment));
-            } else if (assignment.NAME() != null) {
-                positionalArguments.add(new Value(assignment.NAME().getText(), position(assignment.NAME())));
             } else {
-                positionalArguments.add(expression(assignment.expression()));
+                positionalArguments.add(expression(assignment.positionalFieldAssignment().expression()));
             }
         }
         return new NewDataFieldAssignments(

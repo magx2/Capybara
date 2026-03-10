@@ -268,27 +268,35 @@ public class JavaAstBuilder {
     }
 
     private JavaType buildGenericDataType(GenericDataType type) {
-        if ("Option".equals(type.name()) || isOptionTypeName(type.name())) {
+        var rawTypeName = type.name();
+        var genericStart = rawTypeName.indexOf('[');
+        if (genericStart > 0) {
+            rawTypeName = rawTypeName.substring(0, genericStart);
+        }
+        if ("Option".equals(rawTypeName) || isOptionTypeName(rawTypeName)) {
             return new JavaType("java.util.Optional");
         }
-        if (type.name().contains("/") && type.name().contains(".")) {
-            var dotIndex = type.name().lastIndexOf('.');
-            var slashIndex = type.name().lastIndexOf('/');
+        if (rawTypeName.contains("/") && rawTypeName.contains(".")) {
+            var dotIndex = rawTypeName.lastIndexOf('.');
+            var slashIndex = rawTypeName.lastIndexOf('/');
             if (slashIndex > 0 && slashIndex < dotIndex) {
-                var startIdx = type.name().startsWith("/") ? 1 : 0;
-                var modulePath = type.name().substring(startIdx, slashIndex).replace('/', '.');
-                var moduleName = buildClassName(type.name().substring(slashIndex + 1, dotIndex));
-                var nestedType = buildClassName(type.name().substring(dotIndex + 1));
+                var startIdx = rawTypeName.startsWith("/") ? 1 : 0;
+                var modulePath = rawTypeName.substring(startIdx, slashIndex).replace('/', '.');
+                var moduleName = buildClassName(rawTypeName.substring(slashIndex + 1, dotIndex));
+                var nestedType = buildClassName(rawTypeName.substring(dotIndex + 1));
+                if (moduleName.equals(nestedType)) {
+                    return new JavaType(modulePath + "." + moduleName);
+                }
                 return new JavaType(modulePath + "." + moduleName + "." + nestedType);
             }
         }
-        if (type.name().contains(".")) {
-            var qualifiedName = Stream.of(type.name().split("\\."))
+        if (rawTypeName.contains(".")) {
+            var qualifiedName = Stream.of(rawTypeName.split("\\."))
                     .map(JavaAstBuilder::normalizeJavaTypeIdentifier)
                     .collect(joining("."));
             return new JavaType(qualifiedName);
         }
-        return buildClassName(type.name());
+        return buildClassName(rawTypeName);
     }
 
     private JavaType buildPrimitiveLinkedType(PrimitiveLinkedType type) {

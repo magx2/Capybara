@@ -40,7 +40,7 @@ public record LinkedMatchExpression(LinkedExpression matchWith, List<MatchCase> 
         WILDCARD
     }
 
-    public record ConstructorPattern(String constructorName, List<String> names) implements Pattern {
+    public record ConstructorPattern(String constructorName, List<Pattern> fieldPatterns) implements Pattern {
     }
 
     public LinkedMatchExpression(LinkedExpression matchWith, List<MatchCase> cases) {

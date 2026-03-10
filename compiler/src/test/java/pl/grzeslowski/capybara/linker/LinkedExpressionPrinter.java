@@ -23,6 +23,7 @@ public class LinkedExpressionPrinter {
             case LinkedFunctionCall linkedFunctionCall -> printLinkedFunctionCall(linkedFunctionCall, level);
             case LinkedFunctionInvoke linkedFunctionInvoke -> printLinkedFunctionInvoke(linkedFunctionInvoke, level);
             case LinkedIfExpression linkedIfExpression -> printLinkedIfExpression(linkedIfExpression, level);
+            case LinkedIndexExpression linkedIndexExpression -> printLinkedIndexExpression(linkedIndexExpression, level);
             case LinkedInfixExpression linkedInfixExpression ->
                     printLinkedInfixExpression(linkedInfixExpression, level);
             case LinkedIntValue linkedIntValue -> printLinkedIntValue(linkedIntValue, level);
@@ -32,10 +33,14 @@ public class LinkedExpressionPrinter {
             case LinkedMatchExpression linkedMatchExpression ->
                     printLinkedMatchExpression(linkedMatchExpression, level);
             case LinkedNothingValue linkedNothingValue -> printLinkedNothingValue(linkedNothingValue, level);
+            case LinkedPipeAllExpression linkedPipeAllExpression -> printLinkedPipeAllExpression(linkedPipeAllExpression, level);
+            case LinkedPipeAnyExpression linkedPipeAnyExpression -> printLinkedPipeAnyExpression(linkedPipeAnyExpression, level);
             case LinkedPipeFlatMapExpression linkedPipeFlatMapExpression -> printLinkedPipeFlatMapExpression(linkedPipeFlatMapExpression, level);
             case LinkedPipeFilterOutExpression linkedPipeFilterOutExpression -> printLinkedPipeFilterOutExpression(linkedPipeFilterOutExpression, level);
             case LinkedPipeExpression linkedPipeExpression -> printLinkedPipeExpression(linkedPipeExpression, level);
             case LinkedPipeReduceExpression linkedPipeReduceExpression -> printLinkedPipeReduceExpression(linkedPipeReduceExpression, level);
+            case LinkedSliceExpression linkedSliceExpression -> printLinkedSliceExpression(linkedSliceExpression, level);
+            case LinkedTupleExpression linkedTupleExpression -> printLinkedTupleExpression(linkedTupleExpression, level);
             case LinkedNewDict linkedNewDict -> printLinkedNewDict(linkedNewDict, level);
             case LinkedNewList linkedNewList -> printLinkedNewList(linkedNewList, level);
             case LinkedNewSet linkedNewSet -> printLinkedNewSet(linkedNewSet, level);
@@ -93,6 +98,11 @@ public class LinkedExpressionPrinter {
                + " " + printExpression(linkedInfixExpression.right(), level);
     }
 
+    private static String printLinkedIndexExpression(LinkedIndexExpression linkedIndexExpression, int level) {
+        return printExpression(linkedIndexExpression.source(), level)
+               + "[" + printExpression(linkedIndexExpression.index(), level) + "]";
+    }
+
     private static String printLinkedIntValue(LinkedIntValue linkedIntValue, int level) {
         return linkedIntValue.intValue();
     }
@@ -124,6 +134,22 @@ public class LinkedExpressionPrinter {
                + printExpression(linkedPipeExpression.mapper(), level);
     }
 
+    private static String printLinkedPipeAnyExpression(LinkedPipeAnyExpression linkedPipeAnyExpression, int level) {
+        return printExpression(linkedPipeAnyExpression.source(), level)
+               + " |any? "
+               + linkedPipeAnyExpression.argumentName()
+               + " => "
+               + printExpression(linkedPipeAnyExpression.predicate(), level);
+    }
+
+    private static String printLinkedPipeAllExpression(LinkedPipeAllExpression linkedPipeAllExpression, int level) {
+        return printExpression(linkedPipeAllExpression.source(), level)
+               + " |all? "
+               + linkedPipeAllExpression.argumentName()
+               + " => "
+               + printExpression(linkedPipeAllExpression.predicate(), level);
+    }
+
     private static String printLinkedPipeFilterOutExpression(LinkedPipeFilterOutExpression linkedPipeFilterOutExpression, int level) {
         return printExpression(linkedPipeFilterOutExpression.source(), level)
                + " |- "
@@ -149,6 +175,18 @@ public class LinkedExpressionPrinter {
                + printExpression(linkedPipeReduceExpression.initialValue(), level)
                + ", (" + args + ") => "
                + printExpression(linkedPipeReduceExpression.reducerExpression(), level);
+    }
+
+    private static String printLinkedSliceExpression(LinkedSliceExpression linkedSliceExpression, int level) {
+        var from = linkedSliceExpression.start().map(fromEx -> printExpression(fromEx, level)).orElse("");
+        var to = linkedSliceExpression.end().map(toEx -> printExpression(toEx, level)).orElse("");
+        return printExpression(linkedSliceExpression.source(), level) + "[" + from + ":" + to + "]";
+    }
+
+    private static String printLinkedTupleExpression(LinkedTupleExpression linkedTupleExpression, int level) {
+        return "(" + linkedTupleExpression.values().stream()
+                .map(ex -> printExpression(ex, level + 1))
+                .collect(joining(", ")) + ")";
     }
 
     private static String printLinkedNewData(LinkedNewData linkedNewData, int level) {

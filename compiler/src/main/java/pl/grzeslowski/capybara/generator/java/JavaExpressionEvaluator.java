@@ -13,6 +13,8 @@ import static java.lang.System.lineSeparator;
 
 @SuppressWarnings("SwitchStatementWithTooFewBranches")
 public class JavaExpressionEvaluator {
+    private static final java.util.concurrent.atomic.AtomicLong OPTION_CASE_VAR_COUNTER =
+            new java.util.concurrent.atomic.AtomicLong();
     private static final Logger log = Logger.getLogger(JavaExpressionEvaluator.class.getName());
     private static final String DICT_PIPE_ARGS_SEPARATOR = "::";
     private static final String METHOD_DECL_PREFIX = "__method__";
@@ -106,7 +108,24 @@ public class JavaExpressionEvaluator {
 
     private static Scope evaluateFieldAccess(LinkedFieldAccess fieldAccess, Scope scope) {
         var source = evaluateExpression(fieldAccess.source(), scope).popExpression();
-        return source.scope().addExpression("(" + source.expression() + ")." + fieldAccess.field() + "()");
+        var expression = "(" + source.expression() + ")." + fieldAccess.field() + "()";
+        if (requiresGenericFieldCast(fieldAccess)) {
+            var castType = javaCastType(fieldAccess.type());
+            if (!"java.lang.Object".equals(castType)) {
+                expression = "((" + castType + ") (" + expression + "))";
+            }
+        }
+        return source.scope().addExpression(expression);
+    }
+
+    private static boolean requiresGenericFieldCast(LinkedFieldAccess fieldAccess) {
+        return switch (fieldAccess.source().type()) {
+            case pl.grzeslowski.capybara.linker.LinkedDataType linkedDataType ->
+                    !linkedDataType.typeParameters().isEmpty();
+            case pl.grzeslowski.capybara.linker.LinkedDataParentType linkedDataParentType ->
+                    !linkedDataParentType.typeParameters().isEmpty();
+            default -> false;
+        };
     }
 
     private static Scope evaluateFunctionCall(LinkedFunctionCall functionCall, Scope scope) {
@@ -187,6 +206,11 @@ public class JavaExpressionEvaluator {
                 }
                 if (infixExpression.left().type() instanceof pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedDict) {
                     yield evaluateDictAppendExpression(infixExpression, left.expression(), right.expression());
+                }
+                if (infixExpression.type() == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.STRING) {
+                    yield stringConcatOperand(left.expression(), infixExpression.left().type())
+                          + operator.symbol()
+                          + stringConcatOperand(right.expression(), infixExpression.right().type());
                 }
                 yield left.expression() + operator.symbol() + right.expression();
             }
@@ -380,6 +404,16 @@ public class JavaExpressionEvaluator {
                + "entry -> ((java.lang.String) ((java.util.Map.Entry<?, ?>) entry).getKey()), "
                + "entry -> ((" + valueCastType + ") ((java.util.Map.Entry<?, ?>) entry).getValue()), "
                + "(oldValue, newValue) -> newValue, java.util.LinkedHashMap::new))";
+    }
+
+    private static String stringConcatOperand(String expression, pl.grzeslowski.capybara.linker.LinkedType type) {
+        if (type == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.STRING) {
+            return expression;
+        }
+        if (isOptionType(type)) {
+            return expression + ".map(java.lang.String::valueOf).orElse(\"\")";
+        }
+        return "java.lang.String.valueOf(" + expression + ")";
     }
 
     private static String evaluateListRemoveExpression(LinkedInfixExpression infixExpression, String left, String right) {
@@ -1008,33 +1042,48 @@ public class JavaExpressionEvaluator {
         for (int caseIndex = 0; caseIndex < matchExpression.cases().size(); caseIndex++) {
             var matchCase = matchExpression.cases().get(caseIndex);
             var branchScope = current;
-            var optionCaseVar = "__capybaraOptionCase" + caseIndex;
+            var optionCaseVar = "__capybaraOptionCase" + OPTION_CASE_VAR_COUNTER.incrementAndGet();
             if (matchCase.pattern() instanceof LinkedMatchExpression.ConstructorPattern constructorPattern) {
-                for (var name : constructorPattern.names()) {
-                    branchScope = branchScope.addLocalValue(name);
-                }
+                var bindingNames = constructorPatternBindingNames(constructorPattern);
                 var bindingCastTypes = constructorBindingCastTypes(matchExpression.matchWith().type(), constructorPattern);
-                for (int i = 0; i < constructorPattern.names().size(); i++) {
-                    var castType = bindingCastTypes.get(i);
-                    if (castType != null && !"java.lang.Object".equals(castType)) {
-                        var name = constructorPattern.names().get(i);
-                        branchScope = branchScope.addValueOverride(name, "((" + castType + ") " + name + ")");
+                for (int i = 0; i < constructorPattern.fieldPatterns().size(); i++) {
+                    var fieldPattern = constructorPattern.fieldPatterns().get(i);
+                    var bindingName = bindingNames.get(i);
+                    if (fieldPattern instanceof LinkedMatchExpression.VariablePattern variablePattern) {
+                        branchScope = branchScope.addLocalValue(variablePattern.name());
+                        var castType = bindingCastTypes.get(i);
+                        if (castType != null && !"java.lang.Object".equals(castType)) {
+                            branchScope = branchScope.addValueOverride(variablePattern.name(), "((" + castType + ") " + bindingName + ")");
+                        }
+                    }
+                    if (fieldPattern instanceof LinkedMatchExpression.TypedPattern typedPattern) {
+                        branchScope = branchScope.addLocalValue(typedPattern.name());
+                        branchScope = branchScope.addValueOverride(
+                                typedPattern.name(),
+                                "((" + javaPatternType(typedPattern.type()) + ") " + bindingName + ")"
+                        );
                     }
                 }
-                if (optionMatch && isOptionSomePattern(constructorPattern.constructorName()) && constructorPattern.names().size() == 1) {
-                    var valueName = constructorPattern.names().getFirst();
-                    branchScope = branchScope.addValueOverride(
-                            valueName,
-                            optionSomeBindingExpression(switchTarget + ".orElse(null)")
-                    );
+                if (optionMatch && isOptionSomePattern(constructorPattern.constructorName()) && constructorPattern.fieldPatterns().size() == 1) {
+                    var firstPattern = constructorPattern.fieldPatterns().getFirst();
+                    if (firstPattern instanceof LinkedMatchExpression.VariablePattern variablePattern) {
+                        branchScope = branchScope.addValueOverride(
+                                variablePattern.name(),
+                                optionSomeBindingExpression(switchTarget + ".orElse(null)")
+                        );
+                    }
+                    if (firstPattern instanceof LinkedMatchExpression.TypedPattern typedPattern) {
+                        branchScope = branchScope.addValueOverride(
+                                typedPattern.name(),
+                                "((" + javaPatternType(typedPattern.type()) + ") " + optionSomeBindingExpression(switchTarget + ".orElse(null)") + ")"
+                        );
+                    }
                 }
                 if (isResultErrorConstructor(matchExpression.matchWith().type(), constructorPattern)
-                    && constructorPattern.names().size() == 1) {
-                    var valueName = constructorPattern.names().getFirst();
-                    branchScope = branchScope.addValueOverride(
-                            valueName,
-                            "((" + valueName + ") == null ? null : " + valueName + ".getMessage())"
-                    );
+                    && constructorPattern.fieldPatterns().size() == 1
+                    && constructorPattern.fieldPatterns().getFirst() instanceof LinkedMatchExpression.VariablePattern variablePattern) {
+                    var valueName = variablePattern.name();
+                    branchScope = branchScope.addValueOverride(valueName, "((" + valueName + ") == null ? null : " + valueName + ".getMessage())");
                 }
             }
             if (matchCase.pattern() instanceof LinkedMatchExpression.TypedPattern typedPattern
@@ -1082,11 +1131,11 @@ public class JavaExpressionEvaluator {
     ) {
         var constructorType = resolveConstructorType(matchType, constructorPattern.constructorName());
         if (constructorType == null) {
-            return java.util.Collections.nCopies(constructorPattern.names().size(), null);
+            return java.util.Collections.nCopies(constructorPattern.fieldPatterns().size(), null);
         }
         var genericCasts = resolveGenericTypeCasts(matchType, constructorType);
         return constructorType.fields().stream()
-                .limit(constructorPattern.names().size())
+                .limit(constructorPattern.fieldPatterns().size())
                 .map(field -> {
                     var fieldType = field.type();
                     if (fieldType instanceof pl.grzeslowski.capybara.linker.LinkedGenericTypeParameter genericTypeParameter) {
@@ -1171,6 +1220,13 @@ public class JavaExpressionEvaluator {
         if (normalized.startsWith("dict[")) {
             return "java.util.Map";
         }
+        var genericStart = normalized.indexOf('[');
+        if (genericStart > 0 && normalized.endsWith("]")) {
+            var rawType = normalized.substring(0, genericStart).trim();
+            if (!rawType.isEmpty()) {
+                return normalizeJavaTypeReference(rawType);
+            }
+        }
         return switch (normalized.toLowerCase(java.util.Locale.ROOT)) {
             case "byte" -> "java.lang.Byte";
             case "int" -> "java.lang.Integer";
@@ -1214,7 +1270,7 @@ public class JavaExpressionEvaluator {
                 case LinkedMatchExpression.TypedPattern typedPattern when isOptionNonePattern(typedPattern.type().name()) ->
                         "case java.util.Optional " + typedPattern.name() + " when " + typedPattern.name() + ".isEmpty()";
                 case LinkedMatchExpression.ConstructorPattern constructorPattern when isOptionSomePattern(constructorPattern.constructorName()) ->
-                        "case java.util.Optional " + optionCaseVar + " when " + optionCaseVar + ".isPresent()";
+                        optionSomeCasePattern(constructorPattern, optionCaseVar);
                 case LinkedMatchExpression.ConstructorPattern constructorPattern when isOptionNonePattern(constructorPattern.constructorName()) ->
                         "case java.util.Optional " + optionCaseVar + " when " + optionCaseVar + ".isEmpty()";
                 default -> "default";
@@ -1241,9 +1297,12 @@ public class JavaExpressionEvaluator {
             case LinkedMatchExpression.ConstructorPattern constructorPattern -> {
                 var constructorType = resolveConstructorType(matchType, constructorPattern.constructorName());
                 var patternType = constructorPatternTypeName(matchType, constructorType, constructorPattern.constructorName());
-                yield "case " + patternType + "("
-                    + constructorPattern.names().stream().map(name -> "var " + name).reduce((a, b) -> a + ", " + b).orElse("")
-                    + ")";
+                var bindingNames = constructorPatternBindingNames(constructorPattern);
+                var constructorCasePattern = "case " + patternType + "("
+                                             + bindingNames.stream().map(name -> "var " + name).reduce((a, b) -> a + ", " + b).orElse("")
+                                             + ")";
+                var guard = constructorPatternGuard(constructorPattern, bindingNames);
+                yield guard.map(s -> constructorCasePattern + " when " + s).orElse(constructorCasePattern);
             }
         };
     }
@@ -1297,11 +1356,74 @@ public class JavaExpressionEvaluator {
         if (!(matchCase.pattern() instanceof LinkedMatchExpression.ConstructorPattern constructorPattern)) {
             return false;
         }
-        if (!isOptionSomePattern(constructorPattern.constructorName()) || constructorPattern.names().size() != 1) {
+        if (!isOptionSomePattern(constructorPattern.constructorName()) || constructorPattern.fieldPatterns().size() != 1) {
+            return false;
+        }
+        if (!(constructorPattern.fieldPatterns().getFirst() instanceof LinkedMatchExpression.VariablePattern variablePattern)) {
             return false;
         }
         return matchCase.expression() instanceof LinkedVariable variable
-               && variable.name().equals(constructorPattern.names().getFirst());
+               && variable.name().equals(variablePattern.name());
+    }
+
+    private static String optionSomeCasePattern(LinkedMatchExpression.ConstructorPattern constructorPattern, String optionCaseVar) {
+        var base = "case java.util.Optional " + optionCaseVar + " when " + optionCaseVar + ".isPresent()";
+        if (constructorPattern.fieldPatterns().size() != 1) {
+            return base;
+        }
+        var fieldPattern = constructorPattern.fieldPatterns().getFirst();
+        var guard = constructorFieldGuardExpression(fieldPattern, optionCaseVar + ".orElse(null)");
+        return guard.map(s -> base + " && (" + s + ")").orElse(base);
+    }
+
+    private static List<String> constructorPatternBindingNames(LinkedMatchExpression.ConstructorPattern constructorPattern) {
+        var names = new ArrayList<String>(constructorPattern.fieldPatterns().size());
+        for (int i = 0; i < constructorPattern.fieldPatterns().size(); i++) {
+            var fieldPattern = constructorPattern.fieldPatterns().get(i);
+            if (fieldPattern instanceof LinkedMatchExpression.VariablePattern variablePattern) {
+                names.add(variablePattern.name());
+            } else {
+                names.add("__capybaraCtorField" + i);
+            }
+        }
+        return names;
+    }
+
+    private static java.util.Optional<String> constructorPatternGuard(
+            LinkedMatchExpression.ConstructorPattern constructorPattern,
+            List<String> bindingNames
+    ) {
+        var guards = new ArrayList<String>();
+        for (int i = 0; i < constructorPattern.fieldPatterns().size(); i++) {
+            constructorFieldGuardExpression(constructorPattern.fieldPatterns().get(i), bindingNames.get(i))
+                    .ifPresent(guards::add);
+        }
+        if (guards.isEmpty()) {
+            return java.util.Optional.empty();
+        }
+        return java.util.Optional.of(String.join(" && ", guards));
+    }
+
+    private static java.util.Optional<String> constructorFieldGuardExpression(
+            LinkedMatchExpression.Pattern pattern,
+            String valueExpression
+    ) {
+        return switch (pattern) {
+            case LinkedMatchExpression.IntPattern intPattern ->
+                    java.util.Optional.of("java.util.Objects.equals(" + valueExpression + ", " + intPattern.value() + ")");
+            case LinkedMatchExpression.StringPattern stringPattern ->
+                    java.util.Optional.of("java.util.Objects.equals(" + valueExpression + ", " + stringPattern.value() + ")");
+            case LinkedMatchExpression.BoolPattern boolPattern ->
+                    java.util.Optional.of("java.util.Objects.equals(" + valueExpression + ", " + boolPattern.value() + ")");
+            case LinkedMatchExpression.FloatPattern floatPattern ->
+                    java.util.Optional.of("java.util.Objects.equals(" + valueExpression + ", " + floatPattern.value() + ")");
+            case LinkedMatchExpression.TypedPattern typedPattern ->
+                    java.util.Optional.of("(" + valueExpression + " instanceof " + javaPatternType(typedPattern.type()) + ")");
+            case LinkedMatchExpression.VariablePattern ignored -> java.util.Optional.empty();
+            case LinkedMatchExpression.WildcardPattern ignored -> java.util.Optional.empty();
+            case LinkedMatchExpression.ConstructorPattern ignored ->
+                    throw new IllegalStateException("Nested constructor pattern in constructor pattern is not supported in Java generation");
+        };
     }
 
     private static pl.grzeslowski.capybara.linker.LinkedType inferConcreteCaseType(
@@ -1620,6 +1742,9 @@ public class JavaExpressionEvaluator {
                 var packageName = typeName.substring(startIdx, slashIndex).replace('/', '.');
                 var outer = normalizeJavaClassName(typeName.substring(slashIndex + 1, dotIndex));
                 var inner = normalizeJavaClassName(typeName.substring(dotIndex + 1));
+                if (outer.equals(inner)) {
+                    return packageName + "." + outer;
+                }
                 return packageName + "." + outer + "." + inner;
             }
         }

@@ -138,6 +138,7 @@ pattern: TYPE
         | STRING_LITERAL
         | FLOAT_LITERAL
         | typedPattern
+        | NAME
         | UNDERSCORE // wildcard pattern
         | constructorPattern;
 typedPattern: patternType NAME;
@@ -153,7 +154,7 @@ patternType: 'byte'
            | 'nothing'
            | TYPE;
 constructorPattern: TYPE '{' fieldPatternList? '}';
-fieldPatternList: NAME (',' NAME)*;
+fieldPatternList: pattern (',' pattern)*;
 
 newData: type '{' fieldAssignmentList? '}';
 new_list: '[' (expression (',' expression)* ','?)? ']';
@@ -161,10 +162,12 @@ new_set: '{' (expression (',' expression)* ','?)? '}';
 new_dict: '{' dict_entry (',' dict_entry)* ','? '}';
 dict_entry: expression ':' expression;
 fieldAssignmentList: fieldAssignment (',' fieldAssignment)*;
-fieldAssignment: NAME ':' expression
-                | STRING_LITERAL ':' expression
-                | SPREAD expression
-                | NAME;
+fieldAssignment: namedFieldAssignment
+               | spreadFieldAssignment
+               | positionalFieldAssignment;
+namedFieldAssignment: (NAME | STRING_LITERAL) COLON expression;
+spreadFieldAssignment: SPREAD expression;
+positionalFieldAssignment: expression;
 
 infixOperator: PLUS
              | MINUS

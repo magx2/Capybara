@@ -859,12 +859,6 @@ public class CapybaraLinker {
                     normalizedFile)
                     .map(linkedDataType -> new LinkedDataType.LinkedField(type.name(), linkedDataType));
         }
-        if (type.type() instanceof DataType dataType && isQualifiedExternalTypeName(dataType.name())) {
-            return ValueOrError.success(new LinkedDataType.LinkedField(
-                    type.name(),
-                    new LinkedDataParentType(dataType.name(), List.of(), List.of(), List.of())
-            ));
-        }
         var knownDataTypes = new HashMap<String, GenericDataType>();
         declarationsByName.forEach((name, declaration) -> {
             var cached = cache.get(name);
@@ -884,12 +878,74 @@ public class CapybaraLinker {
                 name,
                 new LinkedDataParentType(name, List.of(), List.of(), declaration.typeParameters())
         ));
-        return linkType(type.type(), knownDataTypes)
-                .map(t -> new LinkedDataType.LinkedField(type.name(), t));
+        var linkedType = linkType(type.type(), knownDataTypes);
+        if (linkedType instanceof ValueOrError.Error<LinkedType>
+            && type.type() instanceof DataType dataType
+            && isQualifiedExternalTypeName(dataType.name())) {
+            if (isOptionExternalTypeName(dataType.name())) {
+                return ValueOrError.success(new LinkedDataType.LinkedField(
+                        type.name(),
+                        optionExternalPlaceholder(dataType.name())
+                ));
+            }
+            return ValueOrError.success(new LinkedDataType.LinkedField(
+                    type.name(),
+                    new LinkedDataParentType(dataType.name(), List.of(), List.of(), List.of())
+            ));
+        }
+        return linkedType.map(t -> new LinkedDataType.LinkedField(type.name(), t));
     }
 
     private boolean isQualifiedExternalTypeName(String typeName) {
         return typeName.startsWith("/") && typeName.contains(".");
+    }
+
+    private boolean isOptionExternalTypeName(String typeName) {
+        var baseName = baseTypeName(typeName);
+        return "/capy/lang/Option.Option".equals(baseName) || "/capy/lang/Option".equals(baseName);
+    }
+
+    private String baseTypeName(String typeName) {
+        var idx = typeName.indexOf('[');
+        if (idx > 0 && typeName.endsWith("]")) {
+            return typeName.substring(0, idx);
+        }
+        return typeName;
+    }
+
+    private LinkedDataParentType optionExternalPlaceholder(String typeName) {
+        var optionTypeParameter = optionExternalTypeParameter(typeName);
+        var some = new LinkedDataType(
+                "Some",
+                List.of(new LinkedDataType.LinkedField("value", new LinkedGenericTypeParameter("T"))),
+                List.of("T"),
+                List.of(),
+                false
+        );
+        var none = new LinkedDataType(
+                "None",
+                List.of(),
+                List.of(),
+                List.of(),
+                true
+        );
+        return new LinkedDataParentType(
+                baseTypeName(typeName),
+                List.of(),
+                List.of(some, none),
+                List.of(optionTypeParameter)
+        );
+    }
+
+    private String optionExternalTypeParameter(String typeName) {
+        var start = typeName.indexOf('[');
+        if (start > 0 && typeName.endsWith("]")) {
+            var value = typeName.substring(start + 1, typeName.length() - 1).trim();
+            if (!value.isEmpty()) {
+                return value.toUpperCase(java.util.Locale.ROOT);
+            }
+        }
+        return "ANY";
     }
 
     private ValueOrError<LinkedDataParentType> linkTypeDeclaration(
