@@ -1,7 +1,7 @@
 from /capy/lang/Option import { * }
 data Assertion { result: bool, message: string }
 
-type Assert { assertions: list[Assertion] } = StringAssertion | IntAssertion | LongAssertion | DoubleAssertion | FloatAssertion | BoolAssertion | DataAssertion | OptionAssertion
+type Assert { assertions: list[Assertion] } = StringAssertion | IntAssertion | LongAssertion | DoubleAssertion | FloatAssertion | BoolAssertion | DataAssertion | OptionAssertion | ResultAssertion
 
 data StringAssertion { value: string }
 data IntAssertion { value: int }
@@ -11,6 +11,7 @@ data FloatAssertion { value: float }
 data BoolAssertion { value: bool }
 data DataAssertion { value: data }
 data OptionAssertion { value: /capy/lang/Option.Option[any] }
+data ResultAssertion { value: /capy/lang/Result.Result[any] }
 //data ListAssertion[T] { value: list[T] }
 //data SetAssertion[T] { value: set[T] }
 //data DictAssertion[T] { value: dict[T] }
@@ -119,6 +120,36 @@ fun OptionAssertion.is_empty(): OptionAssertion =
         assertions: this.assertions + assertion
     }
 
+fun ResultAssertion.contains(other: /capy/lang/Result.Success[any]): ResultAssertion =
+    let assertion = Assertion {
+        result: this.value == other,
+        message: "Expected result:\n" + this.value + "\nto contains:\n" + other
+    }
+    ResultAssertion {
+        value: this.value,
+        assertions: this.assertions + assertion
+    }
+
+fun ResultAssertion.failed(): ResultAssertion =
+    let assertion = Assertion {
+        result: (this.value + "").starts_with("Error {"),
+        message: "Expected result:\n" + this.value + "\nto failed"
+    }
+    ResultAssertion {
+        value: this.value,
+        assertions: this.assertions + assertion
+    }
+
+fun ResultAssertion.failed_with_message(msg: string): ResultAssertion =
+    let assertion = Assertion {
+        result: (this.value + "").contains(msg),
+        message: "Expected result:\n" + this.value + "\nto failed with message:\n" + msg
+    }
+    ResultAssertion {
+        value: this.value,
+        assertions: this.assertions + assertion
+    }
+
 fun assert_that(value: string) = StringAssertion { value: value, assertions: [] }
 fun assert_that(value: int) = IntAssertion { value: value, assertions: [] }
 fun assert_that(value: long) = LongAssertion { value: value, assertions: [] }
@@ -126,6 +157,7 @@ fun assert_that(value: double) = DoubleAssertion { value: value, assertions: [] 
 fun assert_that(value: float) = FloatAssertion { value: value, assertions: [] }
 fun assert_that(value: bool) = BoolAssertion { value: value, assertions: [] }
 fun assert_that(value: /capy/lang/Option.Option[any]) = OptionAssertion { value: value, assertions: [] }
+fun assert_that(value: /capy/lang/Result.Result[any]) = ResultAssertion { value: value, assertions: [] }
 fun assert_that(value: data) = DataAssertion { value: value, assertions: [] }
 
 fun Assert.check(): list[string] =

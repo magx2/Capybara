@@ -35,21 +35,98 @@ fun _serialize(json: Json): string =
     | JsonBool { value } => value + ""
     | JsonNull => "null"
 
-fun deserialize(json: string): Result[JsonObject] = _deserializeObject(json)
+fun deserialize(json: string): Result[JsonObject] =
+    match _deserializeJsonObject(json) with
+    | Error e => e
+    | Success { parse } =>
+        if parse.parsing_string.is_empty()
+        then Success { value: parse.value }
+        else Error { "Expected string to end, but still got `" + parse.parsing_string +"`" }
 
-fun _deserializeObject(json: string): Result[JsonObject] =
-    match json with
-    | "" => Error { "message": "Cannot parse JSON object from empty string!" }
-    | _  =>
-        let first_char = json[0]
+data _Parse[T] { value: T, parsing_string: string }
+
+fun _deserializeJson(json: string): Result[_Parse[Json]] =
+    match json[0] with
+    | None => Error { "Expected JSON, but got end of string" }
+    | Some { first_char } =>
         match first_char with
-        | Some { v } =>
-            if v == "{"
-            then Success { value: JsonObject { value: _deserializeKeyValues(json[1:]) }}
-            else Error { message: "JSON object has to start with `{`, was `" + v + "`."}
-        | None => Error { message: "parse_string: Expected `{`, but got end of string." }
-fun _deserializeKeyValues(json: string): dict[Json] = ???
-//fun _deserializeKeyValue(json: string): = ???
+        | '{' => _deserializeJsonObject(json)
+        | '"' => _deserializeJsonString(json)
+        | _ => Error { "Do not know what to do with char `" + first_char + "`!" }
+
+fun _deserializeJsonString(json: string): Result[_Parse[JsonString]] =
+    match _parse_string(json) with
+    | Error e => e
+    | Success { parse } =>
+        Success { _Parse {
+            value: JsonString { parse.value },
+            parsing_string: parse.parsing_string
+        } }
+
+fun _deserializeJsonObject(json: string): Result[_Parse[JsonObject]] =
+    match json[0] with
+    | None => Error { "message": "Expected JSON object, but got empty string!" }
+    | Some { "{" } => {
+        match _deserializeKeyValues(json[1:]) with
+        | Error e => e
+        | Success { parse } =>
+            Success { _Parse {
+                value: JsonObject { parse.value },
+                parsing_string: parse.parsing_string
+            }}
+    }
+    | Some { v } => Error { message: "Expected `{`, but got `" + v + "`."}
+
+fun _deserializeKeyValues(json: string): Result[_Parse[dict[Json]]] =
+    match json[0] with
+    | None => Error { "Expected `,` or `}`, but got empty string!" }
+    | Some { "}" } => {
+        let empty: dict[Json] = {}
+        Success { _Parse { empty, json[1:] } }
+    }
+    | Some { _ } =>
+        match _deserializeKeyValue(json) with
+        | Error e => e
+        | Success { parse_key_value } =>
+            match parse_key_value.parsing_string[0] with
+            | None => Error { "Expected `,` or `}`, but got empty string!" }
+            | Some { "," } => {
+                match _deserializeKeyValues(parse_key_value.parsing_string[1:]) with
+                | Error e => e
+                | Success { rest } => Success {
+                    _Parse {
+                        { parse_key_value.value.key : parse_key_value.value.value } + rest.value,
+                        rest.parsing_string
+                    }
+                }
+            }
+            | Some { "}" } => Success {
+                _Parse {
+                    { parse_key_value.value.key : parse_key_value.value.value },
+                    parse_key_value.parsing_string[1:]
+                }
+            }
+            | Some { v } => Error { "Expected `,` or `}`, but got `" + v + "`!" }
+
+data _KeyValue { key: string, value: Json }
+
+fun _deserializeKeyValue(json: string): Result[_Parse[_KeyValue]] =
+    match _parse_string(json) with
+    | Error e => e
+    | Success { parse } =>
+        match parse.parsing_string[0] with
+        | None => Error { "Expected `:`, but got end of string!" }
+        | Some { ":" } => {
+            match _deserializeJson(parse.parsing_string[1:]) with
+            | Error e => e
+            | Success { parse_json } => Success {
+                _Parse {
+                    _KeyValue { parse.value, parse_json.value },
+                    parse_json.parsing_string
+                }
+            }
+        }
+        | Some { v } =>  Error { "Expected `:`, but got `" + v + "`!" }
 
 /// Parses JSON string, the quotation marks `"` are not included in final string
 /// Supports escape character `\`:
@@ -62,33 +139,36 @@ fun _deserializeKeyValues(json: string): dict[Json] = ???
 /// - `\r` - carriage return
 /// - `\t` - horizontal tab
 /// - `\\uXXXX` - 4 HEX digits
-fun _parse_string_until_quotation(strings: Tuple[string, string], escape: bool): Result[Tuple[string, string]] =
-    Error { message: "not implemented" }
-  /*
-   if escape
+fun _parse_string_until_quotation(parse: _Parse[string], escape: bool): Result[_Parse[string]] =
+    if escape
     then
-        let s1 = strings[0] + /*strings[1][0]'x'
-        let tuple =  (s1, strings[1][1:])
-        _parse_string_until_quotation(tuple, false) // todo support escape
+        let escape_chars: set[string] = { '"', '\\', '/', 'b', 'f', 'n', 'r', 't', 'u' }
+        match parse.parsing_string[0] with
+        | None => Error { message: "Expected one of " + (escape_chars |> "", (a,b) => a + ", " + b) + " but got end of string" }
+        | Some { v } =>
+            if escape_chars ? v
+            then
+                if v == 'u'
+                // support \uXXXX
+                // todo check if next chars are [0-9A-F]
+                then _parse_string_until_quotation( _Parse { parse.value[0] + 'u' + parse.parsing_string[1:5], parse.parsing_string[5:] }, false)
+                else _parse_string_until_quotation( _Parse { parse.value[0] + v, parse.parsing_string[1:] }, false)
+            else Error { message: "Expected one of " + (escape_chars |> "", (a,b) => a + ", " + b) + " but got `" + v + "`" }
     else
         // no escape
-        let first_char = strings[1][0]
-        match first_char with
-        | Some { v } =>
+        match parse.parsing_string[0] with
+        | Some { v } => {
             match v with
-            | '\\' => _parse_string_until_quotation(, true)
-            | '"'  => (strings[0], strings[1][1:]) // quotation mark found, ending
-            | _    =>
-                let tuple = (strings[0] + v, strings[1][1:])
-                _parse_string_until_quotation(tuple, false) // quotation mark not found, parsing...
-        | None => Error { message: "parse_string: Expected `\"`, but got end of string." }
-        */
-fun _parse_string(json: string): Result[Tuple[string, string]] =
+            | '\\' => _parse_string_until_quotation(_Parse { parse.value + v, parse.parsing_string[1:] } , true)
+            | '"'  => Success { _Parse { parse.value, parse.parsing_string[1:] }} // quotation mark found, ending
+            | _    => _parse_string_until_quotation(_Parse { parse.value + v, parse.parsing_string[1:] }, false) // quotation mark not found, parsing...
+        }
+        | None => Error { message: '"parse_string: Expected `"`, but got end of string."' }
+
+fun _parse_string(json: string): Result[_Parse[string]] =
     match json[0] with
-    | Some { v } =>
-        if v == '"'
-        then Success { value: _parse_string_until_quotation(("", json[1:]), false) }
-        else Error { message: "parse_string: Expected `\"`, but got `" + v + "`." }
+    | Some { '"' } => _parse_string_until_quotation(_Parse { "", json[1:] },  false)
+    | Some { v } => Error { message: "parse_string: Expected `\"`, but got `" + v + "`." }
     | None => Error { message: "parse_string: Expected JSON string, got end of string." }
 
 fun _is_white_space(s: string): bool =
