@@ -30,7 +30,7 @@ genericTypeDeclaration: TYPE ('[' TYPE (',' TYPE)* ']')?;
 
 BOOL_LITERAL: 'true' | 'false';
 COLLECTION: 'list' | 'set' | 'dict';
-NAME : [a-z][a-zA-Z0-9_]* | '_' [a-zA-Z0-9_]+;
+NAME : [a-z][a-zA-Z0-9_]* | '_' [a-z][a-zA-Z0-9_]*;
 identifier: NAME | COLLECTION | 'fun' | 'byte' | 'int' | 'long' | 'double' | 'bool' | 'string' | 'float' | 'nothing' | 'any';
 parameters: parameter (',' parameter)*;
 parameter: identifier ':' type;
@@ -52,6 +52,7 @@ type: COLLECTION '[' type ']'
     | qualifiedType ('[' type (',' type)* ']')?;
 qualifiedType: TYPE (DOT TYPE)*;
 TYPE: [A-Z][a-zA-Z0-9_]*
+      | '_' [A-Z][a-zA-Z0-9_]*
       | TYPE_FULL ;
 TYPE_FULL: '/' [A-Za-z_][a-zA-Z0-9_]* ( '/' [A-Za-z_][a-zA-Z0-9_]* )+;
 INFIX_METHOD_LITERAL: '`' [+\-*/\\^%$#@~!:<>]+ '`';
@@ -122,8 +123,10 @@ DOUBLE_LITERAL: ([0-9]+ '.' [0-9]* EXPONENT? | [0-9]+ EXPONENT) [dD];
 FLOAT_LITERAL: [0-9]+ '.' [0-9]* EXPONENT? [fF]? | [0-9]+ EXPONENT [fF];
 INT_LITERAL: [0-9]+;
 fragment EXPONENT: [eE] [+\-]? [0-9]+;
-STRING_LITERAL: '"' (~["\r\n] | '\\' .)* '"'
-              | '\'' (~['\r\n] | '\\' .)* '\'';
+STRING_LITERAL
+    : '"' (~["\\\r\n] | '\\' .)* '"'
+    | '\'' (~['\\\r\n] | '\\' .)* '\''
+    ;
 NOTHING_LITERAL: '???';
 
 matchExpression: 'match' expression 'with' matchCaseList+;

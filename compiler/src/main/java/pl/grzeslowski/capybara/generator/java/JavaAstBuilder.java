@@ -78,7 +78,7 @@ public class JavaAstBuilder {
     }
 
     private static JavaType buildClassName(String name) {
-        return new JavaType(normalizeJavaIdentifier(name, true));
+        return new JavaType(normalizeJavaTypeIdentifier(name));
     }
 
     private Set<JavaMethod> buildStaticMethods(Set<LinkedFunction> functions) {
@@ -126,10 +126,21 @@ public class JavaAstBuilder {
         if ("*".equals(memberName)) {
             return memberName;
         }
-        if (!memberName.isEmpty() && Character.isUpperCase(memberName.charAt(0))) {
+        if (isTypeLikeIdentifier(memberName)) {
             return buildClassName(memberName).toString();
         }
         return buildMethodName(memberName);
+    }
+
+    private boolean isTypeLikeIdentifier(String name) {
+        if (name == null || name.isEmpty()) {
+            return false;
+        }
+        var index = countLeadingUnderscores(name);
+        if (index >= name.length()) {
+            return false;
+        }
+        return Character.isUpperCase(name.charAt(index));
     }
 
     private String buildJavaPackageName(String rawPath) {
@@ -177,7 +188,7 @@ public class JavaAstBuilder {
             case GenericDataType genericDataType -> buildGenericDataType(genericDataType);
             case PrimitiveLinkedType primitiveLinkedType -> buildPrimitiveLinkedType(primitiveLinkedType);
             case CollectionLinkedType collectionLinkedType -> buildCollectionLinkedType(collectionLinkedType);
-            case LinkedTupleType linkedTupleType -> new JavaType("java.util.List<java.lang.Object>");
+            case LinkedTupleType linkedTupleType -> new JavaType("java.util.List<?>");
             case LinkedFunctionType functionType -> new JavaType(
                     "java.util.function.Function<"
                     + buildJavaBoxedType(functionType.argumentType())
@@ -273,7 +284,7 @@ public class JavaAstBuilder {
         }
         if (type.name().contains(".")) {
             var qualifiedName = Stream.of(type.name().split("\\."))
-                    .map(part -> normalizeJavaIdentifier(part, true))
+                    .map(JavaAstBuilder::normalizeJavaTypeIdentifier)
                     .collect(joining("."));
             return new JavaType(qualifiedName);
         }
@@ -319,7 +330,7 @@ public class JavaAstBuilder {
             };
             case GenericDataType genericDataType -> buildGenericDataType(genericDataType).toString();
             case CollectionLinkedType collectionLinkedType -> buildCollectionLinkedType(collectionLinkedType).toString();
-            case LinkedTupleType linkedTupleType -> "java.util.List<java.lang.Object>";
+            case LinkedTupleType linkedTupleType -> "java.util.List<?>";
             case LinkedFunctionType functionType -> "java.util.function.Function<"
                     + buildJavaBoxedType(functionType.argumentType())
                     + ", "
@@ -451,6 +462,24 @@ public class JavaAstBuilder {
             identifier = identifier + "_";
         }
         return identifier;
+    }
+
+    private static String normalizeJavaTypeIdentifier(String rawName) {
+        var leadingUnderscores = countLeadingUnderscoresStatic(rawName);
+        var suffix = rawName.substring(leadingUnderscores);
+        var normalized = normalizeJavaIdentifier(suffix, true);
+        if (leadingUnderscores == 0) {
+            return normalized;
+        }
+        return "_".repeat(leadingUnderscores) + normalized;
+    }
+
+    private static int countLeadingUnderscoresStatic(String value) {
+        var count = 0;
+        while (count < value.length() && value.charAt(count) == '_') {
+            count++;
+        }
+        return count;
     }
 
     private static String encodeSymbolicIdentifier(String raw, boolean upperCamel) {
@@ -587,6 +616,7 @@ public class JavaAstBuilder {
         var fields = List.copyOf(fieldsByName.values());
         return new JavaRecord(
                 buildClassName(type.name()),
+                type.name().startsWith("_"),
                 implementInterfaces,
                 fields,
                 type.typeParameters(),

@@ -162,15 +162,15 @@ public final class JavaGenerator implements Generator {
         javaClass.interfaces().stream()
                 .filter(javaInterface -> javaInterface != ownerInterface)
                 .map(this::mapJavaInterface)
-                .map(this::removePublicModifier)
+                .map(this::removeVisibilityModifier)
                 .forEach(code::append);
         javaClass.records().stream()
                 .map(this::mapJavaRecord)
-                .map(this::removePublicModifier)
+                .map(this::removeVisibilityModifier)
                 .forEach(code::append);
         javaClass.enums().stream()
                 .map(this::mapJavaEnum)
-                .map(this::removePublicModifier)
+                .map(this::removeVisibilityModifier)
                 .forEach(code::append);
         javaClass.staticMethods().stream()
                 .map(this::mapJavaMethod)
@@ -181,9 +181,12 @@ public final class JavaGenerator implements Generator {
         return code.toString();
     }
 
-    private String removePublicModifier(String declaration) {
+    private String removeVisibilityModifier(String declaration) {
         if (declaration.startsWith("public ")) {
             return declaration.substring("public ".length());
+        }
+        if (declaration.startsWith("private ")) {
+            return declaration.substring("private ".length());
         }
         return declaration;
     }
@@ -290,7 +293,8 @@ public final class JavaGenerator implements Generator {
                 .map(this::mapJavaRecordMethod)
                 .collect(joining("\n"));
         var toStringMethod = mapJavaRecordToString(record);
-        return "public record " + record.name() + typeParameters + "(" + fields + ")" + implementInterfaces + "{"
+        var visibility = record.isPrivate() ? "private" : "public";
+        return visibility + " record " + record.name() + typeParameters + "(" + fields + ")" + implementInterfaces + "{"
                + staticMethods + methods + toStringMethod + "}\n";
     }
 
