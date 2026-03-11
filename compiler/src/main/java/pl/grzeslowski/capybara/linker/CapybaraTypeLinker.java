@@ -88,7 +88,7 @@ public class CapybaraTypeLinker {
                     if (trimmed.startsWith("dict[") && trimmed.endsWith("]")) {
                         return new DictType(parseTypeArgument(trimmed.substring(5, trimmed.length() - 1)));
                     }
-                    if (trimmed.startsWith("Tuple[") && trimmed.endsWith("]")) {
+                    if (trimmed.startsWith("tuple[") && trimmed.endsWith("]")) {
                         var inner = trimmed.substring(6, trimmed.length() - 1);
                         var elements = splitTopLevelTypeArguments(inner).stream()
                                 .map(CapybaraTypeLinker::parseTypeArgument)
@@ -144,7 +144,7 @@ public class CapybaraTypeLinker {
             case LinkedList linkedList -> "list[" + typeDescriptor(linkedList.elementType()) + "]";
             case LinkedSet linkedSet -> "set[" + typeDescriptor(linkedSet.elementType()) + "]";
             case LinkedDict linkedDict -> "dict[" + typeDescriptor(linkedDict.valueType()) + "]";
-            case LinkedTupleType linkedTupleType -> "Tuple[" + linkedTupleType.elementTypes().stream()
+            case LinkedTupleType linkedTupleType -> "tuple[" + linkedTupleType.elementTypes().stream()
                     .map(CapybaraTypeLinker::typeDescriptor)
                     .collect(java.util.stream.Collectors.joining(", ")) + "]";
             case LinkedFunctionType linkedFunctionType ->
@@ -344,3 +344,4 @@ public class CapybaraTypeLinker {
                 .map(LinkedTupleType::new);
     }
 }
+

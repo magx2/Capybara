@@ -95,7 +95,7 @@ public class CapybaraExpressionLinker {
                         && source.type() != STRING
                         && !(source.type() instanceof LinkedTupleType)) {
                         return withPosition(
-                                ValueOrError.error("Slice source has to be `list`, `string` or `Tuple`, was `" + source.type() + "`"),
+                                ValueOrError.error("Slice source has to be `list`, `string` or `tuple`, was `" + source.type() + "`"),
                                 expression.position()
                         );
                     }
@@ -117,7 +117,7 @@ public class CapybaraExpressionLinker {
                         && source.type() != STRING
                         && !(source.type() instanceof LinkedTupleType)) {
                         return withPosition(
-                                ValueOrError.error("Index source has to be `list`, `string` or `Tuple`, was `" + source.type() + "`"),
+                                ValueOrError.error("Index source has to be `list`, `string` or `tuple`, was `" + source.type() + "`"),
                                 expression.position()
                         );
                     }
@@ -2025,7 +2025,7 @@ public class CapybaraExpressionLinker {
         var normalized = normalizeTupleIndex(indexValue, size);
         if (normalized < 0 || normalized >= size) {
             return withPosition(
-                    ValueOrError.error("Tuple index `" + indexValue + "` out of bounds for tuple size `" + size + "`"),
+                    ValueOrError.error("tuple index `" + indexValue + "` out of bounds for tuple size `" + size + "`"),
                     position
             );
         }
@@ -2426,7 +2426,7 @@ public class CapybaraExpressionLinker {
             return parseLinkedTypeDescriptor(normalizedDescriptor.substring(5, normalizedDescriptor.length() - 1))
                     .map(LinkedDict::new);
         }
-        if (normalizedDescriptor.startsWith("Tuple[") && normalizedDescriptor.endsWith("]")) {
+        if (normalizedDescriptor.startsWith("tuple[") && normalizedDescriptor.endsWith("]")) {
             var inner = normalizedDescriptor.substring(6, normalizedDescriptor.length() - 1);
             var elementTypes = splitTopLevelTypeDescriptors(inner).stream()
                     .map(this::parseLinkedTypeDescriptor)
@@ -2553,7 +2553,7 @@ public class CapybaraExpressionLinker {
             case LinkedList linkedList -> "list[" + linkedTypeDescriptor(linkedList.elementType()) + "]";
             case LinkedSet linkedSet -> "set[" + linkedTypeDescriptor(linkedSet.elementType()) + "]";
             case LinkedDict linkedDict -> "dict[" + linkedTypeDescriptor(linkedDict.valueType()) + "]";
-            case LinkedTupleType linkedTupleType -> "Tuple[" + linkedTupleType.elementTypes().stream()
+            case LinkedTupleType linkedTupleType -> "tuple[" + linkedTupleType.elementTypes().stream()
                     .map(this::linkedTypeDescriptor)
                     .collect(java.util.stream.Collectors.joining(", ")) + "]";
             case LinkedFunctionType linkedFunctionType ->
@@ -2971,3 +2971,4 @@ public class CapybaraExpressionLinker {
     private record ResolvedModule(String javaModuleName, List<FunctionSignature> signatures) {
     }
 }
+

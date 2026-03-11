@@ -143,7 +143,7 @@ public class CapybaraParser {
     }
 
     private static Type type(pl.grzeslowski.capybara.parser.antlr.FunctionalParser.TypeContext context) {
-        if (context.getChildCount() > 0 && "Tuple".equals(context.getChild(0).getText())) {
+        if (context.getChildCount() > 0 && "tuple".equals(context.getChild(0).getText())) {
             return new TupleType(context.type().stream().map(CapybaraParser::type).toList());
         }
         if (context.COLLECTION() != null) {
@@ -1065,5 +1065,6 @@ public class CapybaraParser {
     }
 
 }
+
 
 

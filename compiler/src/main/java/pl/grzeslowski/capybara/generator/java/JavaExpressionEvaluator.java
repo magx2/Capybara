@@ -1211,7 +1211,7 @@ public class JavaExpressionEvaluator {
         if (normalized.isEmpty()) {
             return "java.lang.Object";
         }
-        if (normalized.startsWith("list[") || normalized.startsWith("Tuple[")) {
+        if (normalized.startsWith("list[") || normalized.startsWith("tuple[")) {
             return "java.util.List";
         }
         if (normalized.startsWith("set[")) {
@@ -1904,3 +1904,4 @@ public class JavaExpressionEvaluator {
     }
 
 }
+

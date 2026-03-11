@@ -36,7 +36,7 @@ parameters: parameter (',' parameter)*;
 parameter: identifier ':' type;
 functionType: ':' type;
 type: COLLECTION '[' type ']'
-    | 'Tuple' '[' type (COMMA type)+ ']'
+    | 'tuple' '[' type (COMMA type)+ ']'
     | LPAREN type (COMMA type)+ RPAREN ARROW type
     | type ARROW type
     | 'byte'
@@ -281,3 +281,4 @@ DOC_COMMENT : '///' ~[\r\n]*;
 LINE_COMMENT : '//' ~[\r\n]* -> skip;
 BLOCK_COMMENT : '/*' .*? '*/' -> skip;
 WS : [ \t\r\n]+ -> skip;
+

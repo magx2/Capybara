@@ -49,14 +49,14 @@ fun typed_let_string(): string =
 
 fun typed_let_tuple_string(): string =
     {
-        let tuple: Tuple[string, int] = ("d", 1)
-        tuple[0]
+        let pair: tuple[string, int] = ("d", 1)
+        pair[0]
     }
 
 fun typed_let_tuple_int(): int =
     {
-        let tuple: Tuple[string, int] = ("d", 1)
-        tuple[1]
+        let pair: tuple[string, int] = ("d", 1)
+        pair[1]
     }
 
 fun typed_let_bool(): bool =
@@ -106,3 +106,4 @@ fun typed_let_dict(): dict[int] =
         let v: dict[int] = {"a": 1, "b": 2}
         v
     }
+
