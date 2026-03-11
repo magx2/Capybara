@@ -18,7 +18,7 @@ fun test_serialize_simple_object(): Assert =
     assert_that(ser).is_equal_to("{\"foo\":\"boo\"}")
 
 fun test_empty(): Assert =
-    let json = JsonObject { value: {  } }
+    let json = JsonObject { value: { : } }
     let ser = serialize(json)
     assert_that(ser).is_equal_to("{}")
 

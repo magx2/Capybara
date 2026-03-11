@@ -81,7 +81,7 @@ fun _deserializeKeyValues(json: string): Result[_Parse[dict[Json]]] =
     match json[0] with
     | None => Error { "Expected `,` or `}`, but got empty string!" }
     | Some { "}" } => {
-        let empty: dict[Json] = {}
+        let empty: dict[Json] = {:}
         Success { _Parse { empty, json[1:] } }
     }
     | Some { _ } =>

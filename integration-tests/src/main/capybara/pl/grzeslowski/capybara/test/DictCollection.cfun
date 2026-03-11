@@ -4,9 +4,9 @@ fun static_dict(): dict[int] = {
     "three": 3,
 }
 
-fun empty_static_dict(): dict[int] = {}
+fun empty_static_dict(): dict[int] = {:}
 
-fun empty_static_dict_with_spaces(): dict[int] = {  }
+fun empty_static_dict_with_spaces(): dict[int] = { : }
 
 fun static_dict_with_trailing_comma(): dict[int] = {
     "one": 1,
