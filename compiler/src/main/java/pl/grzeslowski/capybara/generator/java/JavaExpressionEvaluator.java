@@ -15,6 +15,8 @@ import static java.lang.System.lineSeparator;
 public class JavaExpressionEvaluator {
     private static final java.util.concurrent.atomic.AtomicLong OPTION_CASE_VAR_COUNTER =
             new java.util.concurrent.atomic.AtomicLong();
+    private static final java.util.concurrent.atomic.AtomicLong STRING_PARSE_VAR_COUNTER =
+            new java.util.concurrent.atomic.AtomicLong();
     private static final Logger log = Logger.getLogger(JavaExpressionEvaluator.class.getName());
     private static final String DICT_PIPE_ARGS_SEPARATOR = "::";
     private static final String METHOD_DECL_PREFIX = "__method__";
@@ -149,6 +151,41 @@ public class JavaExpressionEvaluator {
                 methodName = "ends_with";
             }
             var receiver = args.get(0);
+            if ("to_int".equals(methodName)) {
+                return current.addExpression(buildNumericStringParseResult(
+                        functionCall.type(),
+                        "java.lang.Integer.parseInt(" + receiver + ")",
+                        receiver,
+                        "int"
+                ));
+            }
+            if ("to_long".equals(methodName)) {
+                return current.addExpression(buildNumericStringParseResult(
+                        functionCall.type(),
+                        "java.lang.Long.parseLong(" + receiver + ")",
+                        receiver,
+                        "long"
+                ));
+            }
+            if ("to_double".equals(methodName)) {
+                return current.addExpression(buildNumericStringParseResult(
+                        functionCall.type(),
+                        "java.lang.Double.parseDouble(" + receiver + ")",
+                        receiver,
+                        "double"
+                ));
+            }
+            if ("to_float".equals(methodName)) {
+                return current.addExpression(buildNumericStringParseResult(
+                        functionCall.type(),
+                        "java.lang.Float.parseFloat(" + receiver + ")",
+                        receiver,
+                        "float"
+                ));
+            }
+            if ("to_bool".equals(methodName)) {
+                return current.addExpression(buildBoolStringParseResult(functionCall.type(), receiver));
+            }
             var invokeArgs = args.size() > 1 ? String.join(", ", args.subList(1, args.size())) : "";
             return current.addExpression(receiver + "." + normalizeJavaMethodName(methodName) + "(" + invokeArgs + ")");
         }
@@ -1906,6 +1943,67 @@ public class JavaExpressionEvaluator {
             return false;
         }
         return isOptionSomeTypeName(dataType.name()) || isOptionNoneTypeName(dataType.name());
+    }
+
+    private static String buildNumericStringParseResult(
+            pl.grzeslowski.capybara.linker.LinkedType resultType,
+            String parseExpression,
+            String receiverExpression,
+            String targetTypeName
+    ) {
+        var id = STRING_PARSE_VAR_COUNTER.incrementAndGet();
+        var parsedVar = "__capybaraParsedValue" + id;
+        var exVar = "__capybaraParseException" + id;
+        var resultJavaType = resultParentJavaTypeReference(resultType);
+        var successType = resultSuccessJavaTypeReference(resultType);
+        var errorType = resultErrorJavaTypeReferenceForResultType(resultType);
+        return "((java.util.function.Supplier<" + resultJavaType + ">) () -> { try { var " + parsedVar + " = " + parseExpression
+               + "; return new " + successType + "(" + parsedVar + "); } catch (java.lang.Exception " + exVar + ") { return new "
+               + errorType + "(new pl.grzeslowski.capybara.CapybaraException(\"Cannot parse string to "
+               + targetTypeName + ": \" + " + receiverExpression + ", " + exVar + ")); } }).get()";
+    }
+
+    private static String buildBoolStringParseResult(
+            pl.grzeslowski.capybara.linker.LinkedType resultType,
+            String receiverExpression
+    ) {
+        var id = STRING_PARSE_VAR_COUNTER.incrementAndGet();
+        var normalizedVar = "__capybaraNormalizedBool" + id;
+        var resultJavaType = resultParentJavaTypeReference(resultType);
+        var successType = resultSuccessJavaTypeReference(resultType);
+        var errorType = resultErrorJavaTypeReferenceForResultType(resultType);
+        return "((java.util.function.Supplier<" + resultJavaType + ">) () -> { var " + normalizedVar + " = "
+               + receiverExpression + ".toLowerCase(java.util.Locale.ROOT); if (\"true\".equals(" + normalizedVar
+               + ") || \"false\".equals(" + normalizedVar + ")) { return new " + successType
+               + "(java.lang.Boolean.parseBoolean(" + normalizedVar + ")); } return new " + errorType
+               + "(new pl.grzeslowski.capybara.CapybaraException(\"Cannot parse string to bool: \" + "
+               + receiverExpression + ")); }).get()";
+    }
+
+    private static String resultSuccessJavaTypeReference(pl.grzeslowski.capybara.linker.LinkedType resultType) {
+        return resultParentJavaTypeReference(resultType) + ".Success";
+    }
+
+    private static String resultErrorJavaTypeReferenceForResultType(pl.grzeslowski.capybara.linker.LinkedType resultType) {
+        return resultParentJavaTypeReference(resultType) + ".Error";
+    }
+
+    private static String resultParentJavaTypeReference(pl.grzeslowski.capybara.linker.LinkedType resultType) {
+        if (resultType instanceof pl.grzeslowski.capybara.linker.LinkedDataParentType parentType) {
+            var normalized = normalizeQualifiedTypeName(parentType.name());
+            if (normalized.equals("/cap/lang/Result.Result") || normalized.endsWith("/cap/lang/Result.Result")) {
+                return "cap.lang.Result";
+            }
+            if (normalized.equals("/capy/lang/Result.Result") || normalized.endsWith("/capy/lang/Result.Result")) {
+                return "capy.lang.Result";
+            }
+            if ("Result".equals(parentType.name())) {
+                return "capy.lang.Result";
+            }
+            var normalizedType = normalizeJavaTypeReference(parentType.name());
+            return normalizedType.endsWith(".Result") ? normalizedType : normalizedType + ".Result";
+        }
+        return "capy.lang.Result";
     }
 
 }

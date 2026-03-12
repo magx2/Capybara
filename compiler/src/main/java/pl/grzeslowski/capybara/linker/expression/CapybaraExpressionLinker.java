@@ -476,10 +476,16 @@ public class CapybaraExpressionLinker {
                 || "end_with".equals(methodName);
         var supportsTrim = "trim".equals(methodName);
         var supportsIsEmpty = "is_empty".equals(methodName);
-        if ((!supportsTwoStrings && !supportsTrim && !supportsIsEmpty)
+        var supportsToInt = "to_int".equals(methodName);
+        var supportsToLong = "to_long".equals(methodName);
+        var supportsToDouble = "to_double".equals(methodName);
+        var supportsToFloat = "to_float".equals(methodName);
+        var supportsToBool = "to_bool".equals(methodName);
+        var supportsSingleString = supportsTrim || supportsIsEmpty
+                                   || supportsToInt || supportsToLong || supportsToDouble || supportsToFloat || supportsToBool;
+        if ((!supportsTwoStrings && !supportsSingleString)
                 || (supportsTwoStrings && functionCall.arguments().size() != 2)
-                || (supportsTrim && functionCall.arguments().size() != 1)
-                || (supportsIsEmpty && functionCall.arguments().size() != 1)) {
+                || (supportsSingleString && functionCall.arguments().size() != 1)) {
             return Optional.empty();
         }
         var linkedArguments = functionCall.arguments().stream()
@@ -510,6 +516,61 @@ public class CapybaraExpressionLinker {
                     METHOD_DECL_PREFIX + "String__is_empty",
                     args,
                     BOOL
+            )));
+        }
+        if (supportsToInt) {
+            var resultType = resultTypeFor(INT);
+            if (resultType == null) {
+                return Optional.of(withPosition(ValueOrError.error("Result type not found"), functionCall.position()));
+            }
+            return Optional.of(ValueOrError.success(new LinkedFunctionCall(
+                    METHOD_DECL_PREFIX + "String__to_int",
+                    args,
+                    resultType
+            )));
+        }
+        if (supportsToLong) {
+            var resultType = resultTypeFor(LONG);
+            if (resultType == null) {
+                return Optional.of(withPosition(ValueOrError.error("Result type not found"), functionCall.position()));
+            }
+            return Optional.of(ValueOrError.success(new LinkedFunctionCall(
+                    METHOD_DECL_PREFIX + "String__to_long",
+                    args,
+                    resultType
+            )));
+        }
+        if (supportsToDouble) {
+            var resultType = resultTypeFor(DOUBLE);
+            if (resultType == null) {
+                return Optional.of(withPosition(ValueOrError.error("Result type not found"), functionCall.position()));
+            }
+            return Optional.of(ValueOrError.success(new LinkedFunctionCall(
+                    METHOD_DECL_PREFIX + "String__to_double",
+                    args,
+                    resultType
+            )));
+        }
+        if (supportsToFloat) {
+            var resultType = resultTypeFor(FLOAT);
+            if (resultType == null) {
+                return Optional.of(withPosition(ValueOrError.error("Result type not found"), functionCall.position()));
+            }
+            return Optional.of(ValueOrError.success(new LinkedFunctionCall(
+                    METHOD_DECL_PREFIX + "String__to_float",
+                    args,
+                    resultType
+            )));
+        }
+        if (supportsToBool) {
+            var resultType = resultTypeFor(BOOL);
+            if (resultType == null) {
+                return Optional.of(withPosition(ValueOrError.error("Result type not found"), functionCall.position()));
+            }
+            return Optional.of(ValueOrError.success(new LinkedFunctionCall(
+                    METHOD_DECL_PREFIX + "String__to_bool",
+                    args,
+                    resultType
             )));
         }
         return Optional.of(ValueOrError.success(new LinkedFunctionCall(
@@ -2060,6 +2121,32 @@ public class CapybaraExpressionLinker {
         return new LinkedDataParentType(optionType.name(), optionType.fields(), optionType.subTypes(), typeParameters);
     }
 
+    private LinkedDataParentType findResultType() {
+        return dataTypes.entrySet().stream()
+                .filter(entry -> isResultTypeKey(entry.getKey()))
+                .map(Map.Entry::getValue)
+                .filter(LinkedDataParentType.class::isInstance)
+                .map(LinkedDataParentType.class::cast)
+                .findFirst()
+                .orElseGet(() -> dataTypes.values().stream()
+                        .filter(LinkedDataParentType.class::isInstance)
+                        .map(LinkedDataParentType.class::cast)
+                        .filter(type -> "Result".equals(type.name()))
+                        .findFirst()
+                        .orElse(null));
+    }
+
+    private LinkedDataParentType resultTypeFor(LinkedType elementType) {
+        var resultType = findResultType();
+        if (resultType == null) {
+            return null;
+        }
+        var typeParameters = resultType.typeParameters().isEmpty()
+                ? List.<String>of()
+                : List.of(linkedTypeDescriptor(elementType));
+        return new LinkedDataParentType(resultType.name(), resultType.fields(), resultType.subTypes(), typeParameters);
+    }
+
     private boolean isOptionType(LinkedType type) {
         if (!(type instanceof GenericDataType genericDataType)) {
             return false;
@@ -2088,6 +2175,13 @@ public class CapybaraExpressionLinker {
         return normalized.endsWith("/capy/lang/Option.Option")
                || normalized.endsWith("/cap/lang/Option.Option")
                || normalized.endsWith("/Option.Option");
+    }
+
+    private boolean isResultTypeKey(String key) {
+        var normalized = normalizeTypeName(key);
+        return normalized.endsWith("/capy/lang/Result.Result")
+               || normalized.endsWith("/cap/lang/Result.Result")
+               || normalized.endsWith("/Result.Result");
     }
 
     private String normalizeTypeName(String name) {
