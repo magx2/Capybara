@@ -1067,9 +1067,14 @@ public class JavaExpressionEvaluator {
                 if (optionMatch && isOptionSomePattern(constructorPattern.constructorName()) && constructorPattern.fieldPatterns().size() == 1) {
                     var firstPattern = constructorPattern.fieldPatterns().getFirst();
                     if (firstPattern instanceof LinkedMatchExpression.VariablePattern variablePattern) {
+                        var castType = bindingCastTypes.isEmpty() ? null : bindingCastTypes.getFirst();
+                        var valueExpression = optionSomeBindingExpression(switchTarget + ".orElse(null)");
+                        if (castType != null && !"java.lang.Object".equals(castType)) {
+                            valueExpression = "((" + castType + ") " + valueExpression + ")";
+                        }
                         branchScope = branchScope.addValueOverride(
                                 variablePattern.name(),
-                                optionSomeBindingExpression(switchTarget + ".orElse(null)")
+                                valueExpression
                         );
                     }
                     if (firstPattern instanceof LinkedMatchExpression.TypedPattern typedPattern) {

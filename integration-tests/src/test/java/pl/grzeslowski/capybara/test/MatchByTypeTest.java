@@ -35,4 +35,13 @@ class MatchByTypeTest {
         assertThat(MatchByType.isData(new MatchByType.Person("Tom"))).isTrue();
         assertThat(MatchByType.isDataFromEntity(new MatchByType.Person("Jerry"))).isTrue();
     }
+
+    @Test
+    void matchCaseCanUseMultiplePatterns() {
+        assertThat(MatchByType.classifyJsonChar("{")).isEqualTo("object");
+        assertThat(MatchByType.classifyJsonChar("\"")).isEqualTo("string");
+        assertThat(MatchByType.classifyJsonChar("-")).isEqualTo("number");
+        assertThat(MatchByType.classifyJsonChar("7")).isEqualTo("number");
+        assertThat(MatchByType.classifyJsonChar("x")).isEqualTo("other");
+    }
 }

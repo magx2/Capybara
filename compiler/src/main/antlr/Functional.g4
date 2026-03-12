@@ -131,7 +131,7 @@ NOTHING_LITERAL: '???';
 
 matchExpression: 'match' expression 'with' matchCaseList+;
 matchCaseList: matchCase (',' matchCase)*;
-matchCase: PIPE pattern FAT_ARROW expression;
+matchCase: PIPE pattern (COMMA pattern)* FAT_ARROW expression;
 pattern: TYPE
         | INT_LITERAL
         | BOOL_LITERAL

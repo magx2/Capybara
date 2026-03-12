@@ -628,16 +628,21 @@ public class CapybaraParser {
                         .stream()
                         .map(FunctionalParser.MatchCaseListContext::matchCase)
                         .flatMap(Collection::stream)
-                        .map(this::matchCase)
+                        .flatMap(matchCase -> matchCase.pattern()
+                                .stream()
+                                .map(pattern -> matchCase(pattern, matchCase.expression())))
                         .toList(),
                 position(context)
         );
     }
 
-    private MatchExpression.MatchCase matchCase(FunctionalParser.MatchCaseContext context) {
+    private MatchExpression.MatchCase matchCase(
+            FunctionalParser.PatternContext pattern,
+            FunctionalParser.ExpressionContext expression
+    ) {
         return new MatchExpression.MatchCase(
-                matchExpressionPattern(context.pattern()),
-                expression(context.expression())
+                matchExpressionPattern(pattern),
+                expression(expression)
 
         );
     }
