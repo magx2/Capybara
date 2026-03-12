@@ -47,7 +47,7 @@ public class CompilationErrorTest {
     }
 
     static Stream<Arguments> matchCompilationErrors() {
-        return Stream.of(
+        var base = Stream.of(
                 Arguments.of(
                         "match_not_exhaustive",
                         """
@@ -69,24 +69,28 @@ public class CompilationErrorTest {
                                     match letter with
                                     ^ `match` is not exhaustive. Use wildcard `| _ => ...` or add missing branches:`C`, `D`.
                                 """
-                ),
-                Arguments.of(
-                        "match_string",
-                        """
-                                fun foo(x: string): int =
-                                    match x with
-                                    | 'foo' => 1
-                                    | 'boo' => 2
-                                """,
-                        new Position(2, 4),
-                        """
-                                error: mismatched types
-                                 --> /foo/boo/match_string.cfun:2:4
-                                fun foo(x: string): int =
-                                    match x with
-                                    ^ `match` is not exhaustive. Use wildcard `| _ => ...`.
-                                """
                 ));
+        var primitiveTypes = List.of("string", "byte", "int", "long", "float", "double", "bool");
+        var primitiveCases = primitiveTypes.stream().map(CompilationErrorTest::primitiveMatchNotExhaustiveCase);
+        return Stream.concat(base, primitiveCases);
+    }
+
+    private static Arguments primitiveMatchNotExhaustiveCase(String primitive) {
+        var moduleName = "match_%s".formatted(primitive);
+        var code = """
+                fun foo(x: %s): int =
+                    match x with
+                    | %s a => 1
+                    | %s b => 2
+                """.formatted(primitive, primitive, primitive);
+        var message = """
+                error: mismatched types
+                 --> /foo/boo/%s.cfun:2:4
+                fun foo(x: %s): int =
+                    match x with
+                    ^ `match` is not exhaustive. Use wildcard `| _ => ...`.
+                """.formatted(moduleName, primitive);
+        return Arguments.of(moduleName, code, new Position(2, 4), message);
     }
 
     static Stream<Arguments> infixOperations() {
