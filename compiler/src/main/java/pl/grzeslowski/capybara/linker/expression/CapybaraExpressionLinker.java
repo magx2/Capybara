@@ -2144,14 +2144,87 @@ public class CapybaraExpressionLinker {
                 .flatMap(matchWith -> matchExpression.cases().stream()
                         .map(matchCase -> linkMatchCase(matchCase, matchWith, scope))
                         .collect(new ValueOrErrorCollectionCollector<>())
-                        .map(cases -> {
+                        .flatMap(cases -> validateMatchExhaustiveness(matchExpression, matchWith.type(), cases)
+                                .map(ignored -> {
                             var matchType = cases.stream()
                                     .map(LinkedMatchExpression.MatchCase::expression)
                                     .map(LinkedExpression::type)
                                     .reduce(CapybaraTypeFinder::findHigherType)
                                     .orElse(ANY);
                             return (LinkedExpression) new LinkedMatchExpression(matchWith, cases, matchType);
-                        }));
+                        })));
+    }
+
+    private ValueOrError<Void> validateMatchExhaustiveness(
+            MatchExpression matchExpression,
+            LinkedType matchType,
+            List<LinkedMatchExpression.MatchCase> cases
+    ) {
+        if (cases.stream().anyMatch(matchCase -> matchCase.pattern() instanceof LinkedMatchExpression.WildcardPattern)) {
+            return ValueOrError.success(null);
+        }
+        var requiredConstructors = requiredConstructorsForMatch(matchType);
+        if (requiredConstructors.isEmpty()) {
+            return ValueOrError.success(null);
+        }
+        var coveredConstructors = coveredConstructors(cases, requiredConstructors);
+        var missing = requiredConstructors.stream()
+                .filter(name -> !coveredConstructors.contains(name))
+                .toList();
+        if (missing.isEmpty()) {
+            return ValueOrError.success(null);
+        }
+        var missingText = missing.stream()
+                .map(name -> "`" + name + "`")
+                .collect(java.util.stream.Collectors.joining(", "));
+        return withPosition(
+                ValueOrError.error("`match` is not exhaustive. Use wildcard `| _ => ...` or add missing branches:" + missingText + "."),
+                matchExpression.position()
+        );
+    }
+
+    private java.util.LinkedHashSet<String> requiredConstructorsForMatch(LinkedType matchType) {
+        if (matchType instanceof LinkedDataParentType parentType) {
+            return parentType.subTypes().stream()
+                    .map(LinkedDataType::name)
+                    .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
+        }
+        if (matchType instanceof LinkedDataType dataType) {
+            var single = new java.util.LinkedHashSet<String>();
+            single.add(dataType.name());
+            return single;
+        }
+        return new java.util.LinkedHashSet<>();
+    }
+
+    private java.util.LinkedHashSet<String> coveredConstructors(
+            List<LinkedMatchExpression.MatchCase> cases,
+            java.util.Set<String> requiredConstructors
+    ) {
+        var covered = new java.util.LinkedHashSet<String>();
+        for (var matchCase : cases) {
+            var pattern = matchCase.pattern();
+            if (pattern instanceof LinkedMatchExpression.VariablePattern variablePattern) {
+                if (requiredConstructors.contains(variablePattern.name())) {
+                    covered.add(variablePattern.name());
+                }
+                continue;
+            }
+            if (pattern instanceof LinkedMatchExpression.ConstructorPattern constructorPattern) {
+                covered.add(constructorPattern.constructorName());
+                continue;
+            }
+            if (pattern instanceof LinkedMatchExpression.TypedPattern typedPattern) {
+                if (typedPattern.type() instanceof LinkedDataType dataType) {
+                    covered.add(dataType.name());
+                } else if (typedPattern.type() instanceof LinkedDataParentType parentType) {
+                    parentType.subTypes().stream()
+                            .map(LinkedDataType::name)
+                            .forEach(covered::add);
+                }
+            }
+        }
+        return covered;
     }
 
     private ValueOrError<LinkedMatchExpression.MatchCase> linkMatchCase(

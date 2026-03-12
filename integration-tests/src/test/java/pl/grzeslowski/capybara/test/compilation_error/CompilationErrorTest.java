@@ -36,14 +36,40 @@ public class CompilationErrorTest {
         assertAll("Assertions on error",
                 () -> assertThat(error.line()).isEqualTo(expectedPosition.line()),
                 () -> assertThat(error.column()).isEqualTo(expectedPosition.column()),
-                () -> assertThat(error.file()).isEqualTo("/foo/boo/%s.cfun".formatted(moduleName)));
-        assertThat(error.message()).isEqualTo(errorMessage);
+                () -> assertThat(error.file()).isEqualTo("/foo/boo/%s.cfun".formatted(moduleName)),
+                () -> assertThat(error.message()).isEqualTo(errorMessage));
     }
 
 
     @SuppressWarnings("unchecked")
     static Stream<Arguments> compilationError() {
-        return concat(simpleCompilationError(), multilineCompilationError(), infixOperations(), bitwiseOperations());
+        return concat(simpleCompilationError(), multilineCompilationError(), infixOperations(), bitwiseOperations(), matchCompilationErrors());
+    }
+
+    static Stream<Arguments> matchCompilationErrors() {
+        return Stream.of(
+                Arguments.of(
+                        "match_not_exhaustive",
+                        """
+                                type Letter = A | B | C | D
+                                data A { a: int }
+                                data B { b: int }
+                                data C { c: int }
+                                data D { d: int }
+                                fun foo(letter: Letter): int =
+                                    match letter with
+                                    | A { a } => a
+                                    | B { b } => b
+                                """,
+                        new Position(7, 4),
+                        """
+                                error: mismatched types
+                                 --> /foo/boo/match_not_exhaustive.cfun:7:4
+                                fun foo(letter: Letter): int =
+                                    match letter with
+                                    ^ `match` is not exhaustive. Use wildcard `| _ => ...` or add missing branches:`C`, `D`.
+                                """
+                ));
     }
 
     static Stream<Arguments> infixOperations() {

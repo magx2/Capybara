@@ -452,6 +452,7 @@ public class CapybaraLinker {
                                         isProgramMain(function.name(), rtype, parameters)
                                 )))));
         linked = normalizeInfixOperatorErrors(linked, function, moduleSourceFile);
+        linked = normalizeMatchExhaustivenessErrors(linked, function, moduleSourceFile);
         var normalizedFile = normalizeFile(moduleSourceFile);
         var fallbackPosition = returnExpressionPosition(function.expression()).or(() -> function.position());
         return withPosition(linked, fallbackPosition, normalizedFile);
@@ -493,6 +494,42 @@ public class CapybaraLinker {
         var message = "error: mismatched types\n"
                       + " --> " + file + ":" + line + ":" + column + "\n"
                       + functionPreview + "\n"
+                      + pointer + "\n";
+        return new ValueOrError.Error.SingleError(line, column, file, message);
+    }
+
+    private ValueOrError<LinkedFunction> normalizeMatchExhaustivenessErrors(
+            ValueOrError<LinkedFunction> linked,
+            Function function,
+            String moduleSourceFile
+    ) {
+        if (!(linked instanceof ValueOrError.Error<LinkedFunction> error)) {
+            return linked;
+        }
+        var transformed = error.errors().stream()
+                .map(singleError -> normalizeMatchExhaustivenessError(singleError, function, moduleSourceFile))
+                .toList();
+        return new ValueOrError.Error<>(transformed);
+    }
+
+    private ValueOrError.Error.SingleError normalizeMatchExhaustivenessError(
+            ValueOrError.Error.SingleError error,
+            Function function,
+            String moduleSourceFile
+    ) {
+        if (!error.message().startsWith("`match` is not exhaustive.")) {
+            return error;
+        }
+        var line = Math.max(error.line(), 1);
+        var column = Math.max(error.column(), 1);
+        var file = normalizeFile(moduleSourceFile);
+        var header = formatFunctionHeader(function) + " =";
+        var matchLine = "    " + formatMatchLine(function.expression());
+        var pointer = " ".repeat(Math.max(column, 0)) + "^ " + error.message();
+        var message = "error: mismatched types\n"
+                      + " --> " + file + ":" + line + ":" + column + "\n"
+                      + header + "\n"
+                      + matchLine + "\n"
                       + pointer + "\n";
         return new ValueOrError.Error.SingleError(line, column, file, message);
     }
@@ -542,6 +579,10 @@ public class CapybaraLinker {
     }
 
     private String formatFunctionHeaderAndExpression(Function function, String expressionPreview) {
+        return formatFunctionHeader(function) + " = " + expressionPreview;
+    }
+
+    private String formatFunctionHeader(Function function) {
         var header = new StringBuilder("fun ")
                 .append(function.name())
                 .append("(")
@@ -550,8 +591,14 @@ public class CapybaraLinker {
                         .collect(java.util.stream.Collectors.joining(", ")))
                 .append(")");
         function.returnType().ifPresent(type -> header.append(": ").append(formatParserType(type)));
-        header.append(" = ").append(expressionPreview);
         return header.toString();
+    }
+
+    private String formatMatchLine(pl.grzeslowski.capybara.parser.Expression expression) {
+        if (expression instanceof pl.grzeslowski.capybara.parser.MatchExpression matchExpression) {
+            return "match " + formatExpressionPreview(matchExpression.matchWith()) + " with";
+        }
+        return formatExpressionPreview(expression);
     }
 
     private String formatMultilineFunctionPreview(Function function, LinkedType declaredReturnType) {
