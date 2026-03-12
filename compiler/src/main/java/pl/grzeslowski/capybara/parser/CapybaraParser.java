@@ -28,29 +28,32 @@ public class CapybaraParser {
         var tokens = new CommonTokenStream(lexer);
         tokens.fill();
         var parser = new pl.grzeslowski.capybara.parser.antlr.FunctionalParser(tokens);
-        var definitions = parser.program().definition().stream().map(this::definition).collect(toSet());
+        var definitions = parser.program().definition().stream()
+                .map(this::definition)
+                .flatMap(Collection::stream)
+                .collect(toSet());
         return new Functional(definitions);
     }
 
-    private Definition definition(pl.grzeslowski.capybara.parser.antlr.FunctionalParser.DefinitionContext context) {
+    private List<Definition> definition(pl.grzeslowski.capybara.parser.antlr.FunctionalParser.DefinitionContext context) {
         var functionDeclaration = context.functionDeclaration();
         if (functionDeclaration != null) {
-            return functionDeclaration(functionDeclaration);
+            return functionDeclaration(functionDeclaration).stream().map(Definition.class::cast).toList();
         }
 
         var dataDeclaration = context.dataDeclaration();
         if (dataDeclaration != null) {
-            return dataDeclaration(dataDeclaration);
+            return List.of(dataDeclaration(dataDeclaration));
         }
 
         var singleDeclaration = context.singleDeclaration();
         if (singleDeclaration != null) {
-            return singleDeclaration(singleDeclaration);
+            return List.of(singleDeclaration(singleDeclaration));
         }
 
         var typeDeclaration = context.typeDeclaration();
         if (typeDeclaration != null) {
-            return typeDeclaration(typeDeclaration);
+            return List.of(typeDeclaration(typeDeclaration));
         }
 
         throw new IllegalStateException("Unknown definition: " + context.getText());
@@ -104,7 +107,7 @@ public class CapybaraParser {
         return new DataDeclaration.DataField(fieldName(context.NAME(), context.STRING_LITERAL()), type(context.type()));
     }
 
-    private Function functionDeclaration(pl.grzeslowski.capybara.parser.antlr.FunctionalParser.FunctionDeclarationContext functionDeclarationContext) {
+    private List<Function> functionDeclaration(pl.grzeslowski.capybara.parser.antlr.FunctionalParser.FunctionDeclarationContext functionDeclarationContext) {
         var functionNameDeclaration = functionDeclarationContext.functionNameDeclaration();
         var methodOwner = functionNameDeclaration.TYPE();
         var methodName = functionName(functionNameDeclaration);
@@ -124,16 +127,198 @@ public class CapybaraParser {
             parameters = List.copyOf(methodParameters);
             methodName = METHOD_DECL_PREFIX + methodOwner.getText() + "__" + methodName;
         }
-        return new Function(
+        var localFunctions = functionDeclarationContext.functionBody().localFunctionDeclaration();
+        var localFunctionNameMap = new java.util.LinkedHashMap<String, String>();
+        for (int i = 0; i < localFunctions.size(); i++) {
+            var localName = localFunctions.get(i).NAME().getText();
+            if (!localName.startsWith("__")) {
+                throw new IllegalStateException("Local function name has to start with `__`: " + localName);
+            }
+            if (localFunctionNameMap.containsKey(localName)) {
+                throw new IllegalStateException("Duplicate local function name: " + localName);
+            }
+            localFunctionNameMap.put(localName, "__" + methodName + "__local_" + i + "_" + localName.substring(2));
+        }
+
+        var extractedLocalFunctions = localFunctions.stream()
+                .map(local -> localFunctionDeclaration(local, localFunctionNameMap))
+                .toList();
+
+        var expression = rewriteLocalFunctionNames(
+                expression(functionDeclarationContext.functionBody().expression()),
+                localFunctionNameMap
+        );
+        var topLevelFunction = new Function(
                 methodName,
                 parameters,
                 functionType(functionDeclarationContext.functionType()),
-                expression(functionDeclarationContext.expression()),
+                expression,
                 functionDeclarationContext.docComment().stream()
                         .map(comment -> stripDocComment(comment.getText()))
                         .toList(),
                 position(functionDeclarationContext)
         );
+        var allFunctions = new java.util.ArrayList<Function>(1 + extractedLocalFunctions.size());
+        allFunctions.add(topLevelFunction);
+        allFunctions.addAll(extractedLocalFunctions);
+        return List.copyOf(allFunctions);
+    }
+
+    private Function localFunctionDeclaration(
+            pl.grzeslowski.capybara.parser.antlr.FunctionalParser.LocalFunctionDeclarationContext context,
+            java.util.Map<String, String> localFunctionNameMap
+    ) {
+        var localName = context.NAME().getText();
+        var mappedName = localFunctionNameMap.get(localName);
+        if (mappedName == null) {
+            throw new IllegalStateException("Unknown local function mapping for: " + localName);
+        }
+        var parameters = context.parameters() == null
+                ? List.<Parameter>of()
+                : context.parameters().parameter().stream().map(this::parameter).toList();
+        var expression = rewriteLocalFunctionNames(expressionNoLet(context.expressionNoLet()), localFunctionNameMap);
+        return new Function(
+                mappedName,
+                parameters,
+                functionType(context.functionType()),
+                expression,
+                List.of(),
+                position(context)
+        );
+    }
+
+    private Expression rewriteLocalFunctionNames(Expression expression, java.util.Map<String, String> localFunctionNameMap) {
+        return switch (expression) {
+            case FunctionCall functionCall -> {
+                if (functionCall.moduleName().isEmpty() && localFunctionNameMap.containsKey(functionCall.name())) {
+                    yield new FunctionCall(
+                            Optional.empty(),
+                            localFunctionNameMap.get(functionCall.name()),
+                            functionCall.arguments().stream()
+                                    .map(argument -> rewriteLocalFunctionNames(argument, localFunctionNameMap))
+                                    .toList(),
+                            functionCall.position()
+                    );
+                }
+                yield new FunctionCall(
+                        functionCall.moduleName(),
+                        functionCall.name(),
+                        functionCall.arguments().stream()
+                                .map(argument -> rewriteLocalFunctionNames(argument, localFunctionNameMap))
+                                .toList(),
+                        functionCall.position()
+                );
+            }
+            case FunctionReference functionReference -> {
+                var mapped = localFunctionNameMap.get(functionReference.name());
+                if (mapped != null) {
+                    yield new FunctionReference(mapped, functionReference.position());
+                }
+                yield functionReference;
+            }
+            case LetExpression letExpression -> new LetExpression(
+                    letExpression.name(),
+                    letExpression.declaredType(),
+                    rewriteLocalFunctionNames(letExpression.value(), localFunctionNameMap),
+                    rewriteLocalFunctionNames(letExpression.rest(), localFunctionNameMap),
+                    letExpression.position()
+            );
+            case IfExpression ifExpression -> new IfExpression(
+                    rewriteLocalFunctionNames(ifExpression.condition(), localFunctionNameMap),
+                    rewriteLocalFunctionNames(ifExpression.thenBranch(), localFunctionNameMap),
+                    rewriteLocalFunctionNames(ifExpression.elseBranch(), localFunctionNameMap),
+                    ifExpression.position()
+            );
+            case InfixExpression infixExpression -> new InfixExpression(
+                    rewriteLocalFunctionNames(infixExpression.left(), localFunctionNameMap),
+                    infixExpression.operator(),
+                    rewriteLocalFunctionNames(infixExpression.right(), localFunctionNameMap),
+                    infixExpression.position()
+            );
+            case FieldAccess fieldAccess -> new FieldAccess(
+                    rewriteLocalFunctionNames(fieldAccess.source(), localFunctionNameMap),
+                    fieldAccess.field(),
+                    fieldAccess.position()
+            );
+            case LambdaExpression lambdaExpression -> new LambdaExpression(
+                    lambdaExpression.argumentNames(),
+                    rewriteLocalFunctionNames(lambdaExpression.expression(), localFunctionNameMap),
+                    lambdaExpression.position()
+            );
+            case ReduceExpression reduceExpression -> new ReduceExpression(
+                    rewriteLocalFunctionNames(reduceExpression.initialValue(), localFunctionNameMap),
+                    reduceExpression.accumulatorName(),
+                    reduceExpression.keyName(),
+                    reduceExpression.valueName(),
+                    rewriteLocalFunctionNames(reduceExpression.reducerExpression(), localFunctionNameMap),
+                    reduceExpression.position()
+            );
+            case IndexExpression indexExpression -> new IndexExpression(
+                    rewriteLocalFunctionNames(indexExpression.source(), localFunctionNameMap),
+                    rewriteLocalFunctionNames(indexExpression.index(), localFunctionNameMap),
+                    indexExpression.position()
+            );
+            case SliceExpression sliceExpression -> new SliceExpression(
+                    rewriteLocalFunctionNames(sliceExpression.source(), localFunctionNameMap),
+                    sliceExpression.start().map(start -> rewriteLocalFunctionNames(start, localFunctionNameMap)),
+                    sliceExpression.end().map(end -> rewriteLocalFunctionNames(end, localFunctionNameMap)),
+                    sliceExpression.position()
+            );
+            case MatchExpression matchExpression -> new MatchExpression(
+                    rewriteLocalFunctionNames(matchExpression.matchWith(), localFunctionNameMap),
+                    matchExpression.cases().stream()
+                            .map(matchCase -> new MatchExpression.MatchCase(
+                                    matchCase.pattern(),
+                                    rewriteLocalFunctionNames(matchCase.expression(), localFunctionNameMap)
+                            ))
+                            .toList(),
+                    matchExpression.position()
+            );
+            case NewData newData -> new NewData(
+                    newData.type(),
+                    newData.assignments().stream()
+                            .map(assignment -> new NewData.FieldAssignment(
+                                    assignment.name(),
+                                    rewriteLocalFunctionNames(assignment.value(), localFunctionNameMap)
+                            ))
+                            .toList(),
+                    newData.positionalArguments().stream()
+                            .map(argument -> rewriteLocalFunctionNames(argument, localFunctionNameMap))
+                            .toList(),
+                    newData.spreads().stream()
+                            .map(spread -> rewriteLocalFunctionNames(spread, localFunctionNameMap))
+                            .toList(),
+                    newData.position()
+            );
+            case NewListExpression newListExpression -> new NewListExpression(
+                    newListExpression.values().stream()
+                            .map(value -> rewriteLocalFunctionNames(value, localFunctionNameMap))
+                            .toList(),
+                    newListExpression.position()
+            );
+            case NewSetExpression newSetExpression -> new NewSetExpression(
+                    newSetExpression.values().stream()
+                            .map(value -> rewriteLocalFunctionNames(value, localFunctionNameMap))
+                            .toList(),
+                    newSetExpression.position()
+            );
+            case NewDictExpression newDictExpression -> new NewDictExpression(
+                    newDictExpression.entries().stream()
+                            .map(entry -> new NewDictExpression.Entry(
+                                    rewriteLocalFunctionNames(entry.key(), localFunctionNameMap),
+                                    rewriteLocalFunctionNames(entry.value(), localFunctionNameMap)
+                            ))
+                            .toList(),
+                    newDictExpression.position()
+            );
+            case TupleExpression tupleExpression -> new TupleExpression(
+                    tupleExpression.values().stream()
+                            .map(value -> rewriteLocalFunctionNames(value, localFunctionNameMap))
+                            .toList(),
+                    tupleExpression.position()
+            );
+            default -> expression;
+        };
     }
 
     private Optional<Type> functionType(pl.grzeslowski.capybara.parser.antlr.FunctionalParser.FunctionTypeContext context) {

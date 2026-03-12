@@ -12,7 +12,9 @@ definition:
     | dataDeclaration
     | singleDeclaration;
 
-functionDeclaration: docComment* 'fun' functionNameDeclaration '(' parameters? ')' functionType? '=' expression;
+functionDeclaration: docComment* 'fun' functionNameDeclaration '(' parameters? ')' functionType? '=' functionBody;
+functionBody: localFunctionDeclaration* expression;
+localFunctionDeclaration: 'fun' NAME '(' parameters? ')' functionType? '=' expressionNoLet;
 functionNameDeclaration: identifier | TYPE DOT methodIdentifier;
 methodIdentifier: identifier | INFIX_METHOD_LITERAL;
 docComment: DOC_COMMENT;
@@ -30,7 +32,7 @@ genericTypeDeclaration: TYPE ('[' TYPE (',' TYPE)* ']')?;
 
 BOOL_LITERAL: 'true' | 'false';
 COLLECTION: 'list' | 'set' | 'dict';
-NAME : [a-z][a-zA-Z0-9_]* | '_' [a-z][a-zA-Z0-9_]*;
+NAME : [_]* [a-z] [a-zA-Z0-9_]*;
 identifier: NAME | COLLECTION | 'fun' | 'byte' | 'int' | 'long' | 'double' | 'bool' | 'string' | 'float' | 'nothing' | 'any';
 parameters: parameter (',' parameter)*;
 parameter: identifier ':' type;
