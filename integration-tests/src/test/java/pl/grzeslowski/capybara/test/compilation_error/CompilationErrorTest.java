@@ -286,6 +286,17 @@ public class CompilationErrorTest {
                                 fun foo(x: int): string = 1
                                                           ^ expected `string`, found `int`
                                 """
+                ),
+                Arguments.of(
+                        "function_index_literal_of_of_range",
+                        "fun foo(x: int) = x + 97387717187",
+                        new Position(1, 26),
+                        """
+                                error: mismatched types
+                                 --> /foo/boo/function_index_literal_of_of_range.cfun:1:22
+                                fun foo(x: int) = x + 97387717187
+                                                      ^ Int literal out of range: `97387717187`
+                                """
                 )
         );
     }

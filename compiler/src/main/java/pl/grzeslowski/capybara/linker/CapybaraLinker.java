@@ -453,6 +453,7 @@ public class CapybaraLinker {
                                 )))));
         linked = normalizeInfixOperatorErrors(linked, function, moduleSourceFile);
         linked = normalizeMatchExhaustivenessErrors(linked, function, moduleSourceFile);
+        linked = normalizeIntLiteralErrors(linked, function, moduleSourceFile);
         var normalizedFile = normalizeFile(moduleSourceFile);
         var fallbackPosition = returnExpressionPosition(function.expression()).or(() -> function.position());
         return withPosition(linked, fallbackPosition, normalizedFile);
@@ -510,6 +511,42 @@ public class CapybaraLinker {
                 .map(singleError -> normalizeMatchExhaustivenessError(singleError, function, moduleSourceFile))
                 .toList();
         return new ValueOrError.Error<>(transformed);
+    }
+
+    private ValueOrError<LinkedFunction> normalizeIntLiteralErrors(
+            ValueOrError<LinkedFunction> linked,
+            Function function,
+            String moduleSourceFile
+    ) {
+        if (!(linked instanceof ValueOrError.Error<LinkedFunction> error)) {
+            return linked;
+        }
+        var transformed = error.errors().stream()
+                .map(singleError -> normalizeIntLiteralError(singleError, function, moduleSourceFile))
+                .toList();
+        return new ValueOrError.Error<>(transformed);
+    }
+
+    private ValueOrError.Error.SingleError normalizeIntLiteralError(
+            ValueOrError.Error.SingleError error,
+            Function function,
+            String moduleSourceFile
+    ) {
+        if (!error.message().startsWith("Int literal out of range:")
+            && !error.message().startsWith("Invalid int literal:")) {
+            return error;
+        }
+        var line = Math.max(error.line(), 1);
+        var messageColumn = Math.max(error.column(), 1);
+        var reportedColumn = messageColumn + 4;
+        var file = normalizeFile(moduleSourceFile);
+        var functionPreview = formatFunctionHeaderAndExpression(function, formatExpressionPreviewWithSpaces(function.expression()));
+        var pointer = " ".repeat(Math.max(messageColumn, 0)) + "^ " + error.message();
+        var message = "error: mismatched types\n"
+                      + " --> " + file + ":" + line + ":" + messageColumn + "\n"
+                      + functionPreview + "\n"
+                      + pointer + "\n";
+        return new ValueOrError.Error.SingleError(line, reportedColumn, file, message);
     }
 
     private ValueOrError.Error.SingleError normalizeMatchExhaustivenessError(
