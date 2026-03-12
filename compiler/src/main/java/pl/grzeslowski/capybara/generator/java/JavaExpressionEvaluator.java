@@ -1118,8 +1118,8 @@ public class JavaExpressionEvaluator {
         var hasWildcard = matchExpression.cases().stream()
                 .map(LinkedMatchExpression.MatchCase::pattern)
                 .anyMatch(LinkedMatchExpression.WildcardPattern.class::isInstance);
-        if (!hasWildcard) {
-            cases.add("default -> throw new java.lang.IllegalStateException(\"Unexpected value: \" + " + switchTarget + ");");
+        if (optionMatch && !hasWildcard) {
+            cases.add("case java.lang.Object __capybaraUnexpected -> throw new java.lang.IllegalStateException(\"Unexpected value: \" + " + switchTarget + ");");
         }
 
         return current.addExpression("switch (" + switchTarget + ") { " + String.join(" ", cases) + " }");

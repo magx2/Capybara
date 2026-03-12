@@ -2,11 +2,13 @@ fun match_string(value: any): string =
     match value with
     | string s => "s:" + s
     | int i => "i:" + i
+    | _ => ""
 
 fun match_int(value: any): int =
     match value with
     | int i => i + 1
     | string s => 0
+    | _ => 0
 
 data Person { name: string }
 type Entity = Person

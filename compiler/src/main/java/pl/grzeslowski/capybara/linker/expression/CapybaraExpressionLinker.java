@@ -2165,9 +2165,6 @@ public class CapybaraExpressionLinker {
         }
         var requiredConstructors = requiredConstructorsForMatch(matchType);
         if (requiredConstructors.isEmpty()) {
-            if (!requiresWildcardForPrimitiveMatch(matchType)) {
-                return ValueOrError.success(null);
-            }
             return withPosition(
                     ValueOrError.error("`match` is not exhaustive. Use wildcard `| _ => ...`."),
                     matchExpression.position()
@@ -2201,16 +2198,6 @@ public class CapybaraExpressionLinker {
             return single;
         }
         return new java.util.LinkedHashSet<>();
-    }
-
-    private boolean requiresWildcardForPrimitiveMatch(LinkedType matchType) {
-        if (!(matchType instanceof PrimitiveLinkedType primitive)) {
-            return false;
-        }
-        return switch (primitive) {
-            case BYTE, INT, LONG, FLOAT, DOUBLE, STRING, BOOL -> true;
-            default -> false;
-        };
     }
 
     private java.util.LinkedHashSet<String> coveredConstructors(
