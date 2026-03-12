@@ -39,7 +39,8 @@
     <dict><key>name</key><string>constant.numeric.capybara</string><key>match</key><string>\b(?:0[xX][0-9a-fA-F]+|\d+[lL]|\d+\.\d*(?:[eE][+\-]?\d+)?[fFdD]?|\d+[eE][+\-]?\d+[fFdD]?|\d+)\b</string></dict>
     <dict><key>name</key><string>constant.language.boolean.capybara</string><key>match</key><string>\b(true|false)\b</string></dict>
     <dict><key>name</key><string>constant.language.unimplemented.capybara</string><key>match</key><string>\?\?\?</string></dict>
-    <dict><key>name</key><string>entity.name.type.capybara</string><key>match</key><string>\b[A-Z][A-Za-z0-9_]*\b</string></dict>
+    <dict><key>name</key><string>entity.name.type.capybara</string><key>match</key><string>\b_*[A-Z][A-Za-z0-9_]*\b</string></dict>
+    <dict><key>name</key><string>entity.name.type.private.capybara</string><key>match</key><string>\b(type|data|single)\s+(__[A-Za-z0-9_]*)</string></dict>
     <dict><key>name</key><string>entity.name.function.private.capybara</string><key>match</key><string>\bfun\s+(__[A-Za-z0-9_]+)</string></dict>
     <dict><key>name</key><string>entity.name.function.capybara</string><key>match</key><string>\bfun\s+([A-Za-z_][A-Za-z0-9_]*)</string></dict>
     <dict><key>name</key><string>entity.name.function.private.capybara</string><key>match</key><string>:(__[A-Za-z0-9_]+)\b</string></dict>
@@ -48,11 +49,11 @@
     <dict><key>name</key><string>entity.name.function.capybara</string><key>match</key><string>\b([A-Za-z_][A-Za-z0-9_]*)\s*(?=\()</string></dict>
     <dict>
       <key>name</key><string>meta.match.typed-pattern.capybara</string>
-      <key>match</key><string>(\|)\s*([A-Z][A-Za-z0-9_]*)\s+([A-Za-z_][A-Za-z0-9_]*)\s*(=&gt;)</string>
+      <key>match</key><string>(\|)\s*(_*[A-Z][A-Za-z0-9_]*)\s+([A-Za-z_][A-Za-z0-9_]*)\s*(=&gt;)</string>
     </dict>
     <dict>
       <key>name</key><string>meta.match.constructor-pattern.capybara</string>
-      <key>match</key><string>(\|)\s*([A-Z][A-Za-z0-9_]*)\s*(\{)\s*([A-Za-z_][A-Za-z0-9_]*)</string>
+      <key>match</key><string>(\|)\s*(_*[A-Z][A-Za-z0-9_]*)\s*(\{)\s*([A-Za-z_][A-Za-z0-9_]*)</string>
     </dict>
     <dict><key>name</key><string>keyword.operator.pipe.capybara</string><key>match</key><string>\|all\?|\|any\?|\|>|\|\*|\|-|\||\.and\.|\.nand\.|\.or\.|\.xor\.|\.not\.|==|!=|&lt;=|&gt;=|=&gt;|-&gt;|\+|\-|\*|/|%|\^|&lt;|&gt;|=|&amp;|\?|:</string></dict>
     <dict>
@@ -68,5 +69,3 @@
   </array>
 </dict>
 </plist>
-
-

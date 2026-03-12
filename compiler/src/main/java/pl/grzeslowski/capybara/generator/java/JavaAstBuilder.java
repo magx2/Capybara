@@ -55,9 +55,9 @@ public class JavaAstBuilder {
     }
 
     private Map<LinkedDataType, Set<JavaInterface>> findSubClassToInterface(Map<String, GenericDataType> types, Set<JavaInterface> interfaces) {
-        var genericDataTypeToJavaInterface = interfaces.stream()
+        var javaInterfaceByJavaName = interfaces.stream()
                 .collect(toMap(
-                        jInterface -> types.get(jInterface.name().name()),
+                        jInterface -> jInterface.name().name(),
                         identity()));
 
         record ClassToInterface(LinkedDataType data, LinkedDataParentType parent) {
@@ -70,7 +70,10 @@ public class JavaAstBuilder {
                 .filter(LinkedDataParentType.class::isInstance)
                 .map(LinkedDataParentType.class::cast)
                 .flatMap(parent -> parent.subTypes().stream().map(data -> new ClassToInterface(data, parent)))
-                .map(pair -> new ClassToJavaInterface(pair.data, genericDataTypeToJavaInterface.get(pair.parent)))
+                .map(pair -> new ClassToJavaInterface(
+                        pair.data,
+                        javaInterfaceByJavaName.get(buildClassName(pair.parent.name()).name())))
+                .filter(pair -> pair.parent != null)
                 .collect(groupingBy(
                         ClassToJavaInterface::data,
                         mapping(ClassToJavaInterface::parent, toSet())

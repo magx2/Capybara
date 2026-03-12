@@ -1,0 +1,16 @@
+fun foo_me(name: string): string =
+    type __Name = __Foo | __Boo | __Unknown
+    data __Foo { foo: string }
+    data __Boo { boo: string }
+    data __Unknown { unkn: string }
+    fun __name(value: __Name): string =
+        match value with
+        | __Foo { foo } => foo
+        | __Boo { boo } => boo
+        | __Unknown { unkn } => unkn
+    let x =
+        match name with
+        | "foo" => __Foo { "xyz" }
+        | "boo" => __Boo { "zyx" }
+        | _ => __Unknown { name }
+    __name(x)

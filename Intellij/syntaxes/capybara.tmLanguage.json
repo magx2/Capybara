@@ -119,7 +119,7 @@
         },
         {
           "name": "entity.name.type.capybara",
-          "match": "\\b[A-Z][A-Za-z0-9_]*\\b"
+          "match": "\\b_*[A-Z][A-Za-z0-9_]*\\b"
         },
         {
           "name": "entity.name.type.qualified.capybara",
@@ -190,8 +190,20 @@
           }
         },
         {
+          "name": "meta.type.private.capybara",
+          "match": "\\b(type|data|single)\\s+(__[A-Za-z0-9_]*)",
+          "captures": {
+            "1": {
+              "name": "keyword.control.capybara"
+            },
+            "2": {
+              "name": "entity.name.type.private.capybara"
+            }
+          }
+        },
+        {
           "name": "meta.type.capybara",
-          "match": "\\b(type|data|single)\\s+([A-Z][A-Za-z0-9_]*)",
+          "match": "\\b(type|data|single)\\s+(_*[A-Z][A-Za-z0-9_]*)",
           "captures": {
             "1": {
               "name": "keyword.control.capybara"
@@ -203,7 +215,7 @@
         },
         {
           "name": "meta.match.typed-pattern.capybara",
-          "match": "(\\|)\\s*([A-Z][A-Za-z0-9_]*)\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*(=>)",
+          "match": "(\\|)\\s*(_*[A-Z][A-Za-z0-9_]*)\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*(=>)",
           "captures": {
             "1": {
               "name": "keyword.operator.capybara"
@@ -221,7 +233,7 @@
         },
         {
           "name": "meta.match.constructor-pattern.capybara",
-          "match": "(\\|)\\s*([A-Z][A-Za-z0-9_]*)\\s*(\\{)\\s*([A-Za-z_][A-Za-z0-9_]*)",
+          "match": "(\\|)\\s*(_*[A-Z][A-Za-z0-9_]*)\\s*(\\{)\\s*([A-Za-z_][A-Za-z0-9_]*)",
           "captures": {
             "1": {
               "name": "keyword.operator.capybara"

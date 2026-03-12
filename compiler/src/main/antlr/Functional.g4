@@ -13,8 +13,15 @@ definition:
     | singleDeclaration;
 
 functionDeclaration: docComment* 'fun' functionNameDeclaration '(' parameters? ')' functionType? '=' functionBody;
-functionBody: localFunctionDeclaration* expression;
+functionBody: localDefinition* expression;
+localDefinition: localFunctionDeclaration
+               | localTypeDeclaration
+               | localDataDeclaration;
 localFunctionDeclaration: 'fun' NAME '(' parameters? ')' functionType? '=' expressionNoLet;
+localTypeDeclaration: 'type' genericTypeDeclaration '=' genericTypeDeclaration (PIPE genericTypeDeclaration)*
+                    | 'type' genericTypeDeclaration '{' fieldDeclarationList? '}' '=' genericTypeDeclaration (PIPE genericTypeDeclaration)*;
+localDataDeclaration: 'data' genericTypeDeclaration '{' fieldDeclarationList? '}'
+                    | 'data' genericTypeDeclaration '=' '{' fieldDeclarationList? '}';
 functionNameDeclaration: identifier | TYPE DOT methodIdentifier;
 methodIdentifier: identifier | INFIX_METHOD_LITERAL;
 docComment: DOC_COMMENT;
@@ -53,8 +60,7 @@ type: COLLECTION '[' type ']'
     | 'nothing'
     | qualifiedType ('[' type (',' type)* ']')?;
 qualifiedType: TYPE (DOT TYPE)*;
-TYPE: [A-Z][a-zA-Z0-9_]*
-      | '_' [A-Z][a-zA-Z0-9_]*
+TYPE: [_]* [A-Z][a-zA-Z0-9_]*
       | TYPE_FULL ;
 TYPE_FULL: '/' [A-Za-z_][a-zA-Z0-9_]* ( '/' [A-Za-z_][a-zA-Z0-9_]* )+;
 INFIX_METHOD_LITERAL: '`' [+\-*/\\^%$#@~!:<>]+ '`';
