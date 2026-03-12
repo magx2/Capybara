@@ -297,6 +297,27 @@ public class CompilationErrorTest {
                                 fun foo(x: int) = x + 97387717187
                                                       ^ Int literal out of range: `97387717187`
                                 """
+                ),
+                Arguments.of(
+                        "function_private_type_escapes_signature",
+                        """
+                                fun foo_me(name: string): __Name =
+                                    type __Name = __Foo | __Boo | __Unknown
+                                    data __Foo { foo: string }
+                                    data __Boo { boo: string }
+                                    data __Unknown { unkn: string }
+                                    match name with
+                                    | "foo" => __Foo { foo: "xyz" }
+                                    | "boo" => __Boo { boo: "xyz" }
+                                    | _ => __Unknown { unkn: name }
+                                """,
+                        new Position(1, 26),
+                        """
+                                error: mismatched types
+                                 --> /foo/boo/function_private_type_escapes_signature.cfun:1:26
+                                fun foo_me(name: string): __Name = ...
+                                                          ^ Private type `__Name` cannot be used in function signature
+                                """
                 )
         );
     }

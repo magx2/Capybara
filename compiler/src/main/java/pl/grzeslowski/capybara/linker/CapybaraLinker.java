@@ -432,6 +432,10 @@ public class CapybaraLinker {
             Map<String, String> moduleClassNameByModuleName,
             String moduleSourceFile
     ) {
+        var privateTypeSignatureError = privateTypeEscapingFunctionSignatureError(function, moduleSourceFile);
+        if (privateTypeSignatureError.isPresent()) {
+            return privateTypeSignatureError.get();
+        }
         var linked = linkParameters(function.parameters(), dataTypes)
                 .flatMap(parameters -> new CapybaraExpressionLinker(
                         parameters,
@@ -1212,15 +1216,192 @@ public class CapybaraLinker {
     ) {
         return functions.stream()
                 .map(function -> linkParameters(function.parameters(), dataTypes)
-                        .flatMap(parameters -> function.returnType()
-                                .map(type -> linkType(type, dataTypes))
-                                .orElseGet(() -> ValueOrError.success(PrimitiveLinkedType.ANY))
-                                .map(returnType -> new CapybaraExpressionLinker.FunctionSignature(
-                                        function.name(),
-                                        parameters.stream().map(LinkedFunctionParameter::type).toList(),
-                                        returnType
-                                ))))
+                                .flatMap(parameters -> function.returnType()
+                                        .map(type -> linkType(type, dataTypes))
+                                        .orElseGet(() -> ValueOrError.success(PrimitiveLinkedType.ANY))
+                                        .map(returnType -> new CapybaraExpressionLinker.FunctionSignature(
+                                                function.name(),
+                                                parameters.stream().map(LinkedFunctionParameter::type).toList(),
+                                                returnType
+                                        ))))
                 .collect(new ValueOrErrorCollectionCollector<>());
+    }
+
+    private Optional<ValueOrError.Error<LinkedFunction>> privateTypeEscapingFunctionSignatureError(
+            Function function,
+            String moduleSourceFile
+    ) {
+        if (function.name().contains("__local_fun_")) {
+            return Optional.empty();
+        }
+
+        for (int i = 0; i < function.parameters().size(); i++) {
+            var parameter = function.parameters().get(i);
+            var escaped = firstEscapedPrivateLocalType(parameter.type());
+            if (escaped.isPresent()) {
+                var line = function.position().map(SourcePosition::line).orElse(0);
+                var column = signatureParameterTypeColumn(function, i);
+                return Optional.of(new ValueOrError.Error<>(new ValueOrError.Error.SingleError(
+                        line,
+                        column,
+                        "",
+                        privateTypeEscapingFunctionSignatureMessage(
+                                function,
+                                moduleSourceFile,
+                                line,
+                                column,
+                                escaped.get()
+                        )
+                )));
+            }
+        }
+
+        if (function.returnType().isPresent()) {
+            var escaped = firstEscapedPrivateLocalType(function.returnType().get());
+            if (escaped.isPresent()) {
+                var line = function.position().map(SourcePosition::line).orElse(0);
+                var column = signatureReturnTypeColumn(function);
+                return Optional.of(new ValueOrError.Error<>(new ValueOrError.Error.SingleError(
+                        line,
+                        column,
+                        "",
+                        privateTypeEscapingFunctionSignatureMessage(
+                                function,
+                                moduleSourceFile,
+                                line,
+                                column,
+                                escaped.get()
+                        )
+                )));
+            }
+        }
+
+        return Optional.empty();
+    }
+
+    private Optional<String> firstEscapedPrivateLocalType(pl.grzeslowski.capybara.parser.Type type) {
+        return switch (type) {
+            case DataType dataType -> dataType.name().contains("__local_type_")
+                    ? Optional.of(dataType.name())
+                    : Optional.empty();
+            case CollectionType.ListType listType -> firstEscapedPrivateLocalType(listType.elementType());
+            case CollectionType.SetType setType -> firstEscapedPrivateLocalType(setType.elementType());
+            case CollectionType.DictType dictType -> firstEscapedPrivateLocalType(dictType.valueType());
+            case TupleType tupleType -> tupleType.elementTypes().stream()
+                    .map(this::firstEscapedPrivateLocalType)
+                    .flatMap(Optional::stream)
+                    .findFirst();
+            case FunctionType functionType -> firstEscapedPrivateLocalType(functionType.argumentType())
+                    .or(() -> firstEscapedPrivateLocalType(functionType.returnType()));
+            default -> Optional.empty();
+        };
+    }
+
+    private int signatureParameterTypeColumn(Function function, int parameterIndex) {
+        var column = 4 + function.name().length() + 1;
+        for (int i = 0; i < parameterIndex; i++) {
+            if (i > 0) {
+                column += 2;
+            }
+            var parameter = function.parameters().get(i);
+            column += parameter.name().length() + 2 + formatParserTypeForPosition(parameter.type()).length();
+        }
+        if (parameterIndex > 0) {
+            column += 2;
+        }
+        var targetParameter = function.parameters().get(parameterIndex);
+        return column + targetParameter.name().length() + 2;
+    }
+
+    private int signatureReturnTypeColumn(Function function) {
+        var column = 4 + function.name().length() + 1;
+        for (int i = 0; i < function.parameters().size(); i++) {
+            if (i > 0) {
+                column += 2;
+            }
+            var parameter = function.parameters().get(i);
+            column += parameter.name().length() + 2 + formatParserTypeForPosition(parameter.type()).length();
+        }
+        return column + 1 + 2;
+    }
+
+    private String formatParserTypeForPosition(pl.grzeslowski.capybara.parser.Type type) {
+        return formatParserType(restorePrivateTypeNameForDisplay(type));
+    }
+
+    private pl.grzeslowski.capybara.parser.Type restorePrivateTypeNameForDisplay(pl.grzeslowski.capybara.parser.Type type) {
+        return switch (type) {
+            case DataType dataType -> new DataType(restorePrivateTypeNameForDisplay(dataType.name()));
+            case CollectionType.ListType listType -> new CollectionType.ListType(
+                    restorePrivateTypeNameForDisplay(listType.elementType())
+            );
+            case CollectionType.SetType setType -> new CollectionType.SetType(
+                    restorePrivateTypeNameForDisplay(setType.elementType())
+            );
+            case CollectionType.DictType dictType -> new CollectionType.DictType(
+                    restorePrivateTypeNameForDisplay(dictType.valueType())
+            );
+            case TupleType tupleType -> new TupleType(tupleType.elementTypes().stream()
+                    .map(this::restorePrivateTypeNameForDisplay)
+                    .toList());
+            case FunctionType functionType -> new FunctionType(
+                    restorePrivateTypeNameForDisplay(functionType.argumentType()),
+                    restorePrivateTypeNameForDisplay(functionType.returnType())
+            );
+            default -> type;
+        };
+    }
+
+    private String restorePrivateTypeNameForDisplay(String typeName) {
+        var genericStart = typeName.indexOf('[');
+        if (genericStart > 0 && typeName.endsWith("]")) {
+            var base = typeName.substring(0, genericStart);
+            var suffix = typeName.substring(genericStart);
+            return toUserPrivateTypeName(base) + suffix;
+        }
+        return toUserPrivateTypeName(typeName);
+    }
+
+    private String toUserPrivateTypeName(String typeName) {
+        var marker = "__local_type_";
+        var idx = typeName.indexOf(marker);
+        if (idx < 0) {
+            return typeName;
+        }
+        var suffix = typeName.substring(idx + marker.length());
+        var underscoreIdx = suffix.indexOf('_');
+        if (underscoreIdx < 0 || underscoreIdx + 1 >= suffix.length()) {
+            return typeName;
+        }
+        return "__" + suffix.substring(underscoreIdx + 1);
+    }
+
+    private String privateTypeEscapingFunctionSignatureMessage(
+            Function function,
+            String moduleSourceFile,
+            int line,
+            int column,
+            String escapedType
+    ) {
+        var functionPreview = formatFunctionHeaderWithRestoredPrivateTypes(function) + " = ...";
+        var pointer = " ".repeat(Math.max(column, 0))
+                      + "^ Private type `" + toUserPrivateTypeName(escapedType) + "` cannot be used in function signature";
+        return "error: mismatched types\n"
+               + " --> " + normalizeFile(moduleSourceFile) + ":" + line + ":" + column + "\n"
+               + functionPreview + "\n"
+               + pointer + "\n";
+    }
+
+    private String formatFunctionHeaderWithRestoredPrivateTypes(Function function) {
+        var header = new StringBuilder("fun ")
+                .append(function.name())
+                .append("(")
+                .append(function.parameters().stream()
+                        .map(parameter -> parameter.name() + ": " + formatParserTypeForPosition(parameter.type()))
+                        .collect(java.util.stream.Collectors.joining(", ")))
+                .append(")");
+        function.returnType().ifPresent(type -> header.append(": ").append(formatParserTypeForPosition(type)));
+        return header.toString();
     }
 
     private List<CapybaraExpressionLinker.FunctionSignature> signaturesFromLinkedFunctions(List<LinkedFunction> functions) {
