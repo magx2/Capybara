@@ -442,7 +442,7 @@ public class CapybaraLinker {
                 ).linkExpression(function.expression()).flatMap(ex -> function.returnType()
                         .map(type -> linkType(type, dataTypes))
                         .orElseGet(() -> ValueOrError.success(ex.type()))
-                        .flatMap(rtype -> validateFunctionReturnType(function, ex, rtype)
+                        .flatMap(rtype -> validateFunctionReturnType(function, ex, rtype, moduleSourceFile)
                                 .map(validatedExpression -> new LinkedFunction(
                                         function.name(),
                                         rtype,
@@ -459,15 +459,75 @@ public class CapybaraLinker {
     private ValueOrError<pl.grzeslowski.capybara.linker.expression.LinkedExpression> validateFunctionReturnType(
             Function function,
             pl.grzeslowski.capybara.linker.expression.LinkedExpression expression,
-            LinkedType declaredReturnType
+            LinkedType declaredReturnType,
+            String moduleSourceFile
     ) {
         if (isAssignableReturnType(declaredReturnType, expression.type())) {
             return ValueOrError.success(expression);
         }
+        var position = function.expression().position().or(() -> function.position()).orElse(SourcePosition.EMPTY);
+        var line = Math.max(position.line(), 1);
+        var column = Math.max(position.column(), 1);
+        var file = normalizeFile(moduleSourceFile);
+        var functionPreview = "fun " + function.name()
+                              + "(" + function.parameters().stream()
+                .map(parameter -> parameter.name() + ": " + formatParserType(parameter.type()))
+                .collect(java.util.stream.Collectors.joining(", "))
+                              + "): " + formatLinkedType(declaredReturnType)
+                              + " = " + formatExpressionPreview(function.expression());
+        var pointer = " ".repeat(Math.max(column, 0))
+                      + "^ expected `" + formatLinkedType(declaredReturnType)
+                      + "`, found `" + formatLinkedType(expression.type()) + "`";
         return ValueOrError.error(
-                "Cannot return `" + expression.type() + "` from function `" + function.name()
-                + "` declared as `" + declaredReturnType + "`"
+                "error: mismatched types\n"
+                + " --> " + file + ":" + line + ":" + column + "\n"
+                + functionPreview + "\n"
+                + pointer + "\n"
         );
+    }
+
+    private String formatParserType(pl.grzeslowski.capybara.parser.Type type) {
+        return switch (type) {
+            case PrimitiveType primitiveType -> primitiveType.name().toLowerCase(java.util.Locale.ROOT);
+            case CollectionType.ListType listType -> "list[" + formatParserType(listType.elementType()) + "]";
+            case CollectionType.SetType setType -> "set[" + formatParserType(setType.elementType()) + "]";
+            case CollectionType.DictType dictType -> "dict[" + formatParserType(dictType.valueType()) + "]";
+            case TupleType tupleType -> "tuple[" + tupleType.elementTypes().stream()
+                    .map(this::formatParserType)
+                    .collect(java.util.stream.Collectors.joining(", ")) + "]";
+            case FunctionType functionType -> formatParserType(functionType.argumentType()) + "->" + formatParserType(functionType.returnType());
+            case DataType dataType -> dataType.name();
+        };
+    }
+
+    private String formatExpressionPreview(pl.grzeslowski.capybara.parser.Expression expression) {
+        return switch (expression) {
+            case StringValue stringValue -> stringValue.stringValue();
+            case IntValue intValue -> intValue.intValue();
+            case LongValue longValue -> longValue.longValue();
+            case FloatValue floatValue -> floatValue.floatValue();
+            case DoubleValue doubleValue -> doubleValue.doubleValue();
+            case ByteValue byteValue -> byteValue.byteValue();
+            case BooleanValue booleanValue -> String.valueOf(booleanValue.value());
+            case Value value -> value.name();
+            default -> expression.toString();
+        };
+    }
+
+    private String formatLinkedType(LinkedType type) {
+        return switch (type) {
+            case PrimitiveLinkedType primitiveType -> primitiveType.name().toLowerCase(java.util.Locale.ROOT);
+            case CollectionLinkedType.LinkedList linkedList -> "list[" + formatLinkedType(linkedList.elementType()) + "]";
+            case CollectionLinkedType.LinkedSet linkedSet -> "set[" + formatLinkedType(linkedSet.elementType()) + "]";
+            case CollectionLinkedType.LinkedDict linkedDict -> "dict[" + formatLinkedType(linkedDict.valueType()) + "]";
+            case LinkedTupleType linkedTupleType -> "tuple[" + linkedTupleType.elementTypes().stream()
+                    .map(this::formatLinkedType)
+                    .collect(java.util.stream.Collectors.joining(", ")) + "]";
+            case LinkedFunctionType linkedFunctionType -> formatLinkedType(linkedFunctionType.argumentType()) + "->" + formatLinkedType(linkedFunctionType.returnType());
+            case LinkedDataType linkedDataType -> linkedDataType.name();
+            case LinkedDataParentType linkedDataParentType -> linkedDataParentType.name();
+            case LinkedGenericTypeParameter linkedGenericTypeParameter -> linkedGenericTypeParameter.name();
+        };
     }
 
     private boolean isAssignableReturnType(LinkedType expected, LinkedType actual) {
