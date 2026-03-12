@@ -38,7 +38,12 @@ public class CompilationErrorTest {
         assertThat(error.message()).isEqualTo(errorMessage);
     }
 
+
     static Stream<Arguments> compilationError() {
+        return Stream.concat(simpleCompilationError(), multilineCompilationError());
+    }
+
+    static Stream<Arguments> simpleCompilationError() {
         return Stream.of(
                 Arguments.of(
                         "function_wrong_return_type",
@@ -93,6 +98,107 @@ public class CompilationErrorTest {
                                  --> /foo/boo/function_wrong_return_type_string.cfun:1:26
                                 fun foo(x: int): string = 1
                                                           ^ expected `string`, found `int`
+                                """
+                )
+        );
+    }
+
+    static Stream<Arguments> multilineCompilationError() {
+        return Stream.of(
+                Arguments.of(
+                        "multiline_function_wrong_return_type",
+                        """
+                                // normal comment
+                                data Foo {
+                                    option: string,
+                                    x: int
+                                }
+                                
+                                /// some documentation
+                                /// line 2 of doc
+                                fun foo(x: int): int =
+                                    let x = Foo {
+                                        "boo",
+                                        5
+                                    }
+                                    "boo"
+                                """,
+                        new Position(14, 4),
+                        """
+                                error: mismatched types
+                                 --> /foo/boo/multiline_function_wrong_return_type.cfun:14:4
+                                  fun foo(x: int): int =
+                                    let x = Foo {
+                                        "boo",
+                                        5
+                                    }
+                                    "boo"
+                                    ^ expected `int`, found `string`
+                                """
+                ),
+                Arguments.of(
+                        "multiline_let_chain_wrong_return_type",
+                        """
+                                /// docs
+                                fun foo(x: int): int =
+                                    let a = x + 1
+                                    let b = a + 2
+                                    "x"
+                                """,
+                        new Position(5, 4),
+                        """
+                                error: mismatched types
+                                 --> /foo/boo/multiline_let_chain_wrong_return_type.cfun:5:4
+                                  fun foo(x: int): int =
+                                    let a = x+1
+                                    let b = a+2
+                                    "x"
+                                    ^ expected `int`, found `string`
+                                """
+                ),
+                Arguments.of(
+                        "multiline_data_return_wrong_type",
+                        """
+                                data Bar { value: int }
+                                
+                                fun foo(x: int): Bar =
+                                    let y = x + 1
+                                    y
+                                """,
+                        new Position(5, 4),
+                        """
+                                error: mismatched types
+                                 --> /foo/boo/multiline_data_return_wrong_type.cfun:5:4
+                                  fun foo(x: int): Bar =
+                                    let y = x+1
+                                    y
+                                    ^ expected `Bar`, found `int`
+                                """
+                ),
+                Arguments.of(
+                        "multiline_new_data_return_wrong_type",
+                        """
+                                /* block comment */
+                                data Foo { a: int, b: string }
+                                
+                                fun foo(): string =
+                                    let f = Foo {
+                                        a: 1,
+                                        b: "x"
+                                    }
+                                    f
+                                """,
+                        new Position(9, 4),
+                        """
+                                error: mismatched types
+                                 --> /foo/boo/multiline_new_data_return_wrong_type.cfun:9:4
+                                  fun foo(): string =
+                                    let f = Foo {
+                                        a: 1,
+                                        b: "x"
+                                    }
+                                    f
+                                    ^ expected `string`, found `Foo`
                                 """
                 )
         );

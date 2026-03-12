@@ -452,7 +452,7 @@ public class CapybaraLinker {
                                         isProgramMain(function.name(), rtype, parameters)
                                 )))));
         var normalizedFile = normalizeFile(moduleSourceFile);
-        var fallbackPosition = function.expression().position().or(() -> function.position());
+        var fallbackPosition = returnExpressionPosition(function.expression()).or(() -> function.position());
         return withPosition(linked, fallbackPosition, normalizedFile);
     }
 
@@ -465,16 +465,12 @@ public class CapybaraLinker {
         if (isAssignableReturnType(declaredReturnType, expression.type())) {
             return ValueOrError.success(expression);
         }
-        var position = function.expression().position().or(() -> function.position()).orElse(SourcePosition.EMPTY);
+        var returnExpression = terminalReturnExpression(function.expression());
+        var position = returnExpressionPosition(function.expression()).or(() -> function.position()).orElse(SourcePosition.EMPTY);
         var line = Math.max(position.line(), 1);
         var column = Math.max(position.column(), 1);
         var file = normalizeFile(moduleSourceFile);
-        var functionPreview = "fun " + function.name()
-                              + "(" + function.parameters().stream()
-                .map(parameter -> parameter.name() + ": " + formatParserType(parameter.type()))
-                .collect(java.util.stream.Collectors.joining(", "))
-                              + "): " + formatLinkedType(declaredReturnType)
-                              + " = " + formatExpressionPreview(function.expression());
+        var functionPreview = formatReturnTypeMismatchSourceLine(function, returnExpression, position, declaredReturnType);
         var pointer = " ".repeat(Math.max(column, 0))
                       + "^ expected `" + formatLinkedType(declaredReturnType)
                       + "`, found `" + formatLinkedType(expression.type()) + "`";
@@ -484,6 +480,166 @@ public class CapybaraLinker {
                 + functionPreview + "\n"
                 + pointer + "\n"
         );
+    }
+
+    private String formatReturnTypeMismatchSourceLine(
+            Function function,
+            Expression returnExpression,
+            SourcePosition position,
+            LinkedType declaredReturnType
+    ) {
+        var expressionPosition = function.expression().position().orElse(SourcePosition.EMPTY);
+        if (function.expression() instanceof LetExpression && expressionPosition.line() != position.line()) {
+            return formatMultilineFunctionPreview(function, declaredReturnType);
+        }
+        return "fun " + function.name()
+               + "(" + function.parameters().stream()
+                .map(parameter -> parameter.name() + ": " + formatParserType(parameter.type()))
+                .collect(java.util.stream.Collectors.joining(", "))
+               + "): " + formatLinkedType(declaredReturnType)
+               + " = " + formatExpressionPreview(function.expression());
+    }
+
+    private String formatMultilineFunctionPreview(Function function, LinkedType declaredReturnType) {
+        var builder = new StringBuilder();
+        builder.append("  fun ")
+                .append(function.name())
+                .append("(")
+                .append(function.parameters().stream()
+                        .map(parameter -> parameter.name() + ": " + formatParserType(parameter.type()))
+                        .collect(java.util.stream.Collectors.joining(", ")))
+                .append("): ")
+                .append(formatLinkedType(declaredReturnType))
+                .append(" =\n");
+        builder.append(formatMultilineExpression(function.expression(), 4));
+        return builder.toString();
+    }
+
+    private String formatMultilineExpression(Expression expression, int indent) {
+        return switch (expression) {
+            case LetExpression letExpression -> {
+                var builder = new StringBuilder();
+                builder.append(" ".repeat(indent))
+                        .append("let ")
+                        .append(letExpression.name());
+                letExpression.declaredType().ifPresent(type -> builder.append(": ").append(formatParserType(type)));
+                builder.append(" = ");
+                if (isMultilinePreviewExpression(letExpression.value())) {
+                    builder.append(formatExpressionMultilineForLetValue(letExpression.value(), indent));
+                } else {
+                    builder.append(formatExpressionPreview(letExpression.value()));
+                }
+                builder.append('\n').append(formatMultilineExpression(letExpression.rest(), indent));
+                yield builder.toString();
+            }
+            default -> " ".repeat(indent) + formatExpressionPreview(expression);
+        };
+    }
+
+    private boolean isMultilinePreviewExpression(Expression expression) {
+        return expression instanceof NewData;
+    }
+
+    private String formatExpressionMultilineForLetValue(Expression expression, int indent) {
+        return switch (expression) {
+            case NewData newData -> formatNewDataInlineInLet(newData, indent);
+            default -> formatExpressionPreview(expression);
+        };
+    }
+
+    private String formatExpressionMultilineBlock(Expression expression, int indent) {
+        return switch (expression) {
+            case NewData newData -> formatNewDataMultiline(newData, indent);
+            default -> " ".repeat(indent) + formatExpressionPreview(expression);
+        };
+    }
+
+    private String formatNewDataInlineInLet(NewData newData, int indent) {
+        var typeName = formatParserType(newData.type());
+        var builder = new StringBuilder();
+        builder.append(typeName).append(" {");
+        if (!newData.positionalArguments().isEmpty() && newData.assignments().isEmpty()) {
+            builder.append('\n');
+            for (var i = 0; i < newData.positionalArguments().size(); i++) {
+                builder.append(" ".repeat(indent + 4))
+                        .append(formatExpressionPreview(newData.positionalArguments().get(i)));
+                if (i < newData.positionalArguments().size() - 1) {
+                    builder.append(",");
+                }
+                builder.append('\n');
+            }
+            builder.append(" ".repeat(indent)).append("}");
+            return builder.toString();
+        }
+        if (!newData.assignments().isEmpty()) {
+            builder.append('\n');
+            for (var i = 0; i < newData.assignments().size(); i++) {
+                var assignment = newData.assignments().get(i);
+                builder.append(" ".repeat(indent + 4))
+                        .append(assignment.name())
+                        .append(": ")
+                        .append(formatExpressionPreview(assignment.value()));
+                if (i < newData.assignments().size() - 1) {
+                    builder.append(",");
+                }
+                builder.append('\n');
+            }
+            builder.append(" ".repeat(indent)).append("}");
+            return builder.toString();
+        }
+        builder.append("}");
+        return builder.toString();
+    }
+
+    private String formatNewDataMultiline(NewData newData, int indent) {
+        var typeName = formatParserType(newData.type());
+        var builder = new StringBuilder();
+        builder.append(" ".repeat(indent)).append(typeName).append(" {");
+        if (!newData.positionalArguments().isEmpty() && newData.assignments().isEmpty()) {
+            builder.append('\n');
+            for (var i = 0; i < newData.positionalArguments().size(); i++) {
+                builder.append(" ".repeat(indent + 4))
+                        .append(formatExpressionPreview(newData.positionalArguments().get(i)));
+                if (i < newData.positionalArguments().size() - 1) {
+                    builder.append(",");
+                }
+                builder.append('\n');
+            }
+            builder.append(" ".repeat(indent)).append("}");
+            return builder.toString();
+        }
+        if (!newData.assignments().isEmpty()) {
+            builder.append('\n');
+            for (var i = 0; i < newData.assignments().size(); i++) {
+                var assignment = newData.assignments().get(i);
+                builder.append(" ".repeat(indent + 4))
+                        .append(assignment.name())
+                        .append(": ")
+                        .append(formatExpressionPreview(assignment.value()));
+                if (i < newData.assignments().size() - 1) {
+                    builder.append(",");
+                }
+                builder.append('\n');
+            }
+            builder.append(" ".repeat(indent)).append("}");
+            return builder.toString();
+        }
+        builder.append("}");
+        return builder.toString();
+    }
+
+    private Expression terminalReturnExpression(Expression expression) {
+        return switch (expression) {
+            case LetExpression letExpression -> terminalReturnExpression(letExpression.rest());
+            default -> expression;
+        };
+    }
+
+    private Optional<SourcePosition> returnExpressionPosition(Expression expression) {
+        return switch (expression) {
+            case LetExpression letExpression -> returnExpressionPosition(letExpression.rest()).or(() -> letExpression.position());
+            default -> expression.position();
+        };
     }
 
     private String formatParserType(pl.grzeslowski.capybara.parser.Type type) {
@@ -510,8 +666,18 @@ public class CapybaraLinker {
             case ByteValue byteValue -> byteValue.byteValue();
             case BooleanValue booleanValue -> String.valueOf(booleanValue.value());
             case Value value -> value.name();
+            case InfixExpression infixExpression -> formatExpressionPreview(infixExpression.left())
+                                                   + previewOperator(infixExpression.operator().symbol())
+                                                   + formatExpressionPreview(infixExpression.right());
             default -> expression.toString();
         };
+    }
+
+    private String previewOperator(String operator) {
+        if (operator != null && operator.length() >= 2 && operator.startsWith("\"") && operator.endsWith("\"")) {
+            return operator.substring(1, operator.length() - 1);
+        }
+        return operator;
     }
 
     private String formatLinkedType(LinkedType type) {
