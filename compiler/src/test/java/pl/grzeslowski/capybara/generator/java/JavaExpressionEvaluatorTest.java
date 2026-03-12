@@ -117,7 +117,7 @@ class JavaExpressionEvaluatorTest {
                 Arguments.of(
                         "wild_if",
                         """
-                                fun wild_if(x: int): int =
+                                fun wild_if(x: int): string =
                                     let a = "unsued?"
                                     if ({
                                         let a = x * 2

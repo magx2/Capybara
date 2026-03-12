@@ -433,32 +433,166 @@ public class CapybaraLinker {
             String moduleSourceFile
     ) {
         var linked = linkParameters(function.parameters(), dataTypes)
-                .flatMap(parameters ->
-                        new CapybaraExpressionLinker(
-                                parameters,
-                                dataTypes,
-                                signatures,
-                                signaturesByModule,
-                                moduleClassNameByModuleName
-                        ).linkExpression(function.expression())
-                                .flatMap(ex ->
-                                        function.returnType()
-                                                .map(type -> {
-                                                    // todo check if this type matches ex.type
-                                                    return linkType(type, dataTypes);
-                                                })
-                                                .orElseGet(() -> ValueOrError.success(ex.type()))
-                                                .map(rtype ->
-                                                        new LinkedFunction(
-                                                                function.name(),
-                                                                rtype,
-                                                                parameters,
-                                                                enrichNothing(coerceReturnExpression(ex, rtype), function.name(), moduleSourceFile),
-                                                                function.comments(),
-                                                                isProgramMain(function.name(), rtype, parameters)))));
+                .flatMap(parameters -> new CapybaraExpressionLinker(
+                        parameters,
+                        dataTypes,
+                        signatures,
+                        signaturesByModule,
+                        moduleClassNameByModuleName
+                ).linkExpression(function.expression()).flatMap(ex -> function.returnType()
+                        .map(type -> linkType(type, dataTypes))
+                        .orElseGet(() -> ValueOrError.success(ex.type()))
+                        .flatMap(rtype -> validateFunctionReturnType(function, ex, rtype)
+                                .map(validatedExpression -> new LinkedFunction(
+                                        function.name(),
+                                        rtype,
+                                        parameters,
+                                        enrichNothing(coerceReturnExpression(validatedExpression, rtype), function.name(), moduleSourceFile),
+                                        function.comments(),
+                                        isProgramMain(function.name(), rtype, parameters)
+                                )))));
         var normalizedFile = normalizeFile(moduleSourceFile);
         var fallbackPosition = function.expression().position().or(() -> function.position());
         return withPosition(linked, fallbackPosition, normalizedFile);
+    }
+
+    private ValueOrError<pl.grzeslowski.capybara.linker.expression.LinkedExpression> validateFunctionReturnType(
+            Function function,
+            pl.grzeslowski.capybara.linker.expression.LinkedExpression expression,
+            LinkedType declaredReturnType
+    ) {
+        if (isAssignableReturnType(declaredReturnType, expression.type())) {
+            return ValueOrError.success(expression);
+        }
+        return ValueOrError.error(
+                "Cannot return `" + expression.type() + "` from function `" + function.name()
+                + "` declared as `" + declaredReturnType + "`"
+        );
+    }
+
+    private boolean isAssignableReturnType(LinkedType expected, LinkedType actual) {
+        if (expected == actual || expected.equals(actual)) {
+            return true;
+        }
+        if (actual == PrimitiveLinkedType.NOTHING
+            || actual == PrimitiveLinkedType.ANY
+            || expected == PrimitiveLinkedType.ANY) {
+            return true;
+        }
+        if (expected == PrimitiveLinkedType.DATA) {
+            return actual instanceof GenericDataType || actual == PrimitiveLinkedType.DATA;
+        }
+        if (expected instanceof PrimitiveLinkedType expectedPrimitive
+            && actual instanceof PrimitiveLinkedType actualPrimitive) {
+            return isAssignablePrimitiveReturnType(expectedPrimitive, actualPrimitive);
+        }
+        if (expected instanceof CollectionLinkedType.LinkedList expectedList
+            && actual instanceof CollectionLinkedType.LinkedList actualList) {
+            return isAssignableReturnType(expectedList.elementType(), actualList.elementType());
+        }
+        if (expected instanceof CollectionLinkedType.LinkedSet expectedSet
+            && actual instanceof CollectionLinkedType.LinkedSet actualSet) {
+            return isAssignableReturnType(expectedSet.elementType(), actualSet.elementType());
+        }
+        if (expected instanceof CollectionLinkedType.LinkedDict expectedDict
+            && actual instanceof CollectionLinkedType.LinkedDict actualDict) {
+            return isAssignableReturnType(expectedDict.valueType(), actualDict.valueType());
+        }
+        if (expected instanceof LinkedTupleType expectedTuple
+            && actual instanceof LinkedTupleType actualTuple) {
+            if (expectedTuple.elementTypes().size() != actualTuple.elementTypes().size()) {
+                return false;
+            }
+            for (int i = 0; i < expectedTuple.elementTypes().size(); i++) {
+                if (!isAssignableReturnType(expectedTuple.elementTypes().get(i), actualTuple.elementTypes().get(i))) {
+                    return false;
+                }
+            }
+            return true;
+        }
+        if (expected instanceof LinkedFunctionType expectedFunction
+            && actual instanceof LinkedFunctionType actualFunction) {
+            return isAssignableReturnType(expectedFunction.argumentType(), actualFunction.argumentType())
+                   && isAssignableReturnType(expectedFunction.returnType(), actualFunction.returnType());
+        }
+        if (expected instanceof LinkedDataParentType expectedParent) {
+            if (actual instanceof LinkedDataParentType actualParent) {
+                return sameTypeName(expectedParent.name(), actualParent.name());
+            }
+            if (actual instanceof LinkedDataType actualData) {
+                if (sameTypeName(expectedParent.name(), actualData.name())) {
+                    return true;
+                }
+                return expectedParent.subTypes().stream()
+                        .anyMatch(subType -> sameTypeName(subType.name(), actualData.name()));
+            }
+        }
+        if (expected instanceof LinkedDataType expectedData) {
+            if (actual instanceof LinkedDataType actualData) {
+                return sameTypeName(expectedData.name(), actualData.name());
+            }
+            if (actual instanceof LinkedDataParentType actualParent) {
+                return sameTypeName(expectedData.name(), actualParent.name());
+            }
+        }
+        if (expected instanceof LinkedGenericTypeParameter) {
+            return true;
+        }
+        return false;
+    }
+
+    private boolean isAssignablePrimitiveReturnType(PrimitiveLinkedType expected, PrimitiveLinkedType actual) {
+        if (expected == actual) {
+            return true;
+        }
+        if (actual == PrimitiveLinkedType.NOTHING) {
+            return true;
+        }
+        if (expected == PrimitiveLinkedType.ANY) {
+            return true;
+        }
+        if (expected == PrimitiveLinkedType.DATA || actual == PrimitiveLinkedType.DATA) {
+            return false;
+        }
+        if (expected == PrimitiveLinkedType.BOOL || actual == PrimitiveLinkedType.BOOL) {
+            return false;
+        }
+        if (expected == PrimitiveLinkedType.STRING || actual == PrimitiveLinkedType.STRING) {
+            return false;
+        }
+        return numericRank(actual) <= numericRank(expected);
+    }
+
+    private int numericRank(PrimitiveLinkedType type) {
+        return switch (type) {
+            case BYTE -> 0;
+            case INT -> 1;
+            case LONG -> 2;
+            case FLOAT -> 3;
+            case DOUBLE -> 4;
+            default -> Integer.MAX_VALUE;
+        };
+    }
+
+    private boolean sameTypeName(String left, String right) {
+        return normalizeTypeName(left).equals(normalizeTypeName(right));
+    }
+
+    private String normalizeTypeName(String name) {
+        var raw = name;
+        var genericStart = raw.indexOf('[');
+        if (genericStart > 0) {
+            raw = raw.substring(0, genericStart);
+        }
+        var slashIdx = raw.lastIndexOf('/');
+        if (slashIdx >= 0 && slashIdx < raw.length() - 1) {
+            raw = raw.substring(slashIdx + 1);
+        }
+        var dotIdx = raw.lastIndexOf('.');
+        if (dotIdx >= 0 && dotIdx < raw.length() - 1) {
+            raw = raw.substring(dotIdx + 1);
+        }
+        return raw;
     }
 
     private pl.grzeslowski.capybara.linker.expression.LinkedExpression coerceReturnExpression(
