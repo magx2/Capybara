@@ -69,6 +69,23 @@ public class CompilationErrorTest {
                                     match letter with
                                     ^ `match` is not exhaustive. Use wildcard `| _ => ...` or add missing branches:`C`, `D`.
                                 """
+                ),
+                Arguments.of(
+                        "match_string",
+                        """
+                                fun foo(x: string): int =
+                                    match x with
+                                    | 'foo' => 1
+                                    | 'boo' => 2
+                                """,
+                        new Position(2, 4),
+                        """
+                                error: mismatched types
+                                 --> /foo/boo/match_string.cfun:2:4
+                                fun foo(x: string): int =
+                                    match x with
+                                    ^ `match` is not exhaustive. Use wildcard `| _ => ...`.
+                                """
                 ));
     }
 

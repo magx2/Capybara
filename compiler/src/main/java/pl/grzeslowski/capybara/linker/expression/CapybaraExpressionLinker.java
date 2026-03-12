@@ -2165,7 +2165,13 @@ public class CapybaraExpressionLinker {
         }
         var requiredConstructors = requiredConstructorsForMatch(matchType);
         if (requiredConstructors.isEmpty()) {
-            return ValueOrError.success(null);
+            if (matchType != STRING) {
+                return ValueOrError.success(null);
+            }
+            return withPosition(
+                    ValueOrError.error("`match` is not exhaustive. Use wildcard `| _ => ...`."),
+                    matchExpression.position()
+            );
         }
         var coveredConstructors = coveredConstructors(cases, requiredConstructors);
         var missing = requiredConstructors.stream()
