@@ -451,9 +451,50 @@ public class CapybaraLinker {
                                         function.comments(),
                                         isProgramMain(function.name(), rtype, parameters)
                                 )))));
+        linked = normalizeInfixOperatorErrors(linked, function, moduleSourceFile);
         var normalizedFile = normalizeFile(moduleSourceFile);
         var fallbackPosition = returnExpressionPosition(function.expression()).or(() -> function.position());
         return withPosition(linked, fallbackPosition, normalizedFile);
+    }
+
+    private ValueOrError<LinkedFunction> normalizeInfixOperatorErrors(
+            ValueOrError<LinkedFunction> linked,
+            Function function,
+            String moduleSourceFile
+    ) {
+        if (!(linked instanceof ValueOrError.Error<LinkedFunction> error)) {
+            return linked;
+        }
+        var transformed = error.errors().stream()
+                .map(singleError -> normalizeInfixOperatorError(singleError, function, moduleSourceFile))
+                .toList();
+        return new ValueOrError.Error<>(transformed);
+    }
+
+    private ValueOrError.Error.SingleError normalizeInfixOperatorError(
+            ValueOrError.Error.SingleError error,
+            Function function,
+            String moduleSourceFile
+    ) {
+        var pattern = java.util.regex.Pattern.compile("Cannot apply `([^`]+)` to `([^`]+)` and `([^`]+)`");
+        var matcher = pattern.matcher(error.message());
+        if (!matcher.matches()) {
+            return error;
+        }
+        var operator = matcher.group(1);
+        var leftType = normalizeReportedTypeName(matcher.group(2));
+        var rightType = normalizeReportedTypeName(matcher.group(3));
+        var line = Math.max(error.line(), 1);
+        var column = Math.max(error.column(), 1);
+        var file = normalizeFile(moduleSourceFile);
+        var functionPreview = formatFunctionHeaderAndExpression(function, formatExpressionPreviewWithSpaces(function.expression()));
+        var pointer = " ".repeat(Math.max(column, 0))
+                      + "^ `" + operator + "` operator is not defined for `" + leftType + " " + operator + " " + rightType + "`";
+        var message = "error: mismatched types\n"
+                      + " --> " + file + ":" + line + ":" + column + "\n"
+                      + functionPreview + "\n"
+                      + pointer + "\n";
+        return new ValueOrError.Error.SingleError(line, column, file, message);
     }
 
     private ValueOrError<pl.grzeslowski.capybara.linker.expression.LinkedExpression> validateFunctionReturnType(
@@ -498,6 +539,19 @@ public class CapybaraLinker {
                 .collect(java.util.stream.Collectors.joining(", "))
                + "): " + formatLinkedType(declaredReturnType)
                + " = " + formatExpressionPreview(function.expression());
+    }
+
+    private String formatFunctionHeaderAndExpression(Function function, String expressionPreview) {
+        var header = new StringBuilder("fun ")
+                .append(function.name())
+                .append("(")
+                .append(function.parameters().stream()
+                        .map(parameter -> parameter.name() + ": " + formatParserType(parameter.type()))
+                        .collect(java.util.stream.Collectors.joining(", ")))
+                .append(")");
+        function.returnType().ifPresent(type -> header.append(": ").append(formatParserType(type)));
+        header.append(" = ").append(expressionPreview);
+        return header.toString();
     }
 
     private String formatMultilineFunctionPreview(Function function, LinkedType declaredReturnType) {
@@ -673,11 +727,62 @@ public class CapybaraLinker {
         };
     }
 
+    private String formatExpressionPreviewWithSpaces(pl.grzeslowski.capybara.parser.Expression expression) {
+        return switch (expression) {
+            case InfixExpression infixExpression -> formatExpressionPreviewWithSpaces(infixExpression.left())
+                                                   + " " + previewOperator(infixExpression.operator().symbol()) + " "
+                                                   + formatExpressionPreviewWithSpaces(infixExpression.right());
+            default -> formatExpressionPreview(expression);
+        };
+    }
+
     private String previewOperator(String operator) {
         if (operator != null && operator.length() >= 2 && operator.startsWith("\"") && operator.endsWith("\"")) {
             return operator.substring(1, operator.length() - 1);
         }
         return operator;
+    }
+
+    private String normalizeReportedTypeName(String typeName) {
+        if (typeName.startsWith("LinkedList[elementType=") && typeName.endsWith("]")) {
+            var inner = typeName.substring("LinkedList[elementType=".length(), typeName.length() - 1);
+            return "list[" + normalizeReportedTypeName(inner) + "]";
+        }
+        if (typeName.startsWith("LinkedSet[elementType=") && typeName.endsWith("]")) {
+            var inner = typeName.substring("LinkedSet[elementType=".length(), typeName.length() - 1);
+            return "set[" + normalizeReportedTypeName(inner) + "]";
+        }
+        if (typeName.startsWith("LinkedDict[valueType=") && typeName.endsWith("]")) {
+            var inner = typeName.substring("LinkedDict[valueType=".length(), typeName.length() - 1);
+            return "dict[" + normalizeReportedTypeName(inner) + "]";
+        }
+        if (typeName.startsWith("LinkedGenericTypeParameter[name=") && typeName.endsWith("]")) {
+            return typeName.substring("LinkedGenericTypeParameter[name=".length(), typeName.length() - 1);
+        }
+        if (typeName.startsWith("LinkedDataType[name=")) {
+            var end = typeName.indexOf(',');
+            if (end > "LinkedDataType[name=".length()) {
+                return typeName.substring("LinkedDataType[name=".length(), end);
+            }
+        }
+        if (typeName.startsWith("LinkedDataParentType[name=")) {
+            var end = typeName.indexOf(',');
+            if (end > "LinkedDataParentType[name=".length()) {
+                return typeName.substring("LinkedDataParentType[name=".length(), end);
+            }
+        }
+        return switch (typeName) {
+            case "BOOL" -> "bool";
+            case "BYTE" -> "byte";
+            case "INT" -> "int";
+            case "LONG" -> "long";
+            case "FLOAT" -> "float";
+            case "DOUBLE" -> "double";
+            case "STRING" -> "string";
+            case "ANY" -> "any";
+            case "NOTHING" -> "nothing";
+            default -> typeName;
+        };
     }
 
     private String formatLinkedType(LinkedType type) {

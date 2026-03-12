@@ -379,7 +379,7 @@ public class CapybaraParser {
                     isGrouped(leftContext),
                     operator,
                     expressionNoLet(rightContext),
-                    position(expression)
+                    position(infixOperator)
             );
         }
 
@@ -588,7 +588,7 @@ public class CapybaraParser {
                     false,
                     operator,
                     expressionNoLetNoPipe(rightContext),
-                    position(expression)
+                    position(infixOperator)
             );
         }
 

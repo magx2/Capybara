@@ -10,7 +10,9 @@ import pl.grzeslowski.capybara.linker.LinkedProgram;
 import pl.grzeslowski.capybara.linker.ValueOrError;
 import pl.grzeslowski.capybara.parser.CapybaraParser;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.SortedSet;
 import java.util.stream.Stream;
 
@@ -39,8 +41,75 @@ public class CompilationErrorTest {
     }
 
 
+    @SuppressWarnings("unchecked")
     static Stream<Arguments> compilationError() {
-        return Stream.concat(simpleCompilationError(), multilineCompilationError());
+        return concat(simpleCompilationError(), multilineCompilationError(), infixOperations());
+    }
+
+    static Stream<Arguments> infixOperations() {
+        var operators = List.of("+", "-", "*", "^", "/");
+        var numericTypes = List.of(
+                new InfixOperand("byte", "byte", "byte"),
+                new InfixOperand("int", "int", "int"),
+                new InfixOperand("long", "long", "long"),
+                new InfixOperand("float", "float", "float"),
+                new InfixOperand("double", "double", "double")
+        );
+        var primitiveTypes = List.of(
+                new InfixOperand("bool", "bool", "bool"),
+                new InfixOperand("byte", "byte", "byte"),
+                new InfixOperand("int", "int", "int"),
+                new InfixOperand("long", "long", "long"),
+                new InfixOperand("float", "float", "float"),
+                new InfixOperand("double", "double", "double")
+        );
+        var anyType = new InfixOperand("any", "any", "any");
+        var byModule = new LinkedHashMap<String, Arguments>();
+
+        for (var op : operators) {
+            for (var right : primitiveTypes) {
+                add(byModule, op, new InfixOperand("bool", "bool", "bool"), right);
+                add(byModule, op, right, new InfixOperand("bool", "bool", "bool"));
+            }
+
+            if (!op.equals("+")) {
+                for (var left : numericTypes) {
+                    add(byModule, op, left, new InfixOperand("string", "string", "string"));
+                }
+                add(byModule, op, new InfixOperand("string", "string", "string"), new InfixOperand("string", "string", "string"));
+            }
+            add(byModule, op, anyType, anyType);
+        }
+
+        return byModule.values().stream();
+    }
+
+    private static void add(Map<String, Arguments> byModule, String op, InfixOperand left, InfixOperand right) {
+        var module = "infix_%s_%s_%s".formatted(opName(op), left.id(), right.id());
+        byModule.putIfAbsent(module, infixCase(module, op, left, right));
+    }
+
+    private static Arguments infixCase(String moduleName, String op, InfixOperand left, InfixOperand right) {
+        var code = "fun foo(left: %s, right: %s) = left %s right".formatted(left.decl(), right.decl(), op);
+        var column = code.indexOf(op);
+        var pointer = " ".repeat(column)
+                      + "^ `%s` operator is not defined for `%s %s %s`".formatted(op, left.shownType(), op, right.shownType());
+        var errorMessage = "error: mismatched types\n"
+                           + " --> /foo/boo/%s.cfun:1:%d\n".formatted(moduleName, column)
+                           + code + "\n"
+                           + pointer + "\n";
+        return Arguments.of(moduleName, code, new Position(1, column), errorMessage);
+    }
+
+    private static String opName(String op) {
+        return switch (op) {
+            case "+" -> "plus";
+            case "-" -> "minus";
+            case "*" -> "mul";
+            case "^" -> "pow";
+            case "/" -> "div";
+            default -> op;
+        };
     }
 
     static Stream<Arguments> simpleCompilationError() {
@@ -214,5 +283,17 @@ public class CompilationErrorTest {
     }
 
     record Position(int line, int column) {
+    }
+
+    record InfixOperand(String id, String decl, String shownType) {
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Stream<Arguments> concat(Stream<Arguments>... streams) {
+        var out = Stream.<Arguments>empty();
+        for (Stream<Arguments> stream : streams) {
+            out = Stream.concat(out, stream);
+        }
+        return out;
     }
 }
