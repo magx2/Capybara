@@ -43,7 +43,7 @@ public class CompilationErrorTest {
 
     @SuppressWarnings("unchecked")
     static Stream<Arguments> compilationError() {
-        return concat(simpleCompilationError(), multilineCompilationError(), infixOperations());
+        return concat(simpleCompilationError(), multilineCompilationError(), infixOperations(), bitwiseOperations());
     }
 
     static Stream<Arguments> infixOperations() {
@@ -84,6 +84,67 @@ public class CompilationErrorTest {
         return byModule.values().stream();
     }
 
+    static Stream<Arguments> bitwiseOperations() {
+        var nonIntPrimitives = List.of(
+                new InfixOperand("byte", "byte", "byte"),
+                new InfixOperand("long", "long", "long"),
+                new InfixOperand("float", "float", "float"),
+                new InfixOperand("double", "double", "double"),
+                new InfixOperand("bool", "bool", "bool"),
+                new InfixOperand("string", "string", "string")
+        );
+        var byModule = new LinkedHashMap<String, Arguments>();
+        var intType = new InfixOperand("int", "int", "int");
+
+        for (var op : List.of(".and.", ".nand.", ".or.", ".xor.")) {
+            for (var t : nonIntPrimitives) {
+                addBitwiseInfix(byModule, op, intType, t);
+                addBitwiseInfix(byModule, op, t, intType);
+            }
+        }
+
+        for (var t : nonIntPrimitives) {
+            addBitwiseNot(byModule, t);
+        }
+
+        return byModule.values().stream();
+    }
+
+    private static void addBitwiseInfix(Map<String, Arguments> byModule, String op, InfixOperand left, InfixOperand right) {
+        var module = "bitwise_%s_%s_%s".formatted(bitwiseOpName(op), left.id(), right.id());
+        byModule.putIfAbsent(module, bitwiseInfixCase(module, op, left, right));
+    }
+
+    private static void addBitwiseNot(Map<String, Arguments> byModule, InfixOperand operand) {
+        var module = "bitwise_not_%s".formatted(operand.id());
+        byModule.putIfAbsent(module, bitwiseNotCase(module, operand));
+    }
+
+    private static Arguments bitwiseInfixCase(String moduleName, String op, InfixOperand left, InfixOperand right) {
+        var code = "fun foo(left: %s, right: %s) = left %s right".formatted(left.decl(), right.decl(), op);
+        var column = code.indexOf(op);
+        var pointer = " ".repeat(column)
+                      + "^ `%s` operator is not defined for `%s %s %s`".formatted(op, left.shownType(), op, right.shownType());
+        var errorMessage = "error: mismatched types\n"
+                           + " --> /foo/boo/%s.cfun:1:%d\n".formatted(moduleName, column)
+                           + code + "\n"
+                           + pointer + "\n";
+        return Arguments.of(moduleName, code, new Position(1, column), errorMessage);
+    }
+
+    private static Arguments bitwiseNotCase(String moduleName, InfixOperand operand) {
+        var code = "fun foo(value: %s) = .not.value".formatted(operand.decl());
+        var renderedCode = "fun foo(value: %s) = value .not. 0".formatted(operand.decl());
+        var column = code.indexOf(".not.");
+        var pointer = " ".repeat(column)
+                      + "^ `.not.` operator is not defined for `%s .not. int`".formatted(operand.shownType());
+        var errorMessage = "error: mismatched types\n"
+                           + " --> /foo/boo/%s.cfun:1:%d\n".formatted(moduleName, column)
+                           + renderedCode + "\n"
+                           + pointer + "\n";
+        return Arguments.of(moduleName, code, new Position(1, column), errorMessage);
+    }
+
     private static void add(Map<String, Arguments> byModule, String op, InfixOperand left, InfixOperand right) {
         var module = "infix_%s_%s_%s".formatted(opName(op), left.id(), right.id());
         byModule.putIfAbsent(module, infixCase(module, op, left, right));
@@ -108,6 +169,16 @@ public class CompilationErrorTest {
             case "*" -> "mul";
             case "^" -> "pow";
             case "/" -> "div";
+            default -> op;
+        };
+    }
+
+    private static String bitwiseOpName(String op) {
+        return switch (op) {
+            case ".and." -> "and";
+            case ".nand." -> "nand";
+            case ".or." -> "or";
+            case ".xor." -> "xor";
             default -> op;
         };
     }

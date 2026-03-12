@@ -1,7 +1,7 @@
 package pl.grzeslowski.capybara.linker.expression;
 
-import pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedList;
 import pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedDict;
+import pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedList;
 import pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedSet;
 import pl.grzeslowski.capybara.linker.*;
 import pl.grzeslowski.capybara.parser.*;
@@ -13,10 +13,7 @@ import java.util.Optional;
 import java.util.logging.Logger;
 
 import static pl.grzeslowski.capybara.linker.CapybaraTypeLinker.linkType;
-import static pl.grzeslowski.capybara.linker.PrimitiveLinkedType.ANY;
-import static pl.grzeslowski.capybara.linker.PrimitiveLinkedType.BOOL;
-import static pl.grzeslowski.capybara.linker.PrimitiveLinkedType.NOTHING;
-import static pl.grzeslowski.capybara.linker.PrimitiveLinkedType.STRING;
+import static pl.grzeslowski.capybara.linker.PrimitiveLinkedType.*;
 import static pl.grzeslowski.capybara.linker.expression.CapybaraTypeFinder.findHigherType;
 
 public class CapybaraExpressionLinker {
@@ -1852,7 +1849,7 @@ public class CapybaraExpressionLinker {
     private static LinkedType findBitwiseNotType(LinkedType left) {
         if (left instanceof PrimitiveLinkedType leftPrimitive) {
             return switch (leftPrimitive) {
-                case BYTE, INT, LONG -> leftPrimitive;
+                case INT -> leftPrimitive;
                 default -> null;
             };
         }
@@ -1930,21 +1927,15 @@ public class CapybaraExpressionLinker {
     }
 
     private static LinkedType findBitwisePrimitiveType(PrimitiveLinkedType left, PrimitiveLinkedType right) {
-        if (!isBitwisePrimitive(left) || !isBitwisePrimitive(right)) {
-            return null;
-        }
-        if (left == PrimitiveLinkedType.LONG || right == PrimitiveLinkedType.LONG) {
-            return PrimitiveLinkedType.LONG;
-        }
-        if (left == PrimitiveLinkedType.INT || right == PrimitiveLinkedType.INT) {
+        if (left == PrimitiveLinkedType.INT && right == PrimitiveLinkedType.INT) {
             return PrimitiveLinkedType.INT;
         }
-        return PrimitiveLinkedType.BYTE;
+        return null;
     }
 
     private static boolean isBitwisePrimitive(PrimitiveLinkedType type) {
         return switch (type) {
-            case BYTE, INT, LONG -> true;
+            case INT -> true;
             default -> false;
         };
     }

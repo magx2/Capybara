@@ -29,9 +29,4 @@ class BitwiseTest {
     void bitNot() {
         assertThat(Bitwise.bitNot(0b1100)).isEqualTo(~0b1100);
     }
-
-    @Test
-    void bitNotLong() {
-        assertThat(Bitwise.bitNotLong(0b1100L)).isEqualTo(~0b1100L);
-    }
 }
