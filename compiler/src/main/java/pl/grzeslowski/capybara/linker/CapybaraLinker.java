@@ -277,7 +277,7 @@ public class CapybaraLinker {
             case LinkedDataType linkedDataType -> resolveGenericDataType(linkedDataType, all);
             case LinkedDataParentType linkedDataParentType -> {
                 if (isQualifiedExternalPlaceholder(linkedDataParentType)) {
-                    var resolved = all.get(linkedDataParentType.name());
+                    var resolved = resolveQualifiedExternalType(all, linkedDataParentType.name());
                     if (resolved != null) {
                         yield withRequestedName(resolveGenericDataType(resolved, all), linkedDataParentType.name());
                     }
@@ -304,6 +304,18 @@ public class CapybaraLinker {
                && type.fields().isEmpty()
                && type.subTypes().isEmpty()
                && type.typeParameters().isEmpty();
+    }
+
+    private GenericDataType resolveQualifiedExternalType(Map<String, GenericDataType> all, String qualifiedTypeName) {
+        var direct = all.get(qualifiedTypeName);
+        if (direct != null) {
+            return direct;
+        }
+        var genericStart = qualifiedTypeName.indexOf('[');
+        if (genericStart > 0) {
+            return all.get(qualifiedTypeName.substring(0, genericStart));
+        }
+        return null;
     }
 
     private GenericDataType withRequestedName(GenericDataType type, String requestedName) {

@@ -78,7 +78,12 @@ public class CapybaraParser {
         var lines = input.split("\\R", -1);
         for (var i = 0; i < lines.length; i++) {
             var line = lines[i];
-            var pipe = line.indexOf('|');
+            var trimmed = line.stripLeading();
+            if (!trimmed.startsWith("|")) {
+                continue;
+            }
+            var leadingSpaces = line.length() - trimmed.length();
+            var pipe = line.indexOf('|', leadingSpaces);
             if (pipe < 0) {
                 continue;
             }

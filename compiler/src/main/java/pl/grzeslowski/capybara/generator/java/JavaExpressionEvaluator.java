@@ -1379,9 +1379,15 @@ public class JavaExpressionEvaluator {
             return normalizeJavaTypeReference(constructorType.name());
         }
         if (matchType instanceof LinkedDataParentType parentType) {
-            var normalizedParent = normalizeQualifiedTypeName(parentType.name());
-            if (normalizedParent.endsWith("/Result") || normalizedParent.endsWith(".Result") || "Result".equals(parentType.name())) {
-                return "Result." + normalizeJavaClassName(constructorType.name());
+            var normalizedParent = stripGenericSuffix(normalizeQualifiedTypeName(parentType.name()));
+            if (normalizedParent.endsWith("/Result")
+                || normalizedParent.endsWith(".Result")
+                || normalizedParent.endsWith("/Result.Result")
+                || normalizedParent.endsWith(".Result.Result")
+                || "Result".equals(parentType.name())) {
+                return normalizeJavaTypeReference(stripGenericSuffix(parentType.name()))
+                       + "."
+                       + normalizeJavaClassName(constructorType.name());
             }
         }
         return normalizeJavaClassName(constructorType.name());
@@ -1945,6 +1951,11 @@ public class JavaExpressionEvaluator {
             normalized = "/" + normalized;
         }
         return normalized;
+    }
+
+    private static String stripGenericSuffix(String typeName) {
+        var idx = typeName.indexOf('[');
+        return idx >= 0 ? typeName.substring(0, idx) : typeName;
     }
 
     private static boolean isOptionType(pl.grzeslowski.capybara.linker.LinkedType type) {
