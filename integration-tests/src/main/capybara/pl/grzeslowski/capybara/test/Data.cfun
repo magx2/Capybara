@@ -1,4 +1,5 @@
 // algebraic type
+
 type Shape = Circle | Rectangle
 data Circle { radius: float }
 data Rectangle { width: float, "height": float }
@@ -62,3 +63,22 @@ fun create_positional_data_expr(text: string, number: int): PositionalData =
     let new_text = text + "!"
     let new_number = number + 1
     PositionalData { new_text, new_number }
+
+data Box[T] { value: T }
+
+type BoxResult[T] = BoxSuccess[T] | BoxError
+data BoxSuccess[T] { value: T }
+data BoxError { message: string }
+
+fun BoxResult[T].`|`(map: T => BoxResult[Y]): BoxResult[Y] =
+    match this with
+    | BoxError e -> e
+    | BoxSuccess s -> map(s.value)
+
+fun to_box_long(v: string): BoxResult[long] =
+    if v == "41"
+    then BoxSuccess { 42L }
+    else BoxError { "bad long: " + v }
+
+fun generic_field_pipe(box: Box[string]): BoxResult[long] =
+    to_box_long(box.value) | number => BoxSuccess { number + 1L }

@@ -545,11 +545,13 @@ public class JavaExpressionEvaluator {
     }
 
     private static Scope evaluateLambdaExpression(LinkedLambdaExpression lambdaExpression, Scope scope) {
+        var javaArgumentName = normalizeJavaLocalIdentifier(lambdaExpression.argumentName());
         var bodyExSc = evaluateExpression(
                 lambdaExpression.expression(),
                 scope.addLocalValue(lambdaExpression.argumentName())
+                        .addValueOverride(lambdaExpression.argumentName(), javaArgumentName)
         ).popExpression();
-        return bodyExSc.scope().addExpression(lambdaExpression.argumentName() + " -> (" + bodyExSc.expression() + ")");
+        return bodyExSc.scope().addExpression(javaArgumentName + " -> (" + bodyExSc.expression() + ")");
     }
 
     private static Scope evaluatePipeExpression(LinkedPipeExpression pipeExpression, Scope scope) {
@@ -1848,6 +1850,13 @@ public class JavaExpressionEvaluator {
             case '|' -> "pipe";
             default -> "op" + Integer.toHexString(symbol);
         };
+    }
+
+    private static String normalizeJavaLocalIdentifier(String identifier) {
+        if (JAVA_KEYWORDS.contains(identifier)) {
+            return identifier + "_";
+        }
+        return identifier;
     }
 
     private static String normalizeFunctionCallTarget(String target) {

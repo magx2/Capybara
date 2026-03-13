@@ -100,4 +100,15 @@ class DataTest {
         assertThat(value.text()).isEqualTo("abc!");
         assertThat(value.number()).isEqualTo(11);
     }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void genericFieldCanBeMappedWithResultPipe() {
+        var success = Data.genericFieldPipe(new Data.Box<>("41"));
+        assertThat(success).isInstanceOf(Data.BoxSuccess.class);
+        assertThat(((Data.BoxSuccess<Long>) success).value()).isEqualTo(43L);
+
+        var error = Data.genericFieldPipe(new Data.Box<>("x"));
+        assertThat(error).isInstanceOf(Data.BoxError.class);
+    }
 }

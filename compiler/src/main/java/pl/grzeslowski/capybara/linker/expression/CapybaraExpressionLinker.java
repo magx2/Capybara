@@ -216,12 +216,48 @@ public class CapybaraExpressionLinker {
                             .filter(field -> field.name().equals(fieldAccess.field()))
                             .findFirst()
                             .<ValueOrError<LinkedExpression>>map(field ->
-                                    ValueOrError.success(new LinkedFieldAccess(source, field.name(), field.type())))
+                                    ValueOrError.success(new LinkedFieldAccess(
+                                            source,
+                                            field.name(),
+                                            resolveFieldType(dataType, field)
+                                    )))
                             .orElseGet(() -> withPosition(
                                     ValueOrError.error("Field `" + fieldAccess.field() + "` not found in type `" + dataType.name() + "`"),
                                     fieldAccess.position()
                             ));
                 });
+    }
+
+    private LinkedType resolveFieldType(GenericDataType dataType, LinkedDataType.LinkedField field) {
+        var actualTypeDescriptors = switch (dataType) {
+            case LinkedDataType linkedDataType -> linkedDataType.typeParameters();
+            case LinkedDataParentType linkedDataParentType -> linkedDataParentType.typeParameters();
+        };
+        if (actualTypeDescriptors.isEmpty()) {
+            return field.type();
+        }
+
+        var resolvedDataType = resolveDataTypeByName(dataType.name());
+        var declaredTypeParameters = switch (resolvedDataType) {
+            case LinkedDataType linkedDataType -> linkedDataType.typeParameters();
+            case LinkedDataParentType linkedDataParentType -> linkedDataParentType.typeParameters();
+            default -> actualTypeDescriptors;
+        };
+        if (declaredTypeParameters.isEmpty()) {
+            return field.type();
+        }
+
+        var substitutions = new java.util.LinkedHashMap<String, LinkedType>();
+        var max = Math.min(declaredTypeParameters.size(), actualTypeDescriptors.size());
+        for (var i = 0; i < max; i++) {
+            var typeParameterName = declaredTypeParameters.get(i);
+            parseLinkedTypeDescriptor(actualTypeDescriptors.get(i))
+                    .ifPresent(type -> substitutions.put(typeParameterName, type));
+        }
+        if (substitutions.isEmpty()) {
+            return field.type();
+        }
+        return substituteTypeParameters(field.type(), substitutions);
     }
 
     private ValueOrError<LinkedExpression> linkFloatValue(FloatValue floatValue, Scope scope) {
@@ -530,11 +566,11 @@ public class CapybaraExpressionLinker {
             var actualTypeParameters = actualData.typeParameters();
             var count = Math.min(expectedTypeParameters.size(), actualTypeParameters.size());
             for (var i = 0; i < count; i++) {
-                var maybeExpected = parseLinkedTypeDescriptor(expectedTypeParameters.get(i));
-                var maybeActual = parseLinkedTypeDescriptor(actualTypeParameters.get(i));
-                if (maybeExpected.isPresent() && maybeActual.isPresent()) {
-                    collectTypeSubstitutions(maybeExpected.get(), maybeActual.get(), substitutions);
-                }
+                collectTypeSubstitutionsFromDescriptors(
+                        expectedTypeParameters.get(i),
+                        actualTypeParameters.get(i),
+                        substitutions
+                );
             }
             return;
         }
@@ -552,12 +588,32 @@ public class CapybaraExpressionLinker {
             };
             var count = Math.min(expectedTypeParameters.size(), actualTypeParameters.size());
             for (var i = 0; i < count; i++) {
-                var maybeExpected = parseLinkedTypeDescriptor(expectedTypeParameters.get(i));
-                var maybeActual = parseLinkedTypeDescriptor(actualTypeParameters.get(i));
-                if (maybeExpected.isPresent() && maybeActual.isPresent()) {
-                    collectTypeSubstitutions(maybeExpected.get(), maybeActual.get(), substitutions);
-                }
+                collectTypeSubstitutionsFromDescriptors(
+                        expectedTypeParameters.get(i),
+                        actualTypeParameters.get(i),
+                        substitutions
+                );
             }
+        }
+    }
+
+    private void collectTypeSubstitutionsFromDescriptors(
+            String expectedDescriptor,
+            String actualDescriptor,
+            Map<String, LinkedType> substitutions
+    ) {
+        var maybeActual = parseLinkedTypeDescriptor(actualDescriptor);
+        if (maybeActual.isEmpty()) {
+            return;
+        }
+        var maybeExpected = parseLinkedTypeDescriptor(expectedDescriptor);
+        if (maybeExpected.isPresent()) {
+            collectTypeSubstitutions(maybeExpected.get(), maybeActual.get(), substitutions);
+            return;
+        }
+        var expectedName = expectedDescriptor == null ? "" : expectedDescriptor.trim();
+        if (!expectedName.isEmpty()) {
+            substitutions.putIfAbsent(expectedName, maybeActual.get());
         }
     }
 
@@ -1176,7 +1232,18 @@ public class CapybaraExpressionLinker {
     }
 
     private boolean isSubtypeOfParent(LinkedDataType candidate, LinkedDataParentType expectedParentType) {
-        return expectedParentType.subTypes().stream()
+        if (expectedParentType.subTypes().stream()
+                .anyMatch(subType -> sameRawTypeName(subType.name(), candidate.name()))) {
+            return true;
+        }
+        if (!expectedParentType.subTypes().isEmpty()) {
+            return false;
+        }
+        return dataTypes.values().stream()
+                .filter(LinkedDataParentType.class::isInstance)
+                .map(LinkedDataParentType.class::cast)
+                .filter(parentType -> sameRawTypeName(parentType.name(), expectedParentType.name()))
+                .flatMap(parentType -> parentType.subTypes().stream())
                 .anyMatch(subType -> sameRawTypeName(subType.name(), candidate.name()));
     }
 
@@ -1324,7 +1391,38 @@ public class CapybaraExpressionLinker {
     }
 
     private InfixExpression normalizePipeAssociativity(InfixExpression expression) {
+        if (expression.operator() == InfixOperator.PIPE
+            && expression.left() instanceof InfixExpression leftInfix
+            && leftInfix.operator() == InfixOperator.PIPE
+            && leftInfix.right() instanceof LambdaExpression outerLambda
+            && expression.right() instanceof LambdaExpression innerLambda
+            && outerLambda.argumentNames().size() == 1) {
+            var outerArgument = outerLambda.argumentNames().get(0);
+            if (!containsValueReference(innerLambda.expression(), outerArgument)) {
+                return expression;
+            }
+            var nestedBody = new InfixExpression(
+                    outerLambda.expression(),
+                    InfixOperator.PIPE,
+                    innerLambda,
+                    expression.position()
+            );
+            var nestedLambda = new LambdaExpression(
+                    outerLambda.argumentNames(),
+                    nestedBody,
+                    outerLambda.position()
+            );
+            return new InfixExpression(
+                    leftInfix.left(),
+                    InfixOperator.PIPE,
+                    nestedLambda,
+                    expression.position()
+            );
+        }
         if (!isPipeOperator(expression.operator()) || !(expression.right() instanceof InfixExpression rightInfix)) {
+            return expression;
+        }
+        if (rightInfix.left() instanceof LambdaExpression) {
             return expression;
         }
         if (!isPipeOperator(rightInfix.operator())
@@ -1345,6 +1443,72 @@ public class CapybaraExpressionLinker {
                 rightInfix.right(),
                 rightInfix.position()
         );
+    }
+
+    private boolean containsValueReference(Expression expression, String variableName) {
+        return switch (expression) {
+            case Value value -> value.name().equals(variableName);
+            case FieldAccess fieldAccess -> containsValueReference(fieldAccess.source(), variableName);
+            case FunctionCall functionCall -> functionCall.arguments().stream()
+                    .anyMatch(argument -> containsValueReference(argument, variableName));
+            case FunctionInvoke functionInvoke ->
+                    containsValueReference(functionInvoke.function(), variableName)
+                    || functionInvoke.arguments().stream().anyMatch(argument -> containsValueReference(argument, variableName));
+            case InfixExpression infixExpression ->
+                    containsValueReference(infixExpression.left(), variableName)
+                    || containsValueReference(infixExpression.right(), variableName);
+            case IfExpression ifExpression ->
+                    containsValueReference(ifExpression.condition(), variableName)
+                    || containsValueReference(ifExpression.thenBranch(), variableName)
+                    || containsValueReference(ifExpression.elseBranch(), variableName);
+            case IndexExpression indexExpression ->
+                    containsValueReference(indexExpression.source(), variableName)
+                    || containsValueReference(indexExpression.index(), variableName);
+            case SliceExpression sliceExpression ->
+                    containsValueReference(sliceExpression.source(), variableName)
+                    || sliceExpression.start().map(start -> containsValueReference(start, variableName)).orElse(false)
+                    || sliceExpression.end().map(end -> containsValueReference(end, variableName)).orElse(false);
+            case LambdaExpression lambdaExpression -> {
+                if (lambdaExpression.argumentNames().contains(variableName)) {
+                    yield false;
+                }
+                yield containsValueReference(lambdaExpression.expression(), variableName);
+            }
+            case ReduceExpression reduceExpression -> {
+                if (reduceExpression.accumulatorName().equals(variableName)
+                    || reduceExpression.valueName().equals(variableName)
+                    || reduceExpression.keyName().map(variableName::equals).orElse(false)) {
+                    yield false;
+                }
+                yield containsValueReference(reduceExpression.initialValue(), variableName)
+                      || containsValueReference(reduceExpression.reducerExpression(), variableName);
+            }
+            case LetExpression letExpression -> {
+                var valueContains = containsValueReference(letExpression.value(), variableName);
+                if (letExpression.name().equals(variableName)) {
+                    yield valueContains;
+                }
+                yield valueContains || containsValueReference(letExpression.rest(), variableName);
+            }
+            case MatchExpression matchExpression ->
+                    containsValueReference(matchExpression.matchWith(), variableName)
+                    || matchExpression.cases().stream()
+                    .anyMatch(matchCase -> containsValueReference(matchCase.expression(), variableName));
+            case NewData newData ->
+                    newData.assignments().stream().anyMatch(assignment -> containsValueReference(assignment.value(), variableName))
+                    || newData.positionalArguments().stream().anyMatch(argument -> containsValueReference(argument, variableName))
+                    || newData.spreads().stream().anyMatch(spread -> containsValueReference(spread, variableName));
+            case NewDictExpression newDictExpression -> newDictExpression.entries().stream()
+                    .anyMatch(entry -> containsValueReference(entry.key(), variableName)
+                                       || containsValueReference(entry.value(), variableName));
+            case NewListExpression newListExpression -> newListExpression.values().stream()
+                    .anyMatch(value -> containsValueReference(value, variableName));
+            case NewSetExpression newSetExpression -> newSetExpression.values().stream()
+                    .anyMatch(value -> containsValueReference(value, variableName));
+            case TupleExpression tupleExpression -> tupleExpression.values().stream()
+                    .anyMatch(value -> containsValueReference(value, variableName));
+            default -> false;
+        };
     }
 
     private static boolean isPipeOperator(InfixOperator operator) {
