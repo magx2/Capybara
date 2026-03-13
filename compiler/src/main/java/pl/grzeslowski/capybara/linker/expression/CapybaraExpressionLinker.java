@@ -55,10 +55,7 @@ public class CapybaraExpressionLinker {
             case FieldAccess fieldAccess -> linkFieldAccess(fieldAccess, scope);
             case FloatValue floatValue -> linkFloatValue(floatValue, scope);
             case FunctionCall functionCall -> linkFunctionCall(functionCall, scope);
-            case FunctionReference functionReference -> withPosition(
-                    ValueOrError.error("Function reference can only be used as the right side of `|`"),
-                    functionReference.position()
-            );
+            case FunctionReference functionReference -> linkFunctionReference(functionReference, scope);
             case IfExpression ifExpression -> linkIfExpression(ifExpression, scope);
             case IndexExpression indexExpression -> linkIndexExpression(indexExpression, scope);
             case InfixExpression infixExpression -> linkInfixExpression(infixExpression, scope);
@@ -715,6 +712,44 @@ public class CapybaraExpressionLinker {
             );
         }
         return ValueOrError.success(best.expression());
+    }
+
+    private ValueOrError<LinkedExpression> linkFunctionReference(FunctionReference functionReference, Scope scope) {
+        var candidates = functionSignatures.stream()
+                .filter(signature -> signature.name().equals(functionReference.name()))
+                .toList();
+        if (candidates.isEmpty()) {
+            return withPosition(
+                    ValueOrError.error("Function `" + functionReference.name() + "` not found"),
+                    functionReference.position()
+            );
+        }
+        if (candidates.size() > 1) {
+            return withPosition(
+                    ValueOrError.error("Function reference `" + functionReference.name() + "` is ambiguous. Add expected function type."),
+                    functionReference.position()
+            );
+        }
+        return ValueOrError.success(toFunctionReferenceLambda(candidates.getFirst()));
+    }
+
+    private LinkedExpression toFunctionReferenceLambda(FunctionSignature candidate) {
+        var argumentNames = new java.util.ArrayList<String>(candidate.parameterTypes().size());
+        var callArguments = new java.util.ArrayList<LinkedExpression>(candidate.parameterTypes().size());
+        for (int i = 0; i < candidate.parameterTypes().size(); i++) {
+            var argumentName = "arg" + i;
+            argumentNames.add(argumentName);
+            callArguments.add(new LinkedVariable(argumentName, candidate.parameterTypes().get(i)));
+        }
+
+        LinkedExpression expression = new LinkedFunctionCall(candidate.name(), List.copyOf(callArguments), candidate.returnType());
+        var nestedType = candidate.returnType();
+        for (int i = argumentNames.size() - 1; i >= 0; i--) {
+            var functionType = new LinkedFunctionType(candidate.parameterTypes().get(i), nestedType);
+            expression = new LinkedLambdaExpression(argumentNames.get(i), expression, functionType);
+            nestedType = functionType;
+        }
+        return expression;
     }
 
     private ResolvedFunctionReference resolveFunctionReferenceCandidate(FunctionSignature candidate, FunctionShape expectedShape) {

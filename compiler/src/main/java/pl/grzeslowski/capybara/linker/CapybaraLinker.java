@@ -947,7 +947,7 @@ public class CapybaraLinker {
             case TupleType tupleType -> "tuple[" + tupleType.elementTypes().stream()
                     .map(this::formatParserType)
                     .collect(java.util.stream.Collectors.joining(", ")) + "]";
-            case FunctionType functionType -> formatParserType(functionType.argumentType()) + "->" + formatParserType(functionType.returnType());
+            case FunctionType functionType -> formatParserType(functionType.argumentType()) + "=>" + formatParserType(functionType.returnType());
             case DataType dataType -> dataType.name();
         };
     }
@@ -1036,7 +1036,7 @@ public class CapybaraLinker {
             case LinkedTupleType linkedTupleType -> "tuple[" + linkedTupleType.elementTypes().stream()
                     .map(this::formatLinkedType)
                     .collect(java.util.stream.Collectors.joining(", ")) + "]";
-            case LinkedFunctionType linkedFunctionType -> formatLinkedType(linkedFunctionType.argumentType()) + "->" + formatLinkedType(linkedFunctionType.returnType());
+            case LinkedFunctionType linkedFunctionType -> formatLinkedType(linkedFunctionType.argumentType()) + "=>" + formatLinkedType(linkedFunctionType.returnType());
             case LinkedDataType linkedDataType -> linkedDataType.name();
             case LinkedDataParentType linkedDataParentType -> linkedDataParentType.name();
             case LinkedGenericTypeParameter linkedGenericTypeParameter -> linkedGenericTypeParameter.name();
@@ -1784,7 +1784,7 @@ public class CapybaraLinker {
                     .map(this::typeDescriptor)
                     .collect(java.util.stream.Collectors.joining(", ")) + "]";
             case LinkedFunctionType linkedFunctionType ->
-                    "(" + typeDescriptor(linkedFunctionType.argumentType()) + " -> " + typeDescriptor(linkedFunctionType.returnType()) + ")";
+                    "(" + typeDescriptor(linkedFunctionType.argumentType()) + " => " + typeDescriptor(linkedFunctionType.returnType()) + ")";
             case LinkedDataType linkedDataType -> linkedDataType.typeParameters().isEmpty()
                     ? linkedDataType.name()
                     : linkedDataType.name() + "[" + String.join(", ", linkedDataType.typeParameters()) + "]";
@@ -1870,7 +1870,13 @@ public class CapybaraLinker {
                                 .toList();
                         return new TupleType(elements);
                     }
-                    var arrowIndex = indexOfTopLevelArrow(trimmed);
+                    var arrowIndex = indexOfTopLevelArrow(trimmed, "=>");
+                    if (arrowIndex > 0) {
+                        var left = trimmed.substring(0, arrowIndex).trim();
+                        var right = trimmed.substring(arrowIndex + 2).trim();
+                        return new FunctionType(parseTypeArgument(stripOptionalParentheses(left)), parseTypeArgument(right));
+                    }
+                    arrowIndex = indexOfTopLevelArrow(trimmed, "->");
                     if (arrowIndex > 0) {
                         var left = trimmed.substring(0, arrowIndex).trim();
                         var right = trimmed.substring(arrowIndex + 2).trim();
@@ -1880,7 +1886,7 @@ public class CapybaraLinker {
                 });
     }
 
-    private int indexOfTopLevelArrow(String value) {
+    private int indexOfTopLevelArrow(String value, String arrow) {
         var square = 0;
         var paren = 0;
         for (int i = 0; i < value.length() - 1; i++) {
@@ -1901,7 +1907,7 @@ public class CapybaraLinker {
                 paren = Math.max(0, paren - 1);
                 continue;
             }
-            if (ch == '-' && value.charAt(i + 1) == '>' && square == 0 && paren == 0) {
+            if (square == 0 && paren == 0 && value.startsWith(arrow, i)) {
                 return i;
             }
         }

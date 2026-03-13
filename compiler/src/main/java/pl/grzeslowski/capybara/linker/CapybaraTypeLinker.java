@@ -95,8 +95,74 @@ public class CapybaraTypeLinker {
                                 .toList();
                         return new TupleType(elements);
                     }
+                    var fatArrowIndex = indexOfTopLevelArrow(trimmed, "=>");
+                    if (fatArrowIndex > 0) {
+                        var left = trimmed.substring(0, fatArrowIndex).trim();
+                        var right = trimmed.substring(fatArrowIndex + 2).trim();
+                        return new FunctionType(parseTypeArgument(stripOptionalParentheses(left)), parseTypeArgument(right));
+                    }
+                    var slimArrowIndex = indexOfTopLevelArrow(trimmed, "->");
+                    if (slimArrowIndex > 0) {
+                        var left = trimmed.substring(0, slimArrowIndex).trim();
+                        var right = trimmed.substring(slimArrowIndex + 2).trim();
+                        return new FunctionType(parseTypeArgument(stripOptionalParentheses(left)), parseTypeArgument(right));
+                    }
                     return new DataType(trimmed);
                 });
+    }
+
+    private static int indexOfTopLevelArrow(String value, String arrow) {
+        var square = 0;
+        var paren = 0;
+        for (int i = 0; i < value.length() - 1; i++) {
+            var ch = value.charAt(i);
+            if (ch == '[') {
+                square++;
+                continue;
+            }
+            if (ch == ']') {
+                square = Math.max(0, square - 1);
+                continue;
+            }
+            if (ch == '(') {
+                paren++;
+                continue;
+            }
+            if (ch == ')') {
+                paren = Math.max(0, paren - 1);
+                continue;
+            }
+            if (square == 0 && paren == 0 && value.startsWith(arrow, i)) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    private static String stripOptionalParentheses(String value) {
+        var trimmed = value.trim();
+        if (!trimmed.startsWith("(") || !trimmed.endsWith(")")) {
+            return trimmed;
+        }
+        var inner = trimmed.substring(1, trimmed.length() - 1);
+        var square = 0;
+        var paren = 0;
+        for (int i = 0; i < inner.length(); i++) {
+            var ch = inner.charAt(i);
+            if (ch == '[') {
+                square++;
+            } else if (ch == ']') {
+                square = Math.max(0, square - 1);
+            } else if (ch == '(') {
+                paren++;
+            } else if (ch == ')') {
+                paren = Math.max(0, paren - 1);
+            }
+            if (square == 0 && paren == 0 && i < inner.length() - 1 && inner.charAt(i) == ',' ) {
+                return trimmed;
+            }
+        }
+        return inner.trim();
     }
 
     private static LinkedType instantiateTypeArguments(LinkedType linkedType, List<LinkedType> typeArguments) {
