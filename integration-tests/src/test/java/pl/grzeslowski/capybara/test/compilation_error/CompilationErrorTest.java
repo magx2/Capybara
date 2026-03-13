@@ -25,6 +25,9 @@ public class CompilationErrorTest {
             String code,
             Position expectedPosition,
             String errorMessage) {
+        // given
+        var finalErrorMessage = errorMessage.formatted(expectedPosition.line(), expectedPosition.column());
+
         // when
         var errors = compileProgram(code, moduleName);
 
@@ -35,7 +38,7 @@ public class CompilationErrorTest {
                 () -> assertThat(error.line()).isEqualTo(expectedPosition.line()),
                 () -> assertThat(error.column()).isEqualTo(expectedPosition.column()),
                 () -> assertThat(error.file()).isEqualTo("/foo/boo/%s.cfun".formatted(moduleName)),
-                () -> assertThat(error.message()).isEqualTo(errorMessage));
+                () -> assertThat(error.message()).isEqualTo(finalErrorMessage));
     }
 
     @ParameterizedTest(name = "{index}: should fail when compiling `{0}.cfun` (imports flavour)")
@@ -46,6 +49,9 @@ public class CompilationErrorTest {
             Position expectedPosition,
             String errorMessage,
             List<ImportDeclaration> imports) {
+        // given
+        var finalErrorMessage = errorMessage.formatted(expectedPosition.line(), expectedPosition.column());
+
         // when
         var errors = compileProgram(code, moduleName, imports);
 
@@ -56,7 +62,7 @@ public class CompilationErrorTest {
                 () -> assertThat(error.line()).isEqualTo(expectedPosition.line()),
                 () -> assertThat(error.column()).isEqualTo(expectedPosition.column()),
                 () -> assertThat(error.file()).isEqualTo("/foo/boo/%s.cfun".formatted(moduleName)),
-                () -> assertThat(error.message()).isEqualTo(errorMessage));
+                () -> assertThat(error.message()).isEqualTo(finalErrorMessage));
     }
 
     @SuppressWarnings("unchecked")
@@ -77,7 +83,7 @@ public class CompilationErrorTest {
                         new Position(3, 14),
                         """
                                 error: mismatched types
-                                 --> /foo/boo/infix_operator_outside_of_package.cfun:3:14
+                                 --> /foo/boo/infix_operator_outside_of_package.cfun:%d:%d
                                 fun Name[T].foo(map: T -> Name[Y]): Name[Y] =
                                             ^ Cannot declare method on external type `Name`. Type methods/infix operators must be declared in the module where the type is defined.
                                 """,
@@ -94,7 +100,7 @@ public class CompilationErrorTest {
                         new Position(3, 13),
                         """
                                 error: mismatched types
-                                 --> /foo/boo/infix_special_operator_outside_of_package.cfun:3:13
+                                 --> /foo/boo/infix_special_operator_outside_of_package.cfun:%d:%d
                                 fun Name[T].`+`(map: T -> Name[Y]): Name[Y] =
                                              ^ Cannot declare method on external type `Name`. Type methods/infix operators must be declared in the module where the type is defined.
                                 """,
