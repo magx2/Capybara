@@ -237,6 +237,12 @@ public class CapybaraLinker {
         importedTypes.forEach((typeName, type) -> {
             all.put(modulePath + "." + typeName, type);
             all.put("/" + modulePath + "." + typeName, type);
+            // Allow fully-qualified references without duplicate suffix when type name equals module name:
+            // /capy/lang/Program instead of /capy/lang/Program.Program
+            if (module.name().equals(typeName)) {
+                all.put(modulePath, type);
+                all.put("/" + modulePath, type);
+            }
         });
     }
 
@@ -300,7 +306,6 @@ public class CapybaraLinker {
 
     private boolean isQualifiedExternalPlaceholder(LinkedDataParentType type) {
         return type.name().startsWith("/")
-               && type.name().contains(".")
                && type.fields().isEmpty()
                && type.subTypes().isEmpty()
                && type.typeParameters().isEmpty();
@@ -2180,7 +2185,7 @@ public class CapybaraLinker {
     }
 
     private boolean isQualifiedExternalTypeName(String typeName) {
-        return typeName.startsWith("/") && typeName.contains(".");
+        return typeName.startsWith("/");
     }
 
     private boolean isOptionExternalTypeName(String typeName) {

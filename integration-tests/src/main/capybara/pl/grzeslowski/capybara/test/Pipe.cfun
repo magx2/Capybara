@@ -84,7 +84,7 @@ data Value { x: int }
 
 fun add(v: Value, x: int): Value = Value { x: v.x + x }
 
-fun data_pipe(a: int, b: int, c: int): /capy/lang/Option.Option[Value] =
+fun data_pipe(a: int, b: int, c: int): /capy/lang/Option[Value] =
     Value { x: a }
         |- v => v.x > 0
         | v => add(v, b)
@@ -111,7 +111,7 @@ fun type_pipe_ref(x: int): Boxed =
         | :keep_boxed
         | :add_to_boxed
 
-fun type_pipe_optional(x: int): /capy/lang/Option.Option[Boxed] =
+fun type_pipe_optional(x: int): /capy/lang/Option[Boxed] =
     IntBox { value: x }
         | bx => keep_boxed(bx)
         |- by => x > 0

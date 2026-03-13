@@ -11,8 +11,8 @@ data DoubleAssertion { value: double }
 data FloatAssertion { value: float }
 data BoolAssertion { value: bool }
 data DataAssertion { value: data }
-data OptionAssertion[T] { value: /capy/lang/Option.Option[T] }
-data ResultAssertion[T] { value: /capy/lang/Result.Result[T] }
+data OptionAssertion[T] { value: /capy/lang/Option[T] }
+data ResultAssertion[T] { value: /capy/lang/Result[T] }
 //data ListAssertion[T] { value: list[T] }
 //data SetAssertion[T] { value: set[T] }
 //data DictAssertion[T] { value: dict[T] }
@@ -77,7 +77,7 @@ fun DataAssertion.contains(other: any): DataAssertion =
         assertions: this.assertions + assertion
     }
 
-fun OptionAssertion[T].is_equal_to(other: /capy/lang/Option.Option[T]): OptionAssertion[T] =
+fun OptionAssertion[T].is_equal_to(other: /capy/lang/Option[T]): OptionAssertion[T] =
     let assertion = Assertion {
         result: this.value == other,
         message: "Expected data:\n" + this.value + "\nto be equal to:\n" + other
@@ -111,7 +111,7 @@ fun OptionAssertion[T].is_empty(): OptionAssertion[T] =
         assertions: this.assertions + assertion
     }
 
-fun ResultAssertion[T].is_equal_to(other: /capy/lang/Result.Result[T]): ResultAssertion[T] =
+fun ResultAssertion[T].is_equal_to(other: /capy/lang/Result[T]): ResultAssertion[T] =
     let assertion = Assertion {
         result: this.value == other,
         message: "Expected result:\n" + this.value + "\nto contains:\n" + other

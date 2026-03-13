@@ -1,7 +1,7 @@
 from /capy/assert/Assert import { * }
 from /capy/serialization/Json import { * }
 
-fun main(args: list[string]): /capy/lang/Program.Program =
+fun main(args: list[string]): /capy/lang/Program =
     run_tests([
     // ser
         test_serialize_simple_object(),

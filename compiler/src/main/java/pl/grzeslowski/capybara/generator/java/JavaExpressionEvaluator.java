@@ -1894,6 +1894,14 @@ public class JavaExpressionEvaluator {
             || normalizedTypeName.endsWith("/Option")) {
             return "java.util.Optional";
         }
+        if (rawTypeName.startsWith("/") && !rawTypeName.contains(".")) {
+            var slashIndex = rawTypeName.lastIndexOf('/');
+            if (slashIndex > 0 && slashIndex < rawTypeName.length() - 1) {
+                var packageName = rawTypeName.substring(1, slashIndex).replace('/', '.');
+                var className = normalizeJavaClassName(rawTypeName.substring(slashIndex + 1));
+                return packageName + "." + className;
+            }
+        }
         if (rawTypeName.contains("/") && rawTypeName.contains(".")) {
             var dotIndex = rawTypeName.lastIndexOf('.');
             var slashIndex = rawTypeName.lastIndexOf('/');

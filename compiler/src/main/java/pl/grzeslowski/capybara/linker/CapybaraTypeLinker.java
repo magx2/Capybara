@@ -349,7 +349,7 @@ public class CapybaraTypeLinker {
     }
 
     private static LinkedType withQualifiedNameIfNeeded(GenericDataType type, String requestedName) {
-        if (!requestedName.contains(".")) {
+        if (!requestedName.contains(".") && !requestedName.startsWith("/")) {
             return type;
         }
         return switch (type) {

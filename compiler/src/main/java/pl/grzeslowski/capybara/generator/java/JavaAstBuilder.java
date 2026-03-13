@@ -281,6 +281,14 @@ public class JavaAstBuilder {
         if ("Option".equals(rawTypeName) || isOptionTypeName(rawTypeName)) {
             return new JavaType("java.util.Optional");
         }
+        if (rawTypeName.startsWith("/") && !rawTypeName.contains(".")) {
+            var slashIndex = rawTypeName.lastIndexOf('/');
+            if (slashIndex > 0 && slashIndex < rawTypeName.length() - 1) {
+                var packageName = rawTypeName.substring(1, slashIndex).replace('/', '.');
+                var className = buildClassName(rawTypeName.substring(slashIndex + 1));
+                return new JavaType(packageName + "." + className);
+            }
+        }
         if (rawTypeName.contains("/") && rawTypeName.contains(".")) {
             var dotIndex = rawTypeName.lastIndexOf('.');
             var slashIndex = rawTypeName.lastIndexOf('/');
