@@ -1131,9 +1131,12 @@ public class CapybaraParser {
 
         var typedPattern = context.typedPattern();
         if (typedPattern != null) {
+            var patternName = typedPattern.NAME() != null
+                    ? typedPattern.NAME().getText()
+                    : "__ignored";
             return new MatchExpression.TypedPattern(
                     type(typedPattern.patternType().getText()),
-                    typedPattern.NAME().getText()
+                    patternName
             );
         }
 

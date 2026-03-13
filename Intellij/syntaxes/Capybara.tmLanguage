@@ -51,7 +51,7 @@
     <dict><key>name</key><string>entity.name.function.capybara</string><key>match</key><string>\b([A-Za-z_][A-Za-z0-9_]*)\s*(?=\()</string></dict>
     <dict>
       <key>name</key><string>meta.match.typed-pattern.capybara</string>
-      <key>match</key><string>(\|)\s*(_*[A-Z][A-Za-z0-9_]*)\s+([A-Za-z_][A-Za-z0-9_]*)\s*(=&gt;)</string>
+      <key>match</key><string>(\|)\s*(_*[A-Z][A-Za-z0-9_]*)\s+([A-Za-z_][A-Za-z0-9_]*|_)\s*(=&gt;)</string>
     </dict>
     <dict>
       <key>name</key><string>meta.match.wildcard-binding.capybara</string>

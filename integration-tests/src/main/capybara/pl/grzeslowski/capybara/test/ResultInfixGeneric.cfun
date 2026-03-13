@@ -15,6 +15,11 @@ fun MyResult[T].`|*`(flatmap: T -> MyResult[MyResult[Y]]): MyResult[Y] =
         | Fail f => f
         | Ok { top_result } => top_result
 
+fun MyResult[T].or_else(v: T): T =
+    match this with
+    | Fail _ => v
+    | Ok { v } => v
+
 fun map_to_string(v: int): MyResult[string] = Ok { value: "v=" + v }
 
 fun map_to_fail(v: int): MyResult[string] = Fail { message: "bad:" + v }

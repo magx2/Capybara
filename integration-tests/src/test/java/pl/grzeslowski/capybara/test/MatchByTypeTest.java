@@ -22,6 +22,12 @@ class MatchByTypeTest {
     }
 
     @Test
+    void typedPatternCanUseUnderscoreBinding() {
+        assertThat(MatchByType.matchIntIgnoreBinding(9)).isEqualTo(1);
+        assertThat(MatchByType.matchIntIgnoreBinding("x")).isEqualTo(0);
+    }
+
+    @Test
     void dataTypeMatchesOnlyDataAndType() {
         assertThat(MatchByType.isData(1)).isFalse();
         assertThat(MatchByType.isData(1L)).isFalse();

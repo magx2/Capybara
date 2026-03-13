@@ -150,7 +150,7 @@ pattern: TYPE
         | wildcardPattern
         | constructorPattern;
 wildcardPattern: UNDERSCORE NAME?;
-typedPattern: patternType NAME;
+typedPattern: patternType (NAME | UNDERSCORE);
 patternType: 'byte'
            | 'int'
            | 'long'

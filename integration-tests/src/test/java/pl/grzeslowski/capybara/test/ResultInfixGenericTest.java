@@ -52,4 +52,5 @@ class ResultInfixGenericTest {
         assertThat(result).isInstanceOf(ResultInfixGeneric.Fail.class);
         assertThat(((ResultInfixGeneric.Fail) result).message()).isEqualTo("boom");
     }
+
 }

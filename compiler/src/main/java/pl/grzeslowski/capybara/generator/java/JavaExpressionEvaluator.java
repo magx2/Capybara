@@ -15,6 +15,8 @@ import static java.lang.System.lineSeparator;
 public class JavaExpressionEvaluator {
     private static final java.util.concurrent.atomic.AtomicLong OPTION_CASE_VAR_COUNTER =
             new java.util.concurrent.atomic.AtomicLong();
+    private static final java.util.concurrent.atomic.AtomicLong MATCH_BINDING_COUNTER =
+            new java.util.concurrent.atomic.AtomicLong();
     private static final java.util.concurrent.atomic.AtomicLong STRING_PARSE_VAR_COUNTER =
             new java.util.concurrent.atomic.AtomicLong();
     private static final Logger log = Logger.getLogger(JavaExpressionEvaluator.class.getName());
@@ -1119,14 +1121,16 @@ public class JavaExpressionEvaluator {
             var matchCase = matchExpression.cases().get(caseIndex);
             var branchScope = current;
             var optionCaseVar = "__capybaraOptionCase" + OPTION_CASE_VAR_COUNTER.incrementAndGet();
+            var caseBindingNames = new java.util.HashMap<String, String>();
             if (matchCase.pattern() instanceof LinkedMatchExpression.ConstructorPattern constructorPattern) {
-                var bindingNames = constructorPatternBindingNames(constructorPattern);
+                var bindingNames = constructorPatternBindingNames(constructorPattern, caseBindingNames);
                 var bindingCastTypes = constructorBindingCastTypes(matchExpression.matchWith().type(), constructorPattern);
                 for (int i = 0; i < constructorPattern.fieldPatterns().size(); i++) {
                     var fieldPattern = constructorPattern.fieldPatterns().get(i);
                     var bindingName = bindingNames.get(i);
                     if (fieldPattern instanceof LinkedMatchExpression.VariablePattern variablePattern) {
                         branchScope = branchScope.addLocalValue(variablePattern.name());
+                        branchScope = branchScope.addValueOverride(variablePattern.name(), bindingName);
                         var castType = bindingCastTypes.get(i);
                         if (castType != null && !"java.lang.Object".equals(castType)) {
                             branchScope = branchScope.addValueOverride(variablePattern.name(), "((" + castType + ") " + bindingName + ")");
@@ -1164,19 +1168,33 @@ public class JavaExpressionEvaluator {
                     && constructorPattern.fieldPatterns().size() == 1
                     && constructorPattern.fieldPatterns().getFirst() instanceof LinkedMatchExpression.VariablePattern variablePattern) {
                     var valueName = variablePattern.name();
-                    branchScope = branchScope.addValueOverride(valueName, "((" + valueName + ") == null ? null : " + valueName + ".getMessage())");
+                    var generatedName = caseBindingNames.getOrDefault(valueName, valueName);
+                    branchScope = branchScope.addValueOverride(valueName, "((" + generatedName + ") == null ? null : " + generatedName + ".getMessage())");
                 }
+            }
+            if (matchCase.pattern() instanceof LinkedMatchExpression.TypedPattern typedPattern) {
+                var generatedName = caseBindingNames.computeIfAbsent(
+                        typedPattern.name(),
+                        ignored -> "__capybaraMatchBinding" + MATCH_BINDING_COUNTER.incrementAndGet()
+                );
+                branchScope = branchScope
+                        .addLocalValue(typedPattern.name())
+                        .addValueOverride(typedPattern.name(), generatedName);
             }
             if (matchCase.pattern() instanceof LinkedMatchExpression.TypedPattern typedPattern
                 && matchExpression.matchWith() instanceof LinkedVariable matchedVariable) {
+                var generatedName = caseBindingNames.getOrDefault(typedPattern.name(), typedPattern.name());
                 branchScope = branchScope
-                        .addLocalValue(typedPattern.name())
-                        .addValueOverride(matchedVariable.name(), typedPattern.name());
+                        .addValueOverride(matchedVariable.name(), generatedName);
             }
             if (matchCase.pattern() instanceof LinkedMatchExpression.WildcardBindingPattern wildcardBindingPattern) {
+                var generatedName = caseBindingNames.computeIfAbsent(
+                        wildcardBindingPattern.name(),
+                        ignored -> "__capybaraMatchBinding" + MATCH_BINDING_COUNTER.incrementAndGet()
+                );
                 branchScope = branchScope
                         .addLocalValue(wildcardBindingPattern.name())
-                        .addValueOverride(wildcardBindingPattern.name(), switchTarget);
+                        .addValueOverride(wildcardBindingPattern.name(), generatedName);
             }
             var expressionScope = evaluateExpression(matchCase.expression(), branchScope).popExpression();
             var caseExpression = expressionScope.expression();
@@ -1195,8 +1213,8 @@ public class JavaExpressionEvaluator {
                     .map(statement -> statement + ";")
                     .toList());
             var caseRule = caseStatements.isEmpty()
-                    ? matchCasePattern(matchCase.pattern(), matchExpression.matchWith().type(), optionCaseVar) + " -> (" + caseExpression + ");"
-                    : matchCasePattern(matchCase.pattern(), matchExpression.matchWith().type(), optionCaseVar)
+                    ? matchCasePattern(matchCase.pattern(), matchExpression.matchWith().type(), optionCaseVar, caseBindingNames) + " -> (" + caseExpression + ");"
+                    : matchCasePattern(matchCase.pattern(), matchExpression.matchWith().type(), optionCaseVar, caseBindingNames)
                       + " -> { " + caseStatementsCode + " yield (" + caseExpression + "); }";
             cases.add(caseRule);
         }
@@ -1353,20 +1371,21 @@ public class JavaExpressionEvaluator {
     private static String matchCasePattern(
             LinkedMatchExpression.Pattern pattern,
             pl.grzeslowski.capybara.linker.LinkedType matchType,
-            String optionCaseVar
+            String optionCaseVar,
+            java.util.Map<String, String> caseBindingNames
     ) {
         if (isOptionType(matchType)) {
             return switch (pattern) {
                 case LinkedMatchExpression.VariablePattern variablePattern when isOptionNonePattern(variablePattern.name()) ->
                         "case java.util.Optional " + optionCaseVar + " when " + optionCaseVar + ".isEmpty()";
                 case LinkedMatchExpression.TypedPattern typedPattern when isOptionSomePattern(typedPattern.type().name()) ->
-                        "case java.util.Optional " + typedPattern.name() + " when " + typedPattern.name() + ".isPresent()";
+                        "case java.util.Optional " + caseBindingNames.getOrDefault(typedPattern.name(), typedPattern.name()) + " when " + caseBindingNames.getOrDefault(typedPattern.name(), typedPattern.name()) + ".isPresent()";
                 case LinkedMatchExpression.TypedPattern typedPattern when isOptionNonePattern(typedPattern.type().name()) ->
-                        "case java.util.Optional " + typedPattern.name() + " when " + typedPattern.name() + ".isEmpty()";
+                        "case java.util.Optional " + caseBindingNames.getOrDefault(typedPattern.name(), typedPattern.name()) + " when " + caseBindingNames.getOrDefault(typedPattern.name(), typedPattern.name()) + ".isEmpty()";
                 case LinkedMatchExpression.WildcardBindingPattern wildcardBindingPattern ->
-                        "case java.lang.Object " + wildcardBindingPattern.name();
+                        "case " + javaPatternType(matchType) + " " + caseBindingNames.getOrDefault(wildcardBindingPattern.name(), wildcardBindingPattern.name());
                 case LinkedMatchExpression.ConstructorPattern constructorPattern when isOptionSomePattern(constructorPattern.constructorName()) ->
-                        optionSomeCasePattern(constructorPattern, optionCaseVar);
+                        optionSomeCasePattern(constructorPattern, optionCaseVar, caseBindingNames);
                 case LinkedMatchExpression.ConstructorPattern constructorPattern when isOptionNonePattern(constructorPattern.constructorName()) ->
                         "case java.util.Optional " + optionCaseVar + " when " + optionCaseVar + ".isEmpty()";
                 default -> "default";
@@ -1378,24 +1397,25 @@ public class JavaExpressionEvaluator {
             case LinkedMatchExpression.BoolPattern boolPattern -> "case " + boolPattern.value();
             case LinkedMatchExpression.FloatPattern floatPattern -> "case " + floatPattern.value();
             case LinkedMatchExpression.TypedPattern typedPattern -> {
+                var patternBindingName = caseBindingNames.getOrDefault(typedPattern.name(), typedPattern.name());
                 if (typedPattern.type() == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.DATA) {
-                    yield "case java.lang.Object " + typedPattern.name() + " when " + dataGuard(typedPattern.name());
+                    yield "case java.lang.Object " + patternBindingName + " when " + dataGuard(patternBindingName);
                 }
                 if (typedPattern.type() instanceof LinkedDataType typedDataType) {
                     var resolvedTypedType = resolveConstructorType(matchType, typedDataType.name());
                     var patternType = constructorPatternTypeName(matchType, resolvedTypedType, typedDataType.name());
-                    yield "case " + patternType + " " + typedPattern.name();
+                    yield "case " + patternType + " " + patternBindingName;
                 }
-                yield "case " + javaPatternType(typedPattern.type()) + " " + typedPattern.name();
+                yield "case " + javaPatternType(typedPattern.type()) + " " + patternBindingName;
             }
             case LinkedMatchExpression.VariablePattern variablePattern -> "case " + variablePattern.name() + " __ignored";
             case LinkedMatchExpression.WildcardPattern wildcardPattern -> "default";
             case LinkedMatchExpression.WildcardBindingPattern wildcardBindingPattern ->
-                    "case java.lang.Object " + wildcardBindingPattern.name();
+                    "case " + javaPatternType(matchType) + " " + caseBindingNames.getOrDefault(wildcardBindingPattern.name(), wildcardBindingPattern.name());
             case LinkedMatchExpression.ConstructorPattern constructorPattern -> {
                 var constructorType = resolveConstructorType(matchType, constructorPattern.constructorName());
                 var patternType = constructorPatternTypeName(matchType, constructorType, constructorPattern.constructorName());
-                var bindingNames = constructorPatternBindingNames(constructorPattern);
+                var bindingNames = constructorPatternBindingNames(constructorPattern, caseBindingNames);
                 var constructorCasePattern = "case " + patternType + "("
                                              + bindingNames.stream().map(name -> "var " + name).reduce((a, b) -> a + ", " + b).orElse("")
                                              + ")";
@@ -1470,7 +1490,11 @@ public class JavaExpressionEvaluator {
                && variable.name().equals(variablePattern.name());
     }
 
-    private static String optionSomeCasePattern(LinkedMatchExpression.ConstructorPattern constructorPattern, String optionCaseVar) {
+    private static String optionSomeCasePattern(
+            LinkedMatchExpression.ConstructorPattern constructorPattern,
+            String optionCaseVar,
+            java.util.Map<String, String> caseBindingNames
+    ) {
         var base = "case java.util.Optional " + optionCaseVar + " when " + optionCaseVar + ".isPresent()";
         if (constructorPattern.fieldPatterns().size() != 1) {
             return base;
@@ -1480,12 +1504,23 @@ public class JavaExpressionEvaluator {
         return guard.map(s -> base + " && (" + s + ")").orElse(base);
     }
 
-    private static List<String> constructorPatternBindingNames(LinkedMatchExpression.ConstructorPattern constructorPattern) {
+    private static List<String> constructorPatternBindingNames(
+            LinkedMatchExpression.ConstructorPattern constructorPattern,
+            java.util.Map<String, String> caseBindingNames
+    ) {
         var names = new ArrayList<String>(constructorPattern.fieldPatterns().size());
         for (int i = 0; i < constructorPattern.fieldPatterns().size(); i++) {
             var fieldPattern = constructorPattern.fieldPatterns().get(i);
             if (fieldPattern instanceof LinkedMatchExpression.VariablePattern variablePattern) {
-                names.add(variablePattern.name());
+                names.add(caseBindingNames.computeIfAbsent(
+                        variablePattern.name(),
+                        ignored -> "__capybaraMatchBinding" + MATCH_BINDING_COUNTER.incrementAndGet()
+                ));
+            } else if (fieldPattern instanceof LinkedMatchExpression.TypedPattern typedPattern) {
+                names.add(caseBindingNames.computeIfAbsent(
+                        typedPattern.name(),
+                        ignored -> "__capybaraMatchBinding" + MATCH_BINDING_COUNTER.incrementAndGet()
+                ));
             } else {
                 names.add("__capybaraCtorField" + i);
             }

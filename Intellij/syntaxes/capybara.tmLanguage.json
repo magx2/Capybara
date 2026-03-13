@@ -215,7 +215,7 @@
         },
         {
           "name": "meta.match.typed-pattern.capybara",
-          "match": "(\\|)\\s*(_*[A-Z][A-Za-z0-9_]*)\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*(=>)",
+          "match": "(\\|)\\s*(_*[A-Z][A-Za-z0-9_]*)\\s+([A-Za-z_][A-Za-z0-9_]*|_)\\s*(=>)",
           "captures": {
             "1": {
               "name": "keyword.operator.capybara"
