@@ -198,6 +198,9 @@ public class CapybaraExpressionLinker {
                             var javaField = source.type() == STRING ? "length" : "size";
                             return ValueOrError.success(new LinkedFieldAccess(source, javaField, PrimitiveLinkedType.INT));
                         }
+                        if (source.type() == STRING && "is_empty".equals(fieldAccess.field())) {
+                            return ValueOrError.success(new LinkedFieldAccess(source, "isEmpty", PrimitiveLinkedType.BOOL));
+                        }
                         return withPosition(
                                 ValueOrError.error("Field `" + fieldAccess.field() + "` not found in type `" + source.type() + "`"),
                                 fieldAccess.position()
