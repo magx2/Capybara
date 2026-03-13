@@ -17,6 +17,7 @@ import static pl.grzeslowski.capybara.linker.CapybaraTypeLinker.linkType;
 public class CapybaraLinker {
     public static final CapybaraLinker INSTANCE = new CapybaraLinker();
     private static final String METHOD_DECL_PREFIX = "__method__";
+    private static final java.util.regex.Pattern IDENTIFIER_PATTERN = java.util.regex.Pattern.compile("[A-Za-z_][A-Za-z0-9_]*");
 
     public ValueOrError<LinkedProgram> link(Program program) {
         var modulesByName = program.modules().stream().collect(toMap(Module::name, identity(), (first, second) -> first));
@@ -482,13 +483,23 @@ public class CapybaraLinker {
             return Optional.empty();
         }
         var normalizedFile = normalizeFile(moduleSourceFile);
-        var position = function.position().orElse(SourcePosition.EMPTY);
+        var methodLine = methodDeclarationErrorLine(function);
+        var methodColumn = methodDeclarationErrorColumn(function);
+        var position = new SourcePosition(methodLine, methodColumn, Optional.empty());
+        var functionPreview = formatFunctionHeader(function) + " =";
+        var pointerIndent = methodDeclarationPointerIndent(function, functionPreview);
+        var pointer = " ".repeat(Math.max(pointerIndent, 0))
+                      + "^ Cannot declare method on external type `" + ownerType.get()
+                      + "`. Type methods/infix operators must be declared in the module where the type is defined.";
+        var message = "error: mismatched types\n"
+                      + " --> " + normalizedFile + ":" + position.line() + ":" + position.column() + "\n"
+                      + functionPreview + "\n"
+                      + pointer + "\n";
         var error = new ValueOrError.Error.SingleError(
                 position.line(),
                 position.column(),
                 normalizedFile,
-                "Cannot declare method on external type `" + ownerType.get()
-                + "`. Type methods/infix operators must be declared in the module where the type is defined."
+                message
         );
         return Optional.of(new ValueOrError.Error<>(List.of(error)));
     }
@@ -665,15 +676,105 @@ public class CapybaraLinker {
     }
 
     private String formatFunctionHeader(Function function) {
+        var methodDeclaration = methodDeclarationInfo(function);
+        var methodParameters = methodDeclaration
+                .map(ignored -> function.parameters().stream().skip(1).toList())
+                .orElse(function.parameters());
+        var methodHeaderName = methodDeclaration
+                .map(this::formatMethodDeclarationName)
+                .orElse(function.name());
         var header = new StringBuilder("fun ")
-                .append(function.name())
+                .append(methodHeaderName)
                 .append("(")
-                .append(function.parameters().stream()
-                        .map(parameter -> parameter.name() + ": " + formatParserType(parameter.type()))
+                .append(methodParameters.stream()
+                        .map(parameter -> parameter.name() + ": " + formatParserTypeInHeader(parameter.type()))
                         .collect(java.util.stream.Collectors.joining(", ")))
                 .append(")");
-        function.returnType().ifPresent(type -> header.append(": ").append(formatParserType(type)));
+        function.returnType().ifPresent(type -> header.append(": ").append(formatParserTypeInHeader(type)));
         return header.toString();
+    }
+
+    private int methodDeclarationErrorLine(Function function) {
+        if (function.expression() instanceof MatchExpression matchExpression && !matchExpression.cases().isEmpty()) {
+            return matchExpression.cases().getFirst().expression().position()
+                    .map(SourcePosition::line)
+                    .orElseGet(() -> function.position().map(SourcePosition::line).orElse(1));
+        }
+        return function.position().map(SourcePosition::line).orElse(1);
+    }
+
+    private int methodDeclarationErrorColumn(Function function) {
+        var methodDeclaration = methodDeclarationInfo(function);
+        if (methodDeclaration.isEmpty()) {
+            return function.position().map(SourcePosition::column).orElse(1);
+        }
+        var header = formatFunctionHeader(function);
+        var declaration = methodDeclaration.get();
+        if (IDENTIFIER_PATTERN.matcher(declaration.methodName()).matches()) {
+            var idx = header.indexOf("." + declaration.methodName());
+            if (idx >= 0) {
+                return idx + 3;
+            }
+        } else {
+            var wrappedLiteral = "`" + declaration.methodName() + "`";
+            var idx = header.indexOf(wrappedLiteral);
+            if (idx >= 0) {
+                return idx + 1;
+            }
+        }
+        return function.position().map(SourcePosition::column).orElse(1);
+    }
+
+    private int methodDeclarationPointerIndent(Function function, String functionPreview) {
+        var methodDeclaration = methodDeclarationInfo(function);
+        if (methodDeclaration.isEmpty()) {
+            return Math.max(function.position().map(SourcePosition::column).orElse(1) - 1, 0);
+        }
+        var methodName = methodDeclaration.get().methodName();
+        var idx = functionPreview.indexOf(methodName);
+        if (idx >= 0) {
+            return idx;
+        }
+        return Math.max(function.position().map(SourcePosition::column).orElse(1) - 1, 0);
+    }
+
+    private String formatMethodDeclarationName(MethodDeclarationInfo methodDeclarationInfo) {
+        var owner = methodDeclarationInfo.ownerName();
+        var methodName = methodDeclarationInfo.methodName();
+        var methodDisplay = IDENTIFIER_PATTERN.matcher(methodName).matches()
+                ? methodName
+                : "`" + methodName + "`";
+        return owner + "." + methodDisplay;
+    }
+
+    private Optional<MethodDeclarationInfo> methodDeclarationInfo(Function function) {
+        if (!function.name().startsWith(METHOD_DECL_PREFIX)) {
+            return Optional.empty();
+        }
+        var separatorIndex = function.name().indexOf("__", METHOD_DECL_PREFIX.length());
+        if (separatorIndex < 0 || separatorIndex + 2 > function.name().length()) {
+            return Optional.empty();
+        }
+        var ownerFromName = function.name().substring(METHOD_DECL_PREFIX.length(), separatorIndex);
+        var methodName = function.name().substring(separatorIndex + 2);
+        var ownerWithTypeParameters = function.parameters().stream()
+                .findFirst()
+                .map(Parameter::type)
+                .map(this::formatParserType)
+                .orElse(ownerFromName);
+        return Optional.of(new MethodDeclarationInfo(ownerWithTypeParameters, methodName));
+    }
+
+    private String formatParserTypeInHeader(pl.grzeslowski.capybara.parser.Type type) {
+        return switch (type) {
+            case FunctionType functionType -> formatParserTypeInHeader(functionType.argumentType())
+                                              + " -> "
+                                              + formatParserTypeInHeader(functionType.returnType());
+            default -> formatParserType(type);
+        };
+    }
+
+    private record MethodDeclarationInfo(String ownerName, String methodName) {
     }
 
     private String formatMatchLine(pl.grzeslowski.capybara.parser.Expression expression) {
