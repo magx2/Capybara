@@ -986,7 +986,26 @@ public class CapybaraExpressionLinker {
             return linkPipeFilterOutExpression(expression, scope);
         }
         if (expression.operator() == InfixOperator.PIPE_FLATMAP) {
-            return linkPipeFlatMapExpression(expression, scope);
+            return linkExpression(expression.left(), scope)
+                    .flatMap(left -> {
+                        if (left.type() instanceof GenericDataType) {
+                            var methodCall = resolveMethodInfixCall(
+                                    expression.operator().symbol(),
+                                    left,
+                                    expression.right(),
+                                    scope,
+                                    expression.position()
+                            );
+                            if (methodCall instanceof ValueOrError.Value<LinkedExpression> value) {
+                                return value;
+                            }
+                            if (methodCall instanceof ValueOrError.Error<LinkedExpression> error
+                                && !error.errors().isEmpty()) {
+                                return methodCall;
+                            }
+                        }
+                        return linkPipeFlatMapExpression(expression, scope);
+                    });
         }
         if (expression.operator() == InfixOperator.PIPE_REDUCE) {
             return linkPipeReduceExpression(expression, scope);

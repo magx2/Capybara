@@ -7,10 +7,24 @@ fun MyResult[T].`|`(map: T -> MyResult[Y]): MyResult[Y] =
     | Fail f => f
     | Ok o => map(o.value)
 
+fun MyResult[T].`|*`(flatmap: T -> MyResult[MyResult[Y]]): MyResult[Y] =
+    match this with
+    | Fail f => f
+    | Ok o =>
+        match flatmap(o.value) with
+        | Fail f => f
+        | Ok { top_result } => top_result
+
 fun map_to_string(v: int): MyResult[string] = Ok { value: "v=" + v }
 
 fun map_to_fail(v: int): MyResult[string] = Fail { message: "bad:" + v }
 
+fun map_to_nested_ok(v: int): MyResult[MyResult[string]] = Ok { value: Ok { value: "mapped_" + v } }
+
+fun map_to_nested_fail(v: int): MyResult[MyResult[string]] = Ok { value: Fail { message: "nested_bad:" + v } }
+
 fun apply_mapper(r: MyResult[T], map: T -> MyResult[Y]): MyResult[Y] = r | map
 
 fun propagate_fail(r: MyResult[T], map: T -> MyResult[Y]): MyResult[Y] = r | map
+
+fun apply_flat_mapper(r: MyResult[T], map: T -> MyResult[MyResult[Y]]): MyResult[Y] = r |* map

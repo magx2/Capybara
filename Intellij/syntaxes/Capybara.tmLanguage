@@ -44,6 +44,7 @@
     <dict><key>name</key><string>entity.name.function.private.capybara</string><key>match</key><string>\bfun\s+(__[A-Za-z0-9_]+)</string></dict>
     <dict><key>name</key><string>entity.name.function.capybara</string><key>match</key><string>\bfun\s+([A-Za-z_][A-Za-z0-9_]*)</string></dict>
     <dict><key>name</key><string>meta.function.owner-generic.capybara</string><key>match</key><string>\b(fun)\s+(_*[A-Z][A-Za-z0-9_]*\[[^\]]+\])\.(?:`[^`]+`|[A-Za-z_][A-Za-z0-9_]*)</string></dict>
+    <dict><key>name</key><string>meta.function.owner-infix.capybara</string><key>match</key><string>\b(fun)\s+(_*[A-Z][A-Za-z0-9_]*)\.([^]+)</string></dict>
     <dict><key>name</key><string>entity.name.function.private.capybara</string><key>match</key><string>:(__[A-Za-z0-9_]+)\b</string></dict>
     <dict><key>name</key><string>entity.name.function.capybara</string><key>match</key><string>:([A-Za-z_][A-Za-z0-9_]*)\b</string></dict>
     <dict><key>name</key><string>entity.name.function.private.capybara</string><key>match</key><string>\b(__[A-Za-z0-9_]+)\s*(?=\()</string></dict>

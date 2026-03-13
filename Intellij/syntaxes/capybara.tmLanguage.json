@@ -244,6 +244,21 @@
           }
         },
         {
+          "name": "meta.function.owner-infix.capybara",
+          "match": "\\b(fun)\\s+(_*[A-Z][A-Za-z0-9_]*)\\.(`[^`]+`)",
+          "captures": {
+            "1": {
+              "name": "keyword.control.capybara"
+            },
+            "2": {
+              "name": "entity.name.type.capybara"
+            },
+            "3": {
+              "name": "keyword.operator.pipe.capybara"
+            }
+          }
+        },
+        {
           "name": "meta.match.wildcard-binding.capybara",
           "match": "(\\|)\\s*(_)\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*(=>)",
           "captures": {
