@@ -339,7 +339,7 @@ public class CapybaraExpressionLinker {
         return ValueOrError.success(new LinkedFunctionCall(
                 resolvedModule.javaModuleName() + "." + functionCall.name(),
                 best.arguments(),
-                best.signature().returnType()
+                resolveReturnType(best.signature(), best.arguments())
         ));
     }
 
@@ -424,7 +424,7 @@ public class CapybaraExpressionLinker {
         return ValueOrError.success(new LinkedFunctionCall(
                 functionCall.name(),
                 best.arguments(),
-                best.signature().returnType()
+                resolveReturnType(best.signature(), best.arguments())
         ));
     }
 
@@ -471,8 +471,91 @@ public class CapybaraExpressionLinker {
         return ValueOrError.success(new LinkedFunctionCall(
                 best.signature().name(),
                 best.arguments(),
-                best.signature().returnType()
+                resolveReturnType(best.signature(), best.arguments())
         ));
+    }
+
+    private LinkedType resolveReturnType(FunctionSignature signature, List<LinkedExpression> arguments) {
+        if (signature.parameterTypes().isEmpty() || arguments.isEmpty()) {
+            return signature.returnType();
+        }
+        var substitutions = new java.util.LinkedHashMap<String, LinkedType>();
+        var count = Math.min(signature.parameterTypes().size(), arguments.size());
+        for (var i = 0; i < count; i++) {
+            collectTypeSubstitutions(signature.parameterTypes().get(i), arguments.get(i).type(), substitutions);
+        }
+        if (substitutions.isEmpty()) {
+            return signature.returnType();
+        }
+        return substituteTypeParameters(signature.returnType(), substitutions);
+    }
+
+    private void collectTypeSubstitutions(LinkedType expected, LinkedType actual, Map<String, LinkedType> substitutions) {
+        if (expected instanceof LinkedGenericTypeParameter genericTypeParameter) {
+            substitutions.putIfAbsent(genericTypeParameter.name(), actual);
+            return;
+        }
+        if (expected instanceof LinkedList expectedList && actual instanceof LinkedList actualList) {
+            collectTypeSubstitutions(expectedList.elementType(), actualList.elementType(), substitutions);
+            return;
+        }
+        if (expected instanceof LinkedSet expectedSet && actual instanceof LinkedSet actualSet) {
+            collectTypeSubstitutions(expectedSet.elementType(), actualSet.elementType(), substitutions);
+            return;
+        }
+        if (expected instanceof LinkedDict expectedDict && actual instanceof LinkedDict actualDict) {
+            collectTypeSubstitutions(expectedDict.valueType(), actualDict.valueType(), substitutions);
+            return;
+        }
+        if (expected instanceof LinkedFunctionType expectedFunction && actual instanceof LinkedFunctionType actualFunction) {
+            collectTypeSubstitutions(expectedFunction.argumentType(), actualFunction.argumentType(), substitutions);
+            collectTypeSubstitutions(expectedFunction.returnType(), actualFunction.returnType(), substitutions);
+            return;
+        }
+        if (expected instanceof LinkedTupleType expectedTuple && actual instanceof LinkedTupleType actualTuple) {
+            var count = Math.min(expectedTuple.elementTypes().size(), actualTuple.elementTypes().size());
+            for (var i = 0; i < count; i++) {
+                collectTypeSubstitutions(expectedTuple.elementTypes().get(i), actualTuple.elementTypes().get(i), substitutions);
+            }
+            return;
+        }
+        if (expected instanceof LinkedDataParentType expectedParent && actual instanceof LinkedDataType actualData) {
+            if (!isSubtypeOfParent(actualData, expectedParent)) {
+                return;
+            }
+            var expectedTypeParameters = expectedParent.typeParameters();
+            var actualTypeParameters = actualData.typeParameters();
+            var count = Math.min(expectedTypeParameters.size(), actualTypeParameters.size());
+            for (var i = 0; i < count; i++) {
+                var maybeExpected = parseLinkedTypeDescriptor(expectedTypeParameters.get(i));
+                var maybeActual = parseLinkedTypeDescriptor(actualTypeParameters.get(i));
+                if (maybeExpected.isPresent() && maybeActual.isPresent()) {
+                    collectTypeSubstitutions(maybeExpected.get(), maybeActual.get(), substitutions);
+                }
+            }
+            return;
+        }
+        if (expected instanceof GenericDataType expectedData && actual instanceof GenericDataType actualData) {
+            if (!sameRawTypeName(expectedData.name(), actualData.name())) {
+                return;
+            }
+            var expectedTypeParameters = switch (expectedData) {
+                case LinkedDataType linkedDataType -> linkedDataType.typeParameters();
+                case LinkedDataParentType linkedDataParentType -> linkedDataParentType.typeParameters();
+            };
+            var actualTypeParameters = switch (actualData) {
+                case LinkedDataType linkedDataType -> linkedDataType.typeParameters();
+                case LinkedDataParentType linkedDataParentType -> linkedDataParentType.typeParameters();
+            };
+            var count = Math.min(expectedTypeParameters.size(), actualTypeParameters.size());
+            for (var i = 0; i < count; i++) {
+                var maybeExpected = parseLinkedTypeDescriptor(expectedTypeParameters.get(i));
+                var maybeActual = parseLinkedTypeDescriptor(actualTypeParameters.get(i));
+                if (maybeExpected.isPresent() && maybeActual.isPresent()) {
+                    collectTypeSubstitutions(maybeExpected.get(), maybeActual.get(), substitutions);
+                }
+            }
+        }
     }
 
     private Optional<ValueOrError<LinkedExpression>> resolveBuiltinMethodInvoke(FunctionCall functionCall, Scope scope, String methodName) {
@@ -688,6 +771,40 @@ public class CapybaraExpressionLinker {
     }
 
     private ValueOrError<CoercedArgument> linkArgumentForExpectedType(Expression argument, Scope scope, LinkedType expected) {
+        if (argument instanceof TupleExpression tupleExpression
+            && expected instanceof LinkedTupleType expectedTupleType) {
+            if (tupleExpression.values().size() != expectedTupleType.elementTypes().size()) {
+                return withPosition(
+                        ValueOrError.error("Expected `" + expected + "`, got tuple with "
+                                           + tupleExpression.values().size() + " element(s)"),
+                        argument.position()
+                );
+            }
+            var linkedElements = new java.util.ArrayList<LinkedExpression>(tupleExpression.values().size());
+            var coercions = 0;
+            for (var i = 0; i < tupleExpression.values().size(); i++) {
+                var elementExpression = tupleExpression.values().get(i);
+                var elementExpectedType = expectedTupleType.elementTypes().get(i);
+                var maybeLinkedElement = linkArgumentForExpectedType(elementExpression, scope, elementExpectedType);
+                if (maybeLinkedElement instanceof ValueOrError.Error<CoercedArgument>) {
+                    return (ValueOrError<CoercedArgument>) maybeLinkedElement;
+                }
+                var linkedElement = ((ValueOrError.Value<CoercedArgument>) maybeLinkedElement).value();
+                linkedElements.add(linkedElement.expression());
+                coercions += linkedElement.coercions();
+            }
+            return ValueOrError.success(new CoercedArgument(
+                    new LinkedTupleExpression(
+                            List.copyOf(linkedElements),
+                            new LinkedTupleType(
+                                    linkedElements.stream()
+                                            .map(LinkedExpression::type)
+                                            .toList()
+                            )
+                    ),
+                    coercions
+            ));
+        }
         if (argument instanceof LambdaExpression lambdaExpression) {
             if (expected instanceof LinkedFunctionType functionType) {
                 return linkLambdaExpression(lambdaExpression, scope, functionType)
@@ -880,6 +997,10 @@ public class CapybaraExpressionLinker {
 
                     LinkedExpression nested = maybeCoerced.expression();
                     LinkedType nestedType = returnType;
+                    if (returnType instanceof LinkedGenericTypeParameter
+                        && !(nested.type() instanceof LinkedGenericTypeParameter)) {
+                        nestedType = nested.type();
+                    }
                     for (int idx = argumentNames.size() - 1; idx >= 0; idx--) {
                         var functionType = new LinkedFunctionType(argumentTypes.get(idx), nestedType);
                         nested = new LinkedLambdaExpression(argumentNames.get(idx), nested, functionType);
@@ -921,6 +1042,16 @@ public class CapybaraExpressionLinker {
             return new CoercedArgument(argument, 1);
         }
         if (expected == ANY) {
+            return new CoercedArgument(argument, 1);
+        }
+        if (expected instanceof LinkedTupleType expectedTuple
+            && argument.type() instanceof LinkedTupleType argumentTuple
+            && areTupleTypesCompatible(argumentTuple, expectedTuple)) {
+            return new CoercedArgument(argument, 1);
+        }
+        if (expected instanceof LinkedFunctionType expectedFunction
+            && argument.type() instanceof LinkedFunctionType argumentFunction
+            && areFunctionTypesCompatible(argumentFunction, expectedFunction)) {
             return new CoercedArgument(argument, 1);
         }
         if (expected instanceof LinkedList expectedList
@@ -980,6 +1111,51 @@ public class CapybaraExpressionLinker {
             return new CoercedArgument(argument, 1);
         }
         return null;
+    }
+
+    private boolean areTupleTypesCompatible(LinkedTupleType actual, LinkedTupleType expected) {
+        if (actual.elementTypes().size() != expected.elementTypes().size()) {
+            return false;
+        }
+        for (var i = 0; i < actual.elementTypes().size(); i++) {
+            if (!isTypeCompatible(actual.elementTypes().get(i), expected.elementTypes().get(i))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private boolean areFunctionTypesCompatible(LinkedFunctionType actual, LinkedFunctionType expected) {
+        return isTypeCompatible(actual.argumentType(), expected.argumentType())
+               && isTypeCompatible(actual.returnType(), expected.returnType());
+    }
+
+    private boolean isTypeCompatible(LinkedType actual, LinkedType expected) {
+        if (actual.equals(expected)) {
+            return true;
+        }
+        if (expected == ANY || actual == ANY || actual == NOTHING) {
+            return true;
+        }
+        if (expected instanceof LinkedGenericTypeParameter || actual instanceof LinkedGenericTypeParameter) {
+            return true;
+        }
+        if (expected instanceof LinkedList expectedList && actual instanceof LinkedList actualList) {
+            return isTypeCompatible(actualList.elementType(), expectedList.elementType());
+        }
+        if (expected instanceof LinkedSet expectedSet && actual instanceof LinkedSet actualSet) {
+            return isTypeCompatible(actualSet.elementType(), expectedSet.elementType());
+        }
+        if (expected instanceof LinkedDict expectedDict && actual instanceof LinkedDict actualDict) {
+            return isTypeCompatible(actualDict.valueType(), expectedDict.valueType());
+        }
+        if (expected instanceof LinkedTupleType expectedTuple && actual instanceof LinkedTupleType actualTuple) {
+            return areTupleTypesCompatible(actualTuple, expectedTuple);
+        }
+        if (expected instanceof LinkedFunctionType expectedFunction && actual instanceof LinkedFunctionType actualFunction) {
+            return areFunctionTypesCompatible(actualFunction, expectedFunction);
+        }
+        return false;
     }
 
     private boolean isSubtype(LinkedDataType candidate, String expectedTypeName, java.util.Set<String> visited) {
@@ -1102,7 +1278,26 @@ public class CapybaraExpressionLinker {
                     });
         }
         if (expression.operator() == InfixOperator.PIPE_REDUCE) {
-            return linkPipeReduceExpression(expression, scope);
+            return linkExpression(expression.left(), scope)
+                    .flatMap(left -> {
+                        if (left.type() instanceof GenericDataType) {
+                            var methodCall = resolveMethodInfixCall(
+                                    expression.operator().symbol(),
+                                    left,
+                                    expression.right(),
+                                    scope,
+                                    expression.position()
+                            );
+                            if (methodCall instanceof ValueOrError.Value<LinkedExpression> value) {
+                                return value;
+                            }
+                            if (methodCall instanceof ValueOrError.Error<LinkedExpression> error
+                                && !error.errors().isEmpty()) {
+                                return methodCall;
+                            }
+                        }
+                        return linkPipeReduceExpression(expression, scope);
+                    });
         }
         if (expression.operator() == InfixOperator.PIPE_ANY) {
             return linkPipeAnyAllExpression(expression, scope, true);
@@ -1175,11 +1370,15 @@ public class CapybaraExpressionLinker {
 
         ResolvedFunctionCall best = null;
         for (var candidate : candidates) {
-            var maybeReceiver = coerceArgument(left, candidate.parameterTypes().get(0));
+            var receiverParameterType = candidate.parameterTypes().get(0);
+            var maybeReceiver = coerceArgument(left, receiverParameterType);
             if (maybeReceiver == null) {
                 continue;
             }
-            var maybeArgument = coerceArgument(right, candidate.parameterTypes().get(1));
+            var substitutions = new java.util.LinkedHashMap<String, LinkedType>();
+            collectTypeSubstitutions(receiverParameterType, maybeReceiver.expression().type(), substitutions);
+            var expectedRightType = substituteTypeParameters(candidate.parameterTypes().get(1), substitutions);
+            var maybeArgument = coerceArgument(right, expectedRightType);
             if (maybeArgument == null) {
                 continue;
             }
@@ -1201,7 +1400,7 @@ public class CapybaraExpressionLinker {
         return ValueOrError.success(new LinkedFunctionCall(
                 best.signature().name(),
                 best.arguments(),
-                best.signature().returnType()
+                resolveReturnType(best.signature(), best.arguments())
         ));
     }
 
@@ -1223,11 +1422,15 @@ public class CapybaraExpressionLinker {
 
         ResolvedFunctionCall best = null;
         for (var candidate : candidates) {
-            var maybeReceiver = coerceArgument(left, candidate.parameterTypes().get(0));
+            var receiverParameterType = candidate.parameterTypes().get(0);
+            var maybeReceiver = coerceArgument(left, receiverParameterType);
             if (maybeReceiver == null) {
                 continue;
             }
-            var maybeArgument = linkArgumentForExpectedType(right, scope, candidate.parameterTypes().get(1));
+            var substitutions = new java.util.LinkedHashMap<String, LinkedType>();
+            collectTypeSubstitutions(receiverParameterType, maybeReceiver.expression().type(), substitutions);
+            var expectedRightType = substituteTypeParameters(candidate.parameterTypes().get(1), substitutions);
+            var maybeArgument = linkArgumentForExpectedType(right, scope, expectedRightType);
             if (maybeArgument instanceof ValueOrError.Error<CoercedArgument>) {
                 continue;
             }
@@ -1250,7 +1453,7 @@ public class CapybaraExpressionLinker {
         return ValueOrError.success(new LinkedFunctionCall(
                 best.signature().name(),
                 best.arguments(),
-                best.signature().returnType()
+                resolveReturnType(best.signature(), best.arguments())
         ));
     }
 
@@ -1545,7 +1748,11 @@ public class CapybaraExpressionLinker {
         }
         return ValueOrError.success(new PipeMapper(
                 argumentName,
-                new LinkedFunctionCall(functionReference.name(), best.arguments(), best.signature().returnType())
+                new LinkedFunctionCall(
+                        functionReference.name(),
+                        best.arguments(),
+                        resolveReturnType(best.signature(), best.arguments())
+                )
         ));
     }
 

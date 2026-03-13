@@ -14,6 +14,15 @@ fun main(args: list[string]): /capy/lang/Program =
         should_flatmap_positive(),
         should_flatmap_negative(),
         should_flatmap_zero(),
+        // or_else
+        should_return_value_when_result_succeeded(),
+        should_return_other_when_result_failed(),
+        // or
+        should_return_this_result_if_succeeded(),
+        should_return_other_result_if_failed(),
+        // |>
+        should_reduce_success_result(),
+        should_reduce_error_result(),
     ]
     run_tests(asserts)
 
@@ -72,3 +81,30 @@ fun should_flatmap_zero(): Assert =
     let mapped = result |* :_positive_not_zero
     assert_that(mapped).failed("I don't like zero")
 
+fun should_return_value_when_result_succeeded(): Assert =
+    let result = Success { 100 }
+    let value: int = result.or_else(0)
+    assert_that(value).is_equal_to(100)
+
+fun should_return_other_when_result_failed(): Assert =
+    let result = Error { "Some error" }
+    let value: int = result.or_else(0)
+    assert_that(value).is_equal_to(0)
+
+fun should_return_this_result_if_succeeded(): Assert =
+    let result = Success { 100 }
+    let other = Success { 101 }
+    assert_that(result.or(other)).is_equal_to(result)
+
+fun should_return_other_result_if_failed(): Assert =
+    let result = Error { "Error" }
+    let other = Success { 101 }
+    assert_that(result.or(other)).is_equal_to(other)
+
+fun should_reduce_success_result(): Assert =
+    let result = Success { 100 }
+    assert_that(result |> (x=>x+"", msg=>msg)).is_equal_to("100")
+
+fun should_reduce_error_result(): Assert =
+    let result = Error { "Unknown" }
+    assert_that(result |> (x=>x+"", msg=>msg)).is_equal_to("Unknown")

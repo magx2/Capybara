@@ -156,7 +156,11 @@ public class JavaExpressionEvaluator {
         for (var argument : functionCall.arguments()) {
             var argumentScope = evaluateExpression(argument, current).popExpression();
             current = argumentScope.scope();
-            args.add(argumentScope.expression());
+            var renderedArgument = argumentScope.expression();
+            if (argument.type() == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.ANY) {
+                renderedArgument = "((java.lang.Object) (" + renderedArgument + "))";
+            }
+            args.add(renderedArgument);
         }
 
         if (functionCall.name().startsWith(METHOD_DECL_PREFIX)) {
@@ -1067,11 +1071,31 @@ public class JavaExpressionEvaluator {
             current = valueExSc.scope();
             var renderedValue = valueExSc.expression();
             if (value.type() instanceof pl.grzeslowski.capybara.linker.LinkedFunctionType) {
-                renderedValue = "((" + javaCastType(value.type()) + ") " + renderedValue + ")";
+                renderedValue = "((" + javaCastTypeForLambdaLiteral(value.type()) + ") " + renderedValue + ")";
             }
             values.add(renderedValue);
         }
         return current.addExpression("java.util.List.of(" + String.join(", ", values) + ")");
+    }
+
+    private static String javaCastTypeForLambdaLiteral(pl.grzeslowski.capybara.linker.LinkedType type) {
+        return switch (type) {
+            case pl.grzeslowski.capybara.linker.LinkedFunctionType linkedFunctionType ->
+                    "java.util.function.Function<"
+                    + javaCastTypeForLambdaLiteral(linkedFunctionType.argumentType())
+                    + ", "
+                    + javaCastTypeForLambdaLiteral(linkedFunctionType.returnType())
+                    + ">";
+            case pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedList linkedList ->
+                    "java.util.List<" + javaCastTypeForLambdaLiteral(linkedList.elementType()) + ">";
+            case pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedSet linkedSet ->
+                    "java.util.Set<" + javaCastTypeForLambdaLiteral(linkedSet.elementType()) + ">";
+            case pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedDict linkedDict ->
+                    "java.util.Map<java.lang.String, " + javaCastTypeForLambdaLiteral(linkedDict.valueType()) + ">";
+            case pl.grzeslowski.capybara.linker.LinkedTupleType ignored -> "java.util.List<?>";
+            case pl.grzeslowski.capybara.linker.LinkedGenericTypeParameter ignored -> "java.lang.Object";
+            default -> javaCastType(type);
+        };
     }
 
     private static String normalizeSliceIndex(String indexExpression, String sizeExpression) {

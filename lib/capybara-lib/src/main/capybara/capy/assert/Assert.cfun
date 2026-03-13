@@ -57,6 +57,56 @@ fun StringAssertion.contains(other: string): StringAssertion =
        assertions: this.assertions + assertion
     }
 
+fun IntAssertion.is_equal_to(other: int): IntAssertion =
+    let assertion = Assertion {
+        result: this.value == other,
+        message: "Expected int:\n" + this.value + "\nto be equal to:\n" + other
+    }
+    IntAssertion {
+        value: this.value,
+        assertions: this.assertions + assertion
+    }
+
+fun LongAssertion.is_equal_to(other: long): LongAssertion =
+    let assertion = Assertion {
+        result: this.value == other,
+        message: "Expected long:\n" + this.value + "\nto be equal to:\n" + other
+    }
+    LongAssertion {
+        value: this.value,
+        assertions: this.assertions + assertion
+    }
+
+fun DoubleAssertion.is_equal_to(other: double): DoubleAssertion =
+    let assertion = Assertion {
+        result: this.value == other,
+        message: "Expected double:\n" + this.value + "\nto be equal to:\n" + other
+    }
+    DoubleAssertion {
+        value: this.value,
+        assertions: this.assertions + assertion
+    }
+
+fun FloatAssertion.is_equal_to(other: float): FloatAssertion =
+    let assertion = Assertion {
+        result: this.value == other,
+        message: "Expected float:\n" + this.value + "\nto be equal to:\n" + other
+    }
+    FloatAssertion {
+        value: this.value,
+        assertions: this.assertions + assertion
+    }
+
+fun BoolAssertion.is_equal_to(other: bool): BoolAssertion =
+    let assertion = Assertion {
+        result: this.value == other,
+        message: "Expected bool:\n" + this.value + "\nto be equal to:\n" + other
+    }
+    BoolAssertion {
+        value: this.value,
+        assertions: this.assertions + assertion
+    }
+
 fun DataAssertion.is_equal_to(other: data): DataAssertion =
     let assertion = Assertion {
         result: this.value == other,
