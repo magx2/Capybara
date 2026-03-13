@@ -2897,7 +2897,7 @@ public class CapybaraExpressionLinker {
                     .map(this::linkedTypeDescriptor)
                     .collect(java.util.stream.Collectors.joining(", ")) + "]";
             case LinkedFunctionType linkedFunctionType ->
-                    "(" + linkedTypeDescriptor(linkedFunctionType.argumentType()) + " -> " + linkedTypeDescriptor(linkedFunctionType.returnType()) + ")";
+                    "(" + linkedTypeDescriptor(linkedFunctionType.argumentType()) + " => " + linkedTypeDescriptor(linkedFunctionType.returnType()) + ")";
             case LinkedDataType linkedDataType -> linkedDataType.typeParameters().isEmpty()
                     ? linkedDataType.name()
                     : linkedDataType.name() + "[" + String.join(", ", linkedDataType.typeParameters()) + "]";

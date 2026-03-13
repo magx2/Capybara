@@ -612,7 +612,7 @@ public class CapybaraParser {
                 default -> throw new IllegalStateException("Unknown collection type: " + collection);
             };
         }
-        if (context.ARROW() != null) {
+        if (context.FAT_ARROW() != null) {
             if ("(".equals(context.getChild(0).getText())) {
                 var parts = context.type();
                 var returnType = type(parts.get(parts.size() - 1));

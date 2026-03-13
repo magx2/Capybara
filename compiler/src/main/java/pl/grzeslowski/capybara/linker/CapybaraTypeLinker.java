@@ -148,7 +148,7 @@ public class CapybaraTypeLinker {
                     .map(CapybaraTypeLinker::typeDescriptor)
                     .collect(java.util.stream.Collectors.joining(", ")) + "]";
             case LinkedFunctionType linkedFunctionType ->
-                    "(" + typeDescriptor(linkedFunctionType.argumentType()) + " -> " + typeDescriptor(linkedFunctionType.returnType()) + ")";
+                    "(" + typeDescriptor(linkedFunctionType.argumentType()) + " => " + typeDescriptor(linkedFunctionType.returnType()) + ")";
             case LinkedDataType linkedDataType -> linkedDataType.typeParameters().isEmpty()
                     ? linkedDataType.name()
                     : linkedDataType.name() + "[" + String.join(", ", linkedDataType.typeParameters()) + "]";

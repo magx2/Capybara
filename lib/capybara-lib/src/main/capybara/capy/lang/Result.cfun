@@ -2,15 +2,32 @@ type Result[T] = Success[T] | Error
 data Success[T] { value: T }
 data Error { message: string }
 
-fun Result[T].`|`(map: T -> Result[Y]): Result[Y] =
+fun Result[T].`|`(map: T => Result[Y]): Result[Y] =
     match this with
     | Error e => e
     | Success s => map(s.value)
 
-fun Result[T].`|*`(flatmap: T -> Result[Result[Y]]): Result[Y] =
+fun Result[T].`|*`(flatmap: T => Result[Result[Y]]): Result[Y] =
     match this with
     | Error e => e
     | Success s =>
         match flatmap(s.value) with
         | Error e => e
         | Success { top_result } => top_result
+
+fun Result[T].or_else(v: T): T =
+    match this with
+    | Error _ => v
+    | Success { v } => v
+
+fun Result[T].or(r: Result[T]): Result[T] =
+    match this with
+    | Error _ => r
+    | Success s => s
+
+/*
+fun Result[T].`|>`(reduce: tuple[T => R, string => R]): R =
+    match this with
+    | Success { v } => reduce[0](v)
+    | Error { msg } => reduce[1](msg)
+*/

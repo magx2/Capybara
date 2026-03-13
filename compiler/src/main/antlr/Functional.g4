@@ -46,8 +46,8 @@ parameter: identifier ':' type;
 functionType: ':' type;
 type: COLLECTION '[' type ']'
     | 'tuple' '[' type (COMMA type)+ ']'
-    | LPAREN type (COMMA type)+ RPAREN ARROW type
-    | type ARROW type
+    | LPAREN type (COMMA type)+ RPAREN FAT_ARROW type
+    | type FAT_ARROW type
     | 'byte'
     | 'int'
     | 'long'
@@ -270,7 +270,6 @@ MUL : '*';
 DIV : '/';
 POWER: '^';
 MOD : '%';
-ARROW : '->';
 FAT_ARROW : '=>';
 COLONCOLON : '::';
 

@@ -75,7 +75,7 @@ public class CompilationErrorTest {
                 Arguments.of(
                         "infix_operator_outside_of_package",
                         """
-                                fun Name[T].foo(map: T -> Name[Y]): Name[Y] =
+                                fun Name[T].foo(map: T => Name[Y]): Name[Y] =
                                    match this with
                                    | Boo e => e
                                    | Foo s => map(s.value)
@@ -84,7 +84,7 @@ public class CompilationErrorTest {
                         """
                                 error: mismatched types
                                  --> /foo/boo/infix_operator_outside_of_package.cfun:%d:%d
-                                fun Name[T].foo(map: T -> Name[Y]): Name[Y] =
+                                fun Name[T].foo(map: T => Name[Y]): Name[Y] =
                                             ^ Cannot declare method on external type `Name`. Type methods/infix operators must be declared in the module where the type is defined.
                                 """,
                         List.of(new ImportDeclaration("/capy/compilation_test/Name", List.of("Name", "Foo", "Boo"), List.of()))
@@ -92,7 +92,7 @@ public class CompilationErrorTest {
                 Arguments.of(
                         "infix_special_operator_outside_of_package",
                         """
-                                fun Name[T].`+`(map: T -> Name[Y]): Name[Y] =
+                                fun Name[T].`+`(map: T => Name[Y]): Name[Y] =
                                    match this with
                                    | Boo e => e
                                    | Foo s => map(s.value)
@@ -101,7 +101,7 @@ public class CompilationErrorTest {
                         """
                                 error: mismatched types
                                  --> /foo/boo/infix_special_operator_outside_of_package.cfun:%d:%d
-                                fun Name[T].`+`(map: T -> Name[Y]): Name[Y] =
+                                fun Name[T].`+`(map: T => Name[Y]): Name[Y] =
                                              ^ Cannot declare method on external type `Name`. Type methods/infix operators must be declared in the module where the type is defined.
                                 """,
                         List.of(new ImportDeclaration("/capy/compilation_test/Name", List.of("Name", "Foo", "Boo"), List.of()))
