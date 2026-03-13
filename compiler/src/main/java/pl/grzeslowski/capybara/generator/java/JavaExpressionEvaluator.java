@@ -1887,24 +1887,31 @@ public class JavaExpressionEvaluator {
     }
 
     private static String normalizeJavaTypeReference(String typeName) {
-        if (typeName.contains("/") && typeName.contains(".")) {
-            var dotIndex = typeName.lastIndexOf('.');
-            var slashIndex = typeName.lastIndexOf('/');
+        var rawTypeName = stripGenericSuffix(typeName);
+        var normalizedTypeName = normalizeQualifiedTypeName(rawTypeName);
+        if ("Option".equals(rawTypeName)
+            || normalizedTypeName.endsWith("/Option.Option")
+            || normalizedTypeName.endsWith("/Option")) {
+            return "java.util.Optional";
+        }
+        if (rawTypeName.contains("/") && rawTypeName.contains(".")) {
+            var dotIndex = rawTypeName.lastIndexOf('.');
+            var slashIndex = rawTypeName.lastIndexOf('/');
             if (slashIndex > 0 && slashIndex < dotIndex) {
-                var startIdx = typeName.startsWith("/") ? 1 : 0;
-                var packageName = typeName.substring(startIdx, slashIndex).replace('/', '.');
-                var outer = normalizeJavaClassName(typeName.substring(slashIndex + 1, dotIndex));
-                var inner = normalizeJavaClassName(typeName.substring(dotIndex + 1));
+                var startIdx = rawTypeName.startsWith("/") ? 1 : 0;
+                var packageName = rawTypeName.substring(startIdx, slashIndex).replace('/', '.');
+                var outer = normalizeJavaClassName(rawTypeName.substring(slashIndex + 1, dotIndex));
+                var inner = normalizeJavaClassName(rawTypeName.substring(dotIndex + 1));
                 if (outer.equals(inner)) {
                     return packageName + "." + outer;
                 }
                 return packageName + "." + outer + "." + inner;
             }
         }
-        if (!typeName.contains(".")) {
-            return normalizeJavaClassName(typeName);
+        if (!rawTypeName.contains(".")) {
+            return normalizeJavaClassName(rawTypeName);
         }
-        var parts = typeName.split("\\.");
+        var parts = rawTypeName.split("\\.");
         var normalized = new ArrayList<String>(parts.length);
         for (var part : parts) {
             normalized.add(normalizeJavaClassName(part));

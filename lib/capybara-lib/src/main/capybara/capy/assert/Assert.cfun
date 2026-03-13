@@ -121,7 +121,7 @@ fun ResultAssertion[T].is_equal_to(other: /capy/lang/Result.Result[T]): ResultAs
         assertions: this.assertions + assertion
     }
 
-fun ResultAssertion.succeeded(): ResultAssertion =
+fun ResultAssertion[T].succeeded(): ResultAssertion[T] =
     let assertion = Assertion {
         result:
             match this.value with
@@ -134,7 +134,7 @@ fun ResultAssertion.succeeded(): ResultAssertion =
         assertions: this.assertions + assertion
     }
 
-fun ResultAssertion[T].succeeded(other: any): ResultAssertion[T] =
+fun ResultAssertion[T].succeeded(other: T): ResultAssertion[T] =
     let assertion = Assertion {
         result:
             match this.value with
@@ -181,8 +181,8 @@ fun assert_that(value: long) = LongAssertion { value: value, assertions: [] }
 fun assert_that(value: double) = DoubleAssertion { value: value, assertions: [] }
 fun assert_that(value: float) = FloatAssertion { value: value, assertions: [] }
 fun assert_that(value: bool) = BoolAssertion { value: value, assertions: [] }
-fun assert_that(value: /capy/lang/Option.Option[any]) = OptionAssertion { value: value, assertions: [] }
-fun assert_that(value: /capy/lang/Result.Result[any]) = ResultAssertion { value: value, assertions: [] }
+fun assert_that(value: Option[T]) = OptionAssertion { value: value, assertions: [] }
+fun assert_that(value: Result[T]) = ResultAssertion { value: value, assertions: [] }
 fun assert_that(value: data) = DataAssertion { value: value, assertions: [] }
 
 fun Assert.check(): list[string] =

@@ -58,17 +58,15 @@ fun test_serialize_object_with_list(): Assert =
 
 fun should_deserialize_simple_object(): Assert =
     assert_that(deserialize('{"foo":"boo"}'))
-        .contains(
-            /capy/lang/Result.Success {
-                value: JsonObject {
-                    value: { "foo": JsonString { value: "boo" } }
-                }
+        .succeeded(
+            JsonObject {
+                value: { "foo": JsonString { value: "boo" } }
             })
 
 fun should_deserialize_object_with_primitive_types(): Assert =
     assert_that(deserialize('{"string":"string_value","int":5,"int_minus":-5,"double":5.5,"long":97387717187,"bool":true}'))
         .succeeded(
-                value: JsonObject {
+                JsonObject {
                     value: {
                         "string": JsonString { value: "string_value" },
                         "int": JsonNumberLong { value: 5 },
