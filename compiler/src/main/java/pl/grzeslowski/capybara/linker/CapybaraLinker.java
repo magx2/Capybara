@@ -16,6 +16,7 @@ import static pl.grzeslowski.capybara.linker.CapybaraTypeLinker.linkType;
 @SuppressWarnings("OptionalUsedAsFieldOrParameterType")
 public class CapybaraLinker {
     public static final CapybaraLinker INSTANCE = new CapybaraLinker();
+    private static final String METHOD_DECL_PREFIX = "__method__";
 
     public ValueOrError<LinkedProgram> link(Program program) {
         var modulesByName = program.modules().stream().collect(toMap(Module::name, identity(), (first, second) -> first));
@@ -100,6 +101,7 @@ public class CapybaraLinker {
             Map<String, String> moduleClassNameByModuleName
     ) {
         var dataTypes = visibleTypesByModule.get(module.name());
+        var localTypeNames = linkedTypesByModule.get(module.name()).keySet();
         var functions = findFunctions(module.functional().definitions());
         var moduleSourceFile = moduleSourceFile(module);
         var availableSignatures = availableSignatures(module, modulesByName, linkedTypesByModule, signaturesByModule);
@@ -107,7 +109,7 @@ public class CapybaraLinker {
             return withFile(new ValueOrError.Error<>(error.errors()), moduleSourceFile);
         }
         var initialSignatures = ((ValueOrError.Value<List<CapybaraExpressionLinker.FunctionSignature>>) availableSignatures).value();
-        return withFile(linkFunctions(functions, dataTypes, initialSignatures, signaturesByModule, moduleClassNameByModuleName, moduleSourceFile), moduleSourceFile);
+        return withFile(linkFunctions(functions, dataTypes, localTypeNames, initialSignatures, signaturesByModule, moduleClassNameByModuleName, moduleSourceFile), moduleSourceFile);
     }
 
     private ValueOrError<LinkedModule> linkModule(
@@ -127,14 +129,14 @@ public class CapybaraLinker {
             return withFile(new ValueOrError.Error<>(error.errors()), moduleSourceFile);
         }
         var initialSignatures = ((ValueOrError.Value<List<CapybaraExpressionLinker.FunctionSignature>>) availableSignatures).value();
-        return withFile(linkFunctions(functions, visibleTypes, initialSignatures, signaturesByModule, moduleClassNameByModuleName, moduleSourceFile)
+        return withFile(linkFunctions(functions, visibleTypes, localTypes.keySet(), initialSignatures, signaturesByModule, moduleClassNameByModuleName, moduleSourceFile)
                 .flatMap(firstPassFunctions -> {
                     var refinedSignatures = mergeSignatures(
                             signaturesByModule.get(module.name()),
                             signaturesFromLinkedFunctions(firstPassFunctions)
                     );
                     var refinedAvailableSignatures = mergeSignatures(initialSignatures, refinedSignatures);
-                    return linkFunctions(functions, visibleTypes, refinedAvailableSignatures, signaturesByModule, moduleClassNameByModuleName, moduleSourceFile)
+                    return linkFunctions(functions, visibleTypes, localTypes.keySet(), refinedAvailableSignatures, signaturesByModule, moduleClassNameByModuleName, moduleSourceFile)
                             .map(linkedFunctions -> new LinkedModule(
                                     module.name(),
                                     module.path(),
@@ -414,19 +416,21 @@ public class CapybaraLinker {
     private ValueOrError<List<LinkedFunction>> linkFunctions(
             List<Function> functions,
             Map<String, GenericDataType> dataTypes,
+            Set<String> localTypeNames,
             List<CapybaraExpressionLinker.FunctionSignature> signatures,
             Map<String, List<CapybaraExpressionLinker.FunctionSignature>> signaturesByModule,
             Map<String, String> moduleClassNameByModuleName,
             String moduleSourceFile
     ) {
         return functions.stream()
-                .map(f -> linkFunction(f, dataTypes, signatures, signaturesByModule, moduleClassNameByModuleName, moduleSourceFile))
+                .map(f -> linkFunction(f, dataTypes, localTypeNames, signatures, signaturesByModule, moduleClassNameByModuleName, moduleSourceFile))
                 .collect(new ValueOrErrorCollectionCollector<>());
     }
 
     private ValueOrError<LinkedFunction> linkFunction(
             Function function,
             Map<String, GenericDataType> dataTypes,
+            Set<String> localTypeNames,
             List<CapybaraExpressionLinker.FunctionSignature> signatures,
             Map<String, List<CapybaraExpressionLinker.FunctionSignature>> signaturesByModule,
             Map<String, String> moduleClassNameByModuleName,
@@ -436,7 +440,12 @@ public class CapybaraLinker {
         if (privateTypeSignatureError.isPresent()) {
             return privateTypeSignatureError.get();
         }
-        var linked = linkParameters(function.parameters(), dataTypes)
+        var localMethodValidationError = validateTypeMethodDeclaredInLocalType(function, localTypeNames, moduleSourceFile);
+        if (localMethodValidationError.isPresent()) {
+            return localMethodValidationError.get();
+        }
+        var functionGenericTypeNames = functionGenericTypeNames(function, dataTypes);
+        var linked = linkParameters(function.parameters(), dataTypes, functionGenericTypeNames)
                 .flatMap(parameters -> new CapybaraExpressionLinker(
                         parameters,
                         dataTypes,
@@ -444,7 +453,7 @@ public class CapybaraLinker {
                         signaturesByModule,
                         moduleClassNameByModuleName
                 ).linkExpression(function.expression()).flatMap(ex -> function.returnType()
-                        .map(type -> linkType(type, dataTypes))
+                        .map(type -> linkType(type, dataTypes, functionGenericTypeNames))
                         .orElseGet(() -> ValueOrError.success(ex.type()))
                         .flatMap(rtype -> validateFunctionReturnType(function, ex, rtype, moduleSourceFile)
                                 .map(validatedExpression -> new LinkedFunction(
@@ -461,6 +470,38 @@ public class CapybaraLinker {
         var normalizedFile = normalizeFile(moduleSourceFile);
         var fallbackPosition = returnExpressionPosition(function.expression()).or(() -> function.position());
         return withPosition(linked, fallbackPosition, normalizedFile);
+    }
+
+    private Optional<ValueOrError<LinkedFunction>> validateTypeMethodDeclaredInLocalType(
+            Function function,
+            Set<String> localTypeNames,
+            String moduleSourceFile
+    ) {
+        var ownerType = methodOwnerType(function.name());
+        if (ownerType.isEmpty() || localTypeNames.contains(ownerType.get())) {
+            return Optional.empty();
+        }
+        var normalizedFile = normalizeFile(moduleSourceFile);
+        var position = function.position().orElse(SourcePosition.EMPTY);
+        var error = new ValueOrError.Error.SingleError(
+                position.line(),
+                position.column(),
+                normalizedFile,
+                "Cannot declare method on external type `" + ownerType.get()
+                + "`. Type methods/infix operators must be declared in the module where the type is defined."
+        );
+        return Optional.of(new ValueOrError.Error<>(List.of(error)));
+    }
+
+    private Optional<String> methodOwnerType(String functionName) {
+        if (!functionName.startsWith(METHOD_DECL_PREFIX)) {
+            return Optional.empty();
+        }
+        var separatorIndex = functionName.indexOf("__", METHOD_DECL_PREFIX.length());
+        if (separatorIndex < 0) {
+            return Optional.empty();
+        }
+        return Optional.of(functionName.substring(METHOD_DECL_PREFIX.length(), separatorIndex));
     }
 
     private ValueOrError<LinkedFunction> normalizeInfixOperatorErrors(
@@ -1215,15 +1256,17 @@ public class CapybaraLinker {
             Map<String, GenericDataType> dataTypes
     ) {
         return functions.stream()
-                .map(function -> linkParameters(function.parameters(), dataTypes)
+                .map(function -> {
+                            var functionGenericTypeNames = functionGenericTypeNames(function, dataTypes);
+                            return linkParameters(function.parameters(), dataTypes, functionGenericTypeNames)
                                 .flatMap(parameters -> function.returnType()
-                                        .map(type -> linkType(type, dataTypes))
+                                        .map(type -> linkType(type, dataTypes, functionGenericTypeNames))
                                         .orElseGet(() -> ValueOrError.success(PrimitiveLinkedType.ANY))
                                         .map(returnType -> new CapybaraExpressionLinker.FunctionSignature(
                                                 function.name(),
                                                 parameters.stream().map(LinkedFunctionParameter::type).toList(),
                                                 returnType
-                                        ))))
+                                        )));})
                 .collect(new ValueOrErrorCollectionCollector<>());
     }
 
@@ -1415,17 +1458,370 @@ public class CapybaraLinker {
     }
 
     private ValueOrError<List<LinkedFunctionParameter>> linkParameters(List<Parameter> parameters, Map<String, GenericDataType> dataTypes) {
+        return linkParameters(parameters, dataTypes, Set.of());
+    }
+
+    private ValueOrError<List<LinkedFunctionParameter>> linkParameters(
+            List<Parameter> parameters,
+            Map<String, GenericDataType> dataTypes,
+            Set<String> functionGenericTypeNames
+    ) {
         return parameters.stream()
-                .map(p -> linkParameter(p, dataTypes))
+                .map(p -> linkParameter(p, dataTypes, functionGenericTypeNames))
                 .collect(new ValueOrErrorCollectionCollector<>());
     }
 
     private ValueOrError<LinkedFunctionParameter> linkParameter(Parameter parameter, Map<String, GenericDataType> dataTypes) {
+        return linkParameter(parameter, dataTypes, Set.of());
+    }
+
+    private ValueOrError<LinkedFunctionParameter> linkParameter(
+            Parameter parameter,
+            Map<String, GenericDataType> dataTypes,
+            Set<String> functionGenericTypeNames
+    ) {
         return withPosition(
-                linkType(parameter.type(), dataTypes)
+                linkType(parameter.type(), dataTypes, functionGenericTypeNames)
                         .map(type -> new LinkedFunctionParameter(parameter.name(), type)),
                 parameter.position(),
                 "");
+    }
+
+    private ValueOrError<LinkedType> linkType(
+            pl.grzeslowski.capybara.parser.Type type,
+            Map<String, GenericDataType> dataTypes
+    ) {
+        return CapybaraTypeLinker.linkType(type, dataTypes);
+    }
+
+    private ValueOrError<LinkedType> linkType(
+            pl.grzeslowski.capybara.parser.Type type,
+            Map<String, GenericDataType> dataTypes,
+            Set<String> functionGenericTypeNames
+    ) {
+        if (functionGenericTypeNames.isEmpty()) {
+            return linkType(type, dataTypes);
+        }
+        return switch (type) {
+            case PrimitiveType primitiveType -> ValueOrError.success(switch (primitiveType) {
+                case BYTE -> PrimitiveLinkedType.BYTE;
+                case INT -> PrimitiveLinkedType.INT;
+                case LONG -> PrimitiveLinkedType.LONG;
+                case DOUBLE -> PrimitiveLinkedType.DOUBLE;
+                case STRING -> PrimitiveLinkedType.STRING;
+                case BOOL -> PrimitiveLinkedType.BOOL;
+                case FLOAT -> PrimitiveLinkedType.FLOAT;
+                case ANY -> PrimitiveLinkedType.ANY;
+                case DATA -> PrimitiveLinkedType.DATA;
+                case NOTHING -> PrimitiveLinkedType.NOTHING;
+            });
+            case CollectionType.ListType listType -> linkType(listType.elementType(), dataTypes, functionGenericTypeNames)
+                    .map(CollectionLinkedType.LinkedList::new)
+                    .map(LinkedType.class::cast);
+            case CollectionType.SetType setType -> linkType(setType.elementType(), dataTypes, functionGenericTypeNames)
+                    .map(CollectionLinkedType.LinkedSet::new)
+                    .map(LinkedType.class::cast);
+            case CollectionType.DictType dictType -> linkType(dictType.valueType(), dataTypes, functionGenericTypeNames)
+                    .map(CollectionLinkedType.LinkedDict::new)
+                    .map(LinkedType.class::cast);
+            case FunctionType functionType -> linkType(functionType.argumentType(), dataTypes, functionGenericTypeNames)
+                    .flatMap(argumentType -> linkType(functionType.returnType(), dataTypes, functionGenericTypeNames)
+                            .map(returnType -> (LinkedType) new LinkedFunctionType(argumentType, returnType)));
+            case TupleType tupleType -> tupleType.elementTypes().stream()
+                    .map(elementType -> linkType(elementType, dataTypes, functionGenericTypeNames))
+                    .collect(new ValueOrErrorCollectionCollector<>())
+                    .map(linkedTypes -> (LinkedType) new LinkedTupleType(linkedTypes));
+            case DataType dataType -> linkDataTypeWithFunctionGenerics(dataType.name(), dataTypes, functionGenericTypeNames);
+        };
+    }
+
+    private ValueOrError<LinkedType> linkDataTypeWithFunctionGenerics(
+            String rawTypeName,
+            Map<String, GenericDataType> dataTypes,
+            Set<String> functionGenericTypeNames
+    ) {
+        var parsed = parseGenericTypeName(rawTypeName);
+        if (parsed.typeArguments().isEmpty() && functionGenericTypeNames.contains(parsed.baseName())) {
+            return ValueOrError.success(new LinkedGenericTypeParameter(parsed.baseName()));
+        }
+
+        var linkedBase = linkType(new DataType(parsed.baseName()), dataTypes);
+        if (linkedBase instanceof ValueOrError.Error<LinkedType> error) {
+            return new ValueOrError.Error<>(error.errors());
+        }
+        var baseType = ((ValueOrError.Value<LinkedType>) linkedBase).value();
+        if (parsed.typeArguments().isEmpty()) {
+            return ValueOrError.success(baseType);
+        }
+
+        return parsed.typeArguments().stream()
+                .map(argument -> linkType(parseTypeArgument(argument), dataTypes, functionGenericTypeNames))
+                .collect(new ValueOrErrorCollectionCollector<>())
+                .map(arguments -> instantiateTypeArguments(baseType, arguments));
+    }
+
+    private LinkedType instantiateTypeArguments(LinkedType linkedType, List<LinkedType> typeArguments) {
+        var mappedTypeArguments = typeArguments.stream().map(this::typeDescriptor).toList();
+        return switch (linkedType) {
+            case LinkedDataParentType parentType -> new LinkedDataParentType(
+                    parentType.name(),
+                    parentType.fields(),
+                    parentType.subTypes(),
+                    mappedTypeArguments
+            );
+            case LinkedDataType dataType -> {
+                if (dataType.typeParameters().isEmpty()) {
+                    yield new LinkedDataType(
+                            dataType.name(),
+                            dataType.fields(),
+                            mappedTypeArguments,
+                            dataType.extendedTypes(),
+                            dataType.singleton()
+                    );
+                }
+                var substitutions = new LinkedHashMap<String, LinkedType>();
+                var max = Math.min(dataType.typeParameters().size(), typeArguments.size());
+                for (int i = 0; i < max; i++) {
+                    substitutions.put(dataType.typeParameters().get(i), typeArguments.get(i));
+                }
+                var substitutedFields = dataType.fields().stream()
+                        .map(field -> new LinkedDataType.LinkedField(field.name(), substituteTypeParameters(field.type(), substitutions)))
+                        .toList();
+                yield new LinkedDataType(
+                        dataType.name(),
+                        substitutedFields,
+                        mappedTypeArguments,
+                        dataType.extendedTypes(),
+                        dataType.singleton()
+                );
+            }
+            default -> linkedType;
+        };
+    }
+
+    private LinkedType substituteTypeParameters(LinkedType type, Map<String, LinkedType> substitutions) {
+        if (type instanceof LinkedGenericTypeParameter genericTypeParameter) {
+            return substitutions.getOrDefault(genericTypeParameter.name(), type);
+        }
+        return switch (type) {
+            case CollectionLinkedType.LinkedList linkedList -> new CollectionLinkedType.LinkedList(
+                    substituteTypeParameters(linkedList.elementType(), substitutions));
+            case CollectionLinkedType.LinkedSet linkedSet -> new CollectionLinkedType.LinkedSet(
+                    substituteTypeParameters(linkedSet.elementType(), substitutions));
+            case CollectionLinkedType.LinkedDict linkedDict -> new CollectionLinkedType.LinkedDict(
+                    substituteTypeParameters(linkedDict.valueType(), substitutions));
+            case LinkedFunctionType functionType -> new LinkedFunctionType(
+                    substituteTypeParameters(functionType.argumentType(), substitutions),
+                    substituteTypeParameters(functionType.returnType(), substitutions)
+            );
+            case LinkedTupleType linkedTupleType -> new LinkedTupleType(
+                    linkedTupleType.elementTypes().stream()
+                            .map(elementType -> substituteTypeParameters(elementType, substitutions))
+                            .toList()
+            );
+            default -> type;
+        };
+    }
+
+    private String typeDescriptor(LinkedType type) {
+        return switch (type) {
+            case PrimitiveLinkedType primitive -> primitive.name().toLowerCase();
+            case CollectionLinkedType.LinkedList linkedList -> "list[" + typeDescriptor(linkedList.elementType()) + "]";
+            case CollectionLinkedType.LinkedSet linkedSet -> "set[" + typeDescriptor(linkedSet.elementType()) + "]";
+            case CollectionLinkedType.LinkedDict linkedDict -> "dict[" + typeDescriptor(linkedDict.valueType()) + "]";
+            case LinkedTupleType linkedTupleType -> "tuple[" + linkedTupleType.elementTypes().stream()
+                    .map(this::typeDescriptor)
+                    .collect(java.util.stream.Collectors.joining(", ")) + "]";
+            case LinkedFunctionType linkedFunctionType ->
+                    "(" + typeDescriptor(linkedFunctionType.argumentType()) + " -> " + typeDescriptor(linkedFunctionType.returnType()) + ")";
+            case LinkedDataType linkedDataType -> linkedDataType.typeParameters().isEmpty()
+                    ? linkedDataType.name()
+                    : linkedDataType.name() + "[" + String.join(", ", linkedDataType.typeParameters()) + "]";
+            case LinkedDataParentType linkedDataParentType -> linkedDataParentType.typeParameters().isEmpty()
+                    ? linkedDataParentType.name()
+                    : linkedDataParentType.name() + "[" + String.join(", ", linkedDataParentType.typeParameters()) + "]";
+            case LinkedGenericTypeParameter linkedGenericTypeParameter -> linkedGenericTypeParameter.name();
+        };
+    }
+
+    private ParsedGenericTypeName parseGenericTypeName(String rawName) {
+        var idx = rawName.indexOf('[');
+        if (idx <= 0 || !rawName.endsWith("]")) {
+            return new ParsedGenericTypeName(rawName, List.of());
+        }
+        var baseName = rawName.substring(0, idx);
+        var argsContent = rawName.substring(idx + 1, rawName.length() - 1);
+        return new ParsedGenericTypeName(baseName, splitTopLevelTypeArguments(argsContent));
+    }
+
+    private List<String> splitTopLevelTypeArguments(String content) {
+        var result = new ArrayList<String>();
+        var depthSquare = 0;
+        var depthParen = 0;
+        var current = new StringBuilder();
+        for (var i = 0; i < content.length(); i++) {
+            var ch = content.charAt(i);
+            if (ch == '[') {
+                depthSquare++;
+                current.append(ch);
+                continue;
+            }
+            if (ch == ']') {
+                depthSquare = Math.max(0, depthSquare - 1);
+                current.append(ch);
+                continue;
+            }
+            if (ch == '(') {
+                depthParen++;
+                current.append(ch);
+                continue;
+            }
+            if (ch == ')') {
+                depthParen = Math.max(0, depthParen - 1);
+                current.append(ch);
+                continue;
+            }
+            if (ch == ',' && depthSquare == 0 && depthParen == 0) {
+                var token = current.toString().trim();
+                if (!token.isEmpty()) {
+                    result.add(token);
+                }
+                current.setLength(0);
+                continue;
+            }
+            current.append(ch);
+        }
+        var token = current.toString().trim();
+        if (!token.isEmpty()) {
+            result.add(token);
+        }
+        return List.copyOf(result);
+    }
+
+    private pl.grzeslowski.capybara.parser.Type parseTypeArgument(String raw) {
+        var trimmed = raw.trim();
+        return PrimitiveType.find(trimmed)
+                .map(pl.grzeslowski.capybara.parser.Type.class::cast)
+                .orElseGet(() -> {
+                    if (trimmed.startsWith("list[") && trimmed.endsWith("]")) {
+                        return new CollectionType.ListType(parseTypeArgument(trimmed.substring(5, trimmed.length() - 1)));
+                    }
+                    if (trimmed.startsWith("set[") && trimmed.endsWith("]")) {
+                        return new CollectionType.SetType(parseTypeArgument(trimmed.substring(4, trimmed.length() - 1)));
+                    }
+                    if (trimmed.startsWith("dict[") && trimmed.endsWith("]")) {
+                        return new CollectionType.DictType(parseTypeArgument(trimmed.substring(5, trimmed.length() - 1)));
+                    }
+                    if (trimmed.startsWith("tuple[") && trimmed.endsWith("]")) {
+                        var inner = trimmed.substring(6, trimmed.length() - 1);
+                        var elements = splitTopLevelTypeArguments(inner).stream()
+                                .map(this::parseTypeArgument)
+                                .toList();
+                        return new TupleType(elements);
+                    }
+                    var arrowIndex = indexOfTopLevelArrow(trimmed);
+                    if (arrowIndex > 0) {
+                        var left = trimmed.substring(0, arrowIndex).trim();
+                        var right = trimmed.substring(arrowIndex + 2).trim();
+                        return new FunctionType(parseTypeArgument(stripOptionalParentheses(left)), parseTypeArgument(right));
+                    }
+                    return new DataType(trimmed);
+                });
+    }
+
+    private int indexOfTopLevelArrow(String value) {
+        var square = 0;
+        var paren = 0;
+        for (int i = 0; i < value.length() - 1; i++) {
+            var ch = value.charAt(i);
+            if (ch == '[') {
+                square++;
+                continue;
+            }
+            if (ch == ']') {
+                square = Math.max(0, square - 1);
+                continue;
+            }
+            if (ch == '(') {
+                paren++;
+                continue;
+            }
+            if (ch == ')') {
+                paren = Math.max(0, paren - 1);
+                continue;
+            }
+            if (ch == '-' && value.charAt(i + 1) == '>' && square == 0 && paren == 0) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    private String stripOptionalParentheses(String value) {
+        var trimmed = value.trim();
+        if (!trimmed.startsWith("(") || !trimmed.endsWith(")")) {
+            return trimmed;
+        }
+        var depth = 0;
+        for (int i = 0; i < trimmed.length(); i++) {
+            var ch = trimmed.charAt(i);
+            if (ch == '(') {
+                depth++;
+            } else if (ch == ')') {
+                depth--;
+            }
+            if (depth == 0 && i < trimmed.length() - 1) {
+                return trimmed;
+            }
+        }
+        return trimmed.substring(1, trimmed.length() - 1).trim();
+    }
+
+    private Set<String> functionGenericTypeNames(Function function, Map<String, GenericDataType> dataTypes) {
+        var names = new LinkedHashSet<String>();
+        function.parameters().forEach(parameter -> collectFunctionGenericTypeNames(parameter.type(), dataTypes, names));
+        function.returnType().ifPresent(type -> collectFunctionGenericTypeNames(type, dataTypes, names));
+        return Set.copyOf(names);
+    }
+
+    private void collectFunctionGenericTypeNames(
+            pl.grzeslowski.capybara.parser.Type type,
+            Map<String, GenericDataType> dataTypes,
+            Set<String> names
+    ) {
+        switch (type) {
+            case CollectionType.ListType listType -> collectFunctionGenericTypeNames(listType.elementType(), dataTypes, names);
+            case CollectionType.SetType setType -> collectFunctionGenericTypeNames(setType.elementType(), dataTypes, names);
+            case CollectionType.DictType dictType -> collectFunctionGenericTypeNames(dictType.valueType(), dataTypes, names);
+            case FunctionType functionType -> {
+                collectFunctionGenericTypeNames(functionType.argumentType(), dataTypes, names);
+                collectFunctionGenericTypeNames(functionType.returnType(), dataTypes, names);
+            }
+            case TupleType tupleType -> tupleType.elementTypes()
+                    .forEach(elementType -> collectFunctionGenericTypeNames(elementType, dataTypes, names));
+            case DataType dataType -> {
+                var parsed = parseGenericTypeName(dataType.name());
+                if (isFunctionGenericName(parsed.baseName()) && !isKnownTypeName(parsed.baseName(), dataTypes)) {
+                    names.add(parsed.baseName());
+                }
+                parsed.typeArguments().stream()
+                        .map(this::parseTypeArgument)
+                        .forEach(argType -> collectFunctionGenericTypeNames(argType, dataTypes, names));
+            }
+            default -> {
+            }
+        }
+    }
+
+    private boolean isFunctionGenericName(String name) {
+        return name.length() == 1 && Character.isUpperCase(name.charAt(0));
+    }
+
+    private boolean isKnownTypeName(String typeName, Map<String, GenericDataType> dataTypes) {
+        return linkType(new DataType(typeName), dataTypes) instanceof ValueOrError.Value<LinkedType>;
+    }
+
+    private record ParsedGenericTypeName(String baseName, List<String> typeArguments) {
     }
 
     private ValueOrError<Map<String, GenericDataType>> types(Module module) {
