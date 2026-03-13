@@ -110,7 +110,9 @@ public class JavaExpressionEvaluator {
 
     private static Scope evaluateFieldAccess(LinkedFieldAccess fieldAccess, Scope scope) {
         var source = evaluateExpression(fieldAccess.source(), scope).popExpression();
-        var expression = "(" + source.expression() + ")." + fieldAccess.field() + "()";
+        var expression = isResultErrorMessageFieldAccess(fieldAccess)
+                ? "((" + source.expression() + ").ex() == null ? null : (" + source.expression() + ").ex().getMessage())"
+                : "(" + source.expression() + ")." + fieldAccess.field() + "()";
         if (requiresGenericFieldCast(fieldAccess)) {
             var castType = javaCastType(fieldAccess.type());
             if (!"java.lang.Object".equals(castType)) {
@@ -118,6 +120,19 @@ public class JavaExpressionEvaluator {
             }
         }
         return source.scope().addExpression(expression);
+    }
+
+    private static boolean isResultErrorMessageFieldAccess(LinkedFieldAccess fieldAccess) {
+        if (!"message".equals(fieldAccess.field())) {
+            return false;
+        }
+        if (!(fieldAccess.source().type() instanceof LinkedDataType linkedDataType)) {
+            return false;
+        }
+        var normalized = normalizeQualifiedTypeName(linkedDataType.name());
+        return normalized.endsWith("/Result.Error")
+               || normalized.endsWith(".Result.Error")
+               || "Error".equals(linkedDataType.name());
     }
 
     private static boolean requiresGenericFieldCast(LinkedFieldAccess fieldAccess) {
