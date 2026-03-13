@@ -52,7 +52,7 @@ public class CapybaraLinker {
         for (var module : program.modules()) {
             var functions = findFunctions(module.functional().definitions());
             var sourceFile = moduleSourceFile(module);
-            var signatures = withFile(linkFunctionSignatures(functions, visibleTypesByModule.get(module.name())), sourceFile);
+            var signatures = withFile(linkFunctionSignatures(functions, visibleTypesByModule.get(module.name()), sourceFile), sourceFile);
             if (signatures instanceof ValueOrError.Error<List<CapybaraExpressionLinker.FunctionSignature>> error) {
                 return new ValueOrError.Error<>(error.errors());
             }
@@ -1366,21 +1366,59 @@ public class CapybaraLinker {
 
     private ValueOrError<List<CapybaraExpressionLinker.FunctionSignature>> linkFunctionSignatures(
             List<Function> functions,
-            Map<String, GenericDataType> dataTypes
+            Map<String, GenericDataType> dataTypes,
+            String moduleSourceFile
     ) {
         return functions.stream()
                 .map(function -> {
                             var functionGenericTypeNames = functionGenericTypeNames(function, dataTypes);
                             return linkParameters(function.parameters(), dataTypes, functionGenericTypeNames)
-                                .flatMap(parameters -> function.returnType()
-                                        .map(type -> linkType(type, dataTypes, functionGenericTypeNames))
-                                        .orElseGet(() -> ValueOrError.success(PrimitiveLinkedType.ANY))
+                                .flatMap(parameters -> linkSignatureReturnType(function, dataTypes, functionGenericTypeNames, moduleSourceFile)
                                         .map(returnType -> new CapybaraExpressionLinker.FunctionSignature(
                                                 function.name(),
                                                 parameters.stream().map(LinkedFunctionParameter::type).toList(),
                                                 returnType
                                         )));})
                 .collect(new ValueOrErrorCollectionCollector<>());
+    }
+
+    private ValueOrError<LinkedType> linkSignatureReturnType(
+            Function function,
+            Map<String, GenericDataType> dataTypes,
+            Set<String> functionGenericTypeNames,
+            String moduleSourceFile
+    ) {
+        var linked = function.returnType()
+                .map(type -> linkType(type, dataTypes, functionGenericTypeNames))
+                .orElseGet(() -> ValueOrError.success(PrimitiveLinkedType.ANY));
+        if (!(linked instanceof ValueOrError.Error<LinkedType> error)) {
+            return linked;
+        }
+
+        var line = function.position().map(SourcePosition::line).orElse(0);
+        var column = signatureReturnTypeColumn(function);
+        var file = normalizeFile(moduleSourceFile);
+        var header = formatFunctionHeader(function) + " =";
+        var formattedErrors = error.errors().stream()
+                .map(singleError -> normalizeSignatureTypeError(singleError.message()))
+                .map(message -> {
+                    var pointer = " ".repeat(Math.max(column, 0)) + "^ " + message;
+                    var formatted = "error: mismatched types\n"
+                                    + " --> " + file + ":" + line + ":" + column + "\n"
+                                    + header + "\n"
+                                    + pointer + "\n";
+                    return new ValueOrError.Error.SingleError(line, column, file, formatted);
+                })
+                .toList();
+        return new ValueOrError.Error<>(formattedErrors);
+    }
+
+    private String normalizeSignatureTypeError(String message) {
+        if (message.startsWith("Data type \"") && message.endsWith("\" not found")) {
+            var typeName = message.substring("Data type \"".length(), message.length() - "\" not found".length());
+            return "Data type `" + typeName + "` not found";
+        }
+        return message;
     }
 
     private Optional<ValueOrError.Error<LinkedFunction>> privateTypeEscapingFunctionSignatureError(

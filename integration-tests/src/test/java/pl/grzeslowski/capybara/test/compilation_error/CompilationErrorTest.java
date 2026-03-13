@@ -290,6 +290,22 @@ public class CompilationErrorTest {
     static Stream<Arguments> simpleCompilationError() {
         return Stream.of(
                 Arguments.of(
+                        "function_unknown_return_type",
+                        """ 
+                                fun broken(x: int): Str =
+                                    if x > 0
+                                    then "+"
+                                    else "-"
+                                """,
+                        new Position(1, 20),
+                        """
+                                error: mismatched types
+                                 --> /foo/boo/function_unknown_return_type.cfun:1:20
+                                fun broken(x: int): Str =
+                                                    ^ Data type `Str` not found
+                                """
+                ),
+                Arguments.of(
                         "match_case_wrong_operator",
                         """ 
                                 fun broken(result: /capy/lang/Result.Result[any]): bool =
