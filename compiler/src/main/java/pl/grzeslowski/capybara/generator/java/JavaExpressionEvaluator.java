@@ -327,6 +327,12 @@ public class JavaExpressionEvaluator {
                             ? equalsExpression
                             : "!(" + equalsExpression + ")";
                 }
+                if (!isPrimitiveComparison(infixExpression.left().type(), infixExpression.right().type())) {
+                    var equalsExpression = "java.util.Objects.equals(" + left.expression() + ", " + right.expression() + ")";
+                    yield operator == pl.grzeslowski.capybara.parser.InfixOperator.EQUAL
+                            ? equalsExpression
+                            : "!(" + equalsExpression + ")";
+                }
                 yield left.expression() + operator.javaSymbol() + right.expression();
             }
             default -> left.expression() + operator.javaSymbol() + right.expression();
@@ -406,6 +412,20 @@ public class JavaExpressionEvaluator {
                || type == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.LONG
                || type == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.FLOAT
                || type == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.DOUBLE;
+    }
+
+    private static boolean isPrimitiveComparison(pl.grzeslowski.capybara.linker.LinkedType leftType,
+                                                 pl.grzeslowski.capybara.linker.LinkedType rightType) {
+        return isNumericOrBoolType(leftType) && isNumericOrBoolType(rightType);
+    }
+
+    private static boolean isNumericOrBoolType(pl.grzeslowski.capybara.linker.LinkedType type) {
+        return type == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.BYTE
+               || type == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.INT
+               || type == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.LONG
+               || type == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.FLOAT
+               || type == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.DOUBLE
+               || type == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.BOOL;
     }
 
     private static String toBooleanExpression(String expression, pl.grzeslowski.capybara.linker.LinkedType type) {
@@ -1289,6 +1309,9 @@ public class JavaExpressionEvaluator {
             return "java.util.Map";
         }
         if (normalized.matches("[A-Z][A-Za-z0-9_]*")) {
+            if (normalized.matches("[A-Z]")) {
+                return "java.lang.Object";
+            }
             return normalized;
         }
         var genericStart = normalized.indexOf('[');

@@ -1,0 +1,19 @@
+from /capy/assert/Assert import { * }
+from /capy/lang/Result import { * }
+
+fun main(args: list[string]): /capy/lang/Program.Program =
+    run_tests([
+        // map
+        should_map_success(),
+        should_map_error(),
+    ])
+
+fun should_map_success(): Assert =
+    let result: Result = Success { "success_value" }
+    let mapped = result | value => Success { "mapped_" + value }
+    assertThat(mapped).success("mapped_success_value")
+
+fun should_map_error(): Assert =
+    let result: Result = Error { "error message" }
+    let mapped = result | value => Success { "mapped_" + value }
+    assertThat(mapped).fail("error message")
