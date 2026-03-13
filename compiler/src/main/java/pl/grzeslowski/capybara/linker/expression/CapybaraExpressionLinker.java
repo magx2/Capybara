@@ -7,9 +7,11 @@ import pl.grzeslowski.capybara.linker.*;
 import pl.grzeslowski.capybara.parser.*;
 
 import java.math.BigInteger;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.logging.Logger;
 
 import static pl.grzeslowski.capybara.linker.CapybaraTypeLinker.linkType;
@@ -920,17 +922,33 @@ public class CapybaraExpressionLinker {
 
     private boolean isSubtypeOfParent(LinkedDataType candidate, LinkedDataParentType expectedParentType) {
         return expectedParentType.subTypes().stream()
-                .anyMatch(subType -> subType.name().equals(candidate.name()));
+                .anyMatch(subType -> sameRawTypeName(subType.name(), candidate.name()));
     }
 
     private static boolean sameRawTypeName(String left, String right) {
-        return normalizeTypeAlias(left).equals(normalizeTypeAlias(right));
+        var normalizedLeft = normalizeTypeAlias(left);
+        var normalizedRight = normalizeTypeAlias(right);
+        return normalizedLeft.equals(normalizedRight)
+               || simpleRawTypeName(normalizedLeft).equals(simpleRawTypeName(normalizedRight));
     }
 
     private static String normalizeTypeAlias(String typeName) {
-        return typeName
+        var withoutGenerics = stripGenericSuffix(typeName);
+        return withoutGenerics
                 .replace("/capy/lang/Option", "/cap/lang/Option")
                 .replace(".capy.lang.Option", ".cap.lang.Option");
+    }
+
+    private static String stripGenericSuffix(String typeName) {
+        var idx = typeName.indexOf('[');
+        return idx > 0 ? typeName.substring(0, idx) : typeName;
+    }
+
+    private static String simpleRawTypeName(String typeName) {
+        var slash = typeName.lastIndexOf('/');
+        var dot = typeName.lastIndexOf('.');
+        var idx = Math.max(slash, dot);
+        return idx >= 0 ? typeName.substring(idx + 1) : typeName;
     }
 
     private ValueOrError<LinkedExpression> linkIfExpression(IfExpression ifExpression, Scope scope) {
@@ -1070,10 +1088,9 @@ public class CapybaraExpressionLinker {
             LinkedExpression right,
             Optional<pl.grzeslowski.capybara.parser.SourcePosition> position
     ) {
-        var ownerName = left.type().name();
-        var methodName = METHOD_DECL_PREFIX + ownerName + "__" + operatorSymbol;
+        var ownerNames = methodOwnerCandidates(left.type());
         var candidates = functionSignatures.stream()
-                .filter(signature -> signature.name().equals(methodName))
+                .filter(signature -> matchesMethodOwner(signature.name(), ownerNames, operatorSymbol))
                 .filter(signature -> signature.parameterTypes().size() == 2)
                 .toList();
         if (candidates.isEmpty()) {
@@ -1119,10 +1136,9 @@ public class CapybaraExpressionLinker {
             Scope scope,
             Optional<pl.grzeslowski.capybara.parser.SourcePosition> position
     ) {
-        var ownerName = left.type().name();
-        var methodName = METHOD_DECL_PREFIX + ownerName + "__" + operatorSymbol;
+        var ownerNames = methodOwnerCandidates(left.type());
         var candidates = functionSignatures.stream()
-                .filter(signature -> signature.name().equals(methodName))
+                .filter(signature -> matchesMethodOwner(signature.name(), ownerNames, operatorSymbol))
                 .filter(signature -> signature.parameterTypes().size() == 2)
                 .toList();
         if (candidates.isEmpty()) {
@@ -1160,6 +1176,62 @@ public class CapybaraExpressionLinker {
                 best.arguments(),
                 best.signature().returnType()
         ));
+    }
+
+    private Set<String> methodOwnerCandidates(LinkedType receiverType) {
+        var ownerNames = new LinkedHashSet<String>();
+        var receiverBase = baseTypeName(receiverType.name());
+        var receiverSimple = simpleTypeName(receiverBase);
+        ownerNames.add(receiverBase);
+        dataTypes.keySet().stream()
+                .map(this::baseTypeName)
+                .filter(name -> simpleTypeName(name).equals(receiverSimple))
+                .forEach(ownerNames::add);
+        if (receiverType instanceof LinkedDataType receiverDataType) {
+            var receiverDataSimple = simpleTypeName(baseTypeName(receiverDataType.name()));
+            dataTypes.values().stream()
+                    .filter(LinkedDataParentType.class::isInstance)
+                    .map(LinkedDataParentType.class::cast)
+                    .filter(parentType -> parentType.subTypes().stream()
+                            .anyMatch(subType -> simpleTypeName(baseTypeName(subType.name())).equals(receiverDataSimple)))
+                    .map(LinkedDataParentType::name)
+                    .map(this::baseTypeName)
+                    .forEach(ownerNames::add);
+            dataTypes.entrySet().stream()
+                    .filter(entry -> entry.getValue() instanceof LinkedDataParentType parentType
+                            && parentType.subTypes().stream()
+                                    .anyMatch(subType -> simpleTypeName(baseTypeName(subType.name())).equals(receiverDataSimple)))
+                    .map(Map.Entry::getKey)
+                    .map(this::baseTypeName)
+                    .forEach(ownerNames::add);
+        }
+        return Set.copyOf(ownerNames);
+    }
+
+    private boolean matchesMethodOwner(String signatureName, Set<String> ownerNames, String operatorSymbol) {
+        if (!signatureName.startsWith(METHOD_DECL_PREFIX)) {
+            return false;
+        }
+        var separator = signatureName.indexOf("__", METHOD_DECL_PREFIX.length());
+        if (separator < 0 || separator + 2 > signatureName.length()) {
+            return false;
+        }
+        var ownerName = baseTypeName(signatureName.substring(METHOD_DECL_PREFIX.length(), separator));
+        var methodName = signatureName.substring(separator + 2);
+        return methodName.equals(operatorSymbol) && ownerNames.contains(ownerName);
+    }
+
+    private String baseTypeName(String typeName) {
+        var genericStart = typeName.indexOf('[');
+        return genericStart > 0 ? typeName.substring(0, genericStart) : typeName;
+    }
+
+    private String simpleTypeName(String typeName) {
+        var normalized = baseTypeName(typeName);
+        var slash = normalized.lastIndexOf('/');
+        var dot = normalized.lastIndexOf('.');
+        var index = Math.max(slash, dot);
+        return index >= 0 ? normalized.substring(index + 1) : normalized;
     }
 
     private ValueOrError<LinkedExpression> linkPipeExpression(InfixExpression expression, Scope scope) {

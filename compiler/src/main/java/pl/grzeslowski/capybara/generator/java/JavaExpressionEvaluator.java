@@ -1677,7 +1677,9 @@ public class JavaExpressionEvaluator {
             return current.addExpression(normalizeJavaTypeReference(dataType.name()) + ".INSTANCE");
         }
 
-        return current.addExpression("new " + normalizeJavaTypeReference(dataType.name()) + "(" + String.join(", ", args) + ")");
+        var javaType = normalizeJavaTypeReference(dataType.name());
+        var genericSuffix = dataType.typeParameters().isEmpty() ? "" : "<>";
+        return current.addExpression("new " + javaType + genericSuffix + "(" + String.join(", ", args) + ")");
     }
 
     private static Scope evaluateStringValue(LinkedStringValue stringValue, Scope scope) {
