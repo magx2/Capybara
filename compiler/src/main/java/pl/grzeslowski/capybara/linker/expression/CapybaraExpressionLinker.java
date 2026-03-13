@@ -2254,7 +2254,9 @@ public class CapybaraExpressionLinker {
             LinkedType matchType,
             List<LinkedMatchExpression.MatchCase> cases
     ) {
-        if (cases.stream().anyMatch(matchCase -> matchCase.pattern() instanceof LinkedMatchExpression.WildcardPattern)) {
+        if (cases.stream().anyMatch(matchCase ->
+                matchCase.pattern() instanceof LinkedMatchExpression.WildcardPattern
+                || matchCase.pattern() instanceof LinkedMatchExpression.WildcardBindingPattern)) {
             return ValueOrError.success(null);
         }
         var requiredConstructors = requiredConstructorsForMatch(matchType);
@@ -2377,6 +2379,11 @@ public class CapybaraExpressionLinker {
             case MatchExpression.VariablePattern variablePattern -> linkVariablePattern(variablePattern, matchType, scope);
             case MatchExpression.WildcardPattern wildcardPattern ->
                     ValueOrError.success(new PatternAndScope(LinkedMatchExpression.WildcardPattern.WILDCARD, scope));
+            case MatchExpression.WildcardBindingPattern wildcardBindingPattern ->
+                    ValueOrError.success(new PatternAndScope(
+                            new LinkedMatchExpression.WildcardBindingPattern(wildcardBindingPattern.name()),
+                            scope.add(wildcardBindingPattern.name(), matchType)
+                    ));
             case MatchExpression.ConstructorPattern constructorPattern -> linkConstructorPattern(constructorPattern, matchType, scope);
         };
     }

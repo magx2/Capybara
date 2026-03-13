@@ -40,6 +40,9 @@ public record LinkedMatchExpression(LinkedExpression matchWith, List<MatchCase> 
         WILDCARD
     }
 
+    public record WildcardBindingPattern(String name) implements Pattern {
+    }
+
     public record ConstructorPattern(String constructorName, List<Pattern> fieldPatterns) implements Pattern {
     }
 

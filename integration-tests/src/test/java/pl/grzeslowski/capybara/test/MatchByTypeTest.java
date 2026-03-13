@@ -44,4 +44,11 @@ class MatchByTypeTest {
         assertThat(MatchByType.classifyJsonChar("7")).isEqualTo("number");
         assertThat(MatchByType.classifyJsonChar("x")).isEqualTo("other");
     }
+
+    @Test
+    void wildcardCaseCanBindMatchedValue() {
+        assertThat(MatchByType.classifyJsonCharWithNamedWildcard("-")).isEqualTo("minus");
+        assertThat(MatchByType.classifyJsonCharWithNamedWildcard("7")).isEqualTo("number");
+        assertThat(MatchByType.classifyJsonCharWithNamedWildcard("x")).isEqualTo("unknown: x");
+    }
 }

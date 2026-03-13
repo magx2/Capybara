@@ -232,6 +232,24 @@
           }
         },
         {
+          "name": "meta.match.wildcard-binding.capybara",
+          "match": "(\\|)\\s*(_)\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*(=>)",
+          "captures": {
+            "1": {
+              "name": "keyword.operator.capybara"
+            },
+            "2": {
+              "name": "keyword.operator.capybara"
+            },
+            "3": {
+              "name": "variable.parameter.capybara"
+            },
+            "4": {
+              "name": "keyword.operator.capybara"
+            }
+          }
+        },
+        {
           "name": "meta.match.constructor-pattern.capybara",
           "match": "(\\|)\\s*(_*[A-Z][A-Za-z0-9_]*)\\s*(\\{)\\s*([A-Za-z_][A-Za-z0-9_]*)",
           "captures": {

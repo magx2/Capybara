@@ -1073,14 +1073,18 @@ public class CapybaraParser {
             );
         }
 
+        var wildcardPattern = context.wildcardPattern();
+        if (wildcardPattern != null) {
+            var wildcardName = wildcardPattern.NAME();
+            if (wildcardName == null) {
+                return MatchExpression.WildcardPattern.WILDCARD;
+            }
+            return new MatchExpression.WildcardBindingPattern(wildcardName.getText());
+        }
+
         var name = context.NAME();
         if (name != null) {
             return new MatchExpression.VariablePattern(name.getText());
-        }
-
-        var wildcard = context.UNDERSCORE();
-        if (wildcard != null) {
-            return MatchExpression.WildcardPattern.WILDCARD;
         }
 
         var constructorPattern = context.constructorPattern();

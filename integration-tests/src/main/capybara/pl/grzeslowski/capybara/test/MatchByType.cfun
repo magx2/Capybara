@@ -29,3 +29,9 @@ fun classify_json_char(first_char: string): string =
     | '"' => "string"
     | '-', '1', '2', '3', '4', '5', '6', '7', '8', '9', '0' => "number"
     | _ => "other"
+
+fun classify_json_char_with_named_wildcard(first_char: string): string =
+    match first_char with
+    | '-' => "minus"
+    | '1', '2', '3', '4', '5', '6', '7', '8', '9', '0' => "number"
+    | _ v => "unknown: " + v

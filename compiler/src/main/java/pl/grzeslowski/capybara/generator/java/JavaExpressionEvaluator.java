@@ -1134,6 +1134,11 @@ public class JavaExpressionEvaluator {
                         .addLocalValue(typedPattern.name())
                         .addValueOverride(matchedVariable.name(), typedPattern.name());
             }
+            if (matchCase.pattern() instanceof LinkedMatchExpression.WildcardBindingPattern wildcardBindingPattern) {
+                branchScope = branchScope
+                        .addLocalValue(wildcardBindingPattern.name())
+                        .addValueOverride(wildcardBindingPattern.name(), switchTarget);
+            }
             var expressionScope = evaluateExpression(matchCase.expression(), branchScope).popExpression();
             var caseExpression = expressionScope.expression();
             if (optionMatch) {
@@ -1159,7 +1164,9 @@ public class JavaExpressionEvaluator {
 
         var hasWildcard = matchExpression.cases().stream()
                 .map(LinkedMatchExpression.MatchCase::pattern)
-                .anyMatch(LinkedMatchExpression.WildcardPattern.class::isInstance);
+                .anyMatch(pattern ->
+                        pattern instanceof LinkedMatchExpression.WildcardPattern
+                        || pattern instanceof LinkedMatchExpression.WildcardBindingPattern);
         if (optionMatch && !hasWildcard) {
             cases.add("case java.lang.Object __capybaraUnexpected -> throw new java.lang.IllegalStateException(\"Unexpected value: \" + " + switchTarget + ");");
         }
@@ -1311,6 +1318,8 @@ public class JavaExpressionEvaluator {
                         "case java.util.Optional " + typedPattern.name() + " when " + typedPattern.name() + ".isPresent()";
                 case LinkedMatchExpression.TypedPattern typedPattern when isOptionNonePattern(typedPattern.type().name()) ->
                         "case java.util.Optional " + typedPattern.name() + " when " + typedPattern.name() + ".isEmpty()";
+                case LinkedMatchExpression.WildcardBindingPattern wildcardBindingPattern ->
+                        "case java.lang.Object " + wildcardBindingPattern.name();
                 case LinkedMatchExpression.ConstructorPattern constructorPattern when isOptionSomePattern(constructorPattern.constructorName()) ->
                         optionSomeCasePattern(constructorPattern, optionCaseVar);
                 case LinkedMatchExpression.ConstructorPattern constructorPattern when isOptionNonePattern(constructorPattern.constructorName()) ->
@@ -1336,6 +1345,8 @@ public class JavaExpressionEvaluator {
             }
             case LinkedMatchExpression.VariablePattern variablePattern -> "case " + variablePattern.name() + " __ignored";
             case LinkedMatchExpression.WildcardPattern wildcardPattern -> "default";
+            case LinkedMatchExpression.WildcardBindingPattern wildcardBindingPattern ->
+                    "case java.lang.Object " + wildcardBindingPattern.name();
             case LinkedMatchExpression.ConstructorPattern constructorPattern -> {
                 var constructorType = resolveConstructorType(matchType, constructorPattern.constructorName());
                 var patternType = constructorPatternTypeName(matchType, constructorType, constructorPattern.constructorName());
@@ -1463,6 +1474,7 @@ public class JavaExpressionEvaluator {
                     java.util.Optional.of("(" + valueExpression + " instanceof " + javaPatternType(typedPattern.type()) + ")");
             case LinkedMatchExpression.VariablePattern ignored -> java.util.Optional.empty();
             case LinkedMatchExpression.WildcardPattern ignored -> java.util.Optional.empty();
+            case LinkedMatchExpression.WildcardBindingPattern ignored -> java.util.Optional.empty();
             case LinkedMatchExpression.ConstructorPattern ignored ->
                     throw new IllegalStateException("Nested constructor pattern in constructor pattern is not supported in Java generation");
         };

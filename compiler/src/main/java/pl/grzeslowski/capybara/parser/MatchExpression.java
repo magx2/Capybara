@@ -40,6 +40,9 @@ public record MatchExpression(Expression matchWith, List<MatchCase> cases,
         WILDCARD
     }
 
+    public record WildcardBindingPattern(String name) implements Pattern {
+    }
+
     public record ConstructorPattern(String constructorName, List<Pattern> fieldPatterns) implements Pattern {
     }
 }

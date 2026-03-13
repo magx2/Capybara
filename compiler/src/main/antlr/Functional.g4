@@ -147,8 +147,9 @@ pattern: TYPE
         | FLOAT_LITERAL
         | typedPattern
         | NAME
-        | UNDERSCORE // wildcard pattern
+        | wildcardPattern
         | constructorPattern;
+wildcardPattern: UNDERSCORE NAME?;
 typedPattern: patternType NAME;
 patternType: 'byte'
            | 'int'
