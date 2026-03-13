@@ -11,3 +11,11 @@ fun parse_state(input: string): Result[ParseState] =
 
 fun parse_and_add_rest_size(input: string): Result[long] =
     parse_state(input) | parse => (parse.value.to_long() | number => Success { value: number + parse.parsing_string.size })
+
+fun map_untyped_result(): Result[string] =
+    let result: Result = Success { "success_value" }
+    result | value => Success { "mapped_" + value }
+
+fun flatmap_untyped_result(): Result[string] =
+    let result: Result = Success { "success_value" }
+    result |* value => Success { Success { "mapped_" + value } }

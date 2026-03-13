@@ -38,4 +38,18 @@ class ResultErrorTest {
                 .isInstanceOf(CapybaraException.class)
                 .hasMessageContaining("Cannot parse string to long");
     }
+
+    @Test
+    void mapUntypedResult() {
+        var result = ResultError.mapUntypedResult();
+        assertThat(result).isInstanceOf(Result.Success.class);
+        assertThat(((Result.Success<String>) result).value()).isEqualTo("mapped_success_value");
+    }
+
+    @Test
+    void flatmapUntypedResult() {
+        var result = ResultError.flatmapUntypedResult();
+        assertThat(result).isInstanceOf(Result.Success.class);
+        assertThat(((Result.Success<String>) result).value()).isEqualTo("mapped_success_value");
+    }
 }

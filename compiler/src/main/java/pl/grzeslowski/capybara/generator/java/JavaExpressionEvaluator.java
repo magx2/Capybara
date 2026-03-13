@@ -174,7 +174,9 @@ public class JavaExpressionEvaluator {
             if ("end_with".equals(methodName)) {
                 methodName = "ends_with";
             }
+            var normalizedMethodName = normalizeJavaMethodName(methodName);
             var receiver = args.get(0);
+            var typedReceiver = maybeCastGenericMethodReceiver(functionCall, receiver, normalizedMethodName);
             if ("to_int".equals(methodName)) {
                 return current.addExpression(buildNumericStringParseResult(
                         functionCall.type(),
@@ -211,7 +213,7 @@ public class JavaExpressionEvaluator {
                 return current.addExpression(buildBoolStringParseResult(functionCall.type(), receiver));
             }
             var invokeArgs = args.size() > 1 ? String.join(", ", args.subList(1, args.size())) : "";
-            return current.addExpression(receiver + "." + normalizeJavaMethodName(methodName) + "(" + invokeArgs + ")");
+            return current.addExpression(typedReceiver + "." + normalizedMethodName + "(" + invokeArgs + ")");
         }
 
         var expression = switch (functionCall.name()) {
@@ -549,9 +551,18 @@ public class JavaExpressionEvaluator {
         var bodyExSc = evaluateExpression(
                 lambdaExpression.expression(),
                 scope.addLocalValue(lambdaExpression.argumentName())
-                        .addValueOverride(lambdaExpression.argumentName(), javaArgumentName)
         ).popExpression();
-        return bodyExSc.scope().addExpression(javaArgumentName + " -> (" + bodyExSc.expression() + ")");
+        var bodyExpression = lambdaExpression.argumentName().equals(javaArgumentName)
+                ? bodyExSc.expression()
+                : replaceIdentifier(bodyExSc.expression(), lambdaExpression.argumentName(), javaArgumentName);
+        return bodyExSc.scope().addExpression(javaArgumentName + " -> (" + bodyExpression + ")");
+    }
+
+    private static String replaceIdentifier(String expression, String sourceIdentifier, String targetIdentifier) {
+        return expression.replaceAll(
+                "(?<![A-Za-z0-9_])" + java.util.regex.Pattern.quote(sourceIdentifier) + "(?![A-Za-z0-9_])",
+                java.util.regex.Matcher.quoteReplacement(targetIdentifier)
+        );
     }
 
     private static Scope evaluatePipeExpression(LinkedPipeExpression pipeExpression, Scope scope) {
@@ -1353,28 +1364,6 @@ public class JavaExpressionEvaluator {
         if (normalized.isEmpty()) {
             return "java.lang.Object";
         }
-        if (normalized.startsWith("list[") || normalized.startsWith("tuple[")) {
-            return "java.util.List";
-        }
-        if (normalized.startsWith("set[")) {
-            return "java.util.Set";
-        }
-        if (normalized.startsWith("dict[")) {
-            return "java.util.Map";
-        }
-        if (normalized.matches("[A-Z][A-Za-z0-9_]*")) {
-            if (normalized.matches("[A-Z]")) {
-                return "java.lang.Object";
-            }
-            return normalized;
-        }
-        var genericStart = normalized.indexOf('[');
-        if (genericStart > 0 && normalized.endsWith("]")) {
-            var rawType = normalized.substring(0, genericStart).trim();
-            if (!rawType.isEmpty()) {
-                return normalizeJavaTypeReference(rawType);
-            }
-        }
         return switch (normalized.toLowerCase(java.util.Locale.ROOT)) {
             case "byte" -> "java.lang.Byte";
             case "int" -> "java.lang.Integer";
@@ -1383,8 +1372,112 @@ public class JavaExpressionEvaluator {
             case "double" -> "java.lang.Double";
             case "string" -> "java.lang.String";
             case "bool" -> "java.lang.Boolean";
-            default -> "java.lang.Object";
+            case "any", "nothing", "data" -> "java.lang.Object";
+            default -> {
+                if (normalized.matches("[A-Z]")) {
+                    yield "java.lang.Object";
+                }
+                if (normalized.startsWith("list[") && normalized.endsWith("]")) {
+                    var inner = normalized.substring("list[".length(), normalized.length() - 1);
+                    yield "java.util.List<" + javaCastTypeFromDescriptor(inner) + ">";
+                }
+                if (normalized.startsWith("set[") && normalized.endsWith("]")) {
+                    var inner = normalized.substring("set[".length(), normalized.length() - 1);
+                    yield "java.util.Set<" + javaCastTypeFromDescriptor(inner) + ">";
+                }
+                if (normalized.startsWith("dict[") && normalized.endsWith("]")) {
+                    var inner = normalized.substring("dict[".length(), normalized.length() - 1);
+                    yield "java.util.Map<java.lang.String, " + javaCastTypeFromDescriptor(inner) + ">";
+                }
+                if (normalized.startsWith("tuple[") && normalized.endsWith("]")) {
+                    yield "java.util.List<java.lang.Object>";
+                }
+                var genericStart = normalized.indexOf('[');
+                if (genericStart > 0 && normalized.endsWith("]")) {
+                    var rawType = normalized.substring(0, genericStart).trim();
+                    var argsDescriptor = normalized.substring(genericStart + 1, normalized.length() - 1);
+                    var rawArgs = splitTopLevelDescriptors(argsDescriptor);
+                    var javaArgs = splitTopLevelDescriptors(argsDescriptor).stream()
+                            .map(JavaExpressionEvaluator::javaCastTypeFromDescriptor)
+                            .toList();
+                    var javaRaw = normalizeJavaTypeReference(rawType);
+                    if (rawArgs.stream().anyMatch(arg -> arg.matches("[A-Z]"))) {
+                        yield javaRaw;
+                    }
+                    yield javaRaw + "<" + String.join(", ", javaArgs) + ">";
+                }
+                yield normalizeJavaTypeReference(normalized);
+            }
         };
+    }
+
+    private static String maybeCastGenericMethodReceiver(
+            LinkedFunctionCall functionCall,
+            String receiverExpression,
+            String methodName
+    ) {
+        if (!(functionCall.arguments().get(0).type() instanceof pl.grzeslowski.capybara.linker.LinkedDataParentType parentType)) {
+            return receiverExpression;
+        }
+        var normalizedName = normalizeQualifiedTypeName(parentType.name());
+        var isResultType = "Result".equals(parentType.name())
+                           || normalizedName.endsWith("/Result")
+                           || normalizedName.endsWith("/Result.Result");
+        if (!isResultType || parentType.typeParameters().isEmpty()) {
+            return receiverExpression;
+        }
+        var needsTypedReceiver = switch (methodName) {
+            case "pipe", "pipeStar", "pipeGreater", "or", "orElse" -> true;
+            default -> false;
+        };
+        if (!needsTypedReceiver) {
+            return receiverExpression;
+        }
+        var castType = resultParentJavaTypeReference(parentType);
+        if (hasUnknownTypeDescriptor(parentType.typeParameters())) {
+            castType = resultParentRawJavaTypeReference(parentType) + "<?>";
+        }
+        return "((" + castType + ") (" + receiverExpression + "))";
+    }
+
+    private static boolean hasUnknownTypeDescriptor(List<String> descriptors) {
+        return descriptors.stream().anyMatch(JavaExpressionEvaluator::isUnknownTypeDescriptor);
+    }
+
+    private static boolean isUnknownTypeDescriptor(String descriptor) {
+        var normalized = descriptor == null ? "" : descriptor.trim();
+        if (normalized.isEmpty()) {
+            return true;
+        }
+        if ("any".equalsIgnoreCase(normalized) || "nothing".equalsIgnoreCase(normalized) || "data".equalsIgnoreCase(normalized)) {
+            return true;
+        }
+        return normalized.matches("[A-Z]");
+    }
+
+    private static List<String> splitTopLevelDescriptors(String descriptors) {
+        var result = new ArrayList<String>();
+        var depth = 0;
+        var start = 0;
+        for (int i = 0; i < descriptors.length(); i++) {
+            var ch = descriptors.charAt(i);
+            if (ch == '[') {
+                depth++;
+            } else if (ch == ']') {
+                depth = Math.max(0, depth - 1);
+            } else if (ch == ',' && depth == 0) {
+                var part = descriptors.substring(start, i).trim();
+                if (!part.isEmpty()) {
+                    result.add(part);
+                }
+                start = i + 1;
+            }
+        }
+        var tail = descriptors.substring(start).trim();
+        if (!tail.isEmpty()) {
+            result.add(tail);
+        }
+        return result;
     }
 
     private static String castMatchSelectorExpression(
@@ -2145,14 +2238,28 @@ public class JavaExpressionEvaluator {
     }
 
     private static String resultSuccessJavaTypeReference(pl.grzeslowski.capybara.linker.LinkedType resultType) {
-        return resultParentJavaTypeReference(resultType) + ".Success";
+        return resultParentRawJavaTypeReference(resultType) + ".Success";
     }
 
     private static String resultErrorJavaTypeReferenceForResultType(pl.grzeslowski.capybara.linker.LinkedType resultType) {
-        return resultParentJavaTypeReference(resultType) + ".Error";
+        return resultParentRawJavaTypeReference(resultType) + ".Error";
     }
 
     private static String resultParentJavaTypeReference(pl.grzeslowski.capybara.linker.LinkedType resultType) {
+        if (resultType instanceof pl.grzeslowski.capybara.linker.LinkedDataParentType parentType) {
+            var raw = resultParentRawJavaTypeReference(resultType);
+            if (parentType.typeParameters().isEmpty()) {
+                return raw;
+            }
+            var mappedTypeParameters = parentType.typeParameters().stream()
+                    .map(JavaExpressionEvaluator::javaCastTypeFromDescriptor)
+                    .toList();
+            return raw + "<" + String.join(", ", mappedTypeParameters) + ">";
+        }
+        return resultParentRawJavaTypeReference(resultType);
+    }
+
+    private static String resultParentRawJavaTypeReference(pl.grzeslowski.capybara.linker.LinkedType resultType) {
         if (resultType instanceof pl.grzeslowski.capybara.linker.LinkedDataParentType parentType) {
             var normalized = normalizeQualifiedTypeName(parentType.name());
             if (normalized.equals("/cap/lang/Result.Result") || normalized.endsWith("/cap/lang/Result.Result")) {
