@@ -1,4 +1,5 @@
 from /capy/lang/Option import { * }
+from /capy/lang/Result import { * }
 data Assertion { result: bool, message: string }
 
 type Assert { assertions: list[Assertion] } = StringAssertion | IntAssertion | LongAssertion | DoubleAssertion | FloatAssertion | BoolAssertion | DataAssertion | OptionAssertion | ResultAssertion
@@ -10,8 +11,8 @@ data DoubleAssertion { value: double }
 data FloatAssertion { value: float }
 data BoolAssertion { value: bool }
 data DataAssertion { value: data }
-data OptionAssertion { value: /capy/lang/Option.Option[any] }
-data ResultAssertion { value: /capy/lang/Result.Result[any] }
+data OptionAssertion[T] { value: /capy/lang/Option.Option[T] }
+data ResultAssertion[T] { value: /capy/lang/Result.Result[T] }
 //data ListAssertion[T] { value: list[T] }
 //data SetAssertion[T] { value: set[T] }
 //data DictAssertion[T] { value: dict[T] }
@@ -56,16 +57,6 @@ fun StringAssertion.contains(other: string): StringAssertion =
        assertions: this.assertions + assertion
     }
 
-fun StringAssertion.contains(other: string): StringAssertion =
-    let assertion = Assertion {
-       result: this.value ? other,
-       message: "Expected string:\n" + this.value + "\nto contain:\n" + other
-    }
-    StringAssertion {
-       value: this.value,
-       assertions: this.assertions + assertion
-    }
-
 fun DataAssertion.is_equal_to(other: data): DataAssertion =
     let assertion = Assertion {
         result: this.value == other,
@@ -86,7 +77,7 @@ fun DataAssertion.contains(other: any): DataAssertion =
         assertions: this.assertions + assertion
     }
 
-fun OptionAssertion.is_equal_to(other: Option[any]): OptionAssertion =
+fun OptionAssertion[T].is_equal_to(other: /capy/lang/Option.Option[T]): OptionAssertion[T] =
     let assertion = Assertion {
         result: this.value == other,
         message: "Expected data:\n" + this.value + "\nto be equal to:\n" + other
@@ -96,7 +87,7 @@ fun OptionAssertion.is_equal_to(other: Option[any]): OptionAssertion =
         assertions: this.assertions + assertion
     }
 
-fun OptionAssertion.contains(other: any): OptionAssertion =
+fun OptionAssertion[T].contains(other: T): OptionAssertion[T] =
     let assertion = Assertion {
         result: match this.value with
             | Some s -> s == other
@@ -108,7 +99,7 @@ fun OptionAssertion.contains(other: any): OptionAssertion =
         assertions: this.assertions + assertion
     }
 
-fun OptionAssertion.is_empty(): OptionAssertion =
+fun OptionAssertion[T].is_empty(): OptionAssertion[T] =
     let assertion = Assertion {
         result: match this.value with
             | None -> true
@@ -120,7 +111,7 @@ fun OptionAssertion.is_empty(): OptionAssertion =
         assertions: this.assertions + assertion
     }
 
-fun ResultAssertion.contains(other: /capy/lang/Result.Result[any]): ResultAssertion =
+fun ResultAssertion[T].is_equal_to(other: /capy/lang/Result.Result[T]): ResultAssertion[T] =
     let assertion = Assertion {
         result: this.value == other,
         message: "Expected result:\n" + this.value + "\nto contains:\n" + other
@@ -143,7 +134,7 @@ fun ResultAssertion.succeeded(): ResultAssertion =
         assertions: this.assertions + assertion
     }
 
-fun ResultAssertion.succeeded(other: any): ResultAssertion =
+fun ResultAssertion[T].succeeded(other: any): ResultAssertion[T] =
     let assertion = Assertion {
         result:
             match this.value with
@@ -156,7 +147,7 @@ fun ResultAssertion.succeeded(other: any): ResultAssertion =
         assertions: this.assertions + assertion
     }
 
-fun ResultAssertion.failed(): ResultAssertion =
+fun ResultAssertion[T].failed(): ResultAssertion[T] =
     let assertion = Assertion {
         result: {
             match this.value with
@@ -170,7 +161,7 @@ fun ResultAssertion.failed(): ResultAssertion =
         assertions: this.assertions + assertion
     }
 
-fun ResultAssertion.failed(message: string): ResultAssertion =
+fun ResultAssertion[T].failed(message: string): ResultAssertion[T] =
     let assertion = Assertion {
         result: {
             match this.value with
