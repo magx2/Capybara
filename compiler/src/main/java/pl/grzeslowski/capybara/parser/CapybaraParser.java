@@ -109,7 +109,7 @@ public class CapybaraParser {
 
     private List<Definition> functionDeclaration(pl.grzeslowski.capybara.parser.antlr.FunctionalParser.FunctionDeclarationContext functionDeclarationContext) {
         var functionNameDeclaration = functionDeclarationContext.functionNameDeclaration();
-        var methodOwner = functionNameDeclaration.TYPE();
+        var methodOwner = functionNameDeclaration.genericTypeDeclaration();
         var methodName = functionName(functionNameDeclaration);
         var parameters = functionDeclarationContext.parameters() == null
                 ? List.<Parameter>of()
@@ -119,13 +119,13 @@ public class CapybaraParser {
                 .map(this::parameter)
                 .toList();
         if (methodOwner != null) {
-            var ownerType = new DataType(methodOwner.getText());
+            var ownerType = type(methodOwner.getText());
             var thisParameter = new Parameter(ownerType, "this", position(functionNameDeclaration));
             var methodParameters = new java.util.ArrayList<Parameter>(parameters.size() + 1);
             methodParameters.add(thisParameter);
             methodParameters.addAll(parameters);
             parameters = List.copyOf(methodParameters);
-            methodName = METHOD_DECL_PREFIX + methodOwner.getText() + "__" + methodName;
+            methodName = METHOD_DECL_PREFIX + genericTypeName(methodOwner) + "__" + methodName;
         }
         var localDefinitions = functionDeclarationContext.functionBody().localDefinition();
         var localFunctionNameMap = new java.util.LinkedHashMap<String, String>();

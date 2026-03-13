@@ -15,6 +15,7 @@ import java.nio.file.StandardOpenOption;
 import java.util.*;
 import java.util.logging.Logger;
 import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
 import static java.nio.file.Files.isRegularFile;
 import static java.util.stream.Collectors.joining;
@@ -252,15 +253,13 @@ public class Compiler {
             var matcher = IMPORT_PATTERN.matcher(line);
             if (matcher.matches()) {
                 var module = matcher.group(1);
-                var symbols = List.of(matcher.group(2).split(","))
-                        .stream()
+                var symbols = Stream.of(matcher.group(2).split(","))
                         .map(String::trim)
                         .filter(symbol -> !symbol.isBlank())
                         .toList();
                 var excludedSymbols = matcher.group(3) == null
                         ? List.<String>of()
-                        : List.of(matcher.group(3).split(","))
-                                .stream()
+                        : Stream.of(matcher.group(3).split(","))
                                 .map(String::trim)
                                 .filter(symbol -> !symbol.isBlank())
                                 .toList();

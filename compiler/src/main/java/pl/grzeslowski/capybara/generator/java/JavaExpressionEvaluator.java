@@ -121,6 +121,9 @@ public class JavaExpressionEvaluator {
     }
 
     private static boolean requiresGenericFieldCast(LinkedFieldAccess fieldAccess) {
+        if (fieldAccess.type() instanceof pl.grzeslowski.capybara.linker.LinkedGenericTypeParameter) {
+            return true;
+        }
         return switch (fieldAccess.source().type()) {
             case pl.grzeslowski.capybara.linker.LinkedDataType linkedDataType ->
                     !linkedDataType.typeParameters().isEmpty();
@@ -1057,7 +1060,8 @@ public class JavaExpressionEvaluator {
                     normalizeJavaTypeReference(linkedDataType.name());
             case pl.grzeslowski.capybara.linker.LinkedDataParentType linkedDataParentType ->
                     normalizeJavaTypeReference(linkedDataParentType.name());
-            case pl.grzeslowski.capybara.linker.LinkedGenericTypeParameter ignored -> "java.lang.Object";
+            case pl.grzeslowski.capybara.linker.LinkedGenericTypeParameter genericTypeParameter ->
+                    genericTypeParameter.name();
             default -> "java.lang.Object";
         };
     }
@@ -1268,6 +1272,9 @@ public class JavaExpressionEvaluator {
         }
         if (normalized.startsWith("dict[")) {
             return "java.util.Map";
+        }
+        if (normalized.matches("[A-Z][A-Za-z0-9_]*")) {
+            return normalized;
         }
         var genericStart = normalized.indexOf('[');
         if (genericStart > 0 && normalized.endsWith("]")) {

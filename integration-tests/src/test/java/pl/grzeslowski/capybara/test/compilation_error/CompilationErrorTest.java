@@ -3,6 +3,7 @@ package pl.grzeslowski.capybara.test.compilation_error;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import pl.grzeslowski.capybara.compiler.ImportDeclaration;
 import pl.grzeslowski.capybara.compiler.Module;
 import pl.grzeslowski.capybara.compiler.Program;
 import pl.grzeslowski.capybara.linker.CapybaraLinker;
@@ -10,10 +11,7 @@ import pl.grzeslowski.capybara.linker.LinkedProgram;
 import pl.grzeslowski.capybara.linker.ValueOrError;
 import pl.grzeslowski.capybara.parser.CapybaraParser;
 
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.SortedSet;
+import java.util.*;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -40,10 +38,69 @@ public class CompilationErrorTest {
                 () -> assertThat(error.message()).isEqualTo(errorMessage));
     }
 
+    @ParameterizedTest(name = "{index}: should fail when compiling `{0}.cfun` (imports flavour)")
+    @MethodSource
+    void compilationErrorWithImports(
+            String moduleName,
+            String code,
+            Position expectedPosition,
+            String errorMessage,
+            List<ImportDeclaration> imports) {
+        // when
+        var errors = compileProgram(code, moduleName, imports);
+
+        // then
+        assertThat(errors).hasSize(1);
+        var error = errors.first();
+        assertAll("Assertions on error",
+                () -> assertThat(error.line()).isEqualTo(expectedPosition.line()),
+                () -> assertThat(error.column()).isEqualTo(expectedPosition.column()),
+                () -> assertThat(error.file()).isEqualTo("/foo/boo/%s.cfun".formatted(moduleName)),
+                () -> assertThat(error.message()).isEqualTo(errorMessage));
+    }
 
     @SuppressWarnings("unchecked")
     static Stream<Arguments> compilationError() {
         return concat(simpleCompilationError(), multilineCompilationError(), infixOperations(), bitwiseOperations(), matchCompilationErrors());
+    }
+
+    static Stream<Arguments> compilationErrorWithImports() {
+        return Stream.of(
+                Arguments.of(
+                        "infix_operator_outside_of_package",
+                        """
+                                fun Name[T].foo(map: T -> Name[Y]): Name[Y] =
+                                   match this with
+                                   | Boo e => e
+                                   | Foo s => map(s.value)
+                                """,
+                        new Position(3, 14),
+                        """
+                                error: mismatched types
+                                 --> /foo/boo/infix_operator_outside_of_package.cfun:3:14
+                                fun Name[T].foo(map: T -> Name[Y]): Name[Y] =
+                                            ^ Cannot declare method on external type `Name`. Type methods/infix operators must be declared in the module where the type is defined.
+                                """,
+                        List.of(new ImportDeclaration("/capy/compilation_test/Name", List.of("Name", "Foo", "Boo"), List.of()))
+                ),
+                Arguments.of(
+                        "infix_special_operator_outside_of_package",
+                        """
+                                fun Name[T].`+`(map: T -> Name[Y]): Name[Y] =
+                                   match this with
+                                   | Boo e => e
+                                   | Foo s => map(s.value)
+                                """,
+                        new Position(3, 13),
+                        """
+                                error: mismatched types
+                                 --> /foo/boo/infix_special_operator_outside_of_package.cfun:3:13
+                                fun Name[T].`+`(map: T -> Name[Y]): Name[Y] =
+                                             ^ Cannot declare method on external type `Name`. Type methods/infix operators must be declared in the module where the type is defined.
+                                """,
+                        List.of(new ImportDeclaration("/capy/compilation_test/Name", List.of("Name", "Foo", "Boo"), List.of()))
+                )
+        );
     }
 
     static Stream<Arguments> matchCompilationErrors() {
@@ -423,9 +480,28 @@ public class CompilationErrorTest {
         );
     }
 
+
     private static SortedSet<ValueOrError.Error.SingleError> compileProgram(String fun, String moduleName) {
+        return compileProgram(fun, moduleName, List.of());
+    }
+
+    private static final List<Module> DEFAULT_MODULES = List.of(
+            new Module("Name", "/capy/compilation_test",
+                    CapybaraParser.INSTANCE.parseFunctional("""
+                            type Name[T] = Foo[T] | Boo
+                            data Foo[T] { value: T }
+                            data Boo { message: string }
+                            """),
+                    List.of())
+    );
+
+    private static SortedSet<ValueOrError.Error.SingleError> compileProgram(String fun, String moduleName, List<ImportDeclaration> imports) {
         var functional = CapybaraParser.INSTANCE.parseFunctional(fun);
-        var programValueOrError = CapybaraLinker.INSTANCE.link(new Program(List.of(new Module(moduleName, "/foo/boo", functional))));
+        var module = new Module(moduleName, "/foo/boo", functional, imports);
+        var modules = new ArrayList<>(DEFAULT_MODULES);
+        modules.add(module);
+        var program = new Program(modules);
+        var programValueOrError = CapybaraLinker.INSTANCE.link(program);
         if (programValueOrError instanceof ValueOrError.Value<LinkedProgram> value) {
             throw new AssertionError("Expected compilation error but got LinkedProgram: " + value);
         }

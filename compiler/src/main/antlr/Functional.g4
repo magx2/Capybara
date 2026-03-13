@@ -22,7 +22,7 @@ localTypeDeclaration: 'type' genericTypeDeclaration '=' genericTypeDeclaration (
                     | 'type' genericTypeDeclaration '{' fieldDeclarationList? '}' '=' genericTypeDeclaration (PIPE genericTypeDeclaration)*;
 localDataDeclaration: 'data' genericTypeDeclaration '{' fieldDeclarationList? '}'
                     | 'data' genericTypeDeclaration '=' '{' fieldDeclarationList? '}';
-functionNameDeclaration: identifier | TYPE DOT methodIdentifier;
+functionNameDeclaration: identifier | genericTypeDeclaration DOT methodIdentifier;
 methodIdentifier: identifier | INFIX_METHOD_LITERAL;
 docComment: DOC_COMMENT;
 

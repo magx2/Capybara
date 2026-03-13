@@ -92,10 +92,12 @@ public class JavaAstBuilder {
     }
 
     private JavaMethod buildStaticMethod(LinkedFunction function) {
+        var methodTypeParameters = methodTypeParameters(function, Set.of());
         return new JavaMethod(
                 buildMethodName(function.name()),
                 function.name().startsWith("_"),
                 function.programMain(),
+                methodTypeParameters,
                 buildJavaReturnType(function),
                 buildJavaFunctionParameters(function.parameters()),
                 function.expression(),
@@ -297,9 +299,20 @@ public class JavaAstBuilder {
             var qualifiedName = Stream.of(rawTypeName.split("\\."))
                     .map(JavaAstBuilder::normalizeJavaTypeIdentifier)
                     .collect(joining("."));
-            return new JavaType(qualifiedName);
+            return withTypeParametersIfGeneric(type, qualifiedName);
         }
-        return buildClassName(rawTypeName);
+        return withTypeParametersIfGeneric(type, buildClassName(rawTypeName).toString());
+    }
+
+    private JavaType withTypeParametersIfGeneric(GenericDataType type, String rawJavaTypeName) {
+        var typeParameters = switch (type) {
+            case LinkedDataType linkedDataType -> linkedDataType.typeParameters();
+            case LinkedDataParentType linkedDataParentType -> linkedDataParentType.typeParameters();
+        };
+        if (typeParameters.isEmpty() || !typeParameters.stream().allMatch(typeName -> typeName.matches("[A-Z]"))) {
+            return new JavaType(rawJavaTypeName);
+        }
+        return new JavaType(rawJavaTypeName + "<" + String.join(", ", typeParameters) + ">");
     }
 
     private JavaType buildPrimitiveLinkedType(PrimitiveLinkedType type) {
@@ -533,6 +546,7 @@ public class JavaAstBuilder {
             case ':' -> "colon";
             case '<' -> "less";
             case '>' -> "greater";
+            case '|' -> "pipe";
             default -> "op" + Integer.toHexString(symbol);
         };
     }
@@ -564,10 +578,12 @@ public class JavaAstBuilder {
     private JavaMethod buildInterfaceMethod(LinkedFunction function, String ownerPrefix) {
         var methodName = function.name().substring(ownerPrefix.length());
         var parameters = function.parameters().stream().skip(1).toList();
+        var methodTypeParameters = methodTypeParameters(function, Set.copyOf(extractOwnerTypeParameters(function)));
         return new JavaMethod(
                 buildMethodName(methodName),
                 methodName.startsWith("_"),
                 false,
+                methodTypeParameters,
                 buildJavaReturnType(function),
                 buildJavaFunctionParameters(parameters),
                 function.expression(),
@@ -604,7 +620,7 @@ public class JavaAstBuilder {
         var javaInterface = subClassToInterface.get(type);
         var implementInterfaces = javaInterface == null
                 ? Set.<JavaType>of()
-                : javaInterface.stream().map(JavaInterface::name).collect(toSet());
+                : javaInterface.stream().map(javaType -> implementedInterfaceType(type, javaType)).collect(toSet());
 
         var interfaceFields = javaInterface == null
                 ? Stream.<JavaRecord.JavaRecordField>empty()
@@ -646,15 +662,78 @@ public class JavaAstBuilder {
     private JavaMethod buildRecordMethod(LinkedFunction function, String ownerPrefix) {
         var methodName = function.name().substring(ownerPrefix.length());
         var parameters = function.parameters().stream().skip(1).toList();
+        var methodTypeParameters = methodTypeParameters(function, Set.copyOf(extractOwnerTypeParameters(function)));
         return new JavaMethod(
                 buildMethodName(methodName),
                 methodName.startsWith("_"),
                 false,
+                methodTypeParameters,
                 buildJavaReturnType(function),
                 buildJavaFunctionParameters(parameters),
                 function.expression(),
                 function.comments()
         );
+    }
+
+    private List<String> extractOwnerTypeParameters(LinkedFunction function) {
+        if (function.parameters().isEmpty()) {
+            return List.of();
+        }
+        var thisType = function.parameters().getFirst().type();
+        return switch (thisType) {
+            case LinkedDataType linkedDataType -> linkedDataType.typeParameters();
+            case LinkedDataParentType linkedDataParentType -> linkedDataParentType.typeParameters();
+            default -> List.of();
+        };
+    }
+
+    private List<String> methodTypeParameters(LinkedFunction function, Set<String> ownerTypeParameters) {
+        var genericNames = new java.util.LinkedHashSet<String>();
+        function.parameters().forEach(parameter -> collectGenericTypeParameters(parameter.type(), genericNames));
+        collectGenericTypeParameters(function.returnType(), genericNames);
+        genericNames.removeAll(ownerTypeParameters);
+        return List.copyOf(genericNames);
+    }
+
+    private void collectGenericTypeParameters(LinkedType type, Set<String> genericNames) {
+        switch (type) {
+            case LinkedGenericTypeParameter genericTypeParameter -> genericNames.add(genericTypeParameter.name());
+            case LinkedDataType linkedDataType ->
+                    linkedDataType.typeParameters().forEach(typeName -> addGenericTypeName(typeName, genericNames));
+            case LinkedDataParentType linkedDataParentType ->
+                    linkedDataParentType.typeParameters().forEach(typeName -> addGenericTypeName(typeName, genericNames));
+            case CollectionLinkedType.LinkedList linkedList ->
+                    collectGenericTypeParameters(linkedList.elementType(), genericNames);
+            case CollectionLinkedType.LinkedSet linkedSet ->
+                    collectGenericTypeParameters(linkedSet.elementType(), genericNames);
+            case CollectionLinkedType.LinkedDict linkedDict ->
+                    collectGenericTypeParameters(linkedDict.valueType(), genericNames);
+            case LinkedTupleType linkedTupleType ->
+                    linkedTupleType.elementTypes().forEach(elementType -> collectGenericTypeParameters(elementType, genericNames));
+            case LinkedFunctionType linkedFunctionType -> {
+                collectGenericTypeParameters(linkedFunctionType.argumentType(), genericNames);
+                collectGenericTypeParameters(linkedFunctionType.returnType(), genericNames);
+            }
+            default -> {
+            }
+        }
+    }
+
+    private void addGenericTypeName(String typeName, Set<String> genericNames) {
+        if (typeName != null && typeName.matches("[A-Z]")) {
+            genericNames.add(typeName);
+        }
+    }
+
+    private JavaType implementedInterfaceType(LinkedDataType type, JavaInterface javaInterface) {
+        var interfaceTypeParameters = switch (javaInterface) {
+            case JavaSealedInterface javaSealedInterface -> javaSealedInterface.typeParameters();
+            case JavaNormalInterface javaNormalInterface -> List.<String>of();
+        };
+        if (interfaceTypeParameters.isEmpty() || type.typeParameters().size() != interfaceTypeParameters.size()) {
+            return javaInterface.name();
+        }
+        return new JavaType(javaInterface.name() + "<" + String.join(", ", type.typeParameters()) + ">");
     }
 
     private Set<JavaEnum> buildEnums(List<LinkedDataType> dataTypes, Map<LinkedDataType, Set<JavaInterface>> subClassToInterface) {

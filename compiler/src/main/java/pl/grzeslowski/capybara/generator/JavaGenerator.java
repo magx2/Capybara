@@ -406,8 +406,11 @@ public final class JavaGenerator implements Generator {
 
     private String mapJavaInterfaceDefaultMethod(JavaMethod method) {
         var prefix = method.isPrivate() ? "private" : "default";
+        var methodTypeParameters = method.typeParameters().isEmpty()
+                ? ""
+                : method.typeParameters().stream().collect(joining(", ", "<", ">")) + " ";
         return mapJavaDoc(method.comments())
-               + prefix + " " + method.returnType() + " " + mapMethodName(method.name()) + "(" + mapFunctionParameters(method.parameters()) + ") {\n"
+               + prefix + " " + methodTypeParameters + method.returnType() + " " + mapMethodName(method.name()) + "(" + mapFunctionParameters(method.parameters()) + ") {\n"
                + evaluateExpression(method.expression(), method.parameters())
                + "\n}\n";
     }
@@ -416,15 +419,21 @@ public final class JavaGenerator implements Generator {
         if (method.programMain()) {
             return mapJavaProgramMainMethod(method);
         }
+        var methodTypeParameters = method.typeParameters().isEmpty()
+                ? ""
+                : method.typeParameters().stream().collect(joining(", ", "<", ">")) + " ";
         return mapJavaDoc(method.comments())
-               + (method.isPrivate() ? "private" : "public") + " static " + method.returnType() + " " + mapMethodName(method.name()) + "(" + mapFunctionParameters(method.parameters()) + ") {\n"
+               + (method.isPrivate() ? "private" : "public") + " static " + methodTypeParameters + method.returnType() + " " + mapMethodName(method.name()) + "(" + mapFunctionParameters(method.parameters()) + ") {\n"
                + evaluateExpression(method.expression(), method.parameters())
                + "\n}\n";
     }
 
     private String mapJavaRecordMethod(JavaMethod method) {
+        var methodTypeParameters = method.typeParameters().isEmpty()
+                ? ""
+                : method.typeParameters().stream().collect(joining(", ", "<", ">")) + " ";
         return mapJavaDoc(method.comments())
-               + (method.isPrivate() ? "private" : "public") + " " + method.returnType() + " " + mapMethodName(method.name()) + "(" + mapFunctionParameters(method.parameters()) + ") {\n"
+               + (method.isPrivate() ? "private" : "public") + " " + methodTypeParameters + method.returnType() + " " + mapMethodName(method.name()) + "(" + mapFunctionParameters(method.parameters()) + ") {\n"
                + evaluateExpression(method.expression(), method.parameters())
                + "\n}\n";
     }

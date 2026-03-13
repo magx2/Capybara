@@ -9,6 +9,7 @@ public record JavaMethod(
         String name,
         boolean isPrivate,
         boolean programMain,
+        List<String> typeParameters,
         JavaType returnType,
         List<JavaFunctionParameter> parameters,
         LinkedExpression expression,

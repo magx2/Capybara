@@ -836,6 +836,12 @@ public class CapybaraExpressionLinker {
         if (argument.type().equals(expected)) {
             return new CoercedArgument(argument, 0);
         }
+        if (expected instanceof LinkedGenericTypeParameter) {
+            return new CoercedArgument(argument, 1);
+        }
+        if (argument.type() instanceof LinkedGenericTypeParameter) {
+            return new CoercedArgument(argument, 1);
+        }
         if (expected == ANY) {
             return new CoercedArgument(argument, 1);
         }
@@ -948,8 +954,33 @@ public class CapybaraExpressionLinker {
         if (normalizedExpression != expression) {
             return linkInfixExpression(normalizedExpression, scope);
         }
-        if (expression.operator() == InfixOperator.PIPE && isPipeMapExpression(expression)) {
-            return linkPipeExpression(expression, scope);
+        if (expression.operator() == InfixOperator.PIPE) {
+            return linkExpression(expression.left(), scope)
+                    .flatMap(left -> {
+                        if (left.type() instanceof GenericDataType) {
+                            var methodCall = resolveMethodInfixCall(
+                                    expression.operator().symbol(),
+                                    left,
+                                    expression.right(),
+                                    scope,
+                                    expression.position()
+                            );
+                            if (methodCall instanceof ValueOrError.Value<LinkedExpression> value) {
+                                return value;
+                            }
+                            if (methodCall instanceof ValueOrError.Error<LinkedExpression> error
+                                && !error.errors().isEmpty()) {
+                                return methodCall;
+                            }
+                        }
+                        if (isPipeMapExpression(expression)) {
+                            return linkPipeExpression(expression, scope);
+                        }
+                        return linkExpression(expression.right(), scope)
+                                .flatMap(right ->
+                                        getLinkedInfixExpression(left, expression.operator(), right, expression.position())
+                                                .map(linked -> (LinkedExpression) linked));
+                    });
         }
         if (expression.operator() == InfixOperator.PIPE_MINUS) {
             return linkPipeFilterOutExpression(expression, scope);
@@ -1051,6 +1082,56 @@ public class CapybaraExpressionLinker {
                     ValueOrError.error(
                             "No matching method `" + operatorSymbol + "` for argument types ["
                             + left.type().name() + ", " + right.type().name() + "]"
+                    ),
+                    position
+            );
+        }
+        return ValueOrError.success(new LinkedFunctionCall(
+                best.signature().name(),
+                best.arguments(),
+                best.signature().returnType()
+        ));
+    }
+
+    private ValueOrError<LinkedExpression> resolveMethodInfixCall(
+            String operatorSymbol,
+            LinkedExpression left,
+            Expression right,
+            Scope scope,
+            Optional<pl.grzeslowski.capybara.parser.SourcePosition> position
+    ) {
+        var ownerName = left.type().name();
+        var methodName = METHOD_DECL_PREFIX + ownerName + "__" + operatorSymbol;
+        var candidates = functionSignatures.stream()
+                .filter(signature -> signature.name().equals(methodName))
+                .filter(signature -> signature.parameterTypes().size() == 2)
+                .toList();
+        if (candidates.isEmpty()) {
+            return ValueOrError.error(List.of());
+        }
+
+        ResolvedFunctionCall best = null;
+        for (var candidate : candidates) {
+            var maybeReceiver = coerceArgument(left, candidate.parameterTypes().get(0));
+            if (maybeReceiver == null) {
+                continue;
+            }
+            var maybeArgument = linkArgumentForExpectedType(right, scope, candidate.parameterTypes().get(1));
+            if (maybeArgument instanceof ValueOrError.Error<CoercedArgument>) {
+                continue;
+            }
+            var coercedArgument = ((ValueOrError.Value<CoercedArgument>) maybeArgument).value();
+            var arguments = List.of(maybeReceiver.expression(), coercedArgument.expression());
+            var coercions = maybeReceiver.coercions() + coercedArgument.coercions();
+            if (best == null || coercions < best.coercions()) {
+                best = new ResolvedFunctionCall(candidate, arguments, coercions);
+            }
+        }
+        if (best == null) {
+            return withPosition(
+                    ValueOrError.error(
+                            "No matching method `" + operatorSymbol + "` for argument types ["
+                            + left.type().name() + ", " + right + "]"
                     ),
                     position
             );
