@@ -55,6 +55,7 @@ public class CapybaraExpressionLinker {
             case FieldAccess fieldAccess -> linkFieldAccess(fieldAccess, scope);
             case FloatValue floatValue -> linkFloatValue(floatValue, scope);
             case FunctionCall functionCall -> linkFunctionCall(functionCall, scope);
+            case FunctionInvoke functionInvoke -> linkFunctionInvoke(functionInvoke, scope);
             case FunctionReference functionReference -> linkFunctionReference(functionReference, scope);
             case IfExpression ifExpression -> linkIfExpression(ifExpression, scope);
             case IndexExpression indexExpression -> linkIndexExpression(indexExpression, scope);
@@ -275,6 +276,11 @@ public class CapybaraExpressionLinker {
             return resolveFunctionInvoke(functionCall, scope, functionVariable.get());
         }
         return resolveGlobalFunctionCall(functionCall, scope);
+    }
+
+    private ValueOrError<LinkedExpression> linkFunctionInvoke(FunctionInvoke functionInvoke, Scope scope) {
+        return linkExpression(functionInvoke.function(), scope)
+                .flatMap(function -> resolveFunctionInvoke(functionInvoke, scope, function));
     }
 
     private ValueOrError<LinkedExpression> resolveQualifiedFunctionCall(FunctionCall functionCall, Scope scope) {
@@ -611,6 +617,41 @@ public class CapybaraExpressionLinker {
                 return withPosition(
                         ValueOrError.error("Function variable `" + function.name() + "` called with too many arguments"),
                         functionCall.position()
+                );
+            }
+            var linked = linkArgumentForExpectedType(argument, scope, currentFunctionType.argumentType());
+            if (linked instanceof ValueOrError.Error<CoercedArgument> error) {
+                return withPosition(new ValueOrError.Error<>(error.errors()), argument.position());
+            }
+            var coerced = ((ValueOrError.Value<CoercedArgument>) linked).value();
+            coercedArguments.add(coerced.expression());
+            currentType = currentFunctionType.returnType();
+        }
+
+        return ValueOrError.success(new LinkedFunctionInvoke(function, List.copyOf(coercedArguments), currentType));
+    }
+
+    private ValueOrError<LinkedExpression> resolveFunctionInvoke(
+            FunctionInvoke functionInvoke,
+            Scope scope,
+            LinkedExpression function
+    ) {
+        if (!(function.type() instanceof LinkedFunctionType functionType)) {
+            return withPosition(ValueOrError.error("Expression is not callable, was `" + function.type() + "`"), functionInvoke.position());
+        }
+        if (functionInvoke.arguments().isEmpty()) {
+            return withPosition(
+                    ValueOrError.error("Callable expression requires at least one argument"),
+                    functionInvoke.position()
+            );
+        }
+        var currentType = (LinkedType) functionType;
+        var coercedArguments = new java.util.ArrayList<LinkedExpression>(functionInvoke.arguments().size());
+        for (var argument : functionInvoke.arguments()) {
+            if (!(currentType instanceof LinkedFunctionType currentFunctionType)) {
+                return withPosition(
+                        ValueOrError.error("Callable expression invoked with too many arguments"),
+                        functionInvoke.position()
                 );
             }
             var linked = linkArgumentForExpectedType(argument, scope, currentFunctionType.argumentType());
@@ -2469,7 +2510,7 @@ public class CapybaraExpressionLinker {
         var requiredConstructors = requiredConstructorsForMatch(matchType);
         if (requiredConstructors.isEmpty()) {
             return withPosition(
-                    ValueOrError.error("`match` is not exhaustive. Use wildcard `| _ => ...`."),
+                    ValueOrError.error("`match` is not exhaustive. Use wildcard `| _ -> ...`."),
                     matchExpression.position()
             );
         }
@@ -2484,7 +2525,7 @@ public class CapybaraExpressionLinker {
                 .map(name -> "`" + name + "`")
                 .collect(java.util.stream.Collectors.joining(", "));
         return withPosition(
-                ValueOrError.error("`match` is not exhaustive. Use wildcard `| _ => ...` or add missing branches:" + missingText + "."),
+                ValueOrError.error("`match` is not exhaustive. Use wildcard `| _ -> ...` or add missing branches:" + missingText + "."),
                 matchExpression.position()
         );
     }

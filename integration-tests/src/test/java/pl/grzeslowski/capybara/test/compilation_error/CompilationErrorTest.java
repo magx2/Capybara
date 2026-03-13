@@ -77,8 +77,8 @@ public class CompilationErrorTest {
                         """
                                 fun Name[T].foo(map: T => Name[Y]): Name[Y] =
                                    match this with
-                                   | Boo e => e
-                                   | Foo s => map(s.value)
+                                   | Boo e -> e
+                                   | Foo s -> map(s.value)
                                 """,
                         new Position(3, 14),
                         """
@@ -94,8 +94,8 @@ public class CompilationErrorTest {
                         """
                                 fun Name[T].`+`(map: T => Name[Y]): Name[Y] =
                                    match this with
-                                   | Boo e => e
-                                   | Foo s => map(s.value)
+                                   | Boo e -> e
+                                   | Foo s -> map(s.value)
                                 """,
                         new Position(3, 13),
                         """
@@ -121,8 +121,8 @@ public class CompilationErrorTest {
                                 data D { d: int }
                                 fun foo(letter: Letter): int =
                                     match letter with
-                                    | A { a } => a
-                                    | B { b } => b
+                                    | A { a } -> a
+                                    | B { b } -> b
                                 """,
                         new Position(7, 4),
                         """
@@ -130,7 +130,7 @@ public class CompilationErrorTest {
                                  --> /foo/boo/match_not_exhaustive.cfun:7:4
                                 fun foo(letter: Letter): int =
                                     match letter with
-                                    ^ `match` is not exhaustive. Use wildcard `| _ => ...` or add missing branches:`C`, `D`.
+                                    ^ `match` is not exhaustive. Use wildcard `| _ -> ...` or add missing branches:`C`, `D`.
                                 """
                 ));
         var primitiveTypes = List.of("string", "byte", "int", "long", "float", "double", "bool");
@@ -143,15 +143,15 @@ public class CompilationErrorTest {
         var code = """
                 fun foo(x: %s): int =
                     match x with
-                    | %s a => 1
-                    | %s b => 2
+                    | %s a -> 1
+                    | %s b -> 2
                 """.formatted(primitive, primitive, primitive);
         var message = """
                 error: mismatched types
                  --> /foo/boo/%s.cfun:2:4
                 fun foo(x: %s): int =
                     match x with
-                    ^ `match` is not exhaustive. Use wildcard `| _ => ...`.
+                    ^ `match` is not exhaustive. Use wildcard `| _ -> ...`.
                 """.formatted(moduleName, primitive);
         return Arguments.of(moduleName, code, new Position(2, 4), message);
     }
@@ -317,7 +317,7 @@ public class CompilationErrorTest {
                                 fun broken(result: /capy/lang/Result.Result[any]): bool =
                                     match result with
                                     | Error _ = true
-                                    | Success s => false
+                                    | Success s -> false
                                 """,
                         new Position(3, 14),
                         """
@@ -326,7 +326,7 @@ public class CompilationErrorTest {
                                 fun broken(result: /capy/lang/Result.Result[any]): bool =
                                     match result with
                                     | Error _ = true
-                                              ^ Expected `=>`, found `=`
+                                              ^ Expected `->`, found `=`
                                 """
                 ),
                 Arguments.of(
@@ -404,9 +404,9 @@ public class CompilationErrorTest {
                                     data __Boo { boo: string }
                                     data __Unknown { unkn: string }
                                     match name with
-                                    | "foo" => __Foo { foo: "xyz" }
-                                    | "boo" => __Boo { boo: "xyz" }
-                                    | _ => __Unknown { unkn: name }
+                                    | "foo" -> __Foo { foo: "xyz" }
+                                    | "boo" -> __Boo { boo: "xyz" }
+                                    | _ -> __Unknown { unkn: name }
                                 """,
                         new Position(1, 26),
                         """

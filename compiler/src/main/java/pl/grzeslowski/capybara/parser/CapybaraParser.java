@@ -27,10 +27,6 @@ public class CapybaraParser {
     private static final Pattern COLLECTION_DICT_PATTERN = Pattern.compile("dict\\[(.+?)]");
 
     public Functional parseFunctional(String input) {
-        var malformedMatchArrow = malformedMatchCaseArrow(input);
-        if (malformedMatchArrow.isPresent()) {
-            throw new IllegalStateException(formatSyntaxError(malformedMatchArrow.get()));
-        }
         var lexer = new pl.grzeslowski.capybara.parser.antlr.FunctionalLexer(CharStreams.fromString(input));
         var tokens = new CommonTokenStream(lexer);
         tokens.fill();
@@ -67,33 +63,15 @@ public class CapybaraParser {
     }
 
     private String formatSyntaxError(SyntaxError syntaxError) {
-        if (syntaxError.message().contains("mismatched input '=' expecting '=>'")
-            || syntaxError.message().equals("Expected `=>`, found `=`")) {
-            return "line %d:%d: Expected `=>`, found `=`".formatted(syntaxError.line(), syntaxError.column());
+        if (syntaxError.message().contains("no viable alternative at input 'match")
+            && syntaxError.message().contains("=")) {
+            return "line %d:%d: Expected `->`, found `=`".formatted(syntaxError.line(), syntaxError.column());
+        }
+        if (syntaxError.message().contains("mismatched input '=' expecting '->'")
+            || syntaxError.message().equals("Expected `->`, found `=`")) {
+            return "line %d:%d: Expected `->`, found `=`".formatted(syntaxError.line(), syntaxError.column());
         }
         return "line %d:%d: %s".formatted(syntaxError.line(), syntaxError.column(), syntaxError.message());
-    }
-
-    private Optional<SyntaxError> malformedMatchCaseArrow(String input) {
-        var lines = input.split("\\R", -1);
-        for (var i = 0; i < lines.length; i++) {
-            var line = lines[i];
-            var trimmed = line.stripLeading();
-            if (!trimmed.startsWith("|")) {
-                continue;
-            }
-            var leadingSpaces = line.length() - trimmed.length();
-            var pipe = line.indexOf('|', leadingSpaces);
-            if (pipe < 0) {
-                continue;
-            }
-            var arrow = line.indexOf("=>", pipe);
-            var equal = line.indexOf('=', pipe);
-            if (equal >= 0 && (arrow < 0 || equal < arrow)) {
-                return Optional.of(new SyntaxError(i + 1, equal, "Expected `=>`, found `=`"));
-            }
-        }
-        return Optional.empty();
     }
 
     private record SyntaxError(int line, int column, String message) {
@@ -425,6 +403,13 @@ public class CapybaraParser {
                 }
                 yield functionReference;
             }
+            case FunctionInvoke functionInvoke -> new FunctionInvoke(
+                    rewriteLocalNames(functionInvoke.function(), localFunctionNameMap, localTypeNameMap),
+                    functionInvoke.arguments().stream()
+                            .map(argument -> rewriteLocalNames(argument, localFunctionNameMap, localTypeNameMap))
+                            .toList(),
+                    functionInvoke.position()
+            );
             case LetExpression letExpression -> new LetExpression(
                     letExpression.name(),
                     letExpression.declaredType().map(type -> rewriteLocalTypeNames(type, localTypeNameMap)),
@@ -687,7 +672,7 @@ public class CapybaraParser {
             return lambdaExpression(expression.lambdaExpression());
         }
         if (expression.reduceExpression() != null) {
-            return reduceExpression(expression.reduceExpression());
+            return normalizeReduceExpression(reduceExpression(expression.reduceExpression()));
         }
         if (expression.functionReference() != null) {
             return functionReference(expression.functionReference());
@@ -785,6 +770,14 @@ public class CapybaraParser {
                     : new java.util.ArrayList<>(expression.argumentList().expression().stream().map(this::expression).toList());
             args.add(0, receiver);
             return new FunctionCall(Optional.empty(), METHOD_INVOKE_PREFIX + methodName, List.copyOf(args), position(expression));
+        }
+
+        if (isFunctionInvoke(expression)) {
+            var function = expressionNoLet(expression.expressionNoLet(0));
+            var args = expression.argumentList() == null
+                    ? List.<Expression>of()
+                    : expression.argumentList().expression().stream().map(this::expression).toList();
+            return new FunctionInvoke(function, args, position(expression));
         }
 
         if (expression.INFIX_METHOD_LITERAL() != null && expression.expressionNoLet().size() == 2) {
@@ -899,6 +892,9 @@ public class CapybaraParser {
         if (expression.functionCall() != null) {
             return functionCall(expression.functionCall());
         }
+        if (expression.lambdaExpression() != null) {
+            return lambdaExpression(expression.lambdaExpression());
+        }
         if (expression.functionReference() != null) {
             return functionReference(expression.functionReference());
         }
@@ -993,6 +989,14 @@ public class CapybaraParser {
             return new FunctionCall(Optional.empty(), METHOD_INVOKE_PREFIX + methodName, List.copyOf(args), position(expression));
         }
 
+        if (isFunctionInvoke(expression)) {
+            var function = expressionNoLetNoPipe(expression.expressionNoLetNoPipe(0));
+            var args = expression.argumentList() == null
+                    ? List.<Expression>of()
+                    : expression.argumentList().expression().stream().map(this::expression).toList();
+            return new FunctionInvoke(function, args, position(expression));
+        }
+
         if (expression.INFIX_METHOD_LITERAL() != null && expression.expressionNoLetNoPipe().size() == 2) {
             var text = expression.INFIX_METHOD_LITERAL().getText();
             var methodName = text.substring(1, text.length() - 1);
@@ -1048,6 +1052,11 @@ public class CapybaraParser {
             );
         }
 
+        var subExpression = expression.expression();
+        if (subExpression != null) {
+            return expression(subExpression);
+        }
+
         if (!expression.expressionNoLetNoPipe().isEmpty()) {
             return expressionNoLetNoPipe(expression.expressionNoLetNoPipe(0));
         }
@@ -1077,6 +1086,26 @@ public class CapybaraParser {
         return new InfixExpression(left, operator, right, position);
     }
 
+    private static Expression normalizeReduceExpression(ReduceExpression reduceExpression) {
+        if (reduceExpression.initialValue() instanceof InfixExpression infixExpression
+            && infixExpression.operator() == InfixOperator.PIPE_REDUCE) {
+            return new InfixExpression(
+                    infixExpression.left(),
+                    InfixOperator.PIPE_REDUCE,
+                    new ReduceExpression(
+                            infixExpression.right(),
+                            reduceExpression.accumulatorName(),
+                            reduceExpression.keyName(),
+                            reduceExpression.valueName(),
+                            reduceExpression.reducerExpression(),
+                            reduceExpression.position()
+                    ),
+                    reduceExpression.position()
+            );
+        }
+        return reduceExpression;
+    }
+
     private MatchExpression matchExpression(FunctionalParser.MatchExpressionContext context) {
         return new MatchExpression(
                 expression(context.expression()),
@@ -1086,7 +1115,7 @@ public class CapybaraParser {
                         .flatMap(Collection::stream)
                         .flatMap(matchCase -> matchCase.pattern()
                                 .stream()
-                                .map(pattern -> matchCase(pattern, matchCase.expression())))
+                                .map(pattern -> matchCase(pattern, matchCase.expressionNoLetNoPipe())))
                         .toList(),
                 position(context)
         );
@@ -1094,11 +1123,11 @@ public class CapybaraParser {
 
     private MatchExpression.MatchCase matchCase(
             FunctionalParser.PatternContext pattern,
-            FunctionalParser.ExpressionContext expression
+            FunctionalParser.ExpressionNoLetNoPipeContext expression
     ) {
         return new MatchExpression.MatchCase(
                 matchExpressionPattern(pattern),
-                expression(expression)
+                expressionNoLetNoPipe(expression)
 
         );
     }
@@ -1416,6 +1445,22 @@ public class CapybaraParser {
                && expression.methodIdentifier() != null
                && expression.LPAREN() != null
                && expression.RPAREN() != null
+               && expression.expressionNoLetNoPipe().size() == 1;
+    }
+
+    private static boolean isFunctionInvoke(FunctionalParser.ExpressionNoLetContext expression) {
+        return expression.LPAREN() != null
+               && expression.RPAREN() != null
+               && expression.DOT() == null
+               && expression.functionCall() == null
+               && expression.expressionNoLet().size() == 1;
+    }
+
+    private static boolean isFunctionInvoke(FunctionalParser.ExpressionNoLetNoPipeContext expression) {
+        return expression.LPAREN() != null
+               && expression.RPAREN() != null
+               && expression.DOT() == null
+               && expression.functionCall() == null
                && expression.expressionNoLetNoPipe().size() == 1;
     }
 

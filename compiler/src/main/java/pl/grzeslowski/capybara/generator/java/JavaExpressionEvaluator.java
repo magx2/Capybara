@@ -1065,7 +1065,11 @@ public class JavaExpressionEvaluator {
         for (var value : expression.values()) {
             var valueExSc = evaluateExpression(value, current).popExpression();
             current = valueExSc.scope();
-            values.add(valueExSc.expression());
+            var renderedValue = valueExSc.expression();
+            if (value.type() instanceof pl.grzeslowski.capybara.linker.LinkedFunctionType) {
+                renderedValue = "((" + javaCastType(value.type()) + ") " + renderedValue + ")";
+            }
+            values.add(renderedValue);
         }
         return current.addExpression("java.util.List.of(" + String.join(", ", values) + ")");
     }
@@ -1093,6 +1097,12 @@ public class JavaExpressionEvaluator {
             case pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedDict linkedDict ->
                     "java.util.Map<java.lang.String, " + javaCastType(linkedDict.valueType()) + ">";
             case pl.grzeslowski.capybara.linker.LinkedTupleType ignored -> "java.util.List<?>";
+            case pl.grzeslowski.capybara.linker.LinkedFunctionType linkedFunctionType ->
+                    "java.util.function.Function<"
+                    + javaCastType(linkedFunctionType.argumentType())
+                    + ", "
+                    + javaCastType(linkedFunctionType.returnType())
+                    + ">";
             case pl.grzeslowski.capybara.linker.LinkedDataType linkedDataType ->
                     normalizeJavaTypeReference(linkedDataType.name());
             case pl.grzeslowski.capybara.linker.LinkedDataParentType linkedDataParentType ->

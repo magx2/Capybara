@@ -10,6 +10,7 @@ fun main(args: list[string]): /capy/lang/Program.Program =
         test_serialize_object_with_list(),
         // deser
         should_deserialize_simple_object(),
+    //    should_deserialize_object_with_primitive_types(),
     ])
 
 fun test_serialize_simple_object(): Assert =
@@ -61,5 +62,21 @@ fun should_deserialize_simple_object(): Assert =
             /capy/lang/Result.Success {
                 value: JsonObject {
                     value: { "foo": JsonString { value: "boo" } }
+                }
+            })
+
+fun should_deserialize_object_with_primitive_types(): Assert =
+    assert_that(deserialize('{"string":"string_value","int":5,"int_minus":-5,"double":5.5,"long":97387717187,"bool":true}'))
+        .contains(
+            /capy/lang/Result.Success {
+                value: JsonObject {
+                    value: {
+                        "string": JsonString { value: "string_value" },
+                        "int": JsonNumberLong { value: 5 },
+                        "int_minus": JsonNumberLong { value: -5 },
+                        "double": JsonNumberDouble { value: 5.5 },
+                        "long": JsonNumberLong { value: 97387717187L },
+                        "bool": JsonBool { value: true },
+                    }
                 }
             })

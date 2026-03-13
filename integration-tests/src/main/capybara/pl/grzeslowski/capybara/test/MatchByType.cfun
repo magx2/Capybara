@@ -1,42 +1,42 @@
 fun match_string(value: any): string =
     match value with
-    | string s => "s:" + s
-    | int i => "i:" + i
-    | _ => ""
+    | string s -> "s:" + s
+    | int i -> "i:" + i
+    | _ -> ""
 
 fun match_int(value: any): int =
     match value with
-    | int i => i + 1
-    | string s => 0
-    | _ => 0
+    | int i -> i + 1
+    | string s -> 0
+    | _ -> 0
 
 fun match_int_ignore_binding(value: any): int =
     match value with
-    | int _ => 1
-    | _ => 0
+    | int _ -> 1
+    | _ -> 0
 
 data Person { name: string }
 type Entity = Person
 
 fun is_data(value: any): bool =
     match value with
-    | data d => true
-    | _ => false
+    | data d -> true
+    | _ -> false
 
 fun is_data_from_entity(value: Entity): bool =
     match value with
-    | data d => true
-    | _ => false
+    | data d -> true
+    | _ -> false
 
 fun classify_json_char(first_char: string): string =
     match first_char with
-    | '{' => "object"
-    | '"' => "string"
-    | '-', '1', '2', '3', '4', '5', '6', '7', '8', '9', '0' => "number"
-    | _ => "other"
+    | '{' -> "object"
+    | '"' -> "string"
+    | '-', '1', '2', '3', '4', '5', '6', '7', '8', '9', '0' -> "number"
+    | _ -> "other"
 
 fun classify_json_char_with_named_wildcard(first_char: string): string =
     match first_char with
-    | '-' => "minus"
-    | '1', '2', '3', '4', '5', '6', '7', '8', '9', '0' => "number"
-    | _ v => "unknown: " + v
+    | '-' -> "minus"
+    | '1', '2', '3', '4', '5', '6', '7', '8', '9', '0' -> "number"
+    | _ v -> "unknown: " + v

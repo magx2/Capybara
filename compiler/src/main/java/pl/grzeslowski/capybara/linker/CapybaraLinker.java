@@ -780,7 +780,7 @@ public class CapybaraLinker {
     private String formatParserTypeInHeader(pl.grzeslowski.capybara.parser.Type type) {
         return switch (type) {
             case FunctionType functionType -> formatParserTypeInHeader(functionType.argumentType())
-                                              + " -> "
+                                              + " => "
                                               + formatParserTypeInHeader(functionType.returnType());
             default -> formatParserType(type);
         };

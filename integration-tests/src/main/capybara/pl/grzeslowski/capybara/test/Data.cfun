@@ -5,13 +5,13 @@ data Rectangle { width: float, "height": float }
 
 fun area(shape: Shape): float =
     match shape with
-    | Circle { radius } => 3.14 * radius * radius
-    | Rectangle { width, height } => width * height
+    | Circle { radius } -> 3.14 * radius * radius
+    | Rectangle { width, height } -> width * height
 
 fun da_vinci(shape: Shape): Shape =
     match shape with
-    | Circle { radius } => Rectangle { width : radius * 2, "height" : radius * 2 }
-    | Rectangle { width, height } => Circle { radius : (width + height) / 4 }
+    | Circle { radius } -> Rectangle { width : radius * 2, "height" : radius * 2 }
+    | Rectangle { width, height } -> Circle { radius : (width + height) / 4 }
 
 type Typed[T] = Foo[T] | Boo[T]
 data Foo[T] { foo: T }
@@ -25,8 +25,8 @@ fun summon_tom(): Knight = Tom {}
 
 fun is_tom(knight: Knight): bool =
     match knight with
-    | Tom => true
-    | EnglishKnight { power } => power > 10.0
+    | Tom -> true
+    | EnglishKnight { power } -> power > 10.0
 
 type King[T] = FrenchKing[T] | Jerry
 data FrenchKing[T] { head: bool, foo: T }
@@ -36,8 +36,8 @@ fun summon_jerry(): King[int] = Jerry {}
 
 fun jerry_or_french(king: King[int]): string =
     match king with
-    | Jerry => "jerry"
-    | FrenchKing { head, foo } => head + ":" + foo
+    | Jerry -> "jerry"
+    | FrenchKing { head, foo } -> head + ":" + foo
 
 type Worker {name: string, surname: string } = BlueCollar | WhiteCollar
 data BlueCollar { strength: float }

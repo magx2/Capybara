@@ -82,6 +82,7 @@ expressionNoLet: ifExpression
                | MINUS expressionNoLet
                | expressionNoLet LBRACK indexLiteral RBRACK
                | expressionNoLet LBRACK sliceIndexLiteral? COLON sliceIndexLiteral? RBRACK
+               | expressionNoLet LPAREN argumentList? RPAREN
                | expressionNoLet DOT methodIdentifier LPAREN argumentList? RPAREN
                | expressionNoLet INFIX_METHOD_LITERAL expressionNoLet
                | expressionNoLet DOT NAME
@@ -95,18 +96,21 @@ lambdaExpression: identifier FAT_ARROW expressionNoLetNoPipe
                 | LPAREN identifier (COMMA identifier)+ RPAREN FAT_ARROW expressionNoLetNoPipe;
 reduceExpression: expressionNoLetNoPipe COMMA LPAREN NAME COMMA NAME (COMMA NAME (COMMA NAME)?)? RPAREN FAT_ARROW expressionNoLetNoPipe;
 expressionNoLetNoPipe: ifExpression
+                     | lambdaExpression
                      | functionReference
                      | functionCall
                      | new_list
                      | new_dict
                      | tupleLiteral
-                     | '(' expressionNoLetNoPipe ')'
+                     | '(' expression ')'
+                     | '{' expression '}'
                      | new_set
                      | BANG expressionNoLetNoPipe
                      | BITWISE_NOT expressionNoLetNoPipe
                      | MINUS expressionNoLetNoPipe
                      | expressionNoLetNoPipe LBRACK indexNoPipeLiteral RBRACK
                      | expressionNoLetNoPipe LBRACK sliceIndexNoPipeLiteral? COLON sliceIndexNoPipeLiteral? RBRACK
+                     | expressionNoLetNoPipe LPAREN argumentList? RPAREN
                      | expressionNoLetNoPipe DOT methodIdentifier LPAREN argumentList? RPAREN
                      | expressionNoLetNoPipe INFIX_METHOD_LITERAL expressionNoLetNoPipe
                      | expressionNoLetNoPipe DOT NAME
@@ -139,7 +143,7 @@ NOTHING_LITERAL: '???';
 
 matchExpression: 'match' expression 'with' matchCaseList+;
 matchCaseList: matchCase (',' matchCase)*;
-matchCase: PIPE pattern (COMMA pattern)* FAT_ARROW expression;
+matchCase: PIPE pattern (COMMA pattern)* MATCH_ARROW expressionNoLetNoPipe;
 pattern: TYPE
         | INT_LITERAL
         | BOOL_LITERAL
@@ -220,8 +224,7 @@ infixOperatorNoPipe: PLUS
                    | LE
                    | GE
                    | QUESTION
-                   | AND
-                   | PIPE;
+                   | AND;
 
 UNDERSCORE: '_';
 
@@ -271,6 +274,7 @@ DIV : '/';
 POWER: '^';
 MOD : '%';
 FAT_ARROW : '=>';
+MATCH_ARROW : '->';
 COLONCOLON : '::';
 
 ADD_ASSIGN : '+=';

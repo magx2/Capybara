@@ -4,21 +4,21 @@ data Fail { message: string }
 
 fun MyResult[T].`|`(map: T => MyResult[Y]): MyResult[Y] =
     match this with
-    | Fail f => f
-    | Ok o => map(o.value)
+    | Fail f -> f
+    | Ok o -> map(o.value)
 
 fun MyResult[T].`|*`(flatmap: T => MyResult[MyResult[Y]]): MyResult[Y] =
     match this with
-    | Fail f => f
-    | Ok o =>
+    | Fail f -> f
+    | Ok o ->
         match flatmap(o.value) with
-        | Fail f => f
-        | Ok { top_result } => top_result
+        | Fail f -> f
+        | Ok { top_result } -> top_result
 
 fun MyResult[T].or_else(v: T): T =
     match this with
-    | Fail _ => v
-    | Ok { v } => v
+    | Fail _ -> v
+    | Ok { v } -> v
 
 fun map_to_string(v: int): MyResult[string] = Ok { value: "v=" + v }
 

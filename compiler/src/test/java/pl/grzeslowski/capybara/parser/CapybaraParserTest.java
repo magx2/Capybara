@@ -60,7 +60,7 @@ class CapybaraParserTest {
                 ),
                 Arguments.of(
                         "invoke_multi",
-                        "fun run(f: (int, int) -> int): int = f(1, 2)\nfun invoke_multi(): int = run((a, b) => a + b)"
+                        "fun run(f: (int, int) => int): int = f(1, 2)\nfun invoke_multi(): int = run((a, b) => a + b)"
                 ));
     }
 

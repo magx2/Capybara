@@ -98,8 +98,8 @@ fun keep_boxed(boxed: Boxed): Boxed = boxed
 
 fun add_to_boxed(boxed: Boxed): Boxed =
     match boxed with
-    | IntBox { value } => IntBox { value: value + 1 }
-    | LongBox { value } => LongBox { value: value + 1L }
+    | IntBox { value } -> IntBox { value: value + 1 }
+    | LongBox { value } -> LongBox { value: value + 1L }
 
 fun type_pipe_lambda(x: int): Boxed =
     IntBox { value: x }

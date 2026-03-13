@@ -99,8 +99,8 @@ fun OptionAssertion.is_equal_to(other: Option[any]): OptionAssertion =
 fun OptionAssertion.contains(other: any): OptionAssertion =
     let assertion = Assertion {
         result: match this.value with
-            | Some s => s == other
-            | _ => false,
+            | Some s -> s == other
+            | _ -> false,
         message: "Expected option:\n" + this.value + "\nto contains:\n" + other
     }
     OptionAssertion {
@@ -111,8 +111,8 @@ fun OptionAssertion.contains(other: any): OptionAssertion =
 fun OptionAssertion.is_empty(): OptionAssertion =
     let assertion = Assertion {
         result: match this.value with
-            | None => true
-            | _ => false,
+            | None -> true
+            | _ -> false,
         message: "Expected option:\n" + this.value + "\nto be empty"
     }
     OptionAssertion {
@@ -134,8 +134,8 @@ fun ResultAssertion.succeeded(): ResultAssertion =
     let assertion = Assertion {
         result:
             match this.value with
-            | Error e  => false
-            | Success s => true,
+            | Error e  -> false
+            | Success s -> true,
         message: "Expected result:\n" + this.value + "\nto succeed"
     }
     ResultAssertion {
@@ -147,8 +147,8 @@ fun ResultAssertion.succeeded(other: any): ResultAssertion =
     let assertion = Assertion {
         result:
             match this.value with
-            | Error e  => false
-            | Success { v } => v == other,
+            | Error e  -> false
+            | Success { v } -> v == other,
         message: "Expected result:\n" + this.value + "\nto succeed with value:\n" + other
     }
     ResultAssertion {
@@ -160,8 +160,8 @@ fun ResultAssertion.failed(): ResultAssertion =
     let assertion = Assertion {
         result: {
             match this.value with
-            | Error e => true
-            | Success s => false
+            | Error e -> true
+            | Success s -> false
         },
         message: "Expected result:\n" + this.value + "\nto fail"
     }
@@ -174,8 +174,8 @@ fun ResultAssertion.failed(message: string): ResultAssertion =
     let assertion = Assertion {
         result: {
             match this.value with
-            | Error e => e.message == message
-            | Success s => false
+            | Error e -> e.message == message
+            | Success s -> false
         },
         message: "Expected result:\n" + this.value + "\nto failed with message:\n" + message
     }
