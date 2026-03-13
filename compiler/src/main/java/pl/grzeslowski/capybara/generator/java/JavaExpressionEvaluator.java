@@ -1723,6 +1723,7 @@ public class JavaExpressionEvaluator {
             case ':' -> "colon";
             case '<' -> "less";
             case '>' -> "greater";
+            case '|' -> "pipe";
             default -> "op" + Integer.toHexString(symbol);
         };
     }
