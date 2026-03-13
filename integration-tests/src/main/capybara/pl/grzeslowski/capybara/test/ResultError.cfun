@@ -1,5 +1,13 @@
 from /capy/lang/Result import { * }
 
+data ParseState { value: string, parsing_string: string }
+
 fun success_result(): Result[int] = Success { value: 7 }
 
 fun fail_result(): Result[int] = Error { message: "boom" }
+
+fun parse_state(input: string): Result[ParseState] =
+    Success { value: ParseState { value: input, parsing_string: "xyz" } }
+
+fun parse_and_add_rest_size(input: string): Result[long] =
+    parse_state(input) | parse => (parse.value.to_long() | number => Success { value: number + parse.parsing_string.size })

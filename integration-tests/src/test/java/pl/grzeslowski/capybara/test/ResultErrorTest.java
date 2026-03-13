@@ -22,4 +22,20 @@ class ResultErrorTest {
                 .isInstanceOf(CapybaraException.class)
                 .hasMessage("boom");
     }
+
+    @Test
+    void parseAndAddRestSizeSuccess() {
+        var result = ResultError.parseAndAddRestSize("10");
+        assertThat(result).isInstanceOf(Result.Success.class);
+        assertThat(((Result.Success<Long>) result).value()).isEqualTo(13L);
+    }
+
+    @Test
+    void parseAndAddRestSizeFail() {
+        var result = ResultError.parseAndAddRestSize("abc");
+        assertThat(result).isInstanceOf(Result.Error.class);
+        assertThat(((Result.Error) result).ex())
+                .isInstanceOf(CapybaraException.class)
+                .hasMessageContaining("Cannot parse string to long");
+    }
 }
