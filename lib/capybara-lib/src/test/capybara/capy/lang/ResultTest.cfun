@@ -2,18 +2,73 @@ from /capy/assert/Assert import { * }
 from /capy/lang/Result import { * }
 
 fun main(args: list[string]): /capy/lang/Program.Program =
-    run_tests([
+    let asserts: list[Assert] = [
         // map
         should_map_success(),
         should_map_error(),
-    ])
+        should_map_positive(),
+        should_map_negative(),
+        // flat map
+        should_flatmap_success(),
+        should_flatmap_error(),
+        should_flatmap_positive(),
+        should_flatmap_negative(),
+        should_flatmap_zero(),
+    ]
+    run_tests(asserts)
 
 fun should_map_success(): Assert =
     let result: Result = Success { "success_value" }
     let mapped = result | value => Success { "mapped_" + value }
-    assertThat(mapped).succeeded("mapped_success_value")
+    assert_that(mapped).succeeded("mapped_success_value")
 
 fun should_map_error(): Assert =
     let result: Result = Error { "error message" }
     let mapped = result | value => Success { "mapped_" + value }
-    assertThat(mapped).failed("error message")
+    assert_that(mapped).failed("error message")
+
+fun _positive(x: int): Result[string] =
+    if x > 0
+    then Success { x + " is positive" }
+    else Error { x + " is NOT positive" }
+
+fun _positive_not_zero(x: int): Result[Result[int]] =
+    if x != 0
+    then Success { _positive(x) }
+    else Error { "I don't like zero" }
+
+fun should_map_positive(): Assert =
+    let result = Success { 420 }
+    let mapped = result | :_positive
+    assert_that(mapped).succeeded("420 is positive")
+
+fun should_map_negative(): Assert =
+    let result = Success { -1337 }
+    let mapped = result | :_positive
+    assert_that(mapped).failed("-1337 is NOT positive")
+
+fun should_flatmap_success(): Assert =
+    let result: Result = Success { "success_value" }
+    let mapped = result |* value => Success { Success { "mapped_" + value } }
+    assert_that(mapped).succeeded("mapped_success_value")
+
+fun should_flatmap_error(): Assert =
+    let result: Result = Error { "error message" }
+    let mapped = result |* value => Success { Success { "mapped_" + value } }
+    assert_that(mapped).failed("error message")
+
+fun should_flatmap_positive(): Assert =
+    let result = Success { 420 }
+    let mapped = result |* :_positive_not_zero
+    assert_that(mapped).succeeded("420 is positive")
+
+fun should_flatmap_negative(): Assert =
+    let result = Success { -1337 }
+    let mapped = result |* :_positive_not_zero
+    assert_that(mapped).failed("-1337 is NOT positive")
+
+fun should_flatmap_zero(): Assert =
+    let result = Success { 0 }
+    let mapped = result |* :_positive_not_zero
+    assert_that(mapped).failed("I don't like zero")
+

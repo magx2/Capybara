@@ -177,17 +177,7 @@ fun ResultAssertion.failed(message: string): ResultAssertion =
             | Error e => e.message == message
             | Success s => false
         },
-        message: "Expected result:\n" + this.value + "\nto fail with message:\n" + message
-    }
-    ResultAssertion {
-        value: this.value,
-        assertions: this.assertions + assertion
-    }
-
-fun ResultAssertion.failed_with_message(msg: string): ResultAssertion =
-    let assertion = Assertion {
-        result: (this.value + "").contains(msg),
-        message: "Expected result:\n" + this.value + "\nto failed with message:\n" + msg
+        message: "Expected result:\n" + this.value + "\nto failed with message:\n" + message
     }
     ResultAssertion {
         value: this.value,
