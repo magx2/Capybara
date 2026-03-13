@@ -44,17 +44,32 @@ tasks.register('compileTestCapybara', JavaExec) {
         def inputDirs = [capybaraMainSourceDir.asFile, capybaraTestSourceDir.asFile]
                 .findAll { it.exists() && it.isDirectory() }
                 .collect { it.absolutePath }
-        args '--debug', 'JAVA', * inputDirs , capybaraGeneratedTestDir.get().asFile.absolutePath
+        args 'JAVA', * inputDirs , capybaraGeneratedTestDir.get().asFile.absolutePath
     }
 }
 
-tasks.register('testCapybara', JavaExec) {
+tasks.register('runJsonTest', JavaExec) {
     group = 'verification'
-    description = 'Runs generated Capybara JsonTest main function.'
+    description = 'Runs `JsonTest` main function.'
     dependsOn tasks.named('compileTestCapybara')
 
     classpath = sourceSets.test.runtimeClasspath
     mainClass = 'lang.serialization.JsonTest'
+}
+
+tasks.register('runResultTest', JavaExec) {
+    group = 'verification'
+    description = 'Runs `ResultTest` main function.'
+    dependsOn tasks.named('compileTestCapybara')
+
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'capy.lang.ResultTest'
+}
+
+tasks.register('testCapybara') {
+    group = 'verification'
+    description = 'Runs all generated Capybara main-based tests.'
+    dependsOn tasks.named('runJsonTest'), tasks.named('runResultTest')
 }
 
 sourceSets {

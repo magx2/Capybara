@@ -120,10 +120,36 @@ fun OptionAssertion.is_empty(): OptionAssertion =
         assertions: this.assertions + assertion
     }
 
-fun ResultAssertion.contains(other: /capy/lang/Result.Success[any]): ResultAssertion =
+fun ResultAssertion.contains(other: /capy/lang/Result.Result[any]): ResultAssertion =
     let assertion = Assertion {
-        result: (this.value + "") ? (other + ""),
+        result: this.value == other,
         message: "Expected result:\n" + this.value + "\nto contains:\n" + other
+    }
+    ResultAssertion {
+        value: this.value,
+        assertions: this.assertions + assertion
+    }
+
+fun ResultAssertion.succeeded(): ResultAssertion =
+    let assertion = Assertion {
+        result:
+            match this.value with
+            | Error e  => false
+            | Success s => true,
+        message: "Expected result:\n" + this.value + "\nto succeed"
+    }
+    ResultAssertion {
+        value: this.value,
+        assertions: this.assertions + assertion
+    }
+
+fun ResultAssertion.succeeded(other: any): ResultAssertion =
+    let assertion = Assertion {
+        result:
+            match this.value with
+            | Error e  => false
+            | Success { v } => v == other,
+        message: "Expected result:\n" + this.value + "\nto succeed with value:\n" + other
     }
     ResultAssertion {
         value: this.value,
@@ -132,8 +158,26 @@ fun ResultAssertion.contains(other: /capy/lang/Result.Success[any]): ResultAsser
 
 fun ResultAssertion.failed(): ResultAssertion =
     let assertion = Assertion {
-        result: (this.value + "").starts_with("Error {"),
-        message: "Expected result:\n" + this.value + "\nto failed"
+        result: {
+            match this.value with
+            | Error e => true
+            | Success s => false
+        },
+        message: "Expected result:\n" + this.value + "\nto fail"
+    }
+    ResultAssertion {
+        value: this.value,
+        assertions: this.assertions + assertion
+    }
+
+fun ResultAssertion.failed(message: string): ResultAssertion =
+    let assertion = Assertion {
+        result: {
+            match this.value with
+            | Error e => e.message == message
+            | Success s => false
+        },
+        message: "Expected result:\n" + this.value + "\nto fail with message:\n" + message
     }
     ResultAssertion {
         value: this.value,
