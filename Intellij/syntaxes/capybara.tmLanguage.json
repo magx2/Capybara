@@ -190,6 +190,18 @@
           }
         },
         {
+          "name": "meta.let.declaration.capybara",
+          "match": "\\b(let)\\s+([A-Za-z_][A-Za-z0-9_]*)\\b",
+          "captures": {
+            "1": {
+              "name": "keyword.control.capybara"
+            },
+            "2": {
+              "name": "variable.other.capybara"
+            }
+          }
+        },
+        {
           "name": "meta.type.private.capybara",
           "match": "\\b(type|data|single)\\s+(__[A-Za-z0-9_]*)",
           "captures": {

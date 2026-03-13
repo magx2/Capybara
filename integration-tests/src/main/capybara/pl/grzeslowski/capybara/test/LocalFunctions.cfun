@@ -15,3 +15,9 @@ fun parity(x: int): bool =
         then false
         else __is_even(n - 1)
     __is_even(x)
+
+fun local_with_let(x: int): int =
+    fun __inc(y: int): int =
+        let z = y + 1
+        z
+    __inc(x)

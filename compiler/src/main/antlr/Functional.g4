@@ -17,7 +17,7 @@ functionBody: localDefinition* expression;
 localDefinition: localFunctionDeclaration
                | localTypeDeclaration
                | localDataDeclaration;
-localFunctionDeclaration: 'fun' NAME '(' parameters? ')' functionType? '=' expressionNoLet;
+localFunctionDeclaration: 'fun' NAME '(' parameters? ')' functionType? '=' expression;
 localTypeDeclaration: 'type' genericTypeDeclaration '=' genericTypeDeclaration (PIPE genericTypeDeclaration)*
                     | 'type' genericTypeDeclaration '{' fieldDeclarationList? '}' '=' genericTypeDeclaration (PIPE genericTypeDeclaration)*;
 localDataDeclaration: 'data' genericTypeDeclaration '{' fieldDeclarationList? '}'

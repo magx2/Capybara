@@ -294,7 +294,7 @@ public class CapybaraParser {
                         parameter.name(),
                         parameter.position()))
                 .toList();
-        var expression = rewriteLocalNames(expressionNoLet(context.expressionNoLet()), localFunctionNameMap, localTypeNameMap);
+        var expression = rewriteLocalNames(expression(context.expression()), localFunctionNameMap, localTypeNameMap);
         var rewrittenReturnType = functionType(context.functionType())
                 .map(type -> rewriteLocalTypeNames(type, localTypeNameMap));
         return new Function(

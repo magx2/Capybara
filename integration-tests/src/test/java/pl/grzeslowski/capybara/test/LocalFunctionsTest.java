@@ -19,4 +19,10 @@ class LocalFunctionsTest {
         assertThat(LocalFunctions.parity(12)).isTrue();
         assertThat(LocalFunctions.parity(15)).isFalse();
     }
+
+    @Test
+    void localFunctionCanUseLetExpression() {
+        assertThat(LocalFunctions.localWithLet(0)).isEqualTo(1);
+        assertThat(LocalFunctions.localWithLet(10)).isEqualTo(11);
+    }
 }
