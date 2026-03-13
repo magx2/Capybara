@@ -4,9 +4,12 @@ package pl.grzeslowski.capybara.parser;
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;
 import org.antlr.v4.runtime.ParserRuleContext;
+import org.antlr.v4.runtime.RecognitionException;
+import org.antlr.v4.runtime.Recognizer;
 import org.antlr.v4.runtime.tree.TerminalNode;
 import pl.grzeslowski.capybara.parser.antlr.FunctionalParser;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -24,15 +27,71 @@ public class CapybaraParser {
     private static final Pattern COLLECTION_DICT_PATTERN = Pattern.compile("dict\\[(.+?)]");
 
     public Functional parseFunctional(String input) {
+        var malformedMatchArrow = malformedMatchCaseArrow(input);
+        if (malformedMatchArrow.isPresent()) {
+            throw new IllegalStateException(formatSyntaxError(malformedMatchArrow.get()));
+        }
         var lexer = new pl.grzeslowski.capybara.parser.antlr.FunctionalLexer(CharStreams.fromString(input));
         var tokens = new CommonTokenStream(lexer);
         tokens.fill();
         var parser = new pl.grzeslowski.capybara.parser.antlr.FunctionalParser(tokens);
-        var definitions = parser.program().definition().stream()
+        var syntaxErrors = new ArrayList<SyntaxError>();
+        var errorListener = new org.antlr.v4.runtime.BaseErrorListener() {
+            @Override
+            public void syntaxError(
+                    Recognizer<?, ?> recognizer,
+                    Object offendingSymbol,
+                    int line,
+                    int charPositionInLine,
+                    String msg,
+                    RecognitionException e
+            ) {
+                syntaxErrors.add(new SyntaxError(line, charPositionInLine, msg));
+            }
+        };
+        lexer.removeErrorListeners();
+        parser.removeErrorListeners();
+        lexer.addErrorListener(errorListener);
+        parser.addErrorListener(errorListener);
+
+        var program = parser.program();
+        if (!syntaxErrors.isEmpty()) {
+            throw new IllegalStateException(formatSyntaxError(syntaxErrors.get(0)));
+        }
+
+        var definitions = program.definition().stream()
                 .map(this::definition)
                 .flatMap(Collection::stream)
                 .collect(toSet());
         return new Functional(definitions);
+    }
+
+    private String formatSyntaxError(SyntaxError syntaxError) {
+        if (syntaxError.message().contains("mismatched input '=' expecting '=>'")
+            || syntaxError.message().equals("Expected `=>`, found `=`")) {
+            return "line %d:%d: Expected `=>`, found `=`".formatted(syntaxError.line(), syntaxError.column());
+        }
+        return "line %d:%d: %s".formatted(syntaxError.line(), syntaxError.column(), syntaxError.message());
+    }
+
+    private Optional<SyntaxError> malformedMatchCaseArrow(String input) {
+        var lines = input.split("\\R", -1);
+        for (var i = 0; i < lines.length; i++) {
+            var line = lines[i];
+            var pipe = line.indexOf('|');
+            if (pipe < 0) {
+                continue;
+            }
+            var arrow = line.indexOf("=>", pipe);
+            var equal = line.indexOf('=', pipe);
+            if (equal >= 0 && (arrow < 0 || equal < arrow)) {
+                return Optional.of(new SyntaxError(i + 1, equal, "Expected `=>`, found `=`"));
+            }
+        }
+        return Optional.empty();
+    }
+
+    private record SyntaxError(int line, int column, String message) {
     }
 
     private List<Definition> definition(pl.grzeslowski.capybara.parser.antlr.FunctionalParser.DefinitionContext context) {

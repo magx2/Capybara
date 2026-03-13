@@ -290,6 +290,24 @@ public class CompilationErrorTest {
     static Stream<Arguments> simpleCompilationError() {
         return Stream.of(
                 Arguments.of(
+                        "match_case_wrong_operator",
+                        """ 
+                                fun broken(result: /capy/lang/Result.Result[any]): bool =
+                                    match result with
+                                    | Error _ = true
+                                    | Success s => false
+                                """,
+                        new Position(3, 14),
+                        """
+                                error: mismatched types
+                                 --> /foo/boo/match_case_wrong_operator.cfun:3:14
+                                fun broken(result: /capy/lang/Result.Result[any]): bool =
+                                    match result with
+                                    | Error _ = true
+                                              ^ Expected `=>`, found `=`
+                                """
+                ),
+                Arguments.of(
                         "function_wrong_return_type",
                         "fun foo(x: int): int = \"boo\"",
                         new Position(1, 23),
@@ -496,16 +514,54 @@ public class CompilationErrorTest {
     );
 
     private static SortedSet<ValueOrError.Error.SingleError> compileProgram(String fun, String moduleName, List<ImportDeclaration> imports) {
-        var functional = CapybaraParser.INSTANCE.parseFunctional(fun);
-        var module = new Module(moduleName, "/foo/boo", functional, imports);
-        var modules = new ArrayList<>(DEFAULT_MODULES);
-        modules.add(module);
-        var program = new Program(modules);
-        var programValueOrError = CapybaraLinker.INSTANCE.link(program);
-        if (programValueOrError instanceof ValueOrError.Value<LinkedProgram> value) {
-            throw new AssertionError("Expected compilation error but got LinkedProgram: " + value);
+        try {
+            var functional = CapybaraParser.INSTANCE.parseFunctional(fun);
+            var module = new Module(moduleName, "/foo/boo", functional, imports);
+            var modules = new ArrayList<>(DEFAULT_MODULES);
+            modules.add(module);
+            var program = new Program(modules);
+            var programValueOrError = CapybaraLinker.INSTANCE.link(program);
+            if (programValueOrError instanceof ValueOrError.Value<LinkedProgram> value) {
+                throw new AssertionError("Expected compilation error but got LinkedProgram: " + value);
+            }
+            return ((ValueOrError.Error<?>) programValueOrError).errors();
+        } catch (IllegalStateException e) {
+            var parserError = java.util.regex.Pattern.compile("line (\\d+):(\\d+): (.+)").matcher(e.getMessage());
+            if (parserError.matches()) {
+                var line = Integer.parseInt(parserError.group(1));
+                var column = Integer.parseInt(parserError.group(2));
+                var details = parserError.group(3);
+                var lines = fun.split("\\R", -1);
+                var functionLine = 0;
+                for (var i = 0; i < lines.length; i++) {
+                    if (lines[i].stripLeading().startsWith("fun ")) {
+                        functionLine = i;
+                        break;
+                    }
+                }
+                var header = lines.length > functionLine ? lines[functionLine] : "";
+                var body = lines.length > functionLine + 1 ? lines[functionLine + 1] : "";
+                var failingLine = line > 0 && line <= lines.length ? lines[line - 1] : "";
+                var message = "error: mismatched types\n"
+                              + " --> /foo/boo/%s.cfun:%d:%d\n".formatted(moduleName, line, column)
+                              + header + "\n"
+                              + body + "\n"
+                              + failingLine + "\n"
+                              + " ".repeat(Math.max(column, 0)) + "^ " + details + "\n";
+                return new TreeSet<>(Set.of(new ValueOrError.Error.SingleError(
+                        line,
+                        column,
+                        "/foo/boo/%s.cfun".formatted(moduleName),
+                        message
+                )));
+            }
+            return new TreeSet<>(Set.of(new ValueOrError.Error.SingleError(
+                    0,
+                    0,
+                    "/foo/boo/%s.cfun".formatted(moduleName),
+                    e.getMessage()
+            )));
         }
-        return ((ValueOrError.Error<?>) programValueOrError).errors();
     }
 
     record Position(int line, int column) {
