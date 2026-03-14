@@ -4,6 +4,8 @@ import capy.lang.Result;
 import org.junit.jupiter.api.Test;
 import pl.grzeslowski.capybara.CapybaraException;
 
+import java.util.LinkedHashMap;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 class ResultErrorTest {
@@ -51,5 +53,18 @@ class ResultErrorTest {
         var result = ResultError.flatmapUntypedResult();
         assertThat(result).isInstanceOf(Result.Success.class);
         assertThat(((Result.Success<String>) result).value()).isEqualTo("mapped_success_value");
+    }
+
+    @Test
+    void dictReduceThenMap() {
+        var dict = new LinkedHashMap<String, Integer>();
+        dict.put("a", 1);
+        dict.put("b", 2);
+
+        var result = ResultError.dictReduceThenMap(dict);
+
+        assertThat(result).isInstanceOf(Result.Success.class);
+        var value = ((Result.Success<String>) result).value();
+        assertThat(value).contains("a:1,").contains("b:2,").endsWith("done");
     }
 }

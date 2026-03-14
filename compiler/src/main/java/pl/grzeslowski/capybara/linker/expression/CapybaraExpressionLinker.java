@@ -1086,6 +1086,12 @@ public class CapybaraExpressionLinker {
                     if (returnType instanceof LinkedGenericTypeParameter
                         && !(nested.type() instanceof LinkedGenericTypeParameter)) {
                         nestedType = nested.type();
+                    } else if (!returnType.equals(nested.type())
+                               && isTypeCompatible(nested.type(), returnType)
+                               && isResolvedTypeForInference(nested.type())) {
+                        // Keep concrete lambda return types (e.g. Result[JsonObject]) so generic
+                        // method return type inference does not fall back to unresolved placeholders.
+                        nestedType = nested.type();
                     }
                     for (int idx = argumentNames.size() - 1; idx >= 0; idx--) {
                         var functionType = new LinkedFunctionType(argumentTypes.get(idx), nestedType);
@@ -3692,6 +3698,26 @@ public class CapybaraExpressionLinker {
             return !linkedDataParentType.typeParameters().isEmpty();
         }
         return false;
+    }
+
+    private boolean isResolvedTypeForInference(LinkedType type) {
+        return switch (type) {
+            case LinkedGenericTypeParameter ignored -> false;
+            case PrimitiveLinkedType primitive -> primitive != ANY;
+            case LinkedList linkedList -> isResolvedTypeForInference(linkedList.elementType());
+            case LinkedSet linkedSet -> isResolvedTypeForInference(linkedSet.elementType());
+            case LinkedDict linkedDict -> isResolvedTypeForInference(linkedDict.valueType());
+            case LinkedTupleType linkedTupleType -> linkedTupleType.elementTypes().stream().allMatch(this::isResolvedTypeForInference);
+            case LinkedFunctionType linkedFunctionType ->
+                    isResolvedTypeForInference(linkedFunctionType.argumentType())
+                    && isResolvedTypeForInference(linkedFunctionType.returnType());
+            case LinkedDataType linkedDataType -> linkedDataType.typeParameters().stream()
+                    .map(this::parseLinkedTypeDescriptor)
+                    .allMatch(maybeType -> maybeType.map(this::isResolvedTypeForInference).orElse(false));
+            case LinkedDataParentType linkedDataParentType -> linkedDataParentType.typeParameters().stream()
+                    .map(this::parseLinkedTypeDescriptor)
+                    .allMatch(maybeType -> maybeType.map(this::isResolvedTypeForInference).orElse(false));
+        };
     }
 
     private boolean isConcreteResolvedType(LinkedType type) {

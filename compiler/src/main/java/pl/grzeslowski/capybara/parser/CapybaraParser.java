@@ -878,11 +878,11 @@ public class CapybaraParser {
                     ? names.get(2).getText()
                     : names.get(3).getText();
         return new ReduceExpression(
-                expressionNoLetNoPipe(context.expressionNoLetNoPipe()),
+                expressionNoLetNoPipe(context.expressionNoLetNoPipe(0)),
                 accumulatorName,
                 keyName,
                 valueName,
-                expression(context.expression()),
+                expressionNoLetNoPipe(context.expressionNoLetNoPipe(1)),
                 position(context)
         );
     }

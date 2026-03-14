@@ -248,21 +248,19 @@ fun deserialize(dict: dict[any]): Result[JsonObject] =
             | Error e -> e
             | Success { json } -> Success { dict + { e.key : json } }
     let initial_result: Result[dict[Json]] = __initial_result()
-    let reduced: Result[dict[Json]] =
-        dict
-            // dict[any] => dict[Result[Json]]
-            | (k,v) =>
-                match v with
-                | string s -> Success { JsonString { s } }
-                | int i -> Success { JsonNumberLong { i } }
-                | long l -> Success { JsonNumberLong { l } }
-                | double d -> Success { JsonNumberDouble { d } }
-                | float f -> Success { JsonNumberDouble { f } }
-                | dict[any] d -> deserialize(d)
-                | Json j -> Success { j }
-                | _ x -> Error { "Don't know how to deserialize: " + x }
-            // dict[Result[Json]] => Result[dict[Json]]
-            | (k,v) => __Entry { k, v }
-            |> initial_result, (acc, e) => __merge(acc, e)
-    reduced
+    dict
+        // dict[any] => dict[Result[Json]]
+        | (k,v) =>
+            match v with
+            | string s -> Success { JsonString { s } }
+            | int i -> Success { JsonNumberLong { i } }
+            | long l -> Success { JsonNumberLong { l } }
+            | double d -> Success { JsonNumberDouble { d } }
+            | float f -> Success { JsonNumberDouble { f } }
+            | dict[any] d -> deserialize(d)
+            | Json j -> Success { j }
+            | _ x -> Error { "Don't know how to deserialize: " + x }
+        // dict[Result[Json]] => Result[dict[Json]]
+        | (k,v) => __Entry { k, v }
+        |> initial_result, (acc, e) => __merge(acc, e)
         | d => Success { JsonObject { d } }

@@ -94,7 +94,7 @@ indexLiteral: MINUS? INT_LITERAL;
 sliceIndexLiteral: MINUS? INT_LITERAL;
 lambdaExpression: identifier FAT_ARROW expressionNoLetNoPipe
                 | LPAREN identifier (COMMA identifier)+ RPAREN FAT_ARROW expressionNoLetNoPipe;
-reduceExpression: expressionNoLetNoPipe COMMA LPAREN NAME COMMA NAME (COMMA NAME (COMMA NAME)?)? RPAREN FAT_ARROW expression;
+reduceExpression: expressionNoLetNoPipe COMMA LPAREN NAME COMMA NAME (COMMA NAME (COMMA NAME)?)? RPAREN FAT_ARROW expressionNoLetNoPipe;
 expressionNoLetNoPipe: ifExpression
                      | lambdaExpression
                      | functionReference
