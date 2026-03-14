@@ -66,12 +66,14 @@ fun _deserialize_json_number(json: string): Result[_Parse[JsonNumber]] =
                 if parse.value.is_empty
                 then __parse_number(_Parse { '-', parse.parsing_string[1:] })
                 else Error { 'Expected `[0-9]`, but got `-`' }
-            | '1', '2', '3', '4', '5', '6', '7', '8', '9', '0' -> __parse_number(_Parse { parse.value + first_char, parse.parsing_string[1:] })
+            | '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '.' -> __parse_number(_Parse { parse.value + first_char, parse.parsing_string[1:] })
             | _ v -> Success { parse }
 
     __parse_number(_Parse {'', json})
-        | parse => parse.value.to_long()
-            | long => Success { _Parse { JsonNumberLong { long }, parse.parsing_string } }
+        | parse =>
+            if parse.value ? '.'
+            then parse.value.to_double() | double => Success { _Parse { JsonNumberDouble { double }, parse.parsing_string } }
+            else parse.value.to_long()   | long   => Success { _Parse { JsonNumberLong { long }, parse.parsing_string } }
 
 fun _deserializeJsonString(json: string): Result[_Parse[JsonString]] =
     match _parse_string(json) with
