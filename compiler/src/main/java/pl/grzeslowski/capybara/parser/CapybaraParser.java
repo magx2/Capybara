@@ -948,31 +948,36 @@ public class CapybaraParser {
     }
 
     private LambdaExpression lambdaExpression(FunctionalParser.LambdaExpressionContext context) {
+        var argumentNames = context.lambdaArgument().stream()
+                .map(this::lambdaArgument)
+                .toList();
         return new LambdaExpression(
-                context.identifier().stream().map(CapybaraParser::identifier).toList(),
+                argumentNames,
                 expressionNoLetNoPipe(context.expressionNoLetNoPipe()),
                 position(context)
         );
     }
 
     private ReduceExpression reduceExpression(FunctionalParser.ReduceExpressionContext context) {
-        var names = context.NAME();
+        var names = context.lambdaArgument().stream()
+                .map(this::lambdaArgument)
+                .toList();
         if (names.size() < 2 || names.size() > 4) {
             throw new IllegalStateException("Reduce expression has to define two, three or four arguments");
         }
         var accumulatorName = names.size() == 4
-                ? names.get(0).getText() + "::" + names.get(1).getText()
-                : names.get(0).getText();
+                ? names.get(0) + "::" + names.get(1)
+                : names.get(0);
         var keyName = names.size() == 3
-                ? Optional.of(names.get(1).getText())
+                ? Optional.of(names.get(1))
                 : names.size() == 4
-                    ? Optional.of(names.get(2).getText())
+                    ? Optional.of(names.get(2))
                     : Optional.<String>empty();
         var valueName = names.size() == 2
-                ? names.get(1).getText()
+                ? names.get(1)
                 : names.size() == 3
-                    ? names.get(2).getText()
-                    : names.get(3).getText();
+                    ? names.get(2)
+                    : names.get(3);
         return new ReduceExpression(
                 expressionNoLetNoPipe(context.expressionNoLetNoPipe(0)),
                 accumulatorName,
@@ -981,6 +986,16 @@ public class CapybaraParser {
                 expressionNoLetNoPipe(context.expressionNoLetNoPipe(1)),
                 position(context)
         );
+    }
+
+    private String lambdaArgument(FunctionalParser.LambdaArgumentContext context) {
+        if (context.identifier() != null) {
+            return identifier(context.identifier());
+        }
+        if (context.UNDERSCORE() != null) {
+            return context.UNDERSCORE().getText();
+        }
+        throw new IllegalStateException("Unknown lambda argument: " + context.getText());
     }
 
     private FunctionReference functionReference(FunctionalParser.FunctionReferenceContext context) {

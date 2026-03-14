@@ -13,3 +13,7 @@ fun run(fun: (int, int, int, int ) => int) = fun(5,6,7,8)
 fun run_lambda() = run((a, b, c, d) => a + b - c * d)
 
 fun run_lambda2() = run(:plus)
+
+fun invoke_hof_unused(s: string) = hof(_ => s)
+
+fun run_lambda_unused_middle() = run((a, _, c, d) => a + c)

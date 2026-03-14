@@ -1065,7 +1065,7 @@ public class CapybaraExpressionLinker {
 
         var lambdaScope = scope;
         for (int idx = 0; idx < argumentNames.size(); idx++) {
-            lambdaScope = lambdaScope.add(argumentNames.get(idx), argumentTypes.get(idx));
+            lambdaScope = addLambdaBinding(lambdaScope, argumentNames.get(idx), argumentTypes.get(idx));
         }
 
         return linkExpression(lambdaExpression.expression(), lambdaScope)
@@ -1877,7 +1877,7 @@ public class CapybaraExpressionLinker {
                     lambdaExpression.position()
             );
         }
-        var lambdaScope = scope.add(lambdaArgumentName, elementType);
+        var lambdaScope = addLambdaBinding(scope, lambdaArgumentName, elementType);
         return linkExpression(lambdaExpression.expression(), lambdaScope)
                 .map(mapper -> (LinkedExpression) new LinkedPipeExpression(
                         left,
@@ -1921,7 +1921,7 @@ public class CapybaraExpressionLinker {
                     lambdaExpression.position()
             );
         }
-        var lambdaScope = scope.add(lambdaArgumentName, elementType);
+        var lambdaScope = addLambdaBinding(scope, lambdaArgumentName, elementType);
         return linkExpression(lambdaExpression.expression(), lambdaScope)
                 .map(mapper -> (LinkedExpression) new LinkedPipeExpression(
                         left,
@@ -1957,7 +1957,7 @@ public class CapybaraExpressionLinker {
         var argumentNames = lambdaExpression.argumentNames();
         if (argumentNames.size() == 1) {
             var valueName = argumentNames.get(0);
-            var lambdaScope = scope.add(valueName, dictType.valueType());
+            var lambdaScope = addLambdaBinding(scope, valueName, dictType.valueType());
             return linkExpression(lambdaExpression.expression(), lambdaScope)
                     .map(mapper -> (LinkedExpression) new LinkedPipeExpression(
                             left,
@@ -1969,9 +1969,11 @@ public class CapybaraExpressionLinker {
         if (argumentNames.size() == 2) {
             var keyName = argumentNames.get(0);
             var valueName = argumentNames.get(1);
-            var lambdaScope = scope
-                    .add(keyName, STRING)
-                    .add(valueName, dictType.valueType());
+            var lambdaScope = addLambdaBinding(
+                    addLambdaBinding(scope, keyName, STRING),
+                    valueName,
+                    dictType.valueType()
+            );
             return linkExpression(lambdaExpression.expression(), lambdaScope)
                     .map(mapper -> (LinkedExpression) new LinkedPipeExpression(
                             left,
@@ -2013,7 +2015,7 @@ public class CapybaraExpressionLinker {
                     lambdaExpression.position()
             );
         }
-        var lambdaScope = scope.add(lambdaArgumentName, left.type());
+        var lambdaScope = addLambdaBinding(scope, lambdaArgumentName, left.type());
         return linkExpression(lambdaExpression.expression(), lambdaScope)
                 .map(mapper -> (LinkedExpression) new LinkedLetExpression(
                         lambdaArgumentName,
@@ -2086,7 +2088,7 @@ public class CapybaraExpressionLinker {
                         var argumentNames = lambdaExpression.argumentNames();
                         if (argumentNames.size() == 1) {
                             var valueName = argumentNames.get(0);
-                            var lambdaScope = scope.add(valueName, dictType.valueType());
+                            var lambdaScope = addLambdaBinding(scope, valueName, dictType.valueType());
                             return linkExpression(lambdaExpression.expression(), lambdaScope)
                                     .map(mapper -> (LinkedExpression) new LinkedPipeExpression(
                                             left,
@@ -2098,9 +2100,11 @@ public class CapybaraExpressionLinker {
                         if (argumentNames.size() == 2) {
                             var keyName = argumentNames.get(0);
                             var valueName = argumentNames.get(1);
-                            var lambdaScope = scope
-                                    .add(keyName, STRING)
-                                    .add(valueName, dictType.valueType());
+                            var lambdaScope = addLambdaBinding(
+                                    addLambdaBinding(scope, keyName, STRING),
+                                    valueName,
+                                    dictType.valueType()
+                            );
                             return linkExpression(lambdaExpression.expression(), lambdaScope)
                                     .map(mapper -> (LinkedExpression) new LinkedPipeExpression(
                                             left,
@@ -2189,7 +2193,7 @@ public class CapybaraExpressionLinker {
                                 lambdaExpression.position()
                         );
                     }
-                    var lambdaScope = scope.add(lambdaArgumentName, elementType);
+                    var lambdaScope = addLambdaBinding(scope, lambdaArgumentName, elementType);
                     return linkExpression(lambdaExpression.expression(), lambdaScope)
                             .flatMap(mapper -> {
                                 var mappedElementType = collectionElementType(mapper.type());
@@ -2276,7 +2280,7 @@ public class CapybaraExpressionLinker {
                                 lambdaExpression.position()
                         );
                     }
-                    var lambdaScope = scope.add(lambdaArgumentName, elementType);
+                    var lambdaScope = addLambdaBinding(scope, lambdaArgumentName, elementType);
                     return linkExpression(lambdaExpression.expression(), lambdaScope)
                             .flatMap(predicate -> {
                                 if (predicate.type() != BOOL) {
@@ -2348,7 +2352,7 @@ public class CapybaraExpressionLinker {
                                 lambdaExpression.position()
                         );
                     }
-                    var lambdaScope = scope.add(lambdaArgumentName, elementType);
+                    var lambdaScope = addLambdaBinding(scope, lambdaArgumentName, elementType);
                     return linkExpression(lambdaExpression.expression(), lambdaScope)
                             .flatMap(predicate -> {
                                 if (predicate.type() != BOOL) {
@@ -2398,7 +2402,7 @@ public class CapybaraExpressionLinker {
         var argumentNames = lambdaExpression.argumentNames();
         if (argumentNames.size() == 1) {
             var valueName = argumentNames.get(0);
-            var lambdaScope = scope.add(valueName, dictType.valueType());
+            var lambdaScope = addLambdaBinding(scope, valueName, dictType.valueType());
             return linkExpression(lambdaExpression.expression(), lambdaScope)
                     .flatMap(predicate -> {
                         if (predicate.type() != BOOL) {
@@ -2417,9 +2421,11 @@ public class CapybaraExpressionLinker {
         if (argumentNames.size() == 2) {
             var keyName = argumentNames.get(0);
             var valueName = argumentNames.get(1);
-            var lambdaScope = scope
-                    .add(keyName, STRING)
-                    .add(valueName, dictType.valueType());
+            var lambdaScope = addLambdaBinding(
+                    addLambdaBinding(scope, keyName, STRING),
+                    valueName,
+                    dictType.valueType()
+            );
             return linkExpression(lambdaExpression.expression(), lambdaScope)
                     .flatMap(predicate -> {
                         if (predicate.type() != BOOL) {
@@ -2474,7 +2480,7 @@ public class CapybaraExpressionLinker {
         var argumentNames = lambdaExpression.argumentNames();
         if (argumentNames.size() == 1) {
             var valueName = argumentNames.get(0);
-            var lambdaScope = scope.add(valueName, dictType.valueType());
+            var lambdaScope = addLambdaBinding(scope, valueName, dictType.valueType());
             return linkExpression(lambdaExpression.expression(), lambdaScope)
                     .flatMap(predicate -> {
                         if (predicate.type() != BOOL) {
@@ -2494,9 +2500,11 @@ public class CapybaraExpressionLinker {
         if (argumentNames.size() == 2) {
             var keyName = argumentNames.get(0);
             var valueName = argumentNames.get(1);
-            var lambdaScope = scope
-                    .add(keyName, STRING)
-                    .add(valueName, dictType.valueType());
+            var lambdaScope = addLambdaBinding(
+                    addLambdaBinding(scope, keyName, STRING),
+                    valueName,
+                    dictType.valueType()
+            );
             return linkExpression(lambdaExpression.expression(), lambdaScope)
                     .flatMap(predicate -> {
                         if (predicate.type() != BOOL) {
@@ -2557,7 +2565,7 @@ public class CapybaraExpressionLinker {
                     lambdaExpression.position()
             );
         }
-        var lambdaScope = scope.add(lambdaArgumentName, elementType);
+        var lambdaScope = addLambdaBinding(scope, lambdaArgumentName, elementType);
         return linkExpression(lambdaExpression.expression(), lambdaScope)
                 .flatMap(predicate -> {
                     if (predicate.type() != BOOL) {
@@ -2968,6 +2976,10 @@ public class CapybaraExpressionLinker {
             return Optional.empty();
         }
         return Optional.of(lambdaExpression.argumentNames().get(0));
+    }
+
+    private Scope addLambdaBinding(Scope scope, String name, LinkedType type) {
+        return "_".equals(name) ? scope : scope.add(name, type);
     }
 
     private static String encodeDictPipeArguments(String keyName, String valueName) {

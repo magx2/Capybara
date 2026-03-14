@@ -901,13 +901,17 @@ public class JavaExpressionEvaluator {
                             .addValueOverride(keyName, entryVar + ".getKey()")
                             .addValueOverride(pipeReduceExpression.valueName(), entryVar + ".getValue()")
             ).popExpression();
+            var javaAccumulatorName = normalizeJavaLocalIdentifier(pipeReduceExpression.accumulatorName());
+            var javaReducerExpression = pipeReduceExpression.accumulatorName().equals(javaAccumulatorName)
+                    ? reducerExSc.expression()
+                    : replaceIdentifier(reducerExSc.expression(), pipeReduceExpression.accumulatorName(), javaAccumulatorName);
             return reducerExSc.scope().addExpression(
                     sourceExSc.expression()
                     + ".entrySet().stream().reduce("
                     + initialExSc.expression()
-                    + ", (" + pipeReduceExpression.accumulatorName()
+                    + ", (" + javaAccumulatorName
                     + ", " + entryVar
-                    + ") -> (" + reducerExSc.expression() + ")"
+                    + ") -> (" + javaReducerExpression + ")"
                     + ", (left, right) -> left)"
             );
         }
@@ -920,6 +924,15 @@ public class JavaExpressionEvaluator {
                         .addLocalValue(pipeReduceExpression.accumulatorName())
                         .addLocalValue(pipeReduceExpression.valueName())
         ).popExpression();
+        var javaAccumulatorName = normalizeJavaLocalIdentifier(pipeReduceExpression.accumulatorName());
+        var javaValueName = normalizeJavaLocalIdentifier(pipeReduceExpression.valueName());
+        var javaReducerExpression = reducerExSc.expression();
+        if (!pipeReduceExpression.accumulatorName().equals(javaAccumulatorName)) {
+            javaReducerExpression = replaceIdentifier(javaReducerExpression, pipeReduceExpression.accumulatorName(), javaAccumulatorName);
+        }
+        if (!pipeReduceExpression.valueName().equals(javaValueName)) {
+            javaReducerExpression = replaceIdentifier(javaReducerExpression, pipeReduceExpression.valueName(), javaValueName);
+        }
 
         var maybeElementType = streamElementType(pipeReduceExpression.source().type());
         if (maybeElementType.isPresent() && maybeElementType.get().equals(pipeReduceExpression.initialValue().type())) {
@@ -931,9 +944,9 @@ public class JavaExpressionEvaluator {
             return reducerExSc.scope().addExpression(
                     sourceStreamExSc.streamExpression()
                     + ".reduce("
-                    + "(" + pipeReduceExpression.accumulatorName()
-                    + ", " + pipeReduceExpression.valueName()
-                    + ") -> (" + reducerExSc.expression() + "))"
+                    + "(" + javaAccumulatorName
+                    + ", " + javaValueName
+                    + ") -> (" + javaReducerExpression + "))"
                     + maybeMapPrefix
                     + ".orElse("
                     + initialExSc.expression()
@@ -945,9 +958,9 @@ public class JavaExpressionEvaluator {
                 sourceStreamExSc.streamExpression()
                 + ".reduce("
                 + initialExSc.expression()
-                + ", (" + pipeReduceExpression.accumulatorName()
-                + ", " + pipeReduceExpression.valueName()
-                + ") -> (" + reducerExSc.expression() + ")"
+                + ", (" + javaAccumulatorName
+                + ", " + javaValueName
+                + ") -> (" + javaReducerExpression + ")"
                 + ", (left, right) -> left)"
         );
     }
@@ -1095,12 +1108,16 @@ public class JavaExpressionEvaluator {
             Scope evaluatedScope,
             String expression
     ) {
+        var javaArgumentName = normalizeJavaLocalIdentifier(argumentName);
+        var bodyExpression = argumentName.equals(javaArgumentName)
+                ? expression
+                : replaceIdentifier(expression, argumentName, javaArgumentName);
         var addedStatements = addedStatements(baseScope, evaluatedScope);
         if (addedStatements.isEmpty()) {
-            return argumentName + " -> (" + expression + ")";
+            return javaArgumentName + " -> (" + bodyExpression + ")";
         }
         var statements = String.join("; ", addedStatements);
-        return argumentName + " -> { " + statements + "; return (" + expression + "); }";
+        return javaArgumentName + " -> { " + statements + "; return (" + bodyExpression + "); }";
     }
 
     private static String lambdaExpressionNoOuterParens(
@@ -1109,12 +1126,16 @@ public class JavaExpressionEvaluator {
             Scope evaluatedScope,
             String expression
     ) {
+        var javaArgumentName = normalizeJavaLocalIdentifier(argumentName);
+        var bodyExpression = argumentName.equals(javaArgumentName)
+                ? expression
+                : replaceIdentifier(expression, argumentName, javaArgumentName);
         var addedStatements = addedStatements(baseScope, evaluatedScope);
         if (addedStatements.isEmpty()) {
-            return argumentName + " -> " + expression;
+            return javaArgumentName + " -> " + bodyExpression;
         }
         var statements = String.join("; ", addedStatements);
-        return argumentName + " -> { " + statements + "; return " + expression + "; }";
+        return javaArgumentName + " -> { " + statements + "; return " + bodyExpression + "; }";
     }
 
     private static java.util.List<String> addedStatements(Scope baseScope, Scope evaluatedScope) {
@@ -2082,10 +2103,25 @@ public class JavaExpressionEvaluator {
     }
 
     private static String normalizeJavaLocalIdentifier(String identifier) {
-        if (JAVA_KEYWORDS.contains(identifier)) {
-            return identifier + "_";
+        if ("_".equals(identifier)) {
+            return "__unused";
         }
-        return identifier;
+        if (identifier.isEmpty()) {
+            return "__value";
+        }
+        var normalized = new StringBuilder(identifier.length());
+        for (int i = 0; i < identifier.length(); i++) {
+            var ch = identifier.charAt(i);
+            normalized.append(Character.isJavaIdentifierPart(ch) ? ch : '_');
+        }
+        var candidate = normalized.toString();
+        if (!Character.isJavaIdentifierStart(candidate.charAt(0))) {
+            candidate = "_" + candidate;
+        }
+        if (JAVA_KEYWORDS.contains(candidate)) {
+            return candidate + "_";
+        }
+        return candidate;
     }
 
     private static String normalizeFunctionCallTarget(String target) {

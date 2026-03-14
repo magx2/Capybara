@@ -201,6 +201,21 @@ class PipeTest {
     }
 
     @Test
+    void dictUnusedKeyToSum() {
+        assertThat(Pipe.dictUnusedKeyToSum(Map.of("a", 1, "b", 2, "c", 3))).isEqualTo(6);
+    }
+
+    @Test
+    void dictUnusedReduceKey() {
+        assertThat(Pipe.dictUnusedReduceKey(Map.of("a", 1, "b", 2, "c", 3))).isEqualTo(6);
+    }
+
+    @Test
+    void listUnusedLambdaArg() {
+        assertThat(Pipe.listUnusedLambdaArg(List.of(7, 8, 9))).isEqualTo(List.of(1, 1, 1));
+    }
+
+    @Test
     void dataPipe() {
         assertThat(Pipe.dataPipe(1, 2, 3)).isEmpty();
         assertThat(Pipe.dataPipe(-1, 2, 3)).contains(new Pipe.Value(4));

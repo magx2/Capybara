@@ -80,6 +80,18 @@ fun reduce_to_data(l: dict[string]): set[Entry] = l
 
 fun dict_reduce_string2(d: dict[string]): string = d |> "start: ", (acc, v) => acc + " " + v
 
+fun dict_unused_key_to_sum(d: dict[int]): int =
+    d
+        | (_, v) => v
+        |> 0, (acc, v) => acc + v
+
+fun dict_unused_reduce_key(d: dict[int]): int =
+    d
+        |> (_, v) => v
+        |> 0, (acc, v) => acc + v
+
+fun list_unused_lambda_arg(l: list[int]): list[int] = l | _ => 1
+
 data Value { x: int }
 
 fun add(v: Value, x: int): Value = Value { x: v.x + x }

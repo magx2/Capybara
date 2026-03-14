@@ -73,6 +73,10 @@
       <key>name</key><string>meta.match.constructor-pattern.capybara</string>
       <key>match</key><string>(\|)\s*(_*[A-Z][A-Za-z0-9_]*)\s*(\{)\s*([A-Za-z_][A-Za-z0-9_]*)</string>
     </dict>
+    <dict>
+      <key>name</key><string>variable.parameter.unused.capybara</string>
+      <key>match</key><string>(?&lt;=\(|,)\s*(_)(?=\s*(?:,|\)\s*=&gt;))</string>
+    </dict>
     <dict><key>name</key><string>keyword.operator.function-type.capybara</string><key>match</key><string>=&gt;</string></dict>
     <dict><key>name</key><string>keyword.operator.pipe.capybara</string><key>match</key><string>\|all\?|\|any\?|\|>|\|\*|\|-|\||\.and\.|\.nand\.|\.or\.|\.xor\.|\.not\.|==|!=|&lt;=|&gt;=|=&gt;|\+|\-|\*|/|%|\^|&lt;|&gt;|=|&amp;|\?|:|,</string></dict>
     <dict>

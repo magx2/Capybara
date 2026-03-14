@@ -329,6 +329,10 @@
               "name": "variable.parameter.capybara"
             }
           }
+        },
+        {
+          "name": "variable.parameter.unused.capybara",
+          "match": "(?<=\\(|,)\\s*(_)(?=\\s*(?:,|\\)\\s*=>))"
         }
       ]
     },

@@ -36,4 +36,16 @@ class HigherOrderFunctionsTest {
         assertThat(HigherOrderFunctions.runLambda2())
                 .isEqualTo(-45);
     }
+
+    @Test
+    void invokesHigherOrderFunctionWithUnusedSingleArgument() {
+        assertThat(HigherOrderFunctions.invokeHofUnused("Hello"))
+                .isEqualTo("Hello");
+    }
+
+    @Test
+    void invokesHigherOrderFunctionWithUnusedMultiArguments() {
+        assertThat(HigherOrderFunctions.runLambdaUnusedMiddle())
+                .isEqualTo(12);
+    }
 }

@@ -96,9 +96,10 @@ expressionNoLet: ifExpression
                | matchExpression;
 indexLiteral: MINUS? INT_LITERAL;
 sliceIndexLiteral: MINUS? INT_LITERAL;
-lambdaExpression: identifier FAT_ARROW expressionNoLetNoPipe
-                | LPAREN identifier (COMMA identifier)+ RPAREN FAT_ARROW expressionNoLetNoPipe;
-reduceExpression: expressionNoLetNoPipe COMMA LPAREN NAME COMMA NAME (COMMA NAME (COMMA NAME)?)? RPAREN FAT_ARROW expressionNoLetNoPipe;
+lambdaExpression: lambdaArgument FAT_ARROW expressionNoLetNoPipe
+                | LPAREN lambdaArgument (COMMA lambdaArgument)+ RPAREN FAT_ARROW expressionNoLetNoPipe;
+lambdaArgument: identifier | UNDERSCORE;
+reduceExpression: expressionNoLetNoPipe COMMA LPAREN lambdaArgument COMMA lambdaArgument (COMMA lambdaArgument (COMMA lambdaArgument)?)? RPAREN FAT_ARROW expressionNoLetNoPipe;
 expressionNoLetNoPipe: ifExpression
                      | lambdaExpression
                      | functionReference
