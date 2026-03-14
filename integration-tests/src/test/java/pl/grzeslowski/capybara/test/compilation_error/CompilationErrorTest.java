@@ -345,6 +345,32 @@ public class CompilationErrorTest {
                                 """
                 ),
                 Arguments.of(
+                        "function_json_null_wrong_generic_return_type",
+                        """
+                                type Result[T] = Success[T] | Error
+                                data Success[T] { value: T }
+                                data Error { message: string }
+                                data _Parse[T] { value: T, parsing_string: string }
+                                data JsonBool { value: bool }
+                                single JsonNull
+                                  fun _deserialize_json_null(json: string): Result[_Parse[JsonBool]] =
+                                    let parsed: _Parse[JsonNull] = _Parse { JsonNull {}, json[4:] }
+                                    Success { parsed }
+                                """,
+                        new Position(9, 4),
+                        "error: mismatched types\n"
+                        + " --> /foo/boo/function_json_null_wrong_generic_return_type.cfun:%d:%d\n"
+                        + "  fun _deserialize_json_null(json: string): Result[_Parse[JsonBool]] =\n"
+                        + "    let parsed: _Parse[JsonNull] = _Parse {\n"
+                        + "        JsonNull {  },\n"
+                        + "        json[4:]\n"
+                        + "    }\n"
+                        + "    Success {\n"
+                        + "        parsed\n"
+                        + "    }\n"
+                        + "    ^ expected `Result[_Parse[JsonBool]]`, found `Success[_Parse[JsonNull]]`\n"
+                ),
+                Arguments.of(
                         "json_assertion_no_viable_alternative",
                         """
                                 data JsonNumberLong { value: long }

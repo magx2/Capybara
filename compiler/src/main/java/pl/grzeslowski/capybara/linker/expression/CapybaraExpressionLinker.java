@@ -1169,12 +1169,14 @@ public class CapybaraExpressionLinker {
         }
         if (expected instanceof LinkedDataParentType expectedParent
             && argument.type() instanceof LinkedDataParentType argumentParent
-            && sameRawTypeName(expectedParent.name(), argumentParent.name())) {
+            && sameRawTypeName(expectedParent.name(), argumentParent.name())
+            && areTypeParameterDescriptorsCompatible(argumentParent.typeParameters(), expectedParent.typeParameters())) {
             return new CoercedArgument(argument, 1);
         }
         if (expected instanceof LinkedDataType expectedData
             && argument.type() instanceof LinkedDataType argumentData
-            && sameRawTypeName(expectedData.name(), argumentData.name())) {
+            && sameRawTypeName(expectedData.name(), argumentData.name())
+            && areTypeParameterDescriptorsCompatible(argumentData.typeParameters(), expectedData.typeParameters())) {
             return new CoercedArgument(argument, 1);
         }
         if (argument.type() == ANY) {
@@ -1193,7 +1195,9 @@ public class CapybaraExpressionLinker {
         }
         if (expected instanceof LinkedDataParentType expectedParentType
             && argument.type() instanceof LinkedDataType argumentDataType
-            && isSubtypeOfParent(argumentDataType, expectedParentType)) {
+            && isSubtypeOfParent(argumentDataType, expectedParentType)
+            && (argumentDataType.typeParameters().isEmpty()
+                || areTypeParameterDescriptorsCompatible(argumentDataType.typeParameters(), expectedParentType.typeParameters()))) {
             return new CoercedArgument(argument, 1);
         }
         return null;
@@ -1241,7 +1245,83 @@ public class CapybaraExpressionLinker {
         if (expected instanceof LinkedFunctionType expectedFunction && actual instanceof LinkedFunctionType actualFunction) {
             return areFunctionTypesCompatible(actualFunction, expectedFunction);
         }
+        if (expected instanceof GenericDataType expectedData && actual instanceof GenericDataType actualData) {
+            if (!sameRawTypeName(expectedData.name(), actualData.name())) {
+                return false;
+            }
+            var expectedTypeParameters = switch (expectedData) {
+                case LinkedDataType linkedDataType -> linkedDataType.typeParameters();
+                case LinkedDataParentType linkedDataParentType -> linkedDataParentType.typeParameters();
+            };
+            var actualTypeParameters = switch (actualData) {
+                case LinkedDataType linkedDataType -> linkedDataType.typeParameters();
+                case LinkedDataParentType linkedDataParentType -> linkedDataParentType.typeParameters();
+            };
+            return areTypeParameterDescriptorsCompatible(actualTypeParameters, expectedTypeParameters);
+        }
         return false;
+    }
+
+    private boolean areTypeParameterDescriptorsCompatible(List<String> actualTypeParameters, List<String> expectedTypeParameters) {
+        if (expectedTypeParameters.isEmpty()) {
+            return true;
+        }
+        if (actualTypeParameters.size() != expectedTypeParameters.size()) {
+            return false;
+        }
+        for (int i = 0; i < expectedTypeParameters.size(); i++) {
+            if (!isTypeDescriptorCompatible(actualTypeParameters.get(i), expectedTypeParameters.get(i))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private boolean isTypeDescriptorCompatible(String actualDescriptor, String expectedDescriptor) {
+        var actual = normalizeTypeDescriptor(actualDescriptor);
+        var expected = normalizeTypeDescriptor(expectedDescriptor);
+        if (actual.equals(expected)) {
+            return true;
+        }
+        if (expected.matches("[A-Z]") || actual.matches("[A-Z]")) {
+            return true;
+        }
+        var expectedPrimitive = PrimitiveType.find(expected).map(this::toPrimitiveLinkedType);
+        var actualPrimitive = PrimitiveType.find(actual).map(this::toPrimitiveLinkedType);
+        if (expectedPrimitive.isPresent() && actualPrimitive.isPresent()) {
+            if (expectedPrimitive.get() == actualPrimitive.get()) {
+                return true;
+            }
+            if (isNumericPrimitive(expectedPrimitive.get()) && isNumericPrimitive(actualPrimitive.get())) {
+                return isAssignableNumericPrimitive(expectedPrimitive.get(), actualPrimitive.get());
+            }
+            return false;
+        }
+        var parsedActual = parseLinkedTypeDescriptor(actual);
+        var parsedExpected = parseLinkedTypeDescriptor(expected);
+        if (parsedActual.isPresent() && parsedExpected.isPresent()) {
+            return isTypeCompatible(parsedActual.get(), parsedExpected.get());
+        }
+        return sameRawTypeName(actual, expected);
+    }
+
+    private String normalizeTypeDescriptor(String descriptor) {
+        return descriptor == null ? "" : descriptor.replaceAll("\\s+", "").replace("->", "=>");
+    }
+
+    private PrimitiveLinkedType toPrimitiveLinkedType(PrimitiveType primitiveType) {
+        return switch (primitiveType) {
+            case BYTE -> BYTE;
+            case INT -> INT;
+            case LONG -> LONG;
+            case DOUBLE -> DOUBLE;
+            case BOOL -> BOOL;
+            case STRING -> STRING;
+            case FLOAT -> FLOAT;
+            case NOTHING -> NOTHING;
+            case ANY -> ANY;
+            case DATA -> DATA;
+        };
     }
 
     private boolean isSubtype(LinkedDataType candidate, String expectedTypeName, java.util.Set<String> visited) {
@@ -3253,8 +3333,52 @@ public class CapybaraExpressionLinker {
                             .map(elementType -> substituteTypeParameters(elementType, substitutions))
                             .toList()
             );
+            case LinkedDataType linkedDataType -> new LinkedDataType(
+                    linkedDataType.name(),
+                    linkedDataType.fields().stream()
+                            .map(field -> new LinkedDataType.LinkedField(
+                                    field.name(),
+                                    substituteTypeParameters(field.type(), substitutions)
+                            ))
+                            .toList(),
+                    linkedDataType.typeParameters().stream()
+                            .map(typeDescriptor -> substituteTypeDescriptor(typeDescriptor, substitutions))
+                            .toList(),
+                    linkedDataType.extendedTypes(),
+                    linkedDataType.singleton()
+            );
+            case LinkedDataParentType linkedDataParentType -> new LinkedDataParentType(
+                    linkedDataParentType.name(),
+                    linkedDataParentType.fields().stream()
+                            .map(field -> new LinkedDataType.LinkedField(
+                                    field.name(),
+                                    substituteTypeParameters(field.type(), substitutions)
+                            ))
+                            .toList(),
+                    linkedDataParentType.subTypes().stream()
+                            .map(subType -> (LinkedDataType) substituteTypeParameters(subType, substitutions))
+                            .toList(),
+                    linkedDataParentType.typeParameters().stream()
+                            .map(typeDescriptor -> substituteTypeDescriptor(typeDescriptor, substitutions))
+                            .toList()
+            );
             default -> type;
         };
+    }
+
+    private String substituteTypeDescriptor(String descriptor, Map<String, LinkedType> substitutions) {
+        if (descriptor == null || descriptor.isBlank()) {
+            return descriptor;
+        }
+        var direct = substitutions.get(descriptor.trim());
+        if (direct != null) {
+            return linkedTypeDescriptor(direct);
+        }
+        var parsed = parseLinkedTypeDescriptor(descriptor.trim());
+        if (parsed.isPresent()) {
+            return linkedTypeDescriptor(substituteTypeParameters(parsed.get(), substitutions));
+        }
+        return descriptor;
     }
 
     private Optional<LinkedType> parseLinkedTypeDescriptor(String descriptor) {
@@ -3521,12 +3645,85 @@ public class CapybaraExpressionLinker {
                                                     type,
                                                     ((ValueOrError.Value<List<LinkedNewData.FieldAssignment>>) validatedAssignments).value(),
                                                     newData
-                                            )
-                                                    .map(coercedAssignments -> (LinkedExpression) new LinkedNewData(
-                                                            type,
-                                                            List.copyOf(coercedAssignments)
-                                                    ));
+                                            ).flatMap(coercedAssignments -> {
+                                                var resolvedType = inferDataTypeFromAssignments(type, coercedAssignments);
+                                                return coerceAssignmentsForType(
+                                                        resolvedType,
+                                                        List.copyOf(coercedAssignments),
+                                                        newData
+                                                ).map(resolvedAssignments -> (LinkedExpression) new LinkedNewData(
+                                                        resolvedType,
+                                                        List.copyOf(resolvedAssignments)
+                                                ));
+                                            });
                                         }))));
+    }
+
+    private LinkedType inferDataTypeFromAssignments(LinkedType type, List<LinkedNewData.FieldAssignment> assignments) {
+        if (!(type instanceof GenericDataType genericDataType) || !hasGenericTypeParameters(type)) {
+            return type;
+        }
+        var fieldsByName = genericDataType.fields().stream()
+                .collect(java.util.stream.Collectors.toMap(
+                        LinkedDataType.LinkedField::name,
+                        LinkedDataType.LinkedField::type,
+                        (a, b) -> a
+                ));
+        var substitutions = new java.util.LinkedHashMap<String, LinkedType>();
+        for (var assignment : assignments) {
+            var expectedType = fieldsByName.get(assignment.name());
+            if (expectedType == null) {
+                continue;
+            }
+            collectTypeSubstitutions(expectedType, assignment.value().type(), substitutions);
+        }
+        substitutions.entrySet().removeIf(entry -> !isConcreteResolvedType(entry.getValue()));
+        if (substitutions.isEmpty()) {
+            return type;
+        }
+        return substituteTypeParameters(type, substitutions);
+    }
+
+    private boolean hasGenericTypeParameters(LinkedType type) {
+        if (type instanceof LinkedDataType linkedDataType) {
+            return !linkedDataType.typeParameters().isEmpty();
+        }
+        if (type instanceof LinkedDataParentType linkedDataParentType) {
+            return !linkedDataParentType.typeParameters().isEmpty();
+        }
+        return false;
+    }
+
+    private boolean isConcreteResolvedType(LinkedType type) {
+        return switch (type) {
+            case LinkedGenericTypeParameter ignored -> false;
+            case PrimitiveLinkedType primitive -> primitive != ANY;
+            case LinkedList linkedList -> isConcreteResolvedType(linkedList.elementType());
+            case LinkedSet linkedSet -> isConcreteResolvedType(linkedSet.elementType());
+            case LinkedDict linkedDict -> isConcreteResolvedType(linkedDict.valueType());
+            case LinkedTupleType linkedTupleType -> linkedTupleType.elementTypes().stream().allMatch(this::isConcreteResolvedType);
+            case LinkedFunctionType linkedFunctionType ->
+                    isConcreteResolvedType(linkedFunctionType.argumentType())
+                    && isConcreteResolvedType(linkedFunctionType.returnType());
+            case LinkedDataType linkedDataType -> {
+                if (linkedDataType.singleton() && linkedDataType.typeParameters().isEmpty()) {
+                    yield true;
+                }
+                if (linkedDataType.typeParameters().isEmpty()) {
+                    yield false;
+                }
+                yield linkedDataType.typeParameters().stream().allMatch(this::isSingletonDataDescriptor);
+            }
+            case LinkedDataParentType ignored -> false;
+        };
+    }
+
+    private boolean isSingletonDataDescriptor(String descriptor) {
+        return parseLinkedTypeDescriptor(descriptor)
+                .filter(LinkedDataType.class::isInstance)
+                .map(LinkedDataType.class::cast)
+                .filter(linkedDataType -> linkedDataType.singleton() && linkedDataType.typeParameters().isEmpty())
+                .isPresent();
     }
 
     private ValueOrError<List<LinkedNewData.FieldAssignment>> linkSpreadAssignments(List<Expression> spreads, Scope scope) {

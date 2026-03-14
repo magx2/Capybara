@@ -1071,6 +1071,7 @@ public class CapybaraLinker {
                         .map(this::formatExpressionPreview)
                         .collect(java.util.stream.Collectors.joining(", ")) + ")";
             case NewData newData -> formatNewDataPreview(newData);
+            case SliceExpression sliceExpression -> formatSliceExpressionPreview(sliceExpression);
             case InfixExpression infixExpression -> formatExpressionPreview(infixExpression.left())
                                                    + previewOperator(infixExpression.operator().symbol())
                                                    + formatExpressionPreview(infixExpression.right());
@@ -1118,6 +1119,12 @@ public class CapybaraLinker {
         all.addAll(spreads);
         var body = all.stream().collect(java.util.stream.Collectors.joining(", "));
         return formatParserType(newData.type()) + " { " + body + " }";
+    }
+
+    private String formatSliceExpressionPreview(SliceExpression sliceExpression) {
+        var start = sliceExpression.start().map(this::formatExpressionPreview).orElse("");
+        var end = sliceExpression.end().map(this::formatExpressionPreview).orElse("");
+        return formatExpressionPreview(sliceExpression.source()) + "[" + start + ":" + end + "]";
     }
 
     private String normalizeReportedTypeName(String typeName) {
@@ -1172,8 +1179,12 @@ public class CapybaraLinker {
                     .map(this::formatLinkedType)
                     .collect(java.util.stream.Collectors.joining(", ")) + "]";
             case LinkedFunctionType linkedFunctionType -> formatLinkedType(linkedFunctionType.argumentType()) + "=>" + formatLinkedType(linkedFunctionType.returnType());
-            case LinkedDataType linkedDataType -> linkedDataType.name();
-            case LinkedDataParentType linkedDataParentType -> linkedDataParentType.name();
+            case LinkedDataType linkedDataType -> linkedDataType.typeParameters().isEmpty()
+                    ? linkedDataType.name()
+                    : linkedDataType.name() + "[" + String.join(", ", linkedDataType.typeParameters()) + "]";
+            case LinkedDataParentType linkedDataParentType -> linkedDataParentType.typeParameters().isEmpty()
+                    ? linkedDataParentType.name()
+                    : linkedDataParentType.name() + "[" + String.join(", ", linkedDataParentType.typeParameters()) + "]";
             case LinkedGenericTypeParameter linkedGenericTypeParameter -> linkedGenericTypeParameter.name();
         };
     }
@@ -1225,22 +1236,30 @@ public class CapybaraLinker {
         }
         if (expected instanceof LinkedDataParentType expectedParent) {
             if (actual instanceof LinkedDataParentType actualParent) {
-                return sameTypeName(expectedParent.name(), actualParent.name());
+                return sameTypeName(expectedParent.name(), actualParent.name())
+                       && areAssignableDataTypeParameters(expectedParent.typeParameters(), actualParent.typeParameters());
             }
             if (actual instanceof LinkedDataType actualData) {
                 if (sameTypeName(expectedParent.name(), actualData.name())) {
-                    return true;
+                    if (actualData.typeParameters().isEmpty()) {
+                        return true;
+                    }
+                    return areAssignableDataTypeParameters(expectedParent.typeParameters(), actualData.typeParameters());
                 }
                 return expectedParent.subTypes().stream()
-                        .anyMatch(subType -> sameTypeName(subType.name(), actualData.name()));
+                        .anyMatch(subType -> sameTypeName(subType.name(), actualData.name()))
+                       && (actualData.typeParameters().isEmpty()
+                           || areAssignableDataTypeParameters(expectedParent.typeParameters(), actualData.typeParameters()));
             }
         }
         if (expected instanceof LinkedDataType expectedData) {
             if (actual instanceof LinkedDataType actualData) {
-                return sameTypeName(expectedData.name(), actualData.name());
+                return sameTypeName(expectedData.name(), actualData.name())
+                       && areAssignableDataTypeParameters(expectedData.typeParameters(), actualData.typeParameters());
             }
             if (actual instanceof LinkedDataParentType actualParent) {
-                return sameTypeName(expectedData.name(), actualParent.name());
+                return sameTypeName(expectedData.name(), actualParent.name())
+                       && areAssignableDataTypeParameters(expectedData.typeParameters(), actualParent.typeParameters());
             }
         }
         if (expected instanceof LinkedGenericTypeParameter) {
@@ -1515,6 +1534,111 @@ public class CapybaraLinker {
                                                 returnType
                                         )));})
                 .collect(new ValueOrErrorCollectionCollector<>());
+    }
+
+    private boolean areAssignableDataTypeParameters(List<String> expectedParameters, List<String> actualParameters) {
+        if (expectedParameters.isEmpty()) {
+            return true;
+        }
+        if (expectedParameters.size() != actualParameters.size()) {
+            return false;
+        }
+        for (int i = 0; i < expectedParameters.size(); i++) {
+            if (!isAssignableTypeDescriptor(expectedParameters.get(i), actualParameters.get(i))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private boolean isAssignableTypeDescriptor(String expectedDescriptor, String actualDescriptor) {
+        var expected = normalizeDescriptor(expectedDescriptor);
+        var actual = normalizeDescriptor(actualDescriptor);
+        if (expected.equals(actual)) {
+            return true;
+        }
+        if (expected.matches("[A-Z]")) {
+            return true;
+        }
+        if (actual.matches("[A-Z]")) {
+            return true;
+        }
+        if ("any".equals(expected) || "nothing".equals(actual)) {
+            return true;
+        }
+        var expectedPrimitive = PrimitiveType.find(expected).map(this::toPrimitiveLinkedType);
+        var actualPrimitive = PrimitiveType.find(actual).map(this::toPrimitiveLinkedType);
+        if (expectedPrimitive.isPresent() && actualPrimitive.isPresent()) {
+            return isAssignablePrimitiveReturnType(expectedPrimitive.get(), actualPrimitive.get());
+        }
+        if (expected.startsWith("list[") && expected.endsWith("]")
+            && actual.startsWith("list[") && actual.endsWith("]")) {
+            return isAssignableTypeDescriptor(
+                    expected.substring(5, expected.length() - 1),
+                    actual.substring(5, actual.length() - 1)
+            );
+        }
+        if (expected.startsWith("set[") && expected.endsWith("]")
+            && actual.startsWith("set[") && actual.endsWith("]")) {
+            return isAssignableTypeDescriptor(
+                    expected.substring(4, expected.length() - 1),
+                    actual.substring(4, actual.length() - 1)
+            );
+        }
+        if (expected.startsWith("dict[") && expected.endsWith("]")
+            && actual.startsWith("dict[") && actual.endsWith("]")) {
+            return isAssignableTypeDescriptor(
+                    expected.substring(5, expected.length() - 1),
+                    actual.substring(5, actual.length() - 1)
+            );
+        }
+        var expectedArrow = indexOfTopLevelArrow(expected, "=>");
+        var actualArrow = indexOfTopLevelArrow(actual, "=>");
+        if (expectedArrow > 0 && actualArrow > 0) {
+            return isAssignableTypeDescriptor(
+                    stripOptionalParentheses(expected.substring(0, expectedArrow)),
+                    stripOptionalParentheses(actual.substring(0, actualArrow))
+            ) && isAssignableTypeDescriptor(
+                    expected.substring(expectedArrow + 2).trim(),
+                    actual.substring(actualArrow + 2).trim()
+            );
+        }
+        var expectedParsed = parseGenericTypeName(expected);
+        var actualParsed = parseGenericTypeName(actual);
+        if (!sameTypeName(expectedParsed.baseName(), actualParsed.baseName())) {
+            return false;
+        }
+        if (expectedParsed.typeArguments().isEmpty()) {
+            return true;
+        }
+        if (expectedParsed.typeArguments().size() != actualParsed.typeArguments().size()) {
+            return false;
+        }
+        for (int i = 0; i < expectedParsed.typeArguments().size(); i++) {
+            if (!isAssignableTypeDescriptor(expectedParsed.typeArguments().get(i), actualParsed.typeArguments().get(i))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private String normalizeDescriptor(String descriptor) {
+        return descriptor.replaceAll("\\s+", "").replace("->", "=>");
+    }
+
+    private PrimitiveLinkedType toPrimitiveLinkedType(PrimitiveType primitiveType) {
+        return switch (primitiveType) {
+            case BYTE -> PrimitiveLinkedType.BYTE;
+            case INT -> PrimitiveLinkedType.INT;
+            case LONG -> PrimitiveLinkedType.LONG;
+            case DOUBLE -> PrimitiveLinkedType.DOUBLE;
+            case BOOL -> PrimitiveLinkedType.BOOL;
+            case STRING -> PrimitiveLinkedType.STRING;
+            case FLOAT -> PrimitiveLinkedType.FLOAT;
+            case NOTHING -> PrimitiveLinkedType.NOTHING;
+            case ANY -> PrimitiveLinkedType.ANY;
+            case DATA -> PrimitiveLinkedType.DATA;
+        };
     }
 
     private ValueOrError<LinkedType> linkSignatureReturnType(
