@@ -349,8 +349,13 @@ public class CapybaraExpressionLinker {
         }
 
         ResolvedFunctionCall best = null;
+        ValueOrError.Error.SingleError deepestError = null;
         for (var candidate : candidates) {
             var maybeResolved = linkArgumentsForExpectedTypes(functionCall.arguments(), scope, candidate.parameterTypes());
+            if (maybeResolved instanceof ValueOrError.Error<CoercedArguments> error) {
+                deepestError = preferDeeperError(deepestError, firstError(error));
+                continue;
+            }
             if (!(maybeResolved instanceof ValueOrError.Value<CoercedArguments> resolvedValue)) {
                 continue;
             }
@@ -360,6 +365,9 @@ public class CapybaraExpressionLinker {
             }
         }
         if (best == null) {
+            if (deepestError != null) {
+                return new ValueOrError.Error<>(deepestError);
+            }
             var actualTypes = new java.util.ArrayList<String>();
             for (var argument : functionCall.arguments()) {
                 var linked = linkExpression(argument, scope);
@@ -435,8 +443,13 @@ public class CapybaraExpressionLinker {
         }
 
         ResolvedFunctionCall best = null;
+        ValueOrError.Error.SingleError deepestError = null;
         for (var candidate : candidates) {
             var maybeResolved = linkArgumentsForExpectedTypes(functionCall.arguments(), scope, candidate.parameterTypes());
+            if (maybeResolved instanceof ValueOrError.Error<CoercedArguments> error) {
+                deepestError = preferDeeperError(deepestError, firstError(error));
+                continue;
+            }
             if (!(maybeResolved instanceof ValueOrError.Value<CoercedArguments> resolvedValue)) {
                 continue;
             }
@@ -446,6 +459,9 @@ public class CapybaraExpressionLinker {
             }
         }
         if (best == null) {
+            if (deepestError != null) {
+                return new ValueOrError.Error<>(deepestError);
+            }
             var actualTypes = new java.util.ArrayList<String>();
             for (var argument : functionCall.arguments()) {
                 var linked = linkExpression(argument, scope);
@@ -483,8 +499,13 @@ public class CapybaraExpressionLinker {
         }
 
         ResolvedFunctionCall best = null;
+        ValueOrError.Error.SingleError deepestError = null;
         for (var candidate : candidates) {
             var maybeResolved = linkArgumentsForExpectedTypes(functionCall.arguments(), scope, candidate.parameterTypes());
+            if (maybeResolved instanceof ValueOrError.Error<CoercedArguments> error) {
+                deepestError = preferDeeperError(deepestError, firstError(error));
+                continue;
+            }
             if (!(maybeResolved instanceof ValueOrError.Value<CoercedArguments> resolvedValue)) {
                 continue;
             }
@@ -494,6 +515,13 @@ public class CapybaraExpressionLinker {
             }
         }
         if (best == null) {
+            var builtin = resolveBuiltinMethodInvoke(functionCall, scope, methodName);
+            if (builtin.isPresent()) {
+                return builtin.get();
+            }
+            if (deepestError != null) {
+                return new ValueOrError.Error<>(deepestError);
+            }
             var actualTypes = new java.util.ArrayList<String>();
             for (var argument : functionCall.arguments()) {
                 var linked = linkExpression(argument, scope);
@@ -501,11 +529,10 @@ public class CapybaraExpressionLinker {
                     actualTypes.add(value.value().type().name());
                 }
             }
-            return resolveBuiltinMethodInvoke(functionCall, scope, methodName)
-                    .orElseGet(() -> withPosition(
-                            ValueOrError.error("No matching method `" + methodName + "` for argument types " + actualTypes),
-                            functionCall.position()
-                    ));
+            return withPosition(
+                    ValueOrError.error("No matching method `" + methodName + "` for argument types " + actualTypes),
+                    functionCall.position()
+            );
         }
         return ValueOrError.success(new LinkedFunctionCall(
                 best.signature().name(),
@@ -819,8 +846,8 @@ public class CapybaraExpressionLinker {
             var argument = arguments.get(i);
             var expected = expectedTypes.get(i);
             var maybeCoerced = linkArgumentForExpectedType(argument, scope, expected);
-            if (maybeCoerced instanceof ValueOrError.Error<CoercedArgument>) {
-                return ValueOrError.error(List.of());
+            if (maybeCoerced instanceof ValueOrError.Error<CoercedArgument> error) {
+                return new ValueOrError.Error<>(error.errors());
             }
             var value = ((ValueOrError.Value<CoercedArgument>) maybeCoerced).value();
             coerced.add(value.expression());
@@ -1588,6 +1615,7 @@ public class CapybaraExpressionLinker {
         }
 
         ResolvedFunctionCall best = null;
+        ValueOrError.Error.SingleError deepestError = null;
         for (var candidate : candidates) {
             var receiverParameterType = candidate.parameterTypes().get(0);
             var maybeReceiver = coerceArgument(left, receiverParameterType);
@@ -1598,7 +1626,8 @@ public class CapybaraExpressionLinker {
             collectTypeSubstitutions(receiverParameterType, maybeReceiver.expression().type(), substitutions);
             var expectedRightType = substituteTypeParameters(candidate.parameterTypes().get(1), substitutions);
             var maybeArgument = linkArgumentForExpectedType(right, scope, expectedRightType);
-            if (maybeArgument instanceof ValueOrError.Error<CoercedArgument>) {
+            if (maybeArgument instanceof ValueOrError.Error<CoercedArgument> error) {
+                deepestError = preferDeeperError(deepestError, firstError(error));
                 continue;
             }
             var coercedArgument = ((ValueOrError.Value<CoercedArgument>) maybeArgument).value();
@@ -1609,6 +1638,9 @@ public class CapybaraExpressionLinker {
             }
         }
         if (best == null) {
+            if (deepestError != null) {
+                return new ValueOrError.Error<>(deepestError);
+            }
             return withPosition(
                     ValueOrError.error(
                             "No matching method `" + operatorSymbol + "` for argument types ["
@@ -1622,6 +1654,32 @@ public class CapybaraExpressionLinker {
                 best.arguments(),
                 resolveReturnType(best.signature(), best.arguments())
         ));
+    }
+
+    private static ValueOrError.Error.SingleError firstError(ValueOrError.Error<?> error) {
+        if (error.errors().isEmpty()) {
+            return null;
+        }
+        return error.errors().first();
+    }
+
+    private static ValueOrError.Error.SingleError preferDeeperError(
+            ValueOrError.Error.SingleError current,
+            ValueOrError.Error.SingleError candidate
+    ) {
+        if (candidate == null) {
+            return current;
+        }
+        if (current == null) {
+            return candidate;
+        }
+        if (candidate.line() != current.line()) {
+            return candidate.line() > current.line() ? candidate : current;
+        }
+        if (candidate.column() != current.column()) {
+            return candidate.column() > current.column() ? candidate : current;
+        }
+        return candidate.message().length() >= current.message().length() ? candidate : current;
     }
 
     private Set<String> methodOwnerCandidates(LinkedType receiverType) {

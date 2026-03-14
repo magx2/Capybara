@@ -626,7 +626,10 @@ public class CapybaraLinker {
         var line = Math.max(error.line(), 1);
         var column = Math.max(error.column(), 1);
         var file = normalizeFile(moduleSourceFile);
-        var functionPreview = formatFunctionPreviewUpToLine(function, line);
+        var functionLine = function.position().map(SourcePosition::line).orElse(line);
+        var functionPreview = functionLine == line
+                ? formatFunctionHeaderAndExpression(function, formatExpressionPreviewWithSpaces(function.expression()))
+                : formatFunctionPreviewUpToLine(function, line);
         var pointer = " ".repeat(Math.max(column, 0)) + "^ " + error.message();
         var message = "error: mismatched types\n"
                       + " --> " + file + ":" + line + ":" + column + "\n"
@@ -1062,6 +1065,12 @@ public class CapybaraLinker {
             case ByteValue byteValue -> byteValue.byteValue();
             case BooleanValue booleanValue -> String.valueOf(booleanValue.value());
             case Value value -> value.name();
+            case FunctionCall functionCall -> formatFunctionCallPreview(functionCall);
+            case FunctionInvoke functionInvoke -> formatExpressionPreview(functionInvoke.function())
+                                                  + "(" + functionInvoke.arguments().stream()
+                        .map(this::formatExpressionPreview)
+                        .collect(java.util.stream.Collectors.joining(", ")) + ")";
+            case NewData newData -> formatNewDataPreview(newData);
             case InfixExpression infixExpression -> formatExpressionPreview(infixExpression.left())
                                                    + previewOperator(infixExpression.operator().symbol())
                                                    + formatExpressionPreview(infixExpression.right());
@@ -1083,6 +1092,32 @@ public class CapybaraLinker {
             return operator.substring(1, operator.length() - 1);
         }
         return operator;
+    }
+
+    private String formatFunctionCallPreview(FunctionCall functionCall) {
+        var modulePrefix = functionCall.moduleName().map(moduleName -> moduleName + ".").orElse("");
+        return modulePrefix + functionCall.name()
+               + "(" + functionCall.arguments().stream()
+                .map(this::formatExpressionPreview)
+                .collect(java.util.stream.Collectors.joining(", ")) + ")";
+    }
+
+    private String formatNewDataPreview(NewData newData) {
+        var assignments = newData.assignments().stream()
+                .map(assignment -> assignment.name() + ": " + formatExpressionPreview(assignment.value()))
+                .toList();
+        var positional = newData.positionalArguments().stream()
+                .map(this::formatExpressionPreview)
+                .toList();
+        var spreads = newData.spreads().stream()
+                .map(expression -> "..." + formatExpressionPreview(expression))
+                .toList();
+        var all = new ArrayList<String>(assignments.size() + positional.size() + spreads.size());
+        all.addAll(assignments);
+        all.addAll(positional);
+        all.addAll(spreads);
+        var body = all.stream().collect(java.util.stream.Collectors.joining(", "));
+        return formatParserType(newData.type()) + " { " + body + " }";
     }
 
     private String normalizeReportedTypeName(String typeName) {

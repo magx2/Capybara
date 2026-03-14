@@ -330,6 +330,21 @@ public class CompilationErrorTest {
                                 """
                 ),
                 Arguments.of(
+                        "function_call_reports_deepest_argument_error",
+                        """
+                                data JsonNumberLong { value: long }
+                                fun succeeded(value: JsonNumberLong): int = 1
+                                fun foo(): int = succeeded(JsonNumberLong { value: 5.5 })
+                                """,
+                        new Position(3, "fun foo(): int = succeeded(JsonNumberLong { value: "),
+                        """
+                                error: mismatched types
+                                 --> /foo/boo/function_call_reports_deepest_argument_error.cfun:%d:%d
+                                fun foo(): int = succeeded(JsonNumberLong { value: 5.5 })
+                                                                                   ^ Expected `long`, but got `double`
+                                """
+                ),
+                Arguments.of(
                         "json_assertion_no_viable_alternative",
                         """
                                 data JsonNumberLong { value: long }
