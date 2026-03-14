@@ -10,6 +10,7 @@ fun main(args: list[string]): /capy/lang/Program =
         test_serialize_object_with_list(),
         // deser
         should_deserialize_simple_object(),
+        should_deserialize_object_with_number_as_long_types(),
     //    should_deserialize_object_with_primitive_types(),
     ])
 
@@ -63,8 +64,21 @@ fun should_deserialize_simple_object(): Assert =
                 value: { "foo": JsonString { value: "boo" } }
             })
 
+fun should_deserialize_object_with_number_as_long_types(): Assert =
+    assert_that(deserialize('{"int":5,"int_minus":-5,"long":97387717187,"long_minus":-973877177}'))
+        .succeeded(
+                JsonObject {
+                    value: {
+                        "int": JsonNumberLong { value: 5 },
+                        "int_minus": JsonNumberLong { value: -5 },
+                        "long": JsonNumberLong { value: 97387717187L },
+                        "long_minus": JsonNumberLong { value: -973877177L },
+                    }
+            })
+
+/*
 fun should_deserialize_object_with_primitive_types(): Assert =
-    assert_that(deserialize('{"string":"string_value","int":5,"int_minus":-5,"double":5.5,"long":97387717187,"bool":true}'))
+    assert_that(deserialize('{"string":"string_value","int":5,"int_minus":-5,"double":5.5,"long":97387717187,"bool":true,"null":null}'))
         .succeeded(
                 JsonObject {
                     value: {
@@ -74,5 +88,7 @@ fun should_deserialize_object_with_primitive_types(): Assert =
                         "double": JsonNumberDouble { value: 5.5 },
                         "long": JsonNumberLong { value: 97387717187L },
                         "bool": JsonBool { value: true },
+                        "null": JsonNull,
                     }
             })
+*/

@@ -53,23 +53,25 @@ fun _deserializeJson(json: string): Result[_Parse[Json]] =
         match first_char with
         | '{' -> _deserializeJsonObject(json)
         | '"' -> _deserializeJsonString(json)
-        | '-', '1', '2', '3', '4', '5', '6', '7', '8', '9', '0' ->  _deserialize_json_number(first_char)
+        | '-', '1', '2', '3', '4', '5', '6', '7', '8', '9', '0' ->  _deserialize_json_number(json)
         | _ -> Error { "Do not know what to do with char `" + first_char + "`!" }
 
 fun _deserialize_json_number(json: string): Result[_Parse[JsonNumber]] =
     fun __parse_number(parse: _Parse[string]): Result[_Parse[string]] =
-         match parse.parsing_string with
-         | '-' -> ???
-         | '1', '2', '3', '4', '5', '6', '7', '8', '9', '0' -> ???
-         | _ v -> Error { v }
+        match parse.parsing_string[0] with
+        | None -> Error { 'Expected `-[0-9]`, but got empty string!' }
+        | Some { first_char } ->
+            match first_char with
+            | '-' ->
+                if parse.value.is_empty
+                then __parse_number(_Parse { '-', parse.parsing_string[1:] })
+                else Error { 'Expected `[0-9]`, but got `-`' }
+            | '1', '2', '3', '4', '5', '6', '7', '8', '9', '0' -> __parse_number(_Parse { parse.value + first_char, parse.parsing_string[1:] })
+            | _ v -> Success { parse }
 
-    match __parse_number(_Parse {'', json}) with
-    | Error e -> e
-    | Success { parse } ->
-        Success { _Parse {
-            value: JsonNumberLong { 123L },
-            parsing_string: parse.parsing_string
-        } }
+    __parse_number(_Parse {'', json})
+        | parse => parse.value.to_long()
+            | long => Success { _Parse { JsonNumberLong { long }, parse.parsing_string } }
 
 fun _deserializeJsonString(json: string): Result[_Parse[JsonString]] =
     match _parse_string(json) with
