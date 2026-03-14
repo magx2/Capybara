@@ -94,7 +94,7 @@ indexLiteral: MINUS? INT_LITERAL;
 sliceIndexLiteral: MINUS? INT_LITERAL;
 lambdaExpression: identifier FAT_ARROW expressionNoLetNoPipe
                 | LPAREN identifier (COMMA identifier)+ RPAREN FAT_ARROW expressionNoLetNoPipe;
-reduceExpression: expressionNoLetNoPipe COMMA LPAREN NAME COMMA NAME (COMMA NAME (COMMA NAME)?)? RPAREN FAT_ARROW expressionNoLetNoPipe;
+reduceExpression: expressionNoLetNoPipe COMMA LPAREN NAME COMMA NAME (COMMA NAME (COMMA NAME)?)? RPAREN FAT_ARROW expression;
 expressionNoLetNoPipe: ifExpression
                      | lambdaExpression
                      | functionReference
@@ -150,11 +150,24 @@ pattern: TYPE
         | STRING_LITERAL
         | FLOAT_LITERAL
         | typedPattern
-        | NAME
+        | identifier
         | wildcardPattern
         | constructorPattern;
 wildcardPattern: UNDERSCORE NAME?;
-typedPattern: type (NAME | UNDERSCORE);
+typedPattern: patternType (NAME | UNDERSCORE);
+patternType: COLLECTION '[' type ']'
+           | 'tuple' '[' type (COMMA type)+ ']'
+           | 'byte'
+           | 'int'
+           | 'long'
+           | 'double'
+           | 'bool'
+           | 'string'
+           | 'float'
+           | 'any'
+           | 'data'
+           | 'nothing'
+           | qualifiedType ('[' type (',' type)* ']')?;
 constructorPattern: TYPE '{' fieldPatternList? '}';
 fieldPatternList: pattern (',' pattern)*;
 

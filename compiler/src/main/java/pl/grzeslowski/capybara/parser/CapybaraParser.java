@@ -878,11 +878,11 @@ public class CapybaraParser {
                     ? names.get(2).getText()
                     : names.get(3).getText();
         return new ReduceExpression(
-                expressionNoLetNoPipe(context.expressionNoLetNoPipe(0)),
+                expressionNoLetNoPipe(context.expressionNoLetNoPipe()),
                 accumulatorName,
                 keyName,
                 valueName,
-                expressionNoLetNoPipe(context.expressionNoLetNoPipe(1)),
+                expression(context.expression()),
                 position(context)
         );
     }
@@ -1175,7 +1175,7 @@ public class CapybaraParser {
                     ? typedPattern.NAME().getText()
                     : "__ignored";
             return new MatchExpression.TypedPattern(
-                    type(typedPattern.type().getText()),
+                    type(typedPattern.patternType().getText()),
                     patternName
             );
         }
@@ -1189,9 +1189,9 @@ public class CapybaraParser {
             return new MatchExpression.WildcardBindingPattern(wildcardName.getText());
         }
 
-        var name = context.NAME();
-        if (name != null) {
-            return new MatchExpression.VariablePattern(name.getText());
+        var identifier = context.identifier();
+        if (identifier != null) {
+            return new MatchExpression.VariablePattern(this.identifier(identifier));
         }
 
         var constructorPattern = context.constructorPattern();

@@ -1865,6 +1865,10 @@ public class JavaExpressionEvaluator {
             };
             case pl.grzeslowski.capybara.linker.LinkedDataType dataType -> normalizeJavaTypeReference(dataType.name());
             case pl.grzeslowski.capybara.linker.LinkedDataParentType dataParentType -> normalizeJavaTypeReference(dataParentType.name());
+            case pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedList ignored -> "java.util.List";
+            case pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedSet ignored -> "java.util.Set";
+            case pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedDict ignored -> "java.util.Map";
+            case pl.grzeslowski.capybara.linker.LinkedTupleType ignored -> "java.util.List";
             default -> "java.lang.Object";
         };
     }
