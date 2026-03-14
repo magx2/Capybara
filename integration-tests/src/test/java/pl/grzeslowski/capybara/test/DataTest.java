@@ -1,6 +1,9 @@
 package pl.grzeslowski.capybara.test;
 
+import capy.serialization.Json;
 import org.junit.jupiter.api.Test;
+
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -85,6 +88,19 @@ class DataTest {
                 .isEqualTo("prefix=PrintableData { \"foo\": \"abc\", \"boo\": 123 }");
         assertThat(Data.stringPlusDataRight())
                 .isEqualTo("PrintableData { \"foo\": \"abc\", \"boo\": 123 }=suffix");
+    }
+
+    @Test
+    void dataToStringRendersSingletonByTypeName() {
+        assertThat(Data.knightHolderToString())
+                .isEqualTo("KnightHolder { \"knight\": Tom }");
+    }
+
+    @Test
+    void jsonObjectToStringRendersSingletonByTypeName() {
+        var json = new Json.JsonObject(Map.of("foo", Json.JsonNull.INSTANCE));
+        assertThat(json.toString())
+                .isEqualTo("JsonObject { \"value\": {foo=JsonNull} }");
     }
 
     @Test

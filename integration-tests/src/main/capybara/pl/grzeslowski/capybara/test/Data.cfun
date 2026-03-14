@@ -46,6 +46,7 @@ data WhiteCollar { intelligence: float }
 
 data PrintableData { foo: string, boo: int }
 data PositionalData { text: string, number: int }
+data KnightHolder { knight: Knight }
 
 fun printable_data_to_string(): string =
     PrintableData { foo: "abc", boo: 123 } + ""
@@ -55,6 +56,9 @@ fun string_plus_data_left(): string =
 
 fun string_plus_data_right(): string =
     PrintableData { foo: "abc", boo: 123 } + "=suffix"
+
+fun knight_holder_to_string(): string =
+    KnightHolder { knight: Tom {} } + ""
 
 fun create_positional_data(text: string, number: int): PositionalData =
     PositionalData { text, number }

@@ -322,6 +322,31 @@ public final class JavaGenerator implements Generator {
                     .append(mapRecordFieldToStringValue(field));
         }
         body.append(" + \" }\"; }\n");
+        body.append("private static java.lang.String __capybaraToStringValue(java.lang.Object value) {\n");
+        body.append("if (value == null) { return \"null\"; }\n");
+        body.append("if (value instanceof java.lang.String __capybaraStringValue) {\n");
+        body.append("return \"\\\"\" + __capybaraStringValue.replace(\"\\\\\", \"\\\\\\\\\").replace(\"\\\"\", \"\\\\\\\"\") + \"\\\"\";\n");
+        body.append("}\n");
+        body.append("if (value instanceof java.lang.Enum<?> __capybaraEnumValue) {\n");
+        body.append("return \"INSTANCE\".equals(__capybaraEnumValue.name())\n");
+        body.append("? __capybaraEnumValue.getDeclaringClass().getSimpleName()\n");
+        body.append(": __capybaraEnumValue.name();\n");
+        body.append("}\n");
+        body.append("if (value instanceof java.util.Map<?, ?> __capybaraMapValue) {\n");
+        body.append("return __capybaraMapValue.entrySet().stream()\n");
+        body.append(".map(__capybaraEntry -> java.lang.String.valueOf(__capybaraEntry.getKey()) + \"=\" + __capybaraToStringValue(__capybaraEntry.getValue()))\n");
+        body.append(".collect(java.util.stream.Collectors.joining(\",\", \"{\", \"}\"));\n");
+        body.append("}\n");
+        body.append("if (value instanceof java.util.Collection<?> __capybaraCollectionValue) {\n");
+        body.append("return __capybaraCollectionValue.stream()\n");
+        body.append(".map(__capybaraItem -> __capybaraToStringValue(__capybaraItem))\n");
+        body.append(".collect(java.util.stream.Collectors.joining(\",\", \"[\", \"]\"));\n");
+        body.append("}\n");
+        body.append("if (value instanceof java.util.Map.Entry<?, ?> __capybaraEntryValue) {\n");
+        body.append("return java.lang.String.valueOf(__capybaraEntryValue.getKey()) + \"=\" + __capybaraToStringValue(__capybaraEntryValue.getValue());\n");
+        body.append("}\n");
+        body.append("return java.lang.String.valueOf(value);\n");
+        body.append("}\n");
         return body.toString();
     }
 
@@ -335,26 +360,7 @@ public final class JavaGenerator implements Generator {
     }
 
     private String mapRecordFieldToStringValue(JavaRecord.JavaRecordField field) {
-        var fieldName = field.name();
-        var fieldType = field.type().toString();
-        if ("java.lang.String".equals(fieldType)) {
-            return "\"\\\"\" + " + fieldName + ".replace(\"\\\\\", \"\\\\\\\\\").replace(\"\\\"\", \"\\\\\\\"\") + \"\\\"\"";
-        }
-        if (isJavaPrimitive(fieldType)) {
-            return "java.lang.String.valueOf(" + fieldName + ")";
-        }
-        return "(((java.lang.Object) " + fieldName + ") instanceof java.lang.String __capybaraStringValue"
-               + " ? \"\\\"\" + __capybaraStringValue.replace(\"\\\\\", \"\\\\\\\\\").replace(\"\\\"\", \"\\\\\\\"\") + \"\\\"\""
-               + " : java.lang.String.valueOf(" + fieldName + "))";
-    }
-
-    private boolean isJavaPrimitive(String type) {
-        return "byte".equals(type)
-               || "int".equals(type)
-               || "long".equals(type)
-               || "float".equals(type)
-               || "double".equals(type)
-               || "boolean".equals(type);
+        return "__capybaraToStringValue(" + field.name() + ")";
     }
 
     private String mapJavaEnum(JavaEnum javaEnum) {
