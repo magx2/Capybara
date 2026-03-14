@@ -356,6 +356,78 @@ public class CompilationErrorTest {
                                 """
                 ),
                 Arguments.of(
+                        "json_assertion_int_no_viable_alternative",
+                        """
+                                data JsonNumberInt { value: int }
+                                data JsonObject { value: dict[JsonNumberInt] }
+                                fun foo(): JsonObject =
+                                    JsonObject {
+                                        value: {
+                                            "int": JsonNumberInt { value: 5.5 },
+                                            "int_minus": JsonNumberInt { value: -5.5 },
+                                        }
+                                    }
+                                """,
+                        new Position(6, "            \"int\": JsonNumberInt { value: "),
+                        """
+                                error: mismatched types
+                                 --> /foo/boo/json_assertion_int_no_viable_alternative.cfun:%d:%d
+                                fun foo(): JsonObject =
+                                    JsonObject {
+                                        value: {
+                                            "int": JsonNumberInt { value: 5.5 },
+                                                                          ^ Expected `int`, but got `double`
+                                """
+                ),
+                Arguments.of(
+                        "json_assertion_string_no_viable_alternative",
+                        """
+                                data JsonString { value: string }
+                                data JsonObject { value: dict[JsonString] }
+                                fun foo(): JsonObject =
+                                    JsonObject {
+                                        value: {
+                                            "name": JsonString { value: 123 },
+                                            "surname": JsonString { value: 456 },
+                                        }
+                                    }
+                                """,
+                        new Position(6, 40),
+                        """
+                                error: mismatched types
+                                 --> /foo/boo/json_assertion_string_no_viable_alternative.cfun:%d:%d
+                                fun foo(): JsonObject =
+                                    JsonObject {
+                                        value: {
+                                            "name": JsonString { value: 123 },
+                                                                        ^ Expected `string`, but got `int`
+                                """
+                ),
+                Arguments.of(
+                        "json_assertion_bool_no_viable_alternative",
+                        """
+                                data JsonBool { value: bool }
+                                data JsonObject { value: dict[JsonBool] }
+                                fun foo(): JsonObject =
+                                    JsonObject {
+                                        value: {
+                                            "married": JsonBool { value: "yes" },
+                                            "active": JsonBool { value: "no" },
+                                        }
+                                    }
+                                """,
+                        new Position(6, 41),
+                        """
+                                error: mismatched types
+                                 --> /foo/boo/json_assertion_bool_no_viable_alternative.cfun:%d:%d
+                                fun foo(): JsonObject =
+                                    JsonObject {
+                                        value: {
+                                            "married": JsonBool { value: "yes" },
+                                                                         ^ Expected `bool`, but got `string`
+                                """
+                ),
+                Arguments.of(
                         "function_wrong_return_type",
                         "fun foo(x: int): int = \"boo\"",
                         new Position(1, 23),
@@ -623,6 +695,9 @@ public class CompilationErrorTest {
     }
 
     record Position(int line, int column) {
+        public Position(int line, String postitionString) {
+            this(line, postitionString.length());
+        }
     }
 
     record InfixOperand(String id, String decl, String shownType) {
