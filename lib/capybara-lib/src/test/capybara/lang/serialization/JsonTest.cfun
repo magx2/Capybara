@@ -13,6 +13,8 @@ fun main(args: list[string]): /capy/lang/Program =
         should_deserialize_object_with_number_as_long_types(),
         should_deserialize_object_with_number_as_double_types(),
         should_deserialize_object_with_number_as_double_types_in_exponential_notation(),
+        should_deserialize_object_as_bool_types(),
+        should_fail_deserialize_object_as_bool_types(),
     //    should_deserialize_object_with_primitive_types(),
     ])
 
@@ -112,6 +114,19 @@ fun should_deserialize_object_with_number_as_double_types_in_exponential_notatio
                         "positive4": JsonNumberDouble { value: 1.234499968916225E-8 },
                     }
             })
+
+fun should_deserialize_object_as_bool_types(): Assert =
+    assert_that(deserialize('{"t":true,"f":false}'))
+        .succeeded(
+                JsonObject {
+                    value: {
+                        "t": JsonBool { value: true },
+                        "f": JsonBool { value: false },
+                    }
+            })
+
+fun should_fail_deserialize_object_as_bool_types(): Assert =
+    assert_that(deserialize('{"t":tr}')).failed('Expected `true` or `false`, but got `tr`!')
 
 /*
 fun should_deserialize_object_with_primitive_types(): Assert =

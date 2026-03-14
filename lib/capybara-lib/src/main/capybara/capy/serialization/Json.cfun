@@ -54,7 +54,28 @@ fun _deserializeJson(json: string): Result[_Parse[Json]] =
         | '{' -> _deserializeJsonObject(json)
         | '"' -> _deserializeJsonString(json)
         | '-', '1', '2', '3', '4', '5', '6', '7', '8', '9', '0' ->  _deserialize_json_number(json)
+        | 't', 'f' -> _deserialize_json_bool(json)
         | _ -> Error { "Do not know what to do with char `" + first_char + "`!" }
+
+fun _deserialize_json_bool(json: string): Result[_Parse[JsonBool]] =
+    if json.starts_with('true')
+    then Success { _Parse { JsonBool {true}, json[4:] } }
+    else if json.starts_with('false')
+    then Success { _Parse { JsonBool {false}, json[5:] } }
+    else
+        let actual =
+            if json.size > 5
+            then json[:5]
+            else if json.size > 4
+            then json[:4]
+            else if json.size > 3
+            then json[:3]
+            else if json.size > 2
+            then json[:2]
+            else if json.size > 1
+            then json[:1]
+            else '<empty>'
+        Error { "Expected `true` or `false`, but got `" + actual + "`!" }
 
 fun _deserialize_json_number(json: string): Result[_Parse[JsonNumber]] =
     fun __parse_number(parse: _Parse[string]): Result[_Parse[string]] =
