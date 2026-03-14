@@ -10,18 +10,21 @@ definition:
     functionDeclaration
     | typeDeclaration
     | dataDeclaration
-    | singleDeclaration;
+    | singleDeclaration
+    | constDeclaration;
 
 functionDeclaration: docComment* 'fun' functionNameDeclaration '(' parameters? ')' functionType? '=' functionBody;
 functionBody: localDefinition* expression;
 localDefinition: localFunctionDeclaration
                | localTypeDeclaration
-               | localDataDeclaration;
+               | localDataDeclaration
+               | localConstDeclaration;
 localFunctionDeclaration: 'fun' NAME '(' parameters? ')' functionType? '=' expression;
 localTypeDeclaration: 'type' genericTypeDeclaration '=' genericTypeDeclaration (PIPE genericTypeDeclaration)*
                     | 'type' genericTypeDeclaration '{' fieldDeclarationList? '}' '=' genericTypeDeclaration (PIPE genericTypeDeclaration)*;
 localDataDeclaration: 'data' genericTypeDeclaration '{' fieldDeclarationList? '}'
                     | 'data' genericTypeDeclaration '=' '{' fieldDeclarationList? '}';
+localConstDeclaration: 'const' TYPE (':' type)? '=' expressionNoLet;
 functionNameDeclaration: identifier | genericTypeDeclaration DOT methodIdentifier;
 methodIdentifier: identifier | INFIX_METHOD_LITERAL;
 docComment: DOC_COMMENT;
@@ -31,6 +34,7 @@ typeDeclaration: 'type' genericTypeDeclaration '=' genericTypeDeclaration (PIPE 
 dataDeclaration: 'data' genericTypeDeclaration '{' fieldDeclarationList? '}'
                | 'data' genericTypeDeclaration '=' '{' fieldDeclarationList? '}';
 singleDeclaration: 'single' TYPE;
+constDeclaration: 'const' TYPE (':' type)? '=' expressionNoLet;
 fieldDeclarationList: fieldDeclaration (',' fieldDeclaration)*;
 fieldDeclaration: NAME ':' type
                 | STRING_LITERAL ':' type
@@ -126,7 +130,7 @@ ifExpression: 'if' expression 'then' expression 'else' expression;
 functionReference: COLON identifier;
 functionCall: identifier '(' argumentList? ')'
             | TYPE DOT identifier '(' argumentList? ')';
-value: literal | identifier;
+value: literal | identifier | TYPE;
 argumentList: expression (',' expression)*;
 literal: BYTE_LITERAL | LONG_LITERAL | DOUBLE_LITERAL | INT_LITERAL | BOOL_LITERAL | STRING_LITERAL | FLOAT_LITERAL | NOTHING_LITERAL;
 BYTE_LITERAL: '0' [xX] [0-9a-fA-F]+;

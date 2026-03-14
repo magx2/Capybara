@@ -103,7 +103,7 @@
       "patterns": [
         {
           "name": "keyword.control.capybara",
-          "match": "\\b(fun|type|data|single|match|with|if|then|else|let|from|import|except)\\b"
+          "match": "\\b(fun|type|data|single|const|match|with|if|then|else|let|from|import|except)\\b"
         },
         {
           "name": "keyword.other.capybara",
@@ -198,6 +198,30 @@
             },
             "2": {
               "name": "variable.other.capybara"
+            }
+          }
+        },
+        {
+          "name": "meta.const.private.capybara",
+          "match": "\\b(const)\\s+(__[A-Z_][A-Z0-9_]*)\\b",
+          "captures": {
+            "1": {
+              "name": "keyword.control.capybara"
+            },
+            "2": {
+              "name": "entity.name.constant.private.capybara"
+            }
+          }
+        },
+        {
+          "name": "meta.const.capybara",
+          "match": "\\b(const)\\s+(_*[A-Z_][A-Z0-9_]*)\\b",
+          "captures": {
+            "1": {
+              "name": "keyword.control.capybara"
+            },
+            "2": {
+              "name": "entity.name.constant.capybara"
             }
           }
         },

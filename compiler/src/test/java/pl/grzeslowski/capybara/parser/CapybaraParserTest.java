@@ -49,6 +49,7 @@ class CapybaraParserTest {
                 Arguments.of("pipe_reduce_dict", "fun pipe_reduce_dict(d: dict[int]): string = d |> \"\", (a, k, v) => a + k + v"),
                 Arguments.of("pipe_flat_map", "fun pipe_flat_map(l: list[int]): list[int] = l |* x => [x, x + 1]"),
                 Arguments.of("single_quote_string", "fun single_quote_string(): string = 'hello'"),
+                Arguments.of("const_usage", "const PI = 3.14\nfun const_usage(): double = PI"),
                 Arguments.of(
                         "block_comment",
                         """
@@ -63,6 +64,15 @@ class CapybaraParserTest {
                         "invoke_multi",
                         "fun run(f: (int, int) => int): int = f(1, 2)\nfun invoke_multi(): int = run((a, b) => a + b)"
                 ));
+    }
+
+    @Test
+    @DisplayName("should parse const declaration as zero-arg function")
+    void parseConstDeclaration() {
+        var functional = new CapybaraParser().parseFunctional("const E: double = 2.");
+        var function = findFunction("E", functional);
+        assertThat(function.parameters()).isEmpty();
+        assertThat(function.returnType()).contains(PrimitiveType.DOUBLE);
     }
 
     @Test

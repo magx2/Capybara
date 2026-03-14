@@ -26,6 +26,7 @@ public class CapybaraParser {
     private static final Pattern COLLECTION_SET_PATTERN = Pattern.compile("set\\[(.+?)]");
     private static final Pattern COLLECTION_DICT_PATTERN = Pattern.compile("dict\\[(.+?)]");
     private static final Pattern NO_VIABLE_ALTERNATIVE_PATTERN = Pattern.compile("no viable alternative at input '(.+)'");
+    private static final Pattern CONST_NAME_PATTERN = Pattern.compile("^_?[A-Z_][A-Z0-9_]*$");
 
     public Functional parseFunctional(String input) {
         var lexer = new pl.grzeslowski.capybara.parser.antlr.FunctionalLexer(CharStreams.fromString(input));
@@ -104,6 +105,11 @@ public class CapybaraParser {
             return List.of(singleDeclaration(singleDeclaration));
         }
 
+        var constDeclaration = context.constDeclaration();
+        if (constDeclaration != null) {
+            return List.of(constDeclaration(constDeclaration));
+        }
+
         var typeDeclaration = context.typeDeclaration();
         if (typeDeclaration != null) {
             return List.of(typeDeclaration(typeDeclaration));
@@ -146,6 +152,20 @@ public class CapybaraParser {
         return new SingleDeclaration(context.TYPE().getText(), position(context));
     }
 
+    private Function constDeclaration(FunctionalParser.ConstDeclarationContext context) {
+        var name = context.TYPE().getText();
+        validateConstName(name);
+        var constExpression = expressionNoLet(context.expressionNoLet());
+        return new Function(
+                name,
+                List.of(),
+                Optional.ofNullable(context.type()).map(CapybaraParser::type).or(() -> inferConstType(constExpression)),
+                constExpression,
+                List.of(),
+                position(context)
+        );
+    }
+
     private List<DataDeclaration.DataField> fieldDeclarationList(FunctionalParser.FieldDeclarationListContext context) {
         return context.fieldDeclaration()
                 .stream()
@@ -183,8 +203,10 @@ public class CapybaraParser {
         var localDefinitions = functionDeclarationContext.functionBody().localDefinition();
         var localFunctionNameMap = new java.util.LinkedHashMap<String, String>();
         var localTypeNameMap = new java.util.LinkedHashMap<String, String>();
+        var localConstNameMap = new java.util.LinkedHashMap<String, String>();
         var localFunctionIndex = 0;
         var localTypeIndex = 0;
+        var localConstIndex = 0;
         for (var localDefinition : localDefinitions) {
             var localFunction = localDefinition.localFunctionDeclaration();
             if (localFunction != null) {
@@ -231,6 +253,22 @@ public class CapybaraParser {
                 );
                 localTypeIndex++;
             }
+            var localConst = localDefinition.localConstDeclaration();
+            if (localConst != null) {
+                var localConstName = localConst.TYPE().getText();
+                if (!localConstName.startsWith("__")) {
+                    throw new IllegalStateException("Local const name has to start with `__`: " + localConstName);
+                }
+                validateConstName(localConstName);
+                if (localConstNameMap.containsKey(localConstName)) {
+                    throw new IllegalStateException("Duplicate local const name: " + localConstName);
+                }
+                localConstNameMap.put(
+                        localConstName,
+                        "__" + methodName + "__local_const_" + localConstIndex + "_" + localConstName.substring(2)
+                );
+                localConstIndex++;
+            }
         }
 
         var extractedLocalDefinitions = new java.util.ArrayList<Definition>();
@@ -240,7 +278,8 @@ public class CapybaraParser {
                         localFunctionDeclaration(
                                 localDefinition.localFunctionDeclaration(),
                                 localFunctionNameMap,
-                                localTypeNameMap
+                                localTypeNameMap,
+                                localConstNameMap
                         )
                 );
             } else if (localDefinition.localTypeDeclaration() != null) {
@@ -250,6 +289,15 @@ public class CapybaraParser {
             } else if (localDefinition.localDataDeclaration() != null) {
                 extractedLocalDefinitions.add(
                         dataDeclaration(localDefinition.localDataDeclaration(), localTypeNameMap)
+                );
+            } else if (localDefinition.localConstDeclaration() != null) {
+                extractedLocalDefinitions.add(
+                        localConstDeclaration(
+                                localDefinition.localConstDeclaration(),
+                                localFunctionNameMap,
+                                localTypeNameMap,
+                                localConstNameMap
+                        )
                 );
             } else {
                 throw new IllegalStateException("Unknown local definition: " + localDefinition.getText());
@@ -268,7 +316,8 @@ public class CapybaraParser {
         var expression = rewriteLocalNames(
                 expression(functionDeclarationContext.functionBody().expression()),
                 localFunctionNameMap,
-                localTypeNameMap
+                localTypeNameMap,
+                localConstNameMap
         );
         var topLevelFunction = new Function(
                 methodName,
@@ -289,7 +338,8 @@ public class CapybaraParser {
     private Function localFunctionDeclaration(
             pl.grzeslowski.capybara.parser.antlr.FunctionalParser.LocalFunctionDeclarationContext context,
             java.util.Map<String, String> localFunctionNameMap,
-            java.util.Map<String, String> localTypeNameMap
+            java.util.Map<String, String> localTypeNameMap,
+            java.util.Map<String, String> localConstNameMap
     ) {
         var localName = context.NAME().getText();
         var mappedName = localFunctionNameMap.get(localName);
@@ -305,7 +355,7 @@ public class CapybaraParser {
                         parameter.name(),
                         parameter.position()))
                 .toList();
-        var expression = rewriteLocalNames(expression(context.expression()), localFunctionNameMap, localTypeNameMap);
+        var expression = rewriteLocalNames(expression(context.expression()), localFunctionNameMap, localTypeNameMap, localConstNameMap);
         var rewrittenReturnType = functionType(context.functionType())
                 .map(type -> rewriteLocalTypeNames(type, localTypeNameMap));
         return new Function(
@@ -313,6 +363,31 @@ public class CapybaraParser {
                 parameters,
                 rewrittenReturnType,
                 expression,
+                List.of(),
+                position(context)
+        );
+    }
+
+    private Function localConstDeclaration(
+            FunctionalParser.LocalConstDeclarationContext context,
+            java.util.Map<String, String> localFunctionNameMap,
+            java.util.Map<String, String> localTypeNameMap,
+            java.util.Map<String, String> localConstNameMap
+    ) {
+        var localName = context.TYPE().getText();
+        var mappedName = localConstNameMap.get(localName);
+        if (mappedName == null) {
+            throw new IllegalStateException("Unknown local const mapping for: " + localName);
+        }
+        var constExpression = rewriteLocalNames(expressionNoLet(context.expressionNoLet()), localFunctionNameMap, localTypeNameMap, localConstNameMap);
+        return new Function(
+                mappedName,
+                List.of(),
+                Optional.ofNullable(context.type())
+                        .map(CapybaraParser::type)
+                        .map(type -> rewriteLocalTypeNames(type, localTypeNameMap))
+                        .or(() -> inferConstType(constExpression)),
+                constExpression,
                 List.of(),
                 position(context)
         );
@@ -382,16 +457,27 @@ public class CapybaraParser {
     private Expression rewriteLocalNames(
             Expression expression,
             java.util.Map<String, String> localFunctionNameMap,
-            java.util.Map<String, String> localTypeNameMap
+            java.util.Map<String, String> localTypeNameMap,
+            java.util.Map<String, String> localConstNameMap
     ) {
         return switch (expression) {
             case FunctionCall functionCall -> {
+                if (functionCall.moduleName().isEmpty() && localConstNameMap.containsKey(functionCall.name())) {
+                    yield new FunctionCall(
+                            Optional.empty(),
+                            localConstNameMap.get(functionCall.name()),
+                            functionCall.arguments().stream()
+                                    .map(argument -> rewriteLocalNames(argument, localFunctionNameMap, localTypeNameMap, localConstNameMap))
+                                    .toList(),
+                            functionCall.position()
+                    );
+                }
                 if (functionCall.moduleName().isEmpty() && localFunctionNameMap.containsKey(functionCall.name())) {
                     yield new FunctionCall(
                             Optional.empty(),
                             localFunctionNameMap.get(functionCall.name()),
                             functionCall.arguments().stream()
-                                    .map(argument -> rewriteLocalNames(argument, localFunctionNameMap, localTypeNameMap))
+                                    .map(argument -> rewriteLocalNames(argument, localFunctionNameMap, localTypeNameMap, localConstNameMap))
                                     .toList(),
                             functionCall.position()
                     );
@@ -402,10 +488,17 @@ public class CapybaraParser {
                         rewrittenModuleName,
                         functionCall.name(),
                         functionCall.arguments().stream()
-                                .map(argument -> rewriteLocalNames(argument, localFunctionNameMap, localTypeNameMap))
+                                .map(argument -> rewriteLocalNames(argument, localFunctionNameMap, localTypeNameMap, localConstNameMap))
                                 .toList(),
                         functionCall.position()
                 );
+            }
+            case Value value -> {
+                var mappedConst = localConstNameMap.get(value.name());
+                if (mappedConst != null) {
+                    yield new FunctionCall(Optional.empty(), mappedConst, List.of(), value.position());
+                }
+                yield value;
             }
             case FunctionReference functionReference -> {
                 var mapped = localFunctionNameMap.get(functionReference.name());
@@ -415,66 +508,66 @@ public class CapybaraParser {
                 yield functionReference;
             }
             case FunctionInvoke functionInvoke -> new FunctionInvoke(
-                    rewriteLocalNames(functionInvoke.function(), localFunctionNameMap, localTypeNameMap),
+                    rewriteLocalNames(functionInvoke.function(), localFunctionNameMap, localTypeNameMap, localConstNameMap),
                     functionInvoke.arguments().stream()
-                            .map(argument -> rewriteLocalNames(argument, localFunctionNameMap, localTypeNameMap))
+                            .map(argument -> rewriteLocalNames(argument, localFunctionNameMap, localTypeNameMap, localConstNameMap))
                             .toList(),
                     functionInvoke.position()
             );
             case LetExpression letExpression -> new LetExpression(
                     letExpression.name(),
                     letExpression.declaredType().map(type -> rewriteLocalTypeNames(type, localTypeNameMap)),
-                    rewriteLocalNames(letExpression.value(), localFunctionNameMap, localTypeNameMap),
-                    rewriteLocalNames(letExpression.rest(), localFunctionNameMap, localTypeNameMap),
+                    rewriteLocalNames(letExpression.value(), localFunctionNameMap, localTypeNameMap, localConstNameMap),
+                    rewriteLocalNames(letExpression.rest(), localFunctionNameMap, localTypeNameMap, localConstNameMap),
                     letExpression.position()
             );
             case IfExpression ifExpression -> new IfExpression(
-                    rewriteLocalNames(ifExpression.condition(), localFunctionNameMap, localTypeNameMap),
-                    rewriteLocalNames(ifExpression.thenBranch(), localFunctionNameMap, localTypeNameMap),
-                    rewriteLocalNames(ifExpression.elseBranch(), localFunctionNameMap, localTypeNameMap),
+                    rewriteLocalNames(ifExpression.condition(), localFunctionNameMap, localTypeNameMap, localConstNameMap),
+                    rewriteLocalNames(ifExpression.thenBranch(), localFunctionNameMap, localTypeNameMap, localConstNameMap),
+                    rewriteLocalNames(ifExpression.elseBranch(), localFunctionNameMap, localTypeNameMap, localConstNameMap),
                     ifExpression.position()
             );
             case InfixExpression infixExpression -> new InfixExpression(
-                    rewriteLocalNames(infixExpression.left(), localFunctionNameMap, localTypeNameMap),
+                    rewriteLocalNames(infixExpression.left(), localFunctionNameMap, localTypeNameMap, localConstNameMap),
                     infixExpression.operator(),
-                    rewriteLocalNames(infixExpression.right(), localFunctionNameMap, localTypeNameMap),
+                    rewriteLocalNames(infixExpression.right(), localFunctionNameMap, localTypeNameMap, localConstNameMap),
                     infixExpression.position()
             );
             case FieldAccess fieldAccess -> new FieldAccess(
-                    rewriteLocalNames(fieldAccess.source(), localFunctionNameMap, localTypeNameMap),
+                    rewriteLocalNames(fieldAccess.source(), localFunctionNameMap, localTypeNameMap, localConstNameMap),
                     fieldAccess.field(),
                     fieldAccess.position()
             );
             case LambdaExpression lambdaExpression -> new LambdaExpression(
                     lambdaExpression.argumentNames(),
-                    rewriteLocalNames(lambdaExpression.expression(), localFunctionNameMap, localTypeNameMap),
+                    rewriteLocalNames(lambdaExpression.expression(), localFunctionNameMap, localTypeNameMap, localConstNameMap),
                     lambdaExpression.position()
             );
             case ReduceExpression reduceExpression -> new ReduceExpression(
-                    rewriteLocalNames(reduceExpression.initialValue(), localFunctionNameMap, localTypeNameMap),
+                    rewriteLocalNames(reduceExpression.initialValue(), localFunctionNameMap, localTypeNameMap, localConstNameMap),
                     reduceExpression.accumulatorName(),
                     reduceExpression.keyName(),
                     reduceExpression.valueName(),
-                    rewriteLocalNames(reduceExpression.reducerExpression(), localFunctionNameMap, localTypeNameMap),
+                    rewriteLocalNames(reduceExpression.reducerExpression(), localFunctionNameMap, localTypeNameMap, localConstNameMap),
                     reduceExpression.position()
             );
             case IndexExpression indexExpression -> new IndexExpression(
-                    rewriteLocalNames(indexExpression.source(), localFunctionNameMap, localTypeNameMap),
-                    rewriteLocalNames(indexExpression.index(), localFunctionNameMap, localTypeNameMap),
+                    rewriteLocalNames(indexExpression.source(), localFunctionNameMap, localTypeNameMap, localConstNameMap),
+                    rewriteLocalNames(indexExpression.index(), localFunctionNameMap, localTypeNameMap, localConstNameMap),
                     indexExpression.position()
             );
             case SliceExpression sliceExpression -> new SliceExpression(
-                    rewriteLocalNames(sliceExpression.source(), localFunctionNameMap, localTypeNameMap),
-                    sliceExpression.start().map(start -> rewriteLocalNames(start, localFunctionNameMap, localTypeNameMap)),
-                    sliceExpression.end().map(end -> rewriteLocalNames(end, localFunctionNameMap, localTypeNameMap)),
+                    rewriteLocalNames(sliceExpression.source(), localFunctionNameMap, localTypeNameMap, localConstNameMap),
+                    sliceExpression.start().map(start -> rewriteLocalNames(start, localFunctionNameMap, localTypeNameMap, localConstNameMap)),
+                    sliceExpression.end().map(end -> rewriteLocalNames(end, localFunctionNameMap, localTypeNameMap, localConstNameMap)),
                     sliceExpression.position()
             );
             case MatchExpression matchExpression -> new MatchExpression(
-                    rewriteLocalNames(matchExpression.matchWith(), localFunctionNameMap, localTypeNameMap),
+                    rewriteLocalNames(matchExpression.matchWith(), localFunctionNameMap, localTypeNameMap, localConstNameMap),
                     matchExpression.cases().stream()
                             .map(matchCase -> new MatchExpression.MatchCase(
                                     rewriteLocalTypeNames(matchCase.pattern(), localTypeNameMap),
-                                    rewriteLocalNames(matchCase.expression(), localFunctionNameMap, localTypeNameMap)
+                                    rewriteLocalNames(matchCase.expression(), localFunctionNameMap, localTypeNameMap, localConstNameMap)
                             ))
                             .toList(),
                     matchExpression.position()
@@ -484,41 +577,41 @@ public class CapybaraParser {
                     newData.assignments().stream()
                             .map(assignment -> new NewData.FieldAssignment(
                                     assignment.name(),
-                                    rewriteLocalNames(assignment.value(), localFunctionNameMap, localTypeNameMap)
+                                    rewriteLocalNames(assignment.value(), localFunctionNameMap, localTypeNameMap, localConstNameMap)
                             ))
                             .toList(),
                     newData.positionalArguments().stream()
-                            .map(argument -> rewriteLocalNames(argument, localFunctionNameMap, localTypeNameMap))
+                            .map(argument -> rewriteLocalNames(argument, localFunctionNameMap, localTypeNameMap, localConstNameMap))
                             .toList(),
                     newData.spreads().stream()
-                            .map(spread -> rewriteLocalNames(spread, localFunctionNameMap, localTypeNameMap))
+                            .map(spread -> rewriteLocalNames(spread, localFunctionNameMap, localTypeNameMap, localConstNameMap))
                             .toList(),
                     newData.position()
             );
             case NewListExpression newListExpression -> new NewListExpression(
                     newListExpression.values().stream()
-                            .map(value -> rewriteLocalNames(value, localFunctionNameMap, localTypeNameMap))
+                            .map(value -> rewriteLocalNames(value, localFunctionNameMap, localTypeNameMap, localConstNameMap))
                             .toList(),
                     newListExpression.position()
             );
             case NewSetExpression newSetExpression -> new NewSetExpression(
                     newSetExpression.values().stream()
-                            .map(value -> rewriteLocalNames(value, localFunctionNameMap, localTypeNameMap))
+                            .map(value -> rewriteLocalNames(value, localFunctionNameMap, localTypeNameMap, localConstNameMap))
                             .toList(),
                     newSetExpression.position()
             );
             case NewDictExpression newDictExpression -> new NewDictExpression(
                     newDictExpression.entries().stream()
                             .map(entry -> new NewDictExpression.Entry(
-                                    rewriteLocalNames(entry.key(), localFunctionNameMap, localTypeNameMap),
-                                    rewriteLocalNames(entry.value(), localFunctionNameMap, localTypeNameMap)
+                                    rewriteLocalNames(entry.key(), localFunctionNameMap, localTypeNameMap, localConstNameMap),
+                                    rewriteLocalNames(entry.value(), localFunctionNameMap, localTypeNameMap, localConstNameMap)
                             ))
                             .toList(),
                     newDictExpression.position()
             );
             case TupleExpression tupleExpression -> new TupleExpression(
                     tupleExpression.values().stream()
-                            .map(value -> rewriteLocalNames(value, localFunctionNameMap, localTypeNameMap))
+                            .map(value -> rewriteLocalNames(value, localFunctionNameMap, localTypeNameMap, localConstNameMap))
                             .toList(),
                     tupleExpression.position()
             );
@@ -738,6 +831,9 @@ public class CapybaraParser {
             if (value.identifier() != null) {
                 return new Value(identifier(value.identifier()), position(value.identifier()));
             }
+            if (value.TYPE() != null) {
+                return new FunctionCall(Optional.empty(), value.TYPE().getText(), List.of(), position(value.TYPE()));
+            }
         }
 
         var newData = expression.newData();
@@ -954,6 +1050,9 @@ public class CapybaraParser {
 
             if (value.identifier() != null) {
                 return new Value(identifier(value.identifier()), position(value.identifier()));
+            }
+            if (value.TYPE() != null) {
+                return new FunctionCall(Optional.empty(), value.TYPE().getText(), List.of(), position(value.TYPE()));
             }
         }
 
@@ -1417,6 +1516,26 @@ public class CapybaraParser {
         }
         var raw = text.substring(3);
         return raw.startsWith(" ") ? raw.substring(1) : raw;
+    }
+
+    private static void validateConstName(String name) {
+        if (!CONST_NAME_PATTERN.matcher(name).matches()) {
+            throw new IllegalStateException("Invalid const name: " + name);
+        }
+    }
+
+    private static Optional<Type> inferConstType(Expression expression) {
+        return switch (expression) {
+            case BooleanValue ignored -> Optional.of(PrimitiveType.BOOL);
+            case ByteValue ignored -> Optional.of(PrimitiveType.BYTE);
+            case IntValue ignored -> Optional.of(PrimitiveType.INT);
+            case LongValue ignored -> Optional.of(PrimitiveType.LONG);
+            case DoubleValue ignored -> Optional.of(PrimitiveType.DOUBLE);
+            case FloatValue ignored -> Optional.of(PrimitiveType.FLOAT);
+            case StringValue ignored -> Optional.of(PrimitiveType.STRING);
+            case NothingValue ignored -> Optional.of(PrimitiveType.NOTHING);
+            default -> Optional.empty();
+        };
     }
 
     private static String methodIdentifier(FunctionalParser.MethodIdentifierContext context) {

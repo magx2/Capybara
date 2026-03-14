@@ -1,0 +1,45 @@
+const PI: double = 3.14
+const E: double = 2.
+const _HIDDEN: int = 11
+const BYTE_V: byte = 0x1A
+const INT_V: int = 42
+const LONG_V: long = 97387717187L
+const FLOAT_V: float = 1.5f
+const DOUBLE_V: double = 2.5
+const BOOL_V: bool = true
+const STRING_V: string = "const"
+const LIST_V: list[int] = [1, 2, 3]
+const SET_V: set[string] = {"a", "b"}
+const DICT_V: dict[int] = {"one": 1, "two": 2}
+
+type Animal = Dog | Cat
+data Dog { name: string }
+data Cat { age: int }
+
+const DOG_DATA: Dog = Dog { name: "Rex" }
+const ANIMAL_TYPE: Animal = Cat { age: 7 }
+
+fun pi_plus_e(): double = PI + E
+
+fun uses_private_const(): int = _HIDDEN + 1
+
+fun local_consts(x: int): int =
+    const __BASE = 10
+    const __INC: int = 5
+    x + __BASE + __INC
+
+fun primitives_summary(): string =
+    BYTE_V + ":" + INT_V + ":" + LONG_V + ":" + FLOAT_V + ":" + DOUBLE_V + ":" + BOOL_V + ":" + STRING_V
+
+fun list_const_sum(): int = LIST_V |> 0, (acc, v) => acc + v
+
+fun set_const_has_a(): bool = SET_V ? "a"
+
+fun dict_const_size(): int = DICT_V.size
+
+fun dog_data_name(): string = DOG_DATA.name
+
+fun animal_type_text(): string =
+    match ANIMAL_TYPE with
+    | Dog { name } -> "dog:" + name
+    | Cat { age } -> "cat:" + age
