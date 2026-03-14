@@ -72,6 +72,35 @@ class DictCollectionTest {
     }
 
     @Test
+    void appendTuple() {
+        var input = new HashMap<>(EXPECTED);
+
+        var result = DictCollection.appendTuple(input);
+
+        assertThat(result).isEqualTo(Map.of(
+                "one", 1,
+                "two", 2,
+                "three", 3,
+                "leet", 1337
+        ));
+        assertThat(input).isEqualTo(EXPECTED);
+    }
+
+    @Test
+    void appendTupleOverride() {
+        var input = new HashMap<>(EXPECTED);
+
+        var result = DictCollection.appendTupleOverride(input);
+
+        assertThat(result).isEqualTo(Map.of(
+                "one", 1,
+                "two", 200,
+                "three", 3
+        ));
+        assertThat(input).isEqualTo(EXPECTED);
+    }
+
+    @Test
     void remove() {
         var input = new HashMap<>(EXPECTED);
 

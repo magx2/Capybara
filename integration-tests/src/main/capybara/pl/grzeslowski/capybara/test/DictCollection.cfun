@@ -20,6 +20,10 @@ fun append(d: dict[int]): dict[int] = d + {
 
 fun append_dict(left: dict[int], right: dict[int]): dict[int] = left + right
 
+fun append_tuple(d: dict[int]): dict[int] = d + ("leet", 1337)
+
+fun append_tuple_override(d: dict[int]): dict[int] = d + ("two", 200)
+
 fun remove(d: dict[int]): dict[int] = d - "two"
 
 fun remove_dict(left: dict[int], right: dict[int]): dict[int] = left - right

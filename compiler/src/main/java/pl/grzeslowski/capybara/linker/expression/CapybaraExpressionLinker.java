@@ -2623,6 +2623,11 @@ public class CapybaraExpressionLinker {
             if (right instanceof LinkedDict rightDict) {
                 return new LinkedDict(findHigherType(leftDict.valueType(), rightDict.valueType()));
             }
+            if (right instanceof LinkedTupleType tupleType
+                && tupleType.elementTypes().size() == 2
+                && tupleType.elementTypes().getFirst() == STRING) {
+                return new LinkedDict(findHigherType(leftDict.valueType(), tupleType.elementTypes().get(1)));
+            }
             return null;
         }
         if (left instanceof PrimitiveLinkedType leftPrimitive && right instanceof PrimitiveLinkedType rightPrimitive) {

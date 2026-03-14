@@ -478,6 +478,17 @@ public class JavaExpressionEvaluator {
 
     private static String evaluateDictAppendExpression(LinkedInfixExpression infixExpression, String left, String right) {
         var valueCastType = dictValueCastType(infixExpression.type(), infixExpression.left().type(), infixExpression.right().type());
+        if (infixExpression.right().type() instanceof pl.grzeslowski.capybara.linker.LinkedTupleType) {
+            var tupleExpression = "((java.util.List<?>) (" + right + "))";
+            return "java.util.stream.Stream.concat(" + left + ".entrySet().stream(), "
+                   + "java.util.stream.Stream.of(java.util.Map.entry("
+                   + "((java.lang.String) " + tupleExpression + ".get(0)), "
+                   + "((" + valueCastType + ") " + tupleExpression + ".get(1)))))"
+                   + ".collect(java.util.stream.Collectors.toMap("
+                   + "entry -> ((java.lang.String) ((java.util.Map.Entry<?, ?>) entry).getKey()), "
+                   + "entry -> ((" + valueCastType + ") ((java.util.Map.Entry<?, ?>) entry).getValue()), "
+                   + "(oldValue, newValue) -> newValue, java.util.LinkedHashMap::new))";
+        }
         return "java.util.stream.Stream.concat(" + left + ".entrySet().stream(), " + right + ".entrySet().stream())"
                + ".collect(java.util.stream.Collectors.toMap("
                + "entry -> ((java.lang.String) ((java.util.Map.Entry<?, ?>) entry).getKey()), "
