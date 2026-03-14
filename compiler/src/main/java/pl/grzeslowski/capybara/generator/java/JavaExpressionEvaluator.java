@@ -156,11 +156,7 @@ public class JavaExpressionEvaluator {
         for (var argument : functionCall.arguments()) {
             var argumentScope = evaluateExpression(argument, current).popExpression();
             current = argumentScope.scope();
-            var renderedArgument = argumentScope.expression();
-            if (argument.type() == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.ANY) {
-                renderedArgument = "((java.lang.Object) (" + renderedArgument + "))";
-            }
-            args.add(renderedArgument);
+            args.add(argumentScope.expression());
         }
 
         if (functionCall.name().startsWith(METHOD_DECL_PREFIX)) {
@@ -481,7 +477,7 @@ public class JavaExpressionEvaluator {
     }
 
     private static String evaluateDictAppendExpression(LinkedInfixExpression infixExpression, String left, String right) {
-        var valueCastType = dictValueCastType(infixExpression.type());
+        var valueCastType = dictValueCastType(infixExpression.type(), infixExpression.left().type(), infixExpression.right().type());
         return "java.util.stream.Stream.concat(" + left + ".entrySet().stream(), " + right + ".entrySet().stream())"
                + ".collect(java.util.stream.Collectors.toMap("
                + "entry -> ((java.lang.String) ((java.util.Map.Entry<?, ?>) entry).getKey()), "
@@ -516,7 +512,7 @@ public class JavaExpressionEvaluator {
     }
 
     private static String evaluateDictRemoveExpression(LinkedInfixExpression infixExpression, String left, String right) {
-        var valueCastType = dictValueCastType(infixExpression.type());
+        var valueCastType = dictValueCastType(infixExpression.type(), infixExpression.left().type(), infixExpression.right().type());
         if (infixExpression.right().type() instanceof pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedDict) {
             return left + ".entrySet().stream().filter(entry -> !" + right + ".containsKey(entry.getKey()))"
                    + ".collect(java.util.stream.Collectors.toMap("
@@ -534,6 +530,26 @@ public class JavaExpressionEvaluator {
     private static String dictValueCastType(pl.grzeslowski.capybara.linker.LinkedType type) {
         if (type instanceof pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedDict linkedDict) {
             return javaCastType(linkedDict.valueType());
+        }
+        return "java.lang.Object";
+    }
+
+    private static String dictValueCastType(
+            pl.grzeslowski.capybara.linker.LinkedType resultType,
+            pl.grzeslowski.capybara.linker.LinkedType leftType,
+            pl.grzeslowski.capybara.linker.LinkedType rightType
+    ) {
+        var fromResult = dictValueCastType(resultType);
+        if (!"java.lang.Object".equals(fromResult)) {
+            return fromResult;
+        }
+        var fromLeft = dictValueCastType(leftType);
+        if (!"java.lang.Object".equals(fromLeft)) {
+            return fromLeft;
+        }
+        var fromRight = dictValueCastType(rightType);
+        if (!"java.lang.Object".equals(fromRight)) {
+            return fromRight;
         }
         return "java.lang.Object";
     }
@@ -582,22 +598,23 @@ public class JavaExpressionEvaluator {
         var entryVar = "__entry";
         var dictArgs = parseDictPipeArguments(pipeExpression.argumentName());
 
-        Scope mapperScope;
+        Scope mapperBaseScope;
         if (dictArgs.length == 2) {
-            mapperScope = sourceExSc.scope()
+            mapperBaseScope = sourceExSc.scope()
                     .addValueOverride(dictArgs[0], entryVar + ".getKey()")
                     .addValueOverride(dictArgs[1], entryVar + ".getValue()");
         } else {
-            mapperScope = sourceExSc.scope()
+            mapperBaseScope = sourceExSc.scope()
                     .addValueOverride(pipeExpression.argumentName(), entryVar + ".getValue()");
         }
 
-        var mapperExSc = evaluateExpression(pipeExpression.mapper(), mapperScope).popExpression();
-        return mapperExSc.scope().addExpression(
+        var mapperExSc = evaluateExpression(pipeExpression.mapper(), mapperBaseScope).popExpression();
+        var mapperLambda = lambdaExpression(entryVar, mapperBaseScope, mapperExSc.scope(), mapperExSc.expression());
+        return mapperBaseScope.withoutValueOverrides().addExpression(
                 sourceExSc.expression()
                 + ".entrySet().stream().collect(java.util.stream.Collectors.toMap("
                 + entryVar + " -> " + entryVar + ".getKey(), "
-                + entryVar + " -> (" + mapperExSc.expression() + "), "
+                + mapperLambda + ", "
                 + "(oldValue, newValue) -> newValue, java.util.LinkedHashMap::new))"
         );
     }
@@ -631,23 +648,36 @@ public class JavaExpressionEvaluator {
             var sourceExSc = evaluateExpression(source, scope).popExpression();
             var entryVar = "__entry";
             var dictArgs = parseDictPipeArguments(argumentName);
-            var predicateScope = sourceExSc.scope()
+            var predicateBaseScope = sourceExSc.scope()
                     .addValueOverride(dictArgs[0], entryVar + ".getKey()")
                     .addValueOverride(dictArgs[1], entryVar + ".getValue()");
-            var predicateExSc = evaluateExpression(predicate, predicateScope).popExpression();
-            return predicateExSc.scope().addExpression(
+            var predicateExSc = evaluateExpression(predicate, predicateBaseScope).popExpression();
+            var predicateLambda = lambdaExpression(
+                    entryVar,
+                    predicateBaseScope,
+                    predicateExSc.scope(),
+                    predicateExSc.expression()
+            );
+            return predicateBaseScope.withoutValueOverrides().addExpression(
                     sourceExSc.expression()
-                    + ".entrySet().stream()." + matchMethod + "(" + entryVar + " -> (" + predicateExSc.expression() + "))"
+                    + ".entrySet().stream()." + matchMethod + "(" + predicateLambda + ")"
             );
         }
 
         var sourceStreamExSc = evaluateSourceAsStream(source, scope);
+        var predicateBaseScope = sourceStreamExSc.scope().addLocalValue(argumentName);
         var predicateExSc = evaluateExpression(
                 predicate,
-                sourceStreamExSc.scope().addLocalValue(argumentName)
+                predicateBaseScope
         ).popExpression();
-        return predicateExSc.scope().addExpression(
-                sourceStreamExSc.streamExpression() + "." + matchMethod + "(" + argumentName + " -> (" + predicateExSc.expression() + "))"
+        var predicateLambda = lambdaExpression(
+                argumentName,
+                predicateBaseScope,
+                predicateExSc.scope(),
+                predicateExSc.expression()
+        );
+        return sourceStreamExSc.scope().withoutValueOverrides().addExpression(
+                sourceStreamExSc.streamExpression() + "." + matchMethod + "(" + predicateLambda + ")"
         );
     }
 
@@ -656,20 +686,26 @@ public class JavaExpressionEvaluator {
         var entryVar = "__entry";
         var dictArgs = parseDictPipeArguments(pipeFilterOutExpression.argumentName());
 
-        Scope predicateScope;
+        Scope predicateBaseScope;
         if (dictArgs.length == 2) {
-            predicateScope = sourceExSc.scope()
+            predicateBaseScope = sourceExSc.scope()
                     .addValueOverride(dictArgs[0], entryVar + ".getKey()")
                     .addValueOverride(dictArgs[1], entryVar + ".getValue()");
         } else {
-            predicateScope = sourceExSc.scope()
+            predicateBaseScope = sourceExSc.scope()
                     .addValueOverride(pipeFilterOutExpression.argumentName(), entryVar + ".getValue()");
         }
-        var predicateExSc = evaluateExpression(pipeFilterOutExpression.predicate(), predicateScope).popExpression();
-        return predicateExSc.scope().addExpression(
+        var predicateExSc = evaluateExpression(pipeFilterOutExpression.predicate(), predicateBaseScope).popExpression();
+        var predicateLambda = lambdaExpression(
+                entryVar,
+                predicateBaseScope,
+                predicateExSc.scope(),
+                "!(" + predicateExSc.expression() + ")"
+        );
+        return predicateBaseScope.withoutValueOverrides().addExpression(
                 sourceExSc.expression()
                 + ".entrySet().stream()"
-                + ".filter(" + entryVar + " -> !(" + predicateExSc.expression() + "))"
+                + ".filter(" + predicateLambda + ")"
                 + ".collect(java.util.stream.Collectors.toMap("
                 + entryVar + " -> " + entryVar + ".getKey(), "
                 + entryVar + " -> " + entryVar + ".getValue(), "
@@ -679,21 +715,29 @@ public class JavaExpressionEvaluator {
 
     private static Scope evaluateOptionPipeExpression(LinkedPipeExpression pipeExpression, Scope scope) {
         var sourceExSc = evaluateExpression(pipeExpression.source(), scope).popExpression();
+        var mapperBaseScope = sourceExSc.scope().addLocalValue(pipeExpression.argumentName());
         var mapperExSc = evaluateExpression(
                 pipeExpression.mapper(),
-                sourceExSc.scope().addLocalValue(pipeExpression.argumentName())
+                mapperBaseScope
         ).popExpression();
-        return mapperExSc.scope().addExpression(
+        var mapperLambda = lambdaExpression(
+                pipeExpression.argumentName(),
+                mapperBaseScope,
+                mapperExSc.scope(),
+                mapperExSc.expression()
+        );
+        return sourceExSc.scope().withoutValueOverrides().addExpression(
                 sourceExSc.expression()
-                + ".map(" + pipeExpression.argumentName() + " -> (" + mapperExSc.expression() + "))"
+                + ".map(" + mapperLambda + ")"
         );
     }
 
     private static Scope evaluateOptionPipeFilterOutExpression(LinkedPipeFilterOutExpression pipeFilterOutExpression, Scope scope) {
         var sourceExSc = evaluateExpression(pipeFilterOutExpression.source(), scope).popExpression();
+        var predicateBaseScope = sourceExSc.scope().addLocalValue(pipeFilterOutExpression.argumentName());
         var predicateExSc = evaluateExpression(
                 pipeFilterOutExpression.predicate(),
-                sourceExSc.scope().addLocalValue(pipeFilterOutExpression.argumentName())
+                predicateBaseScope
         ).popExpression();
 
         var sourceExpression = isOptionType(pipeFilterOutExpression.source().type())
@@ -701,9 +745,15 @@ public class JavaExpressionEvaluator {
                 ? sourceExSc.expression()
                 : "java.util.Optional.of(" + sourceExSc.expression() + ")";
 
-        return predicateExSc.scope().addExpression(
+        var predicateLambda = lambdaExpression(
+                pipeFilterOutExpression.argumentName(),
+                predicateBaseScope,
+                predicateExSc.scope(),
+                "!(" + predicateExSc.expression() + ")"
+        );
+        return sourceExSc.scope().withoutValueOverrides().addExpression(
                 sourceExpression
-                + ".filter(" + pipeFilterOutExpression.argumentName() + " -> !(" + predicateExSc.expression() + "))"
+                + ".filter(" + predicateLambda + ")"
         );
     }
 
@@ -913,22 +963,25 @@ public class JavaExpressionEvaluator {
             var keyName = dictArgs[0];
             var valueName = dictArgs[1];
             var entryVar = "__entry";
+            var mapperBaseScope = sourceExSc.scope()
+                    .addValueOverride(keyName, entryVar + ".getKey()")
+                    .addValueOverride(valueName, entryVar + ".getValue()");
             var mapperExSc = evaluateExpression(
                     pipeExpression.mapper(),
-                    sourceExSc.scope()
-                            .addValueOverride(keyName, entryVar + ".getKey()")
-                            .addValueOverride(valueName, entryVar + ".getValue()")
+                    mapperBaseScope
             ).popExpression();
+            var mapperLambda = lambdaExpression(entryVar, mapperBaseScope, mapperExSc.scope(), mapperExSc.expression());
             return new StreamExpressionScope(
-                    sourceExSc.expression() + ".entrySet().stream().map(" + entryVar + " -> (" + mapperExSc.expression() + "))",
-                    mapperExSc.scope().withoutValueOverrides()
+                    sourceExSc.expression() + ".entrySet().stream().map(" + mapperLambda + ")",
+                    mapperBaseScope.withoutValueOverrides()
             );
         }
 
         var sourceStreamExSc = evaluateSourceAsStream(pipeExpression.source(), scope);
+        var mapperBaseScope = sourceStreamExSc.scope().addLocalValue(pipeExpression.argumentName());
         var mapperExSc = evaluateExpression(
                 pipeExpression.mapper(),
-                sourceStreamExSc.scope().addLocalValue(pipeExpression.argumentName())
+                mapperBaseScope
         ).popExpression();
         var mapperExpression = mapperExSc.expression();
         if (pipeExpression.type() instanceof pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedList listType
@@ -939,41 +992,61 @@ public class JavaExpressionEvaluator {
             && setType.elementType() == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.ANY) {
             mapperExpression = "(java.lang.Object) (" + mapperExpression + ")";
         }
+        var mapperLambda = lambdaExpression(
+                pipeExpression.argumentName(),
+                mapperBaseScope,
+                mapperExSc.scope(),
+                mapperExpression
+        );
         return new StreamExpressionScope(
                 sourceStreamExSc.streamExpression()
-                + ".map(" + pipeExpression.argumentName() + " -> (" + mapperExpression + "))",
-                mapperExSc.scope().withoutValueOverrides()
+                + ".map(" + mapperLambda + ")",
+                sourceStreamExSc.scope().withoutValueOverrides()
         );
     }
 
     private static StreamExpressionScope evaluatePipeFilterOutExpressionAsStream(LinkedPipeFilterOutExpression pipeFilterOutExpression, Scope scope) {
         var sourceStreamExSc = evaluateSourceAsStream(pipeFilterOutExpression.source(), scope);
+        var predicateBaseScope = sourceStreamExSc.scope().addLocalValue(pipeFilterOutExpression.argumentName());
         var predicateExSc = evaluateExpression(
                 pipeFilterOutExpression.predicate(),
-                sourceStreamExSc.scope().addLocalValue(pipeFilterOutExpression.argumentName())
+                predicateBaseScope
         ).popExpression();
+        var predicateLambda = lambdaExpressionNoOuterParens(
+                pipeFilterOutExpression.argumentName(),
+                predicateBaseScope,
+                predicateExSc.scope(),
+                "!(" + predicateExSc.expression() + ")"
+        );
         return new StreamExpressionScope(
                 sourceStreamExSc.streamExpression()
-                + ".filter(" + pipeFilterOutExpression.argumentName() + " -> !(" + predicateExSc.expression() + "))",
-                predicateExSc.scope().withoutValueOverrides()
+                + ".filter(" + predicateLambda + ")",
+                sourceStreamExSc.scope().withoutValueOverrides()
         );
     }
 
     private static StreamExpressionScope evaluatePipeFlatMapExpressionAsStream(LinkedPipeFlatMapExpression pipeFlatMapExpression, Scope scope) {
         var sourceStreamExSc = evaluateSourceAsStream(pipeFlatMapExpression.source(), scope);
+        var mapperBaseScope = sourceStreamExSc.scope().addLocalValue(pipeFlatMapExpression.argumentName());
         var mapperExSc = evaluateExpression(
                 pipeFlatMapExpression.mapper(),
-                sourceStreamExSc.scope().addLocalValue(pipeFlatMapExpression.argumentName())
+                mapperBaseScope
         ).popExpression();
 
         var streamExtractor = switch (pipeFlatMapExpression.mapper().type()) {
             case pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedDict ignored -> ".values().stream()";
             default -> ".stream()";
         };
+        var mapperLambda = lambdaExpressionNoOuterParens(
+                pipeFlatMapExpression.argumentName(),
+                mapperBaseScope,
+                mapperExSc.scope(),
+                "(" + mapperExSc.expression() + ")" + streamExtractor
+        );
         return new StreamExpressionScope(
                 sourceStreamExSc.streamExpression()
-                + ".flatMap(" + pipeFlatMapExpression.argumentName() + " -> (" + mapperExSc.expression() + ")" + streamExtractor + ")",
-                mapperExSc.scope().withoutValueOverrides()
+                + ".flatMap(" + mapperLambda + ")",
+                sourceStreamExSc.scope().withoutValueOverrides()
         );
     }
 
@@ -1003,6 +1076,43 @@ public class JavaExpressionEvaluator {
     }
 
     private record StreamExpressionScope(String streamExpression, Scope scope) {
+    }
+
+    private static String lambdaExpression(
+            String argumentName,
+            Scope baseScope,
+            Scope evaluatedScope,
+            String expression
+    ) {
+        var addedStatements = addedStatements(baseScope, evaluatedScope);
+        if (addedStatements.isEmpty()) {
+            return argumentName + " -> (" + expression + ")";
+        }
+        var statements = String.join("; ", addedStatements);
+        return argumentName + " -> { " + statements + "; return (" + expression + "); }";
+    }
+
+    private static String lambdaExpressionNoOuterParens(
+            String argumentName,
+            Scope baseScope,
+            Scope evaluatedScope,
+            String expression
+    ) {
+        var addedStatements = addedStatements(baseScope, evaluatedScope);
+        if (addedStatements.isEmpty()) {
+            return argumentName + " -> " + expression;
+        }
+        var statements = String.join("; ", addedStatements);
+        return argumentName + " -> { " + statements + "; return " + expression + "; }";
+    }
+
+    private static java.util.List<String> addedStatements(Scope baseScope, Scope evaluatedScope) {
+        var baseStatements = baseScope.getStatements();
+        var evaluatedStatements = evaluatedScope.getStatements();
+        if (evaluatedStatements.size() <= baseStatements.size()) {
+            return java.util.List.of();
+        }
+        return evaluatedStatements.subList(baseStatements.size(), evaluatedStatements.size());
     }
 
     private static String terminalCollect(pl.grzeslowski.capybara.linker.LinkedType type) {
@@ -1253,6 +1363,9 @@ public class JavaExpressionEvaluator {
                         caseExpression = "((" + javaPatternType(inferredType) + ") (" + caseExpression + "))";
                     }
                 }
+            }
+            if (matchCase.expression().type() instanceof LinkedDataParentType) {
+                caseExpression = "((" + javaCastType(matchCase.expression().type()) + ") (" + caseExpression + "))";
             }
             var caseStatements = expressionScope.scope().getStatements()
                     .subList(branchScope.getStatements().size(), expressionScope.scope().getStatements().size());
@@ -1788,6 +1901,14 @@ public class JavaExpressionEvaluator {
             entries.add("java.util.Map.entry(" + keyExSc.expression() + ", " + valueExSc.expression() + ")");
         }
         if (entries.isEmpty()) {
+            if (newDict.type() instanceof pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedDict linkedDict) {
+                var valueType = javaCastType(linkedDict.valueType());
+                if (!"java.lang.Object".equals(valueType)) {
+                    return current.addExpression(
+                            "java.util.Map.<java.lang.String, " + valueType + ">of()"
+                    );
+                }
+            }
             return current.addExpression("java.util.Map.of()");
         }
         return current.addExpression(

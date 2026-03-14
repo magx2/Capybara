@@ -6,6 +6,7 @@ import pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedDict;
 import pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedList;
 import pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedSet;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -317,10 +318,110 @@ public class JavaAstBuilder {
             case LinkedDataType linkedDataType -> linkedDataType.typeParameters();
             case LinkedDataParentType linkedDataParentType -> linkedDataParentType.typeParameters();
         };
-        if (typeParameters.isEmpty() || !typeParameters.stream().allMatch(typeName -> typeName.matches("[A-Z]"))) {
+        if (typeParameters.isEmpty()) {
             return new JavaType(rawJavaTypeName);
         }
-        return new JavaType(rawJavaTypeName + "<" + String.join(", ", typeParameters) + ">");
+        var mappedTypeParameters = typeParameters.stream()
+                .map(this::mapTypeParameterDescriptor)
+                .collect(joining(", "));
+        return new JavaType(rawJavaTypeName + "<" + mappedTypeParameters + ">");
+    }
+
+    private String mapTypeParameterDescriptor(String descriptor) {
+        var normalized = descriptor.trim();
+        return switch (normalized) {
+            case "byte" -> "java.lang.Byte";
+            case "int" -> "java.lang.Integer";
+            case "long" -> "java.lang.Long";
+            case "double" -> "java.lang.Double";
+            case "float" -> "java.lang.Float";
+            case "bool" -> "java.lang.Boolean";
+            case "string" -> "java.lang.String";
+            case "any", "nothing", "data" -> "java.lang.Object";
+            default -> {
+                if (normalized.matches("[A-Z][A-Za-z0-9_]*")) {
+                    yield normalized;
+                }
+                if (normalized.startsWith("list[") && normalized.endsWith("]")) {
+                    var inner = normalized.substring("list[".length(), normalized.length() - 1);
+                    yield "java.util.List<" + mapTypeParameterDescriptor(inner) + ">";
+                }
+                if (normalized.startsWith("set[") && normalized.endsWith("]")) {
+                    var inner = normalized.substring("set[".length(), normalized.length() - 1);
+                    yield "java.util.Set<" + mapTypeParameterDescriptor(inner) + ">";
+                }
+                if (normalized.startsWith("dict[") && normalized.endsWith("]")) {
+                    var inner = normalized.substring("dict[".length(), normalized.length() - 1);
+                    yield "java.util.Map<java.lang.String, " + mapTypeParameterDescriptor(inner) + ">";
+                }
+                if (normalized.startsWith("tuple[") && normalized.endsWith("]")) {
+                    yield "java.util.List<java.lang.Object>";
+                }
+                var genericStart = normalized.indexOf('[');
+                if (genericStart > 0 && normalized.endsWith("]")) {
+                    var rawType = normalized.substring(0, genericStart).trim();
+                    var argsDescriptor = normalized.substring(genericStart + 1, normalized.length() - 1);
+                    var javaArgs = splitTopLevelDescriptors(argsDescriptor).stream()
+                            .map(this::mapTypeParameterDescriptor)
+                            .collect(joining(", "));
+                    yield normalizeRawTypeReference(rawType) + "<" + javaArgs + ">";
+                }
+                yield normalizeRawTypeReference(normalized);
+            }
+        };
+    }
+
+    private static List<String> splitTopLevelDescriptors(String descriptors) {
+        var result = new ArrayList<String>();
+        var depth = 0;
+        var start = 0;
+        for (int i = 0; i < descriptors.length(); i++) {
+            var ch = descriptors.charAt(i);
+            if (ch == '[') {
+                depth++;
+            } else if (ch == ']') {
+                depth--;
+            } else if (ch == ',' && depth == 0) {
+                result.add(descriptors.substring(start, i).trim());
+                start = i + 1;
+            }
+        }
+        var last = descriptors.substring(start).trim();
+        if (!last.isEmpty()) {
+            result.add(last);
+        }
+        return result;
+    }
+
+    private String normalizeRawTypeReference(String rawTypeName) {
+        if (rawTypeName.startsWith("/") && !rawTypeName.contains(".")) {
+            var slashIndex = rawTypeName.lastIndexOf('/');
+            if (slashIndex > 0 && slashIndex < rawTypeName.length() - 1) {
+                var packageName = rawTypeName.substring(1, slashIndex).replace('/', '.');
+                var className = buildClassName(rawTypeName.substring(slashIndex + 1));
+                return packageName + "." + className;
+            }
+        }
+        if (rawTypeName.contains("/") && rawTypeName.contains(".")) {
+            var dotIndex = rawTypeName.lastIndexOf('.');
+            var slashIndex = rawTypeName.lastIndexOf('/');
+            if (slashIndex > 0 && slashIndex < dotIndex) {
+                var startIdx = rawTypeName.startsWith("/") ? 1 : 0;
+                var modulePath = rawTypeName.substring(startIdx, slashIndex).replace('/', '.');
+                var moduleName = buildClassName(rawTypeName.substring(slashIndex + 1, dotIndex));
+                var nestedType = buildClassName(rawTypeName.substring(dotIndex + 1));
+                if (moduleName.equals(nestedType)) {
+                    return modulePath + "." + moduleName;
+                }
+                return modulePath + "." + moduleName + "." + nestedType;
+            }
+        }
+        if (rawTypeName.contains(".")) {
+            return Stream.of(rawTypeName.split("\\."))
+                    .map(JavaAstBuilder::normalizeJavaTypeIdentifier)
+                    .collect(joining("."));
+        }
+        return buildClassName(rawTypeName).toString();
     }
 
     private JavaType buildPrimitiveLinkedType(PrimitiveLinkedType type) {

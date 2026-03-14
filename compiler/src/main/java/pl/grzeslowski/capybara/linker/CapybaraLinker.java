@@ -485,6 +485,7 @@ public class CapybaraLinker {
         linked = normalizeInfixOperatorErrors(linked, function, moduleSourceFile);
         linked = normalizeMatchExhaustivenessErrors(linked, function, moduleSourceFile);
         linked = normalizeIntLiteralErrors(linked, function, moduleSourceFile);
+        linked = normalizeExpectedFoundErrors(linked, function, moduleSourceFile);
         var normalizedFile = normalizeFile(moduleSourceFile);
         var fallbackPosition = returnExpressionPosition(function.expression()).or(() -> function.position());
         return withPosition(linked, fallbackPosition, normalizedFile);
@@ -598,6 +599,50 @@ public class CapybaraLinker {
                 .map(singleError -> normalizeIntLiteralError(singleError, function, moduleSourceFile))
                 .toList();
         return new ValueOrError.Error<>(transformed);
+    }
+
+    private ValueOrError<LinkedFunction> normalizeExpectedFoundErrors(
+            ValueOrError<LinkedFunction> linked,
+            Function function,
+            String moduleSourceFile
+    ) {
+        if (!(linked instanceof ValueOrError.Error<LinkedFunction> error)) {
+            return linked;
+        }
+        var transformed = error.errors().stream()
+                .map(singleError -> normalizeExpectedFoundError(singleError, function, moduleSourceFile))
+                .toList();
+        return new ValueOrError.Error<>(transformed);
+    }
+
+    private ValueOrError.Error.SingleError normalizeExpectedFoundError(
+            ValueOrError.Error.SingleError error,
+            Function function,
+            String moduleSourceFile
+    ) {
+        if (!error.message().matches("^Expected `[^`]+`, but got `[^`]+`$")) {
+            return error;
+        }
+        var line = Math.max(error.line(), 1);
+        var column = Math.max(error.column(), 1);
+        var file = normalizeFile(moduleSourceFile);
+        var functionPreview = formatFunctionPreviewUpToLine(function, line);
+        var pointer = " ".repeat(Math.max(column, 0)) + "^ " + error.message();
+        var message = "error: mismatched types\n"
+                      + " --> " + file + ":" + line + ":" + column + "\n"
+                      + functionPreview + "\n"
+                      + pointer + "\n";
+        return new ValueOrError.Error.SingleError(line, column, file, message);
+    }
+
+    private String formatFunctionPreviewUpToLine(Function function, int line) {
+        var full = formatFunctionHeader(function) + " =\n" + formatMultilineExpression(function.expression(), 4);
+        var startLine = function.position().map(SourcePosition::line).orElse(line);
+        var lines = full.split("\n", -1);
+        var maxLines = Math.max(1, line - startLine + 1);
+        return java.util.Arrays.stream(lines)
+                .limit(Math.min(maxLines, lines.length))
+                .collect(java.util.stream.Collectors.joining("\n"));
     }
 
     private ValueOrError.Error.SingleError normalizeIntLiteralError(
@@ -833,6 +878,7 @@ public class CapybaraLinker {
                 builder.append('\n').append(formatMultilineExpression(letExpression.rest(), indent));
                 yield builder.toString();
             }
+            case NewData newData -> formatNewDataMultiline(newData, indent);
             default -> " ".repeat(indent) + formatExpressionPreview(expression);
         };
     }
@@ -876,10 +922,11 @@ public class CapybaraLinker {
             builder.append('\n');
             for (var i = 0; i < newData.assignments().size(); i++) {
                 var assignment = newData.assignments().get(i);
+                var assignmentValue = formatAssignmentValue(assignment.value(), indent + 4);
                 builder.append(" ".repeat(indent + 4))
                         .append(assignment.name())
                         .append(": ")
-                        .append(formatExpressionPreview(assignment.value()));
+                        .append(assignmentValue);
                 if (i < newData.assignments().size() - 1) {
                     builder.append(",");
                 }
@@ -890,6 +937,54 @@ public class CapybaraLinker {
         }
         builder.append("}");
         return builder.toString();
+    }
+
+    private String formatAssignmentValue(Expression expression, int indent) {
+        return switch (expression) {
+            case NewDictExpression newDictExpression -> formatNewDictMultiline(newDictExpression, indent);
+            case NewData newData -> formatNewDataSingleLine(newData);
+            default -> formatExpressionPreview(expression);
+        };
+    }
+
+    private String formatNewDictMultiline(NewDictExpression expression, int indent) {
+        var builder = new StringBuilder("{");
+        if (!expression.entries().isEmpty()) {
+            builder.append('\n');
+            for (var i = 0; i < expression.entries().size(); i++) {
+                var entry = expression.entries().get(i);
+                builder.append(" ".repeat(indent + 4))
+                        .append(formatExpressionPreview(entry.key()))
+                        .append(": ")
+                        .append(formatAssignmentValue(entry.value(), indent + 4));
+                if (i < expression.entries().size() - 1) {
+                    builder.append(",");
+                }
+                builder.append('\n');
+            }
+            builder.append(" ".repeat(indent));
+        }
+        builder.append("}");
+        return builder.toString();
+    }
+
+    private String formatNewDataSingleLine(NewData newData) {
+        var typeName = formatParserType(newData.type());
+        if (!newData.positionalArguments().isEmpty() && newData.assignments().isEmpty()) {
+            return typeName + " { "
+                   + newData.positionalArguments().stream()
+                           .map(this::formatExpressionPreview)
+                           .collect(java.util.stream.Collectors.joining(", "))
+                   + " }";
+        }
+        if (!newData.assignments().isEmpty()) {
+            return typeName + " { "
+                   + newData.assignments().stream()
+                           .map(assignment -> assignment.name() + ": " + formatExpressionPreview(assignment.value()))
+                           .collect(java.util.stream.Collectors.joining(", "))
+                   + " }";
+        }
+        return typeName + " {}";
     }
 
     private String formatNewDataMultiline(NewData newData, int indent) {
@@ -916,7 +1011,7 @@ public class CapybaraLinker {
                 builder.append(" ".repeat(indent + 4))
                         .append(assignment.name())
                         .append(": ")
-                        .append(formatExpressionPreview(assignment.value()));
+                        .append(formatAssignmentValue(assignment.value(), indent + 4));
                 if (i < newData.assignments().size() - 1) {
                     builder.append(",");
                 }

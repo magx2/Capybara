@@ -3406,32 +3406,35 @@ public class CapybaraExpressionLinker {
     }
 
     private ValueOrError<LinkedExpression> linkNewDictExpression(NewDictExpression expression, Scope scope) {
-        return expression.entries().stream()
-                .map(entry -> ValueOrError.join(
-                        LinkedNewDict.Entry::new,
-                        linkExpression(entry.key(), scope),
-                        linkExpression(entry.value(), scope)
-                ))
-                .collect(new ValueOrErrorCollectionCollector<>())
-                .flatMap(entries -> {
-                    var invalidKey = entries.stream()
-                            .map(LinkedNewDict.Entry::key)
-                            .filter(key -> key.type() != STRING)
-                            .findFirst();
-                    if (invalidKey.isPresent()) {
-                        return withPosition(
-                                ValueOrError.error("dict keys must be of type `STRING`"),
-                                expression.position()
-                        );
-                    }
+        var entries = new java.util.ArrayList<LinkedNewDict.Entry>();
+        for (var entry : expression.entries()) {
+            var key = linkExpression(entry.key(), scope);
+            if (key instanceof ValueOrError.Error<LinkedExpression> error) {
+                return new ValueOrError.Error<>(error.errors());
+            }
+            var value = linkExpression(entry.value(), scope);
+            if (value instanceof ValueOrError.Error<LinkedExpression> error) {
+                return new ValueOrError.Error<>(error.errors());
+            }
+            var linkedEntry = new LinkedNewDict.Entry(
+                    ((ValueOrError.Value<LinkedExpression>) key).value(),
+                    ((ValueOrError.Value<LinkedExpression>) value).value()
+            );
+            if (linkedEntry.key().type() != STRING) {
+                return withPosition(
+                        ValueOrError.error("dict keys must be of type `STRING`"),
+                        entry.key().position().or(() -> expression.position())
+                );
+            }
+            entries.add(linkedEntry);
+        }
 
-                    var valueType = entries.stream()
-                            .map(LinkedNewDict.Entry::value)
-                            .map(LinkedExpression::type)
-                            .reduce(CapybaraTypeFinder::findHigherType)
-                            .orElse(ANY);
-                    return ValueOrError.success((LinkedExpression) new LinkedNewDict(entries, new LinkedDict(valueType)));
-                });
+        var valueType = entries.stream()
+                .map(LinkedNewDict.Entry::value)
+                .map(LinkedExpression::type)
+                .reduce(CapybaraTypeFinder::findHigherType)
+                .orElse(ANY);
+        return ValueOrError.success((LinkedExpression) new LinkedNewDict(List.copyOf(entries), new LinkedDict(valueType)));
     }
 
     private ValueOrError<LinkedExpression> linkNewData(NewData newData, Scope scope) {
@@ -3596,12 +3599,13 @@ public class CapybaraExpressionLinker {
             var coerced = coerceArgument(assignment.value(), expectedType);
             if (coerced == null) {
                 if (isHardFieldTypeMismatch(expectedType, assignment.value().type())) {
+                    var assignmentPosition = findAssignmentValuePosition(source, assignment.name()).or(source::position);
                     return withPosition(
                             ValueOrError.error(
-                                    "Cannot assign field `" + assignment.name() + "` of type `"
-                                    + expectedType + "` from `" + assignment.value().type() + "`"
+                                    "Expected `" + renderTypeForError(expectedType)
+                                    + "`, but got `" + renderTypeForError(assignment.value().type()) + "`"
                             ),
-                            source.position()
+                            assignmentPosition
                     );
                 }
                 coercedAssignments.add(assignment);
@@ -3610,6 +3614,15 @@ public class CapybaraExpressionLinker {
             coercedAssignments.add(new LinkedNewData.FieldAssignment(assignment.name(), coerced.expression()));
         }
         return ValueOrError.success(List.copyOf(coercedAssignments));
+    }
+
+    private Optional<SourcePosition> findAssignmentValuePosition(NewData source, String fieldName) {
+        return source.assignments().stream()
+                .filter(assignment -> assignment.name().equals(fieldName))
+                .map(NewData.FieldAssignment::value)
+                .map(Expression::position)
+                .flatMap(Optional::stream)
+                .findFirst();
     }
 
     private boolean isHardFieldTypeMismatch(LinkedType expected, LinkedType actual) {
@@ -3636,7 +3649,7 @@ public class CapybaraExpressionLinker {
         if (expected instanceof PrimitiveLinkedType expectedPrimitive) {
             if (actual instanceof PrimitiveLinkedType actualPrimitive) {
                 if (isNumericPrimitive(expectedPrimitive) && isNumericPrimitive(actualPrimitive)) {
-                    return false;
+                    return !isAssignableNumericPrimitive(expectedPrimitive, actualPrimitive);
                 }
                 return expectedPrimitive != actualPrimitive;
             }
@@ -3648,6 +3661,29 @@ public class CapybaraExpressionLinker {
         }
 
         return false;
+    }
+
+    private boolean isAssignableNumericPrimitive(PrimitiveLinkedType expected, PrimitiveLinkedType actual) {
+        return numericRank(actual) <= numericRank(expected);
+    }
+
+    private int numericRank(PrimitiveLinkedType type) {
+        return switch (type) {
+            case BYTE -> 1;
+            case INT -> 2;
+            case LONG -> 3;
+            case FLOAT -> 4;
+            case DOUBLE -> 5;
+            default -> Integer.MAX_VALUE;
+        };
+    }
+
+    private String renderTypeForError(LinkedType type) {
+        return switch (type) {
+            case PrimitiveLinkedType.FLOAT -> "double";
+            case PrimitiveLinkedType primitive -> primitive.name().toLowerCase(java.util.Locale.ROOT);
+            default -> type.toString();
+        };
     }
 
     private ValueOrError<LinkedExpression> linkStringValue(StringValue value, Scope scope) {

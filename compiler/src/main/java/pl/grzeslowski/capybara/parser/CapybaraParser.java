@@ -25,6 +25,7 @@ public class CapybaraParser {
     private static final Pattern COLLECTION_LIST_PATTERN = Pattern.compile("list\\[(.+?)]");
     private static final Pattern COLLECTION_SET_PATTERN = Pattern.compile("set\\[(.+?)]");
     private static final Pattern COLLECTION_DICT_PATTERN = Pattern.compile("dict\\[(.+?)]");
+    private static final Pattern NO_VIABLE_ALTERNATIVE_PATTERN = Pattern.compile("no viable alternative at input '(.+)'");
 
     public Functional parseFunctional(String input) {
         var lexer = new pl.grzeslowski.capybara.parser.antlr.FunctionalLexer(CharStreams.fromString(input));
@@ -66,6 +67,16 @@ public class CapybaraParser {
         if (syntaxError.message().contains("no viable alternative at input 'match")
             && syntaxError.message().contains("=")) {
             return "line %d:%d: Expected `->`, found `=`".formatted(syntaxError.line(), syntaxError.column());
+        }
+        var noViableAlternativeMatcher = NO_VIABLE_ALTERNATIVE_PATTERN.matcher(syntaxError.message());
+        if (noViableAlternativeMatcher.matches()) {
+            var offendingInput = noViableAlternativeMatcher.group(1)
+                    .replaceAll("\\s+", " ")
+                    .trim();
+            var preview = offendingInput.length() > 80
+                    ? offendingInput.substring(0, 77) + "..."
+                    : offendingInput;
+            return "line %d:%d: Syntax error near `%s`".formatted(syntaxError.line(), syntaxError.column(), preview);
         }
         if (syntaxError.message().contains("mismatched input '=' expecting '->'")
             || syntaxError.message().equals("Expected `->`, found `=`")) {

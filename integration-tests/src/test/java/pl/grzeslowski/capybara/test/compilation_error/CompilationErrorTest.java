@@ -330,6 +330,32 @@ public class CompilationErrorTest {
                                 """
                 ),
                 Arguments.of(
+                        "json_assertion_no_viable_alternative",
+                        """
+                                data JsonNumberLong { value: long }
+                                data JsonObject { value: dict[JsonNumberLong] }
+                                fun foo(): JsonObject =
+                                    JsonObject {
+                                        value: {
+                                            "int": JsonNumberLong { value: 5.5 },
+                                            "int_minus": JsonNumberLong { value: -5.5 },
+                                            "long": JsonNumberLong { value: 97387717187.4 },
+                                            "long_minus": JsonNumberLong { value: -973877177.4 },
+                                        }
+                                    }
+                                """,
+                        new Position(6, 43),
+                        """
+                                error: mismatched types
+                                 --> /foo/boo/json_assertion_no_viable_alternative.cfun:%d:%d
+                                fun foo(): JsonObject =
+                                    JsonObject {
+                                        value: {
+                                            "int": JsonNumberLong { value: 5.5 },
+                                                                           ^ Expected `long`, but got `double`
+                                """
+                ),
+                Arguments.of(
                         "function_wrong_return_type",
                         "fun foo(x: int): int = \"boo\"",
                         new Position(1, 23),
@@ -564,11 +590,21 @@ public class CompilationErrorTest {
                 var header = lines.length > functionLine ? lines[functionLine] : "";
                 var body = lines.length > functionLine + 1 ? lines[functionLine + 1] : "";
                 var failingLine = line > 0 && line <= lines.length ? lines[line - 1] : "";
+                var renderedLines = new ArrayList<String>();
+                if (!header.isEmpty()) {
+                    renderedLines.add(header);
+                }
+                if (!body.isEmpty() && !body.equals(header)) {
+                    renderedLines.add(body);
+                }
+                if (!failingLine.isEmpty()
+                    && !failingLine.equals(header)
+                    && !failingLine.equals(body)) {
+                    renderedLines.add(failingLine);
+                }
                 var message = "error: mismatched types\n"
                               + " --> /foo/boo/%s.cfun:%d:%d\n".formatted(moduleName, line, column)
-                              + header + "\n"
-                              + body + "\n"
-                              + failingLine + "\n"
+                              + String.join("\n", renderedLines) + "\n"
                               + " ".repeat(Math.max(column, 0)) + "^ " + details + "\n";
                 return new TreeSet<>(Set.of(new ValueOrError.Error.SingleError(
                         line,
