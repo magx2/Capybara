@@ -428,6 +428,98 @@ public class CompilationErrorTest {
                                 """
                 ),
                 Arguments.of(
+                        "json_assertion_list_no_viable_alternative",
+                        """
+                                data JsonListInt { value: list[int], size: int }
+                                data JsonObject { value: dict[JsonListInt] }
+                                fun foo(v: list[int]): JsonObject =
+                                    JsonObject {
+                                        value: {
+                                            "numbers": JsonListInt { value: v, size: "x" },
+                                        }
+                                    }
+                                """,
+                        new Position(6, "            \"numbers\": JsonListInt { value: v, size: "),
+                        """
+                                error: mismatched types
+                                 --> /foo/boo/json_assertion_list_no_viable_alternative.cfun:%d:%d
+                                fun foo(v: list[int]): JsonObject =
+                                    JsonObject {
+                                        value: {
+                                            "numbers": JsonListInt { value: v, size: "x" }
+                                                                                     ^ Expected `int`, but got `string`
+                                """
+                ),
+                Arguments.of(
+                        "json_assertion_set_no_viable_alternative",
+                        """
+                                data JsonSetBool { value: set[bool], ok: bool }
+                                data JsonObject { value: dict[JsonSetBool] }
+                                fun foo(v: set[bool]): JsonObject =
+                                    JsonObject {
+                                        value: {
+                                            "flags": JsonSetBool { value: v, ok: "yes" },
+                                        }
+                                    }
+                                """,
+                        new Position(6, "            \"flags\": JsonSetBool { value: v, ok: "),
+                        """
+                                error: mismatched types
+                                 --> /foo/boo/json_assertion_set_no_viable_alternative.cfun:%d:%d
+                                fun foo(v: set[bool]): JsonObject =
+                                    JsonObject {
+                                        value: {
+                                            "flags": JsonSetBool { value: v, ok: "yes" }
+                                                                                 ^ Expected `bool`, but got `string`
+                                """
+                ),
+                Arguments.of(
+                        "json_assertion_dict_no_viable_alternative",
+                        """
+                                data JsonByte { value: byte }
+                                data JsonObject { value: dict[JsonByte] }
+                                fun foo(): JsonObject =
+                                    JsonObject {
+                                        value: {
+                                            "tiny": JsonByte { value: "7" },
+                                        }
+                                    }
+                                """,
+                        new Position(6, "            \"tiny\": JsonByte { value: "),
+                        """
+                                error: mismatched types
+                                 --> /foo/boo/json_assertion_dict_no_viable_alternative.cfun:%d:%d
+                                fun foo(): JsonObject =
+                                    JsonObject {
+                                        value: {
+                                            "tiny": JsonByte { value: "7" }
+                                                                      ^ Expected `byte`, but got `string`
+                                """
+                ),
+                Arguments.of(
+                        "json_assertion_primitive_no_viable_alternative",
+                        """
+                                data JsonByte { value: byte }
+                                data JsonObject { value: dict[JsonByte] }
+                                fun foo(): JsonObject =
+                                    JsonObject {
+                                        value: {
+                                            "tiny": JsonByte { value: "7" },
+                                        }
+                                    }
+                                """,
+                        new Position(6, "            \"tiny\": JsonByte { value: "),
+                        """
+                                error: mismatched types
+                                 --> /foo/boo/json_assertion_primitive_no_viable_alternative.cfun:%d:%d
+                                fun foo(): JsonObject =
+                                    JsonObject {
+                                        value: {
+                                            "tiny": JsonByte { value: "7" }
+                                                                      ^ Expected `byte`, but got `string`
+                                """
+                ),
+                Arguments.of(
                         "function_wrong_return_type",
                         "fun foo(x: int): int = \"boo\"",
                         new Position(1, 23),
