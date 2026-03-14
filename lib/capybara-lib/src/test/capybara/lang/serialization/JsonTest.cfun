@@ -17,7 +17,6 @@ fun main(args: list[string]): /capy/lang/Program =
         should_fail_deserialize_object_as_bool_types(),
         should_deserialize_object_as_null(),
         should_fail_deserialize_object_as_null(),
-    //    should_deserialize_object_with_primitive_types(),
     ])
 
 fun test_serialize_simple_object(): Assert =
@@ -136,20 +135,3 @@ fun should_deserialize_object_as_null(): Assert =
 
 fun should_fail_deserialize_object_as_null(): Assert =
     assert_that(deserialize('{"foo":nul}')).failed('Expected `null`, but got `nul`!')
-
-/*
-fun should_deserialize_object_with_primitive_types(): Assert =
-    assert_that(deserialize('{"string":"string_value","int":5,"int_minus":-5,"double":5.5,"long":97387717187,"bool":true,"null":null}'))
-        .succeeded(
-                JsonObject {
-                    value: {
-                        "string": JsonString { value: "string_value" },
-                        "int": JsonNumberLong { value: 5 },
-                        "int_minus": JsonNumberLong { value: -5 },
-                        "double": JsonNumberDouble { value: 5.5 },
-                        "long": JsonNumberLong { value: 97387717187L },
-                        "bool": JsonBool { value: true },
-                        "null": JsonNull,
-                    }
-            })
-*/
