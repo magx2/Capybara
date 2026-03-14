@@ -154,18 +154,7 @@ pattern: TYPE
         | wildcardPattern
         | constructorPattern;
 wildcardPattern: UNDERSCORE NAME?;
-typedPattern: patternType (NAME | UNDERSCORE);
-patternType: 'byte'
-           | 'int'
-           | 'long'
-           | 'double'
-           | 'bool'
-           | 'string'
-           | 'float'
-           | 'any'
-           | 'data'
-           | 'nothing'
-           | TYPE;
+typedPattern: type (NAME | UNDERSCORE);
 constructorPattern: TYPE '{' fieldPatternList? '}';
 fieldPatternList: pattern (',' pattern)*;
 

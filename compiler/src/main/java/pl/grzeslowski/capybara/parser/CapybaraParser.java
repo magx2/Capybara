@@ -1175,7 +1175,7 @@ public class CapybaraParser {
                     ? typedPattern.NAME().getText()
                     : "__ignored";
             return new MatchExpression.TypedPattern(
-                    type(typedPattern.patternType().getText()),
+                    type(typedPattern.type().getText()),
                     patternName
             );
         }
