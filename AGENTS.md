@@ -41,3 +41,15 @@ Use the wrapper from repository root:
   - impacted modules,
   - commands run (for example `./gradlew.bat clean test`),
   - sample `.cfun` snippet/output when behavior changes.
+
+## Capybara Language Change Rules
+- Any change to grammar, linking, type checking, name resolution, diagnostics, or code generation must be evaluated for:
+  - compiler unit tests,
+  - integration tests,
+  - compilation-error tests for invalid programs.
+- If behavior changes for `.cfun` programs, include at least one source example covering the new or changed behavior.
+- Prefer changing the smallest layer possible:
+  - syntax-only issue -> grammar/parser/tests
+  - semantic issue -> linker/validator/tests
+  - output issue -> generator/tests
+- Do not fix source problems by editing generated Java under `build/generated/...`.
