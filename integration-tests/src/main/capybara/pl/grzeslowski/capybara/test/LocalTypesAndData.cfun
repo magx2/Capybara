@@ -1,3 +1,5 @@
+from /capy/lang/Result import { * }
+
 fun foo_me(name: string): string =
     type __Name = __Foo | __Boo | __Unknown
     data __Foo { foo: string }
@@ -14,3 +16,10 @@ fun foo_me(name: string): string =
         | "boo" -> __Boo { "zyx" }
         | _ -> __Unknown { name }
     __name(x)
+
+fun local_data_with_imported_result(v: int): string =
+    data __Entry { key: string, value: Result[int] }
+    let entry = __Entry { "k", Success { value: v } }
+    match entry.value with
+    | Success { value } -> "ok:" + value
+    | Error { message } -> "err:" + message

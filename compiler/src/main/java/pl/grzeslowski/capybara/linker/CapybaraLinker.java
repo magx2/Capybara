@@ -2,6 +2,7 @@ package pl.grzeslowski.capybara.linker;
 
 import pl.grzeslowski.capybara.compiler.Module;
 import pl.grzeslowski.capybara.compiler.Program;
+import pl.grzeslowski.capybara.compiler.ImportDeclaration;
 import pl.grzeslowski.capybara.linker.LinkedFunction.LinkedFunctionParameter;
 import pl.grzeslowski.capybara.linker.expression.CapybaraExpressionLinker;
 import pl.grzeslowski.capybara.parser.*;
@@ -2245,7 +2246,12 @@ public class CapybaraLinker {
         var rawTypeDeclarations = castList(module, TypeDeclaration.class);
         var rawTypeDeclarationsByName = rawTypeDeclarations.stream()
                 .collect(toMap(TypeDeclaration::name, identity(), (first, second) -> first));
-        var dataDeclarationsOrError = linkDataDeclarations(castList(module, DataDeclaration.class), rawTypeDeclarationsByName, normalizedFile);
+        var dataDeclarationsOrError = linkDataDeclarations(
+                castList(module, DataDeclaration.class),
+                rawTypeDeclarationsByName,
+                module.imports(),
+                normalizedFile
+        );
         var singlesDeclarationsOrError = castList(module, SingleDeclaration.class)
                 .stream()
                 .map(this::linkSingleDeclaration)
@@ -2288,12 +2294,13 @@ public class CapybaraLinker {
     }
 
     private ValueOrError<List<LinkedDataType>> linkDataDeclarations(List<DataDeclaration> dataDeclarations) {
-        return linkDataDeclarations(dataDeclarations, Map.of(), "");
+        return linkDataDeclarations(dataDeclarations, Map.of(), List.of(), "");
     }
 
     private ValueOrError<List<LinkedDataType>> linkDataDeclarations(
             List<DataDeclaration> dataDeclarations,
             Map<String, TypeDeclaration> rawTypeDeclarationsByName,
+            List<ImportDeclaration> importDeclarations,
             String normalizedFile
     ) {
         var declarationsByName = dataDeclarations.stream()
@@ -2304,6 +2311,7 @@ public class CapybaraLinker {
                         dataDeclaration,
                         declarationsByName,
                         rawTypeDeclarationsByName,
+                        importDeclarations,
                         cache,
                         new HashSet<>(),
                         normalizedFile))
@@ -2314,6 +2322,7 @@ public class CapybaraLinker {
             DataDeclaration dataDeclaration,
             Map<String, DataDeclaration> declarationsByName,
             Map<String, TypeDeclaration> rawTypeDeclarationsByName,
+            List<ImportDeclaration> importDeclarations,
             Map<String, ValueOrError<LinkedDataType>> cache,
             Set<String> visiting,
             String normalizedFile
@@ -2338,7 +2347,14 @@ public class CapybaraLinker {
                                 "Extended data type `" + parentName + "` not found"
                         );
                     }
-                    return linkDataDeclaration(parent, declarationsByName, rawTypeDeclarationsByName, cache, visiting, normalizedFile)
+                    return linkDataDeclaration(
+                                    parent,
+                                    declarationsByName,
+                                    rawTypeDeclarationsByName,
+                                    importDeclarations,
+                                    cache,
+                                    visiting,
+                                    normalizedFile)
                             .map(LinkedDataType::fields);
                 })
                 .collect(new ValueOrErrorCollectionCollector<>());
@@ -2348,6 +2364,7 @@ public class CapybaraLinker {
                         genericTypes,
                         declarationsByName,
                         rawTypeDeclarationsByName,
+                        importDeclarations,
                         cache,
                         visiting,
                         normalizedFile))
@@ -2384,6 +2401,7 @@ public class CapybaraLinker {
             Set<String> genericTypes,
             Map<String, DataDeclaration> declarationsByName,
             Map<String, TypeDeclaration> rawTypeDeclarationsByName,
+            List<ImportDeclaration> importDeclarations,
             Map<String, ValueOrError<LinkedDataType>> cache,
             Set<String> visiting,
             String normalizedFile
@@ -2396,6 +2414,7 @@ public class CapybaraLinker {
                     declarationsByName.get(dataType.name()),
                     declarationsByName,
                     rawTypeDeclarationsByName,
+                    importDeclarations,
                     cache,
                     visiting,
                     normalizedFile)
@@ -2420,22 +2439,59 @@ public class CapybaraLinker {
                 name,
                 new LinkedDataParentType(name, List.of(), List.of(), declaration.typeParameters())
         ));
+        importedExternalTypePlaceholders(importDeclarations).forEach(knownDataTypes::putIfAbsent);
         var linkedType = linkType(type.type(), knownDataTypes);
+        if (linkedType instanceof ValueOrError.Error<LinkedType>
+            && type.type() instanceof DataType dataType) {
+            var importedQualifiedName = resolveImportedQualifiedTypeName(dataType.name(), importDeclarations);
+            if (importedQualifiedName.isPresent() && isQualifiedExternalTypeName(importedQualifiedName.get())) {
+                return ValueOrError.success(new LinkedDataType.LinkedField(
+                        type.name(),
+                        externalTypePlaceholder(importedQualifiedName.get())
+                ));
+            }
+        }
         if (linkedType instanceof ValueOrError.Error<LinkedType>
             && type.type() instanceof DataType dataType
             && isQualifiedExternalTypeName(dataType.name())) {
-            if (isOptionExternalTypeName(dataType.name())) {
-                return ValueOrError.success(new LinkedDataType.LinkedField(
-                        type.name(),
-                        optionExternalPlaceholder(dataType.name())
-                ));
-            }
             return ValueOrError.success(new LinkedDataType.LinkedField(
                     type.name(),
-                    new LinkedDataParentType(dataType.name(), List.of(), List.of(), List.of())
+                    externalTypePlaceholder(dataType.name())
             ));
         }
         return linkedType.map(t -> new LinkedDataType.LinkedField(type.name(), t));
+    }
+
+    private Map<String, GenericDataType> importedExternalTypePlaceholders(List<ImportDeclaration> importDeclarations) {
+        var placeholders = new LinkedHashMap<String, GenericDataType>();
+        for (var importDeclaration : importDeclarations) {
+            var importedTypeName = importedTypeName(importDeclaration.moduleName());
+            if (!importDeclaration.isStarImport()
+                && !importDeclaration.symbols().contains(importedTypeName)) {
+                continue;
+            }
+            var moduleName = importDeclaration.moduleName();
+            placeholders.put(importedTypeName, externalTypePlaceholder(importedTypeName));
+            placeholders.put(moduleName, externalTypePlaceholder(moduleName));
+        }
+        return Map.copyOf(placeholders);
+    }
+
+    private Optional<String> resolveImportedQualifiedTypeName(String rawTypeName, List<ImportDeclaration> importDeclarations) {
+        var parsed = parseGenericTypeName(rawTypeName);
+        var baseName = parsed.baseName();
+        for (var importDeclaration : importDeclarations) {
+            var importedTypeName = importedTypeName(importDeclaration.moduleName());
+            var imported = importDeclaration.isStarImport() || importDeclaration.symbols().contains(baseName);
+            if (!imported || !importedTypeName.equals(baseName)) {
+                continue;
+            }
+            if (parsed.typeArguments().isEmpty()) {
+                return Optional.of(importDeclaration.moduleName());
+            }
+            return Optional.of(importDeclaration.moduleName() + "[" + String.join(", ", parsed.typeArguments()) + "]");
+        }
+        return Optional.empty();
     }
 
     private boolean isQualifiedExternalTypeName(String typeName) {
@@ -2447,12 +2503,43 @@ public class CapybaraLinker {
         return "/capy/lang/Option.Option".equals(baseName) || "/capy/lang/Option".equals(baseName);
     }
 
+    private boolean isResultExternalTypeName(String typeName) {
+        var baseName = baseTypeName(typeName);
+        return "/capy/lang/Result.Result".equals(baseName) || "/capy/lang/Result".equals(baseName);
+    }
+
     private String baseTypeName(String typeName) {
         var idx = typeName.indexOf('[');
         if (idx > 0 && typeName.endsWith("]")) {
             return typeName.substring(0, idx);
         }
         return typeName;
+    }
+
+    private String importedTypeName(String moduleName) {
+        var normalized = moduleName.replace('\\', '/');
+        var slash = normalized.lastIndexOf('/');
+        return slash >= 0 ? normalized.substring(slash + 1) : normalized;
+    }
+
+    private LinkedDataParentType externalTypePlaceholder(String typeName) {
+        if (isOptionExternalTypeName(typeName)) {
+            return optionExternalPlaceholder(typeName);
+        }
+        if (isResultExternalTypeName(typeName) || "Result".equals(baseTypeName(typeName))) {
+            return resultExternalPlaceholder(typeName);
+        }
+        return new LinkedDataParentType(
+                baseTypeName(typeName),
+                List.of(),
+                List.of(),
+                externalTypeParameters(typeName)
+        );
+    }
+
+    private List<String> externalTypeParameters(String typeName) {
+        var parsed = parseGenericTypeName(typeName);
+        return parsed.typeArguments().isEmpty() ? List.of() : List.copyOf(parsed.typeArguments());
     }
 
     private LinkedDataParentType optionExternalPlaceholder(String typeName) {
@@ -2477,6 +2564,41 @@ public class CapybaraLinker {
                 List.of(some, none),
                 List.of(optionTypeParameter)
         );
+    }
+
+    private LinkedDataParentType resultExternalPlaceholder(String typeName) {
+        var resultTypeParameter = resultExternalTypeParameter(typeName);
+        var success = new LinkedDataType(
+                "Success",
+                List.of(new LinkedDataType.LinkedField("value", new LinkedGenericTypeParameter("T"))),
+                List.of("T"),
+                List.of(),
+                false
+        );
+        var error = new LinkedDataType(
+                "Error",
+                List.of(new LinkedDataType.LinkedField("message", PrimitiveLinkedType.STRING)),
+                List.of(),
+                List.of(),
+                false
+        );
+        return new LinkedDataParentType(
+                baseTypeName(typeName),
+                List.of(),
+                List.of(success, error),
+                List.of(resultTypeParameter)
+        );
+    }
+
+    private String resultExternalTypeParameter(String typeName) {
+        var start = typeName.indexOf('[');
+        if (start > 0 && typeName.endsWith("]")) {
+            var value = typeName.substring(start + 1, typeName.length() - 1).trim();
+            if (!value.isEmpty()) {
+                return value;
+            }
+        }
+        return "T";
     }
 
     private String optionExternalTypeParameter(String typeName) {

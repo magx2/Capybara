@@ -238,7 +238,7 @@ fun _is_white_space(s: string): bool =
     | _ -> (s |all? :_is_white_space)
 
 fun deserialize(dict: dict[any]): Result[JsonObject] =
-    data __Entry { key: string, value: /capy/lang/Result[Json] }
+    data __Entry { key: string, value: Result[Json] }
     fun __initial_result(): Result[dict[Json]] = Success { {:} }
     fun __merge(acc: Result[dict[Json]], e: __Entry): Result[dict[Json]] =
         match acc with
