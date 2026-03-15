@@ -22,6 +22,7 @@ test {
 def capybaraSourceDir = layout.projectDirectory.dir('src/main/capybara')
 def capybaraLibSourceDir = project(':lib:capybara-lib').layout.projectDirectory.dir('src/main/capybara')
 def generatedJavaDir = layout.buildDirectory.dir('generated/sources/capybara/java/main')
+def capybaraDebugEnabled = gradle.startParameter.logLevel == org.gradle.api.logging.LogLevel.DEBUG
 
 tasks.register('generateJavaFromCapybara', JavaExec) {
     group = 'build'
@@ -35,10 +36,17 @@ tasks.register('generateJavaFromCapybara', JavaExec) {
     mainClass = 'pl.grzeslowski.capybara.App'
 
     doFirst {
-        args '--debug', 'JAVA',
+        def capybaraArgs = []
+        if (capybaraDebugEnabled) {
+            capybaraArgs << '--debug'
+        }
+        capybaraArgs.addAll([
+                'JAVA',
                 capybaraSourceDir.asFile.absolutePath,
                 capybaraLibSourceDir.asFile.absolutePath,
                 generatedJavaDir.get().asFile.absolutePath
+        ])
+        setArgs(capybaraArgs)
     }
 }
 

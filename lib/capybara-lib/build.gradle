@@ -10,6 +10,7 @@ def capybaraMainSourceDir = layout.projectDirectory.dir('src/main/capybara')
 def capybaraTestSourceDir = layout.projectDirectory.dir('src/test/capybara')
 def capybaraGeneratedMainDir = layout.buildDirectory.dir('generated/sources/capybara/java/main')
 def capybaraGeneratedTestDir = layout.buildDirectory.dir('generated/sources/capybara/java/test')
+def capybaraDebugEnabled = gradle.startParameter.logLevel == org.gradle.api.logging.LogLevel.DEBUG
 
 tasks.register('compileCapybara', JavaExec) {
     group = 'build'
@@ -22,9 +23,16 @@ tasks.register('compileCapybara', JavaExec) {
     mainClass = 'pl.grzeslowski.capybara.App'
 
     doFirst {
-        args '--debug', 'JAVA',
+        def capybaraArgs = []
+        if (capybaraDebugEnabled) {
+            capybaraArgs << '--debug'
+        }
+        capybaraArgs.addAll([
+                'JAVA',
                 capybaraMainSourceDir.asFile.absolutePath,
                 capybaraGeneratedMainDir.get().asFile.absolutePath
+        ])
+        setArgs(capybaraArgs)
     }
 }
 
@@ -44,7 +52,14 @@ tasks.register('compileTestCapybara', JavaExec) {
         def inputDirs = [capybaraMainSourceDir.asFile, capybaraTestSourceDir.asFile]
                 .findAll { it.exists() && it.isDirectory() }
                 .collect { it.absolutePath }
-        args 'JAVA', * inputDirs , capybaraGeneratedTestDir.get().asFile.absolutePath
+        def capybaraArgs = []
+        if (capybaraDebugEnabled) {
+            capybaraArgs << '--debug'
+        }
+        capybaraArgs.add('JAVA')
+        capybaraArgs.addAll(inputDirs)
+        capybaraArgs.add(capybaraGeneratedTestDir.get().asFile.absolutePath)
+        setArgs(capybaraArgs)
     }
 }
 
