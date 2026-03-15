@@ -19,7 +19,7 @@ tasks.register('compileCapybara', JavaExec) {
     inputs.dir(capybaraMainSourceDir)
     outputs.dir(capybaraGeneratedMainDir)
 
-    classpath = project(':app').sourceSets.main.runtimeClasspath
+    classpath = project(':cli').sourceSets.main.runtimeClasspath
     mainClass = 'pl.grzeslowski.capybara.App'
 
     doFirst {
@@ -45,7 +45,7 @@ tasks.register('compileTestCapybara', JavaExec) {
     inputs.dir(capybaraTestSourceDir)
     outputs.dir(capybaraGeneratedTestDir)
 
-    classpath = project(':app').sourceSets.main.runtimeClasspath
+    classpath = project(':cli').sourceSets.main.runtimeClasspath
     mainClass = 'pl.grzeslowski.capybara.App'
 
     doFirst {
