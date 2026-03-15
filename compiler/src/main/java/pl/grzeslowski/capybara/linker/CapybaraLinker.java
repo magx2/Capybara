@@ -489,7 +489,8 @@ public class CapybaraLinker {
         linked = normalizeExpectedFoundErrors(linked, function, moduleSourceFile);
         var normalizedFile = normalizeFile(moduleSourceFile);
         var fallbackPosition = returnExpressionPosition(function.expression()).or(() -> function.position());
-        return withPosition(linked, fallbackPosition, normalizedFile);
+        linked = withPosition(linked, fallbackPosition, normalizedFile);
+        return normalizeReadableFunctionErrors(linked, function, moduleSourceFile);
     }
 
     private Optional<ValueOrError<LinkedFunction>> validateTypeMethodDeclaredInLocalType(
@@ -614,6 +615,45 @@ public class CapybaraLinker {
                 .map(singleError -> normalizeExpectedFoundError(singleError, function, moduleSourceFile))
                 .toList();
         return new ValueOrError.Error<>(transformed);
+    }
+
+    private ValueOrError<LinkedFunction> normalizeReadableFunctionErrors(
+            ValueOrError<LinkedFunction> linked,
+            Function function,
+            String moduleSourceFile
+    ) {
+        if (!(linked instanceof ValueOrError.Error<LinkedFunction> error)) {
+            return linked;
+        }
+        var transformed = error.errors().stream()
+                .map(singleError -> normalizeReadableFunctionError(singleError, function, moduleSourceFile))
+                .toList();
+        return new ValueOrError.Error<>(transformed);
+    }
+
+    private ValueOrError.Error.SingleError normalizeReadableFunctionError(
+            ValueOrError.Error.SingleError error,
+            Function function,
+            String moduleSourceFile
+    ) {
+        if (error.message().startsWith("error: ")) {
+            return error;
+        }
+        var fallbackLine = function.position().map(SourcePosition::line).orElse(1);
+        var fallbackColumn = function.position().map(SourcePosition::column).orElse(0);
+        var line = Math.max(error.line(), fallbackLine);
+        var column = error.column() > 0 ? error.column() : fallbackColumn;
+        var file = error.file().isBlank() ? normalizeFile(moduleSourceFile) : error.file();
+        var functionLine = function.position().map(SourcePosition::line).orElse(line);
+        var functionPreview = functionLine == line
+                ? formatFunctionHeaderAndExpression(function, formatExpressionPreviewWithSpaces(function.expression()))
+                : formatFunctionPreviewUpToLine(function, line);
+        var pointer = " ".repeat(Math.max(column, 0)) + "^ " + error.message();
+        var message = "error: mismatched types\n"
+                      + " --> " + file + ":" + line + ":" + column + "\n"
+                      + functionPreview + "\n"
+                      + pointer + "\n";
+        return new ValueOrError.Error.SingleError(line, column, file, message);
     }
 
     private ValueOrError.Error.SingleError normalizeExpectedFoundError(
@@ -1066,16 +1106,44 @@ public class CapybaraLinker {
             case ByteValue byteValue -> byteValue.byteValue();
             case BooleanValue booleanValue -> String.valueOf(booleanValue.value());
             case Value value -> value.name();
+            case FieldAccess fieldAccess -> formatExpressionPreview(fieldAccess.source()) + "." + fieldAccess.field();
+            case IndexExpression indexExpression -> formatExpressionPreview(indexExpression.source())
+                                                    + "[" + formatExpressionPreview(indexExpression.index()) + "]";
             case FunctionCall functionCall -> formatFunctionCallPreview(functionCall);
             case FunctionInvoke functionInvoke -> formatExpressionPreview(functionInvoke.function())
                                                   + "(" + functionInvoke.arguments().stream()
                         .map(this::formatExpressionPreview)
                         .collect(java.util.stream.Collectors.joining(", ")) + ")";
+            case FunctionReference functionReference -> ":" + functionReference.name();
             case NewData newData -> formatNewDataPreview(newData);
+            case NewListExpression newListExpression -> "["
+                    + newListExpression.values().stream()
+                    .map(this::formatExpressionPreview)
+                    .collect(java.util.stream.Collectors.joining(", ")) + "]";
+            case NewSetExpression newSetExpression -> "{"
+                    + newSetExpression.values().stream()
+                    .map(this::formatExpressionPreview)
+                    .collect(java.util.stream.Collectors.joining(", ")) + "}";
+            case NewDictExpression newDictExpression -> "{"
+                    + newDictExpression.entries().stream()
+                    .map(entry -> formatExpressionPreview(entry.key()) + ": " + formatExpressionPreview(entry.value()))
+                    .collect(java.util.stream.Collectors.joining(", ")) + "}";
+            case TupleExpression tupleExpression -> "("
+                    + tupleExpression.values().stream()
+                    .map(this::formatExpressionPreview)
+                    .collect(java.util.stream.Collectors.joining(", ")) + ")";
             case SliceExpression sliceExpression -> formatSliceExpressionPreview(sliceExpression);
             case InfixExpression infixExpression -> formatExpressionPreview(infixExpression.left())
                                                    + previewOperator(infixExpression.operator().symbol())
                                                    + formatExpressionPreview(infixExpression.right());
+            case NothingValue ignored -> "???";
+            case IfExpression ifExpression -> "if " + formatExpressionPreview(ifExpression.condition())
+                    + " then " + formatExpressionPreview(ifExpression.thenBranch())
+                    + " else " + formatExpressionPreview(ifExpression.elseBranch());
+            case LetExpression letExpression -> "let " + letExpression.name()
+                    + " = " + formatExpressionPreview(letExpression.value())
+                    + " " + formatExpressionPreview(letExpression.rest());
+            case MatchExpression matchExpression -> "match " + formatExpressionPreview(matchExpression.matchWith()) + " with ...";
             default -> expression.toString();
         };
     }

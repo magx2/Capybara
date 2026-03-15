@@ -312,6 +312,28 @@ public class CompilationErrorTest {
                                 """
                 ),
                 Arguments.of(
+                        "function_variable_not_found",
+                        "fun foo(): int = missing",
+                        new Position(1, "fun foo(): int = "),
+                        """
+                                error: mismatched types
+                                 --> /foo/boo/function_variable_not_found.cfun:1:17
+                                fun foo(): int = missing
+                                                 ^ Variable missing not found
+                                """
+                ),
+                Arguments.of(
+                        "function_field_access_requires_data_type",
+                        "fun foo(): int = \"abc\".foo",
+                        new Position(1, "fun foo(): int = "),
+                        """
+                                error: mismatched types
+                                 --> /foo/boo/function_field_access_requires_data_type.cfun:1:17
+                                fun foo(): int = "abc".foo
+                                                 ^ Field `foo` not found in type `STRING`
+                                """
+                ),
+                Arguments.of(
                         "match_case_wrong_operator",
                         """ 
                                 fun broken(result: /capy/lang/Result.Result[any]): bool =
