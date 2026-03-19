@@ -296,6 +296,38 @@ public class CompilationErrorTest {
     static Stream<Arguments> simpleCompilationError() {
         return Stream.of(
                 Arguments.of(
+                        "lambda_outside_pipe_reports_clear_error",
+                        "fun foo(): int = (() => 1)",
+                        new Position(1, 17),
+                        """
+                                error: mismatched types
+                                 --> /foo/boo/lambda_outside_pipe_reports_clear_error.cfun:%d:%d
+                                fun foo(): int = (() => 1)
+                                                 ^ Lambda expression can only be used as the right side of `|`, `|-`, `|*`, `|all?` or `|any?`
+                                """
+                ),
+                Arguments.of(
+                        "seq_match_case_wrong_arrow",
+                        """
+                                type Seq[T] = Cons[T] | End
+                                data Cons[T] { value: T, rest: Seq[T] }
+                                single End
+                                fun Seq[T].take(n: int): list[T] =
+                                    match this with
+                                    | End => []
+                                    | Cons { value, rest } -> []
+                                """,
+                        new Position(6, 10),
+                        """
+                                error: mismatched types
+                                 --> /foo/boo/seq_match_case_wrong_arrow.cfun:%d:%d
+                                fun Seq[T].take(n: int): list[T] =
+                                    match this with
+                                    | End => []
+                                          ^ Expected `->`, found `=`
+                                """
+                ),
+                Arguments.of(
                         "function_unknown_return_type",
                         """ 
                                 fun broken(x: int): Str =
