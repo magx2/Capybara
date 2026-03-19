@@ -468,9 +468,9 @@ public class JavaExpressionEvaluator {
 
     private static String evaluateListAppendExpression(LinkedInfixExpression infixExpression, String left, String right) {
         if (infixExpression.right().type() instanceof pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedList) {
-            return "java.util.stream.Stream.concat(" + left + ".stream(), " + right + ".stream()).toList()";
+            return "java.util.stream.Stream.concat((" + left + ").stream(), (" + right + ").stream()).toList()";
         }
-        return "java.util.stream.Stream.concat(" + left + ".stream(), java.util.stream.Stream.of(" + right + ")).toList()";
+        return "java.util.stream.Stream.concat((" + left + ").stream(), java.util.stream.Stream.of(" + right + ")).toList()";
     }
 
     private static String evaluateSetAppendExpression(LinkedInfixExpression infixExpression, String left, String right) {
@@ -2218,6 +2218,11 @@ public class JavaExpressionEvaluator {
             || normalizedTypeName.endsWith("/Option.Option")
             || normalizedTypeName.endsWith("/Option")) {
             return "java.util.Optional";
+        }
+        if ("Program".equals(rawTypeName)
+            || normalizedTypeName.endsWith("/Program.Program")
+            || normalizedTypeName.endsWith("/Program")) {
+            return "capy.lang.Program";
         }
         if (rawTypeName.startsWith("/") && !rawTypeName.contains(".")) {
             var slashIndex = rawTypeName.lastIndexOf('/');

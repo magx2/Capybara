@@ -282,6 +282,9 @@ public class JavaAstBuilder {
         if ("Option".equals(rawTypeName) || isOptionTypeName(rawTypeName)) {
             return new JavaType("java.util.Optional");
         }
+        if ("Program".equals(rawTypeName) || isProgramTypeName(rawTypeName)) {
+            return new JavaType("capy.lang.Program");
+        }
         if (rawTypeName.startsWith("/") && !rawTypeName.contains(".")) {
             var slashIndex = rawTypeName.lastIndexOf('/');
             if (slashIndex > 0 && slashIndex < rawTypeName.length() - 1) {
@@ -505,6 +508,16 @@ public class JavaAstBuilder {
                || normalized.equals("/capy/lang/Option.Some")
                || normalized.endsWith("/Option.Some")
                || normalized.endsWith(".Some");
+    }
+
+    private boolean isProgramTypeName(String name) {
+        var normalized = normalizeQualifiedTypeName(name);
+        return normalized.equals("/cap/lang/Program")
+               || normalized.equals("/capy/lang/Program")
+               || normalized.equals("/cap/lang/Program.Program")
+               || normalized.equals("/capy/lang/Program.Program")
+               || normalized.endsWith("/Program")
+               || normalized.endsWith("/Program.Program");
     }
 
     private String normalizeQualifiedTypeName(String name) {

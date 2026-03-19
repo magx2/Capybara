@@ -3125,12 +3125,12 @@ public class CapybaraExpressionLinker {
         }
         if (left instanceof LinkedDataParentType leftParent && right instanceof LinkedDataType rightData) {
             if (isSubtypeOfParent(rightData, leftParent)) {
-                return leftParent;
+                return canonicalizeParentAlias(leftParent);
             }
         }
         if (right instanceof LinkedDataParentType rightParent && left instanceof LinkedDataType leftData) {
             if (isSubtypeOfParent(leftData, rightParent)) {
-                return rightParent;
+                return canonicalizeParentAlias(rightParent);
             }
         }
         if (left instanceof LinkedDataType leftData && right instanceof LinkedDataType rightData) {
@@ -3151,7 +3151,7 @@ public class CapybaraExpressionLinker {
                                 java.util.LinkedHashMap::new
                         ));
                 if (uniqueByRawName.size() == 1) {
-                    return uniqueByRawName.values().iterator().next();
+                    return canonicalizeParentAlias(uniqueByRawName.values().iterator().next());
                 }
             }
         }
@@ -3165,6 +3165,19 @@ public class CapybaraExpressionLinker {
             return first;
         }
         return secondQualified ? second : first;
+    }
+
+    private LinkedDataParentType canonicalizeParentAlias(LinkedDataParentType parent) {
+        if (parent.name().contains("/") || parent.name().contains(".")) {
+            return parent;
+        }
+        return dataTypes.values().stream()
+                .filter(LinkedDataParentType.class::isInstance)
+                .map(LinkedDataParentType.class::cast)
+                .filter(candidate -> sameRawTypeName(candidate.name(), parent.name()))
+                .filter(candidate -> candidate.name().contains("/") || candidate.name().contains("."))
+                .max(java.util.Comparator.comparingInt(candidate -> candidate.name().length()))
+                .orElse(parent);
     }
 
     private ValueOrError<Void> validateMatchExhaustiveness(
