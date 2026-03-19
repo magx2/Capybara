@@ -328,6 +328,21 @@ public class CompilationErrorTest {
                                 """
                 ),
                 Arguments.of(
+                        "data_type_not_found_sqe",
+                        """
+                                type Seq[T] = Cons[T] | End
+                                data Cons[T] { value: T, rest: Sqe[T] }
+                                single End
+                                """,
+                        new Position(2, 31),
+                        """
+                                error: mismatched types
+                                 --> /foo/boo/data_type_not_found_sqe.cfun:%d:%d
+                                data Cons[T] { value: T, rest: Sqe[T] }
+                                                               ^ Data type `Sqe` not found
+                                """
+                ),
+                Arguments.of(
                         "function_unknown_return_type",
                         """ 
                                 fun broken(x: int): Str =
