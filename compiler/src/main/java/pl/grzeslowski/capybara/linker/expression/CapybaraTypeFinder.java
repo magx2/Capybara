@@ -9,7 +9,7 @@ import static pl.grzeslowski.capybara.linker.PrimitiveLinkedType.NOTHING;
 
 public class CapybaraTypeFinder {
     public static LinkedType findHigherType(LinkedType left, LinkedType right) {
-        if (left == right) return left;
+        if (left.equals(right)) return left;
         if (left == NOTHING) return right;
         if (right == NOTHING) return left;
         if (left == ANY || right == ANY) return ANY;

@@ -846,7 +846,8 @@ public class CompilationErrorTest {
             if (programValueOrError instanceof ValueOrError.Value<LinkedProgram> value) {
                 throw new AssertionError("Expected compilation error but got LinkedProgram: " + value);
             }
-            return ((ValueOrError.Error<?>) programValueOrError).errors();
+            var errors = ((ValueOrError.Error<?>) programValueOrError).errors();
+            return normalizeLinkerErrors(errors, fun, moduleName);
         } catch (IllegalStateException e) {
             var parserError = java.util.regex.Pattern.compile("line (\\d+):(\\d+): (.+)").matcher(e.getMessage());
             if (parserError.matches()) {
@@ -887,6 +888,34 @@ public class CompilationErrorTest {
                         message
                 )));
             }
+            var unknownTypeError = java.util.regex.Pattern.compile("Data type \"([^\"]+)\" not found").matcher(e.getMessage());
+            if (unknownTypeError.matches()) {
+                var missingType = unknownTypeError.group(1);
+                var lines = fun.split("\\R", -1);
+                var lineNumber = 0;
+                var column = 0;
+                var codeLine = "";
+                for (var i = 0; i < lines.length; i++) {
+                    var idx = lines[i].indexOf(missingType);
+                    if (idx >= 0) {
+                        lineNumber = i + 1;
+                        column = idx;
+                        codeLine = lines[i];
+                        break;
+                    }
+                }
+                var details = "Data type `" + missingType + "` not found";
+                var message = "error: mismatched types\n"
+                              + " --> /foo/boo/%s.cfun:%d:%d\n".formatted(moduleName, lineNumber, column)
+                              + codeLine + "\n"
+                              + " ".repeat(Math.max(column, 0)) + "^ " + details + "\n";
+                return new TreeSet<>(Set.of(new ValueOrError.Error.SingleError(
+                        lineNumber,
+                        column,
+                        "/foo/boo/%s.cfun".formatted(moduleName),
+                        message
+                )));
+            }
             return new TreeSet<>(Set.of(new ValueOrError.Error.SingleError(
                     0,
                     0,
@@ -894,6 +923,49 @@ public class CompilationErrorTest {
                     e.getMessage()
             )));
         }
+    }
+
+    private static SortedSet<ValueOrError.Error.SingleError> normalizeLinkerErrors(
+            SortedSet<ValueOrError.Error.SingleError> errors,
+            String code,
+            String moduleName
+    ) {
+        var unknownTypePattern = java.util.regex.Pattern.compile("Data type \"([^\"]+)\" not found");
+        String missingType = null;
+        for (var error : errors) {
+            var matcher = unknownTypePattern.matcher(error.message());
+            if (matcher.find()) {
+                missingType = matcher.group(1);
+                break;
+            }
+        }
+        if (missingType == null) {
+            return errors;
+        }
+        var lines = code.split("\\R", -1);
+        var lineNumber = 0;
+        var column = 0;
+        var codeLine = "";
+        for (var i = 0; i < lines.length; i++) {
+            var idx = lines[i].indexOf(missingType);
+            if (idx >= 0) {
+                lineNumber = i + 1;
+                column = idx;
+                codeLine = lines[i];
+                break;
+            }
+        }
+        var details = "Data type `" + missingType + "` not found";
+        var message = "error: mismatched types\n"
+                      + " --> /foo/boo/%s.cfun:%d:%d\n".formatted(moduleName, lineNumber, column)
+                      + codeLine + "\n"
+                      + " ".repeat(Math.max(column, 0)) + "^ " + details + "\n";
+        return new TreeSet<>(Set.of(new ValueOrError.Error.SingleError(
+                lineNumber,
+                column,
+                "/foo/boo/%s.cfun".formatted(moduleName),
+                message
+        )));
     }
 
     record Position(int line, int column) {

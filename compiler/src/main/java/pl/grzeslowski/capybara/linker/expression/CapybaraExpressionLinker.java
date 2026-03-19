@@ -63,7 +63,7 @@ public class CapybaraExpressionLinker {
             case IntValue intValue -> linkIntValue(intValue, scope);
             case LambdaExpression lambdaExpression -> withPosition(
                     ValueOrError.error("Lambda expression can only be used as the right side of `|`, `|-`, `|*`, `|all?` or `|any?`"),
-                    lambdaExpression.position()
+                    lambdaErrorPosition(lambdaExpression)
             );
             case ReduceExpression reduceExpression -> withPosition(
                     ValueOrError.error("Reduce expression can only be used as the right side of `|>`"),
@@ -83,6 +83,15 @@ public class CapybaraExpressionLinker {
             case LetExpression letExpression -> linkLetExpression(letExpression, scope);
             case LongValue longValue -> linkLongValue(longValue, scope);
         };
+    }
+
+    private Optional<SourcePosition> lambdaErrorPosition(LambdaExpression lambdaExpression) {
+        return lambdaExpression.position().map(position -> {
+            if (lambdaExpression.argumentNames().isEmpty() && position.column() > 0) {
+                return new SourcePosition(position.line(), position.column() - 1, position.length());
+            }
+            return position;
+        });
     }
 
     private ValueOrError<LinkedExpression> linkSliceExpression(SliceExpression expression, Scope scope) {
@@ -435,6 +444,12 @@ public class CapybaraExpressionLinker {
                 .filter(signature -> signature.parameterTypes().size() == functionCall.arguments().size())
                 .toList();
         if (candidates.isEmpty()) {
+            if (functionCall.arguments().isEmpty()) {
+                var singleton = findSingletonDataType(functionCall.name());
+                if (singleton.isPresent()) {
+                    return ValueOrError.success(new LinkedNewData(singleton.get(), List.of()));
+                }
+            }
             return functionCall.arguments()
                     .stream()
                     .map((Expression expression) -> linkExpression(expression, scope))
@@ -481,6 +496,36 @@ public class CapybaraExpressionLinker {
                 best.arguments(),
                 resolveReturnType(best.signature(), best.arguments())
         ));
+    }
+
+    private Optional<LinkedDataType> findSingletonDataType(String constructorName) {
+        return dataTypes.values().stream()
+                .filter(LinkedDataType.class::isInstance)
+                .map(LinkedDataType.class::cast)
+                .filter(LinkedDataType::singleton)
+                .filter(dataType -> typeNameMatches(dataType.name(), constructorName))
+                .findFirst();
+    }
+
+    private boolean typeNameMatches(String typeName, String constructorName) {
+        if (typeName.equals(constructorName)) {
+            return true;
+        }
+        var normalizedType = normalizeQualifiedTypeName(typeName);
+        var normalizedConstructor = normalizeQualifiedTypeName(constructorName);
+        return normalizedType.equals(normalizedConstructor)
+               || normalizedType.endsWith("/" + constructorName)
+               || normalizedType.endsWith("." + constructorName)
+               || normalizedConstructor.endsWith("/" + typeName)
+               || normalizedConstructor.endsWith("." + typeName);
+    }
+
+    private String normalizeQualifiedTypeName(String typeName) {
+        var normalized = typeName.replace('\\', '/');
+        if (!normalized.startsWith("/")) {
+            normalized = "/" + normalized;
+        }
+        return normalized;
     }
 
     private ValueOrError<LinkedExpression> resolveMethodInvokeCall(FunctionCall functionCall, Scope scope) {
@@ -3231,7 +3276,7 @@ public class CapybaraExpressionLinker {
             LinkedType matchType,
             Scope scope
     ) {
-        return linkType(typedPattern.type(), dataTypes)
+        return linkTypeInScope(typedPattern.type(), scope)
                 .flatMap(patternType -> {
                     if (!isTypedPatternCompatible(matchType, patternType)) {
                         return ValueOrError.error("Cannot match `" + matchType + "` with typed pattern `" + patternType + "`");
@@ -3352,6 +3397,18 @@ public class CapybaraExpressionLinker {
             }
             case LinkedTupleType linkedTupleType ->
                     linkedTupleType.elementTypes().forEach(elementType -> collectGenericParameterNames(elementType, names));
+            case LinkedDataType linkedDataType -> {
+                linkedDataType.fields().forEach(field -> collectGenericParameterNames(field.type(), names));
+                linkedDataType.typeParameters().forEach(typeDescriptor ->
+                        parseLinkedTypeDescriptor(typeDescriptor)
+                                .ifPresent(parsedType -> collectGenericParameterNames(parsedType, names)));
+            }
+            case LinkedDataParentType linkedDataParentType -> {
+                linkedDataParentType.fields().forEach(field -> collectGenericParameterNames(field.type(), names));
+                linkedDataParentType.typeParameters().forEach(typeDescriptor ->
+                        parseLinkedTypeDescriptor(typeDescriptor)
+                                .ifPresent(parsedType -> collectGenericParameterNames(parsedType, names)));
+            }
             default -> {
             }
         }
@@ -3508,6 +3565,10 @@ public class CapybaraExpressionLinker {
         } catch (IllegalArgumentException ignored) {
             // Not a primitive descriptor.
         }
+        if (normalizedDescriptor.length() == 1
+            && Character.isUpperCase(normalizedDescriptor.charAt(0))) {
+            return Optional.of(new LinkedGenericTypeParameter(normalizedDescriptor));
+        }
         var direct = resolveDataTypeByName(normalizedDescriptor);
         if (direct != null) {
             return Optional.of(direct);
@@ -3661,23 +3722,24 @@ public class CapybaraExpressionLinker {
     }
 
     private ValueOrError<LinkedExpression> linkNewData(NewData newData, Scope scope) {
-        return linkType(newData.type(), dataTypes)
+        return linkTypeInScope(newData.type(), scope)
                 .flatMap(type -> linkSpreadAssignments(newData.spreads(), scope)
                         .flatMap(spreadAssignments ->
-                                linkFieldAssignment(newData.assignments(), scope)
-                                        .flatMap(assignments ->
-                                                linkPositionalArguments(newData.positionalArguments(), scope)
-                                        .flatMap(positionalArguments -> {
+                                linkFieldAssignment(newData.assignments(), scope, type)
+                                        .flatMap(assignments -> linkPositionalAssignments(
+                                                type,
+                                                spreadAssignments,
+                                                assignments,
+                                                newData.positionalArguments(),
+                                                scope,
+                                                newData
+                                        ).flatMap(positionalAssignments -> {
                                             var allAssignments = new java.util.ArrayList<LinkedNewData.FieldAssignment>(
-                                                    spreadAssignments.size() + assignments.size() + positionalArguments.size()
+                                                    spreadAssignments.size() + assignments.size() + positionalAssignments.size()
                                             );
                                             allAssignments.addAll(spreadAssignments);
                                             allAssignments.addAll(assignments);
-                                            var positionalAssignments = mapPositionalArguments(type, allAssignments, positionalArguments, newData);
-                                            if (positionalAssignments instanceof ValueOrError.Error<List<LinkedNewData.FieldAssignment>> error) {
-                                                return new ValueOrError.Error<LinkedExpression>(error.errors());
-                                            }
-                                            allAssignments.addAll(((ValueOrError.Value<List<LinkedNewData.FieldAssignment>>) positionalAssignments).value());
+                                            allAssignments.addAll(positionalAssignments);
                                             var validatedAssignments = validateRequiredAssignments(type, allAssignments, newData);
                                             if (validatedAssignments instanceof ValueOrError.Error<List<LinkedNewData.FieldAssignment>> error) {
                                                 return new ValueOrError.Error<LinkedExpression>(error.errors());
@@ -3811,23 +3873,31 @@ public class CapybaraExpressionLinker {
         return ValueOrError.success(List.copyOf(assignments));
     }
 
-    private ValueOrError<List<LinkedNewData.FieldAssignment>> linkFieldAssignment(List<NewData.FieldAssignment> assignments, Scope scope) {
+    private ValueOrError<List<LinkedNewData.FieldAssignment>> linkFieldAssignment(
+            List<NewData.FieldAssignment> assignments,
+            Scope scope,
+            LinkedType type
+    ) {
+        var expectedByField = fieldTypesByName(type);
         return assignments.stream()
-                .map(a -> linkExpression(a.value(), scope)
-                        .map(ex -> new LinkedNewData.FieldAssignment(a.name(), ex)))
+                .map(assignment -> {
+                    var expected = expectedByField.get(assignment.name());
+                    if (expected == null || !(assignment.value() instanceof LambdaExpression)) {
+                        return linkExpression(assignment.value(), scope)
+                                .map(ex -> new LinkedNewData.FieldAssignment(assignment.name(), ex));
+                    }
+                    return linkArgumentForExpectedType(assignment.value(), scope, expected)
+                            .map(coerced -> new LinkedNewData.FieldAssignment(assignment.name(), coerced.expression()));
+                })
                 .collect(new ValueOrErrorCollectionCollector<>());
     }
 
-    private ValueOrError<List<LinkedExpression>> linkPositionalArguments(List<Expression> positionalArguments, Scope scope) {
-        return positionalArguments.stream()
-                .map(argument -> linkExpression(argument, scope))
-                .collect(new ValueOrErrorCollectionCollector<>());
-    }
-
-    private ValueOrError<List<LinkedNewData.FieldAssignment>> mapPositionalArguments(
+    private ValueOrError<List<LinkedNewData.FieldAssignment>> linkPositionalAssignments(
             LinkedType type,
-            List<LinkedNewData.FieldAssignment> existingAssignments,
-            List<LinkedExpression> positionalArguments,
+            List<LinkedNewData.FieldAssignment> spreadAssignments,
+            List<LinkedNewData.FieldAssignment> namedAssignments,
+            List<Expression> positionalArguments,
+            Scope scope,
             NewData source
     ) {
         if (positionalArguments.isEmpty()) {
@@ -3840,9 +3910,9 @@ public class CapybaraExpressionLinker {
             );
         }
 
-        var assignedNames = existingAssignments.stream()
-                .map(LinkedNewData.FieldAssignment::name)
-                .collect(java.util.stream.Collectors.toSet());
+        var assignedNames = new java.util.LinkedHashSet<String>();
+        spreadAssignments.stream().map(LinkedNewData.FieldAssignment::name).forEach(assignedNames::add);
+        namedAssignments.stream().map(LinkedNewData.FieldAssignment::name).forEach(assignedNames::add);
         var availableFields = genericDataType.fields().stream()
                 .filter(field -> !assignedNames.contains(field.name()))
                 .toList();
@@ -3859,12 +3929,39 @@ public class CapybaraExpressionLinker {
 
         var mapped = new java.util.ArrayList<LinkedNewData.FieldAssignment>(positionalArguments.size());
         for (var i = 0; i < positionalArguments.size(); i++) {
+            var field = availableFields.get(i);
+            LinkedExpression expression;
+            if (positionalArguments.get(i) instanceof LambdaExpression) {
+                var linked = linkArgumentForExpectedType(positionalArguments.get(i), scope, field.type());
+                if (linked instanceof ValueOrError.Error<CoercedArgument> error) {
+                    return new ValueOrError.Error<>(error.errors());
+                }
+                expression = ((ValueOrError.Value<CoercedArgument>) linked).value().expression();
+            } else {
+                var linked = linkExpression(positionalArguments.get(i), scope);
+                if (linked instanceof ValueOrError.Error<LinkedExpression> error) {
+                    return new ValueOrError.Error<>(error.errors());
+                }
+                expression = ((ValueOrError.Value<LinkedExpression>) linked).value();
+            }
             mapped.add(new LinkedNewData.FieldAssignment(
-                    availableFields.get(i).name(),
-                    positionalArguments.get(i)
+                    field.name(),
+                    expression
             ));
         }
         return ValueOrError.success(List.copyOf(mapped));
+    }
+
+    private Map<String, LinkedType> fieldTypesByName(LinkedType type) {
+        if (!(type instanceof GenericDataType genericDataType)) {
+            return Map.of();
+        }
+        return genericDataType.fields().stream()
+                .collect(java.util.stream.Collectors.toMap(
+                        LinkedDataType.LinkedField::name,
+                        LinkedDataType.LinkedField::type,
+                        (first, second) -> first
+                ));
     }
 
     private ValueOrError<List<LinkedNewData.FieldAssignment>> validateRequiredAssignments(
@@ -4036,7 +4133,7 @@ public class CapybaraExpressionLinker {
     private ValueOrError<LinkedExpression> linkLetExpression(LetExpression expression, Scope scope) {
         return linkExpression(expression.value(), scope)
                 .flatMap(value -> expression.declaredType()
-                        .map(declaredType -> linkType(declaredType, dataTypes)
+                        .map(declaredType -> linkTypeInScope(declaredType, scope)
                                 .flatMap(linkedDeclaredType -> {
                                     var coerced = coerceArgument(value, linkedDeclaredType);
                                     if (coerced == null) {
@@ -4064,6 +4161,75 @@ public class CapybaraExpressionLinker {
                                                         value,
                                                         rest
                                                 ))));
+    }
+
+    private ValueOrError<LinkedType> linkTypeInScope(pl.grzeslowski.capybara.parser.Type type, Scope scope) {
+        var knownTypes = new java.util.LinkedHashMap<String, GenericDataType>(dataTypes);
+        var genericTypeNames = new java.util.LinkedHashSet<String>();
+        parameters.forEach(parameter -> collectGenericParameterNames(parameter.type(), genericTypeNames));
+        scope.localValues().values().forEach(localType -> collectGenericParameterNames(localType, genericTypeNames));
+        genericTypeNames.forEach(typeName -> knownTypes.putIfAbsent(
+                typeName,
+                new LinkedDataParentType(typeName, List.of(), List.of(), List.of())
+        ));
+        return linkType(type, knownTypes)
+                .map(linkedType -> replaceScopeGenericPlaceholders(linkedType, genericTypeNames));
+    }
+
+    private LinkedType replaceScopeGenericPlaceholders(LinkedType type, java.util.Set<String> genericTypeNames) {
+        if (type instanceof LinkedDataParentType parentType
+            && parentType.fields().isEmpty()
+            && parentType.subTypes().isEmpty()
+            && parentType.typeParameters().isEmpty()
+            && genericTypeNames.contains(parentType.name())) {
+            return new LinkedGenericTypeParameter(parentType.name());
+        }
+        return switch (type) {
+            case LinkedList linkedList -> new LinkedList(
+                    replaceScopeGenericPlaceholders(linkedList.elementType(), genericTypeNames)
+            );
+            case LinkedSet linkedSet -> new LinkedSet(
+                    replaceScopeGenericPlaceholders(linkedSet.elementType(), genericTypeNames)
+            );
+            case LinkedDict linkedDict -> new LinkedDict(
+                    replaceScopeGenericPlaceholders(linkedDict.valueType(), genericTypeNames)
+            );
+            case LinkedFunctionType functionType -> new LinkedFunctionType(
+                    replaceScopeGenericPlaceholders(functionType.argumentType(), genericTypeNames),
+                    replaceScopeGenericPlaceholders(functionType.returnType(), genericTypeNames)
+            );
+            case LinkedTupleType tupleType -> new LinkedTupleType(
+                    tupleType.elementTypes().stream()
+                            .map(elementType -> replaceScopeGenericPlaceholders(elementType, genericTypeNames))
+                            .toList()
+            );
+            case LinkedDataType linkedDataType -> new LinkedDataType(
+                    linkedDataType.name(),
+                    linkedDataType.fields().stream()
+                            .map(field -> new LinkedDataType.LinkedField(
+                                    field.name(),
+                                    replaceScopeGenericPlaceholders(field.type(), genericTypeNames)
+                            ))
+                            .toList(),
+                    linkedDataType.typeParameters(),
+                    linkedDataType.extendedTypes(),
+                    linkedDataType.singleton()
+            );
+            case LinkedDataParentType linkedDataParentType -> new LinkedDataParentType(
+                    linkedDataParentType.name(),
+                    linkedDataParentType.fields().stream()
+                            .map(field -> new LinkedDataType.LinkedField(
+                                    field.name(),
+                                    replaceScopeGenericPlaceholders(field.type(), genericTypeNames)
+                            ))
+                            .toList(),
+                    linkedDataParentType.subTypes().stream()
+                            .map(subType -> (LinkedDataType) replaceScopeGenericPlaceholders(subType, genericTypeNames))
+                            .toList(),
+                    linkedDataParentType.typeParameters()
+            );
+            default -> type;
+        };
     }
 
     private boolean isPipeMapExpression(InfixExpression expression) {

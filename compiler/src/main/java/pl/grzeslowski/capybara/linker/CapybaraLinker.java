@@ -1132,6 +1132,15 @@ public class CapybaraLinker {
                     + tupleExpression.values().stream()
                     .map(this::formatExpressionPreview)
                     .collect(java.util.stream.Collectors.joining(", ")) + ")";
+            case LambdaExpression lambdaExpression -> {
+                var args = String.join(", ", lambdaExpression.argumentNames());
+                var renderedArgs = lambdaExpression.argumentNames().isEmpty() ? "()" : args;
+                var lambda = renderedArgs + " => " + formatExpressionPreview(lambdaExpression.expression());
+                if (lambdaExpression.argumentNames().isEmpty()) {
+                    yield "(" + lambda + ")";
+                }
+                yield lambda;
+            }
             case SliceExpression sliceExpression -> formatSliceExpressionPreview(sliceExpression);
             case InfixExpression infixExpression -> formatExpressionPreview(infixExpression.left())
                                                    + previewOperator(infixExpression.operator().symbol())

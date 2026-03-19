@@ -1164,8 +1164,16 @@ public class JavaExpressionEvaluator {
     private static Scope evaluateLetExpression(LinkedLetExpression let, Scope scope) {
         var valueScope = evaluateExpression(let.value(), scope);
         var valueExSc = valueScope.popExpression();
-        var scopeExpression = valueExSc.scope().declareValue(let.name(), valueExSc.expression(), let.rest());
+        var scopeExpression = shouldUseTypedLetDeclaration(let.value())
+                ? valueExSc.scope().declareTypedValue(let.name(), javaCastType(let.value().type()), valueExSc.expression(), let.rest())
+                : valueExSc.scope().declareValue(let.name(), valueExSc.expression(), let.rest());
         return evaluateExpression(scopeExpression.expression(), scopeExpression.scope());
+    }
+
+    private static boolean shouldUseTypedLetDeclaration(LinkedExpression expression) {
+        return (expression instanceof LinkedNewList linkedNewList && linkedNewList.values().isEmpty())
+               || (expression instanceof LinkedNewSet linkedNewSet && linkedNewSet.values().isEmpty())
+               || (expression instanceof LinkedNewDict linkedNewDict && linkedNewDict.entries().isEmpty());
     }
 
     private static Scope evaluateSliceExpression(LinkedSliceExpression expression, Scope scope) {
@@ -1442,12 +1450,25 @@ public class JavaExpressionEvaluator {
                 .limit(constructorPattern.fieldPatterns().size())
                 .map(field -> {
                     var fieldType = field.type();
-                    if (fieldType instanceof pl.grzeslowski.capybara.linker.LinkedGenericTypeParameter genericTypeParameter) {
-                        return genericCasts.get(genericTypeParameter.name());
+                    if (fieldType instanceof pl.grzeslowski.capybara.linker.LinkedFunctionType) {
+                        return null;
                     }
-                    return javaCastType(fieldType);
+                    if (fieldType instanceof pl.grzeslowski.capybara.linker.LinkedGenericTypeParameter genericTypeParameter) {
+                        return sanitizePatternCastType(genericCasts.get(genericTypeParameter.name()));
+                    }
+                    return sanitizePatternCastType(javaCastType(fieldType));
                 })
                 .toList();
+    }
+
+    private static String sanitizePatternCastType(String castType) {
+        if (castType == null || "java.lang.Object".equals(castType)) {
+            return null;
+        }
+        if (castType.matches(".*(^|[<,\\s])[A-Z]([>,\\s]|$).*")) {
+            return null;
+        }
+        return castType;
     }
 
     private static LinkedDataType resolveConstructorType(

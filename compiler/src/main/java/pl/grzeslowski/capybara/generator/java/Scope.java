@@ -188,6 +188,13 @@ class Scope {
                 unique.expression);
     }
 
+    ScopeExpression declareTypedValue(String name, String javaType, String lastExpression, LinkedExpression expression) {
+        var unique = addValue(name, expression);
+        return new ScopeExpression(
+                unique.scope.addStatementUnchecked("%s %s = %s".formatted(javaType, unique.uniqueName, lastExpression)),
+                unique.expression);
+    }
+
     public record ExpressionScope(String expression, Scope scope) {
     }
 
