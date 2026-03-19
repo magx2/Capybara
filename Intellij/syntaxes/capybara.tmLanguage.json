@@ -333,6 +333,21 @@
         {
           "name": "variable.parameter.unused.capybara",
           "match": "(?<=\\(|,)\\s*(_)(?=\\s*(?:,|\\)\\s*=>))"
+        },
+        {
+          "name": "meta.lambda.no-args.capybara",
+          "match": "(\\()\\s*(\\))\\s*(=>)",
+          "captures": {
+            "1": {
+              "name": "punctuation.section.group.begin.capybara"
+            },
+            "2": {
+              "name": "punctuation.section.group.end.capybara"
+            },
+            "3": {
+              "name": "keyword.operator.function-type.capybara"
+            }
+          }
         }
       ]
     },

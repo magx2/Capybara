@@ -66,6 +66,10 @@ class CapybaraParserTest {
                 Arguments.of(
                         "invoke_multi",
                         "fun run(f: (int, int) => int): int = f(1, 2)\nfun invoke_multi(): int = run((a, b) => a + b)"
+                ),
+                Arguments.of(
+                        "invoke_no_arg_lambda",
+                        "fun run0(f: () => string): string = f()\nfun invoke_no_arg_lambda(): string = run0(() => \"Hello, Wrold\")"
                 ));
     }
 

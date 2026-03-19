@@ -50,6 +50,7 @@ parameter: identifier ':' type;
 functionType: ':' type;
 type: COLLECTION '[' type ']'
     | 'tuple' '[' type (COMMA type)+ ']'
+    | LPAREN RPAREN FAT_ARROW type
     | LPAREN type (COMMA type)+ RPAREN FAT_ARROW type
     | type FAT_ARROW type
     | 'byte'
@@ -97,7 +98,7 @@ expressionNoLet: ifExpression
 indexLiteral: MINUS? INT_LITERAL;
 sliceIndexLiteral: MINUS? INT_LITERAL;
 lambdaExpression: lambdaArgument FAT_ARROW expressionNoLetNoPipe
-                | LPAREN lambdaArgument (COMMA lambdaArgument)+ RPAREN FAT_ARROW expressionNoLetNoPipe;
+                | LPAREN (lambdaArgument (COMMA lambdaArgument)*)? RPAREN FAT_ARROW expressionNoLetNoPipe;
 lambdaArgument: identifier | UNDERSCORE;
 reduceExpression: expressionNoLetNoPipe COMMA LPAREN lambdaArgument COMMA lambdaArgument (COMMA lambdaArgument (COMMA lambdaArgument)?)? RPAREN FAT_ARROW expressionNoLetNoPipe;
 expressionNoLetNoPipe: ifExpression

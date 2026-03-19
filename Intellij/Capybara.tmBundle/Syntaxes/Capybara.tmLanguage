@@ -77,6 +77,10 @@
       <key>name</key><string>variable.parameter.unused.capybara</string>
       <key>match</key><string>(?&lt;=\(|,)\s*(_)(?=\s*(?:,|\)\s*=&gt;))</string>
     </dict>
+    <dict>
+      <key>name</key><string>meta.lambda.no-args.capybara</string>
+      <key>match</key><string>(\()\s*(\))\s*(=&gt;)</string>
+    </dict>
     <dict><key>name</key><string>keyword.operator.function-type.capybara</string><key>match</key><string>=&gt;</string></dict>
     <dict><key>name</key><string>keyword.operator.pipe.capybara</string><key>match</key><string>\|all\?|\|any\?|\|>|\|\*|\|-|\||\.and\.|\.nand\.|\.or\.|\.xor\.|\.not\.|==|!=|&lt;=|&gt;=|=&gt;|\+|\-|\*|/|%|\^|&lt;|&gt;|=|&amp;|\?|:|,</string></dict>
     <dict>

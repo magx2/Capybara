@@ -17,3 +17,7 @@ fun run_lambda2() = run(:plus)
 fun invoke_hof_unused(s: string) = hof(_ => s)
 
 fun run_lambda_unused_middle() = run((a, _, c, d) => a + c)
+
+fun run0(fun: () => string) = fun()
+
+fun run_lambda_no_args() = run0(() => "Hello, Wrold")

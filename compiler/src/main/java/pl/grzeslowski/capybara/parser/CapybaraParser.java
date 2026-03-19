@@ -704,6 +704,9 @@ public class CapybaraParser {
         if (context.FAT_ARROW() != null) {
             if ("(".equals(context.getChild(0).getText())) {
                 var parts = context.type();
+                if (parts.size() == 1) {
+                    return new FunctionType(PrimitiveType.NOTHING, type(parts.getFirst()));
+                }
                 var returnType = type(parts.get(parts.size() - 1));
                 var functionType = returnType;
                 for (var i = parts.size() - 2; i >= 0; i--) {

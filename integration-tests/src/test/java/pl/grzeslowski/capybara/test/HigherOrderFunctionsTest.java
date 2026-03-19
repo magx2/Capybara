@@ -48,4 +48,10 @@ class HigherOrderFunctionsTest {
         assertThat(HigherOrderFunctions.runLambdaUnusedMiddle())
                 .isEqualTo(12);
     }
+
+    @Test
+    void invokesNoArgAnonymousFunction() {
+        assertThat(HigherOrderFunctions.runLambdaNoArgs())
+                .isEqualTo("Hello, Wrold");
+    }
 }

@@ -774,6 +774,9 @@ public class CapybaraExpressionLinker {
             return withPosition(ValueOrError.error("Variable `" + function.name() + "` is not callable"), functionCall.position());
         }
         if (functionCall.arguments().isEmpty()) {
+            if (functionType.argumentType().equals(NOTHING)) {
+                return ValueOrError.success(new LinkedFunctionInvoke(function, List.of(), functionType.returnType()));
+            }
             return withPosition(
                     ValueOrError.error("Function variable `" + function.name() + "` requires at least one argument"),
                     functionCall.position()
@@ -809,6 +812,9 @@ public class CapybaraExpressionLinker {
             return withPosition(ValueOrError.error("Expression is not callable, was `" + function.type() + "`"), functionInvoke.position());
         }
         if (functionInvoke.arguments().isEmpty()) {
+            if (functionType.argumentType().equals(NOTHING)) {
+                return ValueOrError.success(new LinkedFunctionInvoke(function, List.of(), functionType.returnType()));
+            }
             return withPosition(
                     ValueOrError.error("Callable expression requires at least one argument"),
                     functionInvoke.position()
@@ -1043,12 +1049,16 @@ public class CapybaraExpressionLinker {
             LinkedFunctionType expectedType
     ) {
         var argumentNames = lambdaExpression.argumentNames();
-        if (argumentNames.isEmpty()) {
-            return withPosition(ValueOrError.error("Lambda has to have at least one argument"), lambdaExpression.position());
+        var noArgsLambda = argumentNames.isEmpty();
+        if (noArgsLambda && !expectedType.argumentType().equals(NOTHING)) {
+            return withPosition(
+                    ValueOrError.error("Lambda expects 0 argument(s), but target function type is `" + expectedType + "`"),
+                    lambdaExpression.position()
+            );
         }
 
         var argumentTypes = new java.util.ArrayList<LinkedType>(argumentNames.size());
-        var returnType = expectedReturnTypeForLambda(expectedType, argumentNames.size())
+        var returnType = expectedReturnTypeForLambda(expectedType, argumentNames.size(), noArgsLambda)
                 .orElse(null);
         if (returnType == null) {
             return withPosition(
@@ -1098,11 +1108,19 @@ public class CapybaraExpressionLinker {
                         nested = new LinkedLambdaExpression(argumentNames.get(idx), nested, functionType);
                         nestedType = functionType;
                     }
+                    if (noArgsLambda) {
+                        nested = new LinkedLambdaExpression("__capybaraNoArgs", nested, new LinkedFunctionType(NOTHING, nestedType));
+                    }
                     return ValueOrError.success((LinkedLambdaExpression) nested);
                 });
     }
 
-    private Optional<LinkedType> expectedReturnTypeForLambda(LinkedFunctionType expectedType, int argumentCount) {
+    private Optional<LinkedType> expectedReturnTypeForLambda(LinkedFunctionType expectedType, int argumentCount, boolean noArgsLambda) {
+        if (noArgsLambda) {
+            return expectedType.argumentType().equals(NOTHING)
+                    ? Optional.of(expectedType.returnType())
+                    : Optional.empty();
+        }
         LinkedType current = expectedType;
         for (int idx = 0; idx < argumentCount; idx++) {
             if (!(current instanceof LinkedFunctionType currentFunctionType)) {

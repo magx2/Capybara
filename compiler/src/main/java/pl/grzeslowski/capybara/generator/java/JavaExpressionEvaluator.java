@@ -228,6 +228,12 @@ public class JavaExpressionEvaluator {
         var functionExSc = evaluateExpression(functionInvoke.function(), scope).popExpression();
         var current = functionExSc.scope();
         var call = new StringBuilder(functionExSc.expression());
+        if (functionInvoke.arguments().isEmpty()
+            && functionInvoke.function().type() instanceof pl.grzeslowski.capybara.linker.LinkedFunctionType functionType
+            && functionType.argumentType() == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.NOTHING) {
+            call.append(".apply(null)");
+            return current.addExpression(call.toString());
+        }
         for (var argument : functionInvoke.arguments()) {
             var argumentScope = evaluateExpression(argument, current).popExpression();
             current = argumentScope.scope();
