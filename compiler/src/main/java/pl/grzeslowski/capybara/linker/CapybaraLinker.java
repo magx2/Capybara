@@ -2507,6 +2507,10 @@ public class CapybaraLinker {
                 name,
                 new LinkedDataParentType(name, List.of(), List.of(), declaration.typeParameters())
         ));
+        genericTypes.forEach(genericTypeName -> knownDataTypes.putIfAbsent(
+                genericTypeName,
+                new LinkedDataParentType(genericTypeName, List.of(), List.of(), List.of())
+        ));
         importedExternalTypePlaceholders(importDeclarations).forEach(knownDataTypes::putIfAbsent);
         var linkedType = linkType(type.type(), knownDataTypes);
         if (linkedType instanceof ValueOrError.Error<LinkedType>
