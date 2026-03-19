@@ -29,4 +29,18 @@ class SeqCollectionTest {
         assertThat(SeqCollection.sumFirstTwo(SeqCollection.oneTwoThree())).isEqualTo(3);
         assertThat(SeqCollection.sumFirstTwo(SeqCollection.End.INSTANCE)).isEqualTo(0);
     }
+
+    @Test
+    void dropLocalInfersSeqReturnTypeWithoutExplicitAnnotation() {
+        var dropped = SeqCollection.dropLocal(SeqCollection.oneTwoThree(), 1);
+        assertThat(SeqCollection.headOrDefault(dropped, -1)).isEqualTo(2);
+        assertThat(SeqCollection.headOrDefault(SeqCollection.dropLocal(SeqCollection.oneTwoThree(), 3), -1)).isEqualTo(-1);
+    }
+
+    @Test
+    void untilLocalInfersSeqReturnTypeWithoutExplicitAnnotation() {
+        var untilTwo = SeqCollection.untilLocal(SeqCollection.oneTwoThree(), 2);
+        assertThat(SeqCollection.headOrDefault(untilTwo, -1)).isEqualTo(1);
+        assertThat(SeqCollection.headOrDefault(SeqCollection.tail(untilTwo), -1)).isEqualTo(-1);
+    }
 }

@@ -1461,7 +1461,7 @@ public class CapybaraExpressionLinker {
                     return linkExpression(ifExpression.thenBranch(), scope)
                             .flatMap(t ->
                                     linkExpression(ifExpression.elseBranch(), scope)
-                                            .map(e -> new LinkedIfExpression(c, t, e, findHigherType(t.type(), e.type()))));
+                                            .map(e -> new LinkedIfExpression(c, t, e, mergeBranchTypes(t.type(), e.type()))));
                 });
     }
 
@@ -2210,7 +2210,8 @@ public class CapybaraExpressionLinker {
                                 reduceScope = reduceScope.add(reduceExpression.valueName(), elementType);
                                 return linkExpression(reduceExpression.reducerExpression(), reduceScope)
                                         .flatMap(reducer -> {
-                                            if (!reducer.type().equals(initial.type())) {
+                                            var coercedReducer = coerceArgument(reducer, initial.type());
+                                            if (coercedReducer == null) {
                                                 return withPosition(
                                                         ValueOrError.error(
                                                                 "Reducer in `|>` has to return `" + initial.type() + "`, was `" + reducer.type() + "`"
@@ -2218,18 +2219,41 @@ public class CapybaraExpressionLinker {
                                                         reduceExpression.position()
                                                 );
                                             }
+                                            var inferredReduceType = inferReduceResultType(initial.type(), reducer.type());
                                             return ValueOrError.success((LinkedExpression) new LinkedPipeReduceExpression(
                                                     left,
                                                     initial,
                                                     reduceExpression.accumulatorName(),
                                                     reduceExpression.keyName(),
                                                     reduceExpression.valueName(),
-                                                    reducer,
-                                                    initial.type()
+                                                    coercedReducer.expression(),
+                                                    inferredReduceType
                                             ));
                                         });
                             });
                 });
+    }
+
+    private LinkedType inferReduceResultType(LinkedType initialType, LinkedType reducerType) {
+        if (initialType instanceof LinkedList initialList
+            && initialList.elementType() == ANY
+            && reducerType instanceof LinkedList reducerList
+            && reducerList.elementType() != ANY) {
+            return reducerType;
+        }
+        if (initialType instanceof LinkedSet initialSet
+            && initialSet.elementType() == ANY
+            && reducerType instanceof LinkedSet reducerSet
+            && reducerSet.elementType() != ANY) {
+            return reducerType;
+        }
+        if (initialType instanceof LinkedDict initialDict
+            && initialDict.valueType() == ANY
+            && reducerType instanceof LinkedDict reducerDict
+            && reducerDict.valueType() != ANY) {
+            return reducerType;
+        }
+        return initialType;
     }
 
     private ValueOrError<LinkedExpression> linkPipeFlatMapExpression(InfixExpression expression, Scope scope) {
@@ -3089,10 +3113,58 @@ public class CapybaraExpressionLinker {
                             var matchType = cases.stream()
                                     .map(LinkedMatchExpression.MatchCase::expression)
                                     .map(LinkedExpression::type)
-                                    .reduce(CapybaraTypeFinder::findHigherType)
+                                    .reduce(this::mergeBranchTypes)
                                     .orElse(ANY);
                             return (LinkedExpression) new LinkedMatchExpression(matchWith, cases, matchType);
                         })));
+    }
+
+    private LinkedType mergeBranchTypes(LinkedType left, LinkedType right) {
+        if (left.equals(right)) {
+            return left;
+        }
+        if (left instanceof LinkedDataParentType leftParent && right instanceof LinkedDataType rightData) {
+            if (isSubtypeOfParent(rightData, leftParent)) {
+                return leftParent;
+            }
+        }
+        if (right instanceof LinkedDataParentType rightParent && left instanceof LinkedDataType leftData) {
+            if (isSubtypeOfParent(leftData, rightParent)) {
+                return rightParent;
+            }
+        }
+        if (left instanceof LinkedDataType leftData && right instanceof LinkedDataType rightData) {
+            var sharedParents = dataTypes.values().stream()
+                    .filter(LinkedDataParentType.class::isInstance)
+                    .map(LinkedDataParentType.class::cast)
+                    .filter(parent -> isSubtypeOfParent(leftData, parent) && isSubtypeOfParent(rightData, parent))
+                    .toList();
+            if (sharedParents.size() == 1) {
+                return sharedParents.getFirst();
+            }
+            if (!sharedParents.isEmpty()) {
+                var uniqueByRawName = sharedParents.stream()
+                        .collect(java.util.stream.Collectors.toMap(
+                                parent -> simpleRawTypeName(normalizeTypeAlias(parent.name())),
+                                parent -> parent,
+                                (first, second) -> preferQualifiedParent(first, second),
+                                java.util.LinkedHashMap::new
+                        ));
+                if (uniqueByRawName.size() == 1) {
+                    return uniqueByRawName.values().iterator().next();
+                }
+            }
+        }
+        return findHigherType(left, right);
+    }
+
+    private LinkedDataParentType preferQualifiedParent(LinkedDataParentType first, LinkedDataParentType second) {
+        var firstQualified = first.name().contains("/") || first.name().contains(".");
+        var secondQualified = second.name().contains("/") || second.name().contains(".");
+        if (firstQualified == secondQualified) {
+            return first;
+        }
+        return secondQualified ? second : first;
     }
 
     private ValueOrError<Void> validateMatchExhaustiveness(

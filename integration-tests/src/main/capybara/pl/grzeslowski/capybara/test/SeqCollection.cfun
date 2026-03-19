@@ -19,3 +19,23 @@ fun sum_first_two(s: Seq[int]): int =
     match s with
     | Cons { value, rest } -> value + head_or_default(rest, 0)
     | End -> 0
+
+fun drop_local(s: Seq[int], n: int): Seq[int] =
+    fun __drop(seq: Seq[int], left: int) =
+        if left <= 0
+        then seq
+        else
+            match seq with
+            | End -> End {}
+            | Cons { value, rest } -> __drop(rest, left - 1)
+    __drop(s, n)
+
+fun until_local(s: Seq[int], stop: int): Seq[int] =
+    fun __until(seq: Seq[int], x: int) =
+        match seq with
+        | End -> End {}
+        | Cons { value, rest } ->
+            if value == x
+            then End {}
+            else Cons { value, __until(rest, x) }
+    __until(s, stop)

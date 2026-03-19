@@ -465,24 +465,25 @@ public class CapybaraLinker {
         }
         var functionGenericTypeNames = functionGenericTypeNames(function, dataTypes);
         var linked = linkParameters(function.parameters(), dataTypes, functionGenericTypeNames)
-                .flatMap(parameters -> new CapybaraExpressionLinker(
-                        parameters,
-                        dataTypes,
-                        signatures,
-                        signaturesByModule,
-                        moduleClassNameByModuleName
-                ).linkExpression(function.expression()).flatMap(ex -> function.returnType()
-                        .map(type -> linkType(type, dataTypes, functionGenericTypeNames))
-                        .orElseGet(() -> ValueOrError.success(ex.type()))
-                        .flatMap(rtype -> validateFunctionReturnType(function, ex, rtype, moduleSourceFile)
-                                .map(validatedExpression -> new LinkedFunction(
-                                        function.name(),
-                                        rtype,
-                                        parameters,
-                                        enrichNothing(coerceReturnExpression(validatedExpression, rtype), function.name(), moduleSourceFile),
-                                        function.comments(),
-                                        isProgramMain(function.name(), rtype, parameters)
-                                )))));
+                .flatMap(parameters -> linkExpressionWithRecursiveInference(
+                                function,
+                                parameters,
+                                dataTypes,
+                                signatures,
+                                signaturesByModule,
+                                moduleClassNameByModuleName
+                        ).flatMap(ex -> function.returnType()
+                                .map(type -> linkType(type, dataTypes, functionGenericTypeNames))
+                                .orElseGet(() -> ValueOrError.success(ex.type()))
+                                .flatMap(rtype -> validateFunctionReturnType(function, ex, rtype, moduleSourceFile)
+                                        .map(validatedExpression -> new LinkedFunction(
+                                                function.name(),
+                                                rtype,
+                                                parameters,
+                                                enrichNothing(coerceReturnExpression(validatedExpression, rtype), function.name(), moduleSourceFile),
+                                                function.comments(),
+                                                isProgramMain(function.name(), rtype, parameters)
+                                        )))));
         linked = normalizeInfixOperatorErrors(linked, function, moduleSourceFile);
         linked = normalizeMatchExhaustivenessErrors(linked, function, moduleSourceFile);
         linked = normalizeIntLiteralErrors(linked, function, moduleSourceFile);
@@ -491,6 +492,49 @@ public class CapybaraLinker {
         var fallbackPosition = returnExpressionPosition(function.expression()).or(() -> function.position());
         linked = withPosition(linked, fallbackPosition, normalizedFile);
         return normalizeReadableFunctionErrors(linked, function, moduleSourceFile);
+    }
+
+    private ValueOrError<pl.grzeslowski.capybara.linker.expression.LinkedExpression> linkExpressionWithRecursiveInference(
+            Function function,
+            List<LinkedFunctionParameter> parameters,
+            Map<String, GenericDataType> dataTypes,
+            List<CapybaraExpressionLinker.FunctionSignature> signatures,
+            Map<String, List<CapybaraExpressionLinker.FunctionSignature>> signaturesByModule,
+            Map<String, String> moduleClassNameByModuleName
+    ) {
+        var linker = new CapybaraExpressionLinker(
+                parameters,
+                dataTypes,
+                signatures,
+                signaturesByModule,
+                moduleClassNameByModuleName
+        );
+        return linker.linkExpression(function.expression()).flatMap(expression -> {
+            if (function.returnType().isPresent()
+                || expression.type() != PrimitiveLinkedType.ANY
+                || !function.name().contains("__local_fun_")) {
+                return ValueOrError.success(expression);
+            }
+            var selfSignatureAsNothing = signatures.stream()
+                    .map(signature -> signature.name().equals(function.name())
+                                     ? new CapybaraExpressionLinker.FunctionSignature(
+                            signature.name(),
+                            signature.parameterTypes(),
+                            PrimitiveLinkedType.NOTHING
+                    )
+                                     : signature)
+                    .toList();
+            var retryLinker = new CapybaraExpressionLinker(
+                    parameters,
+                    dataTypes,
+                    selfSignatureAsNothing,
+                    signaturesByModule,
+                    moduleClassNameByModuleName
+            );
+            return retryLinker.linkExpression(function.expression()).map(retry ->
+                    retry.type() != PrimitiveLinkedType.ANY ? retry : expression
+            );
+        });
     }
 
     private Optional<ValueOrError<LinkedFunction>> validateTypeMethodDeclaredInLocalType(
