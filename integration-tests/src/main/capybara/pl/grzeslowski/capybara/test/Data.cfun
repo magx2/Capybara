@@ -22,7 +22,7 @@ type Knight = EnglishKnight | Tom
 data EnglishKnight { power: float }
 single Tom
 
-fun summon_tom(): Knight = Tom {}
+fun summon_tom(): Knight = Tom
 
 fun is_tom(knight: Knight): bool =
     match knight with
@@ -33,7 +33,7 @@ type King[T] = FrenchKing[T] | Jerry
 data FrenchKing[T] { head: bool, foo: T }
 single Jerry
 
-fun summon_jerry(): King[int] = Jerry {}
+fun summon_jerry(): King[int] = Jerry
 
 fun jerry_or_french(king: King[int]): string =
     match king with
@@ -58,7 +58,7 @@ fun string_plus_data_right(): string =
     PrintableData { foo: "abc", boo: 123 } + "=suffix"
 
 fun knight_holder_to_string(): string =
-    KnightHolder { knight: Tom {} } + ""
+    KnightHolder { knight: Tom } + ""
 
 fun create_positional_data(text: string, number: int): PositionalData =
     PositionalData { text, number }

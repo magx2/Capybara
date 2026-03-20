@@ -3,17 +3,32 @@ data Cons[T] { value: T, rest: Seq[T] }
 single End
 
 fun one_two_three(): Seq[int] =
-    Cons { 1, Cons { 2, Cons { 3, End {} } } }
+    Cons { 1, Cons { 2, Cons { 3, End } } }
 
 fun head_or_default(s: Seq[int], d: int): int =
     match s with
     | Cons { value, rest } -> value
     | End -> d
 
+fun head_or_default_wildcard(s: Seq[int], d: int): int =
+    match s with
+    | Cons { value, _ } -> value
+    | End -> d
+
+fun first_fq_singleton(s: Seq[int]): /capy/lang/Option[int] =
+    match s with
+    | End -> /capy/lang/Option.None {}
+    | Cons { value, _ } -> /capy/lang/Option.Some { value }
+
+fun first_short_singleton(s: Seq[int]): /capy/lang/Option[int] =
+    match s with
+    | End -> None {}
+    | Cons { value, _ } -> /capy/lang/Option.Some { value }
+
 fun tail(s: Seq[int]): Seq[int] =
     match s with
     | Cons { value, rest } -> rest
-    | End -> End {}
+    | End -> End
 
 fun sum_first_two(s: Seq[int]): int =
     match s with
@@ -26,16 +41,16 @@ fun drop_local(s: Seq[int], n: int): Seq[int] =
         then seq
         else
             match seq with
-            | End -> End {}
+            | End -> End
             | Cons { value, rest } -> __drop(rest, left - 1)
     __drop(s, n)
 
 fun until_local(s: Seq[int], stop: int): Seq[int] =
     fun __until(seq: Seq[int], x: int) =
         match seq with
-        | End -> End {}
+        | End -> End
         | Cons { value, rest } ->
             if value == x
-            then End {}
+            then End
             else Cons { value, __until(rest, x) }
     __until(s, stop)

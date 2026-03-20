@@ -215,7 +215,7 @@ class JavaExpressionEvaluatorTest {
                                 type Knight = EnglishKnight | Tom
                                 data EnglishKnight { power: float }
                                 single Tom
-                                fun summon_tom(): Knight = Tom {}
+                                fun summon_tom(): Knight = Tom
                                 """,
                         "return Tom.INSTANCE;"
                 ),

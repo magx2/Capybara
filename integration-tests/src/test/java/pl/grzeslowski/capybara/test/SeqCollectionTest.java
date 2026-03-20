@@ -19,6 +19,12 @@ class SeqCollectionTest {
     void headAndTailWorkForRecursiveType() {
         var seq = SeqCollection.oneTwoThree();
         assertThat(SeqCollection.headOrDefault(seq, -1)).isEqualTo(1);
+        assertThat(SeqCollection.headOrDefaultWildcard(seq, -1)).isEqualTo(1);
+        assertThat(SeqCollection.headOrDefaultWildcard(SeqCollection.End.INSTANCE, -1)).isEqualTo(-1);
+        assertThat(SeqCollection.firstFqSingleton(seq)).contains(1);
+        assertThat(SeqCollection.firstFqSingleton(SeqCollection.End.INSTANCE)).isEmpty();
+        assertThat(SeqCollection.firstShortSingleton(seq)).contains(1);
+        assertThat(SeqCollection.firstShortSingleton(SeqCollection.End.INSTANCE)).isEmpty();
 
         var tail = SeqCollection.tail(seq);
         assertThat(SeqCollection.headOrDefault(tail, -1)).isEqualTo(2);

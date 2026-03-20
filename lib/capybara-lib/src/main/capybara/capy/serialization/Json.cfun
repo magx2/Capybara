@@ -60,7 +60,7 @@ fun _deserializeJson(json: string): Result[_Parse[Json]] =
 
 fun _deserialize_json_null(json: string): Result[_Parse[JsonNull]] =
     if json.starts_with('null')
-    then Success { _Parse { JsonNull {}, json[4:] } }
+    then Success { _Parse { JsonNull, json[4:] } }
     else
         let actual =
             if json.size > 4
