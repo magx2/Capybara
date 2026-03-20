@@ -81,10 +81,28 @@ tasks.register('runResultTest', JavaExec) {
     mainClass = 'capy.lang.ResultTest'
 }
 
+tasks.register('runSeqTest', JavaExec) {
+    group = 'verification'
+    description = 'Runs `SeqTest` main function.'
+    dependsOn tasks.named('compileTestCapybara')
+
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'capy.lang.SeqTest'
+}
+
+tasks.register('runCollectionAssertTest', JavaExec) {
+    group = 'verification'
+    description = 'Runs `CollectionAssertTest` main function.'
+    dependsOn tasks.named('compileTestCapybara')
+
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'capy.lang.CollectionAssertTest'
+}
+
 tasks.register('testCapybara') {
     group = 'verification'
     description = 'Runs all generated Capybara main-based tests.'
-    dependsOn tasks.named('runJsonTest'), tasks.named('runResultTest')
+    dependsOn tasks.named('runJsonTest'), tasks.named('runResultTest'), tasks.named('runSeqTest'), tasks.named('runCollectionAssertTest')
 }
 
 sourceSets {

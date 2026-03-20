@@ -1,0 +1,34 @@
+from /capy/assert/Assert import { * }
+
+fun main(args: list[string]): /capy/lang/Program =
+    run_tests([
+        should_assert_list(),
+        should_assert_empty_list(),
+        should_assert_set(),
+        should_assert_empty_set(),
+        should_assert_dict(),
+        should_assert_empty_dict(),
+    ])
+
+fun should_assert_list(): Assert =
+    let l = [1, 2, 3]
+    assert_that(l.size).is_equal_to(3)
+
+fun should_assert_empty_list(): Assert =
+    assert_that([].size).is_equal_to(0)
+
+fun should_assert_set(): Assert =
+    let s = {1, 2, 3}
+    assert_that(s.size).is_equal_to(3)
+
+fun should_assert_empty_set(): Assert =
+    let empty_set: set[int] = {1, 2} - 1 - 2
+    assert_that(empty_set.size).is_equal_to(0)
+
+fun should_assert_dict(): Assert =
+    let d: dict[int] = {"one": 1, "two": 2}
+    assert_that(d.size).is_equal_to(2)
+
+fun should_assert_empty_dict(): Assert =
+    let d: dict[int] = {:}
+    assert_that(d.size).is_equal_to(0)
