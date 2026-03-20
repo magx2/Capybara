@@ -1209,6 +1209,15 @@ public class CapybaraExpressionLinker {
             && areFunctionTypesCompatible(argumentFunction, expectedFunction)) {
             return new CoercedArgument(argument, 1);
         }
+        if (!(expected instanceof LinkedFunctionType)
+            && argument.type() instanceof LinkedFunctionType argumentFunction
+            && argumentFunction.argumentType().equals(NOTHING)) {
+            var invoked = new LinkedFunctionInvoke(argument, List.of(), argumentFunction.returnType());
+            var invokedCoerced = coerceArgument(invoked, expected);
+            if (invokedCoerced != null) {
+                return new CoercedArgument(invokedCoerced.expression(), invokedCoerced.coercions() + 1);
+            }
+        }
         if (expected instanceof LinkedList expectedList
             && argument instanceof LinkedNewList linkedNewList
             && linkedNewList.values().isEmpty()) {
@@ -2210,7 +2219,29 @@ public class CapybaraExpressionLinker {
                                 reduceScope = reduceScope.add(reduceExpression.valueName(), elementType);
                                 return linkExpression(reduceExpression.reducerExpression(), reduceScope)
                                         .flatMap(reducer -> {
-                                            var coercedReducer = coerceArgument(reducer, initial.type());
+                                            var resolvedInitial = initial;
+                                            var accumulatorType = initial.type();
+                                            var coercedReducer = coerceArgument(reducer, accumulatorType);
+                                            if (coercedReducer == null) {
+                                                var coercedInitial = coerceArgument(initial, reducer.type());
+                                                if (coercedInitial != null) {
+                                                    resolvedInitial = coercedInitial.expression();
+                                                    accumulatorType = reducer.type();
+                                                    coercedReducer = coerceArgument(reducer, accumulatorType);
+                                                }
+                                            }
+                                            if (coercedReducer == null) {
+                                                var sharedAccumulatorType = findSharedReduceAccumulatorType(initial, reducer);
+                                                if (sharedAccumulatorType != null) {
+                                                    var coercedInitial = coerceArgument(initial, sharedAccumulatorType);
+                                                    var sharedCoercedReducer = coerceArgument(reducer, sharedAccumulatorType);
+                                                    if (coercedInitial != null && sharedCoercedReducer != null) {
+                                                        resolvedInitial = coercedInitial.expression();
+                                                        accumulatorType = sharedAccumulatorType;
+                                                        coercedReducer = sharedCoercedReducer;
+                                                    }
+                                                }
+                                            }
                                             if (coercedReducer == null) {
                                                 return withPosition(
                                                         ValueOrError.error(
@@ -2219,10 +2250,10 @@ public class CapybaraExpressionLinker {
                                                         reduceExpression.position()
                                                 );
                                             }
-                                            var inferredReduceType = inferReduceResultType(initial.type(), reducer.type());
+                                            var inferredReduceType = inferReduceResultType(accumulatorType, reducer.type());
                                             return ValueOrError.success((LinkedExpression) new LinkedPipeReduceExpression(
                                                     left,
-                                                    initial,
+                                                    resolvedInitial,
                                                     reduceExpression.accumulatorName(),
                                                     reduceExpression.keyName(),
                                                     reduceExpression.valueName(),
@@ -2232,6 +2263,51 @@ public class CapybaraExpressionLinker {
                                         });
                             });
                 });
+    }
+
+    private LinkedType findSharedReduceAccumulatorType(LinkedExpression initial, LinkedExpression reducer) {
+        if (!(initial.type() instanceof LinkedDataType initialData) || !(reducer.type() instanceof LinkedDataType reducerData)) {
+            return null;
+        }
+        for (var initialParentDescriptor : initialData.extendedTypes()) {
+            var initialParentName = rawTypeName(initialParentDescriptor);
+            for (var reducerParentDescriptor : reducerData.extendedTypes()) {
+                var reducerParentName = rawTypeName(reducerParentDescriptor);
+                if (!sameRawTypeName(initialParentName, reducerParentName)) {
+                    continue;
+                }
+                var shared = resolveDataTypeByName(initialParentName);
+                if (shared != null
+                    && coerceArgument(initial, shared) != null
+                    && coerceArgument(reducer, shared) != null) {
+                    return shared;
+                }
+            }
+        }
+        for (var type : dataTypes.values()) {
+            if (!(type instanceof LinkedDataParentType parentType)) {
+                continue;
+            }
+            var hasInitial = parentType.subTypes().stream()
+                    .anyMatch(subType -> sameRawTypeName(subType.name(), initialData.name()));
+            if (!hasInitial) {
+                continue;
+            }
+            var hasReducer = parentType.subTypes().stream()
+                    .anyMatch(subType -> sameRawTypeName(subType.name(), reducerData.name()));
+            if (!hasReducer) {
+                continue;
+            }
+            if (coerceArgument(initial, parentType) != null && coerceArgument(reducer, parentType) != null) {
+                return parentType;
+            }
+        }
+        return null;
+    }
+
+    private String rawTypeName(String descriptor) {
+        var genericStart = descriptor.indexOf('[');
+        return genericStart >= 0 ? descriptor.substring(0, genericStart) : descriptor;
     }
 
     private LinkedType inferReduceResultType(LinkedType initialType, LinkedType reducerType) {

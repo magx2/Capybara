@@ -1,0 +1,35 @@
+fun reverse_ints(values: list[int]): list[int] =
+    fun __rev(left: list[int], acc: list[int]): list[int] =
+        if left.size == 0
+        then acc
+        else
+            match left[0] with
+            | Some { v } -> __rev(left[1:], [v] + acc)
+            | None -> acc
+    __rev(values, [])
+
+fun duplicate_strings(values: list[string]): list[string] =
+    fun __dup(left: list[string], acc: list[string]): list[string] =
+        if left.size == 0
+        then acc
+        else
+            match left[0] with
+            | Some { v } -> __dup(left[1:], acc + [v, v])
+            | None -> acc
+    __dup(values, [])
+
+fun empty_list_of_type_param(v: T): list[T] =
+    []
+
+type SeqEnd[T] = ConsEnd[T] | EndEnd
+data ConsEnd[T] { value: T, rest: () => SeqEnd[T] }
+single EndEnd
+
+fun to_seq_using_end_literal(list: list[T]): SeqEnd[T] =
+    list
+        |> EndEnd, (acc, value) => ConsEnd { value, () => acc }
+
+fun seq_end_head_or_default(s: SeqEnd[int], d: int): int =
+    match s with
+    | EndEnd -> d
+    | ConsEnd { value, rest } -> value

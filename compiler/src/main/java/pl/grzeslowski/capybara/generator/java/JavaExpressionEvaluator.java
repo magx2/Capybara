@@ -930,6 +930,10 @@ public class JavaExpressionEvaluator {
                         .addLocalValue(pipeReduceExpression.accumulatorName())
                         .addLocalValue(pipeReduceExpression.valueName())
         ).popExpression();
+        var reduceInitialExpression = initialExSc.expression();
+        if (!pipeReduceExpression.initialValue().type().equals(pipeReduceExpression.type())) {
+            reduceInitialExpression = "((" + javaCastType(pipeReduceExpression.type()) + ") (" + reduceInitialExpression + "))";
+        }
         var javaAccumulatorName = normalizeJavaLocalIdentifier(pipeReduceExpression.accumulatorName());
         var javaValueName = normalizeJavaLocalIdentifier(pipeReduceExpression.valueName());
         var javaReducerExpression = reducerExSc.expression();
@@ -945,7 +949,7 @@ public class JavaExpressionEvaluator {
             var reducedValueName = "__capybaraReducedValue";
             var maybeMapPrefix = pipeReduceExpression.initialValue().type() == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.STRING
                     && !"\"\"".equals(initialExSc.expression())
-                    ? ".map(" + reducedValueName + " -> (" + initialExSc.expression() + "+" + reducedValueName + "))"
+                    ? ".map(" + reducedValueName + " -> (" + reduceInitialExpression + "+" + reducedValueName + "))"
                     : "";
             return reducerExSc.scope().addExpression(
                     sourceStreamExSc.streamExpression()
@@ -955,7 +959,7 @@ public class JavaExpressionEvaluator {
                     + ") -> (" + javaReducerExpression + "))"
                     + maybeMapPrefix
                     + ".orElse("
-                    + initialExSc.expression()
+                    + reduceInitialExpression
                     + ")"
             );
         }
@@ -963,7 +967,7 @@ public class JavaExpressionEvaluator {
         return reducerExSc.scope().addExpression(
                 sourceStreamExSc.streamExpression()
                 + ".reduce("
-                + initialExSc.expression()
+                + reduceInitialExpression
                 + ", (" + javaAccumulatorName
                 + ", " + javaValueName
                 + ") -> (" + javaReducerExpression + ")"

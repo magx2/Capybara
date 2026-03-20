@@ -296,6 +296,28 @@ public class CompilationErrorTest {
     static Stream<Arguments> simpleCompilationError() {
         return Stream.of(
                 Arguments.of(
+                        "parser_syntax_error_missing_brace_in_then_branch",
+                        """
+                                type Seq[T] = Cons[T] | End
+                                data Cons[T] { value: T, rest: Seq[T] }
+                                single End
+                                fun to_seq(list: list[int]): Seq[int] =
+                                    if list.size > 0
+                                    then Cons { list[0], to_seq(list[1:])
+                                    else End
+                                """,
+                        new Position(7, 4),
+                        """
+                                error: mismatched types
+                                 --> /foo/boo/parser_syntax_error_missing_brace_in_then_branch.cfun:%d:%d
+                                fun to_seq(list: list[int]): Seq[int] =
+                                    if list.size > 0
+                                    then Cons { list[0], to_seq(list[1:])
+                                    else End
+                                    ^ Syntax error near `iflist.size>0thenCons{list[0],to_seq(list[1:])else`
+                                """
+                ),
+                Arguments.of(
                         "lambda_outside_pipe_reports_clear_error",
                         "fun foo(): int = (() => 1)",
                         new Position(1, 17),
@@ -862,20 +884,12 @@ public class CompilationErrorTest {
                         break;
                     }
                 }
-                var header = lines.length > functionLine ? lines[functionLine] : "";
-                var body = lines.length > functionLine + 1 ? lines[functionLine + 1] : "";
-                var failingLine = line > 0 && line <= lines.length ? lines[line - 1] : "";
                 var renderedLines = new ArrayList<String>();
-                if (!header.isEmpty()) {
-                    renderedLines.add(header);
-                }
-                if (!body.isEmpty() && !body.equals(header)) {
-                    renderedLines.add(body);
-                }
-                if (!failingLine.isEmpty()
-                    && !failingLine.equals(header)
-                    && !failingLine.equals(body)) {
-                    renderedLines.add(failingLine);
+                var endLine = Math.min(Math.max(line - 1, functionLine), Math.max(lines.length - 1, 0));
+                for (var idx = functionLine; idx <= endLine && idx < lines.length; idx++) {
+                    if (!lines[idx].isEmpty()) {
+                        renderedLines.add(lines[idx]);
+                    }
                 }
                 var message = "error: mismatched types\n"
                               + " --> /foo/boo/%s.cfun:%d:%d\n".formatted(moduleName, line, column)
