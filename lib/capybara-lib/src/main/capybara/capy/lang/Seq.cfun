@@ -1,0 +1,190 @@
+type Seq[T] = Cons[T] | End
+data Cons[T] { value: T, rest: () => Seq[T] }
+single End
+
+/// Returns infinite sequence of natural numbers (starting with `0`).
+///
+/// If you want to start from `1` then use `drop`:
+/// ```cfun
+/// natural_seq().drop(1)
+/// ```
+fun natural_seq(): Seq[int] =
+    fun __next(i: int): Seq[int] = Cons { i, () => __next(i+1) }
+    __next(0)
+
+/// Returns infinite sequence of Fibonacci numbers: `1 1 2 3 5 8 13 ...`.
+fun fibonacci_seq(): Seq[int] =
+    fun __next(a: int, b: int) = Cons { b, () => __next(b, a+b) }
+    __next(0,1)
+
+/// Returns infinite sequence of only zeros.
+fun zeros_seq(): Seq[int] =
+    fun __next() = Cons { 0, () => __next() }
+    __next()
+
+/// Returns infinite sequence of only ones.
+fun ones_seq(): Seq[int] =
+    fun __next() = Cons { 1, () => __next() }
+    __next()
+
+/// Returns infinite stream of `base` to the natural powers: `base^0, base^1, base^2, base^3, ...`.
+///
+/// Note: The first value in sequence always will be `1` cause anything to the power of `0` is `1`.
+fun powers_seq(base: int): Seq[int] = natural_seq() | n => base ^ n
+
+/// Returns infinite stream of `2` to the natural powers: `2^0, 2^1, 2^2, 2^3, ...`.
+///
+/// Note: The first value in sequence is `1` cause `2` to the power of `0` is `1`.
+fun powers_of_2_seq() = powers_seq(2)
+
+/// Takes first `n` elements and turns them to `list`. Can be safely invoked on infinite sequence.
+fun Seq[T].take(n: int): list[T] =
+    fun __take(seq: Seq[T], n: int, list: list[T]): list[T] =
+        if n <=0
+        then list
+        else
+            match seq with
+            | End -> list
+            | Cons { value, rest } -> __take(rest(), n-1, list + value)
+    __take(this, n, [])
+
+/// Returns sequence as list.
+///
+///Important: This will hang up program if called on infinite sequence.
+fun Seq[T].as_list(): list[T] =
+    fun __as_list(seq: Seq[T], list: list[T]): list[T] =
+        match seq with
+        | End -> list
+        | Cons { value, rest } -> __as_list(rest(), list + value)
+    __as_list(this, [])
+
+/// Maps given list to finite sequence.
+fun to_seq(list: list[T]): Seq[T] =
+    list |> End, (acc, value) => acc + Cons { value, () => End }
+
+/// Maps given set to finite sequence.
+fun to_seq(list: set[T]): Seq[T] =
+    list |> End, (acc, value) => acc + Cons { value, () => End }
+
+/// Maps given dictionary to finite sequence.
+fun to_seq(list: dict[T]): Seq[tuple[string, T]] =
+    list |> End, (acc, key, value) => acc + Cons { (key, value), () => End }
+
+/// Takes last `n` elements abd turns them to `list`.
+///
+///Important: This will hang up program if called on infinite sequence.
+fun Seq[T].take_last(n: int): list[T] =
+    fun __add_to_list(max: int, list: list[T], value: T) = (if list.size >= max then list[1:] else list) + value
+    fun __take_last(seq: Seq[T], max: int, n: int, list: list[T]) =
+        if n <= 0
+        then list
+        else
+            match seq with
+            | End -> list
+            | Cons { value, rest } -> __take_last(rest(), max, n-1, __add_to_list(max, list, value))
+    __take_last(this, n, n, [])
+
+fun Seq[T].filter(pred: T => bool): Seq[T] =
+    fun __filter(seq: Seq[T], pred: T => bool): Seq[T] =
+        match seq with
+        | End -> End
+        | Cons { value, rest } ->
+            if pred(value)
+            then Cons { value, () => __filter(rest(), pred) }
+            else __filter(rest(), pred)
+    __filter(this, pred)
+
+/// Drops `n` elements from the beginning of the sequence.
+fun Seq[T].drop(n: int): Seq[T] =
+    fun __drop(seq: Seq[T], n: int) =
+        if n <= 0
+        then seq
+        else
+            match seq with
+            | End -> End
+            | Cons { value, rest } -> __drop(rest(), n - 1)
+    __drop(this, n)
+
+/// Drops sequence elements until the predicate is true.
+///
+/// Example:
+/// seq: [0, 1, 2, ...]
+/// `seq.drop_until(x => x > 9)` will produce `[10, 11, 12, ...]`
+///
+/// Note: The first element for which predicate return true will also be in the sequence.
+fun Seq[T].drop_until(pred: T => bool): Seq[T] =
+    fun __drop_until(seq: Seq[T], pred: T => bool) =
+        match seq with
+        | End -> End
+        | Cons { value, rest } ->
+            if pred(value)
+            then Cons { value, rest }
+            else __drop_until(rest(), pred)
+    __drop_until(this, pred)
+
+/// Return sub-sequence with elements until the predicate returns `true`. After the predicate returns `true`, rest of the sequence is dropped.
+fun Seq[T].until(pred: T => bool): Seq[T] =
+    fun __until(seq: Seq[T], pred: T => bool) =
+        match seq with
+        | End -> End
+        | Cons { value, rest } ->
+            if pred(value)
+            then End
+            else Cons { value, () => __until(rest(), pred) }
+    __until(this, pred)
+
+/// Adds other sequence to current one. If current on is infinite then the second one will never be returned.
+fun Seq[T].`+`(other: Seq[T]): Seq[T] =
+    fun __add(seq: Seq[T], other: Seq[T]) =
+        match seq with
+        | End -> other
+        | Cons { value, rest } -> Cons { value, () => __add(rest(), other) }
+    __add(this, other)
+
+/// Maps the whole sequence with given function.
+fun Seq[T].`|`(map: T => Y): Seq[Y] =
+    match this with
+    | End -> End
+    | Cons { value, rest } -> Cons { map(value), () => (rest() | map) }
+
+/// Flat maps whole sequence with given function.
+///
+/// Example:
+/// `[1, 2, 3, 4, ...] |* x => [x, 2*x, 3*x]`
+/// will produce:
+/// `[1, 2, 3, 2, 4, 6, 4, 8, 12, ...]`
+fun Seq[T].`|*`(map: T => Seq[Y]): Seq[Y] =
+    fun __flat_map(seq: Seq[T], map: T => Seq[Y]) =
+        match seq with
+        | End -> End
+        | Cons { value, rest } ->
+            map(value) + __flat_map(rest(), map)
+    __flat_map(this, map)
+
+/// Zips 2 sequences. If sequences do not have the same length, then the length of the shorter one is taken.
+///
+/// Example:
+/// `s1`: [1, 2, 3, ...]
+/// `s2`: [a, b, c, ..., z] (this is a finite sequence)
+/// `s1.zip(s2)` -> [(1, a), (2, b), (3, c), ..., (26, z)]
+fun Seq[T].zip(other: Seq[Y]): Seq[tuple[T,Y]] =
+    fun __zip(this: Seq[T], other: Seq[Y]): Seq[tuple[T,Y]] =
+        match this with
+        | End -> End
+        | Cons { v1, r1 } ->
+            match other with
+            | End -> End
+            | Cons { v2, r2 } -> Cons { (v1, v2), () => __zip(r1, r2) }
+    __zip(this, other)
+
+fun Seq[T].first(): /capy/lang/Option[T] =
+    match this with
+    | End -> /capy/lang/Option.None
+    | Cons { value, _ } -> /capy/lang/Option.Some { value }
+
+fun Seq[T].first_match(pred: T => bool): /capy/lang/Option[T] = this.filter(pred).first()
+
+fun Seq[T].any(pred: T => bool): bool =
+    match this.first_match(pred) with
+    | None -> false
+    | Some { _ } -> true
