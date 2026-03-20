@@ -1204,6 +1204,21 @@ public class CapybaraExpressionLinker {
             && areTupleTypesCompatible(argumentTuple, expectedTuple)) {
             return new CoercedArgument(argument, 1);
         }
+        if (expected instanceof LinkedList expectedList
+            && argument.type() instanceof LinkedList argumentList
+            && isTypeCompatible(argumentList.elementType(), expectedList.elementType())) {
+            return new CoercedArgument(argument, 1);
+        }
+        if (expected instanceof LinkedSet expectedSet
+            && argument.type() instanceof LinkedSet argumentSet
+            && isTypeCompatible(argumentSet.elementType(), expectedSet.elementType())) {
+            return new CoercedArgument(argument, 1);
+        }
+        if (expected instanceof LinkedDict expectedDict
+            && argument.type() instanceof LinkedDict argumentDict
+            && isTypeCompatible(argumentDict.valueType(), expectedDict.valueType())) {
+            return new CoercedArgument(argument, 1);
+        }
         if (expected instanceof LinkedFunctionType expectedFunction
             && argument.type() instanceof LinkedFunctionType argumentFunction
             && areFunctionTypesCompatible(argumentFunction, expectedFunction)) {

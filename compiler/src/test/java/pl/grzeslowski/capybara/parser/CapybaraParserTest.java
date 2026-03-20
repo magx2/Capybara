@@ -70,6 +70,32 @@ class CapybaraParserTest {
                 Arguments.of(
                         "invoke_no_arg_lambda",
                         "fun run0(f: () => string): string = f()\nfun invoke_no_arg_lambda(): string = run0(() => \"Hello, Wrold\")"
+                ),
+                Arguments.of(
+                        "seq_first_wildcard",
+                        """
+                                type Seq[T] = Cons[T] | End
+                                data Cons[T] { value: T, rest: Seq[T] }
+                                single End
+
+                                fun seq_first_wildcard(s: Seq[int]): Option[int] =
+                                    match s with
+                                    | End -> None {}
+                                    | Cons { value, _ } -> Some { value }
+                                """
+                ),
+                Arguments.of(
+                        "seq_first_wildcard_fq_singleton",
+                        """
+                                type Seq[T] = Cons[T] | End
+                                data Cons[T] { value: T, rest: Seq[T] }
+                                single End
+
+                                fun seq_first_wildcard_fq_singleton(s: Seq[int]): /capy/lang/Option[int] =
+                                    match s with
+                                    | End -> /capy/lang/Option.None {}
+                                    | Cons { value, _ } -> Some { value }
+                                """
                 ));
     }
 

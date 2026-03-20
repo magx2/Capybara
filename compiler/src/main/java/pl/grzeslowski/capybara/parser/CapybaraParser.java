@@ -834,8 +834,8 @@ public class CapybaraParser {
             if (value.identifier() != null) {
                 return new Value(identifier(value.identifier()), position(value.identifier()));
             }
-            if (value.TYPE() != null) {
-                return new FunctionCall(Optional.empty(), value.TYPE().getText(), List.of(), position(value.TYPE()));
+            if (value.qualifiedType() != null) {
+                return new FunctionCall(Optional.empty(), value.qualifiedType().getText(), List.of(), position(value.qualifiedType()));
             }
         }
 
@@ -1069,8 +1069,8 @@ public class CapybaraParser {
             if (value.identifier() != null) {
                 return new Value(identifier(value.identifier()), position(value.identifier()));
             }
-            if (value.TYPE() != null) {
-                return new FunctionCall(Optional.empty(), value.TYPE().getText(), List.of(), position(value.TYPE()));
+            if (value.qualifiedType() != null) {
+                return new FunctionCall(Optional.empty(), value.qualifiedType().getText(), List.of(), position(value.qualifiedType()));
             }
         }
 

@@ -445,7 +445,7 @@ public class CompilationErrorTest {
                                 data JsonBool { value: bool }
                                 single JsonNull
                                   fun _deserialize_json_null(json: string): Result[_Parse[JsonBool]] =
-                                    let parsed: _Parse[JsonNull] = _Parse { JsonNull {}, json[4:] }
+                                    let parsed: _Parse[JsonNull] = _Parse { JsonNull, json[4:] }
                                     Success { parsed }
                                 """,
                         new Position(9, 4),
@@ -453,7 +453,7 @@ public class CompilationErrorTest {
                         + " --> /foo/boo/function_json_null_wrong_generic_return_type.cfun:%d:%d\n"
                         + "  fun _deserialize_json_null(json: string): Result[_Parse[JsonBool]] =\n"
                         + "    let parsed: _Parse[JsonNull] = _Parse {\n"
-                        + "        JsonNull {  },\n"
+                        + "        JsonNull(),\n"
                         + "        json[4:]\n"
                         + "    }\n"
                         + "    Success {\n"

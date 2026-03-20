@@ -132,7 +132,7 @@ ifExpression: 'if' expression 'then' expression 'else' expression;
 functionReference: COLON identifier;
 functionCall: identifier '(' argumentList? ')'
             | TYPE DOT identifier '(' argumentList? ')';
-value: literal | identifier | TYPE;
+value: literal | identifier | qualifiedType;
 argumentList: expression (',' expression)*;
 literal: BYTE_LITERAL | LONG_LITERAL | DOUBLE_LITERAL | INT_LITERAL | BOOL_LITERAL | STRING_LITERAL | FLOAT_LITERAL | NOTHING_LITERAL;
 BYTE_LITERAL: '0' [xX] [0-9a-fA-F]+;
