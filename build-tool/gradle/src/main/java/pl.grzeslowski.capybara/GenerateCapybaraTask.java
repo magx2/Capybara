@@ -11,7 +11,7 @@ import org.gradle.api.tasks.OutputDirectory;
 import org.gradle.api.tasks.TaskAction;
 import pl.grzeslowski.capybara.compiler.OutputType;
 import pl.grzeslowski.capybara.generator.Generator;
-import pl.grzeslowski.capybara.compiler.LinkedProgram;
+import pl.grzeslowski.capybara.compiler.CompiledProgram;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -58,14 +58,14 @@ public abstract class GenerateCapybaraTask extends DefaultTask {
         });
     }
 
-    private LinkedProgram readLinkedProgram(Path inputDir) {
+    private CompiledProgram readLinkedProgram(Path inputDir) {
         var linkedProgramFile = inputDir.resolve(LINKED_PROGRAM_FILE);
         if (!Files.exists(linkedProgramFile)) {
             throw new GradleException("Missing linked program file: " + linkedProgramFile);
         }
         try {
             ObjectMapper mapper = CompileCapybaraTask.objectMapper();
-            return mapper.readValue(linkedProgramFile.toFile(), LinkedProgram.class);
+            return mapper.readValue(linkedProgramFile.toFile(), CompiledProgram.class);
         } catch (IOException e) {
             throw new UncheckedIOException("Unable to read linked program JSON: " + linkedProgramFile, e);
         }

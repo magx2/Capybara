@@ -6,8 +6,8 @@ import org.junit.jupiter.params.provider.MethodSource;
 import pl.grzeslowski.capybara.compiler.ImportDeclaration;
 import pl.grzeslowski.capybara.compiler.Module;
 import pl.grzeslowski.capybara.compiler.Program;
-import pl.grzeslowski.capybara.compiler.CapybaraLinker;
-import pl.grzeslowski.capybara.compiler.LinkedProgram;
+import pl.grzeslowski.capybara.compiler.CapybaraCompiler;
+import pl.grzeslowski.capybara.compiler.CompiledProgram;
 import pl.grzeslowski.capybara.compiler.ValueOrError;
 import pl.grzeslowski.capybara.parser.CapybaraParser;
 
@@ -882,9 +882,9 @@ public class CompilationErrorTest {
             var modules = new ArrayList<>(DEFAULT_MODULES);
             modules.add(module);
             var program = new Program(modules);
-            var programValueOrError = CapybaraLinker.INSTANCE.link(program);
-            if (programValueOrError instanceof ValueOrError.Value<LinkedProgram> value) {
-                throw new AssertionError("Expected compilation error but got LinkedProgram: " + value);
+            var programValueOrError = CapybaraCompiler.INSTANCE.link(program);
+            if (programValueOrError instanceof ValueOrError.Value<CompiledProgram> value) {
+                throw new AssertionError("Expected compilation error but got CompiledProgram: " + value);
             }
             var errors = ((ValueOrError.Error<?>) programValueOrError).errors();
             return normalizeLinkerErrors(errors, fun, moduleName);

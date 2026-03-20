@@ -3,59 +3,59 @@ package pl.grzeslowski.capybara.generator.java;
 import pl.grzeslowski.capybara.compiler.expression.*;
 
 public class ValueNameRewriter {
-    public static LinkedExpression rewriteValueInExpression(String name, String uniqueName, LinkedExpression expression) {
+    public static CompiledExpression rewriteValueInExpression(String name, String uniqueName, CompiledExpression expression) {
         return switch (expression) {
-            case LinkedBooleanValue linkedBooleanValue -> linkedBooleanValue;
-            case LinkedByteValue linkedByteValue -> linkedByteValue;
-            case LinkedDoubleValue linkedDoubleValue -> linkedDoubleValue;
-            case LinkedFieldAccess linkedFieldAccess -> rewriteValueInLinkedFieldAccess(name, uniqueName, linkedFieldAccess);
-            case LinkedFloatValue linkedFloatValue -> linkedFloatValue;
-            case LinkedFunctionCall linkedFunctionCall ->
+            case CompiledBooleanValue linkedBooleanValue -> linkedBooleanValue;
+            case CompiledByteValue linkedByteValue -> linkedByteValue;
+            case CompiledDoubleValue linkedDoubleValue -> linkedDoubleValue;
+            case CompiledFieldAccess linkedFieldAccess -> rewriteValueInLinkedFieldAccess(name, uniqueName, linkedFieldAccess);
+            case CompiledFloatValue linkedFloatValue -> linkedFloatValue;
+            case CompiledFunctionCall linkedFunctionCall ->
                     rewriteValueInLinkedFunctionCall(name, uniqueName, linkedFunctionCall);
-            case LinkedFunctionInvoke linkedFunctionInvoke ->
+            case CompiledFunctionInvoke linkedFunctionInvoke ->
                     rewriteValueInLinkedFunctionInvoke(name, uniqueName, linkedFunctionInvoke);
-            case LinkedIfExpression linkedIfExpression ->
+            case CompiledIfExpression linkedIfExpression ->
                     rewriteValueInLinkedIfExpression(name, uniqueName, linkedIfExpression);
-            case LinkedIndexExpression linkedIndexExpression ->
+            case CompiledIndexExpression linkedIndexExpression ->
                     rewriteValueInLinkedIndexExpression(name, uniqueName, linkedIndexExpression);
-            case LinkedInfixExpression linkedInfixExpression ->
+            case CompiledInfixExpression linkedInfixExpression ->
                     rewriteValueInLinkedInfixExpression(name, uniqueName, linkedInfixExpression);
-            case LinkedIntValue linkedIntValue -> linkedIntValue;
-            case LinkedLambdaExpression linkedLambdaExpression ->
+            case CompiledIntValue linkedIntValue -> linkedIntValue;
+            case CompiledLambdaExpression linkedLambdaExpression ->
                     rewriteValueInLinkedLambdaExpression(name, uniqueName, linkedLambdaExpression);
-            case LinkedLetExpression linkedLetExpression ->
+            case CompiledLetExpression linkedLetExpression ->
                     rewriteValueInLinkedLetExpression(name, uniqueName, linkedLetExpression);
-            case LinkedLongValue linkedLongValue -> linkedLongValue;
-            case LinkedMatchExpression linkedMatchExpression ->
+            case CompiledLongValue linkedLongValue -> linkedLongValue;
+            case CompiledMatchExpression linkedMatchExpression ->
                     rewriteValueInLinkedMatchExpression(name, uniqueName, linkedMatchExpression);
-            case LinkedNothingValue linkedNothingValue -> linkedNothingValue;
-            case LinkedPipeAllExpression linkedPipeAllExpression ->
+            case CompiledNothingValue linkedNothingValue -> linkedNothingValue;
+            case CompiledPipeAllExpression linkedPipeAllExpression ->
                     rewriteValueInLinkedPipeAllExpression(name, uniqueName, linkedPipeAllExpression);
-            case LinkedPipeAnyExpression linkedPipeAnyExpression ->
+            case CompiledPipeAnyExpression linkedPipeAnyExpression ->
                     rewriteValueInLinkedPipeAnyExpression(name, uniqueName, linkedPipeAnyExpression);
-            case LinkedPipeFlatMapExpression linkedPipeFlatMapExpression ->
+            case CompiledPipeFlatMapExpression linkedPipeFlatMapExpression ->
                     rewriteValueInLinkedPipeFlatMapExpression(name, uniqueName, linkedPipeFlatMapExpression);
-            case LinkedPipeFilterOutExpression linkedPipeFilterOutExpression ->
+            case CompiledPipeFilterOutExpression linkedPipeFilterOutExpression ->
                     rewriteValueInLinkedPipeFilterOutExpression(name, uniqueName, linkedPipeFilterOutExpression);
-            case LinkedPipeExpression linkedPipeExpression ->
+            case CompiledPipeExpression linkedPipeExpression ->
                     rewriteValueInLinkedPipeExpression(name, uniqueName, linkedPipeExpression);
-            case LinkedPipeReduceExpression linkedPipeReduceExpression ->
+            case CompiledPipeReduceExpression linkedPipeReduceExpression ->
                     rewriteValueInLinkedPipeReduceExpression(name, uniqueName, linkedPipeReduceExpression);
-            case LinkedSliceExpression linkedSliceExpression ->
+            case CompiledSliceExpression linkedSliceExpression ->
                     rewriteValueInLinkedSliceExpression(name, uniqueName, linkedSliceExpression);
-            case LinkedTupleExpression linkedTupleExpression ->
+            case CompiledTupleExpression linkedTupleExpression ->
                     rewriteValueInLinkedTupleExpression(name, uniqueName, linkedTupleExpression);
-            case LinkedNewDict linkedNewDict -> rewriteValueInLinkedNewDict(name, uniqueName, linkedNewDict);
-            case LinkedNewList linkedNewList -> rewriteValueInLinkedNewList(name, uniqueName, linkedNewList);
-            case LinkedNewSet linkedNewSet -> rewriteValueInLinkedNewSet(name, uniqueName, linkedNewSet);
-            case LinkedNewData linkedNewData -> rewriteValueInLinkedNewData(name, uniqueName, linkedNewData);
-            case LinkedStringValue linkedStringValue -> linkedStringValue;
-            case LinkedVariable linkedVariable -> rewriteValueInLinkedVariable(name, uniqueName, linkedVariable);
+            case CompiledNewDict linkedNewDict -> rewriteValueInLinkedNewDict(name, uniqueName, linkedNewDict);
+            case CompiledNewList linkedNewList -> rewriteValueInLinkedNewList(name, uniqueName, linkedNewList);
+            case CompiledNewSet linkedNewSet -> rewriteValueInLinkedNewSet(name, uniqueName, linkedNewSet);
+            case CompiledNewData linkedNewData -> rewriteValueInLinkedNewData(name, uniqueName, linkedNewData);
+            case CompiledStringValue linkedStringValue -> linkedStringValue;
+            case CompiledVariable linkedVariable -> rewriteValueInLinkedVariable(name, uniqueName, linkedVariable);
         };
     }
 
-    private static LinkedExpression rewriteValueInLinkedFunctionCall(String name, String uniqueName, LinkedFunctionCall expression) {
-        return new LinkedFunctionCall(
+    private static CompiledExpression rewriteValueInLinkedFunctionCall(String name, String uniqueName, CompiledFunctionCall expression) {
+        return new CompiledFunctionCall(
                 expression.name(),
                 expression.arguments().stream()
                         .map(ar -> rewriteValueInExpression(name, uniqueName, ar))
@@ -64,8 +64,8 @@ public class ValueNameRewriter {
         );
     }
 
-    private static LinkedExpression rewriteValueInLinkedFunctionInvoke(String name, String uniqueName, LinkedFunctionInvoke expression) {
-        return new LinkedFunctionInvoke(
+    private static CompiledExpression rewriteValueInLinkedFunctionInvoke(String name, String uniqueName, CompiledFunctionInvoke expression) {
+        return new CompiledFunctionInvoke(
                 rewriteValueInExpression(name, uniqueName, expression.function()),
                 expression.arguments().stream()
                         .map(ar -> rewriteValueInExpression(name, uniqueName, ar))
@@ -74,16 +74,16 @@ public class ValueNameRewriter {
         );
     }
 
-    private static LinkedExpression rewriteValueInLinkedFieldAccess(String name, String uniqueName, LinkedFieldAccess expression) {
-        return new LinkedFieldAccess(
+    private static CompiledExpression rewriteValueInLinkedFieldAccess(String name, String uniqueName, CompiledFieldAccess expression) {
+        return new CompiledFieldAccess(
                 rewriteValueInExpression(name, uniqueName, expression.source()),
                 expression.field(),
                 expression.type()
         );
     }
 
-    private static LinkedExpression rewriteValueInLinkedIfExpression(String name, String uniqueName, LinkedIfExpression expression) {
-        return new LinkedIfExpression(
+    private static CompiledExpression rewriteValueInLinkedIfExpression(String name, String uniqueName, CompiledIfExpression expression) {
+        return new CompiledIfExpression(
                 rewriteValueInExpression(name, uniqueName, expression.condition()),
                 rewriteValueInExpression(name, uniqueName, expression.thenBranch()),
                 rewriteValueInExpression(name, uniqueName, expression.elseBranch()),
@@ -91,20 +91,20 @@ public class ValueNameRewriter {
         );
     }
 
-    private static LinkedExpression rewriteValueInLinkedInfixExpression(String name, String uniqueName, LinkedInfixExpression expression) {
-        return new LinkedInfixExpression(
+    private static CompiledExpression rewriteValueInLinkedInfixExpression(String name, String uniqueName, CompiledInfixExpression expression) {
+        return new CompiledInfixExpression(
                 rewriteValueInExpression(name, uniqueName, expression.left()),
                 expression.operator(),
                 rewriteValueInExpression(name, uniqueName, expression.right()),
                 expression.type());
     }
 
-    private static LinkedExpression rewriteValueInLinkedIndexExpression(
+    private static CompiledExpression rewriteValueInLinkedIndexExpression(
             String name,
             String uniqueName,
-            LinkedIndexExpression expression
+            CompiledIndexExpression expression
     ) {
-        return new LinkedIndexExpression(
+        return new CompiledIndexExpression(
                 rewriteValueInExpression(name, uniqueName, expression.source()),
                 rewriteValueInExpression(name, uniqueName, expression.index()),
                 expression.elementType(),
@@ -112,11 +112,11 @@ public class ValueNameRewriter {
         );
     }
 
-    private static LinkedExpression rewriteValueInLinkedLambdaExpression(String name, String uniqueName, LinkedLambdaExpression expression) {
+    private static CompiledExpression rewriteValueInLinkedLambdaExpression(String name, String uniqueName, CompiledLambdaExpression expression) {
         if (expression.argumentName().equals(name)) {
             return expression;
         }
-        return new LinkedLambdaExpression(
+        return new CompiledLambdaExpression(
                 expression.argumentName(),
                 rewriteValueInExpression(name, uniqueName, expression.expression()),
                 expression.functionType()
@@ -124,31 +124,31 @@ public class ValueNameRewriter {
     }
 
 
-    private static LinkedExpression rewriteValueInLinkedLetExpression(String name, String uniqueName, LinkedLetExpression expression) {
+    private static CompiledExpression rewriteValueInLinkedLetExpression(String name, String uniqueName, CompiledLetExpression expression) {
         if (expression.name().equals(name)) {
-            return new LinkedLetExpression(
+            return new CompiledLetExpression(
                     uniqueName,
                     expression.value(),
                     rewriteValueInExpression(name, uniqueName, expression.rest()));
         }
 
-        return new LinkedLetExpression(
+        return new CompiledLetExpression(
                 expression.name(),
                 expression.value(),
                 rewriteValueInExpression(name, uniqueName, expression.rest()));
     }
 
-    private static LinkedExpression rewriteValueInLinkedMatchExpression(String name, String uniqueName, LinkedMatchExpression linkedMatchExpression) {
+    private static CompiledExpression rewriteValueInLinkedMatchExpression(String name, String uniqueName, CompiledMatchExpression linkedMatchExpression) {
         // todo
         return linkedMatchExpression;
     }
 
-    private static LinkedExpression rewriteValueInLinkedPipeExpression(String name, String uniqueName, LinkedPipeExpression linkedPipeExpression) {
+    private static CompiledExpression rewriteValueInLinkedPipeExpression(String name, String uniqueName, CompiledPipeExpression linkedPipeExpression) {
         var source = rewriteValueInExpression(name, uniqueName, linkedPipeExpression.source());
         if (linkedPipeExpression.argumentName().equals(name)) {
-            return new LinkedPipeExpression(source, linkedPipeExpression.argumentName(), linkedPipeExpression.mapper(), linkedPipeExpression.type());
+            return new CompiledPipeExpression(source, linkedPipeExpression.argumentName(), linkedPipeExpression.mapper(), linkedPipeExpression.type());
         }
-        return new LinkedPipeExpression(
+        return new CompiledPipeExpression(
                 source,
                 linkedPipeExpression.argumentName(),
                 rewriteValueInExpression(name, uniqueName, linkedPipeExpression.mapper()),
@@ -156,14 +156,14 @@ public class ValueNameRewriter {
         );
     }
 
-    private static LinkedExpression rewriteValueInLinkedPipeFlatMapExpression(String name, String uniqueName,
-                                                                               LinkedPipeFlatMapExpression linkedPipeFlatMapExpression) {
+    private static CompiledExpression rewriteValueInLinkedPipeFlatMapExpression(String name, String uniqueName,
+                                                                               CompiledPipeFlatMapExpression linkedPipeFlatMapExpression) {
         var source = rewriteValueInExpression(name, uniqueName, linkedPipeFlatMapExpression.source());
         if (linkedPipeFlatMapExpression.argumentName().equals(name)) {
-            return new LinkedPipeFlatMapExpression(source, linkedPipeFlatMapExpression.argumentName(),
+            return new CompiledPipeFlatMapExpression(source, linkedPipeFlatMapExpression.argumentName(),
                     linkedPipeFlatMapExpression.mapper(), linkedPipeFlatMapExpression.type());
         }
-        return new LinkedPipeFlatMapExpression(
+        return new CompiledPipeFlatMapExpression(
                 source,
                 linkedPipeFlatMapExpression.argumentName(),
                 rewriteValueInExpression(name, uniqueName, linkedPipeFlatMapExpression.mapper()),
@@ -171,18 +171,18 @@ public class ValueNameRewriter {
         );
     }
 
-    private static LinkedExpression rewriteValueInLinkedPipeFilterOutExpression(String name, String uniqueName,
-                                                                                 LinkedPipeFilterOutExpression linkedPipeFilterOutExpression) {
+    private static CompiledExpression rewriteValueInLinkedPipeFilterOutExpression(String name, String uniqueName,
+                                                                                 CompiledPipeFilterOutExpression linkedPipeFilterOutExpression) {
         var source = rewriteValueInExpression(name, uniqueName, linkedPipeFilterOutExpression.source());
         if (linkedPipeFilterOutExpression.argumentName().equals(name)) {
-            return new LinkedPipeFilterOutExpression(
+            return new CompiledPipeFilterOutExpression(
                     source,
                     linkedPipeFilterOutExpression.argumentName(),
                     linkedPipeFilterOutExpression.predicate(),
                     linkedPipeFilterOutExpression.type()
             );
         }
-        return new LinkedPipeFilterOutExpression(
+        return new CompiledPipeFilterOutExpression(
                 source,
                 linkedPipeFilterOutExpression.argumentName(),
                 rewriteValueInExpression(name, uniqueName, linkedPipeFilterOutExpression.predicate()),
@@ -190,8 +190,8 @@ public class ValueNameRewriter {
         );
     }
 
-    private static LinkedExpression rewriteValueInLinkedPipeReduceExpression(String name, String uniqueName,
-                                                                             LinkedPipeReduceExpression linkedPipeReduceExpression) {
+    private static CompiledExpression rewriteValueInLinkedPipeReduceExpression(String name, String uniqueName,
+                                                                             CompiledPipeReduceExpression linkedPipeReduceExpression) {
         var source = rewriteValueInExpression(name, uniqueName, linkedPipeReduceExpression.source());
         var initialValue = rewriteValueInExpression(name, uniqueName, linkedPipeReduceExpression.initialValue());
         var dictReduceArgs = linkedPipeReduceExpression.accumulatorName().contains("::")
@@ -201,7 +201,7 @@ public class ValueNameRewriter {
             || (dictReduceArgs.length == 2 && (dictReduceArgs[0].equals(name) || dictReduceArgs[1].equals(name)))
             || linkedPipeReduceExpression.valueName().equals(name)
             || linkedPipeReduceExpression.keyName().filter(name::equals).isPresent()) {
-            return new LinkedPipeReduceExpression(
+            return new CompiledPipeReduceExpression(
                     source,
                     initialValue,
                     linkedPipeReduceExpression.accumulatorName(),
@@ -211,7 +211,7 @@ public class ValueNameRewriter {
                     linkedPipeReduceExpression.type()
             );
         }
-        return new LinkedPipeReduceExpression(
+        return new CompiledPipeReduceExpression(
                 source,
                 initialValue,
                 linkedPipeReduceExpression.accumulatorName(),
@@ -222,8 +222,8 @@ public class ValueNameRewriter {
         );
     }
 
-    private static LinkedExpression rewriteValueInLinkedNewList(String name, String uniqueName, LinkedNewList linkedNewList) {
-        return new LinkedNewList(
+    private static CompiledExpression rewriteValueInLinkedNewList(String name, String uniqueName, CompiledNewList linkedNewList) {
+        return new CompiledNewList(
                 linkedNewList.values().stream()
                         .map(ex -> rewriteValueInExpression(name, uniqueName, ex))
                         .toList(),
@@ -231,8 +231,8 @@ public class ValueNameRewriter {
         );
     }
 
-    private static LinkedExpression rewriteValueInLinkedNewSet(String name, String uniqueName, LinkedNewSet linkedNewSet) {
-        return new LinkedNewSet(
+    private static CompiledExpression rewriteValueInLinkedNewSet(String name, String uniqueName, CompiledNewSet linkedNewSet) {
+        return new CompiledNewSet(
                 linkedNewSet.values().stream()
                         .map(ex -> rewriteValueInExpression(name, uniqueName, ex))
                         .toList(),
@@ -240,10 +240,10 @@ public class ValueNameRewriter {
         );
     }
 
-    private static LinkedExpression rewriteValueInLinkedNewDict(String name, String uniqueName, LinkedNewDict linkedNewDict) {
-        return new LinkedNewDict(
+    private static CompiledExpression rewriteValueInLinkedNewDict(String name, String uniqueName, CompiledNewDict linkedNewDict) {
+        return new CompiledNewDict(
                 linkedNewDict.entries().stream()
-                        .map(entry -> new LinkedNewDict.Entry(
+                        .map(entry -> new CompiledNewDict.Entry(
                                 rewriteValueInExpression(name, uniqueName, entry.key()),
                                 rewriteValueInExpression(name, uniqueName, entry.value())
                         ))
@@ -252,26 +252,26 @@ public class ValueNameRewriter {
         );
     }
 
-    private static LinkedExpression rewriteValueInLinkedNewData(String name, String uniqueName, LinkedNewData linkedNewData) {
+    private static CompiledExpression rewriteValueInLinkedNewData(String name, String uniqueName, CompiledNewData linkedNewData) {
         // todo
         return linkedNewData;
     }
 
-    private static LinkedExpression rewriteValueInLinkedPipeAnyExpression(
+    private static CompiledExpression rewriteValueInLinkedPipeAnyExpression(
             String name,
             String uniqueName,
-            LinkedPipeAnyExpression linkedPipeAnyExpression
+            CompiledPipeAnyExpression linkedPipeAnyExpression
     ) {
         var source = rewriteValueInExpression(name, uniqueName, linkedPipeAnyExpression.source());
         if (linkedPipeAnyExpression.argumentName().equals(name)) {
-            return new LinkedPipeAnyExpression(
+            return new CompiledPipeAnyExpression(
                     source,
                     linkedPipeAnyExpression.argumentName(),
                     linkedPipeAnyExpression.predicate(),
                     linkedPipeAnyExpression.type()
             );
         }
-        return new LinkedPipeAnyExpression(
+        return new CompiledPipeAnyExpression(
                 source,
                 linkedPipeAnyExpression.argumentName(),
                 rewriteValueInExpression(name, uniqueName, linkedPipeAnyExpression.predicate()),
@@ -279,21 +279,21 @@ public class ValueNameRewriter {
         );
     }
 
-    private static LinkedExpression rewriteValueInLinkedPipeAllExpression(
+    private static CompiledExpression rewriteValueInLinkedPipeAllExpression(
             String name,
             String uniqueName,
-            LinkedPipeAllExpression linkedPipeAllExpression
+            CompiledPipeAllExpression linkedPipeAllExpression
     ) {
         var source = rewriteValueInExpression(name, uniqueName, linkedPipeAllExpression.source());
         if (linkedPipeAllExpression.argumentName().equals(name)) {
-            return new LinkedPipeAllExpression(
+            return new CompiledPipeAllExpression(
                     source,
                     linkedPipeAllExpression.argumentName(),
                     linkedPipeAllExpression.predicate(),
                     linkedPipeAllExpression.type()
             );
         }
-        return new LinkedPipeAllExpression(
+        return new CompiledPipeAllExpression(
                 source,
                 linkedPipeAllExpression.argumentName(),
                 rewriteValueInExpression(name, uniqueName, linkedPipeAllExpression.predicate()),
@@ -301,12 +301,12 @@ public class ValueNameRewriter {
         );
     }
 
-    private static LinkedExpression rewriteValueInLinkedSliceExpression(
+    private static CompiledExpression rewriteValueInLinkedSliceExpression(
             String name,
             String uniqueName,
-            LinkedSliceExpression linkedSliceExpression
+            CompiledSliceExpression linkedSliceExpression
     ) {
-        return new LinkedSliceExpression(
+        return new CompiledSliceExpression(
                 rewriteValueInExpression(name, uniqueName, linkedSliceExpression.source()),
                 linkedSliceExpression.start().map(ex -> rewriteValueInExpression(name, uniqueName, ex)),
                 linkedSliceExpression.end().map(ex -> rewriteValueInExpression(name, uniqueName, ex)),
@@ -314,12 +314,12 @@ public class ValueNameRewriter {
         );
     }
 
-    private static LinkedExpression rewriteValueInLinkedTupleExpression(
+    private static CompiledExpression rewriteValueInLinkedTupleExpression(
             String name,
             String uniqueName,
-            LinkedTupleExpression linkedTupleExpression
+            CompiledTupleExpression linkedTupleExpression
     ) {
-        return new LinkedTupleExpression(
+        return new CompiledTupleExpression(
                 linkedTupleExpression.values().stream()
                         .map(ex -> rewriteValueInExpression(name, uniqueName, ex))
                         .toList(),
@@ -327,9 +327,9 @@ public class ValueNameRewriter {
         );
     }
 
-    private static LinkedExpression rewriteValueInLinkedVariable(String name, String uniqueName, LinkedVariable linkedVariable) {
+    private static CompiledExpression rewriteValueInLinkedVariable(String name, String uniqueName, CompiledVariable linkedVariable) {
         if (linkedVariable.name().equals(name)) {
-            return new LinkedVariable(uniqueName, linkedVariable.type());
+            return new CompiledVariable(uniqueName, linkedVariable.type());
         }
         return linkedVariable;
     }

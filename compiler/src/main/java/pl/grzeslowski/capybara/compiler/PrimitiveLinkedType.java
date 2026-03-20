@@ -3,7 +3,7 @@ package pl.grzeslowski.capybara.compiler;
 import java.util.Arrays;
 import java.util.Optional;
 
-public enum PrimitiveLinkedType implements LinkedType {
+public enum PrimitiveLinkedType implements CompiledType {
     BYTE,
     INT,
     LONG,

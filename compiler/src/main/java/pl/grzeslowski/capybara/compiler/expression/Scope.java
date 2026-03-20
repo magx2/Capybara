@@ -1,6 +1,6 @@
 package pl.grzeslowski.capybara.compiler.expression;
 
-import pl.grzeslowski.capybara.compiler.LinkedType;
+import pl.grzeslowski.capybara.compiler.CompiledType;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -12,15 +12,15 @@ final class Scope {
 //    private static final Pattern LAST_NUMBER_PATTERN = Pattern.compile("(.+)" + SEPARATOR + "(\\d+)");
     static final Scope EMPTY = new Scope(Map.of(), Map.of());
 
-    private final Map<String, LinkedType> localValues;
+    private final Map<String, CompiledType> localValues;
     private final Map<String, String> variableNameToUniqueName;
 
-    Scope(Map<String, LinkedType> localValues, Map<String, String> variableNameToUniqueName) {
+    Scope(Map<String, CompiledType> localValues, Map<String, String> variableNameToUniqueName) {
         this.localValues = localValues;
         this.variableNameToUniqueName = variableNameToUniqueName;
     }
 
-    Map<String, LinkedType> localValues() {
+    Map<String, CompiledType> localValues() {
         return localValues;
     }
 
@@ -28,7 +28,7 @@ final class Scope {
         return variableNameToUniqueName;
     }
 
-    public Scope add(String name, LinkedType value) {
+    public Scope add(String name, CompiledType value) {
         var updatedVariableNameToUniqueName = new HashMap<>(variableNameToUniqueName);
 //        if (localValues.containsKey(name)) {
 //            var uniqueName = findUniqueName(name);

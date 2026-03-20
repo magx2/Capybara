@@ -19,7 +19,7 @@ import java.util.stream.Stream;
 
 import static java.util.stream.Collectors.joining;
 import static org.assertj.core.api.Assertions.assertThat;
-import static pl.grzeslowski.capybara.compiler.LinkedExpressionPrinter.printExpression;
+import static pl.grzeslowski.capybara.compiler.CompiledExpressionPrinter.printExpression;
 import static pl.grzeslowski.capybara.compiler.PrimitiveLinkedType.ANY;
 
 class JavaExpressionEvaluatorTest {
@@ -33,12 +33,12 @@ class JavaExpressionEvaluatorTest {
 
     @ParameterizedTest(name = "{index}: should compile method {0} to return {2}")
     @MethodSource
-    void returnType(String name, String fun, LinkedType expectedReturnType) {
+    void returnType(String name, String fun, CompiledType expectedReturnType) {
         // given
         var program = compileProgram(fun);
 
         // when
-        var returnType = findFunction(name, program).map(LinkedFunction::returnType);
+        var returnType = findFunction(name, program).map(CompiledFunction::returnType);
 
         // then
         assertThat(returnType).contains(expectedReturnType);
@@ -49,15 +49,15 @@ class JavaExpressionEvaluatorTest {
                 Arguments.of(
                         "list_of_obj",
                         "fun list_of_obj() = []",
-                        new CollectionLinkedType.LinkedList(ANY)),
+                        new CollectionLinkedType.CompiledList(ANY)),
                 Arguments.of(
                         "set_of_obj",
                         "fun set_of_obj() = {}",
-                        new CollectionLinkedType.LinkedSet(ANY)),
+                        new CollectionLinkedType.CompiledSet(ANY)),
                 Arguments.of(
                         "dict_of_obj",
                         "fun dict_of_obj() = { \"one\": 1, }",
-                        new CollectionLinkedType.LinkedDict(PrimitiveLinkedType.INT))
+                        new CollectionLinkedType.CompiledDict(PrimitiveLinkedType.INT))
         );
     }
 
@@ -66,7 +66,7 @@ class JavaExpressionEvaluatorTest {
     void wild(String name, String fun, String expected) {
         var program = compileProgram(fun);
         var expression = findFunction(name, program)
-                .map(LinkedFunction::expression)
+                .map(CompiledFunction::expression)
                 .orElseThrow();
         printExpression(expression);
 
@@ -77,22 +77,22 @@ class JavaExpressionEvaluatorTest {
         assertThat(evaluated).isEqualToNormalizingNewlines(expected);
     }
 
-    private static LinkedProgram compileProgram(String fun) {
+    private static CompiledProgram compileProgram(String fun) {
         var functional = CapybaraParser.INSTANCE.parseFunctional(fun);
-        var programValueOrError = CapybaraLinker.INSTANCE.link(new Program(List.of(new Module("test", "/foo/boo", functional))));
-        if (programValueOrError instanceof ValueOrError.Error<LinkedProgram> er) {
+        var programValueOrError = CapybaraCompiler.INSTANCE.link(new Program(List.of(new Module("test", "/foo/boo", functional))));
+        if (programValueOrError instanceof ValueOrError.Error<CompiledProgram> er) {
             throw new AssertionError(er.errors()
                     .stream()
                     .map(ValueOrError.Error.SingleError::message)
                     .collect(joining(", ")));
         }
-        return ((ValueOrError.Value<LinkedProgram>) programValueOrError).value();
+        return ((ValueOrError.Value<CompiledProgram>) programValueOrError).value();
     }
 
-    private static Optional<LinkedFunction> findFunction(String name, LinkedProgram program) {
+    private static Optional<CompiledFunction> findFunction(String name, CompiledProgram program) {
         return program.modules()
                 .stream()
-                .map(LinkedModule::functions)
+                .map(CompiledModule::functions)
                 .flatMap(Collection::stream)
                 .filter(f -> f.name().equals(name))
                 .findAny();
@@ -105,9 +105,9 @@ class JavaExpressionEvaluatorTest {
                     1: 1
                 }
                 """);
-        var programValueOrError = CapybaraLinker.INSTANCE.link(new Program(List.of(new Module("test", "/foo/boo", functional))));
+        var programValueOrError = CapybaraCompiler.INSTANCE.link(new Program(List.of(new Module("test", "/foo/boo", functional))));
         assertThat(programValueOrError).isInstanceOf(ValueOrError.Error.class);
-        var error = (ValueOrError.Error<LinkedProgram>) programValueOrError;
+        var error = (ValueOrError.Error<CompiledProgram>) programValueOrError;
         assertThat(error.errors().stream().map(ValueOrError.Error.SingleError::message).collect(joining(",")))
                 .contains("dict keys must be of type `STRING`");
     }

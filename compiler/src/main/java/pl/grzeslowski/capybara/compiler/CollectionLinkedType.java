@@ -1,14 +1,14 @@
 package pl.grzeslowski.capybara.compiler;
 
-public sealed interface CollectionLinkedType extends LinkedType {
-    public record LinkedList(LinkedType elementType) implements CollectionLinkedType {
+public sealed interface CollectionLinkedType extends CompiledType {
+    public record CompiledList(CompiledType elementType) implements CollectionLinkedType {
         @Override
         public String name() {
             return "list";
         }
     }
 
-    public record LinkedSet(LinkedType elementType) implements CollectionLinkedType {
+    public record CompiledSet(CompiledType elementType) implements CollectionLinkedType {
 
         @Override
         public String name() {
@@ -16,7 +16,7 @@ public sealed interface CollectionLinkedType extends LinkedType {
         }
     }
 
-    public record LinkedDict(LinkedType valueType) implements CollectionLinkedType {
+    public record CompiledDict(CompiledType valueType) implements CollectionLinkedType {
         @Override
         public String name() {
             return "dict";

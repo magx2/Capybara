@@ -1,7 +1,7 @@
 package pl.grzeslowski.capybara.generator;
 
 import pl.grzeslowski.capybara.compiler.OutputType;
-import pl.grzeslowski.capybara.compiler.LinkedProgram;
+import pl.grzeslowski.capybara.compiler.CompiledProgram;
 
 public sealed interface Generator permits JavaGenerator, JavaScriptGenerator, PythonGenerator {
     static Generator findGenerator(OutputType type) {
@@ -12,5 +12,5 @@ public sealed interface Generator permits JavaGenerator, JavaScriptGenerator, Py
         };
     }
 
-    CompiledProgram generate(LinkedProgram program);
+    GeneratedProgram generate(CompiledProgram program);
 }

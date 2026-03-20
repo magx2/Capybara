@@ -1,8 +1,8 @@
 package pl.grzeslowski.capybara.generator;
 
 import pl.grzeslowski.capybara.generator.java.*;
-import pl.grzeslowski.capybara.compiler.LinkedModule;
-import pl.grzeslowski.capybara.compiler.LinkedProgram;
+import pl.grzeslowski.capybara.compiler.CompiledModule;
+import pl.grzeslowski.capybara.compiler.CompiledProgram;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -19,33 +19,33 @@ public final class JavaGenerator implements Generator {
     private static final String METHOD_DECL_PREFIX = "__method__";
 
     @Override
-    public CompiledProgram generate(LinkedProgram program) {
+    public GeneratedProgram generate(CompiledProgram program) {
         var modules = program.modules().stream()
                 .map(this::modules)
                 .flatMap(List::stream)
                 .toList();
-        return new CompiledProgram(modules);
+        return new GeneratedProgram(modules);
     }
 
-    private List<CompiledModule> modules(LinkedModule module) {
+    private List<GeneratedModule> modules(CompiledModule module) {
         var javaClass = astBuilder.build(module);
         if (!hasTypeOrDataNameConflictWithFile(javaClass)) {
-            return List.of(new CompiledModule(relativePath(javaClass, javaClass.name().toString()), code(javaClass)));
+            return List.of(new GeneratedModule(relativePath(javaClass, javaClass.name().toString()), code(javaClass)));
         }
 
         var ownerInterface = javaClass.interfaces().stream()
                 .filter(javaInterface -> javaInterface.name().toString().equals(javaClass.name().toString()))
                 .findFirst();
         if (ownerInterface.isPresent()) {
-            return List.of(new CompiledModule(
+            return List.of(new GeneratedModule(
                     relativePath(javaClass, javaClass.name().toString()),
                     codeNestedInOwnerInterface(javaClass, ownerInterface.get())
             ));
         }
 
-        var compiled = new ArrayList<CompiledModule>();
+        var compiled = new ArrayList<GeneratedModule>();
         for (var declaration : topLevelDeclarations(javaClass)) {
-            compiled.add(new CompiledModule(
+            compiled.add(new GeneratedModule(
                     relativePath(javaClass, declaration.name()),
                     codeTopLevelDeclaration(javaClass, declaration.code())
             ));
@@ -61,7 +61,7 @@ public final class JavaGenerator implements Generator {
                     java.util.Set.of(),
                     java.util.Set.of()
             );
-            compiled.add(new CompiledModule(
+            compiled.add(new GeneratedModule(
                     relativePath(javaClass, utilityClass.name().toString()),
                     code(utilityClass)
             ));

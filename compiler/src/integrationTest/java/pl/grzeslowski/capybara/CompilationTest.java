@@ -7,8 +7,8 @@ import pl.grzeslowski.capybara.compiler.Module;
 import pl.grzeslowski.capybara.compiler.OutputType;
 import pl.grzeslowski.capybara.compiler.Program;
 import pl.grzeslowski.capybara.generator.Generator;
-import pl.grzeslowski.capybara.compiler.CapybaraLinker;
-import pl.grzeslowski.capybara.compiler.LinkedProgram;
+import pl.grzeslowski.capybara.compiler.CapybaraCompiler;
+import pl.grzeslowski.capybara.compiler.CompiledProgram;
 import pl.grzeslowski.capybara.compiler.ValueOrError;
 import pl.grzeslowski.capybara.parser.CapybaraParser;
 
@@ -28,9 +28,9 @@ class CompilationTest {
         System.out.println(program);
 
         // link
-        var link = CapybaraLinker.INSTANCE.link(program);
-        if (link instanceof ValueOrError.Error<LinkedProgram>) {
-            var errors = ((ValueOrError.Error<LinkedProgram>) link).errors();
+        var link = CapybaraCompiler.INSTANCE.link(program);
+        if (link instanceof ValueOrError.Error<CompiledProgram>) {
+            var errors = ((ValueOrError.Error<CompiledProgram>) link).errors();
             throw new RuntimeException("Linking failed with " + errors.size() + " error(s): " + errors);
         }
         System.out.println("\n === LINKING === ");
@@ -42,7 +42,7 @@ class CompilationTest {
                 .parallel()
                 .map(type -> {
                     var generator = Generator.findGenerator(type);
-                    var linkedProgram = ((ValueOrError.Value<LinkedProgram>) link).value();
+                    var linkedProgram = ((ValueOrError.Value<CompiledProgram>) link).value();
                     var compiled = generator.generate(linkedProgram);
                     return "\t === " + type + " === \n" + compiled;
                 })

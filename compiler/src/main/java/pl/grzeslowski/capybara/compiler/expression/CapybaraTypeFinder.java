@@ -1,6 +1,6 @@
 package pl.grzeslowski.capybara.compiler.expression;
 
-import pl.grzeslowski.capybara.compiler.LinkedType;
+import pl.grzeslowski.capybara.compiler.CompiledType;
 import pl.grzeslowski.capybara.compiler.PrimitiveLinkedType;
 
 import static pl.grzeslowski.capybara.compiler.PrimitiveLinkedType.ANY;
@@ -8,7 +8,7 @@ import static pl.grzeslowski.capybara.compiler.PrimitiveLinkedType.DATA;
 import static pl.grzeslowski.capybara.compiler.PrimitiveLinkedType.NOTHING;
 
 public class CapybaraTypeFinder {
-    public static LinkedType findHigherType(LinkedType left, LinkedType right) {
+    public static CompiledType findHigherType(CompiledType left, CompiledType right) {
         if (left.equals(right)) return left;
         if (left == NOTHING) return right;
         if (right == NOTHING) return left;
@@ -74,7 +74,7 @@ public class CapybaraTypeFinder {
     /// @param right right type
     /// @return higher type
     ///
-    public static LinkedType findHigherType(PrimitiveLinkedType left, PrimitiveLinkedType right) {
+    public static CompiledType findHigherType(PrimitiveLinkedType left, PrimitiveLinkedType right) {
         if (left == NOTHING) {
             return right;
         }

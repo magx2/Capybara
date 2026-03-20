@@ -2,9 +2,9 @@ package pl.grzeslowski.capybara.generator.java;
 
 import pl.grzeslowski.capybara.generator.java.JavaInterface.JavaInterfaceMethod;
 import pl.grzeslowski.capybara.compiler.*;
-import pl.grzeslowski.capybara.compiler.CollectionLinkedType.LinkedDict;
-import pl.grzeslowski.capybara.compiler.CollectionLinkedType.LinkedList;
-import pl.grzeslowski.capybara.compiler.CollectionLinkedType.LinkedSet;
+import pl.grzeslowski.capybara.compiler.CollectionLinkedType.CompiledDict;
+import pl.grzeslowski.capybara.compiler.CollectionLinkedType.CompiledList;
+import pl.grzeslowski.capybara.compiler.CollectionLinkedType.CompiledSet;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -28,20 +28,20 @@ public class JavaAstBuilder {
             "null", "record", "sealed", "permits", "var", "yield"
     );
 
-    public JavaClass build(LinkedModule module) {
+    public JavaClass build(CompiledModule module) {
         var interfaces = buildInterfaces(module.types()
                 .values()
                 .stream()
-                .filter(LinkedDataParentType.class::isInstance)
-                .map(LinkedDataParentType.class::cast)
+                .filter(CompiledDataParentType.class::isInstance)
+                .map(CompiledDataParentType.class::cast)
                 .filter(parentType -> !parentType.enumType())
                 .toList(), module.functions());
         var subClassToInterface = findSubClassToInterface(module.types(), interfaces);
         var dataTypes = module.types()
                 .values()
                 .stream()
-                .filter(LinkedDataType.class::isInstance)
-                .map(LinkedDataType.class::cast)
+                .filter(CompiledDataType.class::isInstance)
+                .map(CompiledDataType.class::cast)
                 .toList();
         return new JavaClass(
                 Set.of(generatedAnnotation()),
@@ -56,21 +56,21 @@ public class JavaAstBuilder {
                 buildEnums(dataTypes, module.types(), subClassToInterface));
     }
 
-    private Map<LinkedDataType, Set<JavaInterface>> findSubClassToInterface(Map<String, GenericDataType> types, Set<JavaInterface> interfaces) {
+    private Map<CompiledDataType, Set<JavaInterface>> findSubClassToInterface(Map<String, GenericDataType> types, Set<JavaInterface> interfaces) {
         var javaInterfaceByJavaName = interfaces.stream()
                 .collect(toMap(
                         jInterface -> jInterface.name().name(),
                         identity()));
 
-        record ClassToInterface(LinkedDataType data, LinkedDataParentType parent) {
+        record ClassToInterface(CompiledDataType data, CompiledDataParentType parent) {
         }
-        record ClassToJavaInterface(LinkedDataType data, JavaInterface parent) {
+        record ClassToJavaInterface(CompiledDataType data, JavaInterface parent) {
         }
 
         return types.values()
                 .stream()
-                .filter(LinkedDataParentType.class::isInstance)
-                .map(LinkedDataParentType.class::cast)
+                .filter(CompiledDataParentType.class::isInstance)
+                .map(CompiledDataParentType.class::cast)
                 .flatMap(parent -> parent.subTypes().stream().map(data -> new ClassToInterface(data, parent)))
                 .map(pair -> new ClassToJavaInterface(
                         pair.data,
@@ -86,14 +86,14 @@ public class JavaAstBuilder {
         return new JavaType(normalizeJavaTypeIdentifier(name));
     }
 
-    private Set<JavaMethod> buildStaticMethods(Set<LinkedFunction> functions) {
+    private Set<JavaMethod> buildStaticMethods(Set<CompiledFunction> functions) {
         return functions.stream()
                 .filter(function -> !function.name().startsWith(METHOD_DECL_PREFIX))
                 .map(this::buildStaticMethod)
                 .collect(toSet());
     }
 
-    private JavaMethod buildStaticMethod(LinkedFunction function) {
+    private JavaMethod buildStaticMethod(CompiledFunction function) {
         var methodTypeParameters = methodTypeParameters(function, Set.of());
         return new JavaMethod(
                 buildMethodName(function.name()),
@@ -190,24 +190,24 @@ public class JavaAstBuilder {
         return normalized;
     }
 
-    private JavaType buildJavaType(LinkedType type) {
+    private JavaType buildJavaType(CompiledType type) {
         return switch (type) {
             case GenericDataType genericDataType -> buildGenericDataType(genericDataType);
             case PrimitiveLinkedType primitiveLinkedType -> buildPrimitiveLinkedType(primitiveLinkedType);
             case CollectionLinkedType collectionLinkedType -> buildCollectionLinkedType(collectionLinkedType);
-            case LinkedTupleType linkedTupleType -> new JavaType("java.util.List<?>");
-            case LinkedFunctionType functionType -> new JavaType(
+            case CompiledTupleType linkedTupleType -> new JavaType("java.util.List<?>");
+            case CompiledFunctionType functionType -> new JavaType(
                     "java.util.function.Function<"
                     + buildJavaBoxedType(functionType.argumentType())
                     + ", "
                     + buildJavaBoxedType(functionType.returnType())
                     + ">"
             );
-            case LinkedGenericTypeParameter linkedGenericTypeParameter -> new JavaType(linkedGenericTypeParameter.name());
+            case CompiledGenericTypeParameter linkedGenericTypeParameter -> new JavaType(linkedGenericTypeParameter.name());
         };
     }
 
-    private JavaType buildJavaReturnType(LinkedFunction function) {
+    private JavaType buildJavaReturnType(CompiledFunction function) {
         if (function.returnType() instanceof GenericDataType genericDataType
             && ("Option".equals(genericDataType.name()) || isOptionTypeName(genericDataType.name()))) {
             var elementType = inferOptionElementType(function.expression());
@@ -216,11 +216,11 @@ public class JavaAstBuilder {
         return buildJavaType(function.returnType());
     }
 
-    private LinkedType inferOptionElementType(pl.grzeslowski.capybara.compiler.expression.LinkedExpression expression) {
+    private CompiledType inferOptionElementType(pl.grzeslowski.capybara.compiler.expression.CompiledExpression expression) {
         return switch (expression) {
-            case pl.grzeslowski.capybara.compiler.expression.LinkedPipeExpression pipeExpression ->
+            case pl.grzeslowski.capybara.compiler.expression.CompiledPipeExpression pipeExpression ->
                     isOptionType(pipeExpression.type()) ? pipeExpression.mapper().type() : PrimitiveLinkedType.ANY;
-            case pl.grzeslowski.capybara.compiler.expression.LinkedPipeFilterOutExpression filterOutExpression -> {
+            case pl.grzeslowski.capybara.compiler.expression.CompiledPipeFilterOutExpression filterOutExpression -> {
                 if (!isOptionType(filterOutExpression.type())) {
                     yield PrimitiveLinkedType.ANY;
                 }
@@ -231,29 +231,29 @@ public class JavaAstBuilder {
                 }
                 yield filterOutExpression.source().type();
             }
-            case pl.grzeslowski.capybara.compiler.expression.LinkedNewData newDataExpression -> {
+            case pl.grzeslowski.capybara.compiler.expression.CompiledNewData newDataExpression -> {
                 if (!(newDataExpression.type() instanceof GenericDataType genericDataType)
                     || !isOptionSomeTypeName(genericDataType.name())) {
                     yield PrimitiveLinkedType.ANY;
                 }
                 yield newDataExpression.assignments().stream()
                         .filter(assignment -> "value".equals(assignment.name()))
-                        .map(pl.grzeslowski.capybara.compiler.expression.LinkedNewData.FieldAssignment::value)
-                        .map(pl.grzeslowski.capybara.compiler.expression.LinkedExpression::type)
+                        .map(pl.grzeslowski.capybara.compiler.expression.CompiledNewData.FieldAssignment::value)
+                        .map(pl.grzeslowski.capybara.compiler.expression.CompiledExpression::type)
                         .findFirst()
                         .orElse(PrimitiveLinkedType.ANY);
             }
-            case pl.grzeslowski.capybara.compiler.expression.LinkedLetExpression letExpression ->
+            case pl.grzeslowski.capybara.compiler.expression.CompiledLetExpression letExpression ->
                     inferOptionElementType(letExpression.rest());
-            case pl.grzeslowski.capybara.compiler.expression.LinkedIfExpression ifExpression ->
+            case pl.grzeslowski.capybara.compiler.expression.CompiledIfExpression ifExpression ->
                     pl.grzeslowski.capybara.compiler.expression.CapybaraTypeFinder.findHigherType(
                             inferOptionElementType(ifExpression.thenBranch()),
                             inferOptionElementType(ifExpression.elseBranch()));
-            case pl.grzeslowski.capybara.compiler.expression.LinkedIndexExpression indexExpression ->
+            case pl.grzeslowski.capybara.compiler.expression.CompiledIndexExpression indexExpression ->
                     indexExpression.elementType();
-            case pl.grzeslowski.capybara.compiler.expression.LinkedMatchExpression matchExpression ->
+            case pl.grzeslowski.capybara.compiler.expression.CompiledMatchExpression matchExpression ->
                     matchExpression.cases().stream()
-                            .map(pl.grzeslowski.capybara.compiler.expression.LinkedMatchExpression.MatchCase::expression)
+                            .map(pl.grzeslowski.capybara.compiler.expression.CompiledMatchExpression.MatchCase::expression)
                             .map(this::inferOptionElementType)
                             .reduce(pl.grzeslowski.capybara.compiler.expression.CapybaraTypeFinder::findHigherType)
                             .orElse(PrimitiveLinkedType.ANY);
@@ -261,7 +261,7 @@ public class JavaAstBuilder {
         };
     }
 
-    private boolean isOptionType(LinkedType type) {
+    private boolean isOptionType(CompiledType type) {
         if (!(type instanceof GenericDataType genericDataType)) {
             return false;
         }
@@ -319,8 +319,8 @@ public class JavaAstBuilder {
 
     private JavaType withTypeParametersIfGeneric(GenericDataType type, String rawJavaTypeName) {
         var typeParameters = switch (type) {
-            case LinkedDataType linkedDataType -> linkedDataType.typeParameters();
-            case LinkedDataParentType linkedDataParentType -> linkedDataParentType.typeParameters();
+            case CompiledDataType linkedDataType -> linkedDataType.typeParameters();
+            case CompiledDataParentType linkedDataParentType -> linkedDataParentType.typeParameters();
         };
         if (typeParameters.isEmpty()) {
             return new JavaType(rawJavaTypeName);
@@ -445,13 +445,13 @@ public class JavaAstBuilder {
 
     private JavaType buildCollectionLinkedType(CollectionLinkedType type) {
         return switch (type) {
-            case LinkedList linkedList -> new JavaType("java.util.List<" + buildJavaBoxedType(linkedList.elementType()) + ">");
-            case LinkedDict linkedDict -> new JavaType("java.util.Map<java.lang.String, " + buildJavaBoxedType(linkedDict.valueType()) + ">");
-            case LinkedSet linkedSet -> new JavaType("java.util.Set<" + buildJavaBoxedType(linkedSet.elementType()) + ">");
+            case CompiledList linkedList -> new JavaType("java.util.List<" + buildJavaBoxedType(linkedList.elementType()) + ">");
+            case CompiledDict linkedDict -> new JavaType("java.util.Map<java.lang.String, " + buildJavaBoxedType(linkedDict.valueType()) + ">");
+            case CompiledSet linkedSet -> new JavaType("java.util.Set<" + buildJavaBoxedType(linkedSet.elementType()) + ">");
         };
     }
 
-    private String buildJavaBoxedType(LinkedType type) {
+    private String buildJavaBoxedType(CompiledType type) {
         return switch (type) {
             case PrimitiveLinkedType primitiveLinkedType -> switch (primitiveLinkedType) {
                 case BYTE -> "java.lang.Byte";
@@ -467,13 +467,13 @@ public class JavaAstBuilder {
             };
             case GenericDataType genericDataType -> buildGenericDataType(genericDataType).toString();
             case CollectionLinkedType collectionLinkedType -> buildCollectionLinkedType(collectionLinkedType).toString();
-            case LinkedTupleType linkedTupleType -> "java.util.List<?>";
-            case LinkedFunctionType functionType -> "java.util.function.Function<"
+            case CompiledTupleType linkedTupleType -> "java.util.List<?>";
+            case CompiledFunctionType functionType -> "java.util.function.Function<"
                     + buildJavaBoxedType(functionType.argumentType())
                     + ", "
                     + buildJavaBoxedType(functionType.returnType())
                     + ">";
-            case LinkedGenericTypeParameter linkedGenericTypeParameter -> linkedGenericTypeParameter.name();
+            case CompiledGenericTypeParameter linkedGenericTypeParameter -> linkedGenericTypeParameter.name();
         };
     }
 
@@ -493,7 +493,7 @@ public class JavaAstBuilder {
                || normalized.endsWith("/Result.Error");
     }
 
-    private boolean isResultErrorDataType(LinkedDataType type) {
+    private boolean isResultErrorDataType(CompiledDataType type) {
         if (!isResultErrorTypeName(type.name())) {
             return false;
         }
@@ -529,11 +529,11 @@ public class JavaAstBuilder {
         return normalized;
     }
 
-    private List<JavaMethod.JavaFunctionParameter> buildJavaFunctionParameters(List<LinkedFunction.LinkedFunctionParameter> parameters) {
+    private List<JavaMethod.JavaFunctionParameter> buildJavaFunctionParameters(List<CompiledFunction.CompiledFunctionParameter> parameters) {
         return parameters.stream().map(this::buildJavaFunctionParameter).toList();
     }
 
-    private JavaMethod.JavaFunctionParameter buildJavaFunctionParameter(LinkedFunction.LinkedFunctionParameter parameter) {
+    private JavaMethod.JavaFunctionParameter buildJavaFunctionParameter(CompiledFunction.CompiledFunctionParameter parameter) {
         return new JavaMethod.JavaFunctionParameter(
                 buildJavaType(parameter.type()),
                 parameter.name(),
@@ -674,23 +674,23 @@ public class JavaAstBuilder {
         };
     }
 
-    private Set<JavaInterface> buildInterfaces(List<LinkedDataParentType> dataParentTypes, Set<LinkedFunction> functions) {
+    private Set<JavaInterface> buildInterfaces(List<CompiledDataParentType> dataParentTypes, Set<CompiledFunction> functions) {
         return dataParentTypes.stream()
                 .map(parentType -> buildInterface(parentType, functions))
                 .collect(toSet());
     }
 
-    private JavaInterface buildInterface(LinkedDataParentType type, Set<LinkedFunction> functions) {
+    private JavaInterface buildInterface(CompiledDataParentType type, Set<CompiledFunction> functions) {
         return new JavaSealedInterface(
                 buildClassName(type.name()),
                 buildJavaMethods(type.fields()),
-                type.subTypes().stream().map(LinkedDataType::name).map(name -> buildClassName(name).toString()).toList(),
+                type.subTypes().stream().map(CompiledDataType::name).map(name -> buildClassName(name).toString()).toList(),
                 type.typeParameters(),
                 buildInterfaceMethods(type, functions)
         );
     }
 
-    private List<JavaMethod> buildInterfaceMethods(LinkedDataParentType type, Set<LinkedFunction> functions) {
+    private List<JavaMethod> buildInterfaceMethods(CompiledDataParentType type, Set<CompiledFunction> functions) {
         var ownerPrefix = METHOD_DECL_PREFIX + type.name() + "__";
         return functions.stream()
                 .filter(function -> function.name().startsWith(ownerPrefix))
@@ -698,7 +698,7 @@ public class JavaAstBuilder {
                 .toList();
     }
 
-    private JavaMethod buildInterfaceMethod(LinkedFunction function, String ownerPrefix) {
+    private JavaMethod buildInterfaceMethod(CompiledFunction function, String ownerPrefix) {
         var methodName = function.name().substring(ownerPrefix.length());
         var parameters = function.parameters().stream().skip(1).toList();
         var methodTypeParameters = methodTypeParameters(function, Set.copyOf(extractOwnerTypeParameters(function)));
@@ -714,20 +714,20 @@ public class JavaAstBuilder {
         );
     }
 
-    private List<JavaInterfaceMethod> buildJavaMethods(List<LinkedDataType.LinkedField> fields) {
+    private List<JavaInterfaceMethod> buildJavaMethods(List<CompiledDataType.CompiledField> fields) {
         return fields.stream().map(this::buildJavaMethod).toList();
     }
 
-    private JavaInterfaceMethod buildJavaMethod(LinkedDataType.LinkedField field) {
+    private JavaInterfaceMethod buildJavaMethod(CompiledDataType.CompiledField field) {
         return new JavaInterfaceMethod(
                 buildMethodName(field.name()),
                 buildJavaType(field.type()));
     }
 
     private Set<JavaRecord> buildRecords(
-            List<LinkedDataType> dataTypes,
-            Map<LinkedDataType, Set<JavaInterface>> subClassToInterface,
-            Set<LinkedFunction> functions
+            List<CompiledDataType> dataTypes,
+            Map<CompiledDataType, Set<JavaInterface>> subClassToInterface,
+            Set<CompiledFunction> functions
     ) {
         return dataTypes.stream()
                 .filter(dt -> !dt.singleton())
@@ -736,9 +736,9 @@ public class JavaAstBuilder {
     }
 
     private JavaRecord buildRecord(
-            LinkedDataType type,
-            Map<LinkedDataType, Set<JavaInterface>> subClassToInterface,
-            Set<LinkedFunction> functions
+            CompiledDataType type,
+            Map<CompiledDataType, Set<JavaInterface>> subClassToInterface,
+            Set<CompiledFunction> functions
     ) {
         var javaInterface = subClassToInterface.get(type);
         var implementInterfaces = javaInterface == null
@@ -774,7 +774,7 @@ public class JavaAstBuilder {
                 buildRecordMethods(type, functions));
     }
 
-    private Set<JavaMethod> buildRecordMethods(LinkedDataType type, Set<LinkedFunction> functions) {
+    private Set<JavaMethod> buildRecordMethods(CompiledDataType type, Set<CompiledFunction> functions) {
         var ownerPrefix = METHOD_DECL_PREFIX + type.name() + "__";
         return functions.stream()
                 .filter(function -> function.name().startsWith(ownerPrefix))
@@ -782,7 +782,7 @@ public class JavaAstBuilder {
                 .collect(toSet());
     }
 
-    private JavaMethod buildRecordMethod(LinkedFunction function, String ownerPrefix) {
+    private JavaMethod buildRecordMethod(CompiledFunction function, String ownerPrefix) {
         var methodName = function.name().substring(ownerPrefix.length());
         var parameters = function.parameters().stream().skip(1).toList();
         var methodTypeParameters = methodTypeParameters(function, Set.copyOf(extractOwnerTypeParameters(function)));
@@ -798,19 +798,19 @@ public class JavaAstBuilder {
         );
     }
 
-    private List<String> extractOwnerTypeParameters(LinkedFunction function) {
+    private List<String> extractOwnerTypeParameters(CompiledFunction function) {
         if (function.parameters().isEmpty()) {
             return List.of();
         }
         var thisType = function.parameters().getFirst().type();
         return switch (thisType) {
-            case LinkedDataType linkedDataType -> linkedDataType.typeParameters();
-            case LinkedDataParentType linkedDataParentType -> linkedDataParentType.typeParameters();
+            case CompiledDataType linkedDataType -> linkedDataType.typeParameters();
+            case CompiledDataParentType linkedDataParentType -> linkedDataParentType.typeParameters();
             default -> List.of();
         };
     }
 
-    private List<String> methodTypeParameters(LinkedFunction function, Set<String> ownerTypeParameters) {
+    private List<String> methodTypeParameters(CompiledFunction function, Set<String> ownerTypeParameters) {
         var genericNames = new java.util.LinkedHashSet<String>();
         function.parameters().forEach(parameter -> collectGenericTypeParameters(parameter.type(), genericNames));
         collectGenericTypeParameters(function.returnType(), genericNames);
@@ -818,22 +818,22 @@ public class JavaAstBuilder {
         return List.copyOf(genericNames);
     }
 
-    private void collectGenericTypeParameters(LinkedType type, Set<String> genericNames) {
+    private void collectGenericTypeParameters(CompiledType type, Set<String> genericNames) {
         switch (type) {
-            case LinkedGenericTypeParameter genericTypeParameter -> genericNames.add(genericTypeParameter.name());
-            case LinkedDataType linkedDataType ->
+            case CompiledGenericTypeParameter genericTypeParameter -> genericNames.add(genericTypeParameter.name());
+            case CompiledDataType linkedDataType ->
                     linkedDataType.typeParameters().forEach(typeName -> addGenericTypeName(typeName, genericNames));
-            case LinkedDataParentType linkedDataParentType ->
+            case CompiledDataParentType linkedDataParentType ->
                     linkedDataParentType.typeParameters().forEach(typeName -> addGenericTypeName(typeName, genericNames));
-            case CollectionLinkedType.LinkedList linkedList ->
+            case CollectionLinkedType.CompiledList linkedList ->
                     collectGenericTypeParameters(linkedList.elementType(), genericNames);
-            case CollectionLinkedType.LinkedSet linkedSet ->
+            case CollectionLinkedType.CompiledSet linkedSet ->
                     collectGenericTypeParameters(linkedSet.elementType(), genericNames);
-            case CollectionLinkedType.LinkedDict linkedDict ->
+            case CollectionLinkedType.CompiledDict linkedDict ->
                     collectGenericTypeParameters(linkedDict.valueType(), genericNames);
-            case LinkedTupleType linkedTupleType ->
+            case CompiledTupleType linkedTupleType ->
                     linkedTupleType.elementTypes().forEach(elementType -> collectGenericTypeParameters(elementType, genericNames));
-            case LinkedFunctionType linkedFunctionType -> {
+            case CompiledFunctionType linkedFunctionType -> {
                 collectGenericTypeParameters(linkedFunctionType.argumentType(), genericNames);
                 collectGenericTypeParameters(linkedFunctionType.returnType(), genericNames);
             }
@@ -848,7 +848,7 @@ public class JavaAstBuilder {
         }
     }
 
-    private JavaType implementedInterfaceType(LinkedDataType type, JavaInterface javaInterface) {
+    private JavaType implementedInterfaceType(CompiledDataType type, JavaInterface javaInterface) {
         var interfaceTypeParameters = switch (javaInterface) {
             case JavaSealedInterface javaSealedInterface -> javaSealedInterface.typeParameters();
             case JavaNormalInterface javaNormalInterface -> List.<String>of();
@@ -860,32 +860,32 @@ public class JavaAstBuilder {
     }
 
     private Set<JavaEnum> buildEnums(
-            List<LinkedDataType> dataTypes,
+            List<CompiledDataType> dataTypes,
             Map<String, GenericDataType> allTypes,
-            Map<LinkedDataType, Set<JavaInterface>> subClassToInterface
+            Map<CompiledDataType, Set<JavaInterface>> subClassToInterface
     ) {
         var singletonEnums = dataTypes.stream()
-                .filter(LinkedDataType::singleton)
+                .filter(CompiledDataType::singleton)
                 .filter(dt -> !isEnumValueType(dt, allTypes))
                 .map(dt -> buildSingletonEnum(dt, subClassToInterface));
         var declaredEnums = allTypes.values().stream()
-                .filter(LinkedDataParentType.class::isInstance)
-                .map(LinkedDataParentType.class::cast)
-                .filter(LinkedDataParentType::enumType)
+                .filter(CompiledDataParentType.class::isInstance)
+                .map(CompiledDataParentType.class::cast)
+                .filter(CompiledDataParentType::enumType)
                 .map(this::buildDeclaredEnum);
         return Stream.concat(singletonEnums, declaredEnums).collect(toSet());
     }
 
-    private boolean isEnumValueType(LinkedDataType type, Map<String, GenericDataType> allTypes) {
+    private boolean isEnumValueType(CompiledDataType type, Map<String, GenericDataType> allTypes) {
         return allTypes.values().stream()
-                .filter(LinkedDataParentType.class::isInstance)
-                .map(LinkedDataParentType.class::cast)
-                .filter(LinkedDataParentType::enumType)
+                .filter(CompiledDataParentType.class::isInstance)
+                .map(CompiledDataParentType.class::cast)
+                .filter(CompiledDataParentType::enumType)
                 .flatMap(parent -> parent.subTypes().stream())
                 .anyMatch(subType -> subType.name().equals(type.name()));
     }
 
-    private JavaEnum buildSingletonEnum(LinkedDataType type, Map<LinkedDataType, Set<JavaInterface>> subClassToInterface) {
+    private JavaEnum buildSingletonEnum(CompiledDataType type, Map<CompiledDataType, Set<JavaInterface>> subClassToInterface) {
         var javaInterface = subClassToInterface.get(type);
         var implementInterfaces = javaInterface == null
                 ? Set.<JavaType>of()
@@ -893,11 +893,11 @@ public class JavaAstBuilder {
         return new JavaEnum(buildClassName(type.name()), implementInterfaces, List.of("INSTANCE"));
     }
 
-    private JavaEnum buildDeclaredEnum(LinkedDataParentType enumType) {
+    private JavaEnum buildDeclaredEnum(CompiledDataParentType enumType) {
         return new JavaEnum(
                 buildClassName(enumType.name()),
                 Set.of(),
-                enumType.subTypes().stream().map(LinkedDataType::name).toList()
+                enumType.subTypes().stream().map(CompiledDataType::name).toList()
         );
     }
 }

@@ -5,9 +5,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
 import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
 import pl.grzeslowski.capybara.generator.Generator;
-import pl.grzeslowski.capybara.compiler.CapybaraLinker;
+import pl.grzeslowski.capybara.compiler.CapybaraCompiler;
 import pl.grzeslowski.capybara.compiler.ImportDeclaration;
-import pl.grzeslowski.capybara.compiler.LinkedProgram;
+import pl.grzeslowski.capybara.compiler.CompiledProgram;
 import pl.grzeslowski.capybara.compiler.Module;
 import pl.grzeslowski.capybara.compiler.OutputType;
 import pl.grzeslowski.capybara.compiler.Program;
@@ -113,14 +113,14 @@ public class App {
                 .map(App::buildModule)
                 .toList();
 
-        var linking = CapybaraLinker.INSTANCE.link(new Program(modules));
-        if (linking instanceof ValueOrError.Error<LinkedProgram> error) {
+        var linking = CapybaraCompiler.INSTANCE.link(new Program(modules));
+        if (linking instanceof ValueOrError.Error<CompiledProgram> error) {
             System.err.println("Linking failed with " + error.errors().size() + " error(s):");
             error.errors().forEach(System.err::println);
             return 100;
         }
 
-        var linkedProgram = ((ValueOrError.Value<LinkedProgram>) linking).value();
+        var linkedProgram = ((ValueOrError.Value<CompiledProgram>) linking).value();
         writeLinkedJson(linkedOutputDir, linkedProgram);
         return 0;
     }
@@ -166,7 +166,7 @@ public class App {
         }
     }
 
-    private static void writeLinkedJson(Path outputDir, LinkedProgram program) {
+    private static void writeLinkedJson(Path outputDir, CompiledProgram program) {
         var mapper = objectMapper();
         try {
             Files.createDirectories(outputDir);
@@ -187,9 +187,9 @@ public class App {
         }
     }
 
-    private static LinkedProgram readLinkedJson(Path linkedProgramFile) {
+    private static CompiledProgram readLinkedJson(Path linkedProgramFile) {
         try {
-            return objectMapper().readValue(linkedProgramFile.toFile(), LinkedProgram.class);
+            return objectMapper().readValue(linkedProgramFile.toFile(), CompiledProgram.class);
         } catch (IOException e) {
             throw new UncheckedIOException("Unable to read linked program JSON: " + linkedProgramFile, e);
         }

@@ -12,9 +12,9 @@ import org.gradle.api.tasks.InputFiles;
 import org.gradle.api.tasks.InputDirectory;
 import org.gradle.api.tasks.OutputDirectory;
 import org.gradle.api.tasks.TaskAction;
-import pl.grzeslowski.capybara.compiler.CapybaraLinker;
+import pl.grzeslowski.capybara.compiler.CapybaraCompiler;
 import pl.grzeslowski.capybara.compiler.ImportDeclaration;
-import pl.grzeslowski.capybara.compiler.LinkedProgram;
+import pl.grzeslowski.capybara.compiler.CompiledProgram;
 import pl.grzeslowski.capybara.compiler.Module;
 import pl.grzeslowski.capybara.compiler.Program;
 import pl.grzeslowski.capybara.compiler.ValueOrError;
@@ -85,14 +85,14 @@ public abstract class CompileCapybaraTask extends DefaultTask {
             throw new GradleException("Parsing failed for " + parsingFailures.size() + " file(s). Check logs for details.");
         }
 
-        var linking = CapybaraLinker.INSTANCE.link(new Program(modules));
-        if (linking instanceof ValueOrError.Error<LinkedProgram> error) {
+        var linking = CapybaraCompiler.INSTANCE.link(new Program(modules));
+        if (linking instanceof ValueOrError.Error<CompiledProgram> error) {
             getLogger().error("Linking failed with {} error(s)", error.errors().size());
             error.errors().forEach(linkingError -> getLogger().error(linkingError.toString()));
             throw new GradleException("Linking failed with " + error.errors().size() + " error(s).");
         }
 
-        var linkedProgram = ((ValueOrError.Value<LinkedProgram>) linking).value();
+        var linkedProgram = ((ValueOrError.Value<CompiledProgram>) linking).value();
         writeLinkedJson(output.toPath(), linkedProgram);
     }
 
@@ -159,7 +159,7 @@ public abstract class CompileCapybaraTask extends DefaultTask {
         return new ParsedSource(String.join(System.lineSeparator(), bodyLines), List.copyOf(imports));
     }
 
-    private void writeLinkedJson(Path outputDir, LinkedProgram program) {
+    private void writeLinkedJson(Path outputDir, CompiledProgram program) {
         var mapper = objectMapper();
         try {
             Files.createDirectories(outputDir);

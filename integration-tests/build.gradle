@@ -23,14 +23,41 @@ test {
 def capybaraSourceDir = layout.projectDirectory.dir('src/main/capybara')
 def capybaraLibSourceDir = project(':lib:capybara-lib').layout.projectDirectory.dir('src/main/capybara')
 def generatedJavaDir = layout.buildDirectory.dir('generated/sources/capybara/java/main')
+def linkedOutputDir = layout.buildDirectory.dir('generated/sources/capybara/linked/main')
 def capybaraDebugEnabled = gradle.startParameter.logLevel == org.gradle.api.logging.LogLevel.DEBUG
 
-tasks.register('generateJavaFromCapybara', JavaExec) {
+tasks.register('linkCapybaraSources', JavaExec) {
     group = 'build'
-    description = 'Compiles Capybara files from src/main/capybara into generated Java sources.'
+    description = 'Links Capybara files from src/main/capybara into linked JSON artifacts.'
 
     inputs.dir(capybaraSourceDir)
     inputs.dir(capybaraLibSourceDir)
+    outputs.dir(linkedOutputDir)
+
+    classpath = project(':cli').sourceSets.main.runtimeClasspath
+    mainClass = 'pl.grzeslowski.capybara.App'
+
+    doFirst {
+        def capybaraArgs = []
+        if (capybaraDebugEnabled) {
+            capybaraArgs << '--debug'
+        }
+        capybaraArgs.addAll([
+                'LINK',
+                capybaraSourceDir.asFile.absolutePath,
+                capybaraLibSourceDir.asFile.absolutePath,
+                linkedOutputDir.get().asFile.absolutePath
+        ])
+        setArgs(capybaraArgs)
+    }
+}
+
+tasks.register('generateJavaFromCapybara', JavaExec) {
+    group = 'build'
+    description = 'Generates Java sources from linked Capybara JSON artifacts.'
+    dependsOn tasks.named('linkCapybaraSources')
+
+    inputs.dir(linkedOutputDir)
     outputs.dir(generatedJavaDir)
 
     classpath = project(':cli').sourceSets.main.runtimeClasspath
@@ -42,9 +69,9 @@ tasks.register('generateJavaFromCapybara', JavaExec) {
             capybaraArgs << '--debug'
         }
         capybaraArgs.addAll([
+                'GENERATE',
                 'JAVA',
-                capybaraSourceDir.asFile.absolutePath,
-                capybaraLibSourceDir.asFile.absolutePath,
+                linkedOutputDir.get().asFile.absolutePath,
                 generatedJavaDir.get().asFile.absolutePath
         ])
         setArgs(capybaraArgs)

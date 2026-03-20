@@ -1,6 +1,6 @@
 package pl.grzeslowski.capybara.generator.java;
 
-import pl.grzeslowski.capybara.compiler.expression.LinkedExpression;
+import pl.grzeslowski.capybara.compiler.expression.CompiledExpression;
 
 import java.util.*;
 import java.util.logging.Logger;
@@ -34,7 +34,7 @@ class Scope {
         this.expression = expression;
     }
 
-    UniqueNameScopeExpression addValue(String name, LinkedExpression expression) {
+    UniqueNameScopeExpression addValue(String name, CompiledExpression expression) {
         return Optional.of(name)
                 .filter(not(localValues::contains))
                 .map(n -> {
@@ -91,10 +91,10 @@ class Scope {
         return new Scope(valueIdx, localValues, valueNameToUniqueName, statements, Optional.of(expression));
     }
 
-    private record UniqueNameScopeExpression(String uniqueName, Scope scope, LinkedExpression expression) {
+    private record UniqueNameScopeExpression(String uniqueName, Scope scope, CompiledExpression expression) {
     }
 
-    private UniqueNameScopeExpression generateUniqueName(String name, LinkedExpression expression) {
+    private UniqueNameScopeExpression generateUniqueName(String name, CompiledExpression expression) {
         if (!localValues.contains(name)) {
             throw new IllegalStateException("Name `%s` should be in `localValues`: %s".formatted(name, localValues));
         }
@@ -178,17 +178,17 @@ class Scope {
         return new Scope(valueIdx, localValues, Map.of(), statements, expression);
     }
 
-    record ScopeExpression(Scope scope, LinkedExpression expression) {
+    record ScopeExpression(Scope scope, CompiledExpression expression) {
     }
 
-    ScopeExpression declareValue(String name, String lastExpression, LinkedExpression expression) {
+    ScopeExpression declareValue(String name, String lastExpression, CompiledExpression expression) {
         var unique = addValue(name, expression);
         return new ScopeExpression(
                 unique.scope.addStatementUnchecked("var %s = %s".formatted(unique.uniqueName, lastExpression)),
                 unique.expression);
     }
 
-    ScopeExpression declareTypedValue(String name, String javaType, String lastExpression, LinkedExpression expression) {
+    ScopeExpression declareTypedValue(String name, String javaType, String lastExpression, CompiledExpression expression) {
         var unique = addValue(name, expression);
         return new ScopeExpression(
                 unique.scope.addStatementUnchecked("%s %s = %s".formatted(javaType, unique.uniqueName, lastExpression)),
