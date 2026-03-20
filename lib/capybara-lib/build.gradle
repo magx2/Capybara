@@ -96,7 +96,7 @@ tasks.register('runCollectionAssertTest', JavaExec) {
     dependsOn tasks.named('compileTestCapybara')
 
     classpath = sourceSets.test.runtimeClasspath
-    mainClass = 'capy.lang.CollectionAssertTest'
+    mainClass = 'capy.assert_.CollectionAssertTest'
 }
 
 tasks.register('testCapybara') {
