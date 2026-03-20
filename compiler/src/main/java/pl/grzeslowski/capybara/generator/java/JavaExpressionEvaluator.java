@@ -907,6 +907,10 @@ public class JavaExpressionEvaluator {
                             .addValueOverride(keyName, entryVar + ".getKey()")
                             .addValueOverride(pipeReduceExpression.valueName(), entryVar + ".getValue()")
             ).popExpression();
+            var reduceInitialExpression = initialExSc.expression();
+            if (!pipeReduceExpression.initialValue().type().equals(pipeReduceExpression.type())) {
+                reduceInitialExpression = "((" + javaCastType(pipeReduceExpression.type()) + ") (" + reduceInitialExpression + "))";
+            }
             var javaAccumulatorName = normalizeJavaLocalIdentifier(pipeReduceExpression.accumulatorName());
             var javaReducerExpression = pipeReduceExpression.accumulatorName().equals(javaAccumulatorName)
                     ? reducerExSc.expression()
@@ -914,7 +918,7 @@ public class JavaExpressionEvaluator {
             return reducerExSc.scope().addExpression(
                     sourceExSc.expression()
                     + ".entrySet().stream().reduce("
-                    + initialExSc.expression()
+                    + reduceInitialExpression
                     + ", (" + javaAccumulatorName
                     + ", " + entryVar
                     + ") -> (" + javaReducerExpression + ")"
