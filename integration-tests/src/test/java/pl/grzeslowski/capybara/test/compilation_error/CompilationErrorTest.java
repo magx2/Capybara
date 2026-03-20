@@ -132,6 +132,24 @@ public class CompilationErrorTest {
                                     match letter with
                                     ^ `match` is not exhaustive. Use wildcard `| _ -> ...` or add missing branches:`C`, `D`.
                                 """
+                ),
+                Arguments.of(
+                        "match_enum_not_exhaustive",
+                        """
+                                enum Color { RED, BLUE, GREEN_BLUE }
+                                fun foo(color: Color): int =
+                                    match color with
+                                    | RED -> 1
+                                    | BLUE -> 2
+                                """,
+                        new Position(3, 4),
+                        """
+                                error: mismatched types
+                                 --> /foo/boo/match_enum_not_exhaustive.cfun:3:4
+                                fun foo(color: Color): int =
+                                    match color with
+                                    ^ `match` is not exhaustive. Use wildcard `| _ -> ...` or add missing branches:`GREEN_BLUE`.
+                                """
                 ));
         var primitiveTypes = List.of("string", "byte", "int", "long", "float", "double", "bool");
         var primitiveCases = primitiveTypes.stream().map(CompilationErrorTest::primitiveMatchNotExhaustiveCase);

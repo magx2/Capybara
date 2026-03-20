@@ -197,8 +197,31 @@ public class CapybaraExpressionLinker {
     }
 
     private ValueOrError<LinkedExpression> linkFieldAccess(FieldAccess fieldAccess, Scope scope) {
+        var enumValuesCall = tryLinkEnumValuesFieldAccess(fieldAccess, scope);
+        if (enumValuesCall.isPresent()) {
+            return enumValuesCall.get();
+        }
         return linkExpression(fieldAccess.source(), scope)
                 .flatMap(source -> {
+                    if (source.type() instanceof LinkedDataParentType linkedDataParentType && linkedDataParentType.enumType()) {
+                        if ("order".equals(fieldAccess.field())) {
+                            return ValueOrError.success(new LinkedFieldAccess(source, "ordinal", PrimitiveLinkedType.INT));
+                        }
+                        if ("name".equals(fieldAccess.field())) {
+                            return ValueOrError.success(new LinkedFieldAccess(source, "name", PrimitiveLinkedType.STRING));
+                        }
+                    }
+                    if (source.type() instanceof LinkedDataType linkedDataType && linkedDataType.singleton()) {
+                        var enumParent = findEnumParentForValue(linkedDataType.name());
+                        if (enumParent != null) {
+                            if ("order".equals(fieldAccess.field())) {
+                                return ValueOrError.success(new LinkedFieldAccess(source, "ordinal", PrimitiveLinkedType.INT));
+                            }
+                            if ("name".equals(fieldAccess.field())) {
+                                return ValueOrError.success(new LinkedFieldAccess(source, "name", PrimitiveLinkedType.STRING));
+                            }
+                        }
+                    }
                     if (source.type() instanceof LinkedList
                         || source.type() instanceof LinkedSet
                         || source.type() instanceof LinkedDict
@@ -334,6 +357,10 @@ public class CapybaraExpressionLinker {
     private ValueOrError<LinkedExpression> resolveQualifiedFunctionCall(FunctionCall functionCall, Scope scope) {
         var rawModuleName = functionCall.moduleName().orElseThrow();
         var moduleName = normalizeQualifiedModuleName(rawModuleName);
+        var enumQualified = resolveEnumQualifiedFunctionCall(functionCall, scope, moduleName);
+        if (enumQualified.isPresent()) {
+            return enumQualified.get();
+        }
         var resolvedModule = resolveQualifiedModule(moduleName);
         if (resolvedModule == null) {
             return withPosition(
@@ -397,6 +424,43 @@ public class CapybaraExpressionLinker {
                 best.arguments(),
                 resolveReturnType(best.signature(), best.arguments())
         ));
+    }
+
+    private Optional<ValueOrError<LinkedExpression>> resolveEnumQualifiedFunctionCall(
+            FunctionCall functionCall,
+            Scope scope,
+            String normalizedModuleName
+    ) {
+        var enumType = findEnumTypeByName(normalizedModuleName);
+        if (enumType == null) {
+            return Optional.empty();
+        }
+        if (!"parse".equals(functionCall.name()) || functionCall.arguments().size() != 1) {
+            return Optional.of(withPosition(
+                    ValueOrError.error("Enum `" + enumType.name() + "` supports only `parse(string)` and `parse(int)`"),
+                    functionCall.position()
+            ));
+        }
+        var linkedArgument = linkExpression(functionCall.arguments().getFirst(), scope);
+        if (linkedArgument instanceof ValueOrError.Error<LinkedExpression> error) {
+            return Optional.of(new ValueOrError.Error<>(error.errors()));
+        }
+        var argument = ((ValueOrError.Value<LinkedExpression>) linkedArgument).value();
+        if (argument.type() != STRING && argument.type() != INT) {
+            return Optional.of(withPosition(
+                    ValueOrError.error("Enum `parse` expects `string` or `int`, got `" + argument.type() + "`"),
+                    functionCall.arguments().getFirst().position()
+            ));
+        }
+        var resultType = resultTypeFor(enumType);
+        if (resultType == null) {
+            return Optional.of(withPosition(ValueOrError.error("Result type not found"), functionCall.position()));
+        }
+        return Optional.of(ValueOrError.success(new LinkedFunctionCall(
+                enumType.name() + ".parse",
+                List.of(argument),
+                resultType
+        )));
     }
 
     private ResolvedModule resolveQualifiedModule(String normalizedModuleName) {
@@ -499,12 +563,62 @@ public class CapybaraExpressionLinker {
     }
 
     private Optional<LinkedDataType> findSingletonDataType(String constructorName) {
-        return dataTypes.values().stream()
+        var direct = dataTypes.values().stream()
                 .filter(LinkedDataType.class::isInstance)
                 .map(LinkedDataType.class::cast)
                 .filter(LinkedDataType::singleton)
                 .filter(dataType -> typeNameMatches(dataType.name(), constructorName))
                 .findFirst();
+        if (direct.isPresent()) {
+            return direct;
+        }
+        return dataTypes.values().stream()
+                .filter(LinkedDataParentType.class::isInstance)
+                .map(LinkedDataParentType.class::cast)
+                .filter(LinkedDataParentType::enumType)
+                .flatMap(parentType -> parentType.subTypes().stream())
+                .filter(dataType -> typeNameMatches(dataType.name(), constructorName))
+                .findFirst();
+    }
+
+    private Optional<ValueOrError<LinkedExpression>> tryLinkEnumValuesFieldAccess(FieldAccess fieldAccess, Scope scope) {
+        if (!(fieldAccess.source() instanceof FunctionCall functionCall)
+            || functionCall.moduleName().isPresent()
+            || !functionCall.arguments().isEmpty()
+            || !"values".equals(fieldAccess.field())) {
+            return Optional.empty();
+        }
+        var enumType = findEnumTypeByName(functionCall.name());
+        if (enumType == null) {
+            return Optional.empty();
+        }
+        var setType = new LinkedSet(enumType);
+        return Optional.of(ValueOrError.success(new LinkedFunctionCall(enumType.name() + ".valuesSet", List.of(), setType)));
+    }
+
+    private LinkedDataParentType findEnumParentForValue(String valueName) {
+        return dataTypes.values().stream()
+                .filter(LinkedDataParentType.class::isInstance)
+                .map(LinkedDataParentType.class::cast)
+                .filter(LinkedDataParentType::enumType)
+                .filter(parentType -> parentType.subTypes().stream().anyMatch(value -> typeNameMatches(value.name(), valueName)))
+                .findFirst()
+                .orElse(null);
+    }
+
+    private LinkedDataParentType findEnumTypeByName(String enumName) {
+        var normalizedLookup = enumName.replace('/', '.');
+        return dataTypes.values().stream()
+                .filter(LinkedDataParentType.class::isInstance)
+                .map(LinkedDataParentType.class::cast)
+                .filter(LinkedDataParentType::enumType)
+                .filter(parentType ->
+                        typeNameMatches(parentType.name(), enumName)
+                        || typeNameMatches(parentType.name(), normalizedLookup)
+                        || normalizeQualifiedTypeName(parentType.name()).replace('/', '.').endsWith("." + normalizedLookup)
+                        || normalizeQualifiedTypeName(parentType.name()).replace('/', '.').endsWith(normalizedLookup))
+                .findFirst()
+                .orElse(null);
     }
 
     private boolean typeNameMatches(String typeName, String constructorName) {
@@ -3634,7 +3748,8 @@ public class CapybaraExpressionLinker {
                             .toList(),
                     linkedDataParentType.typeParameters().stream()
                             .map(typeDescriptor -> substituteTypeDescriptor(typeDescriptor, substitutions))
-                            .toList()
+                            .toList(),
+                    linkedDataParentType.enumType()
             );
             default -> type;
         };
@@ -3703,7 +3818,8 @@ public class CapybaraExpressionLinker {
                         parentType.name(),
                         parentType.fields(),
                         parentType.subTypes(),
-                        typeArgumentDescriptors
+                        typeArgumentDescriptors,
+                        parentType.enumType()
                 );
                 case LinkedDataType dataType -> {
                     if (dataType.typeParameters().isEmpty()) {
@@ -4402,7 +4518,8 @@ public class CapybaraExpressionLinker {
                     linkedDataParentType.subTypes().stream()
                             .map(subType -> (LinkedDataType) replaceScopeGenericPlaceholders(subType, genericTypeNames))
                             .toList(),
-                    linkedDataParentType.typeParameters()
+                    linkedDataParentType.typeParameters(),
+                    linkedDataParentType.enumType()
             );
             default -> type;
         };

@@ -103,7 +103,7 @@
       "patterns": [
         {
           "name": "keyword.control.capybara",
-          "match": "\\b(fun|type|data|single|const|match|with|if|then|else|let|from|import|except)\\b"
+          "match": "\\b(fun|type|enum|data|single|const|match|with|if|then|else|let|from|import|except)\\b"
         },
         {
           "name": "keyword.other.capybara",
@@ -227,7 +227,7 @@
         },
         {
           "name": "meta.type.private.capybara",
-          "match": "\\b(type|data|single)\\s+(__[A-Za-z0-9_]*)",
+          "match": "\\b(type|enum|data|single)\\s+(__[A-Za-z0-9_]*)",
           "captures": {
             "1": {
               "name": "keyword.control.capybara"
@@ -239,7 +239,7 @@
         },
         {
           "name": "meta.type.capybara",
-          "match": "\\b(type|data|single)\\s+(_*[A-Z][A-Za-z0-9_]*)",
+          "match": "\\b(type|enum|data|single)\\s+(_*[A-Z][A-Za-z0-9_]*)",
           "captures": {
             "1": {
               "name": "keyword.control.capybara"

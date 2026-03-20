@@ -27,6 +27,7 @@ public class CapybaraParser {
     private static final Pattern COLLECTION_DICT_PATTERN = Pattern.compile("dict\\[(.+?)]");
     private static final Pattern NO_VIABLE_ALTERNATIVE_PATTERN = Pattern.compile("no viable alternative at input '(.+)'");
     private static final Pattern CONST_NAME_PATTERN = Pattern.compile("^_?[A-Z_][A-Z0-9_]*$");
+    private static final Pattern ENUM_VALUE_NAME_PATTERN = Pattern.compile("^[A-Z]+(?:_[A-Z]+)*$");
 
     public Functional parseFunctional(String input) {
         var lexer = new pl.grzeslowski.capybara.parser.antlr.FunctionalLexer(CharStreams.fromString(input));
@@ -100,6 +101,11 @@ public class CapybaraParser {
             return List.of(dataDeclaration(dataDeclaration));
         }
 
+        var enumDeclaration = context.enumDeclaration();
+        if (enumDeclaration != null) {
+            return List.of(enumDeclaration(enumDeclaration));
+        }
+
         var singleDeclaration = context.singleDeclaration();
         if (singleDeclaration != null) {
             return List.of(singleDeclaration(singleDeclaration));
@@ -144,6 +150,16 @@ public class CapybaraParser {
                 dataFields.fields(),
                 dataFields.extendsTypes(),
                 genericTypeParameters(declaration),
+                position(context)
+        );
+    }
+
+    private EnumDeclaration enumDeclaration(FunctionalParser.EnumDeclarationContext context) {
+        var values = context.TYPE().stream().skip(1).map(TerminalNode::getText).toList();
+        values.forEach(CapybaraParser::validateEnumValueName);
+        return new EnumDeclaration(
+                context.TYPE(0).getText(),
+                values,
                 position(context)
         );
     }
@@ -1539,6 +1555,12 @@ public class CapybaraParser {
     private static void validateConstName(String name) {
         if (!CONST_NAME_PATTERN.matcher(name).matches()) {
             throw new IllegalStateException("Invalid const name: " + name);
+        }
+    }
+
+    private static void validateEnumValueName(String name) {
+        if (!ENUM_VALUE_NAME_PATTERN.matcher(name).matches()) {
+            throw new IllegalStateException("Invalid enum value name: " + name);
         }
     }
 

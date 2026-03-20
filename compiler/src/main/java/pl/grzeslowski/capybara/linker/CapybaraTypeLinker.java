@@ -172,7 +172,8 @@ public class CapybaraTypeLinker {
                     parentType.name(),
                     parentType.fields(),
                     parentType.subTypes(),
-                    mappedTypeArguments
+                    mappedTypeArguments,
+                    parentType.enumType()
             );
             case LinkedDataType dataType -> {
                 if (dataType.typeParameters().isEmpty()) {
@@ -364,7 +365,8 @@ public class CapybaraTypeLinker {
                     requestedName,
                     linkedDataParentType.fields(),
                     linkedDataParentType.subTypes(),
-                    linkedDataParentType.typeParameters()
+                    linkedDataParentType.typeParameters(),
+                    linkedDataParentType.enumType()
             );
         };
     }

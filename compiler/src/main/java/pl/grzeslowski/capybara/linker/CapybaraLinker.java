@@ -274,7 +274,8 @@ public class CapybaraLinker {
                     linkedDataParentType.subTypes().stream()
                             .map(subType -> (LinkedDataType) resolveGenericDataType(subType, all))
                             .toList(),
-                    linkedDataParentType.typeParameters()
+                    linkedDataParentType.typeParameters(),
+                    linkedDataParentType.enumType()
             );
         };
     }
@@ -337,7 +338,8 @@ public class CapybaraLinker {
                     requestedName,
                     linkedDataParentType.fields(),
                     linkedDataParentType.subTypes(),
-                    linkedDataParentType.typeParameters()
+                    linkedDataParentType.typeParameters(),
+                    linkedDataParentType.enumType()
             );
         };
     }
@@ -2099,7 +2101,8 @@ public class CapybaraLinker {
                     parentType.name(),
                     parentType.fields(),
                     parentType.subTypes(),
-                    mappedTypeArguments
+                    mappedTypeArguments,
+                    parentType.enumType()
             );
             case LinkedDataType dataType -> {
                 if (dataType.typeParameters().isEmpty()) {
@@ -2365,6 +2368,7 @@ public class CapybaraLinker {
     private ValueOrError<Map<String, GenericDataType>> types(Module module) {
         var normalizedFile = normalizeFile(moduleSourceFile(module));
         var rawTypeDeclarations = castList(module, TypeDeclaration.class);
+        var rawEnumDeclarations = castList(module, pl.grzeslowski.capybara.parser.EnumDeclaration.class);
         var rawTypeDeclarationsByName = rawTypeDeclarations.stream()
                 .collect(toMap(TypeDeclaration::name, identity(), (first, second) -> first));
         var dataDeclarationsOrError = linkDataDeclarations(
@@ -2386,15 +2390,22 @@ public class CapybaraLinker {
             return new ValueOrError.Error<>(error.errors());
         }
         var singleDeclarations = ((ValueOrError.Value<List<LinkedDataType>>) singlesDeclarationsOrError).value();
+        var enumDeclarations = rawEnumDeclarations.stream()
+                .map(this::linkEnumDeclaration)
+                .toList();
         Map<String, GenericDataType> knownDataTypes = new HashMap<>();
         dataDeclarations.forEach(dataType -> knownDataTypes.put(dataType.name(), dataType));
         singleDeclarations.forEach(dataType -> knownDataTypes.put(dataType.name(), dataType));
+        enumDeclarations.forEach(enumType -> knownDataTypes.put(enumType.name(), enumType));
 
         var typeDeclarationsOrError = rawTypeDeclarations
                 .stream()
                 .map(typeDeclaration -> linkTypeDeclaration(
                         typeDeclaration,
-                        Stream.concat(dataDeclarations.stream(), singleDeclarations.stream()).toList(),
+                        Stream.concat(
+                                Stream.concat(dataDeclarations.stream(), singleDeclarations.stream()),
+                                enumDeclarations.stream().flatMap(enumType -> enumType.subTypes().stream())
+                        ).toList(),
                         rawTypeDeclarationsByName,
                         knownDataTypes,
                         normalizedFile))
@@ -2408,9 +2419,11 @@ public class CapybaraLinker {
         var set = new HashSet<GenericDataType>();
         set.addAll(dataDeclarations);
         set.addAll(singleDeclarations);
+        set.addAll(enumDeclarations);
         set.addAll(typeDeclarations);
         var map = set.stream().collect(toMap(GenericDataType::name, identity()));
         typeDeclarations.forEach(parentType -> parentType.subTypes().forEach(subType -> map.put(subType.name(), subType)));
+        enumDeclarations.forEach(enumType -> enumType.subTypes().forEach(subType -> map.put(subType.name(), subType)));
         return ValueOrError.success(map);
     }
 
@@ -2515,6 +2528,19 @@ public class CapybaraLinker {
 
     private ValueOrError<LinkedDataType> linkSingleDeclaration(SingleDeclaration singleDeclaration) {
         return ValueOrError.success(new LinkedDataType(singleDeclaration.name(), List.of(), List.of(), List.of(), true));
+    }
+
+    private LinkedDataParentType linkEnumDeclaration(pl.grzeslowski.capybara.parser.EnumDeclaration enumDeclaration) {
+        var values = enumDeclaration.values().stream()
+                .map(value -> new LinkedDataType(value, List.of(), List.of(), List.of(), true))
+                .toList();
+        return new LinkedDataParentType(
+                enumDeclaration.name(),
+                List.of(),
+                values,
+                List.of(),
+                true
+        );
     }
 
     private ValueOrError<LinkedDataType.LinkedField> linkField(

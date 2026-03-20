@@ -367,7 +367,35 @@ public final class JavaGenerator implements Generator {
         var implementInterfaces = javaEnum.implementInterfaces().isEmpty()
                 ? ""
                 : javaEnum.implementInterfaces().stream().map(Objects::toString).collect(joining(", ", " implements ", " "));
-        return "public enum " + javaEnum.name() + implementInterfaces + "{INSTANCE}\n";
+        var values = javaEnum.values().isEmpty() ? List.of("INSTANCE") : javaEnum.values();
+        var body = String.join(", ", values);
+        if (values.size() == 1 && "INSTANCE".equals(values.getFirst())) {
+            return "public enum " + javaEnum.name() + implementInterfaces + "{" + body + "}\n";
+        }
+        return "public enum " + javaEnum.name() + implementInterfaces + "{"
+               + body + ";\n"
+               + "public static java.util.Set<" + javaEnum.name() + "> valuesSet() {\n"
+               + "return java.util.EnumSet.allOf(" + javaEnum.name() + ".class);\n"
+               + "}\n"
+               + "public static capy.lang.Result<" + javaEnum.name() + "> parse(java.lang.String name) {\n"
+               + "try {\n"
+               + "return new capy.lang.Result.Success<>(" + javaEnum.name() + ".valueOf(name));\n"
+               + "} catch (java.lang.IllegalArgumentException ex) {\n"
+               + "return new capy.lang.Result.Error(new pl.grzeslowski.capybara.CapybaraException(\"Cannot parse enum `"
+               + javaEnum.name()
+               + "` from string: \" + name));\n"
+               + "}\n"
+               + "}\n"
+               + "public static capy.lang.Result<" + javaEnum.name() + "> parse(int order) {\n"
+               + "var all = " + javaEnum.name() + ".values();\n"
+               + "if (order < 0 || order >= all.length) {\n"
+               + "return new capy.lang.Result.Error(new pl.grzeslowski.capybara.CapybaraException(\"Cannot parse enum `"
+               + javaEnum.name()
+               + "` from order: \" + order));\n"
+               + "}\n"
+               + "return new capy.lang.Result.Success<>(all[order]);\n"
+               + "}\n"
+               + "}\n";
     }
 
 

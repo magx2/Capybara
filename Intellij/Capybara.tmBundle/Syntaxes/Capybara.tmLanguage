@@ -33,14 +33,14 @@
         <dict><key>name</key><string>constant.character.escape.capybara</string><key>match</key><string>\\.</string></dict>
       </array>
     </dict>
-    <dict><key>name</key><string>keyword.control.capybara</string><key>match</key><string>\b(fun|type|data|single|const|match|with|if|then|else|let|from|import|except)\b</string></dict>
+    <dict><key>name</key><string>keyword.control.capybara</string><key>match</key><string>\b(fun|type|enum|data|single|const|match|with|if|then|else|let|from|import|except)\b</string></dict>
     <dict><key>name</key><string>keyword.other.capybara</string><key>match</key><string>\\b(this|is_empty|size|to_int|to_long|to_double|to_float|to_bool)\\b</string></dict>
     <dict><key>name</key><string>support.type.primitive.capybara</string><key>match</key><string>\b(byte|int|long|float|double|bool|string|any|data|nothing|list|set|dict|tuple)\b</string></dict>
     <dict><key>name</key><string>constant.numeric.capybara</string><key>match</key><string>\b(?:0[xX][0-9a-fA-F]+|\d+[lL]|\d+\.\d*(?:[eE][+\-]?\d+)?[fFdD]?|\d+[eE][+\-]?\d+[fFdD]?|\d+)\b</string></dict>
     <dict><key>name</key><string>constant.language.boolean.capybara</string><key>match</key><string>\b(true|false)\b</string></dict>
     <dict><key>name</key><string>constant.language.unimplemented.capybara</string><key>match</key><string>\?\?\?</string></dict>
     <dict><key>name</key><string>entity.name.type.capybara</string><key>match</key><string>\b_*[A-Z][A-Za-z0-9_]*\b</string></dict>
-    <dict><key>name</key><string>entity.name.type.private.capybara</string><key>match</key><string>\b(type|data|single)\s+(__[A-Za-z0-9_]*)</string></dict>
+    <dict><key>name</key><string>entity.name.type.private.capybara</string><key>match</key><string>\b(type|enum|data|single)\s+(__[A-Za-z0-9_]*)</string></dict>
     <dict><key>name</key><string>entity.name.function.private.capybara</string><key>match</key><string>\bfun\s+(__[A-Za-z0-9_]+)</string></dict>
     <dict><key>name</key><string>entity.name.function.capybara</string><key>match</key><string>\bfun\s+([A-Za-z_][A-Za-z0-9_]*)</string></dict>
     <dict><key>name</key><string>meta.function.owner-generic.capybara</string><key>match</key><string>\b(fun)\s+(_*[A-Z][A-Za-z0-9_]*\[[^\]]+\])\.(?:`[^`]+`|[A-Za-z_][A-Za-z0-9_]*)</string></dict>

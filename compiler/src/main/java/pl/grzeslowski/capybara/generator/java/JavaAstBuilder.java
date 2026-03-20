@@ -34,6 +34,7 @@ public class JavaAstBuilder {
                 .stream()
                 .filter(LinkedDataParentType.class::isInstance)
                 .map(LinkedDataParentType.class::cast)
+                .filter(parentType -> !parentType.enumType())
                 .toList(), module.functions());
         var subClassToInterface = findSubClassToInterface(module.types(), interfaces);
         var dataTypes = module.types()
@@ -52,7 +53,7 @@ public class JavaAstBuilder {
                 buildStaticMethods(module.functions()),
                 interfaces,
                 buildRecords(dataTypes, subClassToInterface, module.functions()),
-                buildEnums(dataTypes, subClassToInterface));
+                buildEnums(dataTypes, module.types(), subClassToInterface));
     }
 
     private Map<LinkedDataType, Set<JavaInterface>> findSubClassToInterface(Map<String, GenericDataType> types, Set<JavaInterface> interfaces) {
@@ -858,18 +859,45 @@ public class JavaAstBuilder {
         return new JavaType(javaInterface.name() + "<" + String.join(", ", type.typeParameters()) + ">");
     }
 
-    private Set<JavaEnum> buildEnums(List<LinkedDataType> dataTypes, Map<LinkedDataType, Set<JavaInterface>> subClassToInterface) {
-        return dataTypes.stream()
+    private Set<JavaEnum> buildEnums(
+            List<LinkedDataType> dataTypes,
+            Map<String, GenericDataType> allTypes,
+            Map<LinkedDataType, Set<JavaInterface>> subClassToInterface
+    ) {
+        var singletonEnums = dataTypes.stream()
                 .filter(LinkedDataType::singleton)
-                .map(dt -> buildEnum(dt, subClassToInterface))
-                .collect(toSet());
+                .filter(dt -> !isEnumValueType(dt, allTypes))
+                .map(dt -> buildSingletonEnum(dt, subClassToInterface));
+        var declaredEnums = allTypes.values().stream()
+                .filter(LinkedDataParentType.class::isInstance)
+                .map(LinkedDataParentType.class::cast)
+                .filter(LinkedDataParentType::enumType)
+                .map(this::buildDeclaredEnum);
+        return Stream.concat(singletonEnums, declaredEnums).collect(toSet());
     }
 
-    private JavaEnum buildEnum(LinkedDataType type, Map<LinkedDataType, Set<JavaInterface>> subClassToInterface) {
+    private boolean isEnumValueType(LinkedDataType type, Map<String, GenericDataType> allTypes) {
+        return allTypes.values().stream()
+                .filter(LinkedDataParentType.class::isInstance)
+                .map(LinkedDataParentType.class::cast)
+                .filter(LinkedDataParentType::enumType)
+                .flatMap(parent -> parent.subTypes().stream())
+                .anyMatch(subType -> subType.name().equals(type.name()));
+    }
+
+    private JavaEnum buildSingletonEnum(LinkedDataType type, Map<LinkedDataType, Set<JavaInterface>> subClassToInterface) {
         var javaInterface = subClassToInterface.get(type);
         var implementInterfaces = javaInterface == null
                 ? Set.<JavaType>of()
                 : javaInterface.stream().map(JavaInterface::name).collect(toSet());
-        return new JavaEnum(buildClassName(type.name()), implementInterfaces);
+        return new JavaEnum(buildClassName(type.name()), implementInterfaces, List.of("INSTANCE"));
+    }
+
+    private JavaEnum buildDeclaredEnum(LinkedDataParentType enumType) {
+        return new JavaEnum(
+                buildClassName(enumType.name()),
+                Set.of(),
+                enumType.subTypes().stream().map(LinkedDataType::name).toList()
+        );
     }
 }

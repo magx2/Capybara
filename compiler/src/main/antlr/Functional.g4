@@ -9,6 +9,7 @@ program : definition+ EOF;
 definition:
     functionDeclaration
     | typeDeclaration
+    | enumDeclaration
     | dataDeclaration
     | singleDeclaration
     | constDeclaration;
@@ -31,6 +32,7 @@ docComment: DOC_COMMENT;
 
 typeDeclaration: 'type' genericTypeDeclaration '=' genericTypeDeclaration (PIPE genericTypeDeclaration)*
                | 'type' genericTypeDeclaration '{' fieldDeclarationList? '}' '=' genericTypeDeclaration (PIPE genericTypeDeclaration)*;
+enumDeclaration: 'enum' TYPE '{' TYPE (COMMA TYPE)* COMMA? '}';
 dataDeclaration: 'data' genericTypeDeclaration '{' fieldDeclarationList? '}'
                | 'data' genericTypeDeclaration '=' '{' fieldDeclarationList? '}';
 singleDeclaration: 'single' TYPE;

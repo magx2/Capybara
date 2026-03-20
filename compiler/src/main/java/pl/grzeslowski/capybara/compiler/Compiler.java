@@ -209,6 +209,7 @@ public class Compiler {
     private String definitionSymbol(Definition definition) {
         return switch (definition) {
             case Function function -> function.name();
+            case EnumDeclaration enumDeclaration -> enumDeclaration.name();
             case TypeDeclaration typeDeclaration -> typeDeclaration.name();
             case DataDeclaration dataDeclaration -> dataDeclaration.name();
             case SingleDeclaration singleDeclaration -> singleDeclaration.name();

@@ -1717,7 +1717,12 @@ public class JavaExpressionEvaluator {
                 }
                 yield "case " + javaPatternType(typedPattern.type()) + " " + patternBindingName;
             }
-            case LinkedMatchExpression.VariablePattern variablePattern -> "case " + variablePattern.name() + " __ignored";
+            case LinkedMatchExpression.VariablePattern variablePattern -> {
+                if (matchType instanceof LinkedDataParentType parentType && parentType.enumType()) {
+                    yield "case " + variablePattern.name();
+                }
+                yield "case " + variablePattern.name() + " __ignored";
+            }
             case LinkedMatchExpression.WildcardPattern wildcardPattern -> "default";
             case LinkedMatchExpression.WildcardBindingPattern wildcardBindingPattern ->
                     "case " + javaPatternType(matchType) + " " + caseBindingNames.getOrDefault(wildcardBindingPattern.name(), wildcardBindingPattern.name());
