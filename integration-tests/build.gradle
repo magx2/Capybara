@@ -8,6 +8,7 @@ repositories {
 
 dependencies {
     implementation project(':compiler')
+    implementation project(':lib:capybara-lib')
     implementation project(':lib:java-lib')
 
     testImplementation 'org.assertj:assertj-core:3.27.6'

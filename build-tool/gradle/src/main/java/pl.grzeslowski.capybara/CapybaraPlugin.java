@@ -1,13 +1,14 @@
 package pl.grzeslowski.capybara;
 
-import org.gradle.api.DefaultTask;
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
-import org.gradle.api.file.DirectoryProperty;
-import org.gradle.api.tasks.InputDirectory;
-import org.gradle.api.tasks.OutputDirectory;
-import org.gradle.api.tasks.TaskAction;
 import org.gradle.api.tasks.TaskProvider;
+import org.gradle.api.tasks.SourceSetContainer;
+import org.gradle.api.tasks.JavaExec;
+import org.gradle.api.tasks.testing.Test;
+import pl.grzeslowski.capybara.compiler.OutputType;
+
+import java.util.EnumSet;
 
 public class CapybaraPlugin implements Plugin<Project> {
     @Override
@@ -26,15 +27,16 @@ public class CapybaraPlugin implements Plugin<Project> {
                 }
         );
 
-        TaskProvider<GenerateCapybaraJavaTask> generateCapybaraJava = project.getTasks().register(
+        TaskProvider<GenerateCapybaraTask> generateCapybaraJava = project.getTasks().register(
                 "generateCapybaraJava",
-                GenerateCapybaraJavaTask.class,
+                GenerateCapybaraTask.class,
                 task -> {
                     task.setGroup("build");
                     task.setDescription("Generates Java classes");
                     task.dependsOn(compileCapybara);
                     task.getInputDir().set(layout.getBuildDirectory().dir("classes/capybara"));
-                    task.getOutputDir().set(layout.getBuildDirectory().dir("generated/sources/capybara"));
+                    task.getOutputRootDir().set(layout.getBuildDirectory().dir("generated/sources/capybara"));
+                    task.getOutputTypes().set(EnumSet.of(OutputType.JAVA));
                 }
         );
 
@@ -52,56 +54,71 @@ public class CapybaraPlugin implements Plugin<Project> {
                 }
         );
 
-        TaskProvider<GenerateCapybaraJavaTask> generateTestCapybaraJava = project.getTasks().register(
+        TaskProvider<GenerateCapybaraTask> generateTestCapybaraJava = project.getTasks().register(
                 "generateTestCapybaraJava",
-                GenerateCapybaraJavaTask.class,
+                GenerateCapybaraTask.class,
                 task -> {
                     task.setGroup("verification");
                     task.setDescription("Generates Java classes for tests");
                     task.dependsOn(compileTestCapybara);
                     task.getInputDir().set(layout.getBuildDirectory().dir("classes/test-capybara"));
-                    task.getOutputDir().set(layout.getBuildDirectory().dir("generated/sources/test-capybara"));
+                    task.getOutputRootDir().set(layout.getBuildDirectory().dir("generated/sources/test-capybara"));
+                    task.getOutputTypes().set(EnumSet.of(OutputType.JAVA));
                 }
         );
 
         project.getTasks().named("compileTestJava", task -> task.dependsOn(generateTestCapybaraJava));
-    }
 
-    public abstract static class CompileCapybaraTask extends DefaultTask {
-        @InputDirectory
-        public abstract DirectoryProperty getInputDir();
-
-        @OutputDirectory
-        public abstract DirectoryProperty getOutputDir();
-
-        @TaskAction
-        public void compile() {
-            var input = getInputDir().get().getAsFile();
-            var output = getOutputDir().get().getAsFile();
-
-            getLogger().lifecycle("Compiling Capybara from {} to {}", input, output);
-
-            output.mkdirs();
-            // TODO invoke Capybara compiler and write compiled artifacts to output
+        var sourceSets = project.getExtensions().findByType(SourceSetContainer.class);
+        if (sourceSets != null) {
+            sourceSets.named("main", sourceSet ->
+                    sourceSet.getJava().srcDir(layout.getBuildDirectory().dir("generated/sources/capybara/java")));
+            sourceSets.named("test", sourceSet ->
+                    sourceSet.getJava().srcDir(layout.getBuildDirectory().dir("generated/sources/test-capybara/java")));
         }
-    }
 
-    public abstract static class GenerateCapybaraJavaTask extends DefaultTask {
-        @InputDirectory
-        public abstract DirectoryProperty getInputDir();
+        if (sourceSets != null) {
+            TaskProvider<JavaExec> runJsonTest = project.getTasks().register("runJsonTest", JavaExec.class, task -> {
+                task.setGroup("verification");
+                task.setDescription("Runs `JsonTest` main function.");
+                task.dependsOn(project.getTasks().named("compileTestJava"));
+                task.setClasspath(sourceSets.getByName("test").getRuntimeClasspath());
+                task.getMainClass().set("lang.serialization.JsonTest");
+            });
 
-        @OutputDirectory
-        public abstract DirectoryProperty getOutputDir();
+            TaskProvider<JavaExec> runResultTest = project.getTasks().register("runResultTest", JavaExec.class, task -> {
+                task.setGroup("verification");
+                task.setDescription("Runs `ResultTest` main function.");
+                task.dependsOn(project.getTasks().named("compileTestJava"));
+                task.setClasspath(sourceSets.getByName("test").getRuntimeClasspath());
+                task.getMainClass().set("capy.lang.ResultTest");
+            });
 
-        @TaskAction
-        public void generate() {
-            var input = getInputDir().get().getAsFile();
-            var output = getOutputDir().get().getAsFile();
+            TaskProvider<JavaExec> runSeqTest = project.getTasks().register("runSeqTest", JavaExec.class, task -> {
+                task.setGroup("verification");
+                task.setDescription("Runs `SeqTest` main function.");
+                task.dependsOn(project.getTasks().named("compileTestJava"));
+                task.setClasspath(sourceSets.getByName("test").getRuntimeClasspath());
+                task.getMainClass().set("capy.lang.SeqTest");
+            });
 
-            getLogger().lifecycle("Generating Java from {} to {}", input, output);
+            TaskProvider<JavaExec> runCollectionAssertTest = project.getTasks().register("runCollectionAssertTest", JavaExec.class, task -> {
+                task.setGroup("verification");
+                task.setDescription("Runs `CollectionAssertTest` main function.");
+                task.dependsOn(project.getTasks().named("compileTestJava"));
+                task.setClasspath(sourceSets.getByName("test").getRuntimeClasspath());
+                task.getMainClass().set("capy.assert_.CollectionAssertTest");
+            });
 
-            output.mkdirs();
-            // TODO transform compiled Capybara artifacts into generated Java sources
+            project.getTasks().register("testCapybara", task -> {
+                task.setGroup("verification");
+                task.setDescription("Runs all generated Capybara main-based tests.");
+                task.dependsOn(runJsonTest, runResultTest, runSeqTest, runCollectionAssertTest);
+            });
+
+            project.getTasks().named("test", Test.class, task -> {
+                task.dependsOn("testCapybara");
+            });
         }
     }
 }
