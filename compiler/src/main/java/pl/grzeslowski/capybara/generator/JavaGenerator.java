@@ -486,10 +486,9 @@ public final class JavaGenerator implements Generator {
         if (comments == null || comments.isEmpty()) {
             return "";
         }
-        var body = comments.stream()
-                .map(line -> " * " + line)
-                .collect(joining("\n"));
-        return "/**\n" + body + "\n */\n";
+        return comments.stream()
+                .map(line -> line.isEmpty() ? "///" : "/// " + line)
+                .collect(joining("\n", "", "\n"));
     }
 
     private String mapMethodName(String name) {
