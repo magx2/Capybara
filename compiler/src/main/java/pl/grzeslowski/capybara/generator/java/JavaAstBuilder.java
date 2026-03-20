@@ -1,10 +1,10 @@
 package pl.grzeslowski.capybara.generator.java;
 
 import pl.grzeslowski.capybara.generator.java.JavaInterface.JavaInterfaceMethod;
-import pl.grzeslowski.capybara.linker.*;
-import pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedDict;
-import pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedList;
-import pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedSet;
+import pl.grzeslowski.capybara.compiler.*;
+import pl.grzeslowski.capybara.compiler.CollectionLinkedType.LinkedDict;
+import pl.grzeslowski.capybara.compiler.CollectionLinkedType.LinkedList;
+import pl.grzeslowski.capybara.compiler.CollectionLinkedType.LinkedSet;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -216,11 +216,11 @@ public class JavaAstBuilder {
         return buildJavaType(function.returnType());
     }
 
-    private LinkedType inferOptionElementType(pl.grzeslowski.capybara.linker.expression.LinkedExpression expression) {
+    private LinkedType inferOptionElementType(pl.grzeslowski.capybara.compiler.expression.LinkedExpression expression) {
         return switch (expression) {
-            case pl.grzeslowski.capybara.linker.expression.LinkedPipeExpression pipeExpression ->
+            case pl.grzeslowski.capybara.compiler.expression.LinkedPipeExpression pipeExpression ->
                     isOptionType(pipeExpression.type()) ? pipeExpression.mapper().type() : PrimitiveLinkedType.ANY;
-            case pl.grzeslowski.capybara.linker.expression.LinkedPipeFilterOutExpression filterOutExpression -> {
+            case pl.grzeslowski.capybara.compiler.expression.LinkedPipeFilterOutExpression filterOutExpression -> {
                 if (!isOptionType(filterOutExpression.type())) {
                     yield PrimitiveLinkedType.ANY;
                 }
@@ -231,31 +231,31 @@ public class JavaAstBuilder {
                 }
                 yield filterOutExpression.source().type();
             }
-            case pl.grzeslowski.capybara.linker.expression.LinkedNewData newDataExpression -> {
+            case pl.grzeslowski.capybara.compiler.expression.LinkedNewData newDataExpression -> {
                 if (!(newDataExpression.type() instanceof GenericDataType genericDataType)
                     || !isOptionSomeTypeName(genericDataType.name())) {
                     yield PrimitiveLinkedType.ANY;
                 }
                 yield newDataExpression.assignments().stream()
                         .filter(assignment -> "value".equals(assignment.name()))
-                        .map(pl.grzeslowski.capybara.linker.expression.LinkedNewData.FieldAssignment::value)
-                        .map(pl.grzeslowski.capybara.linker.expression.LinkedExpression::type)
+                        .map(pl.grzeslowski.capybara.compiler.expression.LinkedNewData.FieldAssignment::value)
+                        .map(pl.grzeslowski.capybara.compiler.expression.LinkedExpression::type)
                         .findFirst()
                         .orElse(PrimitiveLinkedType.ANY);
             }
-            case pl.grzeslowski.capybara.linker.expression.LinkedLetExpression letExpression ->
+            case pl.grzeslowski.capybara.compiler.expression.LinkedLetExpression letExpression ->
                     inferOptionElementType(letExpression.rest());
-            case pl.grzeslowski.capybara.linker.expression.LinkedIfExpression ifExpression ->
-                    pl.grzeslowski.capybara.linker.expression.CapybaraTypeFinder.findHigherType(
+            case pl.grzeslowski.capybara.compiler.expression.LinkedIfExpression ifExpression ->
+                    pl.grzeslowski.capybara.compiler.expression.CapybaraTypeFinder.findHigherType(
                             inferOptionElementType(ifExpression.thenBranch()),
                             inferOptionElementType(ifExpression.elseBranch()));
-            case pl.grzeslowski.capybara.linker.expression.LinkedIndexExpression indexExpression ->
+            case pl.grzeslowski.capybara.compiler.expression.LinkedIndexExpression indexExpression ->
                     indexExpression.elementType();
-            case pl.grzeslowski.capybara.linker.expression.LinkedMatchExpression matchExpression ->
+            case pl.grzeslowski.capybara.compiler.expression.LinkedMatchExpression matchExpression ->
                     matchExpression.cases().stream()
-                            .map(pl.grzeslowski.capybara.linker.expression.LinkedMatchExpression.MatchCase::expression)
+                            .map(pl.grzeslowski.capybara.compiler.expression.LinkedMatchExpression.MatchCase::expression)
                             .map(this::inferOptionElementType)
-                            .reduce(pl.grzeslowski.capybara.linker.expression.CapybaraTypeFinder::findHigherType)
+                            .reduce(pl.grzeslowski.capybara.compiler.expression.CapybaraTypeFinder::findHigherType)
                             .orElse(PrimitiveLinkedType.ANY);
             default -> PrimitiveLinkedType.ANY;
         };

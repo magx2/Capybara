@@ -1,6 +1,6 @@
-package pl.grzeslowski.capybara.linker;
+package pl.grzeslowski.capybara.compiler;
 
-import pl.grzeslowski.capybara.linker.expression.*;
+import pl.grzeslowski.capybara.compiler.expression.*;
 
 import static java.lang.System.lineSeparator;
 import static java.util.stream.Collectors.joining;

@@ -11,7 +11,7 @@ import org.gradle.api.tasks.OutputDirectory;
 import org.gradle.api.tasks.TaskAction;
 import pl.grzeslowski.capybara.compiler.OutputType;
 import pl.grzeslowski.capybara.generator.Generator;
-import pl.grzeslowski.capybara.linker.LinkedProgram;
+import pl.grzeslowski.capybara.compiler.LinkedProgram;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;

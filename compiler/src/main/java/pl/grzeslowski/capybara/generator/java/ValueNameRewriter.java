@@ -1,6 +1,6 @@
 package pl.grzeslowski.capybara.generator.java;
 
-import pl.grzeslowski.capybara.linker.expression.*;
+import pl.grzeslowski.capybara.compiler.expression.*;
 
 public class ValueNameRewriter {
     public static LinkedExpression rewriteValueInExpression(String name, String uniqueName, LinkedExpression expression) {

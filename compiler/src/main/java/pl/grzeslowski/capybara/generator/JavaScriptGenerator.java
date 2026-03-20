@@ -1,6 +1,6 @@
 package pl.grzeslowski.capybara.generator;
 
-import pl.grzeslowski.capybara.linker.LinkedProgram;
+import pl.grzeslowski.capybara.compiler.LinkedProgram;
 
 import java.util.List;
 

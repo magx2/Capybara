@@ -1,8 +1,8 @@
 package pl.grzeslowski.capybara.generator;
 
 import pl.grzeslowski.capybara.generator.java.*;
-import pl.grzeslowski.capybara.linker.LinkedModule;
-import pl.grzeslowski.capybara.linker.LinkedProgram;
+import pl.grzeslowski.capybara.compiler.LinkedModule;
+import pl.grzeslowski.capybara.compiler.LinkedProgram;
 
 import java.nio.file.Path;
 import java.util.ArrayList;

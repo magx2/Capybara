@@ -12,12 +12,12 @@ import org.gradle.api.tasks.InputFiles;
 import org.gradle.api.tasks.InputDirectory;
 import org.gradle.api.tasks.OutputDirectory;
 import org.gradle.api.tasks.TaskAction;
+import pl.grzeslowski.capybara.compiler.CapybaraLinker;
 import pl.grzeslowski.capybara.compiler.ImportDeclaration;
+import pl.grzeslowski.capybara.compiler.LinkedProgram;
 import pl.grzeslowski.capybara.compiler.Module;
 import pl.grzeslowski.capybara.compiler.Program;
-import pl.grzeslowski.capybara.linker.CapybaraLinker;
-import pl.grzeslowski.capybara.linker.LinkedProgram;
-import pl.grzeslowski.capybara.linker.ValueOrError;
+import pl.grzeslowski.capybara.compiler.ValueOrError;
 import pl.grzeslowski.capybara.parser.CapybaraParser;
 
 import java.io.IOException;
@@ -184,7 +184,10 @@ public abstract class CompileCapybaraTask extends DefaultTask {
         var mapper = new ObjectMapper();
         mapper.registerModule(new Jdk8Module());
         mapper.activateDefaultTyping(
-                BasicPolymorphicTypeValidator.builder().allowIfSubType("pl.grzeslowski.capybara").build(),
+                BasicPolymorphicTypeValidator.builder()
+                        .allowIfSubType("pl.grzeslowski.capybara")
+                        .allowIfSubType("java.util.")
+                        .build(),
                 ObjectMapper.DefaultTyping.NON_FINAL,
                 JsonTypeInfo.As.PROPERTY
         );

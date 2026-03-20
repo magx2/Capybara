@@ -1,8 +1,8 @@
 package pl.grzeslowski.capybara.generator.java;
 
-import pl.grzeslowski.capybara.linker.expression.*;
-import pl.grzeslowski.capybara.linker.LinkedDataParentType;
-import pl.grzeslowski.capybara.linker.LinkedDataType;
+import pl.grzeslowski.capybara.compiler.expression.*;
+import pl.grzeslowski.capybara.compiler.LinkedDataParentType;
+import pl.grzeslowski.capybara.compiler.LinkedDataType;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -138,13 +138,13 @@ public class JavaExpressionEvaluator {
     }
 
     private static boolean requiresGenericFieldCast(LinkedFieldAccess fieldAccess) {
-        if (fieldAccess.type() instanceof pl.grzeslowski.capybara.linker.LinkedGenericTypeParameter) {
+        if (fieldAccess.type() instanceof pl.grzeslowski.capybara.compiler.LinkedGenericTypeParameter) {
             return true;
         }
         return switch (fieldAccess.source().type()) {
-            case pl.grzeslowski.capybara.linker.LinkedDataType linkedDataType ->
+            case pl.grzeslowski.capybara.compiler.LinkedDataType linkedDataType ->
                     !linkedDataType.typeParameters().isEmpty();
-            case pl.grzeslowski.capybara.linker.LinkedDataParentType linkedDataParentType ->
+            case pl.grzeslowski.capybara.compiler.LinkedDataParentType linkedDataParentType ->
                     !linkedDataParentType.typeParameters().isEmpty();
             default -> false;
         };
@@ -229,8 +229,8 @@ public class JavaExpressionEvaluator {
         var current = functionExSc.scope();
         var call = new StringBuilder(functionExSc.expression());
         if (functionInvoke.arguments().isEmpty()
-            && functionInvoke.function().type() instanceof pl.grzeslowski.capybara.linker.LinkedFunctionType functionType
-            && functionType.argumentType() == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.NOTHING) {
+            && functionInvoke.function().type() instanceof pl.grzeslowski.capybara.compiler.LinkedFunctionType functionType
+            && functionType.argumentType() == pl.grzeslowski.capybara.compiler.PrimitiveLinkedType.NOTHING) {
             call.append(".apply(null)");
             return current.addExpression(call.toString());
         }
@@ -263,16 +263,16 @@ public class JavaExpressionEvaluator {
         var expression = switch (operator) {
             case POWER -> evaluatePowerExpression(infixExpression, left.expression(), right.expression());
             case PLUS -> {
-                if (infixExpression.left().type() instanceof pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedList) {
+                if (infixExpression.left().type() instanceof pl.grzeslowski.capybara.compiler.CollectionLinkedType.LinkedList) {
                     yield evaluateListAppendExpression(infixExpression, left.expression(), right.expression());
                 }
-                if (infixExpression.left().type() instanceof pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedSet) {
+                if (infixExpression.left().type() instanceof pl.grzeslowski.capybara.compiler.CollectionLinkedType.LinkedSet) {
                     yield evaluateSetAppendExpression(infixExpression, left.expression(), right.expression());
                 }
-                if (infixExpression.left().type() instanceof pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedDict) {
+                if (infixExpression.left().type() instanceof pl.grzeslowski.capybara.compiler.CollectionLinkedType.LinkedDict) {
                     yield evaluateDictAppendExpression(infixExpression, left.expression(), right.expression());
                 }
-                if (infixExpression.type() == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.STRING) {
+                if (infixExpression.type() == pl.grzeslowski.capybara.compiler.PrimitiveLinkedType.STRING) {
                     yield stringConcatOperand(left.expression(), infixExpression.left().type())
                           + operator.symbol()
                           + stringConcatOperand(right.expression(), infixExpression.right().type());
@@ -280,13 +280,13 @@ public class JavaExpressionEvaluator {
                 yield left.expression() + operator.symbol() + right.expression();
             }
             case MINUS -> {
-                if (infixExpression.left().type() instanceof pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedList) {
+                if (infixExpression.left().type() instanceof pl.grzeslowski.capybara.compiler.CollectionLinkedType.LinkedList) {
                     yield evaluateListRemoveExpression(infixExpression, left.expression(), right.expression());
                 }
-                if (infixExpression.left().type() instanceof pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedSet) {
+                if (infixExpression.left().type() instanceof pl.grzeslowski.capybara.compiler.CollectionLinkedType.LinkedSet) {
                     yield evaluateSetRemoveExpression(infixExpression, left.expression(), right.expression());
                 }
-                if (infixExpression.left().type() instanceof pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedDict) {
+                if (infixExpression.left().type() instanceof pl.grzeslowski.capybara.compiler.CollectionLinkedType.LinkedDict) {
                     yield evaluateDictRemoveExpression(infixExpression, left.expression(), right.expression());
                 }
                 if (isStringLeftNumericRight(infixExpression)) {
@@ -301,17 +301,17 @@ public class JavaExpressionEvaluator {
                 yield left.expression() + operator.symbol() + right.expression();
             }
             case QUESTION -> {
-                if (infixExpression.left().type() instanceof pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedList) {
+                if (infixExpression.left().type() instanceof pl.grzeslowski.capybara.compiler.CollectionLinkedType.LinkedList) {
                     yield left.expression() + ".contains(" + right.expression() + ")";
                 }
-                if (infixExpression.left().type() instanceof pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedSet) {
+                if (infixExpression.left().type() instanceof pl.grzeslowski.capybara.compiler.CollectionLinkedType.LinkedSet) {
                     yield left.expression() + ".contains(" + right.expression() + ")";
                 }
-                if (infixExpression.left().type() instanceof pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedDict) {
+                if (infixExpression.left().type() instanceof pl.grzeslowski.capybara.compiler.CollectionLinkedType.LinkedDict) {
                     yield left.expression() + ".containsKey(" + right.expression() + ")";
                 }
-                if (infixExpression.left().type() == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.STRING
-                    && infixExpression.right().type() == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.STRING) {
+                if (infixExpression.left().type() == pl.grzeslowski.capybara.compiler.PrimitiveLinkedType.STRING
+                    && infixExpression.right().type() == pl.grzeslowski.capybara.compiler.PrimitiveLinkedType.STRING) {
                     yield left.expression() + ".contains(" + right.expression() + ")";
                 }
                 yield left.expression() + operator.symbol() + right.expression();
@@ -355,38 +355,38 @@ public class JavaExpressionEvaluator {
         if (isStringLeftNumericRight(infixExpression)) {
             return left + "+" + right;
         }
-        if (infixExpression.type() == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.INT
-            && infixExpression.left().type() == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.INT
-            && infixExpression.right().type() == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.INT) {
+        if (infixExpression.type() == pl.grzeslowski.capybara.compiler.PrimitiveLinkedType.INT
+            && infixExpression.left().type() == pl.grzeslowski.capybara.compiler.PrimitiveLinkedType.INT
+            && infixExpression.right().type() == pl.grzeslowski.capybara.compiler.PrimitiveLinkedType.INT) {
             return "pl.grzeslowski.capybara.CapybaraUtil.power(" + left + ", " + right + ")";
         }
         return switch (infixExpression.type()) {
-            case pl.grzeslowski.capybara.linker.PrimitiveLinkedType.BYTE -> "((byte) java.lang.Math.pow(" + left + ", " + right + "))";
-            case pl.grzeslowski.capybara.linker.PrimitiveLinkedType.INT -> "((int) java.lang.Math.pow(" + left + ", " + right + "))";
-            case pl.grzeslowski.capybara.linker.PrimitiveLinkedType.LONG -> "((long) java.lang.Math.pow(" + left + ", " + right + "))";
-            case pl.grzeslowski.capybara.linker.PrimitiveLinkedType.FLOAT -> "((float) java.lang.Math.pow(" + left + ", " + right + "))";
-            case pl.grzeslowski.capybara.linker.PrimitiveLinkedType.DOUBLE -> "java.lang.Math.pow(" + left + ", " + right + ")";
+            case pl.grzeslowski.capybara.compiler.PrimitiveLinkedType.BYTE -> "((byte) java.lang.Math.pow(" + left + ", " + right + "))";
+            case pl.grzeslowski.capybara.compiler.PrimitiveLinkedType.INT -> "((int) java.lang.Math.pow(" + left + ", " + right + "))";
+            case pl.grzeslowski.capybara.compiler.PrimitiveLinkedType.LONG -> "((long) java.lang.Math.pow(" + left + ", " + right + "))";
+            case pl.grzeslowski.capybara.compiler.PrimitiveLinkedType.FLOAT -> "((float) java.lang.Math.pow(" + left + ", " + right + "))";
+            case pl.grzeslowski.capybara.compiler.PrimitiveLinkedType.DOUBLE -> "java.lang.Math.pow(" + left + ", " + right + ")";
             default -> "java.lang.Math.pow(" + left + ", " + right + ")";
         };
     }
 
-    private static String castIfNeeded(pl.grzeslowski.capybara.linker.LinkedType type, String expression) {
-        if (type == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.BYTE) {
+    private static String castIfNeeded(pl.grzeslowski.capybara.compiler.LinkedType type, String expression) {
+        if (type == pl.grzeslowski.capybara.compiler.PrimitiveLinkedType.BYTE) {
             return "((byte) (" + expression + "))";
         }
         return expression;
     }
 
     private static boolean isStringLeftNumericRight(LinkedInfixExpression infixExpression) {
-        if (infixExpression.left().type() != pl.grzeslowski.capybara.linker.PrimitiveLinkedType.STRING) {
+        if (infixExpression.left().type() != pl.grzeslowski.capybara.compiler.PrimitiveLinkedType.STRING) {
             return false;
         }
         return switch (infixExpression.right().type()) {
-            case pl.grzeslowski.capybara.linker.PrimitiveLinkedType.BYTE,
-                 pl.grzeslowski.capybara.linker.PrimitiveLinkedType.INT,
-                 pl.grzeslowski.capybara.linker.PrimitiveLinkedType.LONG,
-                 pl.grzeslowski.capybara.linker.PrimitiveLinkedType.FLOAT,
-                 pl.grzeslowski.capybara.linker.PrimitiveLinkedType.DOUBLE -> true;
+            case pl.grzeslowski.capybara.compiler.PrimitiveLinkedType.BYTE,
+                 pl.grzeslowski.capybara.compiler.PrimitiveLinkedType.INT,
+                 pl.grzeslowski.capybara.compiler.PrimitiveLinkedType.LONG,
+                 pl.grzeslowski.capybara.compiler.PrimitiveLinkedType.FLOAT,
+                 pl.grzeslowski.capybara.compiler.PrimitiveLinkedType.DOUBLE -> true;
             default -> false;
         };
     }
@@ -394,87 +394,87 @@ public class JavaExpressionEvaluator {
     private static boolean isBooleanCoercionComparison(LinkedInfixExpression infixExpression) {
         var leftType = infixExpression.left().type();
         var rightType = infixExpression.right().type();
-        var leftIsBool = leftType == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.BOOL;
-        var rightIsBool = rightType == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.BOOL;
+        var leftIsBool = leftType == pl.grzeslowski.capybara.compiler.PrimitiveLinkedType.BOOL;
+        var rightIsBool = rightType == pl.grzeslowski.capybara.compiler.PrimitiveLinkedType.BOOL;
         return (leftIsBool && isBooleanConvertibleType(rightType))
                || (rightIsBool && isBooleanConvertibleType(leftType));
     }
 
     private static boolean isStringComparison(LinkedInfixExpression infixExpression) {
-        return infixExpression.left().type() == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.STRING
-               || infixExpression.right().type() == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.STRING;
+        return infixExpression.left().type() == pl.grzeslowski.capybara.compiler.PrimitiveLinkedType.STRING
+               || infixExpression.right().type() == pl.grzeslowski.capybara.compiler.PrimitiveLinkedType.STRING;
     }
 
-    private static boolean isBooleanConvertibleType(pl.grzeslowski.capybara.linker.LinkedType type) {
-        if (type == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.BOOL) {
+    private static boolean isBooleanConvertibleType(pl.grzeslowski.capybara.compiler.LinkedType type) {
+        if (type == pl.grzeslowski.capybara.compiler.PrimitiveLinkedType.BOOL) {
             return true;
         }
-        if (type == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.STRING) {
+        if (type == pl.grzeslowski.capybara.compiler.PrimitiveLinkedType.STRING) {
             return true;
         }
-        if (type instanceof pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedList
-            || type instanceof pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedSet
-            || type instanceof pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedDict) {
+        if (type instanceof pl.grzeslowski.capybara.compiler.CollectionLinkedType.LinkedList
+            || type instanceof pl.grzeslowski.capybara.compiler.CollectionLinkedType.LinkedSet
+            || type instanceof pl.grzeslowski.capybara.compiler.CollectionLinkedType.LinkedDict) {
             return true;
         }
-        return type == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.BYTE
-               || type == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.INT
-               || type == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.LONG
-               || type == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.FLOAT
-               || type == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.DOUBLE;
+        return type == pl.grzeslowski.capybara.compiler.PrimitiveLinkedType.BYTE
+               || type == pl.grzeslowski.capybara.compiler.PrimitiveLinkedType.INT
+               || type == pl.grzeslowski.capybara.compiler.PrimitiveLinkedType.LONG
+               || type == pl.grzeslowski.capybara.compiler.PrimitiveLinkedType.FLOAT
+               || type == pl.grzeslowski.capybara.compiler.PrimitiveLinkedType.DOUBLE;
     }
 
-    private static boolean isPrimitiveComparison(pl.grzeslowski.capybara.linker.LinkedType leftType,
-                                                 pl.grzeslowski.capybara.linker.LinkedType rightType) {
+    private static boolean isPrimitiveComparison(pl.grzeslowski.capybara.compiler.LinkedType leftType,
+                                                 pl.grzeslowski.capybara.compiler.LinkedType rightType) {
         return isNumericOrBoolType(leftType) && isNumericOrBoolType(rightType);
     }
 
-    private static boolean isNumericOrBoolType(pl.grzeslowski.capybara.linker.LinkedType type) {
-        return type == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.BYTE
-               || type == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.INT
-               || type == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.LONG
-               || type == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.FLOAT
-               || type == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.DOUBLE
-               || type == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.BOOL;
+    private static boolean isNumericOrBoolType(pl.grzeslowski.capybara.compiler.LinkedType type) {
+        return type == pl.grzeslowski.capybara.compiler.PrimitiveLinkedType.BYTE
+               || type == pl.grzeslowski.capybara.compiler.PrimitiveLinkedType.INT
+               || type == pl.grzeslowski.capybara.compiler.PrimitiveLinkedType.LONG
+               || type == pl.grzeslowski.capybara.compiler.PrimitiveLinkedType.FLOAT
+               || type == pl.grzeslowski.capybara.compiler.PrimitiveLinkedType.DOUBLE
+               || type == pl.grzeslowski.capybara.compiler.PrimitiveLinkedType.BOOL;
     }
 
-    private static String toBooleanExpression(String expression, pl.grzeslowski.capybara.linker.LinkedType type) {
-        if (type == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.BOOL) {
+    private static String toBooleanExpression(String expression, pl.grzeslowski.capybara.compiler.LinkedType type) {
+        if (type == pl.grzeslowski.capybara.compiler.PrimitiveLinkedType.BOOL) {
             return expression;
         }
-        if (type == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.STRING) {
+        if (type == pl.grzeslowski.capybara.compiler.PrimitiveLinkedType.STRING) {
             return "(!(" + expression + ").isEmpty())";
         }
-        if (type instanceof pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedList
-            || type instanceof pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedSet
-            || type instanceof pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedDict) {
+        if (type instanceof pl.grzeslowski.capybara.compiler.CollectionLinkedType.LinkedList
+            || type instanceof pl.grzeslowski.capybara.compiler.CollectionLinkedType.LinkedSet
+            || type instanceof pl.grzeslowski.capybara.compiler.CollectionLinkedType.LinkedDict) {
             return "(!(" + expression + ").isEmpty())";
         }
-        if (type == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.BYTE
-            || type == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.INT) {
+        if (type == pl.grzeslowski.capybara.compiler.PrimitiveLinkedType.BYTE
+            || type == pl.grzeslowski.capybara.compiler.PrimitiveLinkedType.INT) {
             return "((" + expression + ") != 0)";
         }
-        if (type == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.LONG) {
+        if (type == pl.grzeslowski.capybara.compiler.PrimitiveLinkedType.LONG) {
             return "((" + expression + ") != 0L)";
         }
-        if (type == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.FLOAT) {
+        if (type == pl.grzeslowski.capybara.compiler.PrimitiveLinkedType.FLOAT) {
             return "((" + expression + ") != 0f)";
         }
-        if (type == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.DOUBLE) {
+        if (type == pl.grzeslowski.capybara.compiler.PrimitiveLinkedType.DOUBLE) {
             return "((" + expression + ") != 0d)";
         }
         return "(" + expression + ")";
     }
 
     private static String evaluateListAppendExpression(LinkedInfixExpression infixExpression, String left, String right) {
-        if (infixExpression.right().type() instanceof pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedList) {
+        if (infixExpression.right().type() instanceof pl.grzeslowski.capybara.compiler.CollectionLinkedType.LinkedList) {
             return "java.util.stream.Stream.concat((" + left + ").stream(), (" + right + ").stream()).toList()";
         }
         return "java.util.stream.Stream.concat((" + left + ").stream(), java.util.stream.Stream.of(" + right + ")).toList()";
     }
 
     private static String evaluateSetAppendExpression(LinkedInfixExpression infixExpression, String left, String right) {
-        if (infixExpression.right().type() instanceof pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedSet) {
+        if (infixExpression.right().type() instanceof pl.grzeslowski.capybara.compiler.CollectionLinkedType.LinkedSet) {
             return "java.util.stream.Stream.concat(" + left + ".stream(), " + right + ".stream())"
                    + ".collect(java.util.stream.Collectors.toUnmodifiableSet())";
         }
@@ -484,7 +484,7 @@ public class JavaExpressionEvaluator {
 
     private static String evaluateDictAppendExpression(LinkedInfixExpression infixExpression, String left, String right) {
         var valueCastType = dictValueCastType(infixExpression.type(), infixExpression.left().type(), infixExpression.right().type());
-        if (infixExpression.right().type() instanceof pl.grzeslowski.capybara.linker.LinkedTupleType) {
+        if (infixExpression.right().type() instanceof pl.grzeslowski.capybara.compiler.LinkedTupleType) {
             var tupleExpression = "((java.util.List<?>) (" + right + "))";
             return "java.util.stream.Stream.concat(" + left + ".entrySet().stream(), "
                    + "java.util.stream.Stream.of(java.util.Map.entry("
@@ -502,8 +502,8 @@ public class JavaExpressionEvaluator {
                + "(oldValue, newValue) -> newValue, java.util.LinkedHashMap::new))";
     }
 
-    private static String stringConcatOperand(String expression, pl.grzeslowski.capybara.linker.LinkedType type) {
-        if (type == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.STRING) {
+    private static String stringConcatOperand(String expression, pl.grzeslowski.capybara.compiler.LinkedType type) {
+        if (type == pl.grzeslowski.capybara.compiler.PrimitiveLinkedType.STRING) {
             return expression;
         }
         if (isOptionType(type)) {
@@ -513,14 +513,14 @@ public class JavaExpressionEvaluator {
     }
 
     private static String evaluateListRemoveExpression(LinkedInfixExpression infixExpression, String left, String right) {
-        if (infixExpression.right().type() instanceof pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedList) {
+        if (infixExpression.right().type() instanceof pl.grzeslowski.capybara.compiler.CollectionLinkedType.LinkedList) {
             return left + ".stream().filter(v -> !" + right + ".contains(v)).toList()";
         }
         return left + ".stream().filter(v -> !java.util.Objects.equals(v, " + right + ")).toList()";
     }
 
     private static String evaluateSetRemoveExpression(LinkedInfixExpression infixExpression, String left, String right) {
-        if (infixExpression.right().type() instanceof pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedSet) {
+        if (infixExpression.right().type() instanceof pl.grzeslowski.capybara.compiler.CollectionLinkedType.LinkedSet) {
             return left + ".stream().filter(v -> !" + right + ".contains(v))"
                    + ".collect(java.util.stream.Collectors.toUnmodifiableSet())";
         }
@@ -530,7 +530,7 @@ public class JavaExpressionEvaluator {
 
     private static String evaluateDictRemoveExpression(LinkedInfixExpression infixExpression, String left, String right) {
         var valueCastType = dictValueCastType(infixExpression.type(), infixExpression.left().type(), infixExpression.right().type());
-        if (infixExpression.right().type() instanceof pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedDict) {
+        if (infixExpression.right().type() instanceof pl.grzeslowski.capybara.compiler.CollectionLinkedType.LinkedDict) {
             return left + ".entrySet().stream().filter(entry -> !" + right + ".containsKey(entry.getKey()))"
                    + ".collect(java.util.stream.Collectors.toMap("
                    + "entry -> ((java.lang.String) ((java.util.Map.Entry<?, ?>) entry).getKey()), "
@@ -544,17 +544,17 @@ public class JavaExpressionEvaluator {
                + "(oldValue, newValue) -> newValue, java.util.LinkedHashMap::new))";
     }
 
-    private static String dictValueCastType(pl.grzeslowski.capybara.linker.LinkedType type) {
-        if (type instanceof pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedDict linkedDict) {
+    private static String dictValueCastType(pl.grzeslowski.capybara.compiler.LinkedType type) {
+        if (type instanceof pl.grzeslowski.capybara.compiler.CollectionLinkedType.LinkedDict linkedDict) {
             return javaCastType(linkedDict.valueType());
         }
         return "java.lang.Object";
     }
 
     private static String dictValueCastType(
-            pl.grzeslowski.capybara.linker.LinkedType resultType,
-            pl.grzeslowski.capybara.linker.LinkedType leftType,
-            pl.grzeslowski.capybara.linker.LinkedType rightType
+            pl.grzeslowski.capybara.compiler.LinkedType resultType,
+            pl.grzeslowski.capybara.compiler.LinkedType leftType,
+            pl.grzeslowski.capybara.compiler.LinkedType rightType
     ) {
         var fromResult = dictValueCastType(resultType);
         if (!"java.lang.Object".equals(fromResult)) {
@@ -602,8 +602,8 @@ public class JavaExpressionEvaluator {
         if (isOptionType(pipeExpression.type())) {
             return evaluateOptionPipeExpression(pipeExpression, scope);
         }
-        if (pipeExpression.type() instanceof pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedDict
-            && pipeExpression.source().type() instanceof pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedDict) {
+        if (pipeExpression.type() instanceof pl.grzeslowski.capybara.compiler.CollectionLinkedType.LinkedDict
+            && pipeExpression.source().type() instanceof pl.grzeslowski.capybara.compiler.CollectionLinkedType.LinkedDict) {
             return evaluateDictPipeExpression(pipeExpression, scope);
         }
         var streamExSc = evaluatePipeExpressionAsStream(pipeExpression, scope);
@@ -645,8 +645,8 @@ public class JavaExpressionEvaluator {
         if (isOptionType(pipeFilterOutExpression.type())) {
             return evaluateOptionPipeFilterOutExpression(pipeFilterOutExpression, scope);
         }
-        if (pipeFilterOutExpression.type() instanceof pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedDict
-            && pipeFilterOutExpression.source().type() instanceof pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedDict) {
+        if (pipeFilterOutExpression.type() instanceof pl.grzeslowski.capybara.compiler.CollectionLinkedType.LinkedDict
+            && pipeFilterOutExpression.source().type() instanceof pl.grzeslowski.capybara.compiler.CollectionLinkedType.LinkedDict) {
             return evaluateDictPipeFilterOutExpression(pipeFilterOutExpression, scope);
         }
         var streamExSc = evaluatePipeFilterOutExpressionAsStream(pipeFilterOutExpression, scope);
@@ -660,7 +660,7 @@ public class JavaExpressionEvaluator {
             Scope scope,
             String matchMethod
     ) {
-        if (source.type() instanceof pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedDict
+        if (source.type() instanceof pl.grzeslowski.capybara.compiler.CollectionLinkedType.LinkedDict
             && argumentName.contains(DICT_PIPE_ARGS_SEPARATOR)) {
             var sourceExSc = evaluateExpression(source, scope).popExpression();
             var entryVar = "__entry";
@@ -775,14 +775,14 @@ public class JavaExpressionEvaluator {
     }
 
     private static Scope evaluatePipeReduceExpression(LinkedPipeReduceExpression pipeReduceExpression, Scope scope) {
-        if (pipeReduceExpression.source().type() instanceof pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedDict
+        if (pipeReduceExpression.source().type() instanceof pl.grzeslowski.capybara.compiler.CollectionLinkedType.LinkedDict
             && pipeReduceExpression.keyName().isPresent()) {
             var sourceExSc = evaluateExpression(pipeReduceExpression.source(), scope).popExpression();
             var initialExSc = evaluateExpression(pipeReduceExpression.initialValue(), sourceExSc.scope()).popExpression();
             var entryVar = "__entry";
             var keyName = pipeReduceExpression.keyName().orElseThrow();
             if (pipeReduceExpression.accumulatorName().contains("::")
-                && pipeReduceExpression.initialValue().type() == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.STRING) {
+                && pipeReduceExpression.initialValue().type() == pl.grzeslowski.capybara.compiler.PrimitiveLinkedType.STRING) {
                 var dictArgs = parseDictPipeArguments(pipeReduceExpression.accumulatorName());
                 var leftKeyName = dictArgs[0];
                 var leftValueName = dictArgs[1];
@@ -828,7 +828,7 @@ public class JavaExpressionEvaluator {
                 var leftValueName = dictArgs[1];
                 var leftStateVar = "__capybaraLeftState";
                 var rightEntryVar = "__capybaraRightEntry";
-                var dictValueType = ((pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedDict) pipeReduceExpression.source().type())
+                var dictValueType = ((pl.grzeslowski.capybara.compiler.CollectionLinkedType.LinkedDict) pipeReduceExpression.source().type())
                         .valueType();
                 var leftKeyExpression = valueFieldOrFallback(
                         dictValueType,
@@ -873,7 +873,7 @@ public class JavaExpressionEvaluator {
                         + ".getValue()"
                 );
             }
-            if (pipeReduceExpression.initialValue().type() == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.STRING) {
+            if (pipeReduceExpression.initialValue().type() == pl.grzeslowski.capybara.compiler.PrimitiveLinkedType.STRING) {
                 var perEntryReducerExSc = evaluateExpression(
                         pipeReduceExpression.reducerExpression(),
                         initialExSc.scope()
@@ -951,7 +951,7 @@ public class JavaExpressionEvaluator {
         var maybeElementType = streamElementType(pipeReduceExpression.source().type());
         if (maybeElementType.isPresent() && maybeElementType.get().equals(pipeReduceExpression.initialValue().type())) {
             var reducedValueName = "__capybaraReducedValue";
-            var maybeMapPrefix = pipeReduceExpression.initialValue().type() == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.STRING
+            var maybeMapPrefix = pipeReduceExpression.initialValue().type() == pl.grzeslowski.capybara.compiler.PrimitiveLinkedType.STRING
                     && !"\"\"".equals(initialExSc.expression())
                     ? ".map(" + reducedValueName + " -> (" + reduceInitialExpression + "+" + reducedValueName + "))"
                     : "";
@@ -979,22 +979,22 @@ public class JavaExpressionEvaluator {
         );
     }
 
-    private static java.util.Optional<pl.grzeslowski.capybara.linker.LinkedType> streamElementType(pl.grzeslowski.capybara.linker.LinkedType sourceType) {
+    private static java.util.Optional<pl.grzeslowski.capybara.compiler.LinkedType> streamElementType(pl.grzeslowski.capybara.compiler.LinkedType sourceType) {
         return switch (sourceType) {
-            case pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedList linkedList ->
+            case pl.grzeslowski.capybara.compiler.CollectionLinkedType.LinkedList linkedList ->
                     java.util.Optional.of(linkedList.elementType());
-            case pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedSet linkedSet ->
+            case pl.grzeslowski.capybara.compiler.CollectionLinkedType.LinkedSet linkedSet ->
                     java.util.Optional.of(linkedSet.elementType());
-            case pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedDict linkedDict ->
+            case pl.grzeslowski.capybara.compiler.CollectionLinkedType.LinkedDict linkedDict ->
                     java.util.Optional.of(linkedDict.valueType());
-            case pl.grzeslowski.capybara.linker.PrimitiveLinkedType primitive when primitive == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.STRING ->
-                    java.util.Optional.of(pl.grzeslowski.capybara.linker.PrimitiveLinkedType.STRING);
+            case pl.grzeslowski.capybara.compiler.PrimitiveLinkedType primitive when primitive == pl.grzeslowski.capybara.compiler.PrimitiveLinkedType.STRING ->
+                    java.util.Optional.of(pl.grzeslowski.capybara.compiler.PrimitiveLinkedType.STRING);
             default -> java.util.Optional.empty();
         };
     }
 
     private static StreamExpressionScope evaluatePipeExpressionAsStream(LinkedPipeExpression pipeExpression, Scope scope) {
-        if (pipeExpression.source().type() instanceof pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedDict
+        if (pipeExpression.source().type() instanceof pl.grzeslowski.capybara.compiler.CollectionLinkedType.LinkedDict
             && pipeExpression.argumentName().contains("::")) {
             var sourceExSc = evaluateExpression(pipeExpression.source(), scope).popExpression();
             var dictArgs = parseDictPipeArguments(pipeExpression.argumentName());
@@ -1022,12 +1022,12 @@ public class JavaExpressionEvaluator {
                 mapperBaseScope
         ).popExpression();
         var mapperExpression = mapperExSc.expression();
-        if (pipeExpression.type() instanceof pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedList listType
-            && listType.elementType() == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.ANY) {
+        if (pipeExpression.type() instanceof pl.grzeslowski.capybara.compiler.CollectionLinkedType.LinkedList listType
+            && listType.elementType() == pl.grzeslowski.capybara.compiler.PrimitiveLinkedType.ANY) {
             mapperExpression = "(java.lang.Object) (" + mapperExpression + ")";
         }
-        if (pipeExpression.type() instanceof pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedSet setType
-            && setType.elementType() == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.ANY) {
+        if (pipeExpression.type() instanceof pl.grzeslowski.capybara.compiler.CollectionLinkedType.LinkedSet setType
+            && setType.elementType() == pl.grzeslowski.capybara.compiler.PrimitiveLinkedType.ANY) {
             mapperExpression = "(java.lang.Object) (" + mapperExpression + ")";
         }
         var mapperLambda = lambdaExpression(
@@ -1072,7 +1072,7 @@ public class JavaExpressionEvaluator {
         ).popExpression();
 
         var streamExtractor = switch (pipeFlatMapExpression.mapper().type()) {
-            case pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedDict ignored -> ".values().stream()";
+            case pl.grzeslowski.capybara.compiler.CollectionLinkedType.LinkedDict ignored -> ".values().stream()";
             default -> ".stream()";
         };
         var mapperLambda = lambdaExpressionNoOuterParens(
@@ -1101,13 +1101,13 @@ public class JavaExpressionEvaluator {
 
         var sourceExSc = evaluateExpression(source, scope).popExpression();
         var sourceExpression = sourceExSc.expression();
-        if (source.type() == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.STRING) {
+        if (source.type() == pl.grzeslowski.capybara.compiler.PrimitiveLinkedType.STRING) {
             return new StreamExpressionScope(
                     sourceExpression + ".chars().mapToObj(__capybaraChar -> java.lang.String.valueOf((char) __capybaraChar))",
                     sourceExSc.scope()
             );
         }
-        if (source.type() instanceof pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedDict) {
+        if (source.type() instanceof pl.grzeslowski.capybara.compiler.CollectionLinkedType.LinkedDict) {
             sourceExpression = sourceExpression + ".values()";
         }
         return new StreamExpressionScope(sourceExpression + ".stream()", sourceExSc.scope());
@@ -1161,9 +1161,9 @@ public class JavaExpressionEvaluator {
         return evaluatedStatements.subList(baseStatements.size(), evaluatedStatements.size());
     }
 
-    private static String terminalCollect(pl.grzeslowski.capybara.linker.LinkedType type) {
+    private static String terminalCollect(pl.grzeslowski.capybara.compiler.LinkedType type) {
         return switch (type) {
-            case pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedSet ignored ->
+            case pl.grzeslowski.capybara.compiler.CollectionLinkedType.LinkedSet ignored ->
                     ".collect(java.util.stream.Collectors.toSet())";
             default -> ".toList()";
         };
@@ -1203,7 +1203,7 @@ public class JavaExpressionEvaluator {
         }
 
         var source = sourceExSc.expression();
-        var isString = expression.type() == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.STRING;
+        var isString = expression.type() == pl.grzeslowski.capybara.compiler.PrimitiveLinkedType.STRING;
         var sizeExpression = "(" + source + ")." + (isString ? "length()" : "size()");
         var startExpression = start
                 .map(idx -> normalizeSliceIndex(idx, sizeExpression))
@@ -1215,7 +1215,7 @@ public class JavaExpressionEvaluator {
         var slice = isString
                 ? source + ".substring(" + startExpression + ", " + endExpression + ")"
                 : source + ".subList(" + startExpression + ", " + endExpression + ")";
-        if (expression.type() instanceof pl.grzeslowski.capybara.linker.LinkedTupleType) {
+        if (expression.type() instanceof pl.grzeslowski.capybara.compiler.LinkedTupleType) {
             slice = "new java.util.ArrayList<java.lang.Object>(" + slice + ")";
         }
         return current.addExpression(slice);
@@ -1226,10 +1226,10 @@ public class JavaExpressionEvaluator {
         var indexExSc = evaluateExpression(expression.index(), sourceExSc.scope()).popExpression();
         var source = sourceExSc.expression();
         var index = indexExSc.expression();
-        var isString = expression.source().type() == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.STRING;
+        var isString = expression.source().type() == pl.grzeslowski.capybara.compiler.PrimitiveLinkedType.STRING;
         var sizeExpression = "(" + source + ")." + (isString ? "length()" : "size()");
         var normalizedIndex = normalizeSliceIndex(index, sizeExpression);
-        if (expression.source().type() instanceof pl.grzeslowski.capybara.linker.LinkedTupleType) {
+        if (expression.source().type() instanceof pl.grzeslowski.capybara.compiler.LinkedTupleType) {
             var castType = javaCastType(expression.type());
             return indexExSc.scope().addExpression("((" + castType + ") (" + source + ").get(" + normalizedIndex + "))");
         }
@@ -1247,7 +1247,7 @@ public class JavaExpressionEvaluator {
             var valueExSc = evaluateExpression(value, current).popExpression();
             current = valueExSc.scope();
             var renderedValue = valueExSc.expression();
-            if (value.type() instanceof pl.grzeslowski.capybara.linker.LinkedFunctionType) {
+            if (value.type() instanceof pl.grzeslowski.capybara.compiler.LinkedFunctionType) {
                 renderedValue = "((" + javaCastTypeForLambdaLiteral(value.type()) + ") " + renderedValue + ")";
             }
             values.add(renderedValue);
@@ -1255,22 +1255,22 @@ public class JavaExpressionEvaluator {
         return current.addExpression("java.util.List.of(" + String.join(", ", values) + ")");
     }
 
-    private static String javaCastTypeForLambdaLiteral(pl.grzeslowski.capybara.linker.LinkedType type) {
+    private static String javaCastTypeForLambdaLiteral(pl.grzeslowski.capybara.compiler.LinkedType type) {
         return switch (type) {
-            case pl.grzeslowski.capybara.linker.LinkedFunctionType linkedFunctionType ->
+            case pl.grzeslowski.capybara.compiler.LinkedFunctionType linkedFunctionType ->
                     "java.util.function.Function<"
                     + javaCastTypeForLambdaLiteral(linkedFunctionType.argumentType())
                     + ", "
                     + javaCastTypeForLambdaLiteral(linkedFunctionType.returnType())
                     + ">";
-            case pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedList linkedList ->
+            case pl.grzeslowski.capybara.compiler.CollectionLinkedType.LinkedList linkedList ->
                     "java.util.List<" + javaCastTypeForLambdaLiteral(linkedList.elementType()) + ">";
-            case pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedSet linkedSet ->
+            case pl.grzeslowski.capybara.compiler.CollectionLinkedType.LinkedSet linkedSet ->
                     "java.util.Set<" + javaCastTypeForLambdaLiteral(linkedSet.elementType()) + ">";
-            case pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedDict linkedDict ->
+            case pl.grzeslowski.capybara.compiler.CollectionLinkedType.LinkedDict linkedDict ->
                     "java.util.Map<java.lang.String, " + javaCastTypeForLambdaLiteral(linkedDict.valueType()) + ">";
-            case pl.grzeslowski.capybara.linker.LinkedTupleType ignored -> "java.util.List<?>";
-            case pl.grzeslowski.capybara.linker.LinkedGenericTypeParameter ignored -> "java.lang.Object";
+            case pl.grzeslowski.capybara.compiler.LinkedTupleType ignored -> "java.util.List<?>";
+            case pl.grzeslowski.capybara.compiler.LinkedGenericTypeParameter ignored -> "java.lang.Object";
             default -> javaCastType(type);
         };
     }
@@ -1279,9 +1279,9 @@ public class JavaExpressionEvaluator {
         return "((" + indexExpression + ") < 0 ? (" + sizeExpression + " + (" + indexExpression + ")) : (" + indexExpression + "))";
     }
 
-    private static String javaCastType(pl.grzeslowski.capybara.linker.LinkedType type) {
+    private static String javaCastType(pl.grzeslowski.capybara.compiler.LinkedType type) {
         return switch (type) {
-            case pl.grzeslowski.capybara.linker.PrimitiveLinkedType primitive -> switch (primitive) {
+            case pl.grzeslowski.capybara.compiler.PrimitiveLinkedType primitive -> switch (primitive) {
                 case BYTE -> "java.lang.Byte";
                 case INT -> "java.lang.Integer";
                 case LONG -> "java.lang.Long";
@@ -1291,24 +1291,24 @@ public class JavaExpressionEvaluator {
                 case FLOAT -> "java.lang.Float";
                 case NOTHING, ANY, DATA -> "java.lang.Object";
             };
-            case pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedList linkedList ->
+            case pl.grzeslowski.capybara.compiler.CollectionLinkedType.LinkedList linkedList ->
                     "java.util.List<" + javaCastType(linkedList.elementType()) + ">";
-            case pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedSet linkedSet ->
+            case pl.grzeslowski.capybara.compiler.CollectionLinkedType.LinkedSet linkedSet ->
                     "java.util.Set<" + javaCastType(linkedSet.elementType()) + ">";
-            case pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedDict linkedDict ->
+            case pl.grzeslowski.capybara.compiler.CollectionLinkedType.LinkedDict linkedDict ->
                     "java.util.Map<java.lang.String, " + javaCastType(linkedDict.valueType()) + ">";
-            case pl.grzeslowski.capybara.linker.LinkedTupleType ignored -> "java.util.List<?>";
-            case pl.grzeslowski.capybara.linker.LinkedFunctionType linkedFunctionType ->
+            case pl.grzeslowski.capybara.compiler.LinkedTupleType ignored -> "java.util.List<?>";
+            case pl.grzeslowski.capybara.compiler.LinkedFunctionType linkedFunctionType ->
                     "java.util.function.Function<"
                     + javaCastType(linkedFunctionType.argumentType())
                     + ", "
                     + javaCastType(linkedFunctionType.returnType())
                     + ">";
-            case pl.grzeslowski.capybara.linker.LinkedDataType linkedDataType ->
+            case pl.grzeslowski.capybara.compiler.LinkedDataType linkedDataType ->
                     normalizeJavaTypeReference(linkedDataType.name());
-            case pl.grzeslowski.capybara.linker.LinkedDataParentType linkedDataParentType ->
+            case pl.grzeslowski.capybara.compiler.LinkedDataParentType linkedDataParentType ->
                     normalizeJavaTypeReference(linkedDataParentType.name());
-            case pl.grzeslowski.capybara.linker.LinkedGenericTypeParameter genericTypeParameter ->
+            case pl.grzeslowski.capybara.compiler.LinkedGenericTypeParameter genericTypeParameter ->
                     genericTypeParameter.name();
             default -> "java.lang.Object";
         };
@@ -1446,7 +1446,7 @@ public class JavaExpressionEvaluator {
     }
 
     private static List<String> constructorBindingCastTypes(
-            pl.grzeslowski.capybara.linker.LinkedType matchType,
+            pl.grzeslowski.capybara.compiler.LinkedType matchType,
             LinkedMatchExpression.ConstructorPattern constructorPattern
     ) {
         var constructorType = resolveConstructorType(matchType, constructorPattern.constructorName());
@@ -1458,10 +1458,10 @@ public class JavaExpressionEvaluator {
                 .limit(constructorPattern.fieldPatterns().size())
                 .map(field -> {
                     var fieldType = field.type();
-                    if (fieldType instanceof pl.grzeslowski.capybara.linker.LinkedFunctionType) {
+                    if (fieldType instanceof pl.grzeslowski.capybara.compiler.LinkedFunctionType) {
                         return null;
                     }
-                    if (fieldType instanceof pl.grzeslowski.capybara.linker.LinkedGenericTypeParameter genericTypeParameter) {
+                    if (fieldType instanceof pl.grzeslowski.capybara.compiler.LinkedGenericTypeParameter genericTypeParameter) {
                         return sanitizePatternCastType(genericCasts.get(genericTypeParameter.name()));
                     }
                     return sanitizePatternCastType(javaCastType(fieldType));
@@ -1480,7 +1480,7 @@ public class JavaExpressionEvaluator {
     }
 
     private static LinkedDataType resolveConstructorType(
-            pl.grzeslowski.capybara.linker.LinkedType matchType,
+            pl.grzeslowski.capybara.compiler.LinkedType matchType,
             String constructorName
     ) {
         if (matchType instanceof LinkedDataType linkedDataType) {
@@ -1509,7 +1509,7 @@ public class JavaExpressionEvaluator {
     }
 
     private static boolean isResultErrorConstructor(
-            pl.grzeslowski.capybara.linker.LinkedType matchType,
+            pl.grzeslowski.capybara.compiler.LinkedType matchType,
             LinkedMatchExpression.ConstructorPattern constructorPattern
     ) {
         var constructorType = resolveConstructorType(matchType, constructorPattern.constructorName());
@@ -1523,7 +1523,7 @@ public class JavaExpressionEvaluator {
     }
 
     private static java.util.Map<String, String> resolveGenericTypeCasts(
-            pl.grzeslowski.capybara.linker.LinkedType matchType,
+            pl.grzeslowski.capybara.compiler.LinkedType matchType,
             LinkedDataType constructorType
     ) {
         if (!(matchType instanceof LinkedDataParentType parentType)
@@ -1596,7 +1596,7 @@ public class JavaExpressionEvaluator {
             String receiverExpression,
             String methodName
     ) {
-        if (!(functionCall.arguments().get(0).type() instanceof pl.grzeslowski.capybara.linker.LinkedDataParentType parentType)) {
+        if (!(functionCall.arguments().get(0).type() instanceof pl.grzeslowski.capybara.compiler.LinkedDataParentType parentType)) {
             return receiverExpression;
         }
         var normalizedName = normalizeQualifiedTypeName(parentType.name());
@@ -1662,16 +1662,16 @@ public class JavaExpressionEvaluator {
 
     private static String castMatchSelectorExpression(
             String expression,
-            pl.grzeslowski.capybara.linker.LinkedType selectorType,
+            pl.grzeslowski.capybara.compiler.LinkedType selectorType,
             boolean optionMatch
     ) {
         if (optionMatch
-            || selectorType == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.ANY
-            || selectorType == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.DATA
-            || selectorType == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.NOTHING
-            || selectorType instanceof pl.grzeslowski.capybara.linker.LinkedGenericTypeParameter
-            || selectorType instanceof pl.grzeslowski.capybara.linker.LinkedDataType
-            || selectorType instanceof pl.grzeslowski.capybara.linker.LinkedDataParentType) {
+            || selectorType == pl.grzeslowski.capybara.compiler.PrimitiveLinkedType.ANY
+            || selectorType == pl.grzeslowski.capybara.compiler.PrimitiveLinkedType.DATA
+            || selectorType == pl.grzeslowski.capybara.compiler.PrimitiveLinkedType.NOTHING
+            || selectorType instanceof pl.grzeslowski.capybara.compiler.LinkedGenericTypeParameter
+            || selectorType instanceof pl.grzeslowski.capybara.compiler.LinkedDataType
+            || selectorType instanceof pl.grzeslowski.capybara.compiler.LinkedDataParentType) {
             return expression;
         }
         return "((" + javaPatternType(selectorType) + ") (" + expression + "))";
@@ -1679,7 +1679,7 @@ public class JavaExpressionEvaluator {
 
     private static String matchCasePattern(
             LinkedMatchExpression.Pattern pattern,
-            pl.grzeslowski.capybara.linker.LinkedType matchType,
+            pl.grzeslowski.capybara.compiler.LinkedType matchType,
             String optionCaseVar,
             java.util.Map<String, String> caseBindingNames
     ) {
@@ -1707,7 +1707,7 @@ public class JavaExpressionEvaluator {
             case LinkedMatchExpression.FloatPattern floatPattern -> "case " + floatPattern.value();
             case LinkedMatchExpression.TypedPattern typedPattern -> {
                 var patternBindingName = caseBindingNames.getOrDefault(typedPattern.name(), typedPattern.name());
-                if (typedPattern.type() == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.DATA) {
+                if (typedPattern.type() == pl.grzeslowski.capybara.compiler.PrimitiveLinkedType.DATA) {
                     yield "case java.lang.Object " + patternBindingName + " when " + dataGuard(patternBindingName);
                 }
                 if (typedPattern.type() instanceof LinkedDataType typedDataType) {
@@ -1740,7 +1740,7 @@ public class JavaExpressionEvaluator {
     }
 
     private static String constructorPatternTypeName(
-            pl.grzeslowski.capybara.linker.LinkedType matchType,
+            pl.grzeslowski.capybara.compiler.LinkedType matchType,
             LinkedDataType constructorType,
             String constructorName
     ) {
@@ -1880,7 +1880,7 @@ public class JavaExpressionEvaluator {
         };
     }
 
-    private static pl.grzeslowski.capybara.linker.LinkedType inferConcreteCaseType(
+    private static pl.grzeslowski.capybara.compiler.LinkedType inferConcreteCaseType(
             LinkedMatchExpression matchExpression,
             int currentCaseIndex
     ) {
@@ -1889,12 +1889,12 @@ public class JavaExpressionEvaluator {
                 continue;
             }
             var type = matchExpression.cases().get(idx).expression().type();
-            if (type instanceof pl.grzeslowski.capybara.linker.LinkedGenericTypeParameter) {
+            if (type instanceof pl.grzeslowski.capybara.compiler.LinkedGenericTypeParameter) {
                 continue;
             }
-            if (type == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.ANY
-                || type == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.DATA
-                || type == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.NOTHING) {
+            if (type == pl.grzeslowski.capybara.compiler.PrimitiveLinkedType.ANY
+                || type == pl.grzeslowski.capybara.compiler.PrimitiveLinkedType.DATA
+                || type == pl.grzeslowski.capybara.compiler.PrimitiveLinkedType.NOTHING) {
                 continue;
             }
             return type;
@@ -1913,19 +1913,19 @@ public class JavaExpressionEvaluator {
                + ")";
     }
 
-    private static String castMatchCaseExpression(String expression, pl.grzeslowski.capybara.linker.LinkedType resultType) {
-        if (resultType == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.ANY
-            || resultType == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.DATA
-            || resultType == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.NOTHING
-            || resultType instanceof pl.grzeslowski.capybara.linker.LinkedGenericTypeParameter) {
+    private static String castMatchCaseExpression(String expression, pl.grzeslowski.capybara.compiler.LinkedType resultType) {
+        if (resultType == pl.grzeslowski.capybara.compiler.PrimitiveLinkedType.ANY
+            || resultType == pl.grzeslowski.capybara.compiler.PrimitiveLinkedType.DATA
+            || resultType == pl.grzeslowski.capybara.compiler.PrimitiveLinkedType.NOTHING
+            || resultType instanceof pl.grzeslowski.capybara.compiler.LinkedGenericTypeParameter) {
             return expression;
         }
         return "((" + javaPatternType(resultType) + ") (" + expression + "))";
     }
 
-    private static String javaPatternType(pl.grzeslowski.capybara.linker.LinkedType type) {
+    private static String javaPatternType(pl.grzeslowski.capybara.compiler.LinkedType type) {
         return switch (type) {
-            case pl.grzeslowski.capybara.linker.PrimitiveLinkedType primitiveType -> switch (primitiveType) {
+            case pl.grzeslowski.capybara.compiler.PrimitiveLinkedType primitiveType -> switch (primitiveType) {
                 case BYTE -> "java.lang.Byte";
                 case INT -> "java.lang.Integer";
                 case LONG -> "java.lang.Long";
@@ -1935,12 +1935,12 @@ public class JavaExpressionEvaluator {
                 case FLOAT -> "java.lang.Float";
                 case NOTHING, ANY, DATA -> "java.lang.Object";
             };
-            case pl.grzeslowski.capybara.linker.LinkedDataType dataType -> normalizeJavaTypeReference(dataType.name());
-            case pl.grzeslowski.capybara.linker.LinkedDataParentType dataParentType -> normalizeJavaTypeReference(dataParentType.name());
-            case pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedList ignored -> "java.util.List";
-            case pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedSet ignored -> "java.util.Set";
-            case pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedDict ignored -> "java.util.Map";
-            case pl.grzeslowski.capybara.linker.LinkedTupleType ignored -> "java.util.List";
+            case pl.grzeslowski.capybara.compiler.LinkedDataType dataType -> normalizeJavaTypeReference(dataType.name());
+            case pl.grzeslowski.capybara.compiler.LinkedDataParentType dataParentType -> normalizeJavaTypeReference(dataParentType.name());
+            case pl.grzeslowski.capybara.compiler.CollectionLinkedType.LinkedList ignored -> "java.util.List";
+            case pl.grzeslowski.capybara.compiler.CollectionLinkedType.LinkedSet ignored -> "java.util.Set";
+            case pl.grzeslowski.capybara.compiler.CollectionLinkedType.LinkedDict ignored -> "java.util.Map";
+            case pl.grzeslowski.capybara.compiler.LinkedTupleType ignored -> "java.util.List";
             default -> "java.lang.Object";
         };
     }
@@ -1977,7 +1977,7 @@ public class JavaExpressionEvaluator {
             entries.add("java.util.Map.entry(" + keyExSc.expression() + ", " + valueExSc.expression() + ")");
         }
         if (entries.isEmpty()) {
-            if (newDict.type() instanceof pl.grzeslowski.capybara.linker.CollectionLinkedType.LinkedDict linkedDict) {
+            if (newDict.type() instanceof pl.grzeslowski.capybara.compiler.CollectionLinkedType.LinkedDict linkedDict) {
                 var valueType = javaCastType(linkedDict.valueType());
                 if (!"java.lang.Object".equals(valueType)) {
                     return current.addExpression(
@@ -1996,7 +1996,7 @@ public class JavaExpressionEvaluator {
     }
 
     private static Scope evaluateNewData(LinkedNewData newData, Scope scope) {
-        if (!(newData.type() instanceof pl.grzeslowski.capybara.linker.LinkedDataType dataType)) {
+        if (!(newData.type() instanceof pl.grzeslowski.capybara.compiler.LinkedDataType dataType)) {
             throw new UnsupportedOperationException("Cannot instantiate non-data type: " + newData.type());
         }
 
@@ -2321,16 +2321,16 @@ public class JavaExpressionEvaluator {
         return value.replaceFirst("\\d+$", "");
     }
 
-    private static String valueFieldOrFallback(pl.grzeslowski.capybara.linker.LinkedType valueType,
+    private static String valueFieldOrFallback(pl.grzeslowski.capybara.compiler.LinkedType valueType,
                                                String valueExpression,
                                                String fieldName,
                                                String fallbackExpression) {
         return switch (valueType) {
-            case pl.grzeslowski.capybara.linker.LinkedDataType linkedDataType ->
+            case pl.grzeslowski.capybara.compiler.LinkedDataType linkedDataType ->
                     linkedDataType.fields().stream().anyMatch(field -> field.name().equals(fieldName))
                             ? "(" + valueExpression + ")." + fieldName + "()"
                             : fallbackExpression;
-            case pl.grzeslowski.capybara.linker.LinkedDataParentType linkedDataParentType ->
+            case pl.grzeslowski.capybara.compiler.LinkedDataParentType linkedDataParentType ->
                     linkedDataParentType.fields().stream().anyMatch(field -> field.name().equals(fieldName))
                             ? "(" + valueExpression + ")." + fieldName + "()"
                             : fallbackExpression;
@@ -2363,7 +2363,7 @@ public class JavaExpressionEvaluator {
                || normalized.endsWith(".None");
     }
 
-    private static boolean isResultErrorDataType(pl.grzeslowski.capybara.linker.LinkedDataType dataType) {
+    private static boolean isResultErrorDataType(pl.grzeslowski.capybara.compiler.LinkedDataType dataType) {
         var normalized = normalizeQualifiedTypeName(dataType.name());
         if (normalized.equals("/cap/lang/Result.Error") || normalized.equals("/capy/lang/Result.Error")) {
             return true;
@@ -2371,7 +2371,7 @@ public class JavaExpressionEvaluator {
         return "Error".equals(dataType.name())
                && dataType.fields().size() == 1
                && "message".equals(dataType.fields().getFirst().name())
-               && dataType.fields().getFirst().type() == pl.grzeslowski.capybara.linker.PrimitiveLinkedType.STRING;
+               && dataType.fields().getFirst().type() == pl.grzeslowski.capybara.compiler.PrimitiveLinkedType.STRING;
     }
 
     private static String resultErrorJavaTypeReference(String typeName) {
@@ -2401,8 +2401,8 @@ public class JavaExpressionEvaluator {
         return idx >= 0 ? typeName.substring(0, idx) : typeName;
     }
 
-    private static boolean isOptionType(pl.grzeslowski.capybara.linker.LinkedType type) {
-        if (!(type instanceof pl.grzeslowski.capybara.linker.GenericDataType genericDataType)) {
+    private static boolean isOptionType(pl.grzeslowski.capybara.compiler.LinkedType type) {
+        if (!(type instanceof pl.grzeslowski.capybara.compiler.GenericDataType genericDataType)) {
             return false;
         }
         var normalized = normalizeQualifiedTypeName(genericDataType.name());
@@ -2413,14 +2413,14 @@ public class JavaExpressionEvaluator {
 
     private static boolean isOptionConstructor(LinkedExpression expression) {
         if (!(expression instanceof LinkedNewData linkedNewData)
-            || !(linkedNewData.type() instanceof pl.grzeslowski.capybara.linker.GenericDataType dataType)) {
+            || !(linkedNewData.type() instanceof pl.grzeslowski.capybara.compiler.GenericDataType dataType)) {
             return false;
         }
         return isOptionSomeTypeName(dataType.name()) || isOptionNoneTypeName(dataType.name());
     }
 
     private static String buildNumericStringParseResult(
-            pl.grzeslowski.capybara.linker.LinkedType resultType,
+            pl.grzeslowski.capybara.compiler.LinkedType resultType,
             String parseExpression,
             String receiverExpression,
             String targetTypeName
@@ -2438,7 +2438,7 @@ public class JavaExpressionEvaluator {
     }
 
     private static String buildBoolStringParseResult(
-            pl.grzeslowski.capybara.linker.LinkedType resultType,
+            pl.grzeslowski.capybara.compiler.LinkedType resultType,
             String receiverExpression
     ) {
         var id = STRING_PARSE_VAR_COUNTER.incrementAndGet();
@@ -2454,16 +2454,16 @@ public class JavaExpressionEvaluator {
                + receiverExpression + ")); }).get()";
     }
 
-    private static String resultSuccessJavaTypeReference(pl.grzeslowski.capybara.linker.LinkedType resultType) {
+    private static String resultSuccessJavaTypeReference(pl.grzeslowski.capybara.compiler.LinkedType resultType) {
         return resultParentRawJavaTypeReference(resultType) + ".Success";
     }
 
-    private static String resultErrorJavaTypeReferenceForResultType(pl.grzeslowski.capybara.linker.LinkedType resultType) {
+    private static String resultErrorJavaTypeReferenceForResultType(pl.grzeslowski.capybara.compiler.LinkedType resultType) {
         return resultParentRawJavaTypeReference(resultType) + ".Error";
     }
 
-    private static String resultParentJavaTypeReference(pl.grzeslowski.capybara.linker.LinkedType resultType) {
-        if (resultType instanceof pl.grzeslowski.capybara.linker.LinkedDataParentType parentType) {
+    private static String resultParentJavaTypeReference(pl.grzeslowski.capybara.compiler.LinkedType resultType) {
+        if (resultType instanceof pl.grzeslowski.capybara.compiler.LinkedDataParentType parentType) {
             var raw = resultParentRawJavaTypeReference(resultType);
             if (parentType.typeParameters().isEmpty()) {
                 return raw;
@@ -2476,8 +2476,8 @@ public class JavaExpressionEvaluator {
         return resultParentRawJavaTypeReference(resultType);
     }
 
-    private static String resultParentRawJavaTypeReference(pl.grzeslowski.capybara.linker.LinkedType resultType) {
-        if (resultType instanceof pl.grzeslowski.capybara.linker.LinkedDataParentType parentType) {
+    private static String resultParentRawJavaTypeReference(pl.grzeslowski.capybara.compiler.LinkedType resultType) {
+        if (resultType instanceof pl.grzeslowski.capybara.compiler.LinkedDataParentType parentType) {
             var normalized = normalizeQualifiedTypeName(parentType.name());
             if (normalized.equals("/cap/lang/Result.Result") || normalized.endsWith("/cap/lang/Result.Result")) {
                 return "cap.lang.Result";

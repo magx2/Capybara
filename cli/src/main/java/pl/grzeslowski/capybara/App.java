@@ -1,17 +1,41 @@
 package pl.grzeslowski.capybara;
 
-import pl.grzeslowski.capybara.compiler.Arguments;
-import pl.grzeslowski.capybara.compiler.Compiler;
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
+import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
+import pl.grzeslowski.capybara.generator.Generator;
+import pl.grzeslowski.capybara.compiler.CapybaraLinker;
+import pl.grzeslowski.capybara.compiler.ImportDeclaration;
+import pl.grzeslowski.capybara.compiler.LinkedProgram;
+import pl.grzeslowski.capybara.compiler.Module;
 import pl.grzeslowski.capybara.compiler.OutputType;
+import pl.grzeslowski.capybara.compiler.Program;
+import pl.grzeslowski.capybara.compiler.ValueOrError;
+import pl.grzeslowski.capybara.parser.CapybaraParser;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
+import java.util.List;
 import java.util.logging.Handler;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
 public class App {
+    private static final Logger log = Logger.getLogger(App.class.getName());
+    private static final String LINKED_PROGRAM_FILE = "linked-program.json";
+    private static final Pattern IMPORT_PATTERN = Pattern.compile(
+            "^\\s*from\\s+([A-Za-z_][A-Za-z0-9_]*|/[A-Za-z_][A-Za-z0-9_]*(?:/[A-Za-z_][A-Za-z0-9_]*)+)\\s+import\\s*\\{\\s*([^}]*)\\s*}(?:\\s+except\\s*\\{\\s*([^}]*)\\s*})?\\s*$"
+    );
+
     public static void main(String[] args) throws IOException {
         var filteredArgs = Arrays.stream(args)
                 .filter(arg -> !"--debug".equals(arg))
@@ -21,22 +45,232 @@ public class App {
             enableDebugLogging();
         }
 
-        var exitCode = Compiler.INSTANCE.compile(parseArguments(filteredArgs));
+        int exitCode = execute(filteredArgs);
         System.exit(exitCode);
     }
 
-    private static Arguments parseArguments(String[] args) {
-        if (args.length < 3) {
+    private static int execute(String[] args) throws IOException {
+        if (args.length == 0) {
             throw new IllegalArgumentException(
-                    "Usage: java -jar capybara.jar {JAVA,PYTHON,JAVASCRIPT} <input1> <input2> ... <output>"
+                    "Usage: LINK <input1> <input2> ... <linkedOutputDir> | "
+                    + "GENERATE {JAVA,PYTHON,JAVASCRIPT} <linkedInputDir> <generatedOutputDir>"
             );
         }
-        var outputType = OutputType.valueOf(args[0].toUpperCase());
-        var inputs = java.util.Arrays.stream(args, 1, args.length - 1)
-                .map(Path::of)
+        if ("LINK".equalsIgnoreCase(args[0])) {
+            return linkCommand(args);
+        }
+        if ("GENERATE".equalsIgnoreCase(args[0])) {
+            return generateCommand(args);
+        }
+        throw new IllegalArgumentException(
+                "Unknown command `" + args[0] + "`. "
+                + "Use: LINK <input1> <input2> ... <linkedOutputDir> or "
+                + "GENERATE {JAVA,PYTHON,JAVASCRIPT} <linkedInputDir> <generatedOutputDir>"
+        );
+    }
+
+    private static int linkCommand(String[] args) throws IOException {
+        if (args.length < 3) {
+            throw new IllegalArgumentException("Usage: LINK <input1> <input2> ... <linkedOutputDir>");
+        }
+        var inputs = Arrays.stream(args, 1, args.length - 1).map(Path::of).toList();
+        var linkedOutputDir = Path.of(args[args.length - 1]);
+        return link(inputs, linkedOutputDir);
+    }
+
+    private static int generateCommand(String[] args) throws IOException {
+        if (args.length != 4) {
+            throw new IllegalArgumentException(
+                    "Usage: GENERATE {JAVA,PYTHON,JAVASCRIPT} <linkedInputDir> <generatedOutputDir>"
+            );
+        }
+        var outputType = OutputType.valueOf(args[1].toUpperCase());
+        var linkedInputDir = Path.of(args[2]);
+        var generatedOutputDir = Path.of(args[3]);
+        return generate(outputType, linkedInputDir, generatedOutputDir);
+    }
+
+    private static int link(List<Path> inputs, Path linkedOutputDir) throws IOException {
+        if (Files.notExists(linkedOutputDir)) {
+            Files.createDirectories(linkedOutputDir);
+        } else if (!Files.isDirectory(linkedOutputDir)) {
+            throw new IllegalArgumentException("Linked output path is not a directory: " + linkedOutputDir);
+        }
+        for (var input : inputs) {
+            if (Files.notExists(input)) {
+                throw new IllegalArgumentException("Input path does not exist: " + input);
+            }
+            if (!Files.isDirectory(input)) {
+                throw new IllegalArgumentException("Input path is not a directory: " + input);
+            }
+        }
+
+        log.info("Linking files from: " + inputs.stream().map(Path::toString).toList());
+        var modules = inputs.stream()
+                .map(App::listSourceFiles)
+                .flatMap(Collection::stream)
+                .filter(sourceFile -> sourceFile.path().getFileName().toString().endsWith(".cfun"))
+                .map(App::buildModule)
                 .toList();
-        var output = Path.of(args[args.length - 1]);
-        return new Arguments(inputs, output, outputType);
+
+        var linking = CapybaraLinker.INSTANCE.link(new Program(modules));
+        if (linking instanceof ValueOrError.Error<LinkedProgram> error) {
+            System.err.println("Linking failed with " + error.errors().size() + " error(s):");
+            error.errors().forEach(System.err::println);
+            return 100;
+        }
+
+        var linkedProgram = ((ValueOrError.Value<LinkedProgram>) linking).value();
+        writeLinkedJson(linkedOutputDir, linkedProgram);
+        return 0;
+    }
+
+    private static int generate(OutputType outputType, Path linkedInputDir, Path generatedOutputDir) throws IOException {
+        if (Files.notExists(generatedOutputDir)) {
+            Files.createDirectories(generatedOutputDir);
+        } else if (!Files.isDirectory(generatedOutputDir)) {
+            throw new IllegalArgumentException("Generated output path is not a directory: " + generatedOutputDir);
+        }
+        if (Files.notExists(linkedInputDir) || !Files.isDirectory(linkedInputDir)) {
+            throw new IllegalArgumentException("Linked input path is not a directory: " + linkedInputDir);
+        }
+
+        var linkedProgramFile = linkedInputDir.resolve(LINKED_PROGRAM_FILE);
+        if (Files.notExists(linkedProgramFile)) {
+            throw new IllegalArgumentException("Missing linked program file: " + linkedProgramFile);
+        }
+
+        var linkedProgram = readLinkedJson(linkedProgramFile);
+        var compiledProgram = Generator.findGenerator(outputType).generate(linkedProgram);
+        compiledProgram.modules().forEach(module -> writeCompiledModule(generatedOutputDir, module.relativePath(), module.code()));
+        return 0;
+    }
+
+    private static void writeCompiledModule(Path outputDir, Path relativePath, String code) {
+        var absolutePath = outputDir.resolve(relativePath);
+        try {
+            var parent = absolutePath.getParent();
+            if (parent != null) {
+                Files.createDirectories(parent);
+            }
+            log.info("Writing module to file: " + absolutePath);
+            Files.writeString(
+                    absolutePath,
+                    code,
+                    StandardOpenOption.CREATE,
+                    StandardOpenOption.TRUNCATE_EXISTING,
+                    StandardOpenOption.WRITE
+            );
+        } catch (IOException e) {
+            throw new UncheckedIOException("Unable to write file: " + absolutePath, e);
+        }
+    }
+
+    private static void writeLinkedJson(Path outputDir, LinkedProgram program) {
+        var mapper = objectMapper();
+        try {
+            Files.createDirectories(outputDir);
+            var fullProgramFile = outputDir.resolve(LINKED_PROGRAM_FILE);
+            mapper.writerWithDefaultPrettyPrinter().writeValue(fullProgramFile.toFile(), program);
+            log.info("Writing linked program to file: " + fullProgramFile);
+
+            for (var module : program.modules()) {
+                var modulePath = module.path().replace('\\', '/');
+                var moduleJson = modulePath.isBlank()
+                        ? outputDir.resolve(module.name() + ".linked.json")
+                        : outputDir.resolve(modulePath).resolve(module.name() + ".linked.json");
+                Files.createDirectories(moduleJson.getParent());
+                mapper.writerWithDefaultPrettyPrinter().writeValue(moduleJson.toFile(), module);
+            }
+        } catch (IOException e) {
+            throw new UncheckedIOException("Unable to write linked JSON output to " + outputDir, e);
+        }
+    }
+
+    private static LinkedProgram readLinkedJson(Path linkedProgramFile) {
+        try {
+            return objectMapper().readValue(linkedProgramFile.toFile(), LinkedProgram.class);
+        } catch (IOException e) {
+            throw new UncheckedIOException("Unable to read linked program JSON: " + linkedProgramFile, e);
+        }
+    }
+
+    private static ObjectMapper objectMapper() {
+        var mapper = new ObjectMapper();
+        mapper.registerModule(new Jdk8Module());
+        mapper.activateDefaultTyping(
+                BasicPolymorphicTypeValidator.builder()
+                        .allowIfSubType("pl.grzeslowski.capybara")
+                        .allowIfSubType("java.util.")
+                        .build(),
+                ObjectMapper.DefaultTyping.NON_FINAL,
+                JsonTypeInfo.As.PROPERTY
+        );
+        return mapper;
+    }
+
+    private static Module buildModule(SourceFile sourceFile) {
+        log.info("Building module from file: " + sourceFile.path());
+        var fileName = sourceFile.path().getFileName().toString();
+        var fileNameWithoutExtension = fileName.substring(0, fileName.lastIndexOf('.'));
+        var parsedSource = parseSource(readFile(sourceFile.path()));
+        return new Module(
+                fileNameWithoutExtension,
+                findModulePath(sourceFile),
+                CapybaraParser.INSTANCE.parseFunctional(parsedSource.source()),
+                parsedSource.imports()
+        );
+    }
+
+    private static List<SourceFile> listSourceFiles(Path directory) {
+        try (var stream = Files.walk(directory)) {
+            return stream
+                    .filter(Files::isRegularFile)
+                    .map(path -> new SourceFile(directory, path))
+                    .toList();
+        } catch (IOException e) {
+            throw new UncheckedIOException("Unable to list files for directory: " + directory, e);
+        }
+    }
+
+    private static String findModulePath(SourceFile sourceFile) {
+        var relativePath = sourceFile.rootPath().relativize(sourceFile.path()).getParent();
+        return relativePath == null ? "" : relativePath.toString();
+    }
+
+    private static String readFile(Path path) {
+        try {
+            return Files.readString(path);
+        } catch (IOException e) {
+            throw new UnsupportedOperationException("Unable to read file: " + path, e);
+        }
+    }
+
+    private static ParsedSource parseSource(String source) {
+        var imports = new ArrayList<ImportDeclaration>();
+        var bodyLines = new ArrayList<String>();
+        Arrays.stream(source.split("\\R", -1)).forEach(line -> {
+            var matcher = IMPORT_PATTERN.matcher(line);
+            if (matcher.matches()) {
+                var module = matcher.group(1);
+                var symbols = Stream.of(matcher.group(2).split(","))
+                        .map(String::trim)
+                        .filter(symbol -> !symbol.isBlank())
+                        .toList();
+                var excludedSymbols = matcher.group(3) == null
+                        ? List.<String>of()
+                        : Stream.of(matcher.group(3).split(","))
+                                .map(String::trim)
+                                .filter(symbol -> !symbol.isBlank())
+                                .toList();
+                imports.add(new ImportDeclaration(module, symbols, excludedSymbols));
+                // Keep source line numbers stable for parser/linker diagnostics.
+                bodyLines.add("");
+            } else {
+                bodyLines.add(line);
+            }
+        });
+        return new ParsedSource(String.join(System.lineSeparator(), bodyLines), List.copyOf(imports));
     }
 
     private static void enableDebugLogging() {
@@ -45,5 +279,11 @@ public class App {
         for (Handler handler : rootLogger.getHandlers()) {
             handler.setLevel(Level.FINE);
         }
+    }
+
+    private record SourceFile(Path rootPath, Path path) {
+    }
+
+    private record ParsedSource(String source, List<ImportDeclaration> imports) {
     }
 }

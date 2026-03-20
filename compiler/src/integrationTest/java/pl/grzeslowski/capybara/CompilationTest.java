@@ -7,9 +7,9 @@ import pl.grzeslowski.capybara.compiler.Module;
 import pl.grzeslowski.capybara.compiler.OutputType;
 import pl.grzeslowski.capybara.compiler.Program;
 import pl.grzeslowski.capybara.generator.Generator;
-import pl.grzeslowski.capybara.linker.CapybaraLinker;
-import pl.grzeslowski.capybara.linker.LinkedProgram;
-import pl.grzeslowski.capybara.linker.ValueOrError;
+import pl.grzeslowski.capybara.compiler.CapybaraLinker;
+import pl.grzeslowski.capybara.compiler.LinkedProgram;
+import pl.grzeslowski.capybara.compiler.ValueOrError;
 import pl.grzeslowski.capybara.parser.CapybaraParser;
 
 import java.util.Arrays;

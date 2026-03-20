@@ -6,9 +6,9 @@ import org.junit.jupiter.params.provider.MethodSource;
 import pl.grzeslowski.capybara.compiler.ImportDeclaration;
 import pl.grzeslowski.capybara.compiler.Module;
 import pl.grzeslowski.capybara.compiler.Program;
-import pl.grzeslowski.capybara.linker.CapybaraLinker;
-import pl.grzeslowski.capybara.linker.LinkedProgram;
-import pl.grzeslowski.capybara.linker.ValueOrError;
+import pl.grzeslowski.capybara.compiler.CapybaraLinker;
+import pl.grzeslowski.capybara.compiler.LinkedProgram;
+import pl.grzeslowski.capybara.compiler.ValueOrError;
 import pl.grzeslowski.capybara.parser.CapybaraParser;
 
 import java.util.*;

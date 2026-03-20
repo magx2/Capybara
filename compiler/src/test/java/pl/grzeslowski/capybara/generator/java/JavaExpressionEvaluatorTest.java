@@ -6,7 +6,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.api.Test;
 import pl.grzeslowski.capybara.compiler.Module;
 import pl.grzeslowski.capybara.compiler.Program;
-import pl.grzeslowski.capybara.linker.*;
+import pl.grzeslowski.capybara.compiler.*;
 import pl.grzeslowski.capybara.parser.CapybaraParser;
 
 import java.util.Collection;
@@ -19,8 +19,8 @@ import java.util.stream.Stream;
 
 import static java.util.stream.Collectors.joining;
 import static org.assertj.core.api.Assertions.assertThat;
-import static pl.grzeslowski.capybara.linker.LinkedExpressionPrinter.printExpression;
-import static pl.grzeslowski.capybara.linker.PrimitiveLinkedType.ANY;
+import static pl.grzeslowski.capybara.compiler.LinkedExpressionPrinter.printExpression;
+import static pl.grzeslowski.capybara.compiler.PrimitiveLinkedType.ANY;
 
 class JavaExpressionEvaluatorTest {
     static {
