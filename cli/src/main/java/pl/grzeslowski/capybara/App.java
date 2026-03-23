@@ -4,12 +4,12 @@ import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
 import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
-import pl.grzeslowski.capybara.generator.Generator;
 import pl.grzeslowski.capybara.compiler.CapybaraCompiler;
 import pl.grzeslowski.capybara.compiler.CompiledProgram;
 import pl.grzeslowski.capybara.compiler.OutputType;
 import pl.grzeslowski.capybara.compiler.Result;
 import pl.grzeslowski.capybara.compiler.parser.RawModule;
+import pl.grzeslowski.capybara.generator.Generator;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -26,6 +26,7 @@ import java.util.logging.Logger;
 public class App {
     private static final Logger log = Logger.getLogger(App.class.getName());
     private static final String LINKED_PROGRAM_FILE = "linked-program.json";
+    public static final String EXTENSION = ".json";
 
     public static void main(String[] args) throws IOException {
         var filteredArgs = Arrays.stream(args)
@@ -168,8 +169,8 @@ public class App {
             for (var module : program.modules()) {
                 var modulePath = module.path().replace('\\', '/');
                 var moduleJson = modulePath.isBlank()
-                        ? outputDir.resolve(module.name() + ".linked.json")
-                        : outputDir.resolve(modulePath).resolve(module.name() + ".linked.json");
+                        ? outputDir.resolve(module.name() + EXTENSION)
+                        : outputDir.resolve(modulePath).resolve(module.name() + EXTENSION);
                 Files.createDirectories(moduleJson.getParent());
                 mapper.writerWithDefaultPrettyPrinter().writeValue(moduleJson.toFile(), module);
             }

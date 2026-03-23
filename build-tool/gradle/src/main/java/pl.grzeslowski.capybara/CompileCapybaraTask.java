@@ -26,6 +26,8 @@ import java.util.List;
 
 public abstract class CompileCapybaraTask extends DefaultTask {
 
+    public static final String EXTENSION = ".json";
+
     @InputDirectory
     public abstract DirectoryProperty getInputDir();
 
@@ -129,8 +131,8 @@ public abstract class CompileCapybaraTask extends DefaultTask {
             for (var module : program.modules()) {
                 var modulePath = module.path().replace('\\', '/');
                 var moduleJson = (modulePath.isBlank()
-                        ? outputDir.resolve(module.name() + ".linked.json")
-                        : outputDir.resolve(modulePath).resolve(module.name() + ".linked.json"));
+                        ? outputDir.resolve(module.name() + EXTENSION)
+                        : outputDir.resolve(modulePath).resolve(module.name() + EXTENSION));
                 Files.createDirectories(moduleJson.getParent());
                 mapper.writerWithDefaultPrettyPrinter().writeValue(moduleJson.toFile(), module);
             }
