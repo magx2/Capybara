@@ -5,14 +5,9 @@ import pl.grzeslowski.capybara.compiler.CollectionLinkedType.CompiledList;
 import pl.grzeslowski.capybara.compiler.CollectionLinkedType.CompiledSet;
 import pl.grzeslowski.capybara.compiler.*;
 import pl.grzeslowski.capybara.compiler.parser.*;
-import pl.grzeslowski.capybara.parser.*;
 
 import java.math.BigInteger;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
 import java.util.logging.Logger;
 
 import static pl.grzeslowski.capybara.compiler.CapybaraTypeCompiler.linkType;
