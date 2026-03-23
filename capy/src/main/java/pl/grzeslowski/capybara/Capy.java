@@ -14,6 +14,7 @@ import pl.grzeslowski.capybara.generator.Generator;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.PrintStream;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -23,7 +24,9 @@ import java.time.OffsetDateTime;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.TreeSet;
 import java.util.logging.Handler;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -33,111 +36,237 @@ public class Capy {
     public static final String EXTENSION = ".json";
     private static final String BUILD_INFO_FILE = "build-info.json";
     private static final String VERSION_RESOURCE = "/capybara-version.txt";
+    private static final int EXIT_SUCCESS = 0;
+    private static final int EXIT_USAGE = 1;
+    private static final int EXIT_FAILURE = 2;
+    private static final int EXIT_COMPILATION_ERROR = 100;
 
-    public static void main(String[] args) throws IOException {
-        var filteredArgs = Arrays.stream(args)
-                .filter(arg -> !"--debug".equals(arg))
-                .toArray(String[]::new);
-
-        if (filteredArgs.length != args.length) {
-            enableDebugLogging();
-        }
-
-        int exitCode = execute(filteredArgs);
-        System.exit(exitCode);
+    public static void main(String[] args) {
+        System.exit(execute(args, System.out, System.err));
     }
 
-    private static int execute(String[] args) throws IOException {
+    static int execute(String[] args, PrintStream out, PrintStream err) {
+        try {
+            return executeOrThrow(args, out, err);
+        } catch (CliException e) {
+            err.println(e.getMessage());
+            return EXIT_USAGE;
+        } catch (Exception e) {
+            var message = e.getMessage() == null || e.getMessage().isBlank() ? e.getClass().getSimpleName() : e.getMessage();
+            err.println(message);
+            log.log(Level.SEVERE, message, e);
+            return EXIT_FAILURE;
+        }
+    }
+
+    private static int executeOrThrow(String[] args, PrintStream out, PrintStream err) throws IOException {
         if (args.length == 0) {
-            throw new IllegalArgumentException(
-                    "Usage: LINK <input1> <input2> ... <linkedOutputDir> | "
-                    + "GENERATE {JAVA,PYTHON,JAVASCRIPT} <linkedInputDir> <generatedOutputDir>"
-            );
+            throw new CliException(helpText());
         }
-        if ("LINK".equalsIgnoreCase(args[0])) {
-            return linkCommand(args);
+
+        if (isVersionCommand(args[0])) {
+            out.println(versionText());
+            return EXIT_SUCCESS;
         }
-        if ("GENERATE".equalsIgnoreCase(args[0])) {
-            return generateCommand(args);
+        if (isHelpCommand(args[0])) {
+            out.println(versionText());
+            out.println();
+            out.println(helpText());
+            return EXIT_SUCCESS;
         }
-        throw new IllegalArgumentException(
-                "Unknown command `" + args[0] + "`. "
-                + "Use: LINK <input1> <input2> ... <linkedOutputDir> or "
-                + "GENERATE {JAVA,PYTHON,JAVASCRIPT} <linkedInputDir> <generatedOutputDir>"
-        );
+
+        var command = args[0].toLowerCase(Locale.ROOT);
+        return switch (command) {
+            case "compile" -> executeCompile(Arrays.copyOfRange(args, 1, args.length), err);
+            case "generate" -> executeGenerate(Arrays.copyOfRange(args, 1, args.length));
+            default -> throw new CliException("Unknown command `" + args[0] + "`.\n\n" + helpText());
+        };
     }
 
-    private static int linkCommand(String[] args) throws IOException {
-        if (args.length < 3) {
-            throw new IllegalArgumentException("Usage: LINK <input1> <input2> ... <linkedOutputDir>");
-        }
-        var inputs = Arrays.stream(args, 1, args.length - 1).map(Path::of).toList();
-        var linkedOutputDir = Path.of(args[args.length - 1]);
-        return link(inputs, linkedOutputDir);
+    private static boolean isVersionCommand(String arg) {
+        return "-v".equals(arg) || "--version".equals(arg);
     }
 
-    private static int generateCommand(String[] args) throws IOException {
-        if (args.length != 4) {
-            throw new IllegalArgumentException(
-                    "Usage: GENERATE {JAVA,PYTHON,JAVASCRIPT} <linkedInputDir> <generatedOutputDir>"
-            );
-        }
-        var outputType = OutputType.valueOf(args[1].toUpperCase());
-        var linkedInputDir = Path.of(args[2]);
-        var generatedOutputDir = Path.of(args[3]);
-        return generate(outputType, linkedInputDir, generatedOutputDir);
+    private static boolean isHelpCommand(String arg) {
+        return "-h".equals(arg) || "--help".equals(arg);
     }
 
-    private static int link(List<Path> inputs, Path linkedOutputDir) throws IOException {
-        if (Files.notExists(linkedOutputDir)) {
-            Files.createDirectories(linkedOutputDir);
-        } else if (!Files.isDirectory(linkedOutputDir)) {
-            throw new IllegalArgumentException("Linked output path is not a directory: " + linkedOutputDir);
+    private static int executeCompile(String[] args, PrintStream err) throws IOException {
+        var options = parseNamedOptions(args, true);
+        configureLogging(options.logLevel());
+
+        var input = requiredPath(options.values(), "input", "compile");
+        var output = requiredPath(options.values(), "output", "compile");
+        var libraries = readLibraryModules(options.values().get("libs"));
+
+        return compile(input, output, libraries, err);
+    }
+
+    private static int executeGenerate(String[] args) throws IOException {
+        if (args.length == 0) {
+            throw new CliException("Missing output type for `generate`.\n\n" + helpText());
         }
-        for (var input : inputs) {
-            if (Files.notExists(input)) {
-                throw new IllegalArgumentException("Input path does not exist: " + input);
+
+        var outputType = parseOutputType(args[0]);
+        var options = parseNamedOptions(Arrays.copyOfRange(args, 1, args.length), false);
+        configureLogging(options.logLevel());
+
+        var input = options.values().containsKey("input") ? Path.of(options.values().get("input")) : Path.of(".");
+        var output = requiredPath(options.values(), "output", "generate");
+        return generate(outputType, input, output);
+    }
+
+    private static NamedOptions parseNamedOptions(String[] args, boolean allowLibs) {
+        var values = new java.util.LinkedHashMap<String, String>();
+        var logLevel = Level.INFO;
+
+        for (int i = 0; i < args.length; i++) {
+            var arg = args[i];
+            switch (arg) {
+                case "--log" -> {
+                    var value = nextValue(args, i, arg);
+                    logLevel = parseLogLevel(value);
+                    i++;
+                }
+                case "-i", "--input" -> {
+                    var value = nextValue(args, i, arg);
+                    values.put("input", value);
+                    i++;
+                }
+                case "-o", "--output" -> {
+                    var value = nextValue(args, i, arg);
+                    values.put("output", value);
+                    i++;
+                }
+                case "-l", "--libs" -> {
+                    if (!allowLibs) {
+                        throw new CliException("Option `" + arg + "` is supported only for `compile`.");
+                    }
+                    var value = nextValue(args, i, arg);
+                    values.put("libs", value);
+                    i++;
+                }
+                default -> throw new CliException("Unknown option `" + arg + "`.\n\n" + helpText());
             }
-            if (!Files.isDirectory(input)) {
-                throw new IllegalArgumentException("Input path is not a directory: " + input);
-            }
         }
 
-        log.info("Linking files from: " + inputs.stream().map(Path::toString).toList());
-        var rawModules = inputs.stream()
-                .map(Capy::listSourceFiles)
-                .flatMap(Collection::stream)
+        return new NamedOptions(values, logLevel);
+    }
+
+    private static String nextValue(String[] args, int index, String option) {
+        if (index + 1 >= args.length) {
+            throw new CliException("Missing value for `" + option + "`.");
+        }
+        return args[index + 1];
+    }
+
+    private static Path requiredPath(Map<String, String> values, String key, String command) {
+        var value = values.get(key);
+        if (value == null || value.isBlank()) {
+            throw new CliException("Missing required option `--" + key + "` for `" + command + "`.\n\n" + helpText());
+        }
+        return Path.of(value);
+    }
+
+    private static Level parseLogLevel(String value) {
+        return switch (value.toUpperCase(Locale.ROOT)) {
+            case "DEBUG" -> Level.FINE;
+            case "INFO" -> Level.INFO;
+            case "WARN" -> Level.WARNING;
+            case "ERROR" -> Level.SEVERE;
+            default -> throw new CliException("Unknown log level `" + value + "`. Use DEBUG, INFO, WARN, or ERROR.");
+        };
+    }
+
+    private static OutputType parseOutputType(String value) {
+        return switch (value.toUpperCase(Locale.ROOT)) {
+            case "JAVA" -> OutputType.JAVA;
+            case "PYTHON" -> OutputType.PYTHON;
+            case "JAVASCRIPT", "JS" -> OutputType.JAVASCRIPT;
+            default -> throw new CliException(
+                    "Unknown output type `" + value + "`. Use java, python, javascript, or js."
+            );
+        };
+    }
+
+    private static int compile(Path input, Path linkedOutputDir, TreeSet<CompiledModule> libraries, PrintStream err) throws IOException {
+        validateInputDirectory(input);
+        validateEmptyExistingDirectory(linkedOutputDir, "Compile output path");
+
+        log.info("Compiling files from: " + input);
+        var rawModules = listSourceFiles(input).stream()
                 .filter(sourceFile -> sourceFile.path().getFileName().toString().endsWith(".cfun"))
                 .map(Capy::buildModule)
                 .toList();
 
-        var linking = CapybaraCompiler.INSTANCE.compile(rawModules, new java.util.TreeSet<>());
+        var linking = CapybaraCompiler.INSTANCE.compile(rawModules, libraries);
         if (linking instanceof Result.Error<CompiledProgram> error) {
-            System.err.println("Linking failed with " + error.errors().size() + " error(s):");
-            error.errors().forEach(System.err::println);
-            return 100;
+            err.println("Compilation failed with " + error.errors().size() + " error(s):");
+            error.errors().forEach(err::println);
+            log.severe("Compilation failed with " + error.errors().size() + " error(s)");
+            return EXIT_COMPILATION_ERROR;
         }
 
         var linkedProgram = ((Result.Success<CompiledProgram>) linking).value();
         writeLinkedModules(linkedOutputDir, linkedProgram);
         writeBuildInfo(linkedOutputDir);
-        return 0;
+        return EXIT_SUCCESS;
     }
 
     private static int generate(OutputType outputType, Path linkedInputDir, Path generatedOutputDir) throws IOException {
+        validateInputDirectory(linkedInputDir);
         if (Files.notExists(generatedOutputDir)) {
             Files.createDirectories(generatedOutputDir);
         } else if (!Files.isDirectory(generatedOutputDir)) {
-            throw new IllegalArgumentException("Generated output path is not a directory: " + generatedOutputDir);
-        }
-        if (Files.notExists(linkedInputDir) || !Files.isDirectory(linkedInputDir)) {
-            throw new IllegalArgumentException("Linked input path is not a directory: " + linkedInputDir);
+            throw new CliException("Generated output path is not a directory: " + generatedOutputDir);
         }
 
-        var linkedProgram = readLinkedModules(linkedInputDir);
+        var linkedProgram = readLinkedProgram(linkedInputDir, true);
         var compiledProgram = Generator.findGenerator(outputType).generate(linkedProgram);
         compiledProgram.modules().forEach(module -> writeCompiledModule(generatedOutputDir, module.relativePath(), module.code()));
-        return 0;
+        return EXIT_SUCCESS;
+    }
+
+    private static TreeSet<CompiledModule> readLibraryModules(String libsOption) {
+        if (libsOption == null || libsOption.isBlank()) {
+            return new TreeSet<>();
+        }
+
+        var libraries = libsOption.split(",");
+        var modules = new TreeSet<CompiledModule>();
+        for (var library : libraries) {
+            var trimmed = library.trim();
+            if (trimmed.isEmpty()) {
+                continue;
+            }
+            var libraryDir = Path.of(trimmed);
+            validateInputDirectory(libraryDir);
+            modules.addAll(readLinkedProgram(libraryDir, false).modules());
+        }
+        return modules;
+    }
+
+    private static void validateInputDirectory(Path directory) {
+        if (Files.notExists(directory)) {
+            throw new CliException("Input path does not exist: " + directory);
+        }
+        if (!Files.isDirectory(directory)) {
+            throw new CliException("Input path is not a directory: " + directory);
+        }
+    }
+
+    private static void validateEmptyExistingDirectory(Path directory, String label) throws IOException {
+        if (Files.notExists(directory)) {
+            throw new CliException(label + " does not exist: " + directory);
+        }
+        if (!Files.isDirectory(directory)) {
+            throw new CliException(label + " is not a directory: " + directory);
+        }
+        try (var files = Files.list(directory)) {
+            if (files.findAny().isPresent()) {
+                throw new CliException(label + " must be empty: " + directory);
+            }
+        }
     }
 
     private static void writeCompiledModule(Path outputDir, Path relativePath, String code) {
@@ -193,7 +322,7 @@ public class Capy {
         }
     }
 
-    private static String readCompilerVersion() {
+    static String readCompilerVersion() {
         try (InputStream stream = Capy.class.getResourceAsStream(VERSION_RESOURCE)) {
             if (stream == null) {
                 throw new IllegalStateException("Missing version resource: " + VERSION_RESOURCE);
@@ -204,7 +333,25 @@ public class Capy {
         }
     }
 
-    private static CompiledProgram readLinkedModules(Path linkedInputDir) {
+    private static String versionText() {
+        return "Capybara compiler version: " + readCompilerVersion();
+    }
+
+    private static String helpText() {
+        return String.join(System.lineSeparator(),
+                "Usage:",
+                "  capy -v | --version",
+                "  capy -h | --help",
+                "  capy compile [-l|--libs <dir1,dir2,...>] -i|--input <dir> -o|--output <dir> [--log <DEBUG|INFO|WARN|ERROR>]",
+                "  capy generate <java|python|javascript|js> [-i|--input <dir>] -o|--output <dir> [--log <DEBUG|INFO|WARN|ERROR>]",
+                "",
+                "Notes:",
+                "  compile output directory must already exist and be empty.",
+                "  generate input directory defaults to the current directory."
+        );
+    }
+
+    private static CompiledProgram readLinkedProgram(Path linkedInputDir, boolean requireModules) {
         try (var files = Files.walk(linkedInputDir)) {
             var modules = files
                     .filter(Files::isRegularFile)
@@ -212,8 +359,8 @@ public class Capy {
                     .filter(path -> !path.getFileName().toString().equals(BUILD_INFO_FILE))
                     .map(Capy::readLinkedModule)
                     .toList();
-            if (modules.isEmpty()) {
-                throw new IllegalArgumentException("Missing linked module files in directory: " + linkedInputDir);
+            if (requireModules && modules.isEmpty()) {
+                throw new CliException("Missing linked module files in directory: " + linkedInputDir);
             }
             return new CompiledProgram(modules);
         } catch (IOException e) {
@@ -278,15 +425,21 @@ public class Capy {
         }
     }
 
-    private static void enableDebugLogging() {
+    private static void configureLogging(Level level) {
         var rootLogger = Logger.getLogger("");
-        rootLogger.setLevel(Level.FINE);
+        rootLogger.setLevel(level);
         for (Handler handler : rootLogger.getHandlers()) {
-            handler.setLevel(Level.FINE);
+            handler.setLevel(level);
         }
     }
 
     private record SourceFile(Path rootPath, Path path) {
     }
+
+    private record NamedOptions(Map<String, String> values, Level logLevel) {
+    }
 }
+
+
+
 
