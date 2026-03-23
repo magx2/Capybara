@@ -1,14 +1,15 @@
 package pl.grzeslowski.capybara.generator.java;
 
 import java.util.Set;
+import java.util.SortedSet;
 
 public record JavaClass(
-        Set<JavaAnnotation> annotations,
+        SortedSet<JavaAnnotation> annotations,
         JavaType name,
         JavaPackage javaPackage,
-        Set<String> staticImports,
-        Set<JavaMethod> staticMethods,
-        Set<JavaInterface> interfaces,
-        Set<JavaRecord> records,
-        Set<JavaEnum> enums) {
+        SortedSet<String> staticImports,
+        SortedSet<JavaMethod> staticMethods,
+        SortedSet<JavaInterface> interfaces,
+        SortedSet<JavaRecord> records,
+        SortedSet<JavaEnum> enums) {
 }

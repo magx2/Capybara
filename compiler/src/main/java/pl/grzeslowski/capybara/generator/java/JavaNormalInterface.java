@@ -2,7 +2,7 @@ package pl.grzeslowski.capybara.generator.java;
 
 import java.util.List;
 
-public record JavaNormalInterface(JavaType name, List<JavaInterfaceMethod> methods, List<JavaMethod> defaultMethods) implements JavaInterface {
+public record JavaNormalInterface(JavaType name, List<JavaInterfaceMethod> methods, List<JavaMethod> defaultMethods) implements JavaInterface, Comparable<JavaNormalInterface> {
     @Override
     public final boolean equals(Object o) {
         if (!(o instanceof JavaNormalInterface that)) return false;
@@ -13,5 +13,10 @@ public record JavaNormalInterface(JavaType name, List<JavaInterfaceMethod> metho
     @Override
     public int hashCode() {
         return name.hashCode();
+    }
+
+    @Override
+    public int compareTo(JavaNormalInterface o) {
+        return name.compareTo(o.name);
     }
 }

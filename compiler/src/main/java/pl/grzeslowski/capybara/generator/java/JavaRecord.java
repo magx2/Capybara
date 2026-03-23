@@ -9,7 +9,7 @@ public record JavaRecord(JavaType name,
                          List<JavaRecordField> fields,
                          List<String> typeParameters,
                          Set<JavaMethod> staticMethods,
-                         Set<JavaMethod> methods) {
+                         Set<JavaMethod> methods)implements Comparable<JavaRecord> {
     @Override
     public final boolean equals(Object o) {
         if (!(o instanceof JavaRecord that)) return false;
@@ -20,6 +20,11 @@ public record JavaRecord(JavaType name,
     @Override
     public int hashCode() {
         return name.hashCode();
+    }
+
+    @Override
+    public int compareTo(JavaRecord o) {
+        return name.compareTo(o.name);
     }
 
     public record JavaRecordField(String name, JavaType type) {

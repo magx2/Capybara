@@ -6,10 +6,7 @@ import pl.grzeslowski.capybara.compiler.CollectionLinkedType.CompiledDict;
 import pl.grzeslowski.capybara.compiler.CollectionLinkedType.CompiledList;
 import pl.grzeslowski.capybara.compiler.CollectionLinkedType.CompiledSet;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Stream;
 
 import static java.util.function.Function.identity;
@@ -17,6 +14,12 @@ import static java.util.stream.Collectors.*;
 import static pl.grzeslowski.capybara.generator.java.JavaAnnotation.generatedAnnotation;
 
 public class JavaAstBuilder {
+    @SafeVarargs
+    private static <T extends Comparable<? super T>> SortedSet<T> sortedSetOf(T... values) {
+        var sorted = new TreeSet<T>();
+        Collections.addAll(sorted, values);
+        return sorted;
+    }
     private static final String METHOD_DECL_PREFIX = "__method__";
     private static final Set<String> JAVA_KEYWORDS = Set.of(
             "abstract", "assert", "boolean", "break", "byte", "case", "catch", "char", "class",
@@ -35,28 +38,28 @@ public class JavaAstBuilder {
                 .filter(CompiledDataParentType.class::isInstance)
                 .map(CompiledDataParentType.class::cast)
                 .filter(parentType -> !parentType.enumType())
-                .toList(), module.functions());
+                .collect(toCollection(TreeSet::new)), module.functions());
         var subClassToInterface = findSubClassToInterface(module.types(), interfaces);
         var dataTypes = module.types()
                 .values()
                 .stream()
                 .filter(CompiledDataType.class::isInstance)
                 .map(CompiledDataType.class::cast)
-                .toList();
+                .collect(toCollection(TreeSet::new));
         return new JavaClass(
-                Set.of(generatedAnnotation()),
+                sortedSetOf(generatedAnnotation()),
                 buildClassName(module.name()),
                 new JavaPackage(buildJavaPackageName(module.path())),
                 module.staticImports().stream()
                         .map(staticImport -> normalizeJavaClassReference(staticImport.className()) + "." + buildJavaStaticImportMember(staticImport.memberName()))
-                        .collect(toSet()),
+                        .collect(toCollection(TreeSet::new)),
                 buildStaticMethods(module.functions()),
                 interfaces,
                 buildRecords(dataTypes, subClassToInterface, module.functions()),
                 buildEnums(dataTypes, module.types(), subClassToInterface));
     }
 
-    private Map<CompiledDataType, Set<JavaInterface>> findSubClassToInterface(Map<String, GenericDataType> types, Set<JavaInterface> interfaces) {
+    private SortedMap<CompiledDataType, SortedSet<JavaInterface>> findSubClassToInterface(SortedMap<String, GenericDataType> types, SortedSet<JavaInterface> interfaces) {
         var javaInterfaceByJavaName = interfaces.stream()
                 .collect(toMap(
                         jInterface -> jInterface.name().name(),
@@ -78,7 +81,8 @@ public class JavaAstBuilder {
                 .filter(pair -> pair.parent != null)
                 .collect(groupingBy(
                         ClassToJavaInterface::data,
-                        mapping(ClassToJavaInterface::parent, toSet())
+                        TreeMap::new,
+                        mapping(ClassToJavaInterface::parent, toCollection(TreeSet::new))
                 ));
     }
 
@@ -86,11 +90,11 @@ public class JavaAstBuilder {
         return new JavaType(normalizeJavaTypeIdentifier(name));
     }
 
-    private Set<JavaMethod> buildStaticMethods(Set<CompiledFunction> functions) {
+    private SortedSet<JavaMethod> buildStaticMethods(Set<CompiledFunction> functions) {
         return functions.stream()
                 .filter(function -> !function.name().startsWith(METHOD_DECL_PREFIX))
                 .map(this::buildStaticMethod)
-                .collect(toSet());
+                .collect(toCollection(TreeSet::new));
     }
 
     private JavaMethod buildStaticMethod(CompiledFunction function) {
@@ -674,10 +678,10 @@ public class JavaAstBuilder {
         };
     }
 
-    private Set<JavaInterface> buildInterfaces(List<CompiledDataParentType> dataParentTypes, Set<CompiledFunction> functions) {
+    private SortedSet<JavaInterface> buildInterfaces(SortedSet<CompiledDataParentType> dataParentTypes, SortedSet<CompiledFunction> functions) {
         return dataParentTypes.stream()
                 .map(parentType -> buildInterface(parentType, functions))
-                .collect(toSet());
+                .collect(toCollection(TreeSet::new));
     }
 
     private JavaInterface buildInterface(CompiledDataParentType type, Set<CompiledFunction> functions) {
@@ -724,26 +728,26 @@ public class JavaAstBuilder {
                 buildJavaType(field.type()));
     }
 
-    private Set<JavaRecord> buildRecords(
-            List<CompiledDataType> dataTypes,
-            Map<CompiledDataType, Set<JavaInterface>> subClassToInterface,
-            Set<CompiledFunction> functions
+    private SortedSet<JavaRecord> buildRecords(
+            SortedSet<CompiledDataType> dataTypes,
+            SortedMap<CompiledDataType, SortedSet<JavaInterface>> subClassToInterface,
+            SortedSet<CompiledFunction> functions
     ) {
         return dataTypes.stream()
                 .filter(dt -> !dt.singleton())
                 .map(dt -> buildRecord(dt, subClassToInterface, functions))
-                .collect(toSet());
+                .collect(toCollection(TreeSet::new));
     }
 
     private JavaRecord buildRecord(
             CompiledDataType type,
-            Map<CompiledDataType, Set<JavaInterface>> subClassToInterface,
+            Map<CompiledDataType, SortedSet<JavaInterface>> subClassToInterface,
             Set<CompiledFunction> functions
     ) {
         var javaInterface = subClassToInterface.get(type);
         var implementInterfaces = javaInterface == null
-                ? Set.<JavaType>of()
-                : javaInterface.stream().map(javaType -> implementedInterfaceType(type, javaType)).collect(toSet());
+                ? new TreeSet<JavaType>()
+                : javaInterface.stream().map(javaType -> implementedInterfaceType(type, javaType)).collect(toCollection(TreeSet::new));
 
         var interfaceFields = javaInterface == null
                 ? Stream.<JavaRecord.JavaRecordField>empty()
@@ -770,16 +774,16 @@ public class JavaAstBuilder {
                 implementInterfaces,
                 fields,
                 type.typeParameters(),
-                Set.of(),
+                new TreeSet<JavaMethod>(),
                 buildRecordMethods(type, functions));
     }
 
-    private Set<JavaMethod> buildRecordMethods(CompiledDataType type, Set<CompiledFunction> functions) {
+    private SortedSet<JavaMethod> buildRecordMethods(CompiledDataType type, Set<CompiledFunction> functions) {
         var ownerPrefix = METHOD_DECL_PREFIX + type.name() + "__";
         return functions.stream()
                 .filter(function -> function.name().startsWith(ownerPrefix))
                 .map(function -> buildRecordMethod(function, ownerPrefix))
-                .collect(toSet());
+                .collect(toCollection(TreeSet::new));
     }
 
     private JavaMethod buildRecordMethod(CompiledFunction function, String ownerPrefix) {
@@ -859,10 +863,10 @@ public class JavaAstBuilder {
         return new JavaType(javaInterface.name() + "<" + String.join(", ", type.typeParameters()) + ">");
     }
 
-    private Set<JavaEnum> buildEnums(
-            List<CompiledDataType> dataTypes,
-            Map<String, GenericDataType> allTypes,
-            Map<CompiledDataType, Set<JavaInterface>> subClassToInterface
+    private SortedSet<JavaEnum> buildEnums(
+            SortedSet<CompiledDataType> dataTypes,
+            SortedMap<String, GenericDataType> allTypes,
+            SortedMap<CompiledDataType, SortedSet<JavaInterface>> subClassToInterface
     ) {
         var singletonEnums = dataTypes.stream()
                 .filter(CompiledDataType::singleton)
@@ -873,10 +877,10 @@ public class JavaAstBuilder {
                 .map(CompiledDataParentType.class::cast)
                 .filter(CompiledDataParentType::enumType)
                 .map(this::buildDeclaredEnum);
-        return Stream.concat(singletonEnums, declaredEnums).collect(toSet());
+        return Stream.concat(singletonEnums, declaredEnums).collect(toCollection(TreeSet::new));
     }
 
-    private boolean isEnumValueType(CompiledDataType type, Map<String, GenericDataType> allTypes) {
+    private boolean isEnumValueType(CompiledDataType type, SortedMap<String, GenericDataType> allTypes) {
         return allTypes.values().stream()
                 .filter(CompiledDataParentType.class::isInstance)
                 .map(CompiledDataParentType.class::cast)
@@ -885,19 +889,20 @@ public class JavaAstBuilder {
                 .anyMatch(subType -> subType.name().equals(type.name()));
     }
 
-    private JavaEnum buildSingletonEnum(CompiledDataType type, Map<CompiledDataType, Set<JavaInterface>> subClassToInterface) {
+    private JavaEnum buildSingletonEnum(CompiledDataType type, SortedMap<CompiledDataType, SortedSet<JavaInterface>> subClassToInterface) {
         var javaInterface = subClassToInterface.get(type);
         var implementInterfaces = javaInterface == null
-                ? Set.<JavaType>of()
-                : javaInterface.stream().map(JavaInterface::name).collect(toSet());
+                ? new TreeSet<JavaType>()
+                : javaInterface.stream().map(JavaInterface::name).collect(toCollection(TreeSet::new));
         return new JavaEnum(buildClassName(type.name()), implementInterfaces, List.of("INSTANCE"));
     }
 
     private JavaEnum buildDeclaredEnum(CompiledDataParentType enumType) {
         return new JavaEnum(
                 buildClassName(enumType.name()),
-                Set.of(),
+                new TreeSet<JavaType>(),
                 enumType.subTypes().stream().map(CompiledDataType::name).toList()
         );
     }
 }
+

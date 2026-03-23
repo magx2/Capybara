@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import java.util.TreeSet;
 
 import static java.lang.String.join;
 import static java.util.stream.Collectors.joining;
@@ -57,9 +58,9 @@ public final class JavaGenerator implements Generator {
                     javaClass.javaPackage(),
                     javaClass.staticImports(),
                     javaClass.staticMethods(),
-                    java.util.Set.of(),
-                    java.util.Set.of(),
-                    java.util.Set.of()
+                    new TreeSet<>(),
+                    new TreeSet<>(),
+                    new TreeSet<>()
             );
             compiled.add(new GeneratedModule(
                     relativePath(javaClass, utilityClass.name().toString()),
@@ -546,3 +547,4 @@ public final class JavaGenerator implements Generator {
     }
 
 }
+

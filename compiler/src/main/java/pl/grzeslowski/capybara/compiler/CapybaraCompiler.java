@@ -7,6 +7,7 @@ import pl.grzeslowski.capybara.parser.*;
 import java.util.*;
 import java.util.stream.Stream;
 
+import static java.util.Collections.unmodifiableSortedSet;
 import static java.util.function.Function.identity;
 import static java.util.stream.Collectors.toMap;
 import static pl.grzeslowski.capybara.compiler.CapybaraTypeCompiler.linkType;
@@ -26,14 +27,14 @@ public class CapybaraCompiler {
                         (first, second) -> first
                 ));
 
-        var linkedTypesByModule = new HashMap<String, Map<String, GenericDataType>>();
+        var linkedTypesByModule = new HashMap<String, SortedMap<String, GenericDataType>>();
         for (var module : program.modules()) {
             var sourceFile = moduleSourceFile(module);
             var linkedTypes = withFile(types(module), sourceFile);
-            if (linkedTypes instanceof ValueOrError.Error<Map<String, GenericDataType>> error) {
+            if (linkedTypes instanceof ValueOrError.Error<SortedMap<String, GenericDataType>> error) {
                 return new ValueOrError.Error<>(error.errors());
             }
-            linkedTypesByModule.put(module.name(), ((ValueOrError.Value<Map<String, GenericDataType>>) linkedTypes).value());
+            linkedTypesByModule.put(module.name(), ((ValueOrError.Value<SortedMap<String, GenericDataType>>) linkedTypes).value());
         }
 
         var visibleTypesByModule = new HashMap<String, Map<String, GenericDataType>>();
@@ -94,7 +95,7 @@ public class CapybaraCompiler {
     private ValueOrError<List<CompiledFunction>> firstPassLinkedFunctions(
             Module module,
             Map<String, Module> modulesByName,
-            Map<String, Map<String, GenericDataType>> linkedTypesByModule,
+            Map<String, SortedMap<String, GenericDataType>> linkedTypesByModule,
             Map<String, Map<String, GenericDataType>> visibleTypesByModule,
             Map<String, List<CapybaraExpressionCompiler.FunctionSignature>> signaturesByModule,
             Map<String, String> moduleClassNameByModuleName
@@ -114,7 +115,7 @@ public class CapybaraCompiler {
     private ValueOrError<CompiledModule> linkModule(
             Module module,
             Map<String, Module> modulesByName,
-            Map<String, Map<String, GenericDataType>> linkedTypesByModule,
+            Map<String, SortedMap<String, GenericDataType>> linkedTypesByModule,
             Map<String, Map<String, GenericDataType>> visibleTypesByModule,
             Map<String, List<CapybaraExpressionCompiler.FunctionSignature>> signaturesByModule,
             Map<String, String> moduleClassNameByModuleName
@@ -149,7 +150,7 @@ public class CapybaraCompiler {
     private ValueOrError<List<CapybaraExpressionCompiler.FunctionSignature>> availableSignatures(
             Module module,
             Map<String, Module> modulesByName,
-            Map<String, Map<String, GenericDataType>> linkedTypesByModule,
+            Map<String, SortedMap<String, GenericDataType>> linkedTypesByModule,
             Map<String, List<CapybaraExpressionCompiler.FunctionSignature>> signaturesByModule
     ) {
         var all = new ArrayList<CapybaraExpressionCompiler.FunctionSignature>(signaturesByModule.get(module.name()));
@@ -194,7 +195,7 @@ public class CapybaraCompiler {
     private ValueOrError<Map<String, GenericDataType>> availableTypes(
             Module module,
             Map<String, Module> modulesByName,
-            Map<String, Map<String, GenericDataType>> linkedTypesByModule,
+            Map<String, SortedMap<String, GenericDataType>> linkedTypesByModule,
             List<Module> allModules
     ) {
         var localTypes = linkedTypesByModule.get(module.name());
@@ -341,10 +342,10 @@ public class CapybaraCompiler {
         };
     }
 
-    private Set<CompiledModule.StaticImport> staticImports(
+    private SortedSet<CompiledModule.StaticImport> staticImports(
             Module module,
             Map<String, Module> modulesByName,
-            Map<String, Map<String, GenericDataType>> linkedTypesByModule,
+            Map<String, SortedMap<String, GenericDataType>> linkedTypesByModule,
             Map<String, List<CapybaraExpressionCompiler.FunctionSignature>> signaturesByModule
     ) {
         var imports = new HashSet<CompiledModule.StaticImport>();
@@ -370,16 +371,16 @@ public class CapybaraCompiler {
                 }
             }
         }
-        return Set.copyOf(imports);
+        return unmodifiableSortedSet(new TreeSet<>(imports));
     }
 
-    private Set<CompiledFunction> deduplicateFunctions(List<CompiledFunction> linkedFunctions) {
+    private SortedSet<CompiledFunction> deduplicateFunctions(List<CompiledFunction> linkedFunctions) {
         var byKey = new LinkedHashMap<String, CompiledFunction>();
         for (var function : linkedFunctions) {
             var parameters = function.parameters().stream().map(parameter -> parameter.type().name()).toList();
             byKey.put(function.name() + "#" + parameters, function);
         }
-        return Set.copyOf(byKey.values());
+        return unmodifiableSortedSet(new TreeSet<>(byKey.values()));
     }
 
     private Module resolveImportedModule(String rawImportedModuleName, Map<String, Module> modulesByName) {
@@ -2362,7 +2363,7 @@ public class CapybaraCompiler {
     private record ParsedGenericTypeName(String baseName, List<String> typeArguments) {
     }
 
-    private ValueOrError<Map<String, GenericDataType>> types(Module module) {
+    private ValueOrError<SortedMap<String, GenericDataType>> types(Module module) {
         var normalizedFile = normalizeFile(moduleSourceFile(module));
         var rawTypeDeclarations = castList(module, TypeDeclaration.class);
         var rawEnumDeclarations = castList(module, pl.grzeslowski.capybara.parser.EnumDeclaration.class);
@@ -2418,7 +2419,7 @@ public class CapybaraCompiler {
         set.addAll(singleDeclarations);
         set.addAll(enumDeclarations);
         set.addAll(typeDeclarations);
-        var map = set.stream().collect(toMap(GenericDataType::name, identity()));
+        var map = new TreeMap<>(set.stream().collect(toMap(GenericDataType::name, identity())));
         typeDeclarations.forEach(parentType -> parentType.subTypes().forEach(subType -> map.put(subType.name(), subType)));
         enumDeclarations.forEach(enumType -> enumType.subTypes().forEach(subType -> map.put(subType.name(), subType)));
         return ValueOrError.success(map);
