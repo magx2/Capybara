@@ -28,7 +28,7 @@ class CompilationTest {
         System.out.println(program);
 
         // link
-        var link = CapybaraCompiler.INSTANCE.link(program);
+        var link = CapybaraCompiler.INSTANCE.compile(program, new java.util.TreeSet<>());
         if (link instanceof ValueOrError.Error<CompiledProgram>) {
             var errors = ((ValueOrError.Error<CompiledProgram>) link).errors();
             throw new RuntimeException("Linking failed with " + errors.size() + " error(s): " + errors);
@@ -133,4 +133,5 @@ class CompilationTest {
         );
     }
 }
+
 

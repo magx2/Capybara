@@ -18,16 +18,22 @@ public class CapybaraCompiler {
     private static final String METHOD_DECL_PREFIX = "__method__";
     private static final java.util.regex.Pattern IDENTIFIER_PATTERN = java.util.regex.Pattern.compile("[A-Za-z_][A-Za-z0-9_]*");
 
-    public ValueOrError<CompiledProgram> link(Program program) {
-        var modulesByName = program.modules().stream().collect(toMap(Module::name, identity(), (first, second) -> first));
-        var moduleClassNameByModuleName = program.modules().stream()
+    public ValueOrError<CompiledProgram> compile(Program program, SortedSet<CompiledModule> libraries) {
+        var programModuleRefs = program.modules().stream().map(module -> new ModuleRef(module.name(), module.path())).toList();
+        var libraryModuleRefs = libraries.stream().map(module -> new ModuleRef(module.name(), module.path())).toList();
+        var allModuleRefs = Stream.concat(programModuleRefs.stream(), libraryModuleRefs.stream()).toList();
+        var modulesByName = allModuleRefs.stream().collect(toMap(ModuleRef::name, identity(), (first, second) -> first));
+        var moduleClassNameByModuleName = allModuleRefs.stream()
                 .collect(toMap(
-                        Module::name,
+                        ModuleRef::name,
                         module -> module.path().replace('/', '.').replace('\\', '.') + "." + module.name(),
                         (first, second) -> first
                 ));
 
         var linkedTypesByModule = new HashMap<String, SortedMap<String, GenericDataType>>();
+        for (var library : libraries) {
+            linkedTypesByModule.put(library.name(), library.types());
+        }
         for (var module : program.modules()) {
             var sourceFile = moduleSourceFile(module);
             var linkedTypes = withFile(types(module), sourceFile);
@@ -40,7 +46,7 @@ public class CapybaraCompiler {
         var visibleTypesByModule = new HashMap<String, Map<String, GenericDataType>>();
         for (var module : program.modules()) {
             var sourceFile = moduleSourceFile(module);
-            var visibleTypes = withFile(availableTypes(module, modulesByName, linkedTypesByModule, program.modules()), sourceFile);
+            var visibleTypes = withFile(availableTypes(module, modulesByName, linkedTypesByModule, allModuleRefs), sourceFile);
             if (visibleTypes instanceof ValueOrError.Error<Map<String, GenericDataType>> error) {
                 return new ValueOrError.Error<>(error.errors());
             }
@@ -48,6 +54,9 @@ public class CapybaraCompiler {
         }
 
         var signaturesByModule = new HashMap<String, List<CapybaraExpressionCompiler.FunctionSignature>>();
+        for (var library : libraries) {
+            signaturesByModule.put(library.name(), signaturesFromLinkedFunctions(List.copyOf(library.functions())));
+        }
         for (var module : program.modules()) {
             var functions = findFunctions(module.functional().definitions());
             var sourceFile = moduleSourceFile(module);
@@ -92,9 +101,12 @@ public class CapybaraCompiler {
                 .map(CompiledProgram::new);
     }
 
+    private record ModuleRef(String name, String path) {
+    }
+
     private ValueOrError<List<CompiledFunction>> firstPassLinkedFunctions(
             Module module,
-            Map<String, Module> modulesByName,
+            Map<String, ModuleRef> modulesByName,
             Map<String, SortedMap<String, GenericDataType>> linkedTypesByModule,
             Map<String, Map<String, GenericDataType>> visibleTypesByModule,
             Map<String, List<CapybaraExpressionCompiler.FunctionSignature>> signaturesByModule,
@@ -114,7 +126,7 @@ public class CapybaraCompiler {
 
     private ValueOrError<CompiledModule> linkModule(
             Module module,
-            Map<String, Module> modulesByName,
+            Map<String, ModuleRef> modulesByName,
             Map<String, SortedMap<String, GenericDataType>> linkedTypesByModule,
             Map<String, Map<String, GenericDataType>> visibleTypesByModule,
             Map<String, List<CapybaraExpressionCompiler.FunctionSignature>> signaturesByModule,
@@ -149,7 +161,7 @@ public class CapybaraCompiler {
 
     private ValueOrError<List<CapybaraExpressionCompiler.FunctionSignature>> availableSignatures(
             Module module,
-            Map<String, Module> modulesByName,
+            Map<String, ModuleRef> modulesByName,
             Map<String, SortedMap<String, GenericDataType>> linkedTypesByModule,
             Map<String, List<CapybaraExpressionCompiler.FunctionSignature>> signaturesByModule
     ) {
@@ -194,13 +206,13 @@ public class CapybaraCompiler {
 
     private ValueOrError<Map<String, GenericDataType>> availableTypes(
             Module module,
-            Map<String, Module> modulesByName,
+            Map<String, ModuleRef> modulesByName,
             Map<String, SortedMap<String, GenericDataType>> linkedTypesByModule,
-            List<Module> allModules
+            List<ModuleRef> allModules
     ) {
         var localTypes = linkedTypesByModule.get(module.name());
         var all = new LinkedHashMap<String, GenericDataType>(localTypes);
-        addQualifiedTypeAliases(all, module, localTypes);
+        addQualifiedTypeAliases(all, new ModuleRef(module.name(), module.path()), localTypes);
         for (var importDeclaration : module.imports()) {
             var importedModule = resolveImportedModule(importDeclaration.moduleName(), modulesByName);
             if (importedModule == null) {
@@ -226,12 +238,12 @@ public class CapybaraCompiler {
         return ValueOrError.success(Map.copyOf(all));
     }
 
-    private void addQualifiedTypeAliases(Map<String, GenericDataType> all, Module module, Map<String, GenericDataType> importedTypes) {
+    private void addQualifiedTypeAliases(Map<String, GenericDataType> all, ModuleRef module, Map<String, GenericDataType> importedTypes) {
         importedTypes.forEach((typeName, type) -> all.put(module.name() + "." + typeName, type));
         addPathQualifiedTypeAliases(all, module, importedTypes);
     }
 
-    private void addPathQualifiedTypeAliases(Map<String, GenericDataType> all, Module module, Map<String, GenericDataType> importedTypes) {
+    private void addPathQualifiedTypeAliases(Map<String, GenericDataType> all, ModuleRef module, Map<String, GenericDataType> importedTypes) {
         var modulePath = module.path().replace('\\', '/') + "/" + module.name();
         importedTypes.forEach((typeName, type) -> {
             all.put(modulePath + "." + typeName, type);
@@ -344,7 +356,7 @@ public class CapybaraCompiler {
 
     private SortedSet<CompiledModule.StaticImport> staticImports(
             Module module,
-            Map<String, Module> modulesByName,
+            Map<String, ModuleRef> modulesByName,
             Map<String, SortedMap<String, GenericDataType>> linkedTypesByModule,
             Map<String, List<CapybaraExpressionCompiler.FunctionSignature>> signaturesByModule
     ) {
@@ -383,7 +395,7 @@ public class CapybaraCompiler {
         return unmodifiableSortedSet(new TreeSet<>(byKey.values()));
     }
 
-    private Module resolveImportedModule(String rawImportedModuleName, Map<String, Module> modulesByName) {
+    private ModuleRef resolveImportedModule(String rawImportedModuleName, Map<String, ModuleRef> modulesByName) {
         var direct = modulesByName.get(rawImportedModuleName);
         if (direct != null) {
             return direct;
@@ -2903,3 +2915,4 @@ public class CapybaraCompiler {
                 .toList();
     }
 }
+

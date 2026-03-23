@@ -113,7 +113,7 @@ public class App {
                 .map(App::buildModule)
                 .toList();
 
-        var linking = CapybaraCompiler.INSTANCE.link(new Program(modules));
+        var linking = CapybaraCompiler.INSTANCE.compile(new Program(modules), new java.util.TreeSet<>());
         if (linking instanceof ValueOrError.Error<CompiledProgram> error) {
             System.err.println("Linking failed with " + error.errors().size() + " error(s):");
             error.errors().forEach(System.err::println);
@@ -287,3 +287,4 @@ public class App {
     private record ParsedSource(String source, List<ImportDeclaration> imports) {
     }
 }
+

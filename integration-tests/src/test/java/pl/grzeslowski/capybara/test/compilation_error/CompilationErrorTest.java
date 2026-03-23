@@ -882,7 +882,7 @@ public class CompilationErrorTest {
             var modules = new ArrayList<>(DEFAULT_MODULES);
             modules.add(module);
             var program = new Program(modules);
-            var programValueOrError = CapybaraCompiler.INSTANCE.link(program);
+            var programValueOrError = CapybaraCompiler.INSTANCE.compile(program, new java.util.TreeSet<>());
             if (programValueOrError instanceof ValueOrError.Value<CompiledProgram> value) {
                 throw new AssertionError("Expected compilation error but got CompiledProgram: " + value);
             }
@@ -1018,3 +1018,4 @@ public class CompilationErrorTest {
         return out;
     }
 }
+

@@ -85,7 +85,7 @@ public abstract class CompileCapybaraTask extends DefaultTask {
             throw new GradleException("Parsing failed for " + parsingFailures.size() + " file(s). Check logs for details.");
         }
 
-        var linking = CapybaraCompiler.INSTANCE.link(new Program(modules));
+        var linking = CapybaraCompiler.INSTANCE.compile(new Program(modules), new java.util.TreeSet<>());
         if (linking instanceof ValueOrError.Error<CompiledProgram> error) {
             getLogger().error("Linking failed with {} error(s)", error.errors().size());
             error.errors().forEach(linkingError -> getLogger().error(linkingError.toString()));
@@ -200,3 +200,4 @@ public abstract class CompileCapybaraTask extends DefaultTask {
     private record SourceFile(Path rootPath, Path path) {
     }
 }
+

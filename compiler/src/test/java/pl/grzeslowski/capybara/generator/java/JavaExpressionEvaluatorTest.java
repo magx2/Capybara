@@ -79,7 +79,7 @@ class JavaExpressionEvaluatorTest {
 
     private static CompiledProgram compileProgram(String fun) {
         var functional = CapybaraParser.INSTANCE.parseFunctional(fun);
-        var programValueOrError = CapybaraCompiler.INSTANCE.link(new Program(List.of(new Module("test", "/foo/boo", functional))));
+        var programValueOrError = CapybaraCompiler.INSTANCE.compile(new Program(List.of(new Module("test", "/foo/boo", functional))), new java.util.TreeSet<>());
         if (programValueOrError instanceof ValueOrError.Error<CompiledProgram> er) {
             throw new AssertionError(er.errors()
                     .stream()
@@ -105,7 +105,7 @@ class JavaExpressionEvaluatorTest {
                     1: 1
                 }
                 """);
-        var programValueOrError = CapybaraCompiler.INSTANCE.link(new Program(List.of(new Module("test", "/foo/boo", functional))));
+        var programValueOrError = CapybaraCompiler.INSTANCE.compile(new Program(List.of(new Module("test", "/foo/boo", functional))), new java.util.TreeSet<>());
         assertThat(programValueOrError).isInstanceOf(ValueOrError.Error.class);
         var error = (ValueOrError.Error<CompiledProgram>) programValueOrError;
         assertThat(error.errors().stream().map(ValueOrError.Error.SingleError::message).collect(joining(",")))
@@ -263,3 +263,4 @@ class JavaExpressionEvaluatorTest {
         );
     }
 }
+
