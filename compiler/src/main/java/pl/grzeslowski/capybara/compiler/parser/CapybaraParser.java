@@ -176,6 +176,7 @@ public class CapybaraParser {
                 context.genericTypeDeclaration().stream().skip(1).map(CapybaraParser::genericTypeName).toList(),
                 fieldDeclarationList,
                 genericTypeParameters(declaredType),
+                context.VISIBILITY() != null ? pl.grzeslowski.capybara.compiler.Visibility.LOCAL : null,
                 position(context)
         );
     }
@@ -188,6 +189,7 @@ public class CapybaraParser {
                 dataFields.fields(),
                 dataFields.extendsTypes(),
                 genericTypeParameters(declaration),
+                context.VISIBILITY() != null ? pl.grzeslowski.capybara.compiler.Visibility.LOCAL : null,
                 position(context)
         );
     }
@@ -216,6 +218,7 @@ public class CapybaraParser {
                 Optional.ofNullable(context.type()).map(CapybaraParser::type).or(() -> inferConstType(constExpression)),
                 constExpression,
                 List.of(),
+                context.VISIBILITY() != null ? pl.grzeslowski.capybara.compiler.Visibility.LOCAL : null,
                 position(context)
         );
     }
@@ -381,6 +384,7 @@ public class CapybaraParser {
                 functionDeclarationContext.docComment().stream()
                         .map(comment -> stripDocComment(comment.getText()))
                         .toList(),
+                functionDeclarationContext.VISIBILITY() != null ? pl.grzeslowski.capybara.compiler.Visibility.LOCAL : null,
                 position(functionDeclarationContext)
         );
         var allDefinitions = new java.util.ArrayList<Definition>(1 + extractedLocalDefinitions.size());
@@ -1786,6 +1790,10 @@ public class CapybaraParser {
     }
 
 }
+
+
+
+
 
 
 

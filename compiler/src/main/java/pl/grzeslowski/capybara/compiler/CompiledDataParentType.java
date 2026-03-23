@@ -7,10 +7,15 @@ import java.util.List;
 public record CompiledDataParentType(String name, List<CompiledField> fields,
                                    List<CompiledDataType> subTypes,
                                    List<String> typeParameters,
+                                   Visibility visibility,
                                    boolean enumType) implements GenericDataType, Comparable<CompiledDataParentType> {
 
     public CompiledDataParentType(String name, List<CompiledField> fields, List<CompiledDataType> subTypes, List<String> typeParameters) {
-        this(name, fields, subTypes, typeParameters, false);
+        this(name, fields, subTypes, typeParameters, null, false);
+    }
+
+    public CompiledDataParentType(String name, List<CompiledField> fields, List<CompiledDataType> subTypes, List<String> typeParameters, boolean enumType) {
+        this(name, fields, subTypes, typeParameters, null, enumType);
     }
 
     @Override

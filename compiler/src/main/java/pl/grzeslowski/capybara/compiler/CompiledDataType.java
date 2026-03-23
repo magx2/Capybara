@@ -6,7 +6,15 @@ public record CompiledDataType(String name,
                              List<CompiledField> fields,
                              List<String> typeParameters,
                              List<String> extendedTypes,
+                             Visibility visibility,
                              boolean singleton) implements GenericDataType, Comparable<CompiledDataType> {
+    public CompiledDataType(String name,
+                            List<CompiledField> fields,
+                            List<String> typeParameters,
+                            List<String> extendedTypes,
+                            boolean singleton) {
+        this(name, fields, typeParameters, extendedTypes, null, singleton);
+    }
 
     @Override
     public final boolean equals(Object o) {

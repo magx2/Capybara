@@ -14,7 +14,7 @@ definition:
     | singleDeclaration
     | constDeclaration;
 
-functionDeclaration: docComment* 'fun' functionNameDeclaration '(' parameters? ')' functionType? '=' functionBody;
+functionDeclaration: docComment* VISIBILITY? 'fun' functionNameDeclaration '(' parameters? ')' functionType? '=' functionBody;
 functionBody: localDefinition* expression;
 localDefinition: localFunctionDeclaration
                | localTypeDeclaration
@@ -30,19 +30,20 @@ functionNameDeclaration: identifier | genericTypeDeclaration DOT methodIdentifie
 methodIdentifier: identifier | INFIX_METHOD_LITERAL;
 docComment: DOC_COMMENT;
 
-typeDeclaration: 'type' genericTypeDeclaration '=' genericTypeDeclaration (PIPE genericTypeDeclaration)*
-               | 'type' genericTypeDeclaration '{' fieldDeclarationList? '}' '=' genericTypeDeclaration (PIPE genericTypeDeclaration)*;
+typeDeclaration: VISIBILITY? 'type' genericTypeDeclaration '=' genericTypeDeclaration (PIPE genericTypeDeclaration)*
+               | VISIBILITY? 'type' genericTypeDeclaration '{' fieldDeclarationList? '}' '=' genericTypeDeclaration (PIPE genericTypeDeclaration)*;
 enumDeclaration: 'enum' TYPE '{' TYPE (COMMA TYPE)* COMMA? '}';
-dataDeclaration: 'data' genericTypeDeclaration '{' fieldDeclarationList? '}'
-               | 'data' genericTypeDeclaration '=' '{' fieldDeclarationList? '}';
+dataDeclaration: VISIBILITY? 'data' genericTypeDeclaration '{' fieldDeclarationList? '}'
+               | VISIBILITY? 'data' genericTypeDeclaration '=' '{' fieldDeclarationList? '}';
 singleDeclaration: 'single' TYPE;
-constDeclaration: 'const' TYPE (':' type)? '=' expressionNoLet;
+constDeclaration: VISIBILITY? 'const' TYPE (':' type)? '=' expressionNoLet;
 fieldDeclarationList: fieldDeclaration (',' fieldDeclaration)*;
 fieldDeclaration: NAME ':' type
                 | STRING_LITERAL ':' type
                 | SPREAD TYPE;
 genericTypeDeclaration: TYPE ('[' TYPE (',' TYPE)* ']')?;
 
+VISIBILITY: 'local';
 BOOL_LITERAL: 'true' | 'false';
 COLLECTION: 'list' | 'set' | 'dict';
 NAME : [_]* [a-z] [a-zA-Z0-9_]*;
@@ -303,4 +304,9 @@ DOC_COMMENT : '///' ~[\r\n]*;
 LINE_COMMENT : '//' ~[\r\n]* -> skip;
 BLOCK_COMMENT : '/*' .*? '*/' -> skip;
 WS : [ \t\r\n]+ -> skip;
+
+
+
+
+
 

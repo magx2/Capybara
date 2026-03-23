@@ -103,7 +103,7 @@
       "patterns": [
         {
           "name": "keyword.control.capybara",
-          "match": "\\b(fun|type|enum|data|single|const|match|with|if|then|else|let|from|import|except)\\b"
+          "match": "\\b(fun|type|enum|data|single|const|local|match|with|if|then|else|let|from|import|except)\\b"
         },
         {
           "name": "keyword.other.capybara",
@@ -404,6 +404,7 @@
     }
   }
 }
+
 
 
 

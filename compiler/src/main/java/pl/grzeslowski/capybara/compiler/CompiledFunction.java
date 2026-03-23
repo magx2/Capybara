@@ -10,13 +10,23 @@ public record CompiledFunction(String name,
                              List<CompiledFunctionParameter> parameters,
                              CompiledExpression expression,
                              List<String> comments,
+                             Visibility visibility,
                              boolean programMain) implements Comparable<CompiledFunction> {
     public CompiledFunction(String name,
                           CompiledType returnType,
                           List<CompiledFunctionParameter> parameters,
                           CompiledExpression expression,
                           List<String> comments) {
-        this(name, returnType, parameters, expression, comments, false);
+        this(name, returnType, parameters, expression, comments, null, false);
+    }
+
+    public CompiledFunction(String name,
+                            CompiledType returnType,
+                            List<CompiledFunctionParameter> parameters,
+                            CompiledExpression expression,
+                            List<String> comments,
+                            boolean programMain) {
+        this(name, returnType, parameters, expression, comments, null, programMain);
     }
 
     public record CompiledFunctionParameter(String name, CompiledType type) {
@@ -71,4 +81,3 @@ public record CompiledFunction(String name,
         return name.hashCode();
     }
 }
-

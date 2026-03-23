@@ -1,0 +1,13 @@
+local const LOCAL_OFFSET: int = 5
+
+local type LocalValue = LocalNumber
+local data LocalNumber { value: int }
+
+local fun add_local_offset(x: int): int = x + LOCAL_OFFSET
+local fun make_local(x: int): LocalValue = LocalNumber { value: add_local_offset(x) }
+local fun identity_local(value: LocalValue): LocalValue = value
+local fun unwrap_number(value: LocalNumber): int = value.value
+
+fun own_package_value(x: int): int =
+    let value: LocalValue = identity_local(make_local(x))
+    unwrap_number(LocalNumber { value: add_local_offset(x) })

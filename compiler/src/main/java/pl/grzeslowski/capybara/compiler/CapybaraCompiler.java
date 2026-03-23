@@ -163,7 +163,6 @@ public class CapybaraCompiler {
                             ));
                 }), moduleSourceFile);
     }
-
     private Result<List<CapybaraExpressionCompiler.FunctionSignature>> availableSignatures(
             Module module,
             Map<String, ModuleRef> modulesByName,
@@ -176,11 +175,11 @@ public class CapybaraCompiler {
             if (importedModule == null) {
                 return Result.error("Module `" + module.name() + "` imports unknown module `" + importDeclaration.moduleName() + "`");
             }
-            var importedSignatures = signaturesByModule.get(importedModule.name());
+            var importedSignatures = visibleSignatures(module.path(), importedModule, signaturesByModule.get(importedModule.name()));
             var availableFunctionMembers = importedSignatures.stream()
                     .map(CapybaraExpressionCompiler.FunctionSignature::name)
                     .collect(java.util.stream.Collectors.toSet());
-            var availableTypeMembers = linkedTypesByModule.get(importedModule.name()).keySet();
+            var availableTypeMembers = visibleTypes(module.path(), importedModule, linkedTypesByModule.get(importedModule.name())).keySet();
             var availableMembers = new HashSet<String>(availableFunctionMembers);
             availableMembers.addAll(availableTypeMembers);
             for (var excludedSymbol : importDeclaration.excludedSymbols()) {
@@ -223,7 +222,7 @@ public class CapybaraCompiler {
             if (importedModule == null) {
                 return Result.error("Module `" + module.name() + "` imports unknown module `" + importDeclaration.moduleName() + "`");
             }
-            var importedTypes = linkedTypesByModule.get(importedModule.name());
+            var importedTypes = visibleTypes(module.path(), importedModule, linkedTypesByModule.get(importedModule.name()));
             addQualifiedTypeAliases(all, importedModule, importedTypes);
             if (importDeclaration.isStarImport() && importDeclaration.excludedSymbols().isEmpty()) {
                 importedTypes.forEach(all::put);
@@ -238,7 +237,7 @@ public class CapybaraCompiler {
                 }
             }
         }
-        allModules.forEach(knownModule -> addQualifiedTypeAliases(all, knownModule, linkedTypesByModule.get(knownModule.name())));
+        allModules.forEach(knownModule -> addQualifiedTypeAliases(all, knownModule, visibleTypes(module.path(), knownModule, linkedTypesByModule.get(knownModule.name()))));
         resolveQualifiedExternalFieldTypes(all);
         return Result.success(Map.copyOf(all));
     }
@@ -279,6 +278,7 @@ public class CapybaraCompiler {
                             .toList(),
                     linkedDataType.typeParameters(),
                     linkedDataType.extendedTypes(),
+                    linkedDataType.visibility(),
                     linkedDataType.singleton()
             );
             case CompiledDataParentType linkedDataParentType -> new CompiledDataParentType(
@@ -290,6 +290,7 @@ public class CapybaraCompiler {
                             .map(subType -> (CompiledDataType) resolveGenericDataType(subType, all))
                             .toList(),
                     linkedDataParentType.typeParameters(),
+                    linkedDataParentType.visibility(),
                     linkedDataParentType.enumType()
             );
         };
@@ -350,6 +351,7 @@ public class CapybaraCompiler {
                     linkedDataType.fields(),
                     linkedDataType.typeParameters(),
                     linkedDataType.extendedTypes(),
+                    linkedDataType.visibility(),
                     linkedDataType.singleton()
             );
             case CompiledDataParentType linkedDataParentType -> new CompiledDataParentType(
@@ -357,6 +359,7 @@ public class CapybaraCompiler {
                     linkedDataParentType.fields(),
                     linkedDataParentType.subTypes(),
                     linkedDataParentType.typeParameters(),
+                    linkedDataParentType.visibility(),
                     linkedDataParentType.enumType()
             );
         };
@@ -375,14 +378,16 @@ public class CapybaraCompiler {
                 continue;
             }
             var className = importedModule.path().replace('/', '.').replace('\\', '.') + "." + importedModule.name();
+            var importedSignatures = visibleSignatures(module.path(), importedModule, signaturesByModule.get(importedModule.name()));
+            var importedTypes = visibleTypes(module.path(), importedModule, linkedTypesByModule.get(importedModule.name()));
             if (importDeclaration.isStarImport() && importDeclaration.excludedSymbols().isEmpty()) {
                 imports.add(new CompiledModule.StaticImport(className, "*"));
                 continue;
             }
-            var availableFunctionMembers = signaturesByModule.get(importedModule.name()).stream()
+            var availableFunctionMembers = importedSignatures.stream()
                     .map(CapybaraExpressionCompiler.FunctionSignature::name)
                     .collect(java.util.stream.Collectors.toSet());
-            var availableTypeMembers = new HashSet<>(linkedTypesByModule.get(importedModule.name()).keySet());
+            var availableTypeMembers = new HashSet<>(importedTypes.keySet());
             var availableMembers = new HashSet<String>(availableFunctionMembers);
             availableMembers.addAll(availableTypeMembers);
             for (var symbol : importDeclaration.selectedSymbols(availableMembers)) {
@@ -393,7 +398,6 @@ public class CapybaraCompiler {
         }
         return unmodifiableSortedSet(new TreeSet<>(imports));
     }
-
     private SortedSet<CompiledFunction> deduplicateFunctions(List<CompiledFunction> linkedFunctions) {
         var byKey = new LinkedHashMap<String, CompiledFunction>();
         for (var function : linkedFunctions) {
@@ -425,6 +429,46 @@ public class CapybaraCompiler {
         }
 
         return null;
+    }
+
+    private List<CapybaraExpressionCompiler.FunctionSignature> visibleSignatures(
+            String currentModulePath,
+            ModuleRef ownerModule,
+            List<CapybaraExpressionCompiler.FunctionSignature> signatures
+    ) {
+        return signatures.stream()
+                .filter(signature -> signature.visibility() != Visibility.LOCAL || isVisibleFromModule(currentModulePath, ownerModule.path()))
+                .toList();
+    }
+
+    private SortedMap<String, GenericDataType> visibleTypes(
+            String currentModulePath,
+            ModuleRef ownerModule,
+            SortedMap<String, GenericDataType> types
+    ) {
+        return types.entrySet().stream()
+                .filter(entry -> entry.getValue().visibility() != Visibility.LOCAL
+                                 || isVisibleFromModule(currentModulePath, ownerModule.path()))
+                .collect(java.util.stream.Collectors.toMap(
+                        Map.Entry::getKey,
+                        Map.Entry::getValue,
+                        (first, second) -> first,
+                        TreeMap::new
+                ));
+    }
+
+    private boolean isVisibleFromModule(String currentModulePath, String ownerModulePath) {
+        var current = normalizeModulePath(currentModulePath);
+        var owner = normalizeModulePath(ownerModulePath);
+        return current.equals(owner) || current.startsWith(owner + "/");
+    }
+
+    private String normalizeModulePath(String modulePath) {
+        var normalized = modulePath.replace('\\', '/');
+        while (normalized.endsWith("/") && normalized.length() > 1) {
+            normalized = normalized.substring(0, normalized.length() - 1);
+        }
+        return normalized;
     }
 
     private List<CapybaraExpressionCompiler.FunctionSignature> mergeSignatures(
@@ -502,6 +546,7 @@ public class CapybaraCompiler {
                                         parameters,
                                         enrichNothing(coerceReturnExpression(validatedExpression, rtype), function.name(), moduleSourceFile),
                                         function.comments(),
+                                        function.visibility(),
                                         isProgramMain(function.name(), rtype, parameters)
                                 )))));
         linked = normalizeInfixOperatorErrors(linked, function, moduleSourceFile);
@@ -540,7 +585,8 @@ public class CapybaraCompiler {
                             ? new CapybaraExpressionCompiler.FunctionSignature(
                             signature.name(),
                             signature.parameterTypes(),
-                            PrimitiveLinkedType.NOTHING
+                            PrimitiveLinkedType.NOTHING,
+                            signature.visibility()
                     )
                             : signature)
                     .toList();
@@ -556,7 +602,6 @@ public class CapybaraCompiler {
             );
         });
     }
-
     private Optional<Result<CompiledFunction>> validateTypeMethodDeclaredInLocalType(
             Function function,
             Set<String> localTypeNames,
@@ -1700,7 +1745,8 @@ public class CapybaraCompiler {
                                     .map(returnType -> new CapybaraExpressionCompiler.FunctionSignature(
                                             function.name(),
                                             parameters.stream().map(CompiledFunctionParameter::type).toList(),
-                                            returnType
+                                            returnType,
+                                            function.visibility()
                                     )));
                 })
                 .collect(new ResultCollectionCollector<>());
@@ -2566,6 +2612,7 @@ public class CapybaraCompiler {
                             List.copyOf(fields),
                             dataDeclaration.typeParameters(),
                             dataDeclaration.extendsTypes(),
+                            dataDeclaration.visibility(),
                             false
                     );
                 },
@@ -2630,13 +2677,14 @@ public class CapybaraCompiler {
                         List.of(),
                         declaration.typeParameters(),
                         declaration.extendsTypes(),
+                        declaration.visibility(),
                         false
                 ));
             }
         });
         rawTypeDeclarationsByName.forEach((name, declaration) -> knownDataTypes.putIfAbsent(
                 name,
-                new CompiledDataParentType(name, List.of(), List.of(), declaration.typeParameters())
+                new CompiledDataParentType(name, List.of(), List.of(), declaration.typeParameters(), declaration.visibility(), false)
         ));
         genericTypes.forEach(genericTypeName -> knownDataTypes.putIfAbsent(
                 genericTypeName,
@@ -2844,6 +2892,7 @@ public class CapybaraCompiler {
                                     mergeParentFields(fields, subType.fields()),
                                     subType.typeParameters(),
                                     subType.extendedTypes(),
+                                    subType.visibility(),
                                     subType.singleton()
                             ))
                             .toList();
@@ -2851,7 +2900,9 @@ public class CapybaraCompiler {
                             typeDeclaration.name(),
                             fields,
                             inheritedSubtypes,
-                            typeDeclaration.typeParameters()
+                            typeDeclaration.typeParameters(),
+                            typeDeclaration.visibility(),
+                            false
                     );
                 });
     }
@@ -2957,5 +3008,8 @@ public class CapybaraCompiler {
                 .toList();
     }
 }
+
+
+
 
 

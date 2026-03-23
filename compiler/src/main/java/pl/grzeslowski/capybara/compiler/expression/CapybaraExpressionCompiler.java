@@ -4544,9 +4544,11 @@ public class CapybaraExpressionCompiler {
     private record PatternAndScope(CompiledMatchExpression.Pattern pattern, Scope scope) {
     }
 
-    public record FunctionSignature(String name, List<CompiledType> parameterTypes, CompiledType returnType) {
+    public record FunctionSignature(String name, List<CompiledType> parameterTypes, CompiledType returnType, Visibility visibility) {
+        public FunctionSignature(String name, List<CompiledType> parameterTypes, CompiledType returnType) {
+            this(name, parameterTypes, returnType, null);
+        }
     }
-
     private record CoercedArgument(CompiledExpression expression, int coercions) {
     }
 
@@ -4568,5 +4570,6 @@ public class CapybaraExpressionCompiler {
     private record ResolvedModule(String javaModuleName, List<FunctionSignature> signatures) {
     }
 }
+
 
 
