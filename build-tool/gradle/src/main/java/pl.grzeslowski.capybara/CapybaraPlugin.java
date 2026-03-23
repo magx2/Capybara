@@ -2,9 +2,9 @@ package pl.grzeslowski.capybara;
 
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
-import org.gradle.api.tasks.TaskProvider;
-import org.gradle.api.tasks.SourceSetContainer;
 import org.gradle.api.tasks.JavaExec;
+import org.gradle.api.tasks.SourceSetContainer;
+import org.gradle.api.tasks.TaskProvider;
 import org.gradle.api.tasks.testing.Test;
 import pl.grzeslowski.capybara.compiler.OutputType;
 
@@ -14,8 +14,8 @@ public class CapybaraPlugin implements Plugin<Project> {
     @Override
     public void apply(Project project) {
         var layout = project.getLayout();
+        var compilerVersion = project.getVersion().toString();
 
-        // main
         TaskProvider<CompileCapybaraTask> compileCapybara = project.getTasks().register(
                 "compileCapybara",
                 CompileCapybaraTask.class,
@@ -24,6 +24,7 @@ public class CapybaraPlugin implements Plugin<Project> {
                     task.setDescription("Compiles Capybara files from src/main/capybara.");
                     task.getInputDir().set(project.file("src/main/capybara"));
                     task.getOutputDir().set(layout.getBuildDirectory().dir("classes/capybara"));
+                    task.getCompilerVersion().set(compilerVersion);
                 }
         );
 
@@ -42,7 +43,6 @@ public class CapybaraPlugin implements Plugin<Project> {
 
         project.getTasks().named("compileJava", task -> task.dependsOn(generateCapybaraJava));
 
-        // test
         TaskProvider<CompileCapybaraTask> compileTestCapybara = project.getTasks().register(
                 "compileTestCapybara",
                 CompileCapybaraTask.class,
@@ -51,6 +51,7 @@ public class CapybaraPlugin implements Plugin<Project> {
                     task.setDescription("Compiles Capybara files from src/test/capybara.");
                     task.getInputDir().set(project.file("src/test/capybara"));
                     task.getOutputDir().set(layout.getBuildDirectory().dir("classes/test-capybara"));
+                    task.getCompilerVersion().set(compilerVersion);
                 }
         );
 
@@ -116,9 +117,7 @@ public class CapybaraPlugin implements Plugin<Project> {
                 task.dependsOn(runJsonTest, runResultTest, runSeqTest, runCollectionAssertTest);
             });
 
-            project.getTasks().named("test", Test.class, task -> {
-                task.dependsOn("testCapybara");
-            });
+            project.getTasks().named("test", Test.class, task -> task.dependsOn("testCapybara"));
         }
     }
 }

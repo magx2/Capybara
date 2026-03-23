@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
 import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
 import pl.grzeslowski.capybara.compiler.CapybaraCompiler;
+import pl.grzeslowski.capybara.compiler.CompiledModule;
 import pl.grzeslowski.capybara.compiler.CompiledProgram;
 import pl.grzeslowski.capybara.compiler.OutputType;
 import pl.grzeslowski.capybara.compiler.Result;
@@ -12,21 +13,26 @@ import pl.grzeslowski.capybara.compiler.parser.RawModule;
 import pl.grzeslowski.capybara.generator.Generator;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.time.OffsetDateTime;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.logging.Handler;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 public class App {
     private static final Logger log = Logger.getLogger(App.class.getName());
-    private static final String LINKED_PROGRAM_FILE = "linked-program.json";
     public static final String EXTENSION = ".json";
+    private static final String BUILD_INFO_FILE = "build-info.json";
+    private static final String VERSION_RESOURCE = "/capybara-version.txt";
 
     public static void main(String[] args) throws IOException {
         var filteredArgs = Arrays.stream(args)
@@ -113,7 +119,8 @@ public class App {
         }
 
         var linkedProgram = ((Result.Success<CompiledProgram>) linking).value();
-        writeLinkedJson(linkedOutputDir, linkedProgram);
+        writeLinkedModules(linkedOutputDir, linkedProgram);
+        writeBuildInfo(linkedOutputDir);
         return 0;
     }
 
@@ -127,12 +134,7 @@ public class App {
             throw new IllegalArgumentException("Linked input path is not a directory: " + linkedInputDir);
         }
 
-        var linkedProgramFile = linkedInputDir.resolve(LINKED_PROGRAM_FILE);
-        if (Files.notExists(linkedProgramFile)) {
-            throw new IllegalArgumentException("Missing linked program file: " + linkedProgramFile);
-        }
-
-        var linkedProgram = readLinkedJson(linkedProgramFile);
+        var linkedProgram = readLinkedModules(linkedInputDir);
         var compiledProgram = Generator.findGenerator(outputType).generate(linkedProgram);
         compiledProgram.modules().forEach(module -> writeCompiledModule(generatedOutputDir, module.relativePath(), module.code()));
         return 0;
@@ -158,14 +160,10 @@ public class App {
         }
     }
 
-    private static void writeLinkedJson(Path outputDir, CompiledProgram program) {
+    private static void writeLinkedModules(Path outputDir, CompiledProgram program) {
         var mapper = objectMapper();
         try {
             Files.createDirectories(outputDir);
-            var fullProgramFile = outputDir.resolve(LINKED_PROGRAM_FILE);
-            mapper.writerWithDefaultPrettyPrinter().writeValue(fullProgramFile.toFile(), program);
-            log.info("Writing linked program to file: " + fullProgramFile);
-
             for (var module : program.modules()) {
                 var modulePath = module.path().replace('\\', '/');
                 var moduleJson = modulePath.isBlank()
@@ -173,17 +171,61 @@ public class App {
                         : outputDir.resolve(modulePath).resolve(module.name() + EXTENSION);
                 Files.createDirectories(moduleJson.getParent());
                 mapper.writerWithDefaultPrettyPrinter().writeValue(moduleJson.toFile(), module);
+                log.info("Writing linked module to file: " + moduleJson);
             }
         } catch (IOException e) {
             throw new UncheckedIOException("Unable to write linked JSON output to " + outputDir, e);
         }
     }
 
-    private static CompiledProgram readLinkedJson(Path linkedProgramFile) {
+    private static void writeBuildInfo(Path outputDir) {
+        var buildInfo = Map.of(
+                "build_date_time", OffsetDateTime.now().toString(),
+                "capybara_compiler_version", readCompilerVersion()
+        );
         try {
-            return objectMapper().readValue(linkedProgramFile.toFile(), CompiledProgram.class);
+            Files.createDirectories(outputDir);
+            var buildInfoFile = outputDir.resolve(BUILD_INFO_FILE);
+            objectMapper().writerWithDefaultPrettyPrinter().writeValue(buildInfoFile.toFile(), buildInfo);
+            log.info("Writing build info to file: " + buildInfoFile);
         } catch (IOException e) {
-            throw new UncheckedIOException("Unable to read linked program JSON: " + linkedProgramFile, e);
+            throw new UncheckedIOException("Unable to write build info JSON to " + outputDir, e);
+        }
+    }
+
+    private static String readCompilerVersion() {
+        try (InputStream stream = App.class.getResourceAsStream(VERSION_RESOURCE)) {
+            if (stream == null) {
+                throw new IllegalStateException("Missing version resource: " + VERSION_RESOURCE);
+            }
+            return new String(stream.readAllBytes(), StandardCharsets.UTF_8).trim();
+        } catch (IOException e) {
+            throw new UncheckedIOException("Unable to read compiler version resource", e);
+        }
+    }
+
+    private static CompiledProgram readLinkedModules(Path linkedInputDir) {
+        try (var files = Files.walk(linkedInputDir)) {
+            var modules = files
+                    .filter(Files::isRegularFile)
+                    .filter(path -> path.getFileName().toString().endsWith(EXTENSION))
+                    .filter(path -> !path.getFileName().toString().equals(BUILD_INFO_FILE))
+                    .map(App::readLinkedModule)
+                    .toList();
+            if (modules.isEmpty()) {
+                throw new IllegalArgumentException("Missing linked module files in directory: " + linkedInputDir);
+            }
+            return new CompiledProgram(modules);
+        } catch (IOException e) {
+            throw new UncheckedIOException("Unable to read linked module JSONs from: " + linkedInputDir, e);
+        }
+    }
+
+    private static CompiledModule readLinkedModule(Path linkedModuleFile) {
+        try {
+            return objectMapper().readValue(linkedModuleFile.toFile(), CompiledModule.class);
+        } catch (IOException e) {
+            throw new UncheckedIOException("Unable to read linked module JSON: " + linkedModuleFile, e);
         }
     }
 

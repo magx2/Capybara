@@ -8,6 +8,8 @@ import org.gradle.api.DefaultTask;
 import org.gradle.api.GradleException;
 import org.gradle.api.file.ConfigurableFileCollection;
 import org.gradle.api.file.DirectoryProperty;
+import org.gradle.api.provider.Property;
+import org.gradle.api.tasks.Input;
 import org.gradle.api.tasks.InputDirectory;
 import org.gradle.api.tasks.InputFiles;
 import org.gradle.api.tasks.OutputDirectory;
@@ -21,12 +23,15 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 public abstract class CompileCapybaraTask extends DefaultTask {
 
     public static final String EXTENSION = ".json";
+    private static final String BUILD_INFO_FILE = "build-info.json";
 
     @InputDirectory
     public abstract DirectoryProperty getInputDir();
@@ -36,6 +41,9 @@ public abstract class CompileCapybaraTask extends DefaultTask {
 
     @OutputDirectory
     public abstract DirectoryProperty getOutputDir();
+
+    @Input
+    public abstract Property<String> getCompilerVersion();
 
     @TaskAction
     public void compile() {
@@ -86,7 +94,8 @@ public abstract class CompileCapybaraTask extends DefaultTask {
         }
 
         var linkedProgram = ((Result.Success<CompiledProgram>) linking).value();
-        writeLinkedJson(output.toPath(), linkedProgram);
+        writeLinkedModules(output.toPath(), linkedProgram);
+        writeBuildInfo(output.toPath());
     }
 
     private RawModule buildModule(Path rootPath, Path sourceFile) {
@@ -119,25 +128,36 @@ public abstract class CompileCapybaraTask extends DefaultTask {
         return parent == null ? "" : parent.toString();
     }
 
-
-    private void writeLinkedJson(Path outputDir, CompiledProgram program) {
+    private void writeLinkedModules(Path outputDir, CompiledProgram program) {
         var mapper = objectMapper();
         try {
             Files.createDirectories(outputDir);
-            var fullProgramFile = outputDir.resolve("linked-program.json");
-            mapper.writerWithDefaultPrettyPrinter().writeValue(fullProgramFile.toFile(), program);
-            getLogger().lifecycle("Wrote linked program: {}", fullProgramFile);
-
             for (var module : program.modules()) {
                 var modulePath = module.path().replace('\\', '/');
-                var moduleJson = (modulePath.isBlank()
+                var moduleJson = modulePath.isBlank()
                         ? outputDir.resolve(module.name() + EXTENSION)
-                        : outputDir.resolve(modulePath).resolve(module.name() + EXTENSION));
+                        : outputDir.resolve(modulePath).resolve(module.name() + EXTENSION);
                 Files.createDirectories(moduleJson.getParent());
                 mapper.writerWithDefaultPrettyPrinter().writeValue(moduleJson.toFile(), module);
+                getLogger().lifecycle("Wrote linked module: {}", moduleJson);
             }
         } catch (IOException e) {
             throw new UncheckedIOException("Unable to write linked JSON output to " + outputDir, e);
+        }
+    }
+
+    private void writeBuildInfo(Path outputDir) {
+        var buildInfo = Map.of(
+                "build_date_time", OffsetDateTime.now().toString(),
+                "capybara_compiler_version", getCompilerVersion().get()
+        );
+        try {
+            Files.createDirectories(outputDir);
+            var buildInfoFile = outputDir.resolve(BUILD_INFO_FILE);
+            objectMapper().writerWithDefaultPrettyPrinter().writeValue(buildInfoFile.toFile(), buildInfo);
+            getLogger().lifecycle("Wrote build info: {}", buildInfoFile);
+        } catch (IOException e) {
+            throw new UncheckedIOException("Unable to write build info JSON to " + outputDir, e);
         }
     }
 
@@ -154,7 +174,6 @@ public abstract class CompileCapybaraTask extends DefaultTask {
         );
         return mapper;
     }
-
 
     private record SourceFile(Path rootPath, Path path) {
     }

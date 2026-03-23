@@ -8,6 +8,14 @@ dependencies {
     implementation 'com.fasterxml.jackson.datatype:jackson-datatype-jdk8:2.19.0'
 }
 
+def capybaraVersion = project.version.toString()
+
+processResources {
+    filesMatching('capybara-version.txt') {
+        expand(version: capybaraVersion)
+    }
+}
+
 application {
     // Define the main class for the application.
     mainClass = 'pl.grzeslowski.capybara.App'

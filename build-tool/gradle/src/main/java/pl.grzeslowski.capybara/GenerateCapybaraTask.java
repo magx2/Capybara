@@ -1,17 +1,18 @@
 package pl.grzeslowski.capybara;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.gradle.api.GradleException;
 import org.gradle.api.DefaultTask;
+import org.gradle.api.GradleException;
 import org.gradle.api.file.DirectoryProperty;
 import org.gradle.api.provider.SetProperty;
-import org.gradle.api.tasks.InputDirectory;
 import org.gradle.api.tasks.Input;
+import org.gradle.api.tasks.InputDirectory;
 import org.gradle.api.tasks.OutputDirectory;
 import org.gradle.api.tasks.TaskAction;
+import pl.grzeslowski.capybara.compiler.CompiledModule;
+import pl.grzeslowski.capybara.compiler.CompiledProgram;
 import pl.grzeslowski.capybara.compiler.OutputType;
 import pl.grzeslowski.capybara.generator.Generator;
-import pl.grzeslowski.capybara.compiler.CompiledProgram;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -21,7 +22,6 @@ import java.nio.file.StandardOpenOption;
 import java.util.Locale;
 
 public abstract class GenerateCapybaraTask extends DefaultTask {
-    private static final String LINKED_PROGRAM_FILE = "linked-program.json";
 
     @InputDirectory
     public abstract DirectoryProperty getInputDir();
@@ -59,15 +59,27 @@ public abstract class GenerateCapybaraTask extends DefaultTask {
     }
 
     private CompiledProgram readLinkedProgram(Path inputDir) {
-        var linkedProgramFile = inputDir.resolve(LINKED_PROGRAM_FILE);
-        if (!Files.exists(linkedProgramFile)) {
-            throw new GradleException("Missing linked program file: " + linkedProgramFile);
+        try (var files = Files.walk(inputDir)) {
+            var modules = files
+                    .filter(Files::isRegularFile)
+                    .filter(path -> path.getFileName().toString().endsWith(CompileCapybaraTask.EXTENSION))
+                    .map(this::readLinkedModule)
+                    .toList();
+            if (modules.isEmpty()) {
+                throw new GradleException("Missing linked module files in directory: " + inputDir);
+            }
+            return new CompiledProgram(modules);
+        } catch (IOException e) {
+            throw new UncheckedIOException("Unable to read linked module JSONs from: " + inputDir, e);
         }
+    }
+
+    private CompiledModule readLinkedModule(Path linkedModuleFile) {
         try {
             ObjectMapper mapper = CompileCapybaraTask.objectMapper();
-            return mapper.readValue(linkedProgramFile.toFile(), CompiledProgram.class);
+            return mapper.readValue(linkedModuleFile.toFile(), CompiledModule.class);
         } catch (IOException e) {
-            throw new UncheckedIOException("Unable to read linked program JSON: " + linkedProgramFile, e);
+            throw new UncheckedIOException("Unable to read linked module JSON: " + linkedModuleFile, e);
         }
     }
 
