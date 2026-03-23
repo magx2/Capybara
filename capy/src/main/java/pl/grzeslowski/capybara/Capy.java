@@ -59,6 +59,44 @@ public class Capy {
         }
     }
 
+    public static int compile(Path input, Path linkedOutputDir, TreeSet<CompiledModule> libraries, PrintStream err) {
+        return compile(input, linkedOutputDir, libraries, err, readCompilerVersion());
+    }
+
+    public static int compile(
+            Path input,
+            Path linkedOutputDir,
+            TreeSet<CompiledModule> libraries,
+            PrintStream err,
+            String compilerVersion
+    ) {
+        try {
+            return compileOrThrow(input, linkedOutputDir, libraries, err, compilerVersion);
+        } catch (CliException e) {
+            err.println(e.getMessage());
+            return EXIT_USAGE;
+        } catch (Exception e) {
+            var message = e.getMessage() == null || e.getMessage().isBlank() ? e.getClass().getSimpleName() : e.getMessage();
+            err.println(message);
+            log.log(Level.SEVERE, message, e);
+            return EXIT_FAILURE;
+        }
+    }
+
+    public static int generate(OutputType outputType, Path linkedInputDir, Path generatedOutputDir, PrintStream err) {
+        try {
+            return generateOrThrow(outputType, linkedInputDir, generatedOutputDir);
+        } catch (CliException e) {
+            err.println(e.getMessage());
+            return EXIT_USAGE;
+        } catch (Exception e) {
+            var message = e.getMessage() == null || e.getMessage().isBlank() ? e.getClass().getSimpleName() : e.getMessage();
+            err.println(message);
+            log.log(Level.SEVERE, message, e);
+            return EXIT_FAILURE;
+        }
+    }
+
     private static int executeOrThrow(String[] args, PrintStream out, PrintStream err) throws IOException {
         if (args.length == 0) {
             throw new CliException(helpText());
@@ -78,7 +116,7 @@ public class Capy {
         var command = args[0].toLowerCase(Locale.ROOT);
         return switch (command) {
             case "compile" -> executeCompile(Arrays.copyOfRange(args, 1, args.length), err);
-            case "generate" -> executeGenerate(Arrays.copyOfRange(args, 1, args.length));
+            case "generate" -> executeGenerate(Arrays.copyOfRange(args, 1, args.length), err);
             default -> throw new CliException("Unknown command `" + args[0] + "`.\n\n" + helpText());
         };
     }
@@ -91,7 +129,7 @@ public class Capy {
         return "-h".equals(arg) || "--help".equals(arg);
     }
 
-    private static int executeCompile(String[] args, PrintStream err) throws IOException {
+    private static int executeCompile(String[] args, PrintStream err) {
         var options = parseNamedOptions(args, true);
         configureLogging(options.logLevel());
 
@@ -102,7 +140,7 @@ public class Capy {
         return compile(input, output, libraries, err);
     }
 
-    private static int executeGenerate(String[] args) throws IOException {
+    private static int executeGenerate(String[] args, PrintStream err) {
         if (args.length == 0) {
             throw new CliException("Missing output type for `generate`.\n\n" + helpText());
         }
@@ -113,7 +151,7 @@ public class Capy {
 
         var input = options.values().containsKey("input") ? Path.of(options.values().get("input")) : Path.of(".");
         var output = requiredPath(options.values(), "output", "generate");
-        return generate(outputType, input, output);
+        return generate(outputType, input, output, err);
     }
 
     private static NamedOptions parseNamedOptions(String[] args, boolean allowLibs) {
@@ -183,13 +221,17 @@ public class Capy {
             case "JAVA" -> OutputType.JAVA;
             case "PYTHON" -> OutputType.PYTHON;
             case "JAVASCRIPT", "JS" -> OutputType.JAVASCRIPT;
-            default -> throw new CliException(
-                    "Unknown output type `" + value + "`. Use java, python, javascript, or js."
-            );
+            default -> throw new CliException("Unknown output type `" + value + "`. Use java, python, javascript, or js.");
         };
     }
 
-    private static int compile(Path input, Path linkedOutputDir, TreeSet<CompiledModule> libraries, PrintStream err) throws IOException {
+    private static int compileOrThrow(
+            Path input,
+            Path linkedOutputDir,
+            TreeSet<CompiledModule> libraries,
+            PrintStream err,
+            String compilerVersion
+    ) throws IOException {
         validateInputDirectory(input);
         validateEmptyExistingDirectory(linkedOutputDir, "Compile output path");
 
@@ -203,17 +245,16 @@ public class Capy {
         if (linking instanceof Result.Error<CompiledProgram> error) {
             err.println("Compilation failed with " + error.errors().size() + " error(s):");
             error.errors().forEach(err::println);
-            log.severe("Compilation failed with " + error.errors().size() + " error(s)");
             return EXIT_COMPILATION_ERROR;
         }
 
         var linkedProgram = ((Result.Success<CompiledProgram>) linking).value();
         writeLinkedModules(linkedOutputDir, linkedProgram);
-        writeBuildInfo(linkedOutputDir);
+        writeBuildInfo(linkedOutputDir, compilerVersion);
         return EXIT_SUCCESS;
     }
 
-    private static int generate(OutputType outputType, Path linkedInputDir, Path generatedOutputDir) throws IOException {
+    private static int generateOrThrow(OutputType outputType, Path linkedInputDir, Path generatedOutputDir) throws IOException {
         validateInputDirectory(linkedInputDir);
         if (Files.notExists(generatedOutputDir)) {
             Files.createDirectories(generatedOutputDir);
@@ -307,10 +348,10 @@ public class Capy {
         }
     }
 
-    private static void writeBuildInfo(Path outputDir) {
+    private static void writeBuildInfo(Path outputDir, String compilerVersion) {
         var buildInfo = Map.of(
                 "build_date_time", OffsetDateTime.now().toString(),
-                "capybara_compiler_version", readCompilerVersion()
+                "capybara_compiler_version", compilerVersion
         );
         try {
             Files.createDirectories(outputDir);
@@ -320,6 +361,20 @@ public class Capy {
         } catch (IOException e) {
             throw new UncheckedIOException("Unable to write build info JSON to " + outputDir, e);
         }
+    }
+
+    static ObjectMapper objectMapper() {
+        var mapper = new ObjectMapper();
+        mapper.registerModule(new Jdk8Module());
+        mapper.activateDefaultTyping(
+                BasicPolymorphicTypeValidator.builder()
+                        .allowIfSubType("pl.grzeslowski.capybara")
+                        .allowIfSubType("java.util.")
+                        .build(),
+                ObjectMapper.DefaultTyping.NON_FINAL,
+                JsonTypeInfo.As.PROPERTY
+        );
+        return mapper;
     }
 
     static String readCompilerVersion() {
@@ -376,20 +431,6 @@ public class Capy {
         }
     }
 
-    private static ObjectMapper objectMapper() {
-        var mapper = new ObjectMapper();
-        mapper.registerModule(new Jdk8Module());
-        mapper.activateDefaultTyping(
-                BasicPolymorphicTypeValidator.builder()
-                        .allowIfSubType("pl.grzeslowski.capybara")
-                        .allowIfSubType("java.util.")
-                        .build(),
-                ObjectMapper.DefaultTyping.NON_FINAL,
-                JsonTypeInfo.As.PROPERTY
-        );
-        return mapper;
-    }
-
     private static RawModule buildModule(SourceFile sourceFile) {
         log.info("Building module from file: " + sourceFile.path());
         var fileName = sourceFile.path().getFileName().toString();
@@ -439,7 +480,3 @@ public class Capy {
     private record NamedOptions(Map<String, String> values, Level logLevel) {
     }
 }
-
-
-
-
