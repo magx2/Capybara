@@ -21,6 +21,17 @@ application {
     mainClass = 'pl.grzeslowski.capybara.Capy'
 }
 
+jar {
+    manifest {
+        attributes('Main-Class': application.mainClass.get())
+    }
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    dependsOn configurations.runtimeClasspath
+    from {
+        configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
+    }
+}
+
 def isWindows = System.getProperty('os.name').toLowerCase().contains('windows')
 def nativeImageExecutableName = isWindows ? 'native-image.cmd' : 'native-image'
 def nativeBinaryBaseName = "capyc-${project.version}"
