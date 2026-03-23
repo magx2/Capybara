@@ -16,7 +16,10 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintStream;
 import java.io.UncheckedIOException;
+import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.FileSystem;
+import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
@@ -36,6 +39,7 @@ public class Capy {
     public static final String EXTENSION = ".json";
     private static final String BUILD_INFO_FILE = "build-info.json";
     private static final String VERSION_RESOURCE = "/capybara-version.txt";
+    private static final String JAVA_LIB_RESOURCE_DIR = "/java-lib-src";
     private static final int EXIT_SUCCESS = 0;
     private static final int EXIT_USAGE = 1;
     private static final int EXIT_FAILURE = 2;
@@ -265,7 +269,43 @@ public class Capy {
         var linkedProgram = readLinkedProgram(linkedInputDir, true);
         var compiledProgram = Generator.findGenerator(outputType).generate(linkedProgram);
         compiledProgram.modules().forEach(module -> writeCompiledModule(generatedOutputDir, module.relativePath(), module.code()));
+        if (outputType == OutputType.JAVA) {
+            copyJavaLibResources(generatedOutputDir);
+        }
         return EXIT_SUCCESS;
+    }
+
+    private static void copyJavaLibResources(Path generatedOutputDir) {
+        try {
+            var resourceUri = Capy.class.getResource(JAVA_LIB_RESOURCE_DIR).toURI();
+            if ("jar".equals(resourceUri.getScheme())) {
+                try (var fileSystem = FileSystems.newFileSystem(resourceUri, Map.of())) {
+                    copyDirectoryContents(fileSystem.getPath(JAVA_LIB_RESOURCE_DIR), generatedOutputDir);
+                }
+            } else {
+                copyDirectoryContents(Path.of(resourceUri), generatedOutputDir);
+            }
+        } catch (URISyntaxException | IOException e) {
+            throw new UncheckedIOException("Unable to copy bundled java-lib sources", e instanceof IOException io ? io : new IOException(e));
+        }
+    }
+
+    private static void copyDirectoryContents(Path sourceDir, Path targetDir) throws IOException {
+        try (var files = Files.walk(sourceDir)) {
+            for (var source : files.toList()) {
+                var relative = sourceDir.relativize(source);
+                var target = targetDir.resolve(relative.toString());
+                if (Files.isDirectory(source)) {
+                    Files.createDirectories(target);
+                } else {
+                    var parent = target.getParent();
+                    if (parent != null) {
+                        Files.createDirectories(parent);
+                    }
+                    Files.copy(source, target, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                }
+            }
+        }
     }
 
     private static TreeSet<CompiledModule> readLibraryModules(String libsOption) {

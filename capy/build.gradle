@@ -10,9 +10,14 @@ dependencies {
 
 def capybaraVersion = project.version.toString()
 
+def javaLibSourceDir = rootProject.layout.projectDirectory.dir('lib/java-lib/src/main/java')
+
 processResources {
     filesMatching('capybara-version.txt') {
         expand(version: capybaraVersion)
+    }
+    from(javaLibSourceDir) {
+        into 'java-lib-src'
     }
 }
 
@@ -77,5 +82,3 @@ tasks.register('nativeCompile', Exec) {
         )
     }
 }
-
-

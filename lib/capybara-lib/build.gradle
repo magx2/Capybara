@@ -2,10 +2,6 @@ plugins {
     id 'buildlogic.java-library-conventions'
 }
 
-dependencies {
-    implementation project(':lib:java-lib')
-}
-
 def capybaraMainSourceDir = layout.projectDirectory.dir('src/main/capybara')
 def capybaraTestSourceDir = layout.projectDirectory.dir('src/test/capybara')
 def capybaraCombinedTestSourceDir = layout.buildDirectory.dir('tmp/capybara/test-sources')
@@ -169,3 +165,5 @@ tasks.named('test') {
     dependsOn tasks.named('testCapybara')
     failOnNoDiscoveredTests = false
 }
+
+
