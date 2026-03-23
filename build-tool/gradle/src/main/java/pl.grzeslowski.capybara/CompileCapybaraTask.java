@@ -14,7 +14,7 @@ import org.gradle.api.tasks.OutputDirectory;
 import org.gradle.api.tasks.TaskAction;
 import pl.grzeslowski.capybara.compiler.CapybaraCompiler;
 import pl.grzeslowski.capybara.compiler.CompiledProgram;
-import pl.grzeslowski.capybara.compiler.ValueOrError;
+import pl.grzeslowski.capybara.compiler.Result;
 import pl.grzeslowski.capybara.parser.CapybaraParser;
 import pl.grzeslowski.capybara.parser.Module;
 import pl.grzeslowski.capybara.parser.Program;
@@ -79,13 +79,13 @@ public abstract class CompileCapybaraTask extends DefaultTask {
         }
 
         var linking = CapybaraCompiler.INSTANCE.compile(new Program(modules), new java.util.TreeSet<>());
-        if (linking instanceof ValueOrError.Error<CompiledProgram> error) {
+        if (linking instanceof Result.Error<CompiledProgram> error) {
             getLogger().error("Linking failed with {} error(s)", error.errors().size());
             error.errors().forEach(linkingError -> getLogger().error(linkingError.toString()));
             throw new GradleException("Linking failed with " + error.errors().size() + " error(s).");
         }
 
-        var linkedProgram = ((ValueOrError.Value<CompiledProgram>) linking).value();
+        var linkedProgram = ((Result.Success<CompiledProgram>) linking).value();
         writeLinkedJson(output.toPath(), linkedProgram);
     }
 
@@ -159,6 +159,7 @@ public abstract class CompileCapybaraTask extends DefaultTask {
     private record SourceFile(Path rootPath, Path path) {
     }
 }
+
 
 
 

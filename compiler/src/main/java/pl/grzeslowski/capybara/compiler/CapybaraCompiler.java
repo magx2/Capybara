@@ -19,7 +19,7 @@ public class CapybaraCompiler {
     private static final String METHOD_DECL_PREFIX = "__method__";
     private static final java.util.regex.Pattern IDENTIFIER_PATTERN = java.util.regex.Pattern.compile("[A-Za-z_][A-Za-z0-9_]*");
 
-    public ValueOrError<CompiledProgram> compile(Program program, SortedSet<CompiledModule> libraries) {
+    public Result<CompiledProgram> compile(Program program, SortedSet<CompiledModule> libraries) {
         var programModuleRefs = program.modules().stream().map(module -> new ModuleRef(module.name(), module.path())).toList();
         var libraryModuleRefs = libraries.stream().map(module -> new ModuleRef(module.name(), module.path())).toList();
         var allModuleRefs = Stream.concat(programModuleRefs.stream(), libraryModuleRefs.stream()).toList();
@@ -38,20 +38,20 @@ public class CapybaraCompiler {
         for (var module : program.modules()) {
             var sourceFile = moduleSourceFile(module);
             var linkedTypes = withFile(types(module), sourceFile);
-            if (linkedTypes instanceof ValueOrError.Error<SortedMap<String, GenericDataType>> error) {
-                return new ValueOrError.Error<>(error.errors());
+            if (linkedTypes instanceof Result.Error<SortedMap<String, GenericDataType>> error) {
+                return new Result.Error<>(error.errors());
             }
-            linkedTypesByModule.put(module.name(), ((ValueOrError.Value<SortedMap<String, GenericDataType>>) linkedTypes).value());
+            linkedTypesByModule.put(module.name(), ((Result.Success<SortedMap<String, GenericDataType>>) linkedTypes).value());
         }
 
         var visibleTypesByModule = new HashMap<String, Map<String, GenericDataType>>();
         for (var module : program.modules()) {
             var sourceFile = moduleSourceFile(module);
             var visibleTypes = withFile(availableTypes(module, modulesByName, linkedTypesByModule, allModuleRefs), sourceFile);
-            if (visibleTypes instanceof ValueOrError.Error<Map<String, GenericDataType>> error) {
-                return new ValueOrError.Error<>(error.errors());
+            if (visibleTypes instanceof Result.Error<Map<String, GenericDataType>> error) {
+                return new Result.Error<>(error.errors());
             }
-            visibleTypesByModule.put(module.name(), ((ValueOrError.Value<Map<String, GenericDataType>>) visibleTypes).value());
+            visibleTypesByModule.put(module.name(), ((Result.Success<Map<String, GenericDataType>>) visibleTypes).value());
         }
 
         var signaturesByModule = new HashMap<String, List<CapybaraExpressionCompiler.FunctionSignature>>();
@@ -62,10 +62,10 @@ public class CapybaraCompiler {
             var functions = findFunctions(module.functional().definitions());
             var sourceFile = moduleSourceFile(module);
             var signatures = withFile(linkFunctionSignatures(functions, visibleTypesByModule.get(module.name()), sourceFile), sourceFile);
-            if (signatures instanceof ValueOrError.Error<List<CapybaraExpressionCompiler.FunctionSignature>> error) {
-                return new ValueOrError.Error<>(error.errors());
+            if (signatures instanceof Result.Error<List<CapybaraExpressionCompiler.FunctionSignature>> error) {
+                return new Result.Error<>(error.errors());
             }
-            signaturesByModule.put(module.name(), ((ValueOrError.Value<List<CapybaraExpressionCompiler.FunctionSignature>>) signatures).value());
+            signaturesByModule.put(module.name(), ((Result.Success<List<CapybaraExpressionCompiler.FunctionSignature>>) signatures).value());
         }
 
         var refinedSignaturesByModule = new HashMap<>(signaturesByModule);
@@ -79,12 +79,12 @@ public class CapybaraCompiler {
                     moduleClassNameByModuleName
             );
             firstPassFunctions = withFile(firstPassFunctions, moduleSourceFile(module));
-            if (firstPassFunctions instanceof ValueOrError.Error<List<CompiledFunction>> error) {
-                return new ValueOrError.Error<>(error.errors());
+            if (firstPassFunctions instanceof Result.Error<List<CompiledFunction>> error) {
+                return new Result.Error<>(error.errors());
             }
             var refined = mergeSignatures(
                     signaturesByModule.get(module.name()),
-                    signaturesFromLinkedFunctions(((ValueOrError.Value<List<CompiledFunction>>) firstPassFunctions).value())
+                    signaturesFromLinkedFunctions(((Result.Success<List<CompiledFunction>>) firstPassFunctions).value())
             );
             refinedSignaturesByModule.put(module.name(), refined);
         }
@@ -98,14 +98,14 @@ public class CapybaraCompiler {
                         refinedSignaturesByModule,
                         moduleClassNameByModuleName
                 ))
-                .collect(new ValueOrErrorCollectionCollector<>())
+                .collect(new ResultCollectionCollector<>())
                 .map(CompiledProgram::new);
     }
 
     private record ModuleRef(String name, String path) {
     }
 
-    private ValueOrError<List<CompiledFunction>> firstPassLinkedFunctions(
+    private Result<List<CompiledFunction>> firstPassLinkedFunctions(
             Module module,
             Map<String, ModuleRef> modulesByName,
             Map<String, SortedMap<String, GenericDataType>> linkedTypesByModule,
@@ -118,14 +118,14 @@ public class CapybaraCompiler {
         var functions = findFunctions(module.functional().definitions());
         var moduleSourceFile = moduleSourceFile(module);
         var availableSignatures = availableSignatures(module, modulesByName, linkedTypesByModule, signaturesByModule);
-        if (availableSignatures instanceof ValueOrError.Error<List<CapybaraExpressionCompiler.FunctionSignature>> error) {
-            return withFile(new ValueOrError.Error<>(error.errors()), moduleSourceFile);
+        if (availableSignatures instanceof Result.Error<List<CapybaraExpressionCompiler.FunctionSignature>> error) {
+            return withFile(new Result.Error<>(error.errors()), moduleSourceFile);
         }
-        var initialSignatures = ((ValueOrError.Value<List<CapybaraExpressionCompiler.FunctionSignature>>) availableSignatures).value();
+        var initialSignatures = ((Result.Success<List<CapybaraExpressionCompiler.FunctionSignature>>) availableSignatures).value();
         return withFile(linkFunctions(functions, dataTypes, localTypeNames, initialSignatures, signaturesByModule, moduleClassNameByModuleName, moduleSourceFile), moduleSourceFile);
     }
 
-    private ValueOrError<CompiledModule> linkModule(
+    private Result<CompiledModule> linkModule(
             Module module,
             Map<String, ModuleRef> modulesByName,
             Map<String, SortedMap<String, GenericDataType>> linkedTypesByModule,
@@ -138,10 +138,10 @@ public class CapybaraCompiler {
         var functions = findFunctions(module.functional().definitions());
         var moduleSourceFile = moduleSourceFile(module);
         var availableSignatures = availableSignatures(module, modulesByName, linkedTypesByModule, signaturesByModule);
-        if (availableSignatures instanceof ValueOrError.Error<List<CapybaraExpressionCompiler.FunctionSignature>> error) {
-            return withFile(new ValueOrError.Error<>(error.errors()), moduleSourceFile);
+        if (availableSignatures instanceof Result.Error<List<CapybaraExpressionCompiler.FunctionSignature>> error) {
+            return withFile(new Result.Error<>(error.errors()), moduleSourceFile);
         }
-        var initialSignatures = ((ValueOrError.Value<List<CapybaraExpressionCompiler.FunctionSignature>>) availableSignatures).value();
+        var initialSignatures = ((Result.Success<List<CapybaraExpressionCompiler.FunctionSignature>>) availableSignatures).value();
         return withFile(linkFunctions(functions, visibleTypes, localTypes.keySet(), initialSignatures, signaturesByModule, moduleClassNameByModuleName, moduleSourceFile)
                 .flatMap(firstPassFunctions -> {
                     var refinedSignatures = mergeSignatures(
@@ -160,7 +160,7 @@ public class CapybaraCompiler {
                 }), moduleSourceFile);
     }
 
-    private ValueOrError<List<CapybaraExpressionCompiler.FunctionSignature>> availableSignatures(
+    private Result<List<CapybaraExpressionCompiler.FunctionSignature>> availableSignatures(
             Module module,
             Map<String, ModuleRef> modulesByName,
             Map<String, SortedMap<String, GenericDataType>> linkedTypesByModule,
@@ -170,7 +170,7 @@ public class CapybaraCompiler {
         for (var importDeclaration : module.imports()) {
             var importedModule = resolveImportedModule(importDeclaration.moduleName(), modulesByName);
             if (importedModule == null) {
-                return ValueOrError.error("Module `" + module.name() + "` imports unknown module `" + importDeclaration.moduleName() + "`");
+                return Result.error("Module `" + module.name() + "` imports unknown module `" + importDeclaration.moduleName() + "`");
             }
             var importedSignatures = signaturesByModule.get(importedModule.name());
             var availableFunctionMembers = importedSignatures.stream()
@@ -181,7 +181,7 @@ public class CapybaraCompiler {
             availableMembers.addAll(availableTypeMembers);
             for (var excludedSymbol : importDeclaration.excludedSymbols()) {
                 if (!availableMembers.contains(excludedSymbol)) {
-                    return ValueOrError.error(
+                    return Result.error(
                             "Module `" + module.name() + "` excludes unknown symbol `" + excludedSymbol
                             + "` from module `" + importDeclaration.moduleName() + "`"
                     );
@@ -190,7 +190,7 @@ public class CapybaraCompiler {
             if (!importDeclaration.isStarImport()) {
                 for (var symbol : importDeclaration.symbols()) {
                     if (!availableMembers.contains(symbol)) {
-                        return ValueOrError.error(
+                        return Result.error(
                                 "Module `" + module.name() + "` imports unknown symbol `" + symbol
                                 + "` from module `" + importDeclaration.moduleName() + "`"
                         );
@@ -202,10 +202,10 @@ public class CapybaraCompiler {
                 all.addAll(matched);
             }
         }
-        return ValueOrError.success(List.copyOf(all));
+        return Result.success(List.copyOf(all));
     }
 
-    private ValueOrError<Map<String, GenericDataType>> availableTypes(
+    private Result<Map<String, GenericDataType>> availableTypes(
             Module module,
             Map<String, ModuleRef> modulesByName,
             Map<String, SortedMap<String, GenericDataType>> linkedTypesByModule,
@@ -217,7 +217,7 @@ public class CapybaraCompiler {
         for (var importDeclaration : module.imports()) {
             var importedModule = resolveImportedModule(importDeclaration.moduleName(), modulesByName);
             if (importedModule == null) {
-                return ValueOrError.error("Module `" + module.name() + "` imports unknown module `" + importDeclaration.moduleName() + "`");
+                return Result.error("Module `" + module.name() + "` imports unknown module `" + importDeclaration.moduleName() + "`");
             }
             var importedTypes = linkedTypesByModule.get(importedModule.name());
             addQualifiedTypeAliases(all, importedModule, importedTypes);
@@ -236,7 +236,7 @@ public class CapybaraCompiler {
         }
         allModules.forEach(knownModule -> addQualifiedTypeAliases(all, knownModule, linkedTypesByModule.get(knownModule.name())));
         resolveQualifiedExternalFieldTypes(all);
-        return ValueOrError.success(Map.copyOf(all));
+        return Result.success(Map.copyOf(all));
     }
 
     private void addQualifiedTypeAliases(Map<String, GenericDataType> all, ModuleRef module, Map<String, GenericDataType> importedTypes) {
@@ -445,7 +445,7 @@ public class CapybaraCompiler {
                 .toList();
     }
 
-    private ValueOrError<List<CompiledFunction>> linkFunctions(
+    private Result<List<CompiledFunction>> linkFunctions(
             List<Function> functions,
             Map<String, GenericDataType> dataTypes,
             Set<String> localTypeNames,
@@ -456,10 +456,10 @@ public class CapybaraCompiler {
     ) {
         return functions.stream()
                 .map(f -> linkFunction(f, dataTypes, localTypeNames, signatures, signaturesByModule, moduleClassNameByModuleName, moduleSourceFile))
-                .collect(new ValueOrErrorCollectionCollector<>());
+                .collect(new ResultCollectionCollector<>());
     }
 
-    private ValueOrError<CompiledFunction> linkFunction(
+    private Result<CompiledFunction> linkFunction(
             Function function,
             Map<String, GenericDataType> dataTypes,
             Set<String> localTypeNames,
@@ -487,7 +487,7 @@ public class CapybaraCompiler {
                                 moduleClassNameByModuleName
                         ).flatMap(ex -> function.returnType()
                                 .map(type -> linkType(type, dataTypes, functionGenericTypeNames))
-                                .orElseGet(() -> ValueOrError.success(ex.type()))
+                                .orElseGet(() -> Result.success(ex.type()))
                                 .flatMap(rtype -> validateFunctionReturnType(function, ex, rtype, moduleSourceFile)
                                         .map(validatedExpression -> new CompiledFunction(
                                                 function.name(),
@@ -507,7 +507,7 @@ public class CapybaraCompiler {
         return normalizeReadableFunctionErrors(linked, function, moduleSourceFile);
     }
 
-    private ValueOrError<pl.grzeslowski.capybara.compiler.expression.CompiledExpression> linkExpressionWithRecursiveInference(
+    private Result<pl.grzeslowski.capybara.compiler.expression.CompiledExpression> linkExpressionWithRecursiveInference(
             Function function,
             List<CompiledFunctionParameter> parameters,
             Map<String, GenericDataType> dataTypes,
@@ -526,7 +526,7 @@ public class CapybaraCompiler {
             if (function.returnType().isPresent()
                 || expression.type() != PrimitiveLinkedType.ANY
                 || !function.name().contains("__local_fun_")) {
-                return ValueOrError.success(expression);
+                return Result.success(expression);
             }
             var selfSignatureAsNothing = signatures.stream()
                     .map(signature -> signature.name().equals(function.name())
@@ -550,7 +550,7 @@ public class CapybaraCompiler {
         });
     }
 
-    private Optional<ValueOrError<CompiledFunction>> validateTypeMethodDeclaredInLocalType(
+    private Optional<Result<CompiledFunction>> validateTypeMethodDeclaredInLocalType(
             Function function,
             Set<String> localTypeNames,
             String moduleSourceFile
@@ -572,13 +572,13 @@ public class CapybaraCompiler {
                       + " --> " + normalizedFile + ":" + position.line() + ":" + position.column() + "\n"
                       + functionPreview + "\n"
                       + pointer + "\n";
-        var error = new ValueOrError.Error.SingleError(
+        var error = new Result.Error.SingleError(
                 position.line(),
                 position.column(),
                 normalizedFile,
                 message
         );
-        return Optional.of(new ValueOrError.Error<>(List.of(error)));
+        return Optional.of(new Result.Error<>(List.of(error)));
     }
 
     private Optional<String> methodOwnerType(String functionName) {
@@ -592,22 +592,22 @@ public class CapybaraCompiler {
         return Optional.of(functionName.substring(METHOD_DECL_PREFIX.length(), separatorIndex));
     }
 
-    private ValueOrError<CompiledFunction> normalizeInfixOperatorErrors(
-            ValueOrError<CompiledFunction> linked,
+    private Result<CompiledFunction> normalizeInfixOperatorErrors(
+            Result<CompiledFunction> linked,
             Function function,
             String moduleSourceFile
     ) {
-        if (!(linked instanceof ValueOrError.Error<CompiledFunction> error)) {
+        if (!(linked instanceof Result.Error<CompiledFunction> error)) {
             return linked;
         }
         var transformed = error.errors().stream()
                 .map(singleError -> normalizeInfixOperatorError(singleError, function, moduleSourceFile))
                 .toList();
-        return new ValueOrError.Error<>(transformed);
+        return new Result.Error<>(transformed);
     }
 
-    private ValueOrError.Error.SingleError normalizeInfixOperatorError(
-            ValueOrError.Error.SingleError error,
+    private Result.Error.SingleError normalizeInfixOperatorError(
+            Result.Error.SingleError error,
             Function function,
             String moduleSourceFile
     ) {
@@ -629,67 +629,67 @@ public class CapybaraCompiler {
                       + " --> " + file + ":" + line + ":" + column + "\n"
                       + functionPreview + "\n"
                       + pointer + "\n";
-        return new ValueOrError.Error.SingleError(line, column, file, message);
+        return new Result.Error.SingleError(line, column, file, message);
     }
 
-    private ValueOrError<CompiledFunction> normalizeMatchExhaustivenessErrors(
-            ValueOrError<CompiledFunction> linked,
+    private Result<CompiledFunction> normalizeMatchExhaustivenessErrors(
+            Result<CompiledFunction> linked,
             Function function,
             String moduleSourceFile
     ) {
-        if (!(linked instanceof ValueOrError.Error<CompiledFunction> error)) {
+        if (!(linked instanceof Result.Error<CompiledFunction> error)) {
             return linked;
         }
         var transformed = error.errors().stream()
                 .map(singleError -> normalizeMatchExhaustivenessError(singleError, function, moduleSourceFile))
                 .toList();
-        return new ValueOrError.Error<>(transformed);
+        return new Result.Error<>(transformed);
     }
 
-    private ValueOrError<CompiledFunction> normalizeIntLiteralErrors(
-            ValueOrError<CompiledFunction> linked,
+    private Result<CompiledFunction> normalizeIntLiteralErrors(
+            Result<CompiledFunction> linked,
             Function function,
             String moduleSourceFile
     ) {
-        if (!(linked instanceof ValueOrError.Error<CompiledFunction> error)) {
+        if (!(linked instanceof Result.Error<CompiledFunction> error)) {
             return linked;
         }
         var transformed = error.errors().stream()
                 .map(singleError -> normalizeIntLiteralError(singleError, function, moduleSourceFile))
                 .toList();
-        return new ValueOrError.Error<>(transformed);
+        return new Result.Error<>(transformed);
     }
 
-    private ValueOrError<CompiledFunction> normalizeExpectedFoundErrors(
-            ValueOrError<CompiledFunction> linked,
+    private Result<CompiledFunction> normalizeExpectedFoundErrors(
+            Result<CompiledFunction> linked,
             Function function,
             String moduleSourceFile
     ) {
-        if (!(linked instanceof ValueOrError.Error<CompiledFunction> error)) {
+        if (!(linked instanceof Result.Error<CompiledFunction> error)) {
             return linked;
         }
         var transformed = error.errors().stream()
                 .map(singleError -> normalizeExpectedFoundError(singleError, function, moduleSourceFile))
                 .toList();
-        return new ValueOrError.Error<>(transformed);
+        return new Result.Error<>(transformed);
     }
 
-    private ValueOrError<CompiledFunction> normalizeReadableFunctionErrors(
-            ValueOrError<CompiledFunction> linked,
+    private Result<CompiledFunction> normalizeReadableFunctionErrors(
+            Result<CompiledFunction> linked,
             Function function,
             String moduleSourceFile
     ) {
-        if (!(linked instanceof ValueOrError.Error<CompiledFunction> error)) {
+        if (!(linked instanceof Result.Error<CompiledFunction> error)) {
             return linked;
         }
         var transformed = error.errors().stream()
                 .map(singleError -> normalizeReadableFunctionError(singleError, function, moduleSourceFile))
                 .toList();
-        return new ValueOrError.Error<>(transformed);
+        return new Result.Error<>(transformed);
     }
 
-    private ValueOrError.Error.SingleError normalizeReadableFunctionError(
-            ValueOrError.Error.SingleError error,
+    private Result.Error.SingleError normalizeReadableFunctionError(
+            Result.Error.SingleError error,
             Function function,
             String moduleSourceFile
     ) {
@@ -710,11 +710,11 @@ public class CapybaraCompiler {
                       + " --> " + file + ":" + line + ":" + column + "\n"
                       + functionPreview + "\n"
                       + pointer + "\n";
-        return new ValueOrError.Error.SingleError(line, column, file, message);
+        return new Result.Error.SingleError(line, column, file, message);
     }
 
-    private ValueOrError.Error.SingleError normalizeExpectedFoundError(
-            ValueOrError.Error.SingleError error,
+    private Result.Error.SingleError normalizeExpectedFoundError(
+            Result.Error.SingleError error,
             Function function,
             String moduleSourceFile
     ) {
@@ -733,7 +733,7 @@ public class CapybaraCompiler {
                       + " --> " + file + ":" + line + ":" + column + "\n"
                       + functionPreview + "\n"
                       + pointer + "\n";
-        return new ValueOrError.Error.SingleError(line, column, file, message);
+        return new Result.Error.SingleError(line, column, file, message);
     }
 
     private String formatFunctionPreviewUpToLine(Function function, int line) {
@@ -746,8 +746,8 @@ public class CapybaraCompiler {
                 .collect(java.util.stream.Collectors.joining("\n"));
     }
 
-    private ValueOrError.Error.SingleError normalizeIntLiteralError(
-            ValueOrError.Error.SingleError error,
+    private Result.Error.SingleError normalizeIntLiteralError(
+            Result.Error.SingleError error,
             Function function,
             String moduleSourceFile
     ) {
@@ -765,11 +765,11 @@ public class CapybaraCompiler {
                       + " --> " + file + ":" + line + ":" + messageColumn + "\n"
                       + functionPreview + "\n"
                       + pointer + "\n";
-        return new ValueOrError.Error.SingleError(line, reportedColumn, file, message);
+        return new Result.Error.SingleError(line, reportedColumn, file, message);
     }
 
-    private ValueOrError.Error.SingleError normalizeMatchExhaustivenessError(
-            ValueOrError.Error.SingleError error,
+    private Result.Error.SingleError normalizeMatchExhaustivenessError(
+            Result.Error.SingleError error,
             Function function,
             String moduleSourceFile
     ) {
@@ -787,17 +787,17 @@ public class CapybaraCompiler {
                       + header + "\n"
                       + matchLine + "\n"
                       + pointer + "\n";
-        return new ValueOrError.Error.SingleError(line, column, file, message);
+        return new Result.Error.SingleError(line, column, file, message);
     }
 
-    private ValueOrError<pl.grzeslowski.capybara.compiler.expression.CompiledExpression> validateFunctionReturnType(
+    private Result<pl.grzeslowski.capybara.compiler.expression.CompiledExpression> validateFunctionReturnType(
             Function function,
             pl.grzeslowski.capybara.compiler.expression.CompiledExpression expression,
             CompiledType declaredReturnType,
             String moduleSourceFile
     ) {
         if (isAssignableReturnType(declaredReturnType, expression.type())) {
-            return ValueOrError.success(expression);
+            return Result.success(expression);
         }
         var returnExpression = terminalReturnExpression(function.expression());
         var position = returnExpressionPosition(function.expression()).or(() -> function.position()).orElse(SourcePosition.EMPTY);
@@ -808,7 +808,7 @@ public class CapybaraCompiler {
         var pointer = " ".repeat(Math.max(column, 0))
                       + "^ expected `" + formatLinkedType(declaredReturnType)
                       + "`, found `" + formatLinkedType(expression.type()) + "`";
-        return ValueOrError.error(
+        return Result.error(
                 "error: mismatched types\n"
                 + " --> " + file + ":" + line + ":" + column + "\n"
                 + functionPreview + "\n"
@@ -1653,7 +1653,7 @@ public class CapybaraCompiler {
         };
     }
 
-    private ValueOrError<List<CapybaraExpressionCompiler.FunctionSignature>> linkFunctionSignatures(
+    private Result<List<CapybaraExpressionCompiler.FunctionSignature>> linkFunctionSignatures(
             List<Function> functions,
             Map<String, GenericDataType> dataTypes,
             String moduleSourceFile
@@ -1668,7 +1668,7 @@ public class CapybaraCompiler {
                                                 parameters.stream().map(CompiledFunctionParameter::type).toList(),
                                                 returnType
                                         )));})
-                .collect(new ValueOrErrorCollectionCollector<>());
+                .collect(new ResultCollectionCollector<>());
     }
 
     private boolean areAssignableDataTypeParameters(List<String> expectedParameters, List<String> actualParameters) {
@@ -1776,7 +1776,7 @@ public class CapybaraCompiler {
         };
     }
 
-    private ValueOrError<CompiledType> linkSignatureReturnType(
+    private Result<CompiledType> linkSignatureReturnType(
             Function function,
             Map<String, GenericDataType> dataTypes,
             Set<String> functionGenericTypeNames,
@@ -1784,8 +1784,8 @@ public class CapybaraCompiler {
     ) {
         var linked = function.returnType()
                 .map(type -> linkType(type, dataTypes, functionGenericTypeNames))
-                .orElseGet(() -> ValueOrError.success(PrimitiveLinkedType.ANY));
-        if (!(linked instanceof ValueOrError.Error<CompiledType> error)) {
+                .orElseGet(() -> Result.success(PrimitiveLinkedType.ANY));
+        if (!(linked instanceof Result.Error<CompiledType> error)) {
             return linked;
         }
 
@@ -1801,10 +1801,10 @@ public class CapybaraCompiler {
                                     + " --> " + file + ":" + line + ":" + column + "\n"
                                     + header + "\n"
                                     + pointer + "\n";
-                    return new ValueOrError.Error.SingleError(line, column, file, formatted);
+                    return new Result.Error.SingleError(line, column, file, formatted);
                 })
                 .toList();
-        return new ValueOrError.Error<>(formattedErrors);
+        return new Result.Error<>(formattedErrors);
     }
 
     private String normalizeSignatureTypeError(String message) {
@@ -1815,7 +1815,7 @@ public class CapybaraCompiler {
         return message;
     }
 
-    private Optional<ValueOrError.Error<CompiledFunction>> privateTypeEscapingFunctionSignatureError(
+    private Optional<Result.Error<CompiledFunction>> privateTypeEscapingFunctionSignatureError(
             Function function,
             String moduleSourceFile
     ) {
@@ -1829,7 +1829,7 @@ public class CapybaraCompiler {
             if (escaped.isPresent()) {
                 var line = function.position().map(SourcePosition::line).orElse(0);
                 var column = signatureParameterTypeColumn(function, i);
-                return Optional.of(new ValueOrError.Error<>(new ValueOrError.Error.SingleError(
+                return Optional.of(new Result.Error<>(new Result.Error.SingleError(
                         line,
                         column,
                         "",
@@ -1849,7 +1849,7 @@ public class CapybaraCompiler {
             if (escaped.isPresent()) {
                 var line = function.position().map(SourcePosition::line).orElse(0);
                 var column = signatureReturnTypeColumn(function);
-                return Optional.of(new ValueOrError.Error<>(new ValueOrError.Error.SingleError(
+                return Optional.of(new Result.Error<>(new Result.Error.SingleError(
                         line,
                         column,
                         "",
@@ -2002,25 +2002,25 @@ public class CapybaraCompiler {
                 .toList();
     }
 
-    private ValueOrError<List<CompiledFunctionParameter>> linkParameters(List<Parameter> parameters, Map<String, GenericDataType> dataTypes) {
+    private Result<List<CompiledFunctionParameter>> linkParameters(List<Parameter> parameters, Map<String, GenericDataType> dataTypes) {
         return linkParameters(parameters, dataTypes, Set.of());
     }
 
-    private ValueOrError<List<CompiledFunctionParameter>> linkParameters(
+    private Result<List<CompiledFunctionParameter>> linkParameters(
             List<Parameter> parameters,
             Map<String, GenericDataType> dataTypes,
             Set<String> functionGenericTypeNames
     ) {
         return parameters.stream()
                 .map(p -> linkParameter(p, dataTypes, functionGenericTypeNames))
-                .collect(new ValueOrErrorCollectionCollector<>());
+                .collect(new ResultCollectionCollector<>());
     }
 
-    private ValueOrError<CompiledFunctionParameter> linkParameter(Parameter parameter, Map<String, GenericDataType> dataTypes) {
+    private Result<CompiledFunctionParameter> linkParameter(Parameter parameter, Map<String, GenericDataType> dataTypes) {
         return linkParameter(parameter, dataTypes, Set.of());
     }
 
-    private ValueOrError<CompiledFunctionParameter> linkParameter(
+    private Result<CompiledFunctionParameter> linkParameter(
             Parameter parameter,
             Map<String, GenericDataType> dataTypes,
             Set<String> functionGenericTypeNames
@@ -2032,14 +2032,14 @@ public class CapybaraCompiler {
                 "");
     }
 
-    private ValueOrError<CompiledType> linkType(
+    private Result<CompiledType> linkType(
             pl.grzeslowski.capybara.parser.Type type,
             Map<String, GenericDataType> dataTypes
     ) {
         return CapybaraTypeCompiler.linkType(type, dataTypes);
     }
 
-    private ValueOrError<CompiledType> linkType(
+    private Result<CompiledType> linkType(
             pl.grzeslowski.capybara.parser.Type type,
             Map<String, GenericDataType> dataTypes,
             Set<String> functionGenericTypeNames
@@ -2048,7 +2048,7 @@ public class CapybaraCompiler {
             return linkType(type, dataTypes);
         }
         return switch (type) {
-            case PrimitiveType primitiveType -> ValueOrError.success(switch (primitiveType) {
+            case PrimitiveType primitiveType -> Result.success(switch (primitiveType) {
                 case BYTE -> PrimitiveLinkedType.BYTE;
                 case INT -> PrimitiveLinkedType.INT;
                 case LONG -> PrimitiveLinkedType.LONG;
@@ -2074,34 +2074,34 @@ public class CapybaraCompiler {
                             .map(returnType -> (CompiledType) new CompiledFunctionType(argumentType, returnType)));
             case TupleType tupleType -> tupleType.elementTypes().stream()
                     .map(elementType -> linkType(elementType, dataTypes, functionGenericTypeNames))
-                    .collect(new ValueOrErrorCollectionCollector<>())
+                    .collect(new ResultCollectionCollector<>())
                     .map(linkedTypes -> (CompiledType) new CompiledTupleType(linkedTypes));
             case DataType dataType -> linkDataTypeWithFunctionGenerics(dataType.name(), dataTypes, functionGenericTypeNames);
         };
     }
 
-    private ValueOrError<CompiledType> linkDataTypeWithFunctionGenerics(
+    private Result<CompiledType> linkDataTypeWithFunctionGenerics(
             String rawTypeName,
             Map<String, GenericDataType> dataTypes,
             Set<String> functionGenericTypeNames
     ) {
         var parsed = parseGenericTypeName(rawTypeName);
         if (parsed.typeArguments().isEmpty() && functionGenericTypeNames.contains(parsed.baseName())) {
-            return ValueOrError.success(new CompiledGenericTypeParameter(parsed.baseName()));
+            return Result.success(new CompiledGenericTypeParameter(parsed.baseName()));
         }
 
         var linkedBase = linkType(new DataType(parsed.baseName()), dataTypes);
-        if (linkedBase instanceof ValueOrError.Error<CompiledType> error) {
-            return new ValueOrError.Error<>(error.errors());
+        if (linkedBase instanceof Result.Error<CompiledType> error) {
+            return new Result.Error<>(error.errors());
         }
-        var baseType = ((ValueOrError.Value<CompiledType>) linkedBase).value();
+        var baseType = ((Result.Success<CompiledType>) linkedBase).value();
         if (parsed.typeArguments().isEmpty()) {
-            return ValueOrError.success(baseType);
+            return Result.success(baseType);
         }
 
         return parsed.typeArguments().stream()
                 .map(argument -> linkType(parseTypeArgument(argument), dataTypes, functionGenericTypeNames))
-                .collect(new ValueOrErrorCollectionCollector<>())
+                .collect(new ResultCollectionCollector<>())
                 .map(arguments -> instantiateTypeArguments(baseType, arguments));
     }
 
@@ -2370,13 +2370,13 @@ public class CapybaraCompiler {
     }
 
     private boolean isKnownTypeName(String typeName, Map<String, GenericDataType> dataTypes) {
-        return linkType(new DataType(typeName), dataTypes) instanceof ValueOrError.Value<CompiledType>;
+        return linkType(new DataType(typeName), dataTypes) instanceof Result.Success<CompiledType>;
     }
 
     private record ParsedGenericTypeName(String baseName, List<String> typeArguments) {
     }
 
-    private ValueOrError<SortedMap<String, GenericDataType>> types(Module module) {
+    private Result<SortedMap<String, GenericDataType>> types(Module module) {
         var normalizedFile = normalizeFile(moduleSourceFile(module));
         var rawTypeDeclarations = castList(module, TypeDeclaration.class);
         var rawEnumDeclarations = castList(module, pl.grzeslowski.capybara.parser.EnumDeclaration.class);
@@ -2391,16 +2391,16 @@ public class CapybaraCompiler {
         var singlesDeclarationsOrError = castList(module, SingleDeclaration.class)
                 .stream()
                 .map(this::linkSingleDeclaration)
-                .collect(new ValueOrErrorCollectionCollector<>());
+                .collect(new ResultCollectionCollector<>());
 
-        if (dataDeclarationsOrError instanceof ValueOrError.Error<?> error) {
-            return new ValueOrError.Error<>(error.errors());
+        if (dataDeclarationsOrError instanceof Result.Error<?> error) {
+            return new Result.Error<>(error.errors());
         }
-        var dataDeclarations = ((ValueOrError.Value<List<CompiledDataType>>) dataDeclarationsOrError).value();
-        if (singlesDeclarationsOrError instanceof ValueOrError.Error<?> error) {
-            return new ValueOrError.Error<>(error.errors());
+        var dataDeclarations = ((Result.Success<List<CompiledDataType>>) dataDeclarationsOrError).value();
+        if (singlesDeclarationsOrError instanceof Result.Error<?> error) {
+            return new Result.Error<>(error.errors());
         }
-        var singleDeclarations = ((ValueOrError.Value<List<CompiledDataType>>) singlesDeclarationsOrError).value();
+        var singleDeclarations = ((Result.Success<List<CompiledDataType>>) singlesDeclarationsOrError).value();
         var enumDeclarations = rawEnumDeclarations.stream()
                 .map(this::linkEnumDeclaration)
                 .toList();
@@ -2420,12 +2420,12 @@ public class CapybaraCompiler {
                         rawTypeDeclarationsByName,
                         knownDataTypes,
                         normalizedFile))
-                .collect(new ValueOrErrorCollectionCollector<>());
+                .collect(new ResultCollectionCollector<>());
 
-        if (typeDeclarationsOrError instanceof ValueOrError.Error<?> error) {
-            return new ValueOrError.Error<>(error.errors());
+        if (typeDeclarationsOrError instanceof Result.Error<?> error) {
+            return new Result.Error<>(error.errors());
         }
-        var typeDeclarations = ((ValueOrError.Value<List<CompiledDataParentType>>) typeDeclarationsOrError).value();
+        var typeDeclarations = ((Result.Success<List<CompiledDataParentType>>) typeDeclarationsOrError).value();
 
         var set = new HashSet<GenericDataType>();
         set.addAll(dataDeclarations);
@@ -2435,14 +2435,14 @@ public class CapybaraCompiler {
         var map = new TreeMap<>(set.stream().collect(toMap(GenericDataType::name, identity())));
         typeDeclarations.forEach(parentType -> parentType.subTypes().forEach(subType -> map.put(subType.name(), subType)));
         enumDeclarations.forEach(enumType -> enumType.subTypes().forEach(subType -> map.put(subType.name(), subType)));
-        return ValueOrError.success(map);
+        return Result.success(map);
     }
 
-    private ValueOrError<List<CompiledDataType>> linkDataDeclarations(List<DataDeclaration> dataDeclarations) {
+    private Result<List<CompiledDataType>> linkDataDeclarations(List<DataDeclaration> dataDeclarations) {
         return linkDataDeclarations(dataDeclarations, Map.of(), List.of(), "");
     }
 
-    private ValueOrError<List<CompiledDataType>> linkDataDeclarations(
+    private Result<List<CompiledDataType>> linkDataDeclarations(
             List<DataDeclaration> dataDeclarations,
             Map<String, TypeDeclaration> rawTypeDeclarationsByName,
             List<ImportDeclaration> importDeclarations,
@@ -2450,7 +2450,7 @@ public class CapybaraCompiler {
     ) {
         var declarationsByName = dataDeclarations.stream()
                 .collect(toMap(DataDeclaration::name, identity(), (first, second) -> first));
-        var cache = new HashMap<String, ValueOrError<CompiledDataType>>();
+        var cache = new HashMap<String, Result<CompiledDataType>>();
         return dataDeclarations.stream()
                 .map(dataDeclaration -> linkDataDeclaration(
                         dataDeclaration,
@@ -2460,15 +2460,15 @@ public class CapybaraCompiler {
                         cache,
                         new HashSet<>(),
                         normalizedFile))
-                .collect(new ValueOrErrorCollectionCollector<>());
+                .collect(new ResultCollectionCollector<>());
     }
 
-    private ValueOrError<CompiledDataType> linkDataDeclaration(
+    private Result<CompiledDataType> linkDataDeclaration(
             DataDeclaration dataDeclaration,
             Map<String, DataDeclaration> declarationsByName,
             Map<String, TypeDeclaration> rawTypeDeclarationsByName,
             List<ImportDeclaration> importDeclarations,
-            Map<String, ValueOrError<CompiledDataType>> cache,
+            Map<String, Result<CompiledDataType>> cache,
             Set<String> visiting,
             String normalizedFile
     ) {
@@ -2478,7 +2478,7 @@ public class CapybaraCompiler {
         }
         if (!visiting.add(dataDeclaration.name())) {
             return withPosition(
-                    ValueOrError.error("Circular data extension detected for `" + dataDeclaration.name() + "`"),
+                    Result.error("Circular data extension detected for `" + dataDeclaration.name() + "`"),
                     dataDeclaration.position(),
                     normalizedFile);
         }
@@ -2488,7 +2488,7 @@ public class CapybaraCompiler {
                 .map(parentName -> {
                     var parent = declarationsByName.get(parentName);
                     if (parent == null) {
-                        return ValueOrError.<List<CompiledDataType.CompiledField>>error(
+                        return Result.<List<CompiledDataType.CompiledField>>error(
                                 "Extended data type `" + parentName + "` not found"
                         );
                     }
@@ -2502,7 +2502,7 @@ public class CapybaraCompiler {
                                     normalizedFile)
                             .map(CompiledDataType::fields);
                 })
-                .collect(new ValueOrErrorCollectionCollector<>());
+                .collect(new ResultCollectionCollector<>());
         var ownFields = dataDeclaration.fields().stream()
                 .map(field -> linkField(
                         field,
@@ -2513,8 +2513,8 @@ public class CapybaraCompiler {
                         cache,
                         visiting,
                         normalizedFile))
-                .collect(new ValueOrErrorCollectionCollector<>());
-        var linked = ValueOrError.join(
+                .collect(new ResultCollectionCollector<>());
+        var linked = Result.join(
                         (List<List<CompiledDataType.CompiledField>> inherited, List<CompiledDataType.CompiledField> own) -> {
                             var fields = inherited.stream()
                                     .flatMap(Collection::stream)
@@ -2537,8 +2537,8 @@ public class CapybaraCompiler {
         return withPosition;
     }
 
-    private ValueOrError<CompiledDataType> linkSingleDeclaration(SingleDeclaration singleDeclaration) {
-        return ValueOrError.success(new CompiledDataType(singleDeclaration.name(), List.of(), List.of(), List.of(), true));
+    private Result<CompiledDataType> linkSingleDeclaration(SingleDeclaration singleDeclaration) {
+        return Result.success(new CompiledDataType(singleDeclaration.name(), List.of(), List.of(), List.of(), true));
     }
 
     private CompiledDataParentType linkEnumDeclaration(pl.grzeslowski.capybara.parser.EnumDeclaration enumDeclaration) {
@@ -2554,18 +2554,18 @@ public class CapybaraCompiler {
         );
     }
 
-    private ValueOrError<CompiledDataType.CompiledField> linkField(
+    private Result<CompiledDataType.CompiledField> linkField(
             DataDeclaration.DataField type,
             Set<String> genericTypes,
             Map<String, DataDeclaration> declarationsByName,
             Map<String, TypeDeclaration> rawTypeDeclarationsByName,
             List<ImportDeclaration> importDeclarations,
-            Map<String, ValueOrError<CompiledDataType>> cache,
+            Map<String, Result<CompiledDataType>> cache,
             Set<String> visiting,
             String normalizedFile
     ) {
         if (type.type() instanceof DataType dataType && genericTypes.contains(dataType.name())) {
-            return ValueOrError.success(new CompiledDataType.CompiledField(type.name(), new CompiledGenericTypeParameter(dataType.name())));
+            return Result.success(new CompiledDataType.CompiledField(type.name(), new CompiledGenericTypeParameter(dataType.name())));
         }
         if (type.type() instanceof DataType dataType && declarationsByName.containsKey(dataType.name())) {
             return linkDataDeclaration(
@@ -2581,7 +2581,7 @@ public class CapybaraCompiler {
         var knownDataTypes = new HashMap<String, GenericDataType>();
         declarationsByName.forEach((name, declaration) -> {
             var cached = cache.get(name);
-            if (cached instanceof ValueOrError.Value<CompiledDataType> value) {
+            if (cached instanceof Result.Success<CompiledDataType> value) {
                 knownDataTypes.put(name, value.value());
             } else {
                 knownDataTypes.put(name, new CompiledDataType(
@@ -2603,20 +2603,20 @@ public class CapybaraCompiler {
         ));
         importedExternalTypePlaceholders(importDeclarations).forEach(knownDataTypes::putIfAbsent);
         var linkedType = linkType(type.type(), knownDataTypes);
-        if (linkedType instanceof ValueOrError.Error<CompiledType>
+        if (linkedType instanceof Result.Error<CompiledType>
             && type.type() instanceof DataType dataType) {
             var importedQualifiedName = resolveImportedQualifiedTypeName(dataType.name(), importDeclarations);
             if (importedQualifiedName.isPresent() && isQualifiedExternalTypeName(importedQualifiedName.get())) {
-                return ValueOrError.success(new CompiledDataType.CompiledField(
+                return Result.success(new CompiledDataType.CompiledField(
                         type.name(),
                         externalTypePlaceholder(importedQualifiedName.get())
                 ));
             }
         }
-        if (linkedType instanceof ValueOrError.Error<CompiledType>
+        if (linkedType instanceof Result.Error<CompiledType>
             && type.type() instanceof DataType dataType
             && isQualifiedExternalTypeName(dataType.name())) {
-            return ValueOrError.success(new CompiledDataType.CompiledField(
+            return Result.success(new CompiledDataType.CompiledField(
                     type.name(),
                     externalTypePlaceholder(dataType.name())
             ));
@@ -2774,7 +2774,7 @@ public class CapybaraCompiler {
         return "ANY";
     }
 
-    private ValueOrError<CompiledDataParentType> linkTypeDeclaration(
+    private Result<CompiledDataParentType> linkTypeDeclaration(
             TypeDeclaration typeDeclaration,
             List<CompiledDataType> dataDeclarations,
             Map<String, TypeDeclaration> rawTypeDeclarationsByName,
@@ -2786,7 +2786,7 @@ public class CapybaraCompiler {
         return withPosition(linked, typeDeclaration.position(), normalizedFile);
     }
 
-    private ValueOrError<CompiledDataParentType> linkedDataParentType(
+    private Result<CompiledDataParentType> linkedDataParentType(
             TypeDeclaration typeDeclaration,
             List<CompiledDataType> subTypes,
             Map<String, GenericDataType> knownDataTypes
@@ -2795,7 +2795,7 @@ public class CapybaraCompiler {
         return typeDeclaration.fields()
                 .stream()
                 .map(field -> linkField(field, genericTypes, knownDataTypes))
-                .collect(new ValueOrErrorCollectionCollector<>())
+                .collect(new ResultCollectionCollector<>())
                 .map(fields -> {
                     var inheritedSubtypes = subTypes.stream()
                             .map(subType -> new CompiledDataType(
@@ -2832,19 +2832,19 @@ public class CapybaraCompiler {
         return List.copyOf(merged);
     }
 
-    private ValueOrError<CompiledDataType.CompiledField> linkField(
+    private Result<CompiledDataType.CompiledField> linkField(
             DataDeclaration.DataField type,
             Set<String> genericTypes,
             Map<String, GenericDataType> knownDataTypes
     ) {
         if (type.type() instanceof DataType dataType && genericTypes.contains(dataType.name())) {
-            return ValueOrError.success(new CompiledDataType.CompiledField(type.name(), new CompiledGenericTypeParameter(dataType.name())));
+            return Result.success(new CompiledDataType.CompiledField(type.name(), new CompiledGenericTypeParameter(dataType.name())));
         }
         return linkType(type.type(), knownDataTypes)
                 .map(t -> new CompiledDataType.CompiledField(type.name(), t));
     }
 
-    private ValueOrError<List<CompiledDataType>> findSubtypes(
+    private Result<List<CompiledDataType>> findSubtypes(
             List<String> rawSubTypes,
             List<CompiledDataType> dataDeclarations,
             Map<String, TypeDeclaration> rawTypeDeclarationsByName,
@@ -2855,47 +2855,47 @@ public class CapybaraCompiler {
                 .map(key -> {
                     var dataType = dataTypesMap.get(key);
                     if (dataType != null) {
-                        return ValueOrError.success(List.of(dataType));
+                        return Result.success(List.of(dataType));
                     }
                     var typeDeclaration = rawTypeDeclarationsByName.get(key);
                     if (typeDeclaration == null) {
-                        return ValueOrError.<List<CompiledDataType>>error("Type " + key + " not found");
+                        return Result.<List<CompiledDataType>>error("Type " + key + " not found");
                     }
                     if (!visitingTypes.add(key)) {
-                        return ValueOrError.<List<CompiledDataType>>error("Circular type hierarchy detected for `" + key + "`");
+                        return Result.<List<CompiledDataType>>error("Circular type hierarchy detected for `" + key + "`");
                     }
                     var nested = findSubtypes(typeDeclaration.subTypes(), dataDeclarations, rawTypeDeclarationsByName, visitingTypes);
                     visitingTypes.remove(key);
                     return nested;
                 })
-                .collect(new ValueOrErrorCollectionCollector<List<CompiledDataType>>())
+                .collect(new ResultCollectionCollector<List<CompiledDataType>>())
                 .map(list -> list.stream().flatMap(Collection::stream).toList());
     }
 
-    private static <T> ValueOrError<T> withPosition(ValueOrError<T> valueOrError, Optional<SourcePosition> position, String file) {
-        if (valueOrError instanceof ValueOrError.Error<T> error && position.isPresent()) {
+    private static <T> Result<T> withPosition(Result<T> valueOrError, Optional<SourcePosition> position, String file) {
+        if (valueOrError instanceof Result.Error<T> error && position.isPresent()) {
             var pos = position.get();
-            return new ValueOrError.Error<>(error.errors()
+            return new Result.Error<>(error.errors()
                     .stream()
                     .map(singleError -> {
                         var hasKnownPosition = singleError.line() > 0;
                         var line = hasKnownPosition ? singleError.line() : pos.line();
                         var column = hasKnownPosition ? singleError.column() : pos.column();
                         var sourceFile = singleError.file().isBlank() ? file : singleError.file();
-                        return new ValueOrError.Error.SingleError(line, column, sourceFile, singleError.message());
+                        return new Result.Error.SingleError(line, column, sourceFile, singleError.message());
                     })
                     .toList());
         }
         return valueOrError;
     }
 
-    private static <T> ValueOrError<T> withFile(ValueOrError<T> valueOrError, String moduleSourceFile) {
-        if (!(valueOrError instanceof ValueOrError.Error<T> error)) {
+    private static <T> Result<T> withFile(Result<T> valueOrError, String moduleSourceFile) {
+        if (!(valueOrError instanceof Result.Error<T> error)) {
             return valueOrError;
         }
         var normalizedFile = normalizeFile(moduleSourceFile);
-        return new ValueOrError.Error<>(error.errors().stream()
-                .map(singleError -> new ValueOrError.Error.SingleError(
+        return new Result.Error<>(error.errors().stream()
+                .map(singleError -> new Result.Error.SingleError(
                         singleError.line(),
                         singleError.column(),
                         singleError.file().isBlank() ? normalizedFile : singleError.file(),
@@ -2916,4 +2916,5 @@ public class CapybaraCompiler {
                 .toList();
     }
 }
+
 

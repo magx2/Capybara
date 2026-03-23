@@ -43,10 +43,11 @@ class CapybaraCompilerLibrariesTest {
 
     private static CompiledProgram compileProgram(Program program, SortedSet<CompiledModule> libraries) {
         var result = CapybaraCompiler.INSTANCE.compile(program, libraries);
-        if (result instanceof ValueOrError.Error<CompiledProgram> error) {
+        if (result instanceof Result.Error<CompiledProgram> error) {
             fail(error.errors().toString());
         }
-        return ((ValueOrError.Value<CompiledProgram>) result).value();
+        return ((Result.Success<CompiledProgram>) result).value();
     }
 }
+
 

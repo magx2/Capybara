@@ -21,9 +21,9 @@ import java.util.Map;
 
 public class CapybaraTypeCompiler {
 
-    public static ValueOrError<CompiledType> linkType(Type type, Map<String, GenericDataType> dataTypes) {
+    public static Result<CompiledType> linkType(Type type, Map<String, GenericDataType> dataTypes) {
         return switch (type) {
-            case PrimitiveType primitiveType -> ValueOrError.success(linkPrimitiveType(primitiveType));
+            case PrimitiveType primitiveType -> Result.success(linkPrimitiveType(primitiveType));
             case CollectionType collectionType -> linkCollectionType(collectionType, dataTypes);
             case DataType dataType -> linkDataType(dataType, dataTypes);
             case FunctionType functionType -> linkFunctionType(functionType, dataTypes);
@@ -32,12 +32,12 @@ public class CapybaraTypeCompiler {
     }
 
     @Deprecated
-    public static ValueOrError<CompiledType> linkType(Type type) {
+    public static Result<CompiledType> linkType(Type type) {
         // TODO proper mapping of types
         return linkType(type, Map.of());
     }
 
-    private static ValueOrError<CompiledType> linkDataType(DataType dataType, Map<String, GenericDataType> dataTypes) {
+    private static Result<CompiledType> linkDataType(DataType dataType, Map<String, GenericDataType> dataTypes) {
         var parsedName = parseDataTypeName(dataType.name());
         var baseName = parsedName.baseName();
         if (dataTypes.containsKey(baseName)) {
@@ -56,21 +56,21 @@ public class CapybaraTypeCompiler {
             return instantiateTypeArgumentsIfNeeded(withQualifiedNameIfNeeded(dataTypes.get(normalized), normalized), parsedName.typeArguments(), dataTypes);
         }
 
-        return ValueOrError.error("Data type \"" + baseName + "\" not found");
+        return Result.error("Data type \"" + baseName + "\" not found");
     }
 
-    private static ValueOrError<CompiledType> instantiateTypeArgumentsIfNeeded(
+    private static Result<CompiledType> instantiateTypeArgumentsIfNeeded(
             CompiledType linkedType,
             List<String> typeArguments,
             Map<String, GenericDataType> dataTypes
     ) {
         if (typeArguments.isEmpty()) {
-            return ValueOrError.success(linkedType);
+            return Result.success(linkedType);
         }
         return typeArguments.stream()
                 .map(CapybaraTypeCompiler::parseTypeArgument)
                 .map(type -> linkType(type, dataTypes))
-                .collect(new ValueOrErrorCollectionCollector<>())
+                .collect(new ResultCollectionCollector<>())
                 .map(linkedTypeArguments -> instantiateTypeArguments(linkedType, linkedTypeArguments));
     }
 
@@ -389,7 +389,7 @@ public class CapybaraTypeCompiler {
         };
     }
 
-    private static ValueOrError<CompiledType> linkCollectionType(CollectionType type, Map<String, GenericDataType> dataTypes) {
+    private static Result<CompiledType> linkCollectionType(CollectionType type, Map<String, GenericDataType> dataTypes) {
         return switch (type) {
             case ListType list -> linkType(list.elementType(), dataTypes).map(CompiledList::new);
             case DictType dict -> linkType(dict.valueType(), dataTypes).map(CompiledDict::new);
@@ -397,19 +397,20 @@ public class CapybaraTypeCompiler {
         };
     }
 
-    private static ValueOrError<CompiledType> linkFunctionType(FunctionType type, Map<String, GenericDataType> dataTypes) {
-        return ValueOrError.join(
+    private static Result<CompiledType> linkFunctionType(FunctionType type, Map<String, GenericDataType> dataTypes) {
+        return Result.join(
                 (CompiledType argumentType, CompiledType returnType) -> new CompiledFunctionType(argumentType, returnType),
                 linkType(type.argumentType(), dataTypes),
                 linkType(type.returnType(), dataTypes)
         );
     }
 
-    private static ValueOrError<CompiledType> linkTupleType(TupleType type, Map<String, GenericDataType> dataTypes) {
+    private static Result<CompiledType> linkTupleType(TupleType type, Map<String, GenericDataType> dataTypes) {
         return type.elementTypes().stream()
                 .map(elementType -> linkType(elementType, dataTypes))
-                .collect(new ValueOrErrorCollectionCollector<>())
+                .collect(new ResultCollectionCollector<>())
                 .map(CompiledTupleType::new);
     }
 }
+
 

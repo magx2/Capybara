@@ -10,7 +10,7 @@ import pl.grzeslowski.capybara.compiler.CompiledProgram;
 import pl.grzeslowski.capybara.parser.Module;
 import pl.grzeslowski.capybara.compiler.OutputType;
 import pl.grzeslowski.capybara.parser.Program;
-import pl.grzeslowski.capybara.compiler.ValueOrError;
+import pl.grzeslowski.capybara.compiler.Result;
 import pl.grzeslowski.capybara.parser.CapybaraParser;
 
 import java.io.IOException;
@@ -107,13 +107,13 @@ public class App {
                 .toList();
 
         var linking = CapybaraCompiler.INSTANCE.compile(new Program(modules), new java.util.TreeSet<>());
-        if (linking instanceof ValueOrError.Error<CompiledProgram> error) {
+        if (linking instanceof Result.Error<CompiledProgram> error) {
             System.err.println("Linking failed with " + error.errors().size() + " error(s):");
             error.errors().forEach(System.err::println);
             return 100;
         }
 
-        var linkedProgram = ((ValueOrError.Value<CompiledProgram>) linking).value();
+        var linkedProgram = ((Result.Success<CompiledProgram>) linking).value();
         writeLinkedJson(linkedOutputDir, linkedProgram);
         return 0;
     }
@@ -250,5 +250,7 @@ public class App {
 
 
 }
+
+
 
 

@@ -8,7 +8,7 @@ import pl.grzeslowski.capybara.parser.Module;
 import pl.grzeslowski.capybara.parser.Program;
 import pl.grzeslowski.capybara.compiler.CapybaraCompiler;
 import pl.grzeslowski.capybara.compiler.CompiledProgram;
-import pl.grzeslowski.capybara.compiler.ValueOrError;
+import pl.grzeslowski.capybara.compiler.Result;
 import pl.grzeslowski.capybara.parser.CapybaraParser;
 
 import java.util.*;
@@ -861,7 +861,7 @@ public class CompilationErrorTest {
     }
 
 
-    private static SortedSet<ValueOrError.Error.SingleError> compileProgram(String fun, String moduleName) {
+    private static SortedSet<Result.Error.SingleError> compileProgram(String fun, String moduleName) {
         return compileProgram(fun, moduleName, List.of());
     }
 
@@ -875,18 +875,18 @@ public class CompilationErrorTest {
                     List.of())
     );
 
-    private static SortedSet<ValueOrError.Error.SingleError> compileProgram(String fun, String moduleName, List<ImportDeclaration> imports) {
+    private static SortedSet<Result.Error.SingleError> compileProgram(String fun, String moduleName, List<ImportDeclaration> imports) {
         try {
             var functional = CapybaraParser.INSTANCE.parseFunctional(moduleName, "/foo/boo", fun).functional();
             var module = new Module(moduleName, "/foo/boo", functional, imports);
             var modules = new ArrayList<>(DEFAULT_MODULES);
             modules.add(module);
             var program = new Program(modules);
-            var programValueOrError = CapybaraCompiler.INSTANCE.compile(program, new java.util.TreeSet<>());
-            if (programValueOrError instanceof ValueOrError.Value<CompiledProgram> value) {
+            var programResult = CapybaraCompiler.INSTANCE.compile(program, new java.util.TreeSet<>());
+            if (programResult instanceof Result.Success<CompiledProgram> value) {
                 throw new AssertionError("Expected compilation error but got CompiledProgram: " + value);
             }
-            var errors = ((ValueOrError.Error<?>) programValueOrError).errors();
+            var errors = ((Result.Error<?>) programResult).errors();
             return normalizeLinkerErrors(errors, fun, moduleName);
         } catch (IllegalStateException e) {
             var parserError = java.util.regex.Pattern.compile("line (\\d+):(\\d+): (.+)").matcher(e.getMessage());
@@ -913,7 +913,7 @@ public class CompilationErrorTest {
                               + " --> /foo/boo/%s.cfun:%d:%d\n".formatted(moduleName, line, column)
                               + String.join("\n", renderedLines) + "\n"
                               + " ".repeat(Math.max(column, 0)) + "^ " + details + "\n";
-                return new TreeSet<>(Set.of(new ValueOrError.Error.SingleError(
+                return new TreeSet<>(Set.of(new Result.Error.SingleError(
                         line,
                         column,
                         "/foo/boo/%s.cfun".formatted(moduleName),
@@ -941,14 +941,14 @@ public class CompilationErrorTest {
                               + " --> /foo/boo/%s.cfun:%d:%d\n".formatted(moduleName, lineNumber, column)
                               + codeLine + "\n"
                               + " ".repeat(Math.max(column, 0)) + "^ " + details + "\n";
-                return new TreeSet<>(Set.of(new ValueOrError.Error.SingleError(
+                return new TreeSet<>(Set.of(new Result.Error.SingleError(
                         lineNumber,
                         column,
                         "/foo/boo/%s.cfun".formatted(moduleName),
                         message
                 )));
             }
-            return new TreeSet<>(Set.of(new ValueOrError.Error.SingleError(
+            return new TreeSet<>(Set.of(new Result.Error.SingleError(
                     0,
                     0,
                     "/foo/boo/%s.cfun".formatted(moduleName),
@@ -957,8 +957,8 @@ public class CompilationErrorTest {
         }
     }
 
-    private static SortedSet<ValueOrError.Error.SingleError> normalizeLinkerErrors(
-            SortedSet<ValueOrError.Error.SingleError> errors,
+    private static SortedSet<Result.Error.SingleError> normalizeLinkerErrors(
+            SortedSet<Result.Error.SingleError> errors,
             String code,
             String moduleName
     ) {
@@ -992,7 +992,7 @@ public class CompilationErrorTest {
                       + " --> /foo/boo/%s.cfun:%d:%d\n".formatted(moduleName, lineNumber, column)
                       + codeLine + "\n"
                       + " ".repeat(Math.max(column, 0)) + "^ " + details + "\n";
-        return new TreeSet<>(Set.of(new ValueOrError.Error.SingleError(
+        return new TreeSet<>(Set.of(new Result.Error.SingleError(
                 lineNumber,
                 column,
                 "/foo/boo/%s.cfun".formatted(moduleName),
@@ -1018,6 +1018,7 @@ public class CompilationErrorTest {
         return out;
     }
 }
+
 
 
 

@@ -9,20 +9,20 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Collector;
 
-public class ValueOrErrorCollectionCollector<T>
-        implements Collector<ValueOrError<T>, ValueOrErrorCollectionCollector.Accumulator<T>, ValueOrError<List<T>>> {
+public class ResultCollectionCollector<T>
+        implements Collector<Result<T>, ResultCollectionCollector.Accumulator<T>, Result<List<T>>> {
 
     public static final class Accumulator<T> {
         private final List<T> values = new ArrayList<>();
-        private final List<ValueOrError.Error.SingleError> errors = new ArrayList<>();
+        private final List<Result.Error.SingleError> errors = new ArrayList<>();
 
-        void add(ValueOrError<T> valueOrError) {
-            if (valueOrError instanceof ValueOrError.Error<T> error) {
+        void add(Result<T> valueOrError) {
+            if (valueOrError instanceof Result.Error<T> error) {
                 errors.addAll(error.errors());
                 return;
             }
 
-            values.add(((ValueOrError.Value<T>) valueOrError).value());
+            values.add(((Result.Success<T>) valueOrError).value());
         }
 
         Accumulator<T> merge(Accumulator<T> other) {
@@ -31,12 +31,12 @@ public class ValueOrErrorCollectionCollector<T>
             return this;
         }
 
-        ValueOrError<List<T>> finish() {
+        Result<List<T>> finish() {
             if (!errors.isEmpty()) {
-                return new ValueOrError.Error<>(errors);
+                return new Result.Error<>(errors);
             }
 
-            return ValueOrError.success(List.copyOf(values));
+            return Result.success(List.copyOf(values));
         }
     }
 
@@ -46,7 +46,7 @@ public class ValueOrErrorCollectionCollector<T>
     }
 
     @Override
-    public BiConsumer<Accumulator<T>, ValueOrError<T>> accumulator() {
+    public BiConsumer<Accumulator<T>, Result<T>> accumulator() {
         return Accumulator::add;
     }
 
@@ -56,7 +56,7 @@ public class ValueOrErrorCollectionCollector<T>
     }
 
     @Override
-    public Function<Accumulator<T>, ValueOrError<List<T>>> finisher() {
+    public Function<Accumulator<T>, Result<List<T>>> finisher() {
         return Accumulator::finish;
     }
 
@@ -65,3 +65,4 @@ public class ValueOrErrorCollectionCollector<T>
         return Set.of();
     }
 }
+

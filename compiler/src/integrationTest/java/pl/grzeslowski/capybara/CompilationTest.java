@@ -9,7 +9,7 @@ import pl.grzeslowski.capybara.parser.Program;
 import pl.grzeslowski.capybara.generator.Generator;
 import pl.grzeslowski.capybara.compiler.CapybaraCompiler;
 import pl.grzeslowski.capybara.compiler.CompiledProgram;
-import pl.grzeslowski.capybara.compiler.ValueOrError;
+import pl.grzeslowski.capybara.compiler.Result;
 import pl.grzeslowski.capybara.parser.CapybaraParser;
 
 import java.util.Arrays;
@@ -29,8 +29,8 @@ class CompilationTest {
 
         // link
         var link = CapybaraCompiler.INSTANCE.compile(program, new java.util.TreeSet<>());
-        if (link instanceof ValueOrError.Error<CompiledProgram>) {
-            var errors = ((ValueOrError.Error<CompiledProgram>) link).errors();
+        if (link instanceof Result.Error<CompiledProgram>) {
+            var errors = ((Result.Error<CompiledProgram>) link).errors();
             throw new RuntimeException("Linking failed with " + errors.size() + " error(s): " + errors);
         }
         System.out.println("\n === LINKING === ");
@@ -42,7 +42,7 @@ class CompilationTest {
                 .parallel()
                 .map(type -> {
                     var generator = Generator.findGenerator(type);
-                    var linkedProgram = ((ValueOrError.Value<CompiledProgram>) link).value();
+                    var linkedProgram = ((Result.Success<CompiledProgram>) link).value();
                     var compiled = generator.generate(linkedProgram);
                     return "\t === " + type + " === \n" + compiled;
                 })
@@ -133,6 +133,7 @@ class CompilationTest {
         );
     }
 }
+
 
 
 

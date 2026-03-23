@@ -79,14 +79,14 @@ class JavaExpressionEvaluatorTest {
 
     private static CompiledProgram compileProgram(String fun) {
         var functional = CapybaraParser.INSTANCE.parseFunctional("test", "/foo/boo", fun).functional();
-        var programValueOrError = CapybaraCompiler.INSTANCE.compile(new Program(List.of(new Module("test", "/foo/boo", functional))), new java.util.TreeSet<>());
-        if (programValueOrError instanceof ValueOrError.Error<CompiledProgram> er) {
+        var programResult = CapybaraCompiler.INSTANCE.compile(new Program(List.of(new Module("test", "/foo/boo", functional))), new java.util.TreeSet<>());
+        if (programResult instanceof Result.Error<CompiledProgram> er) {
             throw new AssertionError(er.errors()
                     .stream()
-                    .map(ValueOrError.Error.SingleError::message)
+                    .map(Result.Error.SingleError::message)
                     .collect(joining(", ")));
         }
-        return ((ValueOrError.Value<CompiledProgram>) programValueOrError).value();
+        return ((Result.Success<CompiledProgram>) programResult).value();
     }
 
     private static Optional<CompiledFunction> findFunction(String name, CompiledProgram program) {
@@ -105,10 +105,10 @@ class JavaExpressionEvaluatorTest {
                     1: 1
                 }
                 """).functional();
-        var programValueOrError = CapybaraCompiler.INSTANCE.compile(new Program(List.of(new Module("test", "/foo/boo", functional))), new java.util.TreeSet<>());
-        assertThat(programValueOrError).isInstanceOf(ValueOrError.Error.class);
-        var error = (ValueOrError.Error<CompiledProgram>) programValueOrError;
-        assertThat(error.errors().stream().map(ValueOrError.Error.SingleError::message).collect(joining(",")))
+        var programResult = CapybaraCompiler.INSTANCE.compile(new Program(List.of(new Module("test", "/foo/boo", functional))), new java.util.TreeSet<>());
+        assertThat(programResult).isInstanceOf(Result.Error.class);
+        var error = (Result.Error<CompiledProgram>) programResult;
+        assertThat(error.errors().stream().map(Result.Error.SingleError::message).collect(joining(",")))
                 .contains("dict keys must be of type `STRING`");
     }
 
@@ -263,6 +263,7 @@ class JavaExpressionEvaluatorTest {
         );
     }
 }
+
 
 
 
