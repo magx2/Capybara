@@ -3,6 +3,7 @@ package pl.grzeslowski.capybara.compiler;
 import pl.grzeslowski.capybara.compiler.CompiledFunction.CompiledFunctionParameter;
 import pl.grzeslowski.capybara.compiler.expression.CapybaraExpressionCompiler;
 import pl.grzeslowski.capybara.parser.*;
+import pl.grzeslowski.capybara.parser.Module;
 
 import java.util.*;
 import java.util.stream.Stream;

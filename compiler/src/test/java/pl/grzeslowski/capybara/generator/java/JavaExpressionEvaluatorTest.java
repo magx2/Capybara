@@ -4,8 +4,8 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.api.Test;
-import pl.grzeslowski.capybara.compiler.Module;
-import pl.grzeslowski.capybara.compiler.Program;
+import pl.grzeslowski.capybara.parser.Module;
+import pl.grzeslowski.capybara.parser.Program;
 import pl.grzeslowski.capybara.compiler.*;
 import pl.grzeslowski.capybara.parser.CapybaraParser;
 
@@ -78,7 +78,7 @@ class JavaExpressionEvaluatorTest {
     }
 
     private static CompiledProgram compileProgram(String fun) {
-        var functional = CapybaraParser.INSTANCE.parseFunctional(fun);
+        var functional = CapybaraParser.INSTANCE.parseFunctional("test", "/foo/boo", fun).functional();
         var programValueOrError = CapybaraCompiler.INSTANCE.compile(new Program(List.of(new Module("test", "/foo/boo", functional))), new java.util.TreeSet<>());
         if (programValueOrError instanceof ValueOrError.Error<CompiledProgram> er) {
             throw new AssertionError(er.errors()
@@ -100,11 +100,11 @@ class JavaExpressionEvaluatorTest {
 
     @Test
     void dictKeysMustBeStrings() {
-        var functional = CapybaraParser.INSTANCE.parseFunctional("""
+        var functional = CapybaraParser.INSTANCE.parseFunctional("test", "/foo/boo", """
                 fun invalid_dict() = {
                     1: 1
                 }
-                """);
+                """).functional();
         var programValueOrError = CapybaraCompiler.INSTANCE.compile(new Program(List.of(new Module("test", "/foo/boo", functional))), new java.util.TreeSet<>());
         assertThat(programValueOrError).isInstanceOf(ValueOrError.Error.class);
         var error = (ValueOrError.Error<CompiledProgram>) programValueOrError;
@@ -263,4 +263,6 @@ class JavaExpressionEvaluatorTest {
         );
     }
 }
+
+
 

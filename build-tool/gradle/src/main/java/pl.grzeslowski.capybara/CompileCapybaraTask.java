@@ -1,39 +1,32 @@
 package pl.grzeslowski.capybara;
 
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
-import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
 import org.gradle.api.DefaultTask;
 import org.gradle.api.GradleException;
 import org.gradle.api.file.ConfigurableFileCollection;
 import org.gradle.api.file.DirectoryProperty;
-import org.gradle.api.tasks.InputFiles;
 import org.gradle.api.tasks.InputDirectory;
+import org.gradle.api.tasks.InputFiles;
 import org.gradle.api.tasks.OutputDirectory;
 import org.gradle.api.tasks.TaskAction;
 import pl.grzeslowski.capybara.compiler.CapybaraCompiler;
-import pl.grzeslowski.capybara.compiler.ImportDeclaration;
 import pl.grzeslowski.capybara.compiler.CompiledProgram;
-import pl.grzeslowski.capybara.compiler.Module;
-import pl.grzeslowski.capybara.compiler.Program;
 import pl.grzeslowski.capybara.compiler.ValueOrError;
 import pl.grzeslowski.capybara.parser.CapybaraParser;
+import pl.grzeslowski.capybara.parser.Module;
+import pl.grzeslowski.capybara.parser.Program;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
-import java.util.regex.Pattern;
-import java.util.stream.Stream;
 
 public abstract class CompileCapybaraTask extends DefaultTask {
-    private static final Pattern IMPORT_PATTERN = Pattern.compile(
-            "^\\s*from\\s+([A-Za-z_][A-Za-z0-9_]*|/[A-Za-z_][A-Za-z0-9_]*(?:/[A-Za-z_][A-Za-z0-9_]*)+)\\s+import\\s*\\{\\s*([^}]*)\\s*}(?:\\s+except\\s*\\{\\s*([^}]*)\\s*})?\\s*$"
-    );
 
     @InputDirectory
     public abstract DirectoryProperty getInputDir();
@@ -100,13 +93,7 @@ public abstract class CompileCapybaraTask extends DefaultTask {
         getLogger().info("Parsing module: {}", sourceFile);
         var fileName = sourceFile.getFileName().toString();
         var moduleName = fileName.substring(0, fileName.lastIndexOf('.'));
-        var parsedSource = parseSource(readFile(sourceFile));
-        return new Module(
-                moduleName,
-                findModulePath(rootPath, sourceFile),
-                CapybaraParser.INSTANCE.parseFunctional(parsedSource.source()),
-                parsedSource.imports()
-        );
+        return CapybaraParser.INSTANCE.parseFunctional(moduleName, findModulePath(rootPath, sourceFile), readFile(sourceFile));
     }
 
     private String readFile(Path file) {
@@ -132,32 +119,6 @@ public abstract class CompileCapybaraTask extends DefaultTask {
         return parent == null ? "" : parent.toString();
     }
 
-    private ParsedSource parseSource(String source) {
-        var imports = new ArrayList<ImportDeclaration>();
-        var bodyLines = new ArrayList<String>();
-        Arrays.stream(source.split("\\R", -1)).forEach(line -> {
-            var matcher = IMPORT_PATTERN.matcher(line);
-            if (matcher.matches()) {
-                var module = matcher.group(1);
-                var symbols = Stream.of(matcher.group(2).split(","))
-                        .map(String::trim)
-                        .filter(symbol -> !symbol.isBlank())
-                        .toList();
-                var excludedSymbols = matcher.group(3) == null
-                        ? List.<String>of()
-                        : Stream.of(matcher.group(3).split(","))
-                                .map(String::trim)
-                                .filter(symbol -> !symbol.isBlank())
-                                .toList();
-                imports.add(new ImportDeclaration(module, symbols, excludedSymbols));
-                // Keep source line numbers stable for parser/linker diagnostics.
-                bodyLines.add("");
-            } else {
-                bodyLines.add(line);
-            }
-        });
-        return new ParsedSource(String.join(System.lineSeparator(), bodyLines), List.copyOf(imports));
-    }
 
     private void writeLinkedJson(Path outputDir, CompiledProgram program) {
         var mapper = objectMapper();
@@ -194,10 +155,14 @@ public abstract class CompileCapybaraTask extends DefaultTask {
         return mapper;
     }
 
-    private record ParsedSource(String source, List<ImportDeclaration> imports) {
-    }
 
     private record SourceFile(Path rootPath, Path path) {
     }
 }
+
+
+
+
+
+
 

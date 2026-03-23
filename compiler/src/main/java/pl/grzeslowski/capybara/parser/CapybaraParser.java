@@ -7,6 +7,7 @@ import org.antlr.v4.runtime.ParserRuleContext;
 import org.antlr.v4.runtime.RecognitionException;
 import org.antlr.v4.runtime.Recognizer;
 import org.antlr.v4.runtime.tree.TerminalNode;
+import pl.grzeslowski.capybara.compiler.ImportDeclaration;
 import pl.grzeslowski.capybara.parser.antlr.FunctionalParser;
 
 import java.util.ArrayList;
@@ -15,6 +16,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
 import static java.util.stream.Collectors.toSet;
 
@@ -28,9 +30,13 @@ public class CapybaraParser {
     private static final Pattern NO_VIABLE_ALTERNATIVE_PATTERN = Pattern.compile("no viable alternative at input '(.+)'");
     private static final Pattern CONST_NAME_PATTERN = Pattern.compile("^_?[A-Z_][A-Z0-9_]*$");
     private static final Pattern ENUM_VALUE_NAME_PATTERN = Pattern.compile("^[A-Z]+(?:_[A-Z]+)*$");
+    private static final Pattern IMPORT_PATTERN = Pattern.compile(
+            "^\\s*from\\s+([A-Za-z_][A-Za-z0-9_]*|/[A-Za-z_][A-Za-z0-9_]*(?:/[A-Za-z_][A-Za-z0-9_]*)+)\\s+import\\s*\\{\\s*([^}]*)\\s*}(?:\\s+except\\s*\\{\\s*([^}]*)\\s*})?\\s*$"
+    );
 
-    public Functional parseFunctional(String input) {
-        var lexer = new pl.grzeslowski.capybara.parser.antlr.FunctionalLexer(CharStreams.fromString(input));
+    public Module parseFunctional(String name, String path, String input) {
+        var parsedSource = parseSource(input);
+        var lexer = new pl.grzeslowski.capybara.parser.antlr.FunctionalLexer(CharStreams.fromString(parsedSource.source()));
         var tokens = new CommonTokenStream(lexer);
         tokens.fill();
         var parser = new pl.grzeslowski.capybara.parser.antlr.FunctionalParser(tokens);
@@ -62,7 +68,34 @@ public class CapybaraParser {
                 .map(this::definition)
                 .flatMap(Collection::stream)
                 .collect(toSet());
-        return new Functional(definitions);
+        return new Module(name, path, new Functional(definitions), parsedSource.imports());
+    }
+
+    private ParsedSource parseSource(String source) {
+        var imports = new ArrayList<ImportDeclaration>();
+        var bodyLines = new ArrayList<String>();
+        for (var line : source.split("\\R", -1)) {
+            var matcher = IMPORT_PATTERN.matcher(line);
+            if (matcher.matches()) {
+                var module = matcher.group(1);
+                var symbols = Stream.of(matcher.group(2).split(","))
+                        .map(String::trim)
+                        .filter(symbol -> !symbol.isBlank())
+                        .toList();
+                var excludedSymbols = matcher.group(3) == null
+                        ? List.<String>of()
+                        : Stream.of(matcher.group(3).split(","))
+                                .map(String::trim)
+                                .filter(symbol -> !symbol.isBlank())
+                                .toList();
+                imports.add(new ImportDeclaration(module, symbols, excludedSymbols));
+                // Keep source line numbers stable for parser/linker diagnostics.
+                bodyLines.add("");
+            } else {
+                bodyLines.add(line);
+            }
+        }
+        return new ParsedSource(String.join(System.lineSeparator(), bodyLines), List.copyOf(imports));
     }
 
     private String formatSyntaxError(SyntaxError syntaxError) {
@@ -85,6 +118,9 @@ public class CapybaraParser {
             return "line %d:%d: Expected `->`, found `=`".formatted(syntaxError.line(), syntaxError.column());
         }
         return "line %d:%d: %s".formatted(syntaxError.line(), syntaxError.column(), syntaxError.message());
+    }
+
+    private record ParsedSource(String source, List<ImportDeclaration> imports) {
     }
 
     private record SyntaxError(int line, int column, String message) {
@@ -1748,6 +1784,9 @@ public class CapybaraParser {
     }
 
 }
+
+
+
 
 
 

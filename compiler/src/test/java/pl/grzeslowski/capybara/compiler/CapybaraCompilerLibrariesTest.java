@@ -2,6 +2,8 @@ package pl.grzeslowski.capybara.compiler;
 
 import org.junit.jupiter.api.Test;
 import pl.grzeslowski.capybara.parser.CapybaraParser;
+import pl.grzeslowski.capybara.parser.Module;
+import pl.grzeslowski.capybara.parser.Program;
 
 import java.util.List;
 import java.util.SortedSet;
@@ -15,19 +17,19 @@ class CapybaraCompilerLibrariesTest {
         var libraries = compileProgram(new Program(List.of(new Module(
                 "Library",
                 "/foo/lib",
-                CapybaraParser.INSTANCE.parseFunctional("""
+                CapybaraParser.INSTANCE.parseFunctional("Library", "/foo/lib", """
                         data Message { value: string }
                         fun make_message(value: string): Message = Message { value: value }
-                        """)
+                        """).functional()
         ))), new java.util.TreeSet<>()).modules();
 
         var consumer = new Module(
                 "Consumer",
                 "/foo/app",
-                CapybaraParser.INSTANCE.parseFunctional("""
+                CapybaraParser.INSTANCE.parseFunctional("Consumer", "/foo/app", """
                         fun consume(value: string): Message = make_message(value)
                         fun unwrap(message: Message): string = message.value
-                        """),
+                        """).functional(),
                 List.of(new ImportDeclaration("Library", List.of("*"), List.of()))
         );
 
@@ -47,3 +49,4 @@ class CapybaraCompilerLibrariesTest {
         return ((ValueOrError.Value<CompiledProgram>) result).value();
     }
 }
+

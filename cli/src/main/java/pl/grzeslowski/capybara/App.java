@@ -6,11 +6,10 @@ import com.fasterxml.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
 import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
 import pl.grzeslowski.capybara.generator.Generator;
 import pl.grzeslowski.capybara.compiler.CapybaraCompiler;
-import pl.grzeslowski.capybara.compiler.ImportDeclaration;
 import pl.grzeslowski.capybara.compiler.CompiledProgram;
-import pl.grzeslowski.capybara.compiler.Module;
+import pl.grzeslowski.capybara.parser.Module;
 import pl.grzeslowski.capybara.compiler.OutputType;
-import pl.grzeslowski.capybara.compiler.Program;
+import pl.grzeslowski.capybara.parser.Program;
 import pl.grzeslowski.capybara.compiler.ValueOrError;
 import pl.grzeslowski.capybara.parser.CapybaraParser;
 
@@ -19,22 +18,16 @@ import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.logging.Handler;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import java.util.regex.Pattern;
-import java.util.stream.Stream;
 
 public class App {
     private static final Logger log = Logger.getLogger(App.class.getName());
     private static final String LINKED_PROGRAM_FILE = "linked-program.json";
-    private static final Pattern IMPORT_PATTERN = Pattern.compile(
-            "^\\s*from\\s+([A-Za-z_][A-Za-z0-9_]*|/[A-Za-z_][A-Za-z0-9_]*(?:/[A-Za-z_][A-Za-z0-9_]*)+)\\s+import\\s*\\{\\s*([^}]*)\\s*}(?:\\s+except\\s*\\{\\s*([^}]*)\\s*})?\\s*$"
-    );
 
     public static void main(String[] args) throws IOException {
         var filteredArgs = Arrays.stream(args)
@@ -213,12 +206,10 @@ public class App {
         log.info("Building module from file: " + sourceFile.path());
         var fileName = sourceFile.path().getFileName().toString();
         var fileNameWithoutExtension = fileName.substring(0, fileName.lastIndexOf('.'));
-        var parsedSource = parseSource(readFile(sourceFile.path()));
-        return new Module(
+        return CapybaraParser.INSTANCE.parseFunctional(
                 fileNameWithoutExtension,
                 findModulePath(sourceFile),
-                CapybaraParser.INSTANCE.parseFunctional(parsedSource.source()),
-                parsedSource.imports()
+                readFile(sourceFile.path())
         );
     }
 
@@ -246,33 +237,6 @@ public class App {
         }
     }
 
-    private static ParsedSource parseSource(String source) {
-        var imports = new ArrayList<ImportDeclaration>();
-        var bodyLines = new ArrayList<String>();
-        Arrays.stream(source.split("\\R", -1)).forEach(line -> {
-            var matcher = IMPORT_PATTERN.matcher(line);
-            if (matcher.matches()) {
-                var module = matcher.group(1);
-                var symbols = Stream.of(matcher.group(2).split(","))
-                        .map(String::trim)
-                        .filter(symbol -> !symbol.isBlank())
-                        .toList();
-                var excludedSymbols = matcher.group(3) == null
-                        ? List.<String>of()
-                        : Stream.of(matcher.group(3).split(","))
-                                .map(String::trim)
-                                .filter(symbol -> !symbol.isBlank())
-                                .toList();
-                imports.add(new ImportDeclaration(module, symbols, excludedSymbols));
-                // Keep source line numbers stable for parser/linker diagnostics.
-                bodyLines.add("");
-            } else {
-                bodyLines.add(line);
-            }
-        });
-        return new ParsedSource(String.join(System.lineSeparator(), bodyLines), List.copyOf(imports));
-    }
-
     private static void enableDebugLogging() {
         var rootLogger = Logger.getLogger("");
         rootLogger.setLevel(Level.FINE);
@@ -284,7 +248,7 @@ public class App {
     private record SourceFile(Path rootPath, Path path) {
     }
 
-    private record ParsedSource(String source, List<ImportDeclaration> imports) {
-    }
+
 }
+
 

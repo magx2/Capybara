@@ -1,4 +1,4 @@
-package pl.grzeslowski.capybara.compiler;
+package pl.grzeslowski.capybara.parser;
 
 import java.util.List;
 

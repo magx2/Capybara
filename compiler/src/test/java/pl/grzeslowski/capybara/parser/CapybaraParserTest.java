@@ -16,9 +16,9 @@ class CapybaraParserTest {
     @ParameterizedTest(name = "{index}: should parse function {0}")
     @MethodSource
     void parse(String name, String code) {
-        var functional = new CapybaraParser().parseFunctional(code);
-        findFunction(name, functional);
-        System.out.println(functional);
+        var module = new CapybaraParser().parseFunctional("Test", "/parser", code);
+        findFunction(name, module.functional());
+        System.out.println(module);
     }
 
     private static Function findFunction(String name, Functional functional) {
@@ -102,8 +102,8 @@ class CapybaraParserTest {
     @Test
     @DisplayName("should parse const declaration as zero-arg function")
     void parseConstDeclaration() {
-        var functional = new CapybaraParser().parseFunctional("const E: double = 2.");
-        var function = findFunction("E", functional);
+        var module = new CapybaraParser().parseFunctional("Test", "/parser", "const E: double = 2.");
+        var function = findFunction("E", module.functional());
         assertThat(function.parameters()).isEmpty();
         assertThat(function.returnType()).contains(PrimitiveType.DOUBLE);
     }
@@ -116,10 +116,10 @@ class CapybaraParserTest {
         var code = "fun list_identity(l: list[int]): list[int] = l";
 
         // when
-        var functional = new CapybaraParser().parseFunctional(code);
+        var module = new CapybaraParser().parseFunctional("Test", "/parser", code);
 
         // then
-        var function = findFunction(name, functional);
+        var function = findFunction(name, module.functional());
         var parameters = function.parameters();
         assertThat(parameters).hasSize(1);
         var parameter = parameters.get(0);
@@ -129,3 +129,5 @@ class CapybaraParserTest {
         assertThat(function.returnType()).hasValue(listOfIntsType);
     }
 }
+
+

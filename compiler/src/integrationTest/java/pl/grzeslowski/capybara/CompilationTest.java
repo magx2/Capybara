@@ -3,9 +3,9 @@ package pl.grzeslowski.capybara;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
-import pl.grzeslowski.capybara.compiler.Module;
+import pl.grzeslowski.capybara.parser.Module;
 import pl.grzeslowski.capybara.compiler.OutputType;
-import pl.grzeslowski.capybara.compiler.Program;
+import pl.grzeslowski.capybara.parser.Program;
 import pl.grzeslowski.capybara.generator.Generator;
 import pl.grzeslowski.capybara.compiler.CapybaraCompiler;
 import pl.grzeslowski.capybara.compiler.CompiledProgram;
@@ -21,7 +21,7 @@ class CompilationTest {
     @MethodSource
     void test(String code) {
         // parse
-        var functional = CapybaraParser.INSTANCE.parseFunctional(code);
+        var functional = CapybaraParser.INSTANCE.parseFunctional("Main", "/capybara", code).functional();
         var module = new Module("Main", "/capybara", functional);
         var program = new Program(List.of(module));
         System.out.println(" === PARSING === ");
@@ -133,5 +133,7 @@ class CompilationTest {
         );
     }
 }
+
+
 
 

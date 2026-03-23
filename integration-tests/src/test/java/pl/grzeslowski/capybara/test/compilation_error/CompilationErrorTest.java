@@ -4,8 +4,8 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import pl.grzeslowski.capybara.compiler.ImportDeclaration;
-import pl.grzeslowski.capybara.compiler.Module;
-import pl.grzeslowski.capybara.compiler.Program;
+import pl.grzeslowski.capybara.parser.Module;
+import pl.grzeslowski.capybara.parser.Program;
 import pl.grzeslowski.capybara.compiler.CapybaraCompiler;
 import pl.grzeslowski.capybara.compiler.CompiledProgram;
 import pl.grzeslowski.capybara.compiler.ValueOrError;
@@ -867,17 +867,17 @@ public class CompilationErrorTest {
 
     private static final List<Module> DEFAULT_MODULES = List.of(
             new Module("Name", "/capy/compilation_test",
-                    CapybaraParser.INSTANCE.parseFunctional("""
+                    CapybaraParser.INSTANCE.parseFunctional("Name", "/capy/compilation_test", """
                             type Name[T] = Foo[T] | Boo
                             data Foo[T] { value: T }
                             data Boo { message: string }
-                            """),
+                            """).functional(),
                     List.of())
     );
 
     private static SortedSet<ValueOrError.Error.SingleError> compileProgram(String fun, String moduleName, List<ImportDeclaration> imports) {
         try {
-            var functional = CapybaraParser.INSTANCE.parseFunctional(fun);
+            var functional = CapybaraParser.INSTANCE.parseFunctional(moduleName, "/foo/boo", fun).functional();
             var module = new Module(moduleName, "/foo/boo", functional, imports);
             var modules = new ArrayList<>(DEFAULT_MODULES);
             modules.add(module);
@@ -1018,4 +1018,6 @@ public class CompilationErrorTest {
         return out;
     }
 }
+
+
 
