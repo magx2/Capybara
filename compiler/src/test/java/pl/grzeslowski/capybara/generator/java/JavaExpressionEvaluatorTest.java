@@ -4,10 +4,8 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.api.Test;
-import pl.grzeslowski.capybara.parser.Module;
-import pl.grzeslowski.capybara.parser.Program;
 import pl.grzeslowski.capybara.compiler.*;
-import pl.grzeslowski.capybara.parser.CapybaraParser;
+import pl.grzeslowski.capybara.compiler.parser.RawModule;
 
 import java.util.Collection;
 import java.util.List;
@@ -34,13 +32,8 @@ class JavaExpressionEvaluatorTest {
     @ParameterizedTest(name = "{index}: should compile method {0} to return {2}")
     @MethodSource
     void returnType(String name, String fun, CompiledType expectedReturnType) {
-        // given
         var program = compileProgram(fun);
-
-        // when
         var returnType = findFunction(name, program).map(CompiledFunction::returnType);
-
-        // then
         assertThat(returnType).contains(expectedReturnType);
     }
 
@@ -70,16 +63,13 @@ class JavaExpressionEvaluatorTest {
                 .orElseThrow();
         printExpression(expression);
 
-        // when
         var evaluated = JavaExpressionEvaluator.evaluateExpression(expression);
 
-        // then
         assertThat(evaluated).isEqualToNormalizingNewlines(expected);
     }
 
     private static CompiledProgram compileProgram(String fun) {
-        var functional = CapybaraParser.INSTANCE.parseFunctional("test", "/foo/boo", fun).functional();
-        var programResult = CapybaraCompiler.INSTANCE.compile(new Program(List.of(new Module("test", "/foo/boo", functional))), new java.util.TreeSet<>());
+        var programResult = CapybaraCompiler.INSTANCE.compile(List.of(new RawModule("test", "/foo/boo", fun)), new java.util.TreeSet<>());
         if (programResult instanceof Result.Error<CompiledProgram> er) {
             throw new AssertionError(er.errors()
                     .stream()
@@ -100,12 +90,11 @@ class JavaExpressionEvaluatorTest {
 
     @Test
     void dictKeysMustBeStrings() {
-        var functional = CapybaraParser.INSTANCE.parseFunctional("test", "/foo/boo", """
+        var programResult = CapybaraCompiler.INSTANCE.compile(List.of(new RawModule("test", "/foo/boo", """
                 fun invalid_dict() = {
                     1: 1
                 }
-                """).functional();
-        var programResult = CapybaraCompiler.INSTANCE.compile(new Program(List.of(new Module("test", "/foo/boo", functional))), new java.util.TreeSet<>());
+                """)), new java.util.TreeSet<>());
         assertThat(programResult).isInstanceOf(Result.Error.class);
         var error = (Result.Error<CompiledProgram>) programResult;
         assertThat(error.errors().stream().map(Result.Error.SingleError::message).collect(joining(",")))
@@ -263,7 +252,4 @@ class JavaExpressionEvaluatorTest {
         );
     }
 }
-
-
-
 

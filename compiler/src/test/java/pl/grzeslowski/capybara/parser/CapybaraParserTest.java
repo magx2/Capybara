@@ -6,8 +6,9 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
-import java.util.Optional;
 import java.util.stream.Stream;
+
+import pl.grzeslowski.capybara.compiler.parser.*;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -16,7 +17,7 @@ class CapybaraParserTest {
     @ParameterizedTest(name = "{index}: should parse function {0}")
     @MethodSource
     void parse(String name, String code) {
-        var module = new CapybaraParser().parseFunctional("Test", "/parser", code);
+        var module = new CapybaraParser().parseModule(new RawModule("Test", "/parser", code));
         findFunction(name, module.functional());
         System.out.println(module);
     }
@@ -102,7 +103,7 @@ class CapybaraParserTest {
     @Test
     @DisplayName("should parse const declaration as zero-arg function")
     void parseConstDeclaration() {
-        var module = new CapybaraParser().parseFunctional("Test", "/parser", "const E: double = 2.");
+        var module = new CapybaraParser().parseModule(new RawModule("Test", "/parser", "const E: double = 2."));
         var function = findFunction("E", module.functional());
         assertThat(function.parameters()).isEmpty();
         assertThat(function.returnType()).contains(PrimitiveType.DOUBLE);
@@ -116,7 +117,7 @@ class CapybaraParserTest {
         var code = "fun list_identity(l: list[int]): list[int] = l";
 
         // when
-        var module = new CapybaraParser().parseFunctional("Test", "/parser", code);
+        var module = new CapybaraParser().parseModule(new RawModule("Test", "/parser", code));
 
         // then
         var function = findFunction(name, module.functional());
@@ -129,5 +130,6 @@ class CapybaraParserTest {
         assertThat(function.returnType()).hasValue(listOfIntsType);
     }
 }
+
 
 

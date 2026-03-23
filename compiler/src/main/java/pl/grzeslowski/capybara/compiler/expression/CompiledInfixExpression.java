@@ -1,7 +1,7 @@
 package pl.grzeslowski.capybara.compiler.expression;
 
 import pl.grzeslowski.capybara.compiler.CompiledType;
-import pl.grzeslowski.capybara.parser.InfixOperator;
+import pl.grzeslowski.capybara.compiler.parser.InfixOperator;
 
 public record CompiledInfixExpression(CompiledExpression left,
                                     InfixOperator operator,

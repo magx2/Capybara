@@ -3,6 +3,7 @@ package pl.grzeslowski.capybara.generator.java;
 import pl.grzeslowski.capybara.compiler.expression.*;
 import pl.grzeslowski.capybara.compiler.CompiledDataParentType;
 import pl.grzeslowski.capybara.compiler.CompiledDataType;
+import pl.grzeslowski.capybara.compiler.parser.InfixOperator;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -333,13 +334,13 @@ public class JavaExpressionEvaluator {
                 }
                 if (isStringComparison(infixExpression)) {
                     var equalsExpression = "java.util.Objects.equals(" + left.expression() + ", " + right.expression() + ")";
-                    yield operator == pl.grzeslowski.capybara.parser.InfixOperator.EQUAL
+                    yield operator == InfixOperator.EQUAL
                             ? equalsExpression
                             : "!(" + equalsExpression + ")";
                 }
                 if (!isPrimitiveComparison(infixExpression.left().type(), infixExpression.right().type())) {
                     var equalsExpression = "java.util.Objects.equals(" + left.expression() + ", " + right.expression() + ")";
-                    yield operator == pl.grzeslowski.capybara.parser.InfixOperator.EQUAL
+                    yield operator == InfixOperator.EQUAL
                             ? equalsExpression
                             : "!(" + equalsExpression + ")";
                 }

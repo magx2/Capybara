@@ -3,14 +3,12 @@ package pl.grzeslowski.capybara;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
-import pl.grzeslowski.capybara.parser.Module;
 import pl.grzeslowski.capybara.compiler.OutputType;
-import pl.grzeslowski.capybara.parser.Program;
 import pl.grzeslowski.capybara.generator.Generator;
 import pl.grzeslowski.capybara.compiler.CapybaraCompiler;
 import pl.grzeslowski.capybara.compiler.CompiledProgram;
 import pl.grzeslowski.capybara.compiler.Result;
-import pl.grzeslowski.capybara.parser.CapybaraParser;
+import pl.grzeslowski.capybara.compiler.parser.RawModule;
 
 import java.util.Arrays;
 import java.util.List;
@@ -20,15 +18,11 @@ class CompilationTest {
     @ParameterizedTest(name = "{index}: should {0}")
     @MethodSource
     void test(String code) {
-        // parse
-        var functional = CapybaraParser.INSTANCE.parseFunctional("Main", "/capybara", code).functional();
-        var module = new Module("Main", "/capybara", functional);
-        var program = new Program(List.of(module));
+        var rawModules = List.of(new RawModule("Main", "/capybara", code));
         System.out.println(" === PARSING === ");
-        System.out.println(program);
+        System.out.println(rawModules);
 
-        // link
-        var link = CapybaraCompiler.INSTANCE.compile(program, new java.util.TreeSet<>());
+        var link = CapybaraCompiler.INSTANCE.compile(rawModules, new java.util.TreeSet<>());
         if (link instanceof Result.Error<CompiledProgram>) {
             var errors = ((Result.Error<CompiledProgram>) link).errors();
             throw new RuntimeException("Linking failed with " + errors.size() + " error(s): " + errors);
@@ -36,7 +30,6 @@ class CompilationTest {
         System.out.println("\n === LINKING === ");
         System.out.println(link);
 
-        // generate
         System.out.println("\n === GENERATION === ");
         Arrays.stream(OutputType.values())
                 .parallel()
@@ -133,8 +126,3 @@ class CompilationTest {
         );
     }
 }
-
-
-
-
-

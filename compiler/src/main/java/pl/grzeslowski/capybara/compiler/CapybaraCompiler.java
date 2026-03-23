@@ -2,8 +2,8 @@ package pl.grzeslowski.capybara.compiler;
 
 import pl.grzeslowski.capybara.compiler.CompiledFunction.CompiledFunctionParameter;
 import pl.grzeslowski.capybara.compiler.expression.CapybaraExpressionCompiler;
-import pl.grzeslowski.capybara.parser.*;
-import pl.grzeslowski.capybara.parser.Module;
+import pl.grzeslowski.capybara.compiler.parser.*;
+import pl.grzeslowski.capybara.compiler.parser.Module;
 
 import java.util.*;
 import java.util.stream.Stream;
@@ -11,7 +11,6 @@ import java.util.stream.Stream;
 import static java.util.Collections.unmodifiableSortedSet;
 import static java.util.function.Function.identity;
 import static java.util.stream.Collectors.toMap;
-import static pl.grzeslowski.capybara.compiler.CapybaraTypeCompiler.linkType;
 
 @SuppressWarnings("OptionalUsedAsFieldOrParameterType")
 public class CapybaraCompiler {
@@ -19,7 +18,12 @@ public class CapybaraCompiler {
     private static final String METHOD_DECL_PREFIX = "__method__";
     private static final java.util.regex.Pattern IDENTIFIER_PATTERN = java.util.regex.Pattern.compile("[A-Za-z_][A-Za-z0-9_]*");
 
-    public Result<CompiledProgram> compile(Program program, SortedSet<CompiledModule> libraries) {
+    public Result<CompiledProgram> compile(Collection<RawModule> rawModules, SortedSet<CompiledModule> libraries) {
+        var program = CapybaraParser.INSTANCE.parseModule(rawModules);
+        return compile(program, libraries);
+    }
+
+    private Result<CompiledProgram> compile(Program program, SortedSet<CompiledModule> libraries) {
         var programModuleRefs = program.modules().stream().map(module -> new ModuleRef(module.name(), module.path())).toList();
         var libraryModuleRefs = libraries.stream().map(module -> new ModuleRef(module.name(), module.path())).toList();
         var allModuleRefs = Stream.concat(programModuleRefs.stream(), libraryModuleRefs.stream()).toList();
@@ -303,9 +307,12 @@ public class CapybaraCompiler {
                 }
                 yield resolveGenericDataType(linkedDataParentType, all);
             }
-            case CollectionLinkedType.CompiledList linkedList -> new CollectionLinkedType.CompiledList(resolveLinkedType(linkedList.elementType(), all));
-            case CollectionLinkedType.CompiledSet linkedSet -> new CollectionLinkedType.CompiledSet(resolveLinkedType(linkedSet.elementType(), all));
-            case CollectionLinkedType.CompiledDict linkedDict -> new CollectionLinkedType.CompiledDict(resolveLinkedType(linkedDict.valueType(), all));
+            case CollectionLinkedType.CompiledList linkedList ->
+                    new CollectionLinkedType.CompiledList(resolveLinkedType(linkedList.elementType(), all));
+            case CollectionLinkedType.CompiledSet linkedSet ->
+                    new CollectionLinkedType.CompiledSet(resolveLinkedType(linkedSet.elementType(), all));
+            case CollectionLinkedType.CompiledDict linkedDict ->
+                    new CollectionLinkedType.CompiledDict(resolveLinkedType(linkedDict.valueType(), all));
             case CompiledTupleType linkedTupleType -> new CompiledTupleType(
                     linkedTupleType.elementTypes().stream().map(element -> resolveLinkedType(element, all)).toList()
             );
@@ -440,8 +447,8 @@ public class CapybaraCompiler {
                 .filter(Function.class::isInstance)
                 .map(Function.class::cast)
                 .sorted(Comparator
-                        .comparingInt((Function function) -> function.position().map(pl.grzeslowski.capybara.parser.SourcePosition::line).orElse(Integer.MAX_VALUE))
-                        .thenComparingInt(function -> function.position().map(pl.grzeslowski.capybara.parser.SourcePosition::column).orElse(Integer.MAX_VALUE)))
+                        .comparingInt((Function function) -> function.position().map(SourcePosition::line).orElse(Integer.MAX_VALUE))
+                        .thenComparingInt(function -> function.position().map(SourcePosition::column).orElse(Integer.MAX_VALUE)))
                 .toList();
     }
 
@@ -479,24 +486,24 @@ public class CapybaraCompiler {
         var functionGenericTypeNames = functionGenericTypeNames(function, dataTypes);
         var linked = linkParameters(function.parameters(), dataTypes, functionGenericTypeNames)
                 .flatMap(parameters -> linkExpressionWithRecursiveInference(
-                                function,
-                                parameters,
-                                dataTypes,
-                                signatures,
-                                signaturesByModule,
-                                moduleClassNameByModuleName
-                        ).flatMap(ex -> function.returnType()
-                                .map(type -> linkType(type, dataTypes, functionGenericTypeNames))
-                                .orElseGet(() -> Result.success(ex.type()))
-                                .flatMap(rtype -> validateFunctionReturnType(function, ex, rtype, moduleSourceFile)
-                                        .map(validatedExpression -> new CompiledFunction(
-                                                function.name(),
-                                                rtype,
-                                                parameters,
-                                                enrichNothing(coerceReturnExpression(validatedExpression, rtype), function.name(), moduleSourceFile),
-                                                function.comments(),
-                                                isProgramMain(function.name(), rtype, parameters)
-                                        )))));
+                        function,
+                        parameters,
+                        dataTypes,
+                        signatures,
+                        signaturesByModule,
+                        moduleClassNameByModuleName
+                ).flatMap(ex -> function.returnType()
+                        .map(type -> linkType(type, dataTypes, functionGenericTypeNames))
+                        .orElseGet(() -> Result.success(ex.type()))
+                        .flatMap(rtype -> validateFunctionReturnType(function, ex, rtype, moduleSourceFile)
+                                .map(validatedExpression -> new CompiledFunction(
+                                        function.name(),
+                                        rtype,
+                                        parameters,
+                                        enrichNothing(coerceReturnExpression(validatedExpression, rtype), function.name(), moduleSourceFile),
+                                        function.comments(),
+                                        isProgramMain(function.name(), rtype, parameters)
+                                )))));
         linked = normalizeInfixOperatorErrors(linked, function, moduleSourceFile);
         linked = normalizeMatchExhaustivenessErrors(linked, function, moduleSourceFile);
         linked = normalizeIntLiteralErrors(linked, function, moduleSourceFile);
@@ -530,12 +537,12 @@ public class CapybaraCompiler {
             }
             var selfSignatureAsNothing = signatures.stream()
                     .map(signature -> signature.name().equals(function.name())
-                                     ? new CapybaraExpressionCompiler.FunctionSignature(
+                            ? new CapybaraExpressionCompiler.FunctionSignature(
                             signature.name(),
                             signature.parameterTypes(),
                             PrimitiveLinkedType.NOTHING
                     )
-                                     : signature)
+                            : signature)
                     .toList();
             var retryLinker = new CapybaraExpressionCompiler(
                     parameters,
@@ -828,8 +835,8 @@ public class CapybaraCompiler {
         }
         return "fun " + function.name()
                + "(" + function.parameters().stream()
-                .map(parameter -> parameter.name() + ": " + formatParserType(parameter.type()))
-                .collect(java.util.stream.Collectors.joining(", "))
+                       .map(parameter -> parameter.name() + ": " + formatParserType(parameter.type()))
+                       .collect(java.util.stream.Collectors.joining(", "))
                + "): " + formatLinkedType(declaredReturnType)
                + " = " + formatExpressionPreview(function.expression());
     }
@@ -928,7 +935,7 @@ public class CapybaraCompiler {
         return Optional.of(new MethodDeclarationInfo(ownerWithTypeParameters, methodName));
     }
 
-    private String formatParserTypeInHeader(pl.grzeslowski.capybara.parser.Type type) {
+    private String formatParserTypeInHeader(Type type) {
         return switch (type) {
             case FunctionType functionType -> formatParserTypeInHeader(functionType.argumentType())
                                               + " => "
@@ -940,8 +947,8 @@ public class CapybaraCompiler {
     private record MethodDeclarationInfo(String ownerName, String methodName) {
     }
 
-    private String formatMatchLine(pl.grzeslowski.capybara.parser.Expression expression) {
-        if (expression instanceof pl.grzeslowski.capybara.parser.MatchExpression matchExpression) {
+    private String formatMatchLine(Expression expression) {
+        if (expression instanceof MatchExpression matchExpression) {
             return "match " + formatExpressionPreview(matchExpression.matchWith()) + " with";
         }
         return formatExpressionPreview(expression);
@@ -1134,12 +1141,13 @@ public class CapybaraCompiler {
 
     private Optional<SourcePosition> returnExpressionPosition(Expression expression) {
         return switch (expression) {
-            case LetExpression letExpression -> returnExpressionPosition(letExpression.rest()).or(() -> letExpression.position());
+            case LetExpression letExpression ->
+                    returnExpressionPosition(letExpression.rest()).or(() -> letExpression.position());
             default -> expression.position();
         };
     }
 
-    private String formatParserType(pl.grzeslowski.capybara.parser.Type type) {
+    private String formatParserType(Type type) {
         return switch (type) {
             case PrimitiveType primitiveType -> primitiveType.name().toLowerCase(java.util.Locale.ROOT);
             case CollectionType.ListType listType -> "list[" + formatParserType(listType.elementType()) + "]";
@@ -1148,12 +1156,13 @@ public class CapybaraCompiler {
             case TupleType tupleType -> "tuple[" + tupleType.elementTypes().stream()
                     .map(this::formatParserType)
                     .collect(java.util.stream.Collectors.joining(", ")) + "]";
-            case FunctionType functionType -> formatParserType(functionType.argumentType()) + "=>" + formatParserType(functionType.returnType());
+            case FunctionType functionType ->
+                    formatParserType(functionType.argumentType()) + "=>" + formatParserType(functionType.returnType());
             case DataType dataType -> dataType.name();
         };
     }
 
-    private String formatExpressionPreview(pl.grzeslowski.capybara.parser.Expression expression) {
+    private String formatExpressionPreview(Expression expression) {
         return switch (expression) {
             case StringValue stringValue -> stringValue.stringValue();
             case IntValue intValue -> intValue.intValue();
@@ -1169,26 +1178,26 @@ public class CapybaraCompiler {
             case FunctionCall functionCall -> formatFunctionCallPreview(functionCall);
             case FunctionInvoke functionInvoke -> formatExpressionPreview(functionInvoke.function())
                                                   + "(" + functionInvoke.arguments().stream()
-                        .map(this::formatExpressionPreview)
-                        .collect(java.util.stream.Collectors.joining(", ")) + ")";
+                                                          .map(this::formatExpressionPreview)
+                                                          .collect(java.util.stream.Collectors.joining(", ")) + ")";
             case FunctionReference functionReference -> ":" + functionReference.name();
             case NewData newData -> formatNewDataPreview(newData);
             case NewListExpression newListExpression -> "["
-                    + newListExpression.values().stream()
-                    .map(this::formatExpressionPreview)
-                    .collect(java.util.stream.Collectors.joining(", ")) + "]";
+                                                        + newListExpression.values().stream()
+                                                                .map(this::formatExpressionPreview)
+                                                                .collect(java.util.stream.Collectors.joining(", ")) + "]";
             case NewSetExpression newSetExpression -> "{"
-                    + newSetExpression.values().stream()
-                    .map(this::formatExpressionPreview)
-                    .collect(java.util.stream.Collectors.joining(", ")) + "}";
+                                                      + newSetExpression.values().stream()
+                                                              .map(this::formatExpressionPreview)
+                                                              .collect(java.util.stream.Collectors.joining(", ")) + "}";
             case NewDictExpression newDictExpression -> "{"
-                    + newDictExpression.entries().stream()
-                    .map(entry -> formatExpressionPreview(entry.key()) + ": " + formatExpressionPreview(entry.value()))
-                    .collect(java.util.stream.Collectors.joining(", ")) + "}";
+                                                        + newDictExpression.entries().stream()
+                                                                .map(entry -> formatExpressionPreview(entry.key()) + ": " + formatExpressionPreview(entry.value()))
+                                                                .collect(java.util.stream.Collectors.joining(", ")) + "}";
             case TupleExpression tupleExpression -> "("
-                    + tupleExpression.values().stream()
-                    .map(this::formatExpressionPreview)
-                    .collect(java.util.stream.Collectors.joining(", ")) + ")";
+                                                    + tupleExpression.values().stream()
+                                                            .map(this::formatExpressionPreview)
+                                                            .collect(java.util.stream.Collectors.joining(", ")) + ")";
             case LambdaExpression lambdaExpression -> {
                 var args = String.join(", ", lambdaExpression.argumentNames());
                 var renderedArgs = lambdaExpression.argumentNames().isEmpty() ? "()" : args;
@@ -1200,25 +1209,26 @@ public class CapybaraCompiler {
             }
             case SliceExpression sliceExpression -> formatSliceExpressionPreview(sliceExpression);
             case InfixExpression infixExpression -> formatExpressionPreview(infixExpression.left())
-                                                   + previewOperator(infixExpression.operator().symbol())
-                                                   + formatExpressionPreview(infixExpression.right());
+                                                    + previewOperator(infixExpression.operator().symbol())
+                                                    + formatExpressionPreview(infixExpression.right());
             case NothingValue ignored -> "???";
             case IfExpression ifExpression -> "if " + formatExpressionPreview(ifExpression.condition())
-                    + " then " + formatExpressionPreview(ifExpression.thenBranch())
-                    + " else " + formatExpressionPreview(ifExpression.elseBranch());
+                                              + " then " + formatExpressionPreview(ifExpression.thenBranch())
+                                              + " else " + formatExpressionPreview(ifExpression.elseBranch());
             case LetExpression letExpression -> "let " + letExpression.name()
-                    + " = " + formatExpressionPreview(letExpression.value())
-                    + " " + formatExpressionPreview(letExpression.rest());
-            case MatchExpression matchExpression -> "match " + formatExpressionPreview(matchExpression.matchWith()) + " with ...";
+                                                + " = " + formatExpressionPreview(letExpression.value())
+                                                + " " + formatExpressionPreview(letExpression.rest());
+            case MatchExpression matchExpression ->
+                    "match " + formatExpressionPreview(matchExpression.matchWith()) + " with ...";
             default -> expression.toString();
         };
     }
 
-    private String formatExpressionPreviewWithSpaces(pl.grzeslowski.capybara.parser.Expression expression) {
+    private String formatExpressionPreviewWithSpaces(Expression expression) {
         return switch (expression) {
             case InfixExpression infixExpression -> formatExpressionPreviewWithSpaces(infixExpression.left())
-                                                   + " " + previewOperator(infixExpression.operator().symbol()) + " "
-                                                   + formatExpressionPreviewWithSpaces(infixExpression.right());
+                                                    + " " + previewOperator(infixExpression.operator().symbol()) + " "
+                                                    + formatExpressionPreviewWithSpaces(infixExpression.right());
             default -> formatExpressionPreview(expression);
         };
     }
@@ -1234,8 +1244,8 @@ public class CapybaraCompiler {
         var modulePrefix = functionCall.moduleName().map(moduleName -> moduleName + ".").orElse("");
         return modulePrefix + functionCall.name()
                + "(" + functionCall.arguments().stream()
-                .map(this::formatExpressionPreview)
-                .collect(java.util.stream.Collectors.joining(", ")) + ")";
+                       .map(this::formatExpressionPreview)
+                       .collect(java.util.stream.Collectors.joining(", ")) + ")";
     }
 
     private String formatNewDataPreview(NewData newData) {
@@ -1307,13 +1317,16 @@ public class CapybaraCompiler {
     private String formatLinkedType(CompiledType type) {
         return switch (type) {
             case PrimitiveLinkedType primitiveType -> primitiveType.name().toLowerCase(java.util.Locale.ROOT);
-            case CollectionLinkedType.CompiledList linkedList -> "list[" + formatLinkedType(linkedList.elementType()) + "]";
+            case CollectionLinkedType.CompiledList linkedList ->
+                    "list[" + formatLinkedType(linkedList.elementType()) + "]";
             case CollectionLinkedType.CompiledSet linkedSet -> "set[" + formatLinkedType(linkedSet.elementType()) + "]";
-            case CollectionLinkedType.CompiledDict linkedDict -> "dict[" + formatLinkedType(linkedDict.valueType()) + "]";
+            case CollectionLinkedType.CompiledDict linkedDict ->
+                    "dict[" + formatLinkedType(linkedDict.valueType()) + "]";
             case CompiledTupleType linkedTupleType -> "tuple[" + linkedTupleType.elementTypes().stream()
                     .map(this::formatLinkedType)
                     .collect(java.util.stream.Collectors.joining(", ")) + "]";
-            case CompiledFunctionType linkedFunctionType -> formatLinkedType(linkedFunctionType.argumentType()) + "=>" + formatLinkedType(linkedFunctionType.returnType());
+            case CompiledFunctionType linkedFunctionType ->
+                    formatLinkedType(linkedFunctionType.argumentType()) + "=>" + formatLinkedType(linkedFunctionType.returnType());
             case CompiledDataType linkedDataType -> linkedDataType.typeParameters().isEmpty()
                     ? linkedDataType.name()
                     : linkedDataType.name() + "[" + String.join(", ", linkedDataType.typeParameters()) + "]";
@@ -1382,7 +1395,7 @@ public class CapybaraCompiler {
                     return areAssignableDataTypeParameters(expectedParent.typeParameters(), actualData.typeParameters());
                 }
                 return expectedParent.subTypes().stream()
-                        .anyMatch(subType -> sameTypeName(subType.name(), actualData.name()))
+                               .anyMatch(subType -> sameTypeName(subType.name(), actualData.name()))
                        && (actualData.typeParameters().isEmpty()
                            || areAssignableDataTypeParameters(expectedParent.typeParameters(), actualData.typeParameters()));
             }
@@ -1515,139 +1528,160 @@ public class CapybaraCompiler {
             case pl.grzeslowski.capybara.compiler.expression.CompiledBooleanValue value -> value;
             case pl.grzeslowski.capybara.compiler.expression.CompiledByteValue value -> value;
             case pl.grzeslowski.capybara.compiler.expression.CompiledDoubleValue value -> value;
-            case pl.grzeslowski.capybara.compiler.expression.CompiledFieldAccess value -> new pl.grzeslowski.capybara.compiler.expression.CompiledFieldAccess(
-                    enrichNothing(value.source(), functionName, moduleSourceFile),
-                    value.field(),
-                    value.type()
-            );
+            case pl.grzeslowski.capybara.compiler.expression.CompiledFieldAccess value ->
+                    new pl.grzeslowski.capybara.compiler.expression.CompiledFieldAccess(
+                            enrichNothing(value.source(), functionName, moduleSourceFile),
+                            value.field(),
+                            value.type()
+                    );
             case pl.grzeslowski.capybara.compiler.expression.CompiledFloatValue value -> value;
-            case pl.grzeslowski.capybara.compiler.expression.CompiledFunctionCall value -> new pl.grzeslowski.capybara.compiler.expression.CompiledFunctionCall(
-                    value.name(),
-                    value.arguments().stream().map(argument -> enrichNothing(argument, functionName, moduleSourceFile)).toList(),
-                    value.returnType()
-            );
-            case pl.grzeslowski.capybara.compiler.expression.CompiledFunctionInvoke value -> new pl.grzeslowski.capybara.compiler.expression.CompiledFunctionInvoke(
-                    enrichNothing(value.function(), functionName, moduleSourceFile),
-                    value.arguments().stream().map(argument -> enrichNothing(argument, functionName, moduleSourceFile)).toList(),
-                    value.returnType()
-            );
-            case pl.grzeslowski.capybara.compiler.expression.CompiledIfExpression value -> new pl.grzeslowski.capybara.compiler.expression.CompiledIfExpression(
-                    enrichNothing(value.condition(), functionName, moduleSourceFile),
-                    enrichNothing(value.thenBranch(), functionName, moduleSourceFile),
-                    enrichNothing(value.elseBranch(), functionName, moduleSourceFile),
-                    value.type()
-            );
-            case pl.grzeslowski.capybara.compiler.expression.CompiledIndexExpression value -> new pl.grzeslowski.capybara.compiler.expression.CompiledIndexExpression(
-                    enrichNothing(value.source(), functionName, moduleSourceFile),
-                    enrichNothing(value.index(), functionName, moduleSourceFile),
-                    value.elementType(),
-                    value.type()
-            );
-            case pl.grzeslowski.capybara.compiler.expression.CompiledInfixExpression value -> new pl.grzeslowski.capybara.compiler.expression.CompiledInfixExpression(
-                    enrichNothing(value.left(), functionName, moduleSourceFile),
-                    value.operator(),
-                    enrichNothing(value.right(), functionName, moduleSourceFile),
-                    value.type()
-            );
+            case pl.grzeslowski.capybara.compiler.expression.CompiledFunctionCall value ->
+                    new pl.grzeslowski.capybara.compiler.expression.CompiledFunctionCall(
+                            value.name(),
+                            value.arguments().stream().map(argument -> enrichNothing(argument, functionName, moduleSourceFile)).toList(),
+                            value.returnType()
+                    );
+            case pl.grzeslowski.capybara.compiler.expression.CompiledFunctionInvoke value ->
+                    new pl.grzeslowski.capybara.compiler.expression.CompiledFunctionInvoke(
+                            enrichNothing(value.function(), functionName, moduleSourceFile),
+                            value.arguments().stream().map(argument -> enrichNothing(argument, functionName, moduleSourceFile)).toList(),
+                            value.returnType()
+                    );
+            case pl.grzeslowski.capybara.compiler.expression.CompiledIfExpression value ->
+                    new pl.grzeslowski.capybara.compiler.expression.CompiledIfExpression(
+                            enrichNothing(value.condition(), functionName, moduleSourceFile),
+                            enrichNothing(value.thenBranch(), functionName, moduleSourceFile),
+                            enrichNothing(value.elseBranch(), functionName, moduleSourceFile),
+                            value.type()
+                    );
+            case pl.grzeslowski.capybara.compiler.expression.CompiledIndexExpression value ->
+                    new pl.grzeslowski.capybara.compiler.expression.CompiledIndexExpression(
+                            enrichNothing(value.source(), functionName, moduleSourceFile),
+                            enrichNothing(value.index(), functionName, moduleSourceFile),
+                            value.elementType(),
+                            value.type()
+                    );
+            case pl.grzeslowski.capybara.compiler.expression.CompiledInfixExpression value ->
+                    new pl.grzeslowski.capybara.compiler.expression.CompiledInfixExpression(
+                            enrichNothing(value.left(), functionName, moduleSourceFile),
+                            value.operator(),
+                            enrichNothing(value.right(), functionName, moduleSourceFile),
+                            value.type()
+                    );
             case pl.grzeslowski.capybara.compiler.expression.CompiledIntValue value -> value;
-            case pl.grzeslowski.capybara.compiler.expression.CompiledLambdaExpression value -> new pl.grzeslowski.capybara.compiler.expression.CompiledLambdaExpression(
-                    value.argumentName(),
-                    enrichNothing(value.expression(), functionName, moduleSourceFile),
-                    value.functionType()
-            );
-            case pl.grzeslowski.capybara.compiler.expression.CompiledLetExpression value -> new pl.grzeslowski.capybara.compiler.expression.CompiledLetExpression(
-                    value.name(),
-                    enrichNothing(value.value(), functionName, moduleSourceFile),
-                    enrichNothing(value.rest(), functionName, moduleSourceFile)
-            );
+            case pl.grzeslowski.capybara.compiler.expression.CompiledLambdaExpression value ->
+                    new pl.grzeslowski.capybara.compiler.expression.CompiledLambdaExpression(
+                            value.argumentName(),
+                            enrichNothing(value.expression(), functionName, moduleSourceFile),
+                            value.functionType()
+                    );
+            case pl.grzeslowski.capybara.compiler.expression.CompiledLetExpression value ->
+                    new pl.grzeslowski.capybara.compiler.expression.CompiledLetExpression(
+                            value.name(),
+                            enrichNothing(value.value(), functionName, moduleSourceFile),
+                            enrichNothing(value.rest(), functionName, moduleSourceFile)
+                    );
             case pl.grzeslowski.capybara.compiler.expression.CompiledLongValue value -> value;
-            case pl.grzeslowski.capybara.compiler.expression.CompiledMatchExpression value -> new pl.grzeslowski.capybara.compiler.expression.CompiledMatchExpression(
-                    enrichNothing(value.matchWith(), functionName, moduleSourceFile),
-                    value.cases().stream().map(matchCase -> new pl.grzeslowski.capybara.compiler.expression.CompiledMatchExpression.MatchCase(
-                            matchCase.pattern(),
-                            enrichNothing(matchCase.expression(), functionName, moduleSourceFile)
-                    )).toList(),
-                    value.type()
-            );
+            case pl.grzeslowski.capybara.compiler.expression.CompiledMatchExpression value ->
+                    new pl.grzeslowski.capybara.compiler.expression.CompiledMatchExpression(
+                            enrichNothing(value.matchWith(), functionName, moduleSourceFile),
+                            value.cases().stream().map(matchCase -> new pl.grzeslowski.capybara.compiler.expression.CompiledMatchExpression.MatchCase(
+                                    matchCase.pattern(),
+                                    enrichNothing(matchCase.expression(), functionName, moduleSourceFile)
+                            )).toList(),
+                            value.type()
+                    );
             case pl.grzeslowski.capybara.compiler.expression.CompiledNothingValue value -> {
-                var line = value.position().map(pl.grzeslowski.capybara.parser.SourcePosition::line).orElse(-1);
-                var column = value.position().map(pl.grzeslowski.capybara.parser.SourcePosition::column).orElse(-1);
+                var line = value.position().map(SourcePosition::line).orElse(-1);
+                var column = value.position().map(SourcePosition::column).orElse(-1);
                 var normalizedFile = moduleSourceFile.startsWith("/") ? moduleSourceFile : "/" + moduleSourceFile;
                 var message = "line " + line + ", column " + column + ", file " + normalizedFile
                               + ": the function `" + functionName + "` is not yet implemented";
                 yield new pl.grzeslowski.capybara.compiler.expression.CompiledNothingValue(value.position(), message);
             }
-            case pl.grzeslowski.capybara.compiler.expression.CompiledPipeAllExpression value -> new pl.grzeslowski.capybara.compiler.expression.CompiledPipeAllExpression(
-                    enrichNothing(value.source(), functionName, moduleSourceFile),
-                    value.argumentName(),
-                    enrichNothing(value.predicate(), functionName, moduleSourceFile),
-                    value.type()
-            );
-            case pl.grzeslowski.capybara.compiler.expression.CompiledPipeAnyExpression value -> new pl.grzeslowski.capybara.compiler.expression.CompiledPipeAnyExpression(
-                    enrichNothing(value.source(), functionName, moduleSourceFile),
-                    value.argumentName(),
-                    enrichNothing(value.predicate(), functionName, moduleSourceFile),
-                    value.type()
-            );
-            case pl.grzeslowski.capybara.compiler.expression.CompiledPipeFlatMapExpression value -> new pl.grzeslowski.capybara.compiler.expression.CompiledPipeFlatMapExpression(
-                    enrichNothing(value.source(), functionName, moduleSourceFile),
-                    value.argumentName(),
-                    enrichNothing(value.mapper(), functionName, moduleSourceFile),
-                    value.type()
-            );
-            case pl.grzeslowski.capybara.compiler.expression.CompiledPipeFilterOutExpression value -> new pl.grzeslowski.capybara.compiler.expression.CompiledPipeFilterOutExpression(
-                    enrichNothing(value.source(), functionName, moduleSourceFile),
-                    value.argumentName(),
-                    enrichNothing(value.predicate(), functionName, moduleSourceFile),
-                    value.type()
-            );
-            case pl.grzeslowski.capybara.compiler.expression.CompiledPipeExpression value -> new pl.grzeslowski.capybara.compiler.expression.CompiledPipeExpression(
-                    enrichNothing(value.source(), functionName, moduleSourceFile),
-                    value.argumentName(),
-                    enrichNothing(value.mapper(), functionName, moduleSourceFile),
-                    value.type()
-            );
-            case pl.grzeslowski.capybara.compiler.expression.CompiledPipeReduceExpression value -> new pl.grzeslowski.capybara.compiler.expression.CompiledPipeReduceExpression(
-                    enrichNothing(value.source(), functionName, moduleSourceFile),
-                    enrichNothing(value.initialValue(), functionName, moduleSourceFile),
-                    value.accumulatorName(),
-                    value.keyName(),
-                    value.valueName(),
-                    enrichNothing(value.reducerExpression(), functionName, moduleSourceFile),
-                    value.type()
-            );
-            case pl.grzeslowski.capybara.compiler.expression.CompiledNewDict value -> new pl.grzeslowski.capybara.compiler.expression.CompiledNewDict(
-                    value.entries().stream().map(entry -> new pl.grzeslowski.capybara.compiler.expression.CompiledNewDict.Entry(
-                            enrichNothing(entry.key(), functionName, moduleSourceFile),
-                            enrichNothing(entry.value(), functionName, moduleSourceFile)
-                    )).toList(),
-                    value.type()
-            );
-            case pl.grzeslowski.capybara.compiler.expression.CompiledNewList value -> new pl.grzeslowski.capybara.compiler.expression.CompiledNewList(
-                    value.values().stream().map(argument -> enrichNothing(argument, functionName, moduleSourceFile)).toList(),
-                    value.type()
-            );
-            case pl.grzeslowski.capybara.compiler.expression.CompiledNewSet value -> new pl.grzeslowski.capybara.compiler.expression.CompiledNewSet(
-                    value.values().stream().map(argument -> enrichNothing(argument, functionName, moduleSourceFile)).toList(),
-                    value.type()
-            );
-            case pl.grzeslowski.capybara.compiler.expression.CompiledNewData value -> new pl.grzeslowski.capybara.compiler.expression.CompiledNewData(
-                    value.type(),
-                    value.assignments().stream().map(assignment -> new pl.grzeslowski.capybara.compiler.expression.CompiledNewData.FieldAssignment(
-                            assignment.name(),
-                            enrichNothing(assignment.value(), functionName, moduleSourceFile)
-                    )).toList()
-            );
-            case pl.grzeslowski.capybara.compiler.expression.CompiledSliceExpression value -> new pl.grzeslowski.capybara.compiler.expression.CompiledSliceExpression(
-                    enrichNothing(value.source(), functionName, moduleSourceFile),
-                    value.start().map(v -> enrichNothing(v, functionName, moduleSourceFile)),
-                    value.end().map(v -> enrichNothing(v, functionName, moduleSourceFile)),
-                    value.type()
-            );
-            case pl.grzeslowski.capybara.compiler.expression.CompiledTupleExpression value -> new pl.grzeslowski.capybara.compiler.expression.CompiledTupleExpression(
-                    value.values().stream().map(v -> enrichNothing(v, functionName, moduleSourceFile)).toList(),
-                    value.type()
-            );
+            case pl.grzeslowski.capybara.compiler.expression.CompiledPipeAllExpression value ->
+                    new pl.grzeslowski.capybara.compiler.expression.CompiledPipeAllExpression(
+                            enrichNothing(value.source(), functionName, moduleSourceFile),
+                            value.argumentName(),
+                            enrichNothing(value.predicate(), functionName, moduleSourceFile),
+                            value.type()
+                    );
+            case pl.grzeslowski.capybara.compiler.expression.CompiledPipeAnyExpression value ->
+                    new pl.grzeslowski.capybara.compiler.expression.CompiledPipeAnyExpression(
+                            enrichNothing(value.source(), functionName, moduleSourceFile),
+                            value.argumentName(),
+                            enrichNothing(value.predicate(), functionName, moduleSourceFile),
+                            value.type()
+                    );
+            case pl.grzeslowski.capybara.compiler.expression.CompiledPipeFlatMapExpression value ->
+                    new pl.grzeslowski.capybara.compiler.expression.CompiledPipeFlatMapExpression(
+                            enrichNothing(value.source(), functionName, moduleSourceFile),
+                            value.argumentName(),
+                            enrichNothing(value.mapper(), functionName, moduleSourceFile),
+                            value.type()
+                    );
+            case pl.grzeslowski.capybara.compiler.expression.CompiledPipeFilterOutExpression value ->
+                    new pl.grzeslowski.capybara.compiler.expression.CompiledPipeFilterOutExpression(
+                            enrichNothing(value.source(), functionName, moduleSourceFile),
+                            value.argumentName(),
+                            enrichNothing(value.predicate(), functionName, moduleSourceFile),
+                            value.type()
+                    );
+            case pl.grzeslowski.capybara.compiler.expression.CompiledPipeExpression value ->
+                    new pl.grzeslowski.capybara.compiler.expression.CompiledPipeExpression(
+                            enrichNothing(value.source(), functionName, moduleSourceFile),
+                            value.argumentName(),
+                            enrichNothing(value.mapper(), functionName, moduleSourceFile),
+                            value.type()
+                    );
+            case pl.grzeslowski.capybara.compiler.expression.CompiledPipeReduceExpression value ->
+                    new pl.grzeslowski.capybara.compiler.expression.CompiledPipeReduceExpression(
+                            enrichNothing(value.source(), functionName, moduleSourceFile),
+                            enrichNothing(value.initialValue(), functionName, moduleSourceFile),
+                            value.accumulatorName(),
+                            value.keyName(),
+                            value.valueName(),
+                            enrichNothing(value.reducerExpression(), functionName, moduleSourceFile),
+                            value.type()
+                    );
+            case pl.grzeslowski.capybara.compiler.expression.CompiledNewDict value ->
+                    new pl.grzeslowski.capybara.compiler.expression.CompiledNewDict(
+                            value.entries().stream().map(entry -> new pl.grzeslowski.capybara.compiler.expression.CompiledNewDict.Entry(
+                                    enrichNothing(entry.key(), functionName, moduleSourceFile),
+                                    enrichNothing(entry.value(), functionName, moduleSourceFile)
+                            )).toList(),
+                            value.type()
+                    );
+            case pl.grzeslowski.capybara.compiler.expression.CompiledNewList value ->
+                    new pl.grzeslowski.capybara.compiler.expression.CompiledNewList(
+                            value.values().stream().map(argument -> enrichNothing(argument, functionName, moduleSourceFile)).toList(),
+                            value.type()
+                    );
+            case pl.grzeslowski.capybara.compiler.expression.CompiledNewSet value ->
+                    new pl.grzeslowski.capybara.compiler.expression.CompiledNewSet(
+                            value.values().stream().map(argument -> enrichNothing(argument, functionName, moduleSourceFile)).toList(),
+                            value.type()
+                    );
+            case pl.grzeslowski.capybara.compiler.expression.CompiledNewData value ->
+                    new pl.grzeslowski.capybara.compiler.expression.CompiledNewData(
+                            value.type(),
+                            value.assignments().stream().map(assignment -> new pl.grzeslowski.capybara.compiler.expression.CompiledNewData.FieldAssignment(
+                                    assignment.name(),
+                                    enrichNothing(assignment.value(), functionName, moduleSourceFile)
+                            )).toList()
+                    );
+            case pl.grzeslowski.capybara.compiler.expression.CompiledSliceExpression value ->
+                    new pl.grzeslowski.capybara.compiler.expression.CompiledSliceExpression(
+                            enrichNothing(value.source(), functionName, moduleSourceFile),
+                            value.start().map(v -> enrichNothing(v, functionName, moduleSourceFile)),
+                            value.end().map(v -> enrichNothing(v, functionName, moduleSourceFile)),
+                            value.type()
+                    );
+            case pl.grzeslowski.capybara.compiler.expression.CompiledTupleExpression value ->
+                    new pl.grzeslowski.capybara.compiler.expression.CompiledTupleExpression(
+                            value.values().stream().map(v -> enrichNothing(v, functionName, moduleSourceFile)).toList(),
+                            value.type()
+                    );
             case pl.grzeslowski.capybara.compiler.expression.CompiledStringValue value -> value;
             case pl.grzeslowski.capybara.compiler.expression.CompiledVariable value -> value;
         };
@@ -1660,14 +1694,15 @@ public class CapybaraCompiler {
     ) {
         return functions.stream()
                 .map(function -> {
-                            var functionGenericTypeNames = functionGenericTypeNames(function, dataTypes);
-                            return linkParameters(function.parameters(), dataTypes, functionGenericTypeNames)
-                                .flatMap(parameters -> linkSignatureReturnType(function, dataTypes, functionGenericTypeNames, moduleSourceFile)
-                                        .map(returnType -> new CapybaraExpressionCompiler.FunctionSignature(
-                                                function.name(),
-                                                parameters.stream().map(CompiledFunctionParameter::type).toList(),
-                                                returnType
-                                        )));})
+                    var functionGenericTypeNames = functionGenericTypeNames(function, dataTypes);
+                    return linkParameters(function.parameters(), dataTypes, functionGenericTypeNames)
+                            .flatMap(parameters -> linkSignatureReturnType(function, dataTypes, functionGenericTypeNames, moduleSourceFile)
+                                    .map(returnType -> new CapybaraExpressionCompiler.FunctionSignature(
+                                            function.name(),
+                                            parameters.stream().map(CompiledFunctionParameter::type).toList(),
+                                            returnType
+                                    )));
+                })
                 .collect(new ResultCollectionCollector<>());
     }
 
@@ -1867,7 +1902,7 @@ public class CapybaraCompiler {
         return Optional.empty();
     }
 
-    private Optional<String> firstEscapedPrivateLocalType(pl.grzeslowski.capybara.parser.Type type) {
+    private Optional<String> firstEscapedPrivateLocalType(Type type) {
         return switch (type) {
             case DataType dataType -> dataType.name().contains("__local_type_")
                     ? Optional.of(dataType.name())
@@ -1913,11 +1948,11 @@ public class CapybaraCompiler {
         return column + 1 + 2;
     }
 
-    private String formatParserTypeForPosition(pl.grzeslowski.capybara.parser.Type type) {
+    private String formatParserTypeForPosition(Type type) {
         return formatParserType(restorePrivateTypeNameForDisplay(type));
     }
 
-    private pl.grzeslowski.capybara.parser.Type restorePrivateTypeNameForDisplay(pl.grzeslowski.capybara.parser.Type type) {
+    private Type restorePrivateTypeNameForDisplay(Type type) {
         return switch (type) {
             case DataType dataType -> new DataType(restorePrivateTypeNameForDisplay(dataType.name()));
             case CollectionType.ListType listType -> new CollectionType.ListType(
@@ -2033,14 +2068,14 @@ public class CapybaraCompiler {
     }
 
     private Result<CompiledType> linkType(
-            pl.grzeslowski.capybara.parser.Type type,
+            Type type,
             Map<String, GenericDataType> dataTypes
     ) {
         return CapybaraTypeCompiler.linkType(type, dataTypes);
     }
 
     private Result<CompiledType> linkType(
-            pl.grzeslowski.capybara.parser.Type type,
+            Type type,
             Map<String, GenericDataType> dataTypes,
             Set<String> functionGenericTypeNames
     ) {
@@ -2060,9 +2095,10 @@ public class CapybaraCompiler {
                 case DATA -> PrimitiveLinkedType.DATA;
                 case NOTHING -> PrimitiveLinkedType.NOTHING;
             });
-            case CollectionType.ListType listType -> linkType(listType.elementType(), dataTypes, functionGenericTypeNames)
-                    .map(CollectionLinkedType.CompiledList::new)
-                    .map(CompiledType.class::cast);
+            case CollectionType.ListType listType ->
+                    linkType(listType.elementType(), dataTypes, functionGenericTypeNames)
+                            .map(CollectionLinkedType.CompiledList::new)
+                            .map(CompiledType.class::cast);
             case CollectionType.SetType setType -> linkType(setType.elementType(), dataTypes, functionGenericTypeNames)
                     .map(CollectionLinkedType.CompiledSet::new)
                     .map(CompiledType.class::cast);
@@ -2076,7 +2112,8 @@ public class CapybaraCompiler {
                     .map(elementType -> linkType(elementType, dataTypes, functionGenericTypeNames))
                     .collect(new ResultCollectionCollector<>())
                     .map(linkedTypes -> (CompiledType) new CompiledTupleType(linkedTypes));
-            case DataType dataType -> linkDataTypeWithFunctionGenerics(dataType.name(), dataTypes, functionGenericTypeNames);
+            case DataType dataType ->
+                    linkDataTypeWithFunctionGenerics(dataType.name(), dataTypes, functionGenericTypeNames);
         };
     }
 
@@ -2172,7 +2209,8 @@ public class CapybaraCompiler {
     private String typeDescriptor(CompiledType type) {
         return switch (type) {
             case PrimitiveLinkedType primitive -> primitive.name().toLowerCase();
-            case CollectionLinkedType.CompiledList linkedList -> "list[" + typeDescriptor(linkedList.elementType()) + "]";
+            case CollectionLinkedType.CompiledList linkedList ->
+                    "list[" + typeDescriptor(linkedList.elementType()) + "]";
             case CollectionLinkedType.CompiledSet linkedSet -> "set[" + typeDescriptor(linkedSet.elementType()) + "]";
             case CollectionLinkedType.CompiledDict linkedDict -> "dict[" + typeDescriptor(linkedDict.valueType()) + "]";
             case CompiledTupleType linkedTupleType -> "tuple[" + linkedTupleType.elementTypes().stream()
@@ -2244,10 +2282,10 @@ public class CapybaraCompiler {
         return List.copyOf(result);
     }
 
-    private pl.grzeslowski.capybara.parser.Type parseTypeArgument(String raw) {
+    private Type parseTypeArgument(String raw) {
         var trimmed = raw.trim();
         return PrimitiveType.find(trimmed)
-                .map(pl.grzeslowski.capybara.parser.Type.class::cast)
+                .map(Type.class::cast)
                 .orElseGet(() -> {
                     if (trimmed.startsWith("list[") && trimmed.endsWith("]")) {
                         return new CollectionType.ListType(parseTypeArgument(trimmed.substring(5, trimmed.length() - 1)));
@@ -2337,14 +2375,17 @@ public class CapybaraCompiler {
     }
 
     private void collectFunctionGenericTypeNames(
-            pl.grzeslowski.capybara.parser.Type type,
+            Type type,
             Map<String, GenericDataType> dataTypes,
             Set<String> names
     ) {
         switch (type) {
-            case CollectionType.ListType listType -> collectFunctionGenericTypeNames(listType.elementType(), dataTypes, names);
-            case CollectionType.SetType setType -> collectFunctionGenericTypeNames(setType.elementType(), dataTypes, names);
-            case CollectionType.DictType dictType -> collectFunctionGenericTypeNames(dictType.valueType(), dataTypes, names);
+            case CollectionType.ListType listType ->
+                    collectFunctionGenericTypeNames(listType.elementType(), dataTypes, names);
+            case CollectionType.SetType setType ->
+                    collectFunctionGenericTypeNames(setType.elementType(), dataTypes, names);
+            case CollectionType.DictType dictType ->
+                    collectFunctionGenericTypeNames(dictType.valueType(), dataTypes, names);
             case FunctionType functionType -> {
                 collectFunctionGenericTypeNames(functionType.argumentType(), dataTypes, names);
                 collectFunctionGenericTypeNames(functionType.returnType(), dataTypes, names);
@@ -2379,7 +2420,7 @@ public class CapybaraCompiler {
     private Result<SortedMap<String, GenericDataType>> types(Module module) {
         var normalizedFile = normalizeFile(moduleSourceFile(module));
         var rawTypeDeclarations = castList(module, TypeDeclaration.class);
-        var rawEnumDeclarations = castList(module, pl.grzeslowski.capybara.parser.EnumDeclaration.class);
+        var rawEnumDeclarations = castList(module, EnumDeclaration.class);
         var rawTypeDeclarationsByName = rawTypeDeclarations.stream()
                 .collect(toMap(TypeDeclaration::name, identity(), (first, second) -> first));
         var dataDeclarationsOrError = linkDataDeclarations(
@@ -2493,13 +2534,13 @@ public class CapybaraCompiler {
                         );
                     }
                     return linkDataDeclaration(
-                                    parent,
-                                    declarationsByName,
-                                    rawTypeDeclarationsByName,
-                                    importDeclarations,
-                                    cache,
-                                    visiting,
-                                    normalizedFile)
+                            parent,
+                            declarationsByName,
+                            rawTypeDeclarationsByName,
+                            importDeclarations,
+                            cache,
+                            visiting,
+                            normalizedFile)
                             .map(CompiledDataType::fields);
                 })
                 .collect(new ResultCollectionCollector<>());
@@ -2515,22 +2556,22 @@ public class CapybaraCompiler {
                         normalizedFile))
                 .collect(new ResultCollectionCollector<>());
         var linked = Result.join(
-                        (List<List<CompiledDataType.CompiledField>> inherited, List<CompiledDataType.CompiledField> own) -> {
-                            var fields = inherited.stream()
-                                    .flatMap(Collection::stream)
-                                    .collect(java.util.stream.Collectors.toCollection(ArrayList::new));
-                            fields.addAll(own);
-                            return new CompiledDataType(
-                                    dataDeclaration.name(),
-                                    List.copyOf(fields),
-                                    dataDeclaration.typeParameters(),
-                                    dataDeclaration.extendsTypes(),
-                                    false
-                            );
-                        },
-                        inheritedFields,
-                        ownFields
-                );
+                (List<List<CompiledDataType.CompiledField>> inherited, List<CompiledDataType.CompiledField> own) -> {
+                    var fields = inherited.stream()
+                            .flatMap(Collection::stream)
+                            .collect(java.util.stream.Collectors.toCollection(ArrayList::new));
+                    fields.addAll(own);
+                    return new CompiledDataType(
+                            dataDeclaration.name(),
+                            List.copyOf(fields),
+                            dataDeclaration.typeParameters(),
+                            dataDeclaration.extendsTypes(),
+                            false
+                    );
+                },
+                inheritedFields,
+                ownFields
+        );
         visiting.remove(dataDeclaration.name());
         var withPosition = withPosition(linked, dataDeclaration.position(), normalizedFile);
         cache.put(dataDeclaration.name(), withPosition);
@@ -2541,7 +2582,7 @@ public class CapybaraCompiler {
         return Result.success(new CompiledDataType(singleDeclaration.name(), List.of(), List.of(), List.of(), true));
     }
 
-    private CompiledDataParentType linkEnumDeclaration(pl.grzeslowski.capybara.parser.EnumDeclaration enumDeclaration) {
+    private CompiledDataParentType linkEnumDeclaration(EnumDeclaration enumDeclaration) {
         var values = enumDeclaration.values().stream()
                 .map(value -> new CompiledDataType(value, List.of(), List.of(), List.of(), true))
                 .toList();

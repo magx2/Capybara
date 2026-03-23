@@ -7,11 +7,9 @@ import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
 import pl.grzeslowski.capybara.generator.Generator;
 import pl.grzeslowski.capybara.compiler.CapybaraCompiler;
 import pl.grzeslowski.capybara.compiler.CompiledProgram;
-import pl.grzeslowski.capybara.parser.Module;
 import pl.grzeslowski.capybara.compiler.OutputType;
-import pl.grzeslowski.capybara.parser.Program;
 import pl.grzeslowski.capybara.compiler.Result;
-import pl.grzeslowski.capybara.parser.CapybaraParser;
+import pl.grzeslowski.capybara.compiler.parser.RawModule;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -99,14 +97,14 @@ public class App {
         }
 
         log.info("Linking files from: " + inputs.stream().map(Path::toString).toList());
-        var modules = inputs.stream()
+        var rawModules = inputs.stream()
                 .map(App::listSourceFiles)
                 .flatMap(Collection::stream)
                 .filter(sourceFile -> sourceFile.path().getFileName().toString().endsWith(".cfun"))
                 .map(App::buildModule)
                 .toList();
 
-        var linking = CapybaraCompiler.INSTANCE.compile(new Program(modules), new java.util.TreeSet<>());
+        var linking = CapybaraCompiler.INSTANCE.compile(rawModules, new java.util.TreeSet<>());
         if (linking instanceof Result.Error<CompiledProgram> error) {
             System.err.println("Linking failed with " + error.errors().size() + " error(s):");
             error.errors().forEach(System.err::println);
@@ -202,11 +200,11 @@ public class App {
         return mapper;
     }
 
-    private static Module buildModule(SourceFile sourceFile) {
+    private static RawModule buildModule(SourceFile sourceFile) {
         log.info("Building module from file: " + sourceFile.path());
         var fileName = sourceFile.path().getFileName().toString();
         var fileNameWithoutExtension = fileName.substring(0, fileName.lastIndexOf('.'));
-        return CapybaraParser.INSTANCE.parseFunctional(
+        return new RawModule(
                 fileNameWithoutExtension,
                 findModulePath(sourceFile),
                 readFile(sourceFile.path())
@@ -247,10 +245,4 @@ public class App {
 
     private record SourceFile(Path rootPath, Path path) {
     }
-
-
 }
-
-
-
-

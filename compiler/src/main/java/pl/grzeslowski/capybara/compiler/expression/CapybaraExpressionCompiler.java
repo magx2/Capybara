@@ -4,6 +4,7 @@ import pl.grzeslowski.capybara.compiler.CollectionLinkedType.CompiledDict;
 import pl.grzeslowski.capybara.compiler.CollectionLinkedType.CompiledList;
 import pl.grzeslowski.capybara.compiler.CollectionLinkedType.CompiledSet;
 import pl.grzeslowski.capybara.compiler.*;
+import pl.grzeslowski.capybara.compiler.parser.*;
 import pl.grzeslowski.capybara.parser.*;
 
 import java.math.BigInteger;
@@ -1838,7 +1839,7 @@ public class CapybaraExpressionCompiler {
             String operatorSymbol,
             CompiledExpression left,
             CompiledExpression right,
-            Optional<pl.grzeslowski.capybara.parser.SourcePosition> position
+            Optional<SourcePosition> position
     ) {
         var ownerNames = methodOwnerCandidates(left.type());
         var candidates = functionSignatures.stream()
@@ -1890,7 +1891,7 @@ public class CapybaraExpressionCompiler {
             CompiledExpression left,
             Expression right,
             Scope scope,
-            Optional<pl.grzeslowski.capybara.parser.SourcePosition> position
+            Optional<SourcePosition> position
     ) {
         var ownerNames = methodOwnerCandidates(left.type());
         var candidates = functionSignatures.stream()
@@ -2879,7 +2880,7 @@ public class CapybaraExpressionCompiler {
             CompiledExpression left,
             InfixOperator operator,
             CompiledExpression right,
-            Optional<pl.grzeslowski.capybara.parser.SourcePosition> position
+            Optional<SourcePosition> position
     ) {
         CompiledType type = switch (operator) {
             case PLUS -> findPlusType(left.type(), right.type());
@@ -3141,7 +3142,7 @@ public class CapybaraExpressionCompiler {
     private Result<CompiledType> tupleElementType(
             CompiledTupleType tupleType,
             CompiledExpression index,
-            Optional<pl.grzeslowski.capybara.parser.SourcePosition> position
+            Optional<SourcePosition> position
     ) {
         var size = tupleType.elementTypes().size();
         var indexValue = intLiteralValue(index);
@@ -4455,7 +4456,7 @@ public class CapybaraExpressionCompiler {
                                                 ))));
     }
 
-    private Result<CompiledType> linkTypeInScope(pl.grzeslowski.capybara.parser.Type type, Scope scope) {
+    private Result<CompiledType> linkTypeInScope(Type type, Scope scope) {
         var knownTypes = new java.util.LinkedHashMap<String, GenericDataType>(dataTypes);
         var genericTypeNames = new java.util.LinkedHashSet<String>();
         parameters.forEach(parameter -> collectGenericParameterNames(parameter.type(), genericTypeNames));
@@ -4530,7 +4531,7 @@ public class CapybaraExpressionCompiler {
                || expression.right() instanceof FunctionReference;
     }
 
-    private static <T> Result<T> withPosition(Result<T> valueOrError, Optional<pl.grzeslowski.capybara.parser.SourcePosition> position) {
+    private static <T> Result<T> withPosition(Result<T> valueOrError, Optional<SourcePosition> position) {
         if (valueOrError instanceof Result.Error<T> error && position.isPresent()) {
             var pos = position.get();
             return new Result.Error<>(error.errors()

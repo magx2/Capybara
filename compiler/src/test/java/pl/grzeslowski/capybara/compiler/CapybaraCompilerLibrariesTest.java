@@ -1,9 +1,7 @@
 package pl.grzeslowski.capybara.compiler;
 
 import org.junit.jupiter.api.Test;
-import pl.grzeslowski.capybara.parser.CapybaraParser;
-import pl.grzeslowski.capybara.parser.Module;
-import pl.grzeslowski.capybara.parser.Program;
+import pl.grzeslowski.capybara.compiler.parser.RawModule;
 
 import java.util.List;
 import java.util.SortedSet;
@@ -14,26 +12,18 @@ import static org.assertj.core.api.Assertions.fail;
 class CapybaraCompilerLibrariesTest {
     @Test
     void shouldCompileAgainstLibrariesWithoutIncludingThemInOutput() {
-        var libraries = compileProgram(new Program(List.of(new Module(
-                "Library",
-                "/foo/lib",
-                CapybaraParser.INSTANCE.parseFunctional("Library", "/foo/lib", """
-                        data Message { value: string }
-                        fun make_message(value: string): Message = Message { value: value }
-                        """).functional()
-        ))), new java.util.TreeSet<>()).modules();
+        var librarySource = """
+                data Message { value: string }
+                fun make_message(value: string): Message = Message { value: value }
+                """;
+        var libraries = compileProgram(List.of(new RawModule("Library", "/foo/lib", librarySource)), new java.util.TreeSet<>()).modules();
 
-        var consumer = new Module(
-                "Consumer",
-                "/foo/app",
-                CapybaraParser.INSTANCE.parseFunctional("Consumer", "/foo/app", """
-                        fun consume(value: string): Message = make_message(value)
-                        fun unwrap(message: Message): string = message.value
-                        """).functional(),
-                List.of(new ImportDeclaration("Library", List.of("*"), List.of()))
-        );
-
-        var compiled = compileProgram(new Program(List.of(consumer)), libraries);
+        var consumerSource = """
+                from Library import { * }
+                fun consume(value: string): Message = make_message(value)
+                fun unwrap(message: Message): string = message.value
+                """;
+        var compiled = compileProgram(List.of(new RawModule("Consumer", "/foo/app", consumerSource)), libraries);
 
         assertThat(compiled.modules()).extracting(CompiledModule::name).containsExactly("Consumer");
         assertThat(compiled.modules().first().functions())
@@ -41,13 +31,11 @@ class CapybaraCompilerLibrariesTest {
                 .containsExactlyInAnyOrder("consume", "unwrap");
     }
 
-    private static CompiledProgram compileProgram(Program program, SortedSet<CompiledModule> libraries) {
-        var result = CapybaraCompiler.INSTANCE.compile(program, libraries);
+    private static CompiledProgram compileProgram(List<RawModule> rawModules, SortedSet<CompiledModule> libraries) {
+        var result = CapybaraCompiler.INSTANCE.compile(rawModules, libraries);
         if (result instanceof Result.Error<CompiledProgram> error) {
             fail(error.errors().toString());
         }
         return ((Result.Success<CompiledProgram>) result).value();
     }
 }
-
-

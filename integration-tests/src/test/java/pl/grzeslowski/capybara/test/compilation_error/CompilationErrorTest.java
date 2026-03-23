@@ -4,12 +4,10 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import pl.grzeslowski.capybara.compiler.ImportDeclaration;
-import pl.grzeslowski.capybara.parser.Module;
-import pl.grzeslowski.capybara.parser.Program;
 import pl.grzeslowski.capybara.compiler.CapybaraCompiler;
 import pl.grzeslowski.capybara.compiler.CompiledProgram;
 import pl.grzeslowski.capybara.compiler.Result;
-import pl.grzeslowski.capybara.parser.CapybaraParser;
+import pl.grzeslowski.capybara.compiler.parser.RawModule;
 
 import java.util.*;
 import java.util.stream.Stream;
@@ -865,29 +863,25 @@ public class CompilationErrorTest {
         return compileProgram(fun, moduleName, List.of());
     }
 
-    private static final List<Module> DEFAULT_MODULES = List.of(
-            new Module("Name", "/capy/compilation_test",
-                    CapybaraParser.INSTANCE.parseFunctional("Name", "/capy/compilation_test", """
-                            type Name[T] = Foo[T] | Boo
-                            data Foo[T] { value: T }
-                            data Boo { message: string }
-                            """).functional(),
-                    List.of())
+
+    private static final List<RawModule> DEFAULT_MODULES = List.of(
+            new RawModule("Name", "/capy/compilation_test", """
+                    type Name[T] = Foo[T] | Boo
+                    data Foo[T] { value: T }
+                    data Boo { message: string }
+                    """)
     );
 
     private static SortedSet<Result.Error.SingleError> compileProgram(String fun, String moduleName, List<ImportDeclaration> imports) {
         try {
-            var functional = CapybaraParser.INSTANCE.parseFunctional(moduleName, "/foo/boo", fun).functional();
-            var module = new Module(moduleName, "/foo/boo", functional, imports);
-            var modules = new ArrayList<>(DEFAULT_MODULES);
-            modules.add(module);
-            var program = new Program(modules);
-            var programResult = CapybaraCompiler.INSTANCE.compile(program, new java.util.TreeSet<>());
+            var rawModules = new ArrayList<>(DEFAULT_MODULES);
+            rawModules.add(new RawModule(moduleName, "/foo/boo", prependImports(imports, fun)));
+            var programResult = CapybaraCompiler.INSTANCE.compile(rawModules, new java.util.TreeSet<>());
             if (programResult instanceof Result.Success<CompiledProgram> value) {
                 throw new AssertionError("Expected compilation error but got CompiledProgram: " + value);
             }
             var errors = ((Result.Error<?>) programResult).errors();
-            return normalizeLinkerErrors(errors, fun, moduleName);
+            return adjustImportLineOffsets(normalizeLinkerErrors(errors, fun, moduleName), imports.size());
         } catch (IllegalStateException e) {
             var parserError = java.util.regex.Pattern.compile("line (\\d+):(\\d+): (.+)").matcher(e.getMessage());
             if (parserError.matches()) {
@@ -956,7 +950,6 @@ public class CompilationErrorTest {
             )));
         }
     }
-
     private static SortedSet<Result.Error.SingleError> normalizeLinkerErrors(
             SortedSet<Result.Error.SingleError> errors,
             String code,
@@ -1000,6 +993,45 @@ public class CompilationErrorTest {
         )));
     }
 
+    private static String prependImports(List<ImportDeclaration> imports, String code) {
+        if (imports.isEmpty()) {
+            return code;
+        }
+        var importLines = imports.stream()
+                .map(CompilationErrorTest::toImportLine)
+                .toList();
+        return String.join("\n", java.util.stream.Stream.concat(importLines.stream(), java.util.stream.Stream.of(code)).toList());
+    }
+    private static SortedSet<Result.Error.SingleError> adjustImportLineOffsets(
+            SortedSet<Result.Error.SingleError> errors,
+            int importLineCount
+    ) {
+        if (importLineCount == 0) {
+            return errors;
+        }
+        return errors.stream()
+                .map(error -> {
+                    var adjustedLine = Math.max(0, error.line() - importLineCount);
+                    var adjustedMessage = error.message().replace(
+                            "/foo/boo/%s.cfun:%d:%d".formatted(moduleFileName(error.file()), error.line(), error.column()),
+                            "/foo/boo/%s.cfun:%d:%d".formatted(moduleFileName(error.file()), adjustedLine, error.column())
+                    );
+                    return new Result.Error.SingleError(adjustedLine, error.column(), error.file(), adjustedMessage);
+                })
+                .collect(java.util.stream.Collectors.toCollection(TreeSet::new));
+    }
+
+    private static String moduleFileName(String file) {
+        var normalized = file.replace('\\', '/');
+        return normalized.substring(normalized.lastIndexOf('/') + 1, normalized.length() - ".cfun".length());
+    }
+    private static String toImportLine(ImportDeclaration importDeclaration) {
+        var base = "from %s import { %s }".formatted(importDeclaration.moduleName(), String.join(", ", importDeclaration.symbols()));
+        if (importDeclaration.excludedSymbols().isEmpty()) {
+            return base;
+        }
+        return base + " except { " + String.join(", ", importDeclaration.excludedSymbols()) + " }";
+    }
     record Position(int line, int column) {
         public Position(int line, String postitionString) {
             this(line, postitionString.length());
@@ -1018,6 +1050,12 @@ public class CompilationErrorTest {
         return out;
     }
 }
+
+
+
+
+
+
 
 
 

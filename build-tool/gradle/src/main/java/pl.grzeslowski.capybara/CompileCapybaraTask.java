@@ -15,9 +15,7 @@ import org.gradle.api.tasks.TaskAction;
 import pl.grzeslowski.capybara.compiler.CapybaraCompiler;
 import pl.grzeslowski.capybara.compiler.CompiledProgram;
 import pl.grzeslowski.capybara.compiler.Result;
-import pl.grzeslowski.capybara.parser.CapybaraParser;
-import pl.grzeslowski.capybara.parser.Module;
-import pl.grzeslowski.capybara.parser.Program;
+import pl.grzeslowski.capybara.compiler.parser.RawModule;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -63,11 +61,11 @@ public abstract class CompileCapybaraTask extends DefaultTask {
                 .toList();
         getLogger().lifecycle("Found {} Capybara source files", sourceFiles.size());
 
-        var modules = new ArrayList<Module>();
+        var rawModules = new ArrayList<RawModule>();
         var parsingFailures = new ArrayList<String>();
         for (var sourceFile : sourceFiles) {
             try {
-                modules.add(buildModule(sourceFile.rootPath(), sourceFile.path()));
+                rawModules.add(buildModule(sourceFile.rootPath(), sourceFile.path()));
             } catch (RuntimeException e) {
                 var msg = "Parsing failed for " + sourceFile.path() + ": " + e.getMessage();
                 parsingFailures.add(msg);
@@ -78,7 +76,7 @@ public abstract class CompileCapybaraTask extends DefaultTask {
             throw new GradleException("Parsing failed for " + parsingFailures.size() + " file(s). Check logs for details.");
         }
 
-        var linking = CapybaraCompiler.INSTANCE.compile(new Program(modules), new java.util.TreeSet<>());
+        var linking = CapybaraCompiler.INSTANCE.compile(rawModules, new java.util.TreeSet<>());
         if (linking instanceof Result.Error<CompiledProgram> error) {
             getLogger().error("Linking failed with {} error(s)", error.errors().size());
             error.errors().forEach(linkingError -> getLogger().error(linkingError.toString()));
@@ -89,11 +87,11 @@ public abstract class CompileCapybaraTask extends DefaultTask {
         writeLinkedJson(output.toPath(), linkedProgram);
     }
 
-    private Module buildModule(Path rootPath, Path sourceFile) {
+    private RawModule buildModule(Path rootPath, Path sourceFile) {
         getLogger().info("Parsing module: {}", sourceFile);
         var fileName = sourceFile.getFileName().toString();
         var moduleName = fileName.substring(0, fileName.lastIndexOf('.'));
-        return CapybaraParser.INSTANCE.parseFunctional(moduleName, findModulePath(rootPath, sourceFile), readFile(sourceFile));
+        return new RawModule(moduleName, findModulePath(rootPath, sourceFile), readFile(sourceFile));
     }
 
     private String readFile(Path file) {
@@ -159,11 +157,3 @@ public abstract class CompileCapybaraTask extends DefaultTask {
     private record SourceFile(Path rootPath, Path path) {
     }
 }
-
-
-
-
-
-
-
-

@@ -3,9 +3,7 @@ package pl.grzeslowski.capybara.compiler;
 import org.junit.jupiter.api.Test;
 import pl.grzeslowski.capybara.generator.GeneratedModule;
 import pl.grzeslowski.capybara.generator.JavaGenerator;
-import pl.grzeslowski.capybara.parser.CapybaraParser;
-import pl.grzeslowski.capybara.parser.Module;
-import pl.grzeslowski.capybara.parser.Program;
+import pl.grzeslowski.capybara.compiler.parser.RawModule;
 
 import java.nio.file.Path;
 import java.util.List;
@@ -18,25 +16,17 @@ import static org.assertj.core.api.Assertions.fail;
 class CapybaraCompilerLibrariesIntegrationTest {
     @Test
     void shouldGenerateJavaReferencingLibraryWithoutEmittingIt() {
-        var libraries = compileProgram(new Program(List.of(new Module(
-                "Library",
-                "/foo/lib",
-                CapybaraParser.INSTANCE.parseFunctional("Library", "/foo/lib", """
-                        data Message { value: string }
-                        fun make_message(value: string): Message = Message { value: value }
-                        """).functional()
-        ))), new TreeSet<>()).modules();
+        var librarySource = """
+                data Message { value: string }
+                fun make_message(value: string): Message = Message { value: value }
+                """;
+        var libraries = compileProgram(List.of(new RawModule("Library", "/foo/lib", librarySource)), new TreeSet<>()).modules();
 
-        var consumer = new Module(
-                "Consumer",
-                "/foo/app",
-                CapybaraParser.INSTANCE.parseFunctional("Consumer", "/foo/app", """
-                        fun consume(value: string): string = make_message(value).value
-                        """).functional(),
-                List.of(new ImportDeclaration("Library", List.of("*"), List.of()))
-        );
-
-        var generated = new JavaGenerator().generate(compileProgram(new Program(List.of(consumer)), libraries));
+        var consumerSource = """
+                from Library import { * }
+                fun consume(value: string): string = make_message(value).value
+                """;
+        var generated = new JavaGenerator().generate(compileProgram(List.of(new RawModule("Consumer", "/foo/app", consumerSource)), libraries));
 
         assertThat(generated.modules()).hasSize(1);
         var module = generated.modules().getFirst();
@@ -48,13 +38,11 @@ class CapybaraCompilerLibrariesIntegrationTest {
                 .doesNotContain(Path.of("foo", "lib", "Library.java"));
     }
 
-    private static CompiledProgram compileProgram(Program program, SortedSet<CompiledModule> libraries) {
-        var result = CapybaraCompiler.INSTANCE.compile(program, libraries);
+    private static CompiledProgram compileProgram(List<RawModule> rawModules, SortedSet<CompiledModule> libraries) {
+        var result = CapybaraCompiler.INSTANCE.compile(rawModules, libraries);
         if (result instanceof Result.Error<CompiledProgram> error) {
             fail(error.errors().toString());
         }
         return ((Result.Success<CompiledProgram>) result).value();
     }
 }
-
-

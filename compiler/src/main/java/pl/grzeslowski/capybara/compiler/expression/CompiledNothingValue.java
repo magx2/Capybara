@@ -2,7 +2,7 @@ package pl.grzeslowski.capybara.compiler.expression;
 
 import pl.grzeslowski.capybara.compiler.CompiledType;
 import pl.grzeslowski.capybara.compiler.PrimitiveLinkedType;
-import pl.grzeslowski.capybara.parser.SourcePosition;
+import pl.grzeslowski.capybara.compiler.parser.SourcePosition;
 
 import java.util.Optional;
 
