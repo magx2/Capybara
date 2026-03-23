@@ -27,6 +27,20 @@ def generatedJavaDir = layout.buildDirectory.dir('generated/sources/capybara/jav
 def linkedOutputDir = layout.buildDirectory.dir('generated/sources/capybara/linked/main')
 def capybaraDebugEnabled = gradle.startParameter.logLevel == org.gradle.api.logging.LogLevel.DEBUG
 
+def prepareEmptyDir = { File dir ->
+    if (dir.exists()) {
+        java.nio.file.Files.walk(dir.toPath())
+                .sorted(java.util.Comparator.reverseOrder())
+                .forEach { path ->
+                    if (path != dir.toPath()) {
+                        java.nio.file.Files.deleteIfExists(path)
+                    }
+                }
+    } else {
+        dir.mkdirs()
+    }
+}
+
 tasks.register('linkCapybaraSources', JavaExec) {
     group = 'build'
     description = 'Compiles Capybara files from src/main/capybara into linked JSON artifacts.'
@@ -40,6 +54,7 @@ tasks.register('linkCapybaraSources', JavaExec) {
     mainClass = 'pl.grzeslowski.capybara.Capy'
 
     doFirst {
+        prepareEmptyDir(linkedOutputDir.get().asFile)
         def capybaraArgs = [
                 'compile',
                 '-i', capybaraSourceDir.asFile.absolutePath,
@@ -65,6 +80,7 @@ tasks.register('generateJavaFromCapybara', JavaExec) {
     mainClass = 'pl.grzeslowski.capybara.Capy'
 
     doFirst {
+        prepareEmptyDir(generatedJavaDir.get().asFile)
         def capybaraArgs = ['generate', 'java', '-i', linkedOutputDir.get().asFile.absolutePath, '-o', generatedJavaDir.get().asFile.absolutePath]
         if (capybaraDebugEnabled) {
             capybaraArgs.addAll(['--log', 'DEBUG'])

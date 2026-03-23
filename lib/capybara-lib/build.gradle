@@ -11,6 +11,20 @@ def capybaraLinkedMainDir = layout.buildDirectory.dir('generated/sources/capybar
 def capybaraLinkedTestDir = layout.buildDirectory.dir('generated/sources/capybara/linked/test')
 def capybaraDebugEnabled = gradle.startParameter.logLevel == org.gradle.api.logging.LogLevel.DEBUG
 
+def prepareEmptyDir = { File dir ->
+    if (dir.exists()) {
+        java.nio.file.Files.walk(dir.toPath())
+                .sorted(java.util.Comparator.reverseOrder())
+                .forEach { path ->
+                    if (path != dir.toPath()) {
+                        java.nio.file.Files.deleteIfExists(path)
+                    }
+                }
+    } else {
+        dir.mkdirs()
+    }
+}
+
 tasks.register('syncTestCapybaraSources', Sync) {
     from(capybaraMainSourceDir)
     from(capybaraTestSourceDir)
@@ -28,6 +42,7 @@ tasks.register('linkCapybara', JavaExec) {
     mainClass = 'pl.grzeslowski.capybara.Capy'
 
     doFirst {
+        prepareEmptyDir(capybaraLinkedMainDir.get().asFile)
         def capybaraArgs = ['compile', '-i', capybaraMainSourceDir.asFile.absolutePath, '-o', capybaraLinkedMainDir.get().asFile.absolutePath]
         if (capybaraDebugEnabled) {
             capybaraArgs.addAll(['--log', 'DEBUG'])
@@ -48,6 +63,7 @@ tasks.register('compileCapybara', JavaExec) {
     mainClass = 'pl.grzeslowski.capybara.Capy'
 
     doFirst {
+        prepareEmptyDir(capybaraGeneratedMainDir.get().asFile)
         def capybaraArgs = ['generate', 'java', '-i', capybaraLinkedMainDir.get().asFile.absolutePath, '-o', capybaraGeneratedMainDir.get().asFile.absolutePath]
         if (capybaraDebugEnabled) {
             capybaraArgs.addAll(['--log', 'DEBUG'])
@@ -69,6 +85,7 @@ tasks.register('linkTestCapybara', JavaExec) {
     mainClass = 'pl.grzeslowski.capybara.Capy'
 
     doFirst {
+        prepareEmptyDir(capybaraLinkedTestDir.get().asFile)
         def capybaraArgs = [
                 'compile',
                 '-i', capybaraCombinedTestSourceDir.get().asFile.absolutePath,
@@ -94,6 +111,7 @@ tasks.register('compileTestCapybara', JavaExec) {
     mainClass = 'pl.grzeslowski.capybara.Capy'
 
     doFirst {
+        prepareEmptyDir(capybaraGeneratedTestDir.get().asFile)
         def capybaraArgs = ['generate', 'java', '-i', capybaraLinkedTestDir.get().asFile.absolutePath, '-o', capybaraGeneratedTestDir.get().asFile.absolutePath]
         if (capybaraDebugEnabled) {
             capybaraArgs.addAll(['--log', 'DEBUG'])
@@ -165,5 +183,3 @@ tasks.named('test') {
     dependsOn tasks.named('testCapybara')
     failOnNoDiscoveredTests = false
 }
-
-
