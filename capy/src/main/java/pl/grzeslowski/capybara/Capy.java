@@ -28,8 +28,8 @@ import java.util.logging.Handler;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-public class App {
-    private static final Logger log = Logger.getLogger(App.class.getName());
+public class Capy {
+    private static final Logger log = Logger.getLogger(Capy.class.getName());
     public static final String EXTENSION = ".json";
     private static final String BUILD_INFO_FILE = "build-info.json";
     private static final String VERSION_RESOURCE = "/capybara-version.txt";
@@ -105,10 +105,10 @@ public class App {
 
         log.info("Linking files from: " + inputs.stream().map(Path::toString).toList());
         var rawModules = inputs.stream()
-                .map(App::listSourceFiles)
+                .map(Capy::listSourceFiles)
                 .flatMap(Collection::stream)
                 .filter(sourceFile -> sourceFile.path().getFileName().toString().endsWith(".cfun"))
-                .map(App::buildModule)
+                .map(Capy::buildModule)
                 .toList();
 
         var linking = CapybaraCompiler.INSTANCE.compile(rawModules, new java.util.TreeSet<>());
@@ -194,7 +194,7 @@ public class App {
     }
 
     private static String readCompilerVersion() {
-        try (InputStream stream = App.class.getResourceAsStream(VERSION_RESOURCE)) {
+        try (InputStream stream = Capy.class.getResourceAsStream(VERSION_RESOURCE)) {
             if (stream == null) {
                 throw new IllegalStateException("Missing version resource: " + VERSION_RESOURCE);
             }
@@ -210,7 +210,7 @@ public class App {
                     .filter(Files::isRegularFile)
                     .filter(path -> path.getFileName().toString().endsWith(EXTENSION))
                     .filter(path -> !path.getFileName().toString().equals(BUILD_INFO_FILE))
-                    .map(App::readLinkedModule)
+                    .map(Capy::readLinkedModule)
                     .toList();
             if (modules.isEmpty()) {
                 throw new IllegalArgumentException("Missing linked module files in directory: " + linkedInputDir);
@@ -289,3 +289,4 @@ public class App {
     private record SourceFile(Path rootPath, Path path) {
     }
 }
+

@@ -34,8 +34,8 @@ tasks.register('linkCapybaraSources', JavaExec) {
     inputs.dir(capybaraLibSourceDir)
     outputs.dir(linkedOutputDir)
 
-    classpath = project(':cli').sourceSets.main.runtimeClasspath
-    mainClass = 'pl.grzeslowski.capybara.App'
+    classpath = project(':capy').sourceSets.main.runtimeClasspath
+    mainClass = 'pl.grzeslowski.capybara.Capy'
 
     doFirst {
         def capybaraArgs = []
@@ -60,8 +60,8 @@ tasks.register('generateJavaFromCapybara', JavaExec) {
     inputs.dir(linkedOutputDir)
     outputs.dir(generatedJavaDir)
 
-    classpath = project(':cli').sourceSets.main.runtimeClasspath
-    mainClass = 'pl.grzeslowski.capybara.App'
+    classpath = project(':capy').sourceSets.main.runtimeClasspath
+    mainClass = 'pl.grzeslowski.capybara.Capy'
 
     doFirst {
         def capybaraArgs = []
@@ -87,3 +87,5 @@ sourceSets {
 tasks.named('compileJava') {
     dependsOn tasks.named('generateJavaFromCapybara')
 }
+
+

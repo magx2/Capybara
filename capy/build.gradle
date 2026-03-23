@@ -18,7 +18,7 @@ processResources {
 
 application {
     // Define the main class for the application.
-    mainClass = 'pl.grzeslowski.capybara.App'
+    mainClass = 'pl.grzeslowski.capybara.Capy'
 }
 
 def isWindows = System.getProperty('os.name').toLowerCase().contains('windows')
@@ -66,3 +66,5 @@ tasks.register('nativeCompile', Exec) {
         )
     }
 }
+
+

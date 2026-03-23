@@ -3,7 +3,7 @@
 ## Project Structure & Module Organization
 This repository is a Gradle multi-project build (`settings.gradle`) with these main modules:
 - `compiler/`: Capybara parser, linker, and Java generator (`src/main/antlr/Functional.g4`, Java sources, unit tests).
-- `app/`: CLI entrypoint (`pl.grzeslowski.capybara.App`) used by generation tasks.
+- `app/`: CLI entrypoint (`pl.grzeslowski.capybara.Capy`) used by generation tasks.
 - `integration-tests/`: `.cfun` examples and Java integration tests. Capybara files in `src/main/capybara` are compiled into generated Java.
 - `lib/java-lib/`: shared Java helpers.
 - `lib/capybara-lib/`: standard library written in Capybara (`src/main/capybara`) plus generated Java tests.
@@ -53,3 +53,5 @@ Use the wrapper from repository root:
   - semantic issue -> linker/validator/tests
   - output issue -> generator/tests
 - Do not fix source problems by editing generated Java under `build/generated/...`.
+
+

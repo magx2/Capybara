@@ -21,8 +21,8 @@ tasks.register('linkCapybara', JavaExec) {
     inputs.dir(capybaraMainSourceDir)
     outputs.dir(capybaraLinkedMainDir)
 
-    classpath = project(':cli').sourceSets.main.runtimeClasspath
-    mainClass = 'pl.grzeslowski.capybara.App'
+    classpath = project(':capy').sourceSets.main.runtimeClasspath
+    mainClass = 'pl.grzeslowski.capybara.Capy'
 
     doFirst {
         def capybaraArgs = []
@@ -46,8 +46,8 @@ tasks.register('compileCapybara', JavaExec) {
     inputs.dir(capybaraLinkedMainDir)
     outputs.dir(capybaraGeneratedMainDir)
 
-    classpath = project(':cli').sourceSets.main.runtimeClasspath
-    mainClass = 'pl.grzeslowski.capybara.App'
+    classpath = project(':capy').sourceSets.main.runtimeClasspath
+    mainClass = 'pl.grzeslowski.capybara.Capy'
 
     doFirst {
         def capybaraArgs = []
@@ -72,8 +72,8 @@ tasks.register('linkTestCapybara', JavaExec) {
     inputs.dir(capybaraTestSourceDir)
     outputs.dir(capybaraLinkedTestDir)
 
-    classpath = project(':cli').sourceSets.main.runtimeClasspath
-    mainClass = 'pl.grzeslowski.capybara.App'
+    classpath = project(':capy').sourceSets.main.runtimeClasspath
+    mainClass = 'pl.grzeslowski.capybara.Capy'
 
     doFirst {
         def inputDirs = [capybaraMainSourceDir.asFile, capybaraTestSourceDir.asFile]
@@ -99,8 +99,8 @@ tasks.register('compileTestCapybara', JavaExec) {
     inputs.dir(capybaraLinkedTestDir)
     outputs.dir(capybaraGeneratedTestDir)
 
-    classpath = project(':cli').sourceSets.main.runtimeClasspath
-    mainClass = 'pl.grzeslowski.capybara.App'
+    classpath = project(':capy').sourceSets.main.runtimeClasspath
+    mainClass = 'pl.grzeslowski.capybara.Capy'
 
     doFirst {
         def capybaraArgs = []
@@ -180,3 +180,5 @@ tasks.named('test') {
     dependsOn tasks.named('testCapybara')
     failOnNoDiscoveredTests = false
 }
+
+
