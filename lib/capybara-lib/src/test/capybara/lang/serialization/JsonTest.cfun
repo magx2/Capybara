@@ -27,7 +27,7 @@ fun test_serialize_simple_object(): Assert =
 fun test_empty(): Assert =
     let json = JsonObject { value: { : } }
     let ser = serialize(json)
-    assert_that(ser).is_equal_to("{}")
+    assert_that(ser).is_equal_to('{}')
 
 fun test_serialize_object_with_primitive_types(): Assert =
     let json = JsonObject { value: {
@@ -135,3 +135,4 @@ fun should_deserialize_object_as_null(): Assert =
 
 fun should_fail_deserialize_object_as_null(): Assert =
     assert_that(deserialize('{"foo":nul}')).failed('Expected `null`, but got `nul`!')
+

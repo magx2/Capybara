@@ -1,0 +1,11 @@
+data Foo { name: string }
+
+fun simple(name: string): string = "Hello {name}"
+
+fun expression(name: string, x: int): string = "Hello {name + x}"
+
+fun escaped(name: string): string = "Hello \{}"
+
+fun data_field(foo: Foo): string = "Hello {foo.name}"
+
+fun single_quoted(name: string): string = 'Hello {name}'

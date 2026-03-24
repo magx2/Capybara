@@ -5,6 +5,7 @@ import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;
 import org.antlr.v4.runtime.ParserRuleContext;
 import org.antlr.v4.runtime.RecognitionException;
+import org.antlr.v4.runtime.Token;
 import org.antlr.v4.runtime.Recognizer;
 import org.antlr.v4.runtime.tree.TerminalNode;
 import pl.grzeslowski.capybara.compiler.ImportDeclaration;
@@ -879,7 +880,7 @@ public class CapybaraParser {
                     return new DoubleValue(literal.DOUBLE_LITERAL().getText(), position(literal.DOUBLE_LITERAL()));
                 }
                 if (literal.STRING_LITERAL() != null) {
-                    return new StringValue(normalizeStringLiteral(literal.STRING_LITERAL().getText()), position(literal.STRING_LITERAL()));
+                    return stringLiteralExpression(literal.STRING_LITERAL());
                 }
                 if (literal.FLOAT_LITERAL() != null) {
                     return new FloatValue(literal.FLOAT_LITERAL().getText(), position(literal.FLOAT_LITERAL()));
@@ -1114,7 +1115,7 @@ public class CapybaraParser {
                     return new DoubleValue(literal.DOUBLE_LITERAL().getText(), position(literal.DOUBLE_LITERAL()));
                 }
                 if (literal.STRING_LITERAL() != null) {
-                    return new StringValue(normalizeStringLiteral(literal.STRING_LITERAL().getText()), position(literal.STRING_LITERAL()));
+                    return stringLiteralExpression(literal.STRING_LITERAL());
                 }
                 if (literal.FLOAT_LITERAL() != null) {
                     return new FloatValue(literal.FLOAT_LITERAL().getText(), position(literal.FLOAT_LITERAL()));
@@ -1544,12 +1545,286 @@ public class CapybaraParser {
         throw new IllegalStateException("Missing field name");
     }
 
+    private Expression stringLiteralExpression(TerminalNode stringLiteral) {
+        var raw = stringLiteral.getText();
+        var position = SourcePosition.of(stringLiteral);
+        if (!isDoubleQuoted(raw) || !hasInterpolation(raw)) {
+            return new StringValue(normalizeStringLiteral(raw), Optional.of(position));
+        }
+        return interpolatedStringExpression(raw, position);
+    }
+
+    private Expression interpolatedStringExpression(String raw, SourcePosition position) {
+        var content = raw.substring(1, raw.length() - 1);
+        var parts = new ArrayList<Expression>();
+        var current = new StringBuilder();
+        for (var i = 0; i < content.length(); i++) {
+            var ch = content.charAt(i);
+            if (ch != '{' || isEscaped(content, i)) {
+                current.append(ch);
+                continue;
+            }
+            if (current.length() > 0) {
+                parts.add(new StringValue(quoteDoubleQuotedSegment(current.toString()), Optional.of(position)));
+                current.setLength(0);
+            }
+            var end = findInterpolationEnd(content, i + 1);
+            if (end < 0) {
+                throw interpolationError(position, i, "missing `}`");
+            }
+            var expressionText = content.substring(i + 1, end);
+            if (expressionText.isBlank()) {
+                throw interpolationError(position, i, "Cannot evaluate expression");
+            }
+            parts.add(parseInterpolationExpression(expressionText, position, i));
+            i = end;
+        }
+        if (current.length() > 0) {
+            parts.add(new StringValue(quoteDoubleQuotedSegment(current.toString()), Optional.of(position)));
+        }
+        if (parts.isEmpty()) {
+            return new StringValue("\"\"", Optional.of(position));
+        }
+        Expression result = parts.getFirst();
+        if (!(result instanceof StringValue)) {
+            result = new InfixExpression(
+                    new StringValue("\"\"", Optional.of(position)),
+                    InfixOperator.PLUS,
+                    result,
+                    Optional.of(position)
+            );
+        }
+        for (var i = 1; i < parts.size(); i++) {
+            result = new InfixExpression(result, InfixOperator.PLUS, parts.get(i), Optional.of(position));
+        }
+        return result;
+    }
+
+    private Expression parseInterpolationExpression(String expressionText, SourcePosition stringPosition, int interpolationOffset) {
+        var lexer = new pl.grzeslowski.capybara.parser.antlr.FunctionalLexer(CharStreams.fromString(expressionText));
+        var tokens = new CommonTokenStream(lexer);
+        var parser = new pl.grzeslowski.capybara.parser.antlr.FunctionalParser(tokens);
+        var syntaxErrors = new ArrayList<SyntaxError>();
+        var errorListener = new org.antlr.v4.runtime.BaseErrorListener() {
+            @Override
+            public void syntaxError(
+                    Recognizer<?, ?> recognizer,
+                    Object offendingSymbol,
+                    int line,
+                    int charPositionInLine,
+                    String msg,
+                    RecognitionException e
+            ) {
+                syntaxErrors.add(new SyntaxError(line, charPositionInLine, msg));
+            }
+        };
+        lexer.removeErrorListeners();
+        parser.removeErrorListeners();
+        lexer.addErrorListener(errorListener);
+        parser.addErrorListener(errorListener);
+
+        var parsed = parser.expressionNoLet();
+        if (!syntaxErrors.isEmpty()) {
+            var first = syntaxErrors.getFirst();
+            var details = formatSyntaxError(first).replaceFirst("^line \\d+:\\d+:\\s*", "");
+            throw interpolationError(stringPosition, interpolationOffset + first.column(), details);
+        }
+        if (parser.getCurrentToken().getType() != Token.EOF) {
+            throw interpolationError(stringPosition, interpolationOffset, "Cannot evaluate expression");
+        }
+        return shiftInterpolationPositions(expressionNoLet(parsed), stringPosition, interpolationOffset);
+    }
+
+    private Expression shiftInterpolationPositions(Expression expression, SourcePosition stringPosition, int interpolationOffset) {
+        return switch (expression) {
+            case BooleanValue value -> new BooleanValue(value.value(), shiftPosition(value.position(), stringPosition, interpolationOffset));
+            case ByteValue value -> new ByteValue(value.byteValue(), shiftPosition(value.position(), stringPosition, interpolationOffset));
+            case DoubleValue value -> new DoubleValue(value.doubleValue(), shiftPosition(value.position(), stringPosition, interpolationOffset));
+            case FieldAccess value -> new FieldAccess(
+                    shiftInterpolationPositions(value.source(), stringPosition, interpolationOffset),
+                    value.field(),
+                    shiftPosition(value.position(), stringPosition, interpolationOffset)
+            );
+            case FloatValue value -> new FloatValue(value.floatValue(), shiftPosition(value.position(), stringPosition, interpolationOffset));
+            case FunctionCall value -> new FunctionCall(
+                    value.moduleName(),
+                    value.name(),
+                    value.arguments().stream().map(argument -> shiftInterpolationPositions(argument, stringPosition, interpolationOffset)).toList(),
+                    shiftPosition(value.position(), stringPosition, interpolationOffset)
+            );
+            case FunctionInvoke value -> new FunctionInvoke(
+                    shiftInterpolationPositions(value.function(), stringPosition, interpolationOffset),
+                    value.arguments().stream().map(argument -> shiftInterpolationPositions(argument, stringPosition, interpolationOffset)).toList(),
+                    shiftPosition(value.position(), stringPosition, interpolationOffset)
+            );
+            case FunctionReference value -> new FunctionReference(value.name(), shiftPosition(value.position(), stringPosition, interpolationOffset));
+            case IfExpression value -> new IfExpression(
+                    shiftInterpolationPositions(value.condition(), stringPosition, interpolationOffset),
+                    shiftInterpolationPositions(value.thenBranch(), stringPosition, interpolationOffset),
+                    shiftInterpolationPositions(value.elseBranch(), stringPosition, interpolationOffset),
+                    shiftPosition(value.position(), stringPosition, interpolationOffset)
+            );
+            case IndexExpression value -> new IndexExpression(
+                    shiftInterpolationPositions(value.source(), stringPosition, interpolationOffset),
+                    shiftInterpolationPositions(value.index(), stringPosition, interpolationOffset),
+                    shiftPosition(value.position(), stringPosition, interpolationOffset)
+            );
+            case InfixExpression value -> new InfixExpression(
+                    shiftInterpolationPositions(value.left(), stringPosition, interpolationOffset),
+                    value.operator(),
+                    shiftInterpolationPositions(value.right(), stringPosition, interpolationOffset),
+                    shiftPosition(value.position(), stringPosition, interpolationOffset)
+            );
+            case IntValue value -> new IntValue(value.intValue(), shiftPosition(value.position(), stringPosition, interpolationOffset));
+            case LambdaExpression value -> new LambdaExpression(
+                    value.argumentNames(),
+                    shiftInterpolationPositions(value.expression(), stringPosition, interpolationOffset),
+                    shiftPosition(value.position(), stringPosition, interpolationOffset)
+            );
+            case LetExpression value -> new LetExpression(
+                    value.name(),
+                    value.declaredType(),
+                    shiftInterpolationPositions(value.value(), stringPosition, interpolationOffset),
+                    shiftInterpolationPositions(value.rest(), stringPosition, interpolationOffset),
+                    shiftPosition(value.position(), stringPosition, interpolationOffset)
+            );
+            case LongValue value -> new LongValue(value.longValue(), shiftPosition(value.position(), stringPosition, interpolationOffset));
+            case MatchExpression value -> new MatchExpression(
+                    shiftInterpolationPositions(value.matchWith(), stringPosition, interpolationOffset),
+                    value.cases().stream().map(matchCase -> new MatchExpression.MatchCase(
+                            matchCase.pattern(),
+                            shiftInterpolationPositions(matchCase.expression(), stringPosition, interpolationOffset)
+                    )).toList(),
+                    shiftPosition(value.position(), stringPosition, interpolationOffset)
+            );
+            case NewData value -> new NewData(
+                    value.type(),
+                    value.assignments().stream().map(assignment -> new NewData.FieldAssignment(
+                            assignment.name(),
+                            shiftInterpolationPositions(assignment.value(), stringPosition, interpolationOffset)
+                    )).toList(),
+                    value.positionalArguments().stream().map(argument -> shiftInterpolationPositions(argument, stringPosition, interpolationOffset)).toList(),
+                    value.spreads().stream().map(argument -> shiftInterpolationPositions(argument, stringPosition, interpolationOffset)).toList(),
+                    shiftPosition(value.position(), stringPosition, interpolationOffset)
+            );
+            case NewDictExpression value -> new NewDictExpression(
+                    value.entries().stream().map(entry -> new NewDictExpression.Entry(
+                            shiftInterpolationPositions(entry.key(), stringPosition, interpolationOffset),
+                            shiftInterpolationPositions(entry.value(), stringPosition, interpolationOffset)
+                    )).toList(),
+                    shiftPosition(value.position(), stringPosition, interpolationOffset)
+            );
+            case NewListExpression value -> new NewListExpression(
+                    value.values().stream().map(argument -> shiftInterpolationPositions(argument, stringPosition, interpolationOffset)).toList(),
+                    shiftPosition(value.position(), stringPosition, interpolationOffset)
+            );
+            case NewSetExpression value -> new NewSetExpression(
+                    value.values().stream().map(argument -> shiftInterpolationPositions(argument, stringPosition, interpolationOffset)).toList(),
+                    shiftPosition(value.position(), stringPosition, interpolationOffset)
+            );
+            case NothingValue value -> new NothingValue(shiftPosition(value.position(), stringPosition, interpolationOffset));
+            case ReduceExpression value -> new ReduceExpression(
+                    shiftInterpolationPositions(value.initialValue(), stringPosition, interpolationOffset),
+                    value.accumulatorName(),
+                    value.keyName(),
+                    value.valueName(),
+                    shiftInterpolationPositions(value.reducerExpression(), stringPosition, interpolationOffset),
+                    shiftPosition(value.position(), stringPosition, interpolationOffset)
+            );
+            case SliceExpression value -> new SliceExpression(
+                    shiftInterpolationPositions(value.source(), stringPosition, interpolationOffset),
+                    value.start().map(start -> shiftInterpolationPositions(start, stringPosition, interpolationOffset)),
+                    value.end().map(end -> shiftInterpolationPositions(end, stringPosition, interpolationOffset)),
+                    shiftPosition(value.position(), stringPosition, interpolationOffset)
+            );
+            case StringValue value -> new StringValue(value.stringValue(), shiftPosition(value.position(), stringPosition, interpolationOffset));
+            case TupleExpression value -> new TupleExpression(
+                    value.values().stream().map(argument -> shiftInterpolationPositions(argument, stringPosition, interpolationOffset)).toList(),
+                    shiftPosition(value.position(), stringPosition, interpolationOffset)
+            );
+            case Value value -> new Value(value.name(), shiftPosition(value.position(), stringPosition, interpolationOffset));
+        };
+    }
+
+    private Optional<SourcePosition> shiftPosition(Optional<SourcePosition> position, SourcePosition stringPosition, int interpolationOffset) {
+        return position.map(sourcePosition -> new SourcePosition(
+                stringPosition.line(),
+                stringPosition.column() + interpolationOffset + 1 + sourcePosition.column(),
+                sourcePosition.length()
+        ));
+    }
+    private static boolean isDoubleQuoted(String raw) {
+        return raw.length() >= 2 && raw.charAt(0) == '"' && raw.charAt(raw.length() - 1) == '"';
+    }
+
+    private static boolean hasInterpolation(String raw) {
+        var content = raw.substring(1, raw.length() - 1);
+        for (var i = 0; i < content.length(); i++) {
+            if (isInterpolationStart(content, i)) {
+                return true;
+            }
+        }
+        return false;
+    }
+    private static boolean isInterpolationStart(String content, int index) {
+        if (index < 0 || index >= content.length() || content.charAt(index) != '{' || isEscaped(content, index)) {
+            return false;
+        }
+        if (index + 1 >= content.length()) {
+            return false;
+        }
+        var next = content.charAt(index + 1);
+        if (next == '}' && !isEscaped(content, index + 1)) {
+            return true;
+        }
+        return Character.isLetterOrDigit(next)
+               || next == '_'
+               || next == '('
+               || next == '['
+               || next == '{'
+               || next == '"'
+               || next == '\''
+               || next == '!'
+               || next == '-'
+               || next == '/';
+    }
+    private static int findInterpolationEnd(String content, int startInclusive) {
+        for (var i = startInclusive; i < content.length(); i++) {
+            if (content.charAt(i) == '}' && !isEscaped(content, i)) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    private static boolean isEscaped(String content, int index) {
+        var backslashes = 0;
+        for (var i = index - 1; i >= 0 && content.charAt(i) == '\\'; i--) {
+            backslashes++;
+        }
+        return backslashes % 2 == 1;
+    }
+
+    private static String quoteDoubleQuotedSegment(String content) {
+        return "\"" + content
+                .replace("\\", "\\\\")
+                .replace("\"", "\\\"") + "\"";
+    }
+
+    private static IllegalStateException interpolationError(SourcePosition position, int interpolationOffset, String details) {
+        return new IllegalStateException(
+                "line %d:%d: %s".formatted(position.line(), position.column() + interpolationOffset + 1, details)
+        );
+    }
+
     private static String normalizeStringLiteral(String raw) {
         if (raw.length() < 2) {
             return raw;
         }
         if (raw.charAt(0) == '"' && raw.charAt(raw.length() - 1) == '"') {
-            return raw;
+            var content = raw.substring(1, raw.length() - 1)
+                    .replace("\\{", "\\\\{");
+            return "\"" + content + "\"";
         }
         if (raw.charAt(0) == '\'' && raw.charAt(raw.length() - 1) == '\'') {
             var content = raw.substring(1, raw.length() - 1)
@@ -1790,6 +2065,14 @@ public class CapybaraParser {
     }
 
 }
+
+
+
+
+
+
+
+
 
 
 

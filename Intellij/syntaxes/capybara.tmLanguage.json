@@ -1,35 +1,14 @@
 {
-  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
-  "name": "Capybara",
   "scopeName": "source.capybara",
+  "name": "Capybara",
+  "fileTypes": ["cfun"],
   "patterns": [
-    {
-      "include": "#comments"
-    },
-    {
-      "include": "#strings"
-    },
-    {
-      "include": "#numbers"
-    },
-    {
-      "include": "#keywords"
-    },
-    {
-      "include": "#types"
-    },
-    {
-      "include": "#declarations"
-    },
-    {
-      "include": "#operators"
-    },
-    {
-      "include": "#indexing"
-    },
-    {
-      "include": "#constants"
-    }
+    { "include": "#comments" },
+    { "include": "#strings" },
+    { "include": "#numbers" },
+    { "include": "#keywords" },
+    { "include": "#typesAndFunctions" },
+    { "include": "#operatorsAndBrackets" }
   ],
   "repository": {
     "comments": {
@@ -56,6 +35,56 @@
           "begin": "\"",
           "end": "\"",
           "patterns": [
+            {
+              "name": "meta.interpolation.capybara",
+              "contentName": "meta.embedded.expression.capybara",
+              "begin": "(?<!\\\\)\\{",
+              "beginCaptures": {
+                "0": {
+                  "name": "punctuation.section.embedded.begin.capybara"
+                }
+              },
+              "end": "(?<!\\\\)\\}",
+              "endCaptures": {
+                "0": {
+                  "name": "punctuation.section.embedded.end.capybara"
+                }
+              },
+              "patterns": [
+                {
+                  "include": "#strings"
+                },
+                {
+                  "include": "#numbers"
+                },
+                {
+                  "include": "#keywords"
+                },
+                {
+                  "include": "#typesAndFunctions"
+                },
+                {
+                  "include": "#operatorsAndBrackets"
+                },
+                {
+                  "name": "constant.character.escape.capybara",
+                  "match": "\\\\."
+                }
+              ]
+            },
+              "end": "(?<!\\\\)\\}",
+              "endCaptures": {
+                "0": {
+                  "name": "punctuation.section.interpolation.end.capybara"
+                }
+              },
+              "patterns": [
+                {
+                  "name": "constant.character.escape.capybara",
+                  "match": "\\\\."
+                }
+              ]
+            },
             {
               "name": "constant.character.escape.capybara",
               "match": "\\\\."
@@ -86,12 +115,12 @@
           "match": "\\b\\d+[lL]\\b"
         },
         {
-          "name": "constant.numeric.float.capybara",
-          "match": "\\b(?:\\d+\\.\\d*(?:[eE][+\\-]?\\d+)?|\\d+[eE][+\\-]?\\d+)[fF]\\b"
+          "name": "constant.numeric.double.capybara",
+          "match": "\\b(?:\\d+\\.\\d*(?:[eE][+\\-]?\\d+)?[dD]?|\\d+[eE][+\\-]?\\d+[dD])\\b"
         },
         {
-          "name": "constant.numeric.double.capybara",
-          "match": "\\b(?:\\d+\\.\\d*(?:[eE][+\\-]?\\d+)?|\\d+[eE][+\\-]?\\d+)(?:[dD])?\\b"
+          "name": "constant.numeric.float.capybara",
+          "match": "\\b(?:\\d+\\.\\d*(?:[eE][+\\-]?\\d+)?[fF]?|\\d+[eE][+\\-]?\\d+[fF])\\b"
         },
         {
           "name": "constant.numeric.int.capybara",
@@ -106,252 +135,100 @@
           "match": "\\b(fun|type|enum|data|single|const|local|match|with|if|then|else|let|from|import|except)\\b"
         },
         {
-          "name": "keyword.other.capybara",
-          "match": "\\b(this|is_empty|size)\\b"
-        }
-      ]
-    },
-    "types": {
-      "patterns": [
+          "name": "keyword.operator.word.capybara",
+          "match": "\\b(this|is_empty|size|to_int|to_long|to_double|to_float|to_bool)\\b"
+        },
         {
           "name": "support.type.primitive.capybara",
           "match": "\\b(byte|int|long|float|double|bool|string|any|data|nothing|list|set|dict|tuple)\\b"
         },
         {
+          "name": "constant.language.boolean.capybara",
+          "match": "\\b(true|false)\\b"
+        },
+        {
+          "name": "constant.language.unimplemented.capybara",
+          "match": "\\?\\?\\?"
+        }
+      ]
+    },
+    "typesAndFunctions": {
+      "patterns": [
+        {
           "name": "entity.name.type.capybara",
           "match": "\\b_*[A-Z][A-Za-z0-9_]*\\b"
         },
         {
-          "name": "entity.name.type.qualified.capybara",
-          "match": "/[A-Za-z_][A-Za-z0-9_]*(?:/[A-Za-z_][A-Za-z0-9_]*)+"
-        }
-      ]
-    },
-    "declarations": {
-      "patterns": [
-        {
-          "name": "meta.function.private.capybara",
-          "match": "\\b(fun)\\s+(__[A-Za-z0-9_]+)",
-          "captures": {
-            "1": {
-              "name": "keyword.control.capybara"
-            },
-            "2": {
-              "name": "entity.name.function.private.capybara"
-            }
-          }
+          "name": "entity.name.type.private.capybara",
+          "match": "\\b(type|enum|data|single)\\s+(__[A-Za-z0-9_]*)"
         },
         {
-          "name": "meta.function.capybara",
-          "match": "\\b(fun)\\s+([A-Za-z_][A-Za-z0-9_]*)",
-          "captures": {
-            "1": {
-              "name": "keyword.control.capybara"
-            },
-            "2": {
-              "name": "entity.name.function.capybara"
-            }
-          }
+          "name": "entity.name.function.private.capybara",
+          "match": "\\bfun\\s+(__[A-Za-z0-9_]+)"
         },
         {
-          "name": "meta.function.reference.private.capybara",
-          "match": ":(__[A-Za-z0-9_]+)\\b",
-          "captures": {
-            "1": {
-              "name": "entity.name.function.private.capybara"
-            }
-          }
-        },
-        {
-          "name": "meta.function.reference.capybara",
-          "match": ":([A-Za-z_][A-Za-z0-9_]*)\\b",
-          "captures": {
-            "1": {
-              "name": "entity.name.function.capybara"
-            }
-          }
-        },
-        {
-          "name": "meta.function.call.private.capybara",
-          "match": "\\b(__[A-Za-z0-9_]+)\\s*(?=\\()",
-          "captures": {
-            "1": {
-              "name": "entity.name.function.private.capybara"
-            }
-          }
-        },
-        {
-          "name": "meta.function.call.capybara",
-          "match": "\\b([A-Za-z_][A-Za-z0-9_]*)\\s*(?=\\()",
-          "captures": {
-            "1": {
-              "name": "entity.name.function.capybara"
-            }
-          }
-        },
-        {
-          "name": "meta.let.declaration.capybara",
-          "match": "\\b(let)\\s+([A-Za-z_][A-Za-z0-9_]*)\\b",
-          "captures": {
-            "1": {
-              "name": "keyword.control.capybara"
-            },
-            "2": {
-              "name": "variable.other.capybara"
-            }
-          }
-        },
-        {
-          "name": "meta.const.private.capybara",
-          "match": "\\b(const)\\s+(__[A-Z_][A-Z0-9_]*)\\b",
-          "captures": {
-            "1": {
-              "name": "keyword.control.capybara"
-            },
-            "2": {
-              "name": "entity.name.constant.private.capybara"
-            }
-          }
-        },
-        {
-          "name": "meta.const.capybara",
-          "match": "\\b(const)\\s+(_*[A-Z_][A-Z0-9_]*)\\b",
-          "captures": {
-            "1": {
-              "name": "keyword.control.capybara"
-            },
-            "2": {
-              "name": "entity.name.constant.capybara"
-            }
-          }
-        },
-        {
-          "name": "meta.type.private.capybara",
-          "match": "\\b(type|enum|data|single)\\s+(__[A-Za-z0-9_]*)",
-          "captures": {
-            "1": {
-              "name": "keyword.control.capybara"
-            },
-            "2": {
-              "name": "entity.name.type.private.capybara"
-            }
-          }
-        },
-        {
-          "name": "meta.type.capybara",
-          "match": "\\b(type|enum|data|single)\\s+(_*[A-Z][A-Za-z0-9_]*)",
-          "captures": {
-            "1": {
-              "name": "keyword.control.capybara"
-            },
-            "2": {
-              "name": "entity.name.type.capybara"
-            }
-          }
-        },
-        {
-          "name": "meta.match.typed-pattern.capybara",
-          "match": "(\\|)\\s*(_*[A-Z][A-Za-z0-9_]*)\\s+([A-Za-z_][A-Za-z0-9_]*|_)\\s*(=>)",
-          "captures": {
-            "1": {
-              "name": "keyword.operator.capybara"
-            },
-            "2": {
-              "name": "entity.name.type.capybara"
-            },
-            "3": {
-              "name": "variable.parameter.capybara"
-            },
-            "4": {
-              "name": "keyword.operator.capybara"
-            }
-          }
+          "name": "entity.name.function.capybara",
+          "match": "\\bfun\\s+([A-Za-z_][A-Za-z0-9_]*)"
         },
         {
           "name": "meta.function.owner-generic.capybara",
-          "match": "\\b(fun)\\s+(_*[A-Z][A-Za-z0-9_]*\\[[^\\]]+\\])\\.(?:`[^`]+`|[A-Za-z_][A-Za-z0-9_]*)",
-          "captures": {
-            "1": {
-              "name": "keyword.control.capybara"
-            },
-            "2": {
-              "name": "entity.name.type.capybara"
-            }
-          }
+          "match": "\\b(fun)\\s+(_*[A-Z][A-Za-z0-9_]*\\[[^\\]]+\\])\\.(?:`[^`]+`|[A-Za-z_][A-Za-z0-9_]*)"
         },
         {
           "name": "meta.function.owner-infix.capybara",
-          "match": "\\b(fun)\\s+(_*[A-Z][A-Za-z0-9_]*)\\.(`[^`]+`)",
-          "captures": {
-            "1": {
-              "name": "keyword.control.capybara"
-            },
-            "2": {
-              "name": "entity.name.type.capybara"
-            },
-            "3": {
-              "name": "keyword.operator.pipe.capybara"
-            }
-          }
+          "match": "\\b(fun)\\s+(_*[A-Z][A-Za-z0-9_]*)\\.([^]+)"
+        },
+        {
+          "name": "entity.name.function.private.capybara",
+          "match": ":(__[A-Za-z0-9_]+)\\b"
+        },
+        {
+          "name": "entity.name.function.capybara",
+          "match": ":([A-Za-z_][A-Za-z0-9_]*)\\b"
+        },
+        {
+          "name": "entity.name.function.private.capybara",
+          "match": "\\b(__[A-Za-z0-9_]+)\\s*(?=\\()"
+        },
+        {
+          "name": "entity.name.function.capybara",
+          "match": "\\b([A-Za-z_][A-Za-z0-9_]*)\\s*(?=\\()"
+        },
+        {
+          "name": "meta.let.declaration.capybara",
+          "match": "\\b(let)\\s+([A-Za-z_][A-Za-z0-9_]*)\\b"
+        },
+        {
+          "name": "meta.const.private.capybara",
+          "match": "\\b(const)\\s+(__[A-Z_][A-Z0-9_]*)\\b"
+        },
+        {
+          "name": "meta.const.capybara",
+          "match": "\\b(const)\\s+(_*[A-Z_][A-Z0-9_]*)\\b"
+        },
+        {
+          "name": "meta.match.typed-pattern.capybara",
+          "match": "(\\|)\\s*(_*[A-Z][A-Za-z0-9_]*)\\s+([A-Za-z_][A-Za-z0-9_]*|_)\\s*(=>)"
         },
         {
           "name": "meta.match.wildcard-binding.capybara",
-          "match": "(\\|)\\s*(_)\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*(=>)",
-          "captures": {
-            "1": {
-              "name": "keyword.operator.capybara"
-            },
-            "2": {
-              "name": "keyword.operator.capybara"
-            },
-            "3": {
-              "name": "variable.parameter.capybara"
-            },
-            "4": {
-              "name": "keyword.operator.capybara"
-            }
-          }
+          "match": "(\\|)\\s*(_)\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*(=>)"
         },
         {
           "name": "meta.match.constructor-pattern.capybara",
-          "match": "(\\|)\\s*(_*[A-Z][A-Za-z0-9_]*)\\s*(\\{)\\s*([A-Za-z_][A-Za-z0-9_]*)",
-          "captures": {
-            "1": {
-              "name": "keyword.operator.capybara"
-            },
-            "2": {
-              "name": "entity.name.type.capybara"
-            },
-            "3": {
-              "name": "punctuation.section.block.begin.capybara"
-            },
-            "4": {
-              "name": "variable.parameter.capybara"
-            }
-          }
+          "match": "(\\|)\\s*(_*[A-Z][A-Za-z0-9_]*)\\s*(\\{)\\s*([A-Za-z_][A-Za-z0-9_]*)"
         },
         {
           "name": "variable.parameter.unused.capybara",
-          "match": "(?<=\\(|,)\\s*(_)(?=\\s*(?:,|\\)\\s*=>))"
+          "match": "(?<=\\(|,)\\s*(_) (?=\\s*(?:,|\\)\\s*=>))"
         },
         {
           "name": "meta.lambda.no-args.capybara",
-          "match": "(\\()\\s*(\\))\\s*(=>)",
-          "captures": {
-            "1": {
-              "name": "punctuation.section.group.begin.capybara"
-            },
-            "2": {
-              "name": "punctuation.section.group.end.capybara"
-            },
-            "3": {
-              "name": "keyword.operator.function-type.capybara"
-            }
-          }
+          "match": "(\\()\\s*(\\))\\s*(=>)"
         }
       ]
     },
-    "operators": {
+    "operatorsAndBrackets": {
       "patterns": [
         {
           "name": "keyword.operator.function-type.capybara",
@@ -359,20 +236,8 @@
         },
         {
           "name": "keyword.operator.pipe.capybara",
-          "match": "\\|all\\?|\\|any\\?|\\|>|\\|\\*|\\|-|\\|"
+          "match": "\\|all\\?|\\|any\\?|\\|>|\\|\\*|\\|-|\\||\\.and\\.|\\.nand\\.|\\.or\\.|\\.xor\\.|\\.not\\.|==|!=|<=|>=|=>|\\+|\\-|\\*|/|%|\\^|<|>|=|&|\\?|:|,"
         },
-        {
-          "name": "keyword.operator.capybara",
-          "match": "\\.and\\.|\\.nand\\.|\\.or\\.|\\.xor\\.|\\.not\\."
-        },
-        {
-          "name": "keyword.operator.capybara",
-          "match": "==|!=|<=|>=|=>|\\+|\\-|\\*|/|%|\\^|<|>|=|&|\\?|:|,"
-        }
-      ]
-    },
-    "indexing": {
-      "patterns": [
         {
           "name": "meta.index.capybara",
           "begin": "\\[",
@@ -389,22 +254,9 @@
           ]
         }
       ]
-    },
-    "constants": {
-      "patterns": [
-        {
-          "name": "constant.language.boolean.capybara",
-          "match": "\\b(true|false)\\b"
-        },
-        {
-          "name": "constant.language.unimplemented.capybara",
-          "match": "\\?\\?\\?"
-        }
-      ]
     }
   }
 }
-
 
 
 
