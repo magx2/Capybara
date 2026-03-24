@@ -10,6 +10,8 @@ def capybaraStdlibLinkedDir = project(':lib:capybara-lib').layout.buildDirectory
 
 dependencies {
     antlr group: 'org.antlr', name: 'antlr4', version: antlrVersion
+    implementation 'com.fasterxml.jackson.core:jackson-databind:2.19.0'
+    implementation 'com.fasterxml.jackson.datatype:jackson-datatype-jdk8:2.19.0'
     implementation group: 'org.antlr', name: 'antlr4-runtime', version: antlrVersion
     testImplementation platform("org.junit:junit-bom:${junitVersion}")
     testImplementation 'org.junit.jupiter:junit-jupiter'
@@ -54,3 +56,4 @@ tasks.named('processResources') {
         into 'capy'
     }
 }
+

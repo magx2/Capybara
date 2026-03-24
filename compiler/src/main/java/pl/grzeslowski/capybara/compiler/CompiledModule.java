@@ -15,6 +15,9 @@ public record CompiledModule(
         SortedMap<String, GenericDataType> types,
         SortedSet<CompiledFunction> functions,
         SortedSet<StaticImport> staticImports) implements Comparable<CompiledModule> {
+
+    public static final String EXTENSION = ".json";
+
     public CompiledModule(
             String name,
             String path,
@@ -65,3 +68,4 @@ public record CompiledModule(
         return name.hashCode();
     }
 }
+

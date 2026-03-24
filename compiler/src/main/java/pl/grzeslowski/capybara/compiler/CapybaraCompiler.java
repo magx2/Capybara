@@ -1,10 +1,19 @@
 package pl.grzeslowski.capybara.compiler;
 
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
+import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
 import pl.grzeslowski.capybara.compiler.CompiledFunction.CompiledFunctionParameter;
 import pl.grzeslowski.capybara.compiler.expression.CapybaraExpressionCompiler;
 import pl.grzeslowski.capybara.compiler.parser.*;
 import pl.grzeslowski.capybara.compiler.parser.Module;
 
+import java.io.IOException;
+import java.net.URI;
+import java.nio.file.FileSystemNotFoundException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.*;
 import java.util.stream.Stream;
 
@@ -20,9 +29,78 @@ public class CapybaraCompiler {
 
     public Result<CompiledProgram> compile(Collection<RawModule> rawModules, SortedSet<CompiledModule> libraries) {
         var program = CapybaraParser.INSTANCE.parseModule(rawModules);
-        return compile(program, libraries);
+        return compile(program, mergeLibraries(rawModules, libraries));
     }
 
+    private SortedSet<CompiledModule> mergeLibraries(Collection<RawModule> rawModules, SortedSet<CompiledModule> libraries) {
+        var merged = new TreeSet<>(loadBundledLibraries(rawModules));
+        libraries.forEach(library -> {
+            // TreeSet uniqueness is based on module path+name, so remove+add replaces
+            // the bundled stdlib module with an explicitly provided one when they match.
+            merged.remove(library);
+            merged.add(library);
+        });
+        return merged;
+    }
+
+    private static SortedSet<CompiledModule> loadBundledLibraries(Collection<RawModule> rawModules) {
+        try {
+            var resource = CapybaraCompiler.class.getClassLoader().getResource("capy");
+            if (resource == null) {
+                if (isStdlibBootstrap(rawModules)) {
+                    return new TreeSet<>();
+                }
+                throw new IllegalStateException("Unable to find bundled Capybara libraries resource `capy`");
+            }
+            try (var paths = Files.walk(resourcePath(resource.toURI()))) {
+                return paths
+                        .filter(path -> path.getFileName().toString().endsWith(CompiledModule.EXTENSION))
+                        .map(CapybaraCompiler::readBundledLibrary)
+                        .collect(java.util.stream.Collectors.toCollection(TreeSet::new));
+            }
+        } catch (Exception e) {
+            throw new IllegalStateException("Unable to load bundled Capybara libraries", e);
+        }
+    }
+
+    private static boolean isStdlibBootstrap(Collection<RawModule> rawModules) {
+        return rawModules.stream().anyMatch(rawModule -> rawModule.path().replace('\\', '/').startsWith("capy"));
+    }
+
+    private static Path resourcePath(URI resource) throws IOException {
+        if ("jar".equals(resource.getScheme())) {
+            try {
+                return Path.of(resource);
+            } catch (FileSystemNotFoundException ignored) {
+                java.nio.file.FileSystems.newFileSystem(resource, Map.of());
+                return Path.of(resource);
+            }
+        }
+        return Path.of(resource);
+    }
+
+    private static CompiledModule readBundledLibrary(Path path) {
+        try {
+            return objectMapper().readValue(Files.readString(path), CompiledModule.class);
+        } catch (IOException e) {
+            throw new IllegalStateException("Unable to read bundled Capybara library `" + path + "`", e);
+        }
+    }
+
+    private static ObjectMapper objectMapper() {
+        var mapper = new ObjectMapper();
+        mapper.registerModule(new Jdk8Module());
+        var validator = BasicPolymorphicTypeValidator.builder()
+                .allowIfSubType("pl.grzeslowski.capybara")
+                .allowIfSubType("java.util")
+                .build();
+        mapper.activateDefaultTyping(
+                validator,
+                ObjectMapper.DefaultTyping.NON_FINAL,
+                JsonTypeInfo.As.PROPERTY
+        );
+        return mapper;
+    }
     private Result<CompiledProgram> compile(Program program, SortedSet<CompiledModule> libraries) {
         var programModuleRefs = program.modules().stream().map(module -> new ModuleRef(module.name(), module.path())).toList();
         var libraryModuleRefs = libraries.stream().map(module -> new ModuleRef(module.name(), module.path())).toList();
@@ -3008,6 +3086,16 @@ public class CapybaraCompiler {
                 .toList();
     }
 }
+
+
+
+
+
+
+
+
+
+
 
 
 

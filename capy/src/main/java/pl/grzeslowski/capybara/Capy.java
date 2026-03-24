@@ -36,7 +36,7 @@ import java.util.logging.Logger;
 
 public class Capy {
     private static final Logger log = Logger.getLogger(Capy.class.getName());
-    public static final String EXTENSION = ".json";
+
     private static final String BUILD_INFO_FILE = "build-info.json";
     private static final String VERSION_RESOURCE = "/capybara-version.txt";
     private static final String JAVA_LIB_RESOURCE_DIR = "/java-lib-src";
@@ -377,8 +377,8 @@ public class Capy {
             for (var module : program.modules()) {
                 var modulePath = module.path().replace('\\', '/');
                 var moduleJson = modulePath.isBlank()
-                        ? outputDir.resolve(module.name() + EXTENSION)
-                        : outputDir.resolve(modulePath).resolve(module.name() + EXTENSION);
+                        ? outputDir.resolve(module.name() + CompiledModule.EXTENSION)
+                        : outputDir.resolve(modulePath).resolve(module.name() + CompiledModule.EXTENSION);
                 Files.createDirectories(moduleJson.getParent());
                 mapper.writerWithDefaultPrettyPrinter().writeValue(moduleJson.toFile(), module);
                 log.info("Writing linked module to file: " + moduleJson);
@@ -450,7 +450,7 @@ public class Capy {
         try (var files = Files.walk(linkedInputDir)) {
             var modules = files
                     .filter(Files::isRegularFile)
-                    .filter(path -> path.getFileName().toString().endsWith(EXTENSION))
+                    .filter(path -> path.getFileName().toString().endsWith(CompiledModule.EXTENSION))
                     .filter(path -> !path.getFileName().toString().equals(BUILD_INFO_FILE))
                     .map(Capy::readLinkedModule)
                     .toList();
@@ -520,3 +520,5 @@ public class Capy {
     private record NamedOptions(Map<String, String> values, Level logLevel) {
     }
 }
+
+
