@@ -6,6 +6,8 @@ plugins {
     id 'buildlogic.java-library-conventions'
 }
 
+def capybaraStdlibLinkedDir = project(':lib:capybara-lib').layout.buildDirectory.dir('generated/sources/capybara/linked/main/capy')
+
 dependencies {
     antlr group: 'org.antlr', name: 'antlr4', version: antlrVersion
     implementation group: 'org.antlr', name: 'antlr4-runtime', version: antlrVersion
@@ -44,4 +46,11 @@ tasks.register('integrationTest', Test) {
 
 check {
     dependsOn tasks.named('integrationTest')
+}
+
+tasks.named('processResources') {
+    dependsOn ':lib:capybara-lib:linkCapybara'
+    from(capybaraStdlibLinkedDir) {
+        into 'capy'
+    }
 }

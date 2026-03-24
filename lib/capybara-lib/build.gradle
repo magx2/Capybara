@@ -2,6 +2,19 @@ plugins {
     id 'buildlogic.java-library-conventions'
 }
 
+def capyProject = project(':capy')
+def compilerProject = project(':compiler')
+def capyExternalRuntimeClasspath = capyProject.configurations.runtimeClasspath.incoming.artifactView {
+    componentFilter { componentIdentifier ->
+        !(componentIdentifier instanceof org.gradle.api.artifacts.component.ProjectComponentIdentifier)
+    }
+}.files
+def capyExecutionClasspath = files(
+        capyProject.sourceSets.main.output,
+        compilerProject.sourceSets.main.output.classesDirs,
+        capyExternalRuntimeClasspath
+)
+
 def capybaraMainSourceDir = layout.projectDirectory.dir('src/main/capybara')
 def capybaraTestSourceDir = layout.projectDirectory.dir('src/test/capybara')
 def capybaraCombinedTestSourceDir = layout.buildDirectory.dir('tmp/capybara/test-sources')
@@ -38,7 +51,7 @@ tasks.register('linkCapybara', JavaExec) {
     inputs.dir(capybaraMainSourceDir)
     outputs.dir(capybaraLinkedMainDir)
 
-    classpath = project(':capy').sourceSets.main.runtimeClasspath
+    classpath = capyExecutionClasspath
     mainClass = 'pl.grzeslowski.capybara.Capy'
 
     doFirst {
@@ -59,7 +72,7 @@ tasks.register('compileCapybara', JavaExec) {
     inputs.dir(capybaraLinkedMainDir)
     outputs.dir(capybaraGeneratedMainDir)
 
-    classpath = project(':capy').sourceSets.main.runtimeClasspath
+    classpath = capyExecutionClasspath
     mainClass = 'pl.grzeslowski.capybara.Capy'
 
     doFirst {
@@ -81,7 +94,7 @@ tasks.register('linkTestCapybara', JavaExec) {
     inputs.dir(capybaraTestSourceDir)
     outputs.dir(capybaraLinkedTestDir)
 
-    classpath = project(':capy').sourceSets.main.runtimeClasspath
+    classpath = capyExecutionClasspath
     mainClass = 'pl.grzeslowski.capybara.Capy'
 
     doFirst {
@@ -107,7 +120,7 @@ tasks.register('compileTestCapybara', JavaExec) {
     inputs.dir(capybaraLinkedTestDir)
     outputs.dir(capybaraGeneratedTestDir)
 
-    classpath = project(':capy').sourceSets.main.runtimeClasspath
+    classpath = capyExecutionClasspath
     mainClass = 'pl.grzeslowski.capybara.Capy'
 
     doFirst {
