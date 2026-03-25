@@ -72,8 +72,10 @@ TYPE: [_]* [A-Z][a-zA-Z0-9_]*
       | TYPE_FULL ;
 TYPE_FULL: '/' [A-Za-z_][a-zA-Z0-9_]* ( '/' [A-Za-z_][a-zA-Z0-9_]* )+;
 INFIX_METHOD_LITERAL: '`' [+\-*/\\^%$#@~!:<>|]+ '`';
-expression: letExpression* expressionNoLet;
-letExpression: 'let' NAME (':' type)? '=' expressionNoLet ';'?;
+expression: letExpression | expressionNoLet;
+letExpression: 'let' NAME (':' type)? '=' expressionNoLet ';'? expression;
+expressionNoPipe: letExpressionNoPipe | expressionNoLetNoPipe;
+letExpressionNoPipe: 'let' NAME (':' type)? '=' expressionNoLet ';'? expressionNoPipe;
 expressionNoLet: ifExpression
                | lambdaExpression
                | reduceExpression
@@ -100,10 +102,10 @@ expressionNoLet: ifExpression
                | matchExpression;
 indexLiteral: MINUS? INT_LITERAL;
 sliceIndexLiteral: MINUS? INT_LITERAL;
-lambdaExpression: lambdaArgument FAT_ARROW expressionNoLetNoPipe
-                | LPAREN (lambdaArgument (COMMA lambdaArgument)*)? RPAREN FAT_ARROW expressionNoLetNoPipe;
+lambdaExpression: lambdaArgument FAT_ARROW expressionNoPipe
+                | LPAREN (lambdaArgument (COMMA lambdaArgument)*)? RPAREN FAT_ARROW expressionNoPipe;
 lambdaArgument: identifier | UNDERSCORE;
-reduceExpression: expressionNoLetNoPipe COMMA LPAREN lambdaArgument COMMA lambdaArgument (COMMA lambdaArgument (COMMA lambdaArgument)?)? RPAREN FAT_ARROW expressionNoLetNoPipe;
+reduceExpression: expressionNoLetNoPipe COMMA LPAREN lambdaArgument COMMA lambdaArgument (COMMA lambdaArgument (COMMA lambdaArgument)?)? RPAREN FAT_ARROW expressionNoPipe;
 expressionNoLetNoPipe: ifExpression
                      | lambdaExpression
                      | functionReference
@@ -152,7 +154,7 @@ NOTHING_LITERAL: '???';
 
 matchExpression: 'match' expression 'with' matchCaseList+;
 matchCaseList: matchCase (',' matchCase)*;
-matchCase: PIPE pattern (COMMA pattern)* MATCH_ARROW expressionNoLetNoPipe;
+matchCase: PIPE pattern (COMMA pattern)* MATCH_ARROW expressionNoPipe;
 pattern: TYPE
         | INT_LITERAL
         | BOOL_LITERAL

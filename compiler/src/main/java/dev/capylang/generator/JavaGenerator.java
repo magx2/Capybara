@@ -31,7 +31,10 @@ public final class JavaGenerator implements Generator {
     private List<GeneratedModule> modules(CompiledModule module) {
         var javaClass = astBuilder.build(module);
         if (!hasTypeOrDataNameConflictWithFile(javaClass)) {
-            return List.of(new GeneratedModule(relativePath(javaClass, javaClass.name().toString()), code(javaClass)));
+            return List.of(new GeneratedModule(
+                    relativePath(javaClass, javaClass.name().toString()),
+                    code(javaClass, javaClass.name().toString(), true)
+            ));
         }
 
         var ownerInterface = javaClass.interfaces().stream()
@@ -40,12 +43,13 @@ public final class JavaGenerator implements Generator {
         if (ownerInterface.isPresent()) {
             return List.of(new GeneratedModule(
                     relativePath(javaClass, javaClass.name().toString()),
-                    codeNestedInOwnerInterface(javaClass, ownerInterface.get())
+                    codeNestedInOwnerInterface(javaClass, ownerInterface.get(), ownerInterface.get().name().toString())
             ));
         }
 
+        var helperCallOwnerName = javaClass.name() + "Module";
         var compiled = new ArrayList<GeneratedModule>();
-        for (var declaration : topLevelDeclarations(javaClass)) {
+        for (var declaration : topLevelDeclarations(javaClass, helperCallOwnerName)) {
             compiled.add(new GeneratedModule(
                     relativePath(javaClass, declaration.name()),
                     codeTopLevelDeclaration(javaClass, declaration.code())
@@ -64,7 +68,7 @@ public final class JavaGenerator implements Generator {
             );
             compiled.add(new GeneratedModule(
                     relativePath(javaClass, utilityClass.name().toString()),
-                    code(utilityClass)
+                    code(utilityClass, utilityClass.name().toString(), false)
             ));
         }
         return List.copyOf(compiled);
@@ -78,7 +82,7 @@ public final class JavaGenerator implements Generator {
         return Path.of(packageName.replace('.', '/'), simpleName + ".java");
     }
 
-    private String code(JavaClass javaClass) {
+    private String code(JavaClass javaClass, String helperCallOwnerName, boolean allowPrivateStaticMethods) {
         var code = new StringBuilder();
 
         // package
@@ -102,14 +106,14 @@ public final class JavaGenerator implements Generator {
         code.append('\n');
         javaClass.interfaces()
                 .stream()
-                .map(this::mapJavaInterface)
+                .map(javaInterface -> mapJavaInterface(javaInterface, helperCallOwnerName))
                 .forEach(code::append);
 
         // records
         code.append('\n');
         javaClass.records()
                 .stream()
-                .map(this::mapJavaRecord)
+                .map(record -> mapJavaRecord(record, helperCallOwnerName))
                 .forEach(code::append);
 
         // enums
@@ -123,7 +127,7 @@ public final class JavaGenerator implements Generator {
         code.append('\n');
         javaClass.staticMethods()
                 .stream()
-                .map(this::mapJavaMethod)
+                .map(method -> mapJavaMethod(method, allowPrivateStaticMethods))
                 .forEach(code::append);
         code.append('\n').append(unsupportedHelperMethod());
 
@@ -133,7 +137,7 @@ public final class JavaGenerator implements Generator {
         return code.toString();
     }
 
-    private String codeNestedInOwnerInterface(JavaClass javaClass, JavaInterface ownerInterface) {
+    private String codeNestedInOwnerInterface(JavaClass javaClass, JavaInterface ownerInterface, String helperCallOwnerName) {
         var code = new StringBuilder();
         code.append("package ").append(javaClass.javaPackage()).append(";\n\n");
         appendImports(code, javaClass.staticImports());
@@ -148,7 +152,7 @@ public final class JavaGenerator implements Generator {
                     .map(this::mapJavaInterfaceMethod)
                     .forEach(method -> code.append(method).append('\n'));
             normalInterface.defaultMethods().stream()
-                    .map(this::mapJavaInterfaceDefaultMethod)
+                    .map(method -> mapJavaInterfaceDefaultMethod(method, helperCallOwnerName))
                     .forEach(code::append);
         }
         if (ownerInterface instanceof JavaSealedInterface sealedInterface) {
@@ -156,17 +160,17 @@ public final class JavaGenerator implements Generator {
                     .map(this::mapJavaInterfaceMethod)
                     .forEach(method -> code.append(method).append('\n'));
             sealedInterface.defaultMethods().stream()
-                    .map(this::mapJavaInterfaceDefaultMethod)
+                    .map(method -> mapJavaInterfaceDefaultMethod(method, helperCallOwnerName))
                     .forEach(code::append);
         }
 
         javaClass.interfaces().stream()
                 .filter(javaInterface -> javaInterface != ownerInterface)
-                .map(this::mapJavaInterface)
+                .map(javaInterface -> mapJavaInterface(javaInterface, helperCallOwnerName))
                 .map(this::removeVisibilityModifier)
                 .forEach(code::append);
         javaClass.records().stream()
-                .map(this::mapJavaRecord)
+                .map(record -> mapJavaRecord(record, helperCallOwnerName))
                 .map(this::removeVisibilityModifier)
                 .forEach(code::append);
         javaClass.enums().stream()
@@ -174,7 +178,7 @@ public final class JavaGenerator implements Generator {
                 .map(this::removeVisibilityModifier)
                 .forEach(code::append);
         javaClass.staticMethods().stream()
-                .map(this::mapJavaMethod)
+                .map(method -> mapJavaMethod(method, true))
                 .forEach(code::append);
         code.append('\n').append(unsupportedHelperMethod());
 
@@ -260,13 +264,13 @@ public final class JavaGenerator implements Generator {
                || javaClass.enums().stream().anyMatch(javaEnum -> javaEnum.name().toString().equals(fileName));
     }
 
-    private List<TopLevelDeclaration> topLevelDeclarations(JavaClass javaClass) {
+    private List<TopLevelDeclaration> topLevelDeclarations(JavaClass javaClass, String helperCallOwnerName) {
         var declarations = new ArrayList<TopLevelDeclaration>();
         javaClass.interfaces().forEach(javaInterface -> declarations.add(
-                new TopLevelDeclaration(javaInterface.name().toString(), mapJavaInterface(javaInterface))
+                new TopLevelDeclaration(javaInterface.name().toString(), mapJavaInterface(javaInterface, helperCallOwnerName))
         ));
         javaClass.records().forEach(javaRecord -> declarations.add(
-                new TopLevelDeclaration(javaRecord.name().toString(), mapJavaRecord(javaRecord))
+                new TopLevelDeclaration(javaRecord.name().toString(), mapJavaRecord(javaRecord, helperCallOwnerName))
         ));
         javaClass.enums().forEach(javaEnum -> declarations.add(
                 new TopLevelDeclaration(javaEnum.name().toString(), mapJavaEnum(javaEnum))
@@ -277,7 +281,7 @@ public final class JavaGenerator implements Generator {
     private record TopLevelDeclaration(String name, String code) {
     }
 
-    private String mapJavaRecord(JavaRecord record) {
+    private String mapJavaRecord(JavaRecord record, String helperCallOwnerName) {
         var fields = record.fields().stream().map(this::mapJavaRecordField).collect(joining(", "));
         var typeParameters = record.typeParameters().isEmpty()
                 ? ""
@@ -288,10 +292,10 @@ public final class JavaGenerator implements Generator {
                 .collect(joining(", ", " implements ", " "))
                 : "";
         var staticMethods = record.staticMethods().stream()
-                .map(this::mapJavaMethod)
+                .map(method -> mapJavaMethod(method, true))
                 .collect(joining("\n"));
         var methods = record.methods().stream()
-                .map(this::mapJavaRecordMethod)
+                .map(method -> mapJavaRecordMethod(method, helperCallOwnerName))
                 .collect(joining("\n"));
         var toStringMethod = mapJavaRecordToString(record);
         var visibility = record.isPrivate() ? "private" : "public";
@@ -400,26 +404,26 @@ public final class JavaGenerator implements Generator {
     }
 
 
-    private String mapJavaInterface(JavaInterface javaInterface) {
+    private String mapJavaInterface(JavaInterface javaInterface, String helperCallOwnerName) {
         return switch (javaInterface) {
-            case JavaNormalInterface javaNormalInterface -> mapJavaNormalInterface(javaNormalInterface);
-            case JavaSealedInterface javaSealedInterface -> mapJavaSealedInterface(javaSealedInterface);
+            case JavaNormalInterface javaNormalInterface -> mapJavaNormalInterface(javaNormalInterface, helperCallOwnerName);
+            case JavaSealedInterface javaSealedInterface -> mapJavaSealedInterface(javaSealedInterface, helperCallOwnerName);
         };
     }
 
-    private String mapJavaNormalInterface(JavaNormalInterface javaInterface) {
+    private String mapJavaNormalInterface(JavaNormalInterface javaInterface, String helperCallOwnerName) {
         var methods = javaInterface.methods().size() > 0
                 ? javaInterface.methods().stream()
                 .map(this::mapJavaInterfaceMethod)
                 .collect(joining("\n", "\n", ""))
                 : "";
         var defaultMethods = javaInterface.defaultMethods().stream()
-                .map(this::mapJavaInterfaceDefaultMethod)
+                .map(method -> mapJavaInterfaceDefaultMethod(method, helperCallOwnerName))
                 .collect(joining());
         return "public interface " + javaInterface.name() + " {" + methods + defaultMethods + "}\n";
     }
 
-    private String mapJavaSealedInterface(JavaSealedInterface javaInterface) {
+    private String mapJavaSealedInterface(JavaSealedInterface javaInterface, String helperCallOwnerName) {
         var permits = join(", ", javaInterface.permits());
         var typeParameters = javaInterface.typeParameters().isEmpty()
                 ? ""
@@ -430,7 +434,7 @@ public final class JavaGenerator implements Generator {
                 .collect(joining("\n", "\n", ""))
                 : "";
         var defaultMethods = javaInterface.defaultMethods().stream()
-                .map(this::mapJavaInterfaceDefaultMethod)
+                .map(method -> mapJavaInterfaceDefaultMethod(method, helperCallOwnerName))
                 .collect(joining());
         return "public sealed interface " + javaInterface.name() + typeParameters + " permits " + permits + " {" + methods + defaultMethods + "}\n";
     }
@@ -439,37 +443,40 @@ public final class JavaGenerator implements Generator {
         return method.returnType() + " " + method.name() + "();";
     }
 
-    private String mapJavaInterfaceDefaultMethod(JavaMethod method) {
+    private String mapJavaInterfaceDefaultMethod(JavaMethod method, String helperCallOwnerName) {
         var prefix = method.isPrivate() ? "private" : "default";
         var methodTypeParameters = method.typeParameters().isEmpty()
                 ? ""
                 : method.typeParameters().stream().collect(joining(", ", "<", ">")) + " ";
         return mapJavaDoc(method.comments())
                + prefix + " " + methodTypeParameters + method.returnType() + " " + mapMethodName(method.name()) + "(" + mapFunctionParameters(method.parameters()) + ") {\n"
-               + evaluateExpression(method.expression(), method.parameters())
+               + evaluateExpression(method.expression(), method.parameters(), helperCallOwnerName)
                + "\n}\n";
     }
 
-    private String mapJavaMethod(JavaMethod method) {
+    private String mapJavaMethod(JavaMethod method, boolean allowPrivateStaticMethods) {
         if (method.programMain()) {
             return mapJavaProgramMainMethod(method);
         }
         var methodTypeParameters = method.typeParameters().isEmpty()
                 ? ""
                 : method.typeParameters().stream().collect(joining(", ", "<", ">")) + " ";
+        var visibility = method.isPrivate()
+                ? (allowPrivateStaticMethods ? "private " : "")
+                : "public ";
         return mapJavaDoc(method.comments())
-               + (method.isPrivate() ? "private" : "public") + " static " + methodTypeParameters + method.returnType() + " " + mapMethodName(method.name()) + "(" + mapFunctionParameters(method.parameters()) + ") {\n"
+               + visibility + "static " + methodTypeParameters + method.returnType() + " " + mapMethodName(method.name()) + "(" + mapFunctionParameters(method.parameters()) + ") {\n"
                + evaluateExpression(method.expression(), method.parameters())
                + "\n}\n";
     }
 
-    private String mapJavaRecordMethod(JavaMethod method) {
+    private String mapJavaRecordMethod(JavaMethod method, String helperCallOwnerName) {
         var methodTypeParameters = method.typeParameters().isEmpty()
                 ? ""
                 : method.typeParameters().stream().collect(joining(", ", "<", ">")) + " ";
         return mapJavaDoc(method.comments())
                + (method.isPrivate() ? "private" : "public") + " " + methodTypeParameters + method.returnType() + " " + mapMethodName(method.name()) + "(" + mapFunctionParameters(method.parameters()) + ") {\n"
-               + evaluateExpression(method.expression(), method.parameters())
+               + evaluateExpression(method.expression(), method.parameters(), helperCallOwnerName)
                + "\n}\n";
     }
 

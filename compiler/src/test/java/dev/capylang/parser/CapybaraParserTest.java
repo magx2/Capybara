@@ -53,6 +53,25 @@ class CapybaraParserTest {
                 Arguments.of("pipe_reduce_dict_unused", "fun pipe_reduce_dict_unused(d: dict[int]): int = d |> 0, (_, _, v) => v"),
                 Arguments.of("pipe_flat_map", "fun pipe_flat_map(l: list[int]): list[int] = l |* x => [x, x + 1]"),
                 Arguments.of("single_quote_string", "fun single_quote_string(): string = 'hello'"),
+                Arguments.of(
+                        "chained_lets_without_semicolons",
+                        """
+                                fun chained_lets_without_semicolons(): int =
+                                    let a = 1
+                                    let b = a + 2
+                                    b * 3
+                                """
+                ),
+                Arguments.of(
+                        "let_inside_match_branch",
+                        """
+                                fun let_inside_match_branch(v: int): int =
+                                    match v with
+                                    | _ ->
+                                        let x = v + 1
+                                        x * 2
+                                """
+                ),
                 Arguments.of("const_usage", "const PI = 3.14\nfun const_usage(): double = PI"),
                 Arguments.of(
                         "block_comment",

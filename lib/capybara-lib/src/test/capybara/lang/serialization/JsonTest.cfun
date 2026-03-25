@@ -38,7 +38,7 @@ fun test_serialize_object_with_primitive_types(): Assert =
         "ageFloat" : JsonNumberDouble { value: 60.5f },
         "married" : JsonBool { value: true },
         "car" : JsonNull,
-    }}
+    }};
     let ser = serialize(json)
     assert_that(ser)
         .starts_with("{")

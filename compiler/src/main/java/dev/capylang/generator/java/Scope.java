@@ -15,23 +15,26 @@ class Scope {
     private static final Logger LOG = Logger.getLogger(Scope.class.getName());
     private static final String SEPARATOR = "_j";
     private static final Pattern LAST_NUMBER_PATTERN = Pattern.compile("(.+)" + SEPARATOR + "(\\d+)");
-    static final Scope EMPTY = new Scope(0L, Set.of(), Map.of(), List.of(), Optional.empty());
+    static final Scope EMPTY = new Scope(0L, Set.of(), Map.of(), List.of(), Optional.empty(), Optional.empty());
 
     private final long valueIdx;
     private final Set<String> localValues;
     private final Map<String, String> valueNameToUniqueName;
     private final List<String> statements;
     private final Optional<String> expression;
+    private final Optional<String> moduleHelperClass;
 
     private Scope(long valueIdx, Set<String> localValues,
                   Map<String, String> valueNameToUniqueName,
                   List<String> statements,
-                  Optional<String> expression) {
+                  Optional<String> expression,
+                  Optional<String> moduleHelperClass) {
         this.valueIdx = valueIdx;
         this.localValues = Set.copyOf(localValues);
         this.valueNameToUniqueName = Map.copyOf(valueNameToUniqueName);
         this.statements = List.copyOf(statements);
         this.expression = expression;
+        this.moduleHelperClass = moduleHelperClass;
     }
 
     UniqueNameScopeExpression addValue(String name, CompiledExpression expression) {
@@ -42,7 +45,7 @@ class Scope {
                     updatedValues.add(name);
                     return new UniqueNameScopeExpression(
                             n,
-                            new Scope(valueIdx, updatedValues, valueNameToUniqueName, statements, this.expression),
+                            new Scope(valueIdx, updatedValues, valueNameToUniqueName, statements, this.expression, moduleHelperClass),
                             expression
                     );
                 })
@@ -75,20 +78,20 @@ class Scope {
         }
         var updated = new HashSet<>(localValues);
         updated.add(name);
-        return new Scope(valueIdx, updated, valueNameToUniqueName, statements, expression);
+        return new Scope(valueIdx, updated, valueNameToUniqueName, statements, expression, moduleHelperClass);
     }
 
     private Scope addStatementUnchecked(String statement) {
         var updated = new ArrayList<>(statements);
         updated.add(statement);
-        return new Scope(valueIdx, localValues, valueNameToUniqueName, updated, expression);
+        return new Scope(valueIdx, localValues, valueNameToUniqueName, updated, expression, moduleHelperClass);
     }
 
     public Scope addExpression(String expression) {
         if (this.expression.isPresent()) {
             throw new IllegalStateException("Expression already exists and it's set to: " + this.expression.get());
         }
-        return new Scope(valueIdx, localValues, valueNameToUniqueName, statements, Optional.of(expression));
+        return new Scope(valueIdx, localValues, valueNameToUniqueName, statements, Optional.of(expression), moduleHelperClass);
     }
 
     private record UniqueNameScopeExpression(String uniqueName, Scope scope, CompiledExpression expression) {
@@ -118,7 +121,8 @@ class Scope {
                         set,
                         map,
                         statements,
-                        this.expression),
+                        this.expression,
+                        moduleHelperClass),
                 rewriteValueInExpression(name, uniqueName, expression)
         );
     }
@@ -126,7 +130,7 @@ class Scope {
     Scope addValueOverride(String sourceName, String targetName) {
         var updatedMap = new HashMap<>(valueNameToUniqueName);
         updatedMap.put(sourceName, targetName);
-        return new Scope(valueIdx, localValues, updatedMap, statements, expression);
+        return new Scope(valueIdx, localValues, updatedMap, statements, expression, moduleHelperClass);
     }
 
     public List<String> getStatements() {
@@ -141,7 +145,8 @@ class Scope {
         return new Scope(valueIdx,
                 union(localValues, other.localValues),
                 union(valueNameToUniqueName, other.valueNameToUniqueName),
-                union(statements, other.statements), union(expression, other.expression));
+                union(statements, other.statements), union(expression, other.expression),
+                moduleHelperClass.or(() -> other.moduleHelperClass));
     }
 
     private static Set<String> union(Set<String> left, Set<String> right) {
@@ -175,7 +180,7 @@ class Scope {
     }
 
     Scope withoutValueOverrides() {
-        return new Scope(valueIdx, localValues, Map.of(), statements, expression);
+        return new Scope(valueIdx, localValues, Map.of(), statements, expression, moduleHelperClass);
     }
 
     record ScopeExpression(Scope scope, CompiledExpression expression) {
@@ -200,7 +205,15 @@ class Scope {
 
     public ExpressionScope popExpression() {
         var expression = getExpression();
-        return new ExpressionScope(expression, new Scope(valueIdx, localValues, valueNameToUniqueName, statements, Optional.empty()));
+        return new ExpressionScope(expression, new Scope(valueIdx, localValues, valueNameToUniqueName, statements, Optional.empty(), moduleHelperClass));
+    }
+
+    Scope withModuleHelperClass(String moduleHelperClass) {
+        return new Scope(valueIdx, localValues, valueNameToUniqueName, statements, expression, Optional.of(moduleHelperClass));
+    }
+
+    Optional<String> moduleHelperClass() {
+        return moduleHelperClass;
     }
 
     @Override

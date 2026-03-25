@@ -810,19 +810,31 @@ public class CapybaraParser {
     }
 
     private Expression expression(dev.capylang.parser.antlr.FunctionalParser.ExpressionContext expression) {
-        var result = expressionNoLet(expression.expressionNoLet());
-        var letExpressions = expression.letExpression();
-        for (var i = letExpressions.size() - 1; i >= 0; i--) {
-            var letExpression = letExpressions.get(i);
-            result = new LetExpression(
+        if (expression.letExpression() != null) {
+            var letExpression = expression.letExpression();
+            return new LetExpression(
                     letExpression.NAME().getText(),
                     Optional.ofNullable(letExpression.type()).map(CapybaraParser::type),
                     expressionNoLet(letExpression.expressionNoLet()),
-                    result,
+                    expression(letExpression.expression()),
                     position(letExpression)
             );
         }
-        return result;
+        return expressionNoLet(expression.expressionNoLet());
+    }
+
+    private Expression expressionNoPipe(dev.capylang.parser.antlr.FunctionalParser.ExpressionNoPipeContext expression) {
+        if (expression.letExpressionNoPipe() != null) {
+            var letExpression = expression.letExpressionNoPipe();
+            return new LetExpression(
+                    letExpression.NAME().getText(),
+                    Optional.ofNullable(letExpression.type()).map(CapybaraParser::type),
+                    expressionNoLet(letExpression.expressionNoLet()),
+                    expressionNoPipe(letExpression.expressionNoPipe()),
+                    position(letExpression)
+            );
+        }
+        return expressionNoLetNoPipe(expression.expressionNoLetNoPipe());
     }
 
     private Expression expressionNoLet(dev.capylang.parser.antlr.FunctionalParser.ExpressionNoLetContext expression) {
@@ -1015,7 +1027,7 @@ public class CapybaraParser {
                 .toList();
         return new LambdaExpression(
                 argumentNames,
-                expressionNoLetNoPipe(context.expressionNoLetNoPipe()),
+                expressionNoPipe(context.expressionNoPipe()),
                 position(context)
         );
     }
@@ -1041,11 +1053,11 @@ public class CapybaraParser {
                     ? names.get(2)
                     : names.get(3);
         return new ReduceExpression(
-                expressionNoLetNoPipe(context.expressionNoLetNoPipe(0)),
+                expressionNoLetNoPipe(context.expressionNoLetNoPipe()),
                 accumulatorName,
                 keyName,
                 valueName,
-                expressionNoLetNoPipe(context.expressionNoLetNoPipe(1)),
+                expressionNoPipe(context.expressionNoPipe()),
                 position(context)
         );
     }
@@ -1302,7 +1314,7 @@ public class CapybaraParser {
                         .flatMap(Collection::stream)
                         .flatMap(matchCase -> matchCase.pattern()
                                 .stream()
-                                .map(pattern -> matchCase(pattern, matchCase.expressionNoLetNoPipe())))
+                                .map(pattern -> matchCase(pattern, matchCase.expressionNoPipe())))
                         .toList(),
                 position(context)
         );
@@ -1310,11 +1322,11 @@ public class CapybaraParser {
 
     private MatchExpression.MatchCase matchCase(
             FunctionalParser.PatternContext pattern,
-            FunctionalParser.ExpressionNoLetNoPipeContext expression
+            FunctionalParser.ExpressionNoPipeContext expression
     ) {
         return new MatchExpression.MatchCase(
                 matchExpressionPattern(pattern),
-                expressionNoLetNoPipe(expression)
+                expressionNoPipe(expression)
 
         );
     }

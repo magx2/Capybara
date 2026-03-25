@@ -40,8 +40,16 @@ public class JavaExpressionEvaluator {
     }
 
     public static String evaluateExpression(CompiledExpression expression, List<JavaMethod.JavaFunctionParameter> parameters) {
+        return evaluateExpression(expression, parameters, null);
+    }
+
+    public static String evaluateExpression(
+            CompiledExpression expression,
+            List<JavaMethod.JavaFunctionParameter> parameters,
+            String moduleHelperClass
+    ) {
         log.fine(() -> "evaluateExpression: " + expression.getClass().getSimpleName() + " -> " + expression);
-        var scope = Scope.EMPTY;
+        var scope = moduleHelperClass == null ? Scope.EMPTY : Scope.EMPTY.withModuleHelperClass(moduleHelperClass);
         for (var parameter : parameters) {
             scope = scope.addLocalValue(parameter.sourceName())
                     .addValueOverride(parameter.sourceName(), parameter.generatedName());
@@ -220,7 +228,7 @@ public class JavaExpressionEvaluator {
                 }
                 yield "((float) java.lang.Math.sqrt(" + args.get(0) + "))";
             }
-            default -> normalizeFunctionCallTarget(functionCall.name()) + "(" + String.join(", ", args) + ")";
+            default -> normalizeFunctionCallTarget(functionCall.name(), scope) + "(" + String.join(", ", args) + ")";
         };
         return current.addExpression(expression);
     }
@@ -2165,9 +2173,12 @@ public class JavaExpressionEvaluator {
         return candidate;
     }
 
-    private static String normalizeFunctionCallTarget(String target) {
+    private static String normalizeFunctionCallTarget(String target, Scope scope) {
         var lastDot = target.lastIndexOf('.');
         if (lastDot < 0) {
+            if (scope.moduleHelperClass().isPresent()) {
+                return scope.moduleHelperClass().get() + "." + normalizeJavaMethodName(target);
+            }
             return normalizeJavaMethodName(target);
         }
         var qualifier = target.substring(0, lastDot);
@@ -2496,4 +2507,3 @@ public class JavaExpressionEvaluator {
     }
 
 }
-
