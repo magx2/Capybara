@@ -1,13 +1,13 @@
 # Capybara Gradle Plugin
 
-This module publishes the Gradle plugin `pl.grzeslowski.capybara`.
+This module publishes the Gradle plugin `dev.capylang`.
 
 ## Publish To GitHub Packages
 
 The plugin is published as Maven artifacts to GitHub Packages for this repository:
 
 - repository: `https://maven.pkg.github.com/grzeslowski/capybara`
-- plugin id: `pl.grzeslowski.capybara`
+- plugin id: `dev.capylang`
 
 Local publishing requires credentials with `write:packages`.
 
@@ -56,7 +56,7 @@ pluginManagement {
 
 ```groovy
 plugins {
-    id 'pl.grzeslowski.capybara' version '0.2.0'
+    id 'dev.capylang' version '0.2.0'
 }
 ```
 

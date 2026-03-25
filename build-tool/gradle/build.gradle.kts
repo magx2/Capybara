@@ -3,7 +3,7 @@ plugins {
     `maven-publish`
 }
 
-group = "pl.grzeslowski.capybara"
+group = "dev.capylang"
 version = rootProject.version
 
 repositories {
@@ -18,8 +18,8 @@ dependencies {
 gradlePlugin {
     plugins {
         create("capybaraPlugin") {
-            id = "pl.grzeslowski.capybara"
-            implementationClass = "pl.grzeslowski.capybara.CapybaraPlugin"
+            id = "dev.capylang"
+            implementationClass = "dev.capylang.CapybaraPlugin"
         }
     }
 }

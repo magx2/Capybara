@@ -52,7 +52,7 @@ tasks.register('linkCapybara', JavaExec) {
     outputs.dir(capybaraLinkedMainDir)
 
     classpath = capyExecutionClasspath
-    mainClass = 'pl.grzeslowski.capybara.Capy'
+    mainClass = 'dev.capylang.Capy'
 
     doFirst {
         prepareEmptyDir(capybaraLinkedMainDir.get().asFile)
@@ -73,7 +73,7 @@ tasks.register('compileCapybara', JavaExec) {
     outputs.dir(capybaraGeneratedMainDir)
 
     classpath = capyExecutionClasspath
-    mainClass = 'pl.grzeslowski.capybara.Capy'
+    mainClass = 'dev.capylang.Capy'
 
     doFirst {
         prepareEmptyDir(capybaraGeneratedMainDir.get().asFile)
@@ -95,7 +95,7 @@ tasks.register('linkTestCapybara', JavaExec) {
     outputs.dir(capybaraLinkedTestDir)
 
     classpath = capyExecutionClasspath
-    mainClass = 'pl.grzeslowski.capybara.Capy'
+    mainClass = 'dev.capylang.Capy'
 
     doFirst {
         prepareEmptyDir(capybaraLinkedTestDir.get().asFile)
@@ -121,7 +121,7 @@ tasks.register('compileTestCapybara', JavaExec) {
     outputs.dir(capybaraGeneratedTestDir)
 
     classpath = capyExecutionClasspath
-    mainClass = 'pl.grzeslowski.capybara.Capy'
+    mainClass = 'dev.capylang.Capy'
 
     doFirst {
         prepareEmptyDir(capybaraGeneratedTestDir.get().asFile)

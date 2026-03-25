@@ -24,7 +24,7 @@ processResources {
 
 application {
     // Define the main class for the application.
-    mainClass = 'pl.grzeslowski.capybara.Capy'
+    mainClass = 'dev.capylang.Capy'
 }
 
 jar {
