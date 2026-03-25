@@ -2545,11 +2545,17 @@ public class CapybaraCompiler {
         var normalizedFile = normalizeFile(moduleSourceFile(module));
         var rawTypeDeclarations = castList(module, TypeDeclaration.class);
         var rawEnumDeclarations = castList(module, EnumDeclaration.class);
+        var enumDeclarations = rawEnumDeclarations.stream()
+                .map(this::linkEnumDeclaration)
+                .toList();
+        var enumDeclarationsByName = enumDeclarations.stream()
+                .collect(toMap(CompiledDataParentType::name, identity(), (first, second) -> first));
         var rawTypeDeclarationsByName = rawTypeDeclarations.stream()
                 .collect(toMap(TypeDeclaration::name, identity(), (first, second) -> first));
         var dataDeclarationsOrError = linkDataDeclarations(
                 castList(module, DataDeclaration.class),
                 rawTypeDeclarationsByName,
+                enumDeclarationsByName,
                 module.imports(),
                 normalizedFile
         );
@@ -2566,9 +2572,6 @@ public class CapybaraCompiler {
             return new Result.Error<>(error.errors());
         }
         var singleDeclarations = ((Result.Success<List<CompiledDataType>>) singlesDeclarationsOrError).value();
-        var enumDeclarations = rawEnumDeclarations.stream()
-                .map(this::linkEnumDeclaration)
-                .toList();
         Map<String, GenericDataType> knownDataTypes = new HashMap<>();
         dataDeclarations.forEach(dataType -> knownDataTypes.put(dataType.name(), dataType));
         singleDeclarations.forEach(dataType -> knownDataTypes.put(dataType.name(), dataType));
@@ -2604,12 +2607,13 @@ public class CapybaraCompiler {
     }
 
     private Result<List<CompiledDataType>> linkDataDeclarations(List<DataDeclaration> dataDeclarations) {
-        return linkDataDeclarations(dataDeclarations, Map.of(), List.of(), "");
+        return linkDataDeclarations(dataDeclarations, Map.of(), Map.of(), List.of(), "");
     }
 
     private Result<List<CompiledDataType>> linkDataDeclarations(
             List<DataDeclaration> dataDeclarations,
             Map<String, TypeDeclaration> rawTypeDeclarationsByName,
+            Map<String, ? extends GenericDataType> additionalKnownTypes,
             List<ImportDeclaration> importDeclarations,
             String normalizedFile
     ) {
@@ -2621,6 +2625,7 @@ public class CapybaraCompiler {
                         dataDeclaration,
                         declarationsByName,
                         rawTypeDeclarationsByName,
+                        additionalKnownTypes,
                         importDeclarations,
                         cache,
                         new HashSet<>(),
@@ -2632,6 +2637,7 @@ public class CapybaraCompiler {
             DataDeclaration dataDeclaration,
             Map<String, DataDeclaration> declarationsByName,
             Map<String, TypeDeclaration> rawTypeDeclarationsByName,
+            Map<String, ? extends GenericDataType> additionalKnownTypes,
             List<ImportDeclaration> importDeclarations,
             Map<String, Result<CompiledDataType>> cache,
             Set<String> visiting,
@@ -2661,6 +2667,7 @@ public class CapybaraCompiler {
                             parent,
                             declarationsByName,
                             rawTypeDeclarationsByName,
+                            additionalKnownTypes,
                             importDeclarations,
                             cache,
                             visiting,
@@ -2674,6 +2681,7 @@ public class CapybaraCompiler {
                         genericTypes,
                         declarationsByName,
                         rawTypeDeclarationsByName,
+                        additionalKnownTypes,
                         importDeclarations,
                         cache,
                         visiting,
@@ -2725,6 +2733,7 @@ public class CapybaraCompiler {
             Set<String> genericTypes,
             Map<String, DataDeclaration> declarationsByName,
             Map<String, TypeDeclaration> rawTypeDeclarationsByName,
+            Map<String, ? extends GenericDataType> additionalKnownTypes,
             List<ImportDeclaration> importDeclarations,
             Map<String, Result<CompiledDataType>> cache,
             Set<String> visiting,
@@ -2738,6 +2747,7 @@ public class CapybaraCompiler {
                     declarationsByName.get(dataType.name()),
                     declarationsByName,
                     rawTypeDeclarationsByName,
+                    additionalKnownTypes,
                     importDeclarations,
                     cache,
                     visiting,
@@ -2764,6 +2774,7 @@ public class CapybaraCompiler {
                 name,
                 new CompiledDataParentType(name, List.of(), List.of(), declaration.typeParameters(), declaration.visibility(), false)
         ));
+        additionalKnownTypes.forEach(knownDataTypes::putIfAbsent);
         genericTypes.forEach(genericTypeName -> knownDataTypes.putIfAbsent(
                 genericTypeName,
                 new CompiledDataParentType(genericTypeName, List.of(), List.of(), List.of())
@@ -2800,12 +2811,34 @@ public class CapybaraCompiler {
                 continue;
             }
             var moduleName = importDeclaration.moduleName();
-            placeholders.put(importedTypeName, externalTypePlaceholder(importedTypeName));
-            placeholders.put(moduleName, externalTypePlaceholder(moduleName));
+            var modulePlaceholder = externalTypePlaceholder(moduleName);
+            placeholders.put(importedTypeName, aliasedTypePlaceholder(importedTypeName, modulePlaceholder));
+            placeholders.put(moduleName, modulePlaceholder);
         }
         return Map.copyOf(placeholders);
     }
 
+    private GenericDataType aliasedTypePlaceholder(String alias, GenericDataType placeholder) {
+        return switch (placeholder) {
+            case CompiledDataParentType parentType -> new CompiledDataParentType(
+                    alias,
+                    parentType.fields(),
+                    parentType.subTypes(),
+                    parentType.typeParameters(),
+                    parentType.visibility(),
+                    parentType.enumType()
+            );
+            case CompiledDataType dataType -> new CompiledDataType(
+                    alias,
+                    dataType.fields(),
+                    dataType.typeParameters(),
+                    dataType.extendedTypes(),
+                    dataType.visibility(),
+                    dataType.singleton()
+            );
+            default -> placeholder;
+        };
+    }
     private Optional<String> resolveImportedQualifiedTypeName(String rawTypeName, List<ImportDeclaration> importDeclarations) {
         var parsed = parseGenericTypeName(rawTypeName);
         var baseName = parsed.baseName();
@@ -3086,6 +3119,14 @@ public class CapybaraCompiler {
                 .toList();
     }
 }
+
+
+
+
+
+
+
+
 
 
 
