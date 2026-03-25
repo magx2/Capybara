@@ -16,4 +16,6 @@ fun remove_set(left: set[int], right: set[int]): set[int] = left - right
 
 fun contains(s: set[int], value: int): bool = s ? value
 
+fun is_empty(s: set[int]): bool = s.is_empty
+
 fun size(s: set[int]): int = s.size

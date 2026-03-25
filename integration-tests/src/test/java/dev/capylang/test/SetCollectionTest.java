@@ -79,6 +79,12 @@ class SetCollectionTest {
     }
 
     @Test
+    void isEmpty() {
+        assertThat(SetCollection.isEmpty(Set.of())).isTrue();
+        assertThat(SetCollection.isEmpty(Set.of(1, 2, 3))).isFalse();
+    }
+
+    @Test
     void size() {
         assertThat(SetCollection.size(Set.of(1, 2, 3))).isEqualTo(3);
         assertThat(SetCollection.size(Set.of())).isEqualTo(0);

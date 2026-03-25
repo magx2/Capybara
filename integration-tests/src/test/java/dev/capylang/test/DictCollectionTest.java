@@ -132,6 +132,12 @@ class DictCollectionTest {
     }
 
     @Test
+    void isEmpty() {
+        assertThat(DictCollection.isEmpty(Map.of())).isTrue();
+        assertThat(DictCollection.isEmpty(EXPECTED)).isFalse();
+    }
+
+    @Test
     void size() {
         assertThat(DictCollection.size(EXPECTED)).isEqualTo(3);
         assertThat(DictCollection.size(Map.of())).isEqualTo(0);

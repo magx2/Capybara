@@ -226,7 +226,7 @@ public class CapybaraExpressionCompiler {
                             var javaField = source.type() == STRING ? "length" : "size";
                             return Result.success(new CompiledFieldAccess(source, javaField, PrimitiveLinkedType.INT));
                         }
-                        if (source.type() == STRING && "is_empty".equals(fieldAccess.field())) {
+                        if ("is_empty".equals(fieldAccess.field())) {
                             return Result.success(new CompiledFieldAccess(source, "isEmpty", PrimitiveLinkedType.BOOL));
                         }
                         return withPosition(

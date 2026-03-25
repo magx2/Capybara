@@ -30,6 +30,8 @@ fun remove_dict(left: dict[int], right: dict[int]): dict[int] = left - right
 
 fun contains(d: dict[int], key: string): bool = d ? key
 
+fun is_empty(d: dict[int]): bool = d.is_empty
+
 fun size(d: dict[int]): int = d.size
 
 data Entry {k: string, v: int}

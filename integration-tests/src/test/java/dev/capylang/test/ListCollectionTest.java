@@ -74,6 +74,12 @@ class ListCollectionTest {
     }
 
     @Test
+    void isEmpty() {
+        assertThat(ListCollection.isEmpty(List.of())).isTrue();
+        assertThat(ListCollection.isEmpty(List.of(1, 2, 3))).isFalse();
+    }
+
+    @Test
     void size() {
         assertThat(ListCollection.size(List.of(1, 2, 3))).isEqualTo(3);
         assertThat(ListCollection.size(List.of())).isEqualTo(0);
