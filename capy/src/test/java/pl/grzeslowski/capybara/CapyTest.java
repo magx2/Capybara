@@ -8,6 +8,7 @@ import java.io.IOException;
 import java.io.PrintStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.zip.ZipFile;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -42,6 +43,7 @@ class CapyTest {
         assertTrue(text.startsWith("Capybara compiler version: " + Capy.readCompilerVersion()));
         assertTrue(text.contains("capy compile"));
         assertTrue(text.contains("capy generate"));
+        assertTrue(text.contains("capy package"));
     }
 
     @Test
@@ -125,6 +127,83 @@ class CapyTest {
 
         assertEquals(0, generateExit);
     }
+
+    @Test
+    void shouldPackageCompiledInputAndOverrideMetadata() throws IOException {
+        var sourceDir = Files.createDirectories(tempDir.resolve("source"));
+        Files.writeString(sourceDir.resolve("Main.cfun"), "fun main(): int = 1\n");
+        var linkedDir = Files.createDirectories(tempDir.resolve("linked"));
+        assertEquals(0, Capy.execute(
+                new String[]{"compile", "-i", sourceDir.toString(), "-o", linkedDir.toString()},
+                new PrintStream(new ByteArrayOutputStream()),
+                new PrintStream(new ByteArrayOutputStream())
+        ));
+
+        var moduleDir = Files.createDirectories(tempDir.resolve("module"));
+        var moduleFile = moduleDir.resolve("capy.yml");
+        Files.writeString(moduleFile, """
+                version: 1.2.3
+                authors:
+                  - name: Jane Doe
+                    email: jane@example.com
+                scm: https://example.com/repo.git
+                license: Apache-2.0
+                """);
+
+        var exitCode = Capy.execute(
+                new String[]{
+                        "package",
+                        "-ci", linkedDir.toString(),
+                        "-m", moduleFile.toString(),
+                        "--capy.license", "GPLv2"
+                },
+                new PrintStream(new ByteArrayOutputStream()),
+                new PrintStream(new ByteArrayOutputStream())
+        );
+
+        assertEquals(0, exitCode);
+        var archive = moduleDir.resolve("capy.cbin");
+        assertTrue(Files.exists(archive));
+        try (var zip = new ZipFile(archive.toFile())) {
+            assertTrue(zip.getEntry("Main.json") != null);
+            assertTrue(zip.getEntry("build-info.json") != null);
+            var moduleYaml = new String(zip.getInputStream(zip.getEntry("capy.yml")).readAllBytes());
+            assertTrue(moduleYaml.contains("version: 1.2.3"));
+            assertTrue(moduleYaml.contains("license: GPLv2"));
+            assertTrue(moduleYaml.contains("capybara_compiler_version: '" + Capy.readCompilerVersion() + "'")
+                    || moduleYaml.contains("capybara_compiler_version: " + Capy.readCompilerVersion()));
+            assertTrue(moduleYaml.contains("build_date_time:"));
+            assertTrue(moduleYaml.contains("os:"));
+        }
+    }
+
+    @Test
+    void shouldCompileInputBeforePackaging() throws IOException {
+        var sourceDir = Files.createDirectories(tempDir.resolve("package-src"));
+        Files.createDirectories(sourceDir.resolve("foo"));
+        Files.writeString(sourceDir.resolve("foo").resolve("Main.cfun"), "fun main(): int = 1\n");
+
+        var moduleDir = Files.createDirectories(tempDir.resolve("module-inline"));
+        var moduleFile = moduleDir.resolve("capy.yml");
+        Files.writeString(moduleFile, "version: 1.0.0\nlicense: MIT\n");
+
+        var exitCode = Capy.execute(
+                new String[]{
+                        "package",
+                        "-i", sourceDir.toString(),
+                        "-m", moduleFile.toString(),
+                        "--log", "info"
+                },
+                new PrintStream(new ByteArrayOutputStream()),
+                new PrintStream(new ByteArrayOutputStream())
+        );
+
+        assertEquals(0, exitCode);
+        var archive = moduleDir.resolve("capy.cbin");
+        assertTrue(Files.exists(archive));
+        try (var zip = new ZipFile(archive.toFile())) {
+            assertTrue(zip.getEntry("foo/Main.json") != null);
+            assertTrue(zip.getEntry("capy.yml") != null);
+        }
+    }
 }
-
-

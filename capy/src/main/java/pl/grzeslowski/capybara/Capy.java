@@ -4,6 +4,9 @@ import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
 import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
+import org.yaml.snakeyaml.DumperOptions;
+import org.yaml.snakeyaml.LoaderOptions;
+import org.yaml.snakeyaml.Yaml;
 import pl.grzeslowski.capybara.compiler.CapybaraCompiler;
 import pl.grzeslowski.capybara.compiler.CompiledModule;
 import pl.grzeslowski.capybara.compiler.CompiledProgram;
@@ -18,14 +21,13 @@ import java.io.PrintStream;
 import java.io.UncheckedIOException;
 import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.FileSystem;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.time.OffsetDateTime;
 import java.util.Arrays;
-import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -33,11 +35,15 @@ import java.util.TreeSet;
 import java.util.logging.Handler;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 public class Capy {
     private static final Logger log = Logger.getLogger(Capy.class.getName());
 
     private static final String BUILD_INFO_FILE = "build-info.json";
+    private static final String PACKAGE_FILE = "capy.cbin";
+    private static final String MODULE_FILE = "capy.yml";
     private static final String VERSION_RESOURCE = "/capybara-version.txt";
     private static final String JAVA_LIB_RESOURCE_DIR = "/java-lib-src";
     private static final int EXIT_SUCCESS = 0;
@@ -121,6 +127,7 @@ public class Capy {
         return switch (command) {
             case "compile" -> executeCompile(Arrays.copyOfRange(args, 1, args.length), err);
             case "generate" -> executeGenerate(Arrays.copyOfRange(args, 1, args.length), err);
+            case "package" -> executePackage(Arrays.copyOfRange(args, 1, args.length), err);
             default -> throw new CliException("Unknown command `" + args[0] + "`.\n\n" + helpText());
         };
     }
@@ -158,8 +165,14 @@ public class Capy {
         return generate(outputType, input, output, err);
     }
 
+    private static int executePackage(String[] args, PrintStream err) {
+        var options = parsePackageOptions(args);
+        configureLogging(options.logLevel());
+        return packageCode(options, err);
+    }
+
     private static NamedOptions parseNamedOptions(String[] args, boolean allowLibs) {
-        var values = new java.util.LinkedHashMap<String, String>();
+        var values = new LinkedHashMap<String, String>();
         var logLevel = Level.INFO;
 
         for (int i = 0; i < args.length; i++) {
@@ -193,6 +206,57 @@ public class Capy {
         }
 
         return new NamedOptions(values, logLevel);
+    }
+
+    private static PackageOptions parsePackageOptions(String[] args) {
+        var values = new LinkedHashMap<String, String>();
+        var capyOverrides = new LinkedHashMap<String, String>();
+        var logLevel = Level.INFO;
+
+        for (int i = 0; i < args.length; i++) {
+            var arg = args[i];
+            switch (arg) {
+                case "--log" -> {
+                    var value = nextValue(args, i, arg);
+                    logLevel = parseLogLevel(value);
+                    i++;
+                }
+                case "-ci", "--compiled-input" -> {
+                    var value = nextValue(args, i, arg);
+                    values.put("compiled-input", value);
+                    i++;
+                }
+                case "-i", "--input" -> {
+                    var value = nextValue(args, i, arg);
+                    values.put("input", value);
+                    i++;
+                }
+                case "-m", "--module" -> {
+                    var value = nextValue(args, i, arg);
+                    values.put("module", value);
+                    i++;
+                }
+                default -> {
+                    if (!arg.startsWith("--capy.")) {
+                        throw new CliException("Unknown option `" + arg + "`.\n\n" + helpText());
+                    }
+                    var value = nextValue(args, i, arg);
+                    capyOverrides.put(arg.substring("--capy.".length()), value);
+                    i++;
+                }
+            }
+        }
+
+        var compiledInput = values.containsKey("compiled-input") ? Path.of(values.get("compiled-input")) : null;
+        var input = values.containsKey("input") ? Path.of(values.get("input")) : null;
+        var module = requiredPath(values, "module", "package");
+        if (compiledInput == null && input == null) {
+            throw new CliException("Package requires either `--compiled-input` or `--input`.\n\n" + helpText());
+        }
+        if (compiledInput != null && input != null) {
+            throw new CliException("Package accepts only one of `--compiled-input` or `--input`.\n\n" + helpText());
+        }
+        return new PackageOptions(compiledInput, input, module, capyOverrides, logLevel);
     }
 
     private static String nextValue(String[] args, int index, String option) {
@@ -229,6 +293,20 @@ public class Capy {
         };
     }
 
+    private static int packageCode(PackageOptions options, PrintStream err) {
+        try {
+            return packageOrThrow(options, err);
+        } catch (CliException e) {
+            err.println(e.getMessage());
+            return EXIT_USAGE;
+        } catch (Exception e) {
+            var message = e.getMessage() == null || e.getMessage().isBlank() ? e.getClass().getSimpleName() : e.getMessage();
+            err.println(message);
+            log.log(Level.SEVERE, message, e);
+            return EXIT_FAILURE;
+        }
+    }
+
     private static int compileOrThrow(
             Path input,
             Path linkedOutputDir,
@@ -258,6 +336,21 @@ public class Capy {
         return EXIT_SUCCESS;
     }
 
+    private static int packageOrThrow(PackageOptions options, PrintStream err) throws IOException {
+        validateModuleFile(options.module());
+        var compiledInput = findCompiledInput(options, err);
+        validateInputDirectory(compiledInput);
+
+        var packageDefinition = readModuleDefinition(options.module());
+        packageDefinition.put("capybara_compiler_version", readCompilerVersion());
+        packageDefinition.put("build_date_time", OffsetDateTime.now().toString());
+        packageDefinition.put("os", System.getProperty("os.name"));
+        options.capyOverrides().forEach(packageDefinition::put);
+
+        writePackageArchive(options.module().resolveSibling(PACKAGE_FILE), compiledInput, packageDefinition);
+        return EXIT_SUCCESS;
+    }
+
     private static int generateOrThrow(OutputType outputType, Path linkedInputDir, Path generatedOutputDir) throws IOException {
         validateInputDirectory(linkedInputDir);
         if (Files.notExists(generatedOutputDir)) {
@@ -273,6 +366,19 @@ public class Capy {
             copyJavaLibResources(generatedOutputDir);
         }
         return EXIT_SUCCESS;
+    }
+
+    private static Path findCompiledInput(PackageOptions options, PrintStream err) throws IOException {
+        if (options.compiledInput() != null) {
+            return options.compiledInput();
+        }
+
+        var tempDir = Files.createTempDirectory("capy-package-");
+        var exitCode = compileOrThrow(options.input(), tempDir, new TreeSet<>(), err, readCompilerVersion());
+        if (exitCode != EXIT_SUCCESS) {
+            throw new CliException("Unable to compile package input from: " + options.input());
+        }
+        return tempDir;
     }
 
     private static void copyJavaLibResources(Path generatedOutputDir) {
@@ -308,6 +414,52 @@ public class Capy {
         }
     }
 
+    private static Map<String, Object> readModuleDefinition(Path moduleFile) {
+        try {
+            var loaded = yaml().load(Files.readString(moduleFile));
+            if (loaded == null) {
+                return new LinkedHashMap<>();
+            }
+            if (!(loaded instanceof Map<?, ?> map)) {
+                throw new CliException("Module file must contain a YAML object: " + moduleFile);
+            }
+            var definition = new LinkedHashMap<String, Object>();
+            map.forEach((key, value) -> definition.put(String.valueOf(key), value));
+            return definition;
+        } catch (IOException e) {
+            throw new UncheckedIOException("Unable to read module YAML: " + moduleFile, e);
+        }
+    }
+
+    private static void writePackageArchive(Path outputFile, Path compiledInputDir, Map<String, Object> moduleDefinition) {
+        try {
+            var parent = outputFile.getParent();
+            if (parent != null) {
+                Files.createDirectories(parent);
+            }
+            try (var zip = new ZipOutputStream(Files.newOutputStream(outputFile))) {
+                writeZipEntry(zip, MODULE_FILE, yaml().dump(moduleDefinition));
+                try (var files = Files.walk(compiledInputDir)) {
+                    for (var path : files.filter(Files::isRegularFile).toList()) {
+                        var entryName = compiledInputDir.relativize(path).toString().replace('\\', '/');
+                        zip.putNextEntry(new ZipEntry(entryName));
+                        Files.copy(path, zip);
+                        zip.closeEntry();
+                    }
+                }
+            }
+            log.info("Writing package archive to file: " + outputFile);
+        } catch (IOException e) {
+            throw new UncheckedIOException("Unable to write package archive: " + outputFile, e);
+        }
+    }
+
+    private static void writeZipEntry(ZipOutputStream zip, String entryName, String content) throws IOException {
+        zip.putNextEntry(new ZipEntry(entryName));
+        zip.write(content.getBytes(StandardCharsets.UTF_8));
+        zip.closeEntry();
+    }
+
     private static TreeSet<CompiledModule> readLibraryModules(String libsOption) {
         if (libsOption == null || libsOption.isBlank()) {
             return new TreeSet<>();
@@ -333,6 +485,15 @@ public class Capy {
         }
         if (!Files.isDirectory(directory)) {
             throw new CliException("Input path is not a directory: " + directory);
+        }
+    }
+
+    private static void validateModuleFile(Path moduleFile) {
+        if (Files.notExists(moduleFile)) {
+            throw new CliException("Module file does not exist: " + moduleFile);
+        }
+        if (!Files.isRegularFile(moduleFile)) {
+            throw new CliException("Module path is not a file: " + moduleFile);
         }
     }
 
@@ -439,11 +600,21 @@ public class Capy {
                 "  capy -h | --help",
                 "  capy compile [-l|--libs <dir1,dir2,...>] -i|--input <dir> -o|--output <dir> [--log <DEBUG|INFO|WARN|ERROR>]",
                 "  capy generate <java|python|javascript|js> [-i|--input <dir>] -o|--output <dir> [--log <DEBUG|INFO|WARN|ERROR>]",
+                "  capy package (-ci|--compiled-input <dir> | -i|--input <dir>) -m|--module <capy.yml> [--capy.<field> <value>] [--log <DEBUG|INFO|WARN|ERROR>]",
                 "",
                 "Notes:",
                 "  compile output directory must already exist and be empty.",
-                "  generate input directory defaults to the current directory."
+                "  generate input directory defaults to the current directory.",
+                "  package writes `capy.cbin` next to the provided `capy.yml`."
         );
+    }
+
+    private static Yaml yaml() {
+        var loaderOptions = new LoaderOptions();
+        var dumperOptions = new DumperOptions();
+        dumperOptions.setDefaultFlowStyle(DumperOptions.FlowStyle.BLOCK);
+        dumperOptions.setPrettyFlow(true);
+        return new Yaml(loaderOptions, dumperOptions);
     }
 
     private static CompiledProgram readLinkedProgram(Path linkedInputDir, boolean requireModules) {
@@ -519,6 +690,16 @@ public class Capy {
 
     private record NamedOptions(Map<String, String> values, Level logLevel) {
     }
+
+    private record PackageOptions(
+            Path compiledInput,
+            Path input,
+            Path module,
+            Map<String, String> capyOverrides,
+            Level logLevel
+    ) {
+    }
 }
+
 
 
