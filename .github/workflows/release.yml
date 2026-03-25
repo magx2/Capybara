@@ -71,8 +71,8 @@ jobs:
 
       - name: Configure git user
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.name "CapyAutomata"
+          git config user.email "CapyAutomata@capylang.dev"
 
       - name: Commit release version
         shell: bash
@@ -256,3 +256,4 @@ jobs:
             dist/capyc-*.jar
             dist/capyc-*-windows-x64.exe
             dist/capyc-*-linux-x64
+

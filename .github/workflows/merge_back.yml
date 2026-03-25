@@ -19,8 +19,8 @@ jobs:
 
       - name: Configure git user
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.name "CapyAutomata"
+          git config user.email "CapyAutomata@capylang.dev"
 
       - name: Merge release branch into default branch
         shell: bash
@@ -32,3 +32,4 @@ jobs:
           git checkout "${DEFAULT_BRANCH}"
           git merge --no-ff "origin/${RELEASE_BRANCH}" -m "merge: ${RELEASE_BRANCH} into ${DEFAULT_BRANCH}"
           git push origin "${DEFAULT_BRANCH}"
+
