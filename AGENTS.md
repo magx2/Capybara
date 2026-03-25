@@ -36,6 +36,7 @@ Use the wrapper from repository root:
 ## Commit & Pull Request Guidelines
 - Follow concise conventional-style commits seen in history: `feat: ...`, `fix: ...`, `test: ...`, `chore: ...`.
 - Keep commits logically scoped (grammar, linker, generator, tests).
+- When renaming or moving tracked files, use `git mv` instead of deleting and re-adding files.
 - PRs should include:
   - what changed and why,
   - impacted modules,
