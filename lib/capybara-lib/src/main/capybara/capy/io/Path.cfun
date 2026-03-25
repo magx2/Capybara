@@ -1,0 +1,73 @@
+from /capy/lang/Option import {*}
+
+enum PathRoot { RELATIVE, ABSOLUTE, HOME }
+
+data Path {
+    root: PathRoot,
+    prefix: Option[string],
+    segments: list[string]
+}
+
+fun Path.`/`(segment: string) =
+    Path {
+        root: this.root,
+        prefix: this.prefix,
+        segments: this.segments + segment
+    }
+
+fun Path.`/`(other: Path) =
+    Path {
+        root: this.root,
+        prefix: this.prefix,
+        segments: this.segments + other.segments
+    }
+
+fun Path.name(): string =
+    match this.prefix with
+    | Some { v } -> v
+    | None ->
+        match this.root with
+        | RELATIVE -> '.'
+        | ABSOLUTE -> '/'
+        | HOME -> '~'
+
+fun Path.parent(): Option[Path] =
+    if this.segments.is_empty then None {}
+    else Some {
+        Path {
+            root: this.root,
+            prefix: this.prefix,
+            segments: []
+        }
+    }
+
+fun Path.is_absolute(): bool =
+    match this.root with
+    | RELATIVE -> false
+    | _ -> true
+
+fun Path.is_root(): bool = this.segments.size == 0
+
+fun Path.normalize(): Path =
+    fun __normalize_path(root: PathRoot, segments: list[string], acc: list[string]): list[string] =
+        match segments[0] with
+        | None -> acc
+        | Some { seg } ->
+            let rest = segments[1:]
+            if seg == "" | seg == "."
+            then __normalize_path(root, rest, acc)
+            else if seg == ".."
+            then
+                if acc.size > 0
+                then __normalize_path(root, rest, acc[:-1])
+                else
+                    match root with
+                    | RELATIVE -> __normalize_path(root, rest, acc + "..")
+                    | _ -> __normalize_path(root, rest, acc)
+            else
+                __normalize_path(root, rest, acc + seg)
+    Path {
+        root: this.root,
+        prefix: this.prefix,
+        segments: __normalize_path(this.root, this.segments, [])
+    }
