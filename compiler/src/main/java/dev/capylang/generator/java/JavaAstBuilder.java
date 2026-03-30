@@ -200,13 +200,15 @@ public class JavaAstBuilder {
             case PrimitiveLinkedType primitiveLinkedType -> buildPrimitiveLinkedType(primitiveLinkedType);
             case CollectionLinkedType collectionLinkedType -> buildCollectionLinkedType(collectionLinkedType);
             case CompiledTupleType linkedTupleType -> new JavaType("java.util.List<?>");
-            case CompiledFunctionType functionType -> new JavaType(
-                    "java.util.function.Function<"
-                    + buildJavaBoxedType(functionType.argumentType())
-                    + ", "
-                    + buildJavaBoxedType(functionType.returnType())
-                    + ">"
-            );
+            case CompiledFunctionType functionType -> functionType.argumentType() == PrimitiveLinkedType.NOTHING
+                    ? new JavaType("java.util.function.Supplier<" + buildJavaBoxedType(functionType.returnType()) + ">")
+                    : new JavaType(
+                            "java.util.function.Function<"
+                            + buildJavaBoxedType(functionType.argumentType())
+                            + ", "
+                            + buildJavaBoxedType(functionType.returnType())
+                            + ">"
+                    );
             case CompiledGenericTypeParameter linkedGenericTypeParameter -> new JavaType(linkedGenericTypeParameter.name());
         };
     }
@@ -472,11 +474,13 @@ public class JavaAstBuilder {
             case GenericDataType genericDataType -> buildGenericDataType(genericDataType).toString();
             case CollectionLinkedType collectionLinkedType -> buildCollectionLinkedType(collectionLinkedType).toString();
             case CompiledTupleType linkedTupleType -> "java.util.List<?>";
-            case CompiledFunctionType functionType -> "java.util.function.Function<"
-                    + buildJavaBoxedType(functionType.argumentType())
-                    + ", "
-                    + buildJavaBoxedType(functionType.returnType())
-                    + ">";
+            case CompiledFunctionType functionType -> functionType.argumentType() == PrimitiveLinkedType.NOTHING
+                    ? "java.util.function.Supplier<" + buildJavaBoxedType(functionType.returnType()) + ">"
+                    : "java.util.function.Function<"
+                      + buildJavaBoxedType(functionType.argumentType())
+                      + ", "
+                      + buildJavaBoxedType(functionType.returnType())
+                      + ">";
             case CompiledGenericTypeParameter linkedGenericTypeParameter -> linkedGenericTypeParameter.name();
         };
     }
@@ -550,33 +554,21 @@ public class JavaAstBuilder {
     }
 
     private String normalizeJavaVariableName(String name) {
-        var parts = Stream.of(name.split("[^A-Za-z0-9]+"))
-                .filter(part -> !part.isEmpty())
-                .toList();
-
-        var result = new StringBuilder();
-        var first = true;
-        for (var part : parts) {
-            if (first) {
-                result.append(Character.toLowerCase(part.charAt(0)));
-                if (part.length() > 1) {
-                    result.append(part.substring(1));
-                }
-                first = false;
-            } else {
-                result.append(Character.toUpperCase(part.charAt(0)));
-                if (part.length() > 1) {
-                    result.append(part.substring(1));
-                }
-            }
+        if ("_".equals(name)) {
+            return "__unused";
         }
-        if (result.isEmpty()) {
-            result.append("value");
+        if (name.isEmpty()) {
+            return "value";
         }
-        if (!Character.isJavaIdentifierStart(result.charAt(0))) {
-            result.insert(0, 'v');
+        var normalized = new StringBuilder(name.length());
+        for (int i = 0; i < name.length(); i++) {
+            var ch = name.charAt(i);
+            normalized.append(Character.isJavaIdentifierPart(ch) ? ch : '_');
         }
-        var identifier = result.toString();
+        var identifier = normalized.toString();
+        if (!Character.isJavaIdentifierStart(identifier.charAt(0))) {
+            identifier = "v" + identifier;
+        }
         if (JAVA_KEYWORDS.contains(identifier)) {
             return identifier + "_";
         }
@@ -687,6 +679,7 @@ public class JavaAstBuilder {
     private JavaInterface buildInterface(CompiledDataParentType type, Set<CompiledFunction> functions) {
         return new JavaSealedInterface(
                 buildClassName(type.name()),
+                type.comments(),
                 buildJavaMethods(type.fields()),
                 type.subTypes().stream().map(CompiledDataType::name).map(name -> buildClassName(name).toString()).toList(),
                 type.typeParameters(),
@@ -771,6 +764,7 @@ public class JavaAstBuilder {
         return new JavaRecord(
                 buildClassName(type.name()),
                 type.name().startsWith("_"),
+                type.comments(),
                 implementInterfaces,
                 fields,
                 type.typeParameters(),
@@ -905,4 +899,6 @@ public class JavaAstBuilder {
         );
     }
 }
+
+
 

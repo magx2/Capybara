@@ -21,6 +21,11 @@ class StringInterpolationTest {
     }
 
     @Test
+    void quoteEscapeInterpolation() {
+        assertThat(StringInterpolation.quoteEscape(new StringInterpolation.Foo("Martin"))).isEqualTo("Hello \"Martin\"");
+    }
+
+    @Test
     void dataFieldInterpolation() {
         assertThat(StringInterpolation.dataField(new StringInterpolation.Foo("Martin"))).isEqualTo("Hello Martin");
     }
@@ -30,3 +35,6 @@ class StringInterpolationTest {
         assertThat(StringInterpolation.singleQuoted("Capybara")).isEqualTo("Hello {name}");
     }
 }
+
+
+

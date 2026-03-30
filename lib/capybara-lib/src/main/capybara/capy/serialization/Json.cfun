@@ -61,7 +61,7 @@ fun _deserializeJson(json: string): Result[_Parse[Json]] =
 fun _deserialize_json_null(json: string): Result[_Parse[JsonNull]] =
     if json.starts_with('null')
     then Success { _Parse { JsonNull, json[4:] } }
-    else
+    else {
         let actual =
             if json.size > 4
             then json[:4]
@@ -73,13 +73,14 @@ fun _deserialize_json_null(json: string): Result[_Parse[JsonNull]] =
             then json[:1]
             else '<empty>'
         Error { "Expected `null`, but got `" + actual + "`!" }
+    }
 
 fun _deserialize_json_bool(json: string): Result[_Parse[JsonBool]] =
     if json.starts_with('true')
     then Success { _Parse { JsonBool {true}, json[4:] } }
     else if json.starts_with('false')
     then Success { _Parse { JsonBool {false}, json[5:] } }
-    else
+    else {
         let actual =
             if json.size > 5
             then json[:5]
@@ -93,6 +94,7 @@ fun _deserialize_json_bool(json: string): Result[_Parse[JsonBool]] =
             then json[:1]
             else '<empty>'
         Error { "Expected `true` or `false`, but got `" + actual + "`!" }
+    }
 
 fun _deserialize_json_number(json: string): Result[_Parse[JsonNumber]] =
     fun __parse_number(parse: _Parse[string]): Result[_Parse[string]] =
@@ -108,11 +110,12 @@ fun _deserialize_json_number(json: string): Result[_Parse[JsonNumber]] =
             | '}', ']', ',' -> Success { parse }
             | _ v -> Error { 'Expected `}`, `]` or `,`, but got `' + v + '`!' }
 
-    __parse_number(_Parse {'', json})
-        | parse =>
-            if parse.value ? '.'
-            then parse.value.to_double() | double => Success { _Parse { JsonNumberDouble { double }, parse.parsing_string } }
-            else parse.value.to_long()   | long   => Success { _Parse { JsonNumberLong { long }, parse.parsing_string } }
+    match __parse_number(_Parse {'', json}) with
+    | Error e -> e
+    | Success { parse } ->
+        if parse.value ? '.'
+        then parse.value.to_double() | double => Success { _Parse { JsonNumberDouble { double }, parse.parsing_string } }
+        else parse.value.to_long()   | long   => Success { _Parse { JsonNumberLong { long }, parse.parsing_string } }
 
 fun _deserializeJsonString(json: string): Result[_Parse[JsonString]] =
     match _parse_string(json) with

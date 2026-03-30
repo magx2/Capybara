@@ -117,6 +117,13 @@ class DataTest {
         assertThat(value.number()).isEqualTo(11);
     }
 
+    @Test
+    void dataCanUseReservedIdentifierAsFieldName() {
+        var value = Data.createDataWithType("record");
+        assertThat(value.type()).isEqualTo("record");
+        assertThat(Data.readDataType(value)).isEqualTo("record");
+    }
+
     @SuppressWarnings("unchecked")
     @Test
     void genericFieldCanBeMappedWithResultPipe() {

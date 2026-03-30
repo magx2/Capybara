@@ -30,15 +30,15 @@ functionNameDeclaration: identifier | genericTypeDeclaration DOT methodIdentifie
 methodIdentifier: identifier | INFIX_METHOD_LITERAL;
 docComment: DOC_COMMENT;
 
-typeDeclaration: VISIBILITY? 'type' genericTypeDeclaration '=' genericTypeDeclaration (PIPE genericTypeDeclaration)*
-               | VISIBILITY? 'type' genericTypeDeclaration '{' fieldDeclarationList? '}' '=' genericTypeDeclaration (PIPE genericTypeDeclaration)*;
+typeDeclaration: docComment* VISIBILITY? 'type' genericTypeDeclaration '=' genericTypeDeclaration (PIPE genericTypeDeclaration)*
+               | docComment* VISIBILITY? 'type' genericTypeDeclaration '{' fieldDeclarationList? '}' '=' genericTypeDeclaration (PIPE genericTypeDeclaration)*;
 enumDeclaration: 'enum' TYPE '{' TYPE (COMMA TYPE)* COMMA? '}';
-dataDeclaration: VISIBILITY? 'data' genericTypeDeclaration '{' fieldDeclarationList? '}'
-               | VISIBILITY? 'data' genericTypeDeclaration '=' '{' fieldDeclarationList? '}';
+dataDeclaration: docComment* VISIBILITY? 'data' genericTypeDeclaration '{' fieldDeclarationList? '}'
+               | docComment* VISIBILITY? 'data' genericTypeDeclaration '=' '{' fieldDeclarationList? '}';
 singleDeclaration: 'single' TYPE;
 constDeclaration: VISIBILITY? 'const' TYPE (':' type)? '=' expressionNoLet;
 fieldDeclarationList: fieldDeclaration (',' fieldDeclaration)*;
-fieldDeclaration: NAME ':' type
+fieldDeclaration: identifier ':' type
                 | STRING_LITERAL ':' type
                 | SPREAD TYPE;
 genericTypeDeclaration: TYPE ('[' TYPE (',' TYPE)* ']')?;
@@ -47,7 +47,7 @@ VISIBILITY: 'local';
 BOOL_LITERAL: 'true' | 'false';
 COLLECTION: 'list' | 'set' | 'dict';
 NAME : [_]* [a-z] [a-zA-Z0-9_]*;
-identifier: NAME | COLLECTION | 'fun' | 'byte' | 'int' | 'long' | 'double' | 'bool' | 'string' | 'float' | 'nothing' | 'any';
+identifier: NAME | COLLECTION | 'fun' | 'type' | 'byte' | 'int' | 'long' | 'double' | 'bool' | 'string' | 'float' | 'nothing' | 'any';
 parameters: parameter (',' parameter)*;
 parameter: identifier ':' type;
 functionType: ':' type;
@@ -72,10 +72,10 @@ TYPE: [_]* [A-Z][a-zA-Z0-9_]*
       | TYPE_FULL ;
 TYPE_FULL: '/' [A-Za-z_][a-zA-Z0-9_]* ( '/' [A-Za-z_][a-zA-Z0-9_]* )+;
 INFIX_METHOD_LITERAL: '`' [+\-*/\\^%$#@~!:<>|]+ '`';
-expression: letExpression | expressionNoLet;
-letExpression: 'let' NAME (':' type)? '=' expressionNoLet ';'? expression;
-expressionNoPipe: letExpressionNoPipe | expressionNoLetNoPipe;
-letExpressionNoPipe: 'let' NAME (':' type)? '=' expressionNoLet ';'? expressionNoPipe;
+expression: letExpression* expressionNoLet;
+letExpression: 'let' NAME (':' type)? '=' expressionNoLet ';'?;
+expressionNoPipe: letExpressionNoPipe* expressionNoLetNoPipe;
+letExpressionNoPipe: 'let' NAME (':' type)? '=' expressionNoLet ';'?;
 expressionNoLet: ifExpression
                | lambdaExpression
                | reduceExpression
@@ -95,7 +95,7 @@ expressionNoLet: ifExpression
                | expressionNoLet LPAREN argumentList? RPAREN
                | expressionNoLet DOT methodIdentifier LPAREN argumentList? RPAREN
                | expressionNoLet INFIX_METHOD_LITERAL expressionNoLet
-               | expressionNoLet DOT NAME
+               | expressionNoLet DOT identifier
                | expressionNoLet infixOperator expressionNoLet
                | value
                | newData
@@ -124,7 +124,7 @@ expressionNoLetNoPipe: ifExpression
                      | expressionNoLetNoPipe LPAREN argumentList? RPAREN
                      | expressionNoLetNoPipe DOT methodIdentifier LPAREN argumentList? RPAREN
                      | expressionNoLetNoPipe INFIX_METHOD_LITERAL expressionNoLetNoPipe
-                     | expressionNoLetNoPipe DOT NAME
+                     | expressionNoLetNoPipe DOT identifier
                      | expressionNoLetNoPipe infixOperatorNoPipe expressionNoLetNoPipe
                      | value
                      | newData
@@ -135,7 +135,18 @@ tupleLiteral: LPAREN expression (COMMA expression)+ RPAREN;
 
 ifExpression: 'if' expression 'then' expression 'else' expression;
 functionReference: COLON identifier;
-functionCall: identifier '(' argumentList? ')'
+functionCall: NAME '(' argumentList? ')'
+            | COLLECTION '(' argumentList? ')'
+            | 'fun' '(' argumentList? ')'
+            | 'byte' '(' argumentList? ')'
+            | 'int' '(' argumentList? ')'
+            | 'long' '(' argumentList? ')'
+            | 'double' '(' argumentList? ')'
+            | 'bool' '(' argumentList? ')'
+            | 'string' '(' argumentList? ')'
+            | 'float' '(' argumentList? ')'
+            | 'nothing' '(' argumentList? ')'
+            | 'any' '(' argumentList? ')'
             | TYPE DOT identifier '(' argumentList? ')';
 value: literal | identifier | qualifiedType;
 argumentList: expression (',' expression)*;
@@ -191,7 +202,7 @@ fieldAssignmentList: fieldAssignment (',' fieldAssignment)*;
 fieldAssignment: namedFieldAssignment
                | spreadFieldAssignment
                | positionalFieldAssignment;
-namedFieldAssignment: (NAME | STRING_LITERAL) COLON expression;
+namedFieldAssignment: (identifier | STRING_LITERAL) COLON expression;
 spreadFieldAssignment: SPREAD expression;
 positionalFieldAssignment: expression;
 

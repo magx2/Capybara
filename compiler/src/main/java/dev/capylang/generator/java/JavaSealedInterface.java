@@ -2,7 +2,7 @@ package dev.capylang.generator.java;
 
 import java.util.List;
 
-public record JavaSealedInterface(JavaType name, List<JavaInterfaceMethod> methods,
+public record JavaSealedInterface(JavaType name, List<String> comments, List<JavaInterfaceMethod> methods,
                                   List<String> permits,
                                   List<String> typeParameters,
                                   List<JavaMethod> defaultMethods) implements JavaInterface, Comparable<JavaSealedInterface> {

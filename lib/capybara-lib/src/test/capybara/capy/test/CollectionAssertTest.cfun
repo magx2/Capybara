@@ -1,13 +1,14 @@
-from /capy/assert/Assert import { * }
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
 
-fun main(args: list[string]): /capy/lang/Program =
-    run_tests([
-        should_assert_list(),
-        should_assert_empty_list(),
-        should_assert_set(),
-        should_assert_empty_set(),
-        should_assert_dict(),
-        should_assert_empty_dict(),
+fun tests(): TestFile =
+    test_file("/capy/test/CollectionAssertTest.cfun", [
+        test("should assert list", should_assert_list()),
+        test("should assert empty list", should_assert_empty_list()),
+        test("should assert set", should_assert_set()),
+        test("should assert empty set", should_assert_empty_set()),
+        test("should assert dict", should_assert_dict()),
+        test("should assert empty dict", should_assert_empty_dict()),
     ])
 
 fun should_assert_list(): Assert =
@@ -32,3 +33,5 @@ fun should_assert_dict(): Assert =
 fun should_assert_empty_dict(): Assert =
     let d: dict[int] = {:}
     assert_that(d.size).is_equal_to(0)
+
+

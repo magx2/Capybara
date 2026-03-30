@@ -1,0 +1,500 @@
+from /capy/lang/Option import { * }
+from /capy/lang/Result import { * }
+from /capy/lang/Seq import { * }
+
+data Assertion { result: bool, message: string, type: string }
+
+type Assert { assertions: list[() => Assertion] } =
+    StringAssert | IntAssert | LongAssert | DoubleAssert | FloatAssert | BoolAssert
+    | DataAssert | OptionAssert | ResultAssert
+    | ListAssert | SetAssert | DictAssert | SeqAssert
+
+fun Assert.failed(): bool = this.assertions | supplier => supplier().result |any? r => !r
+
+fun Assert.succeeded(): bool = !this.failed()
+
+data StringAssert { value: string }
+data IntAssert { value: int }
+data LongAssert { value: long }
+data DoubleAssert { value: double }
+data FloatAssert { value: float }
+data BoolAssert { value: bool }
+data DataAssert { value: data }
+data OptionAssert[T] { value: /capy/lang/Option[T] }
+data ResultAssert[T] { value: /capy/lang/Result[T] }
+data ListAssert[T] { value: list[T] }
+data SetAssert[T] { value: set[T] }
+data DictAssert[T] { value: dict[T] }
+data SeqAssert[T] { value: Seq[T] }
+
+fun StringAssert.is_equal_to(other: string): StringAssert =
+    let assertion = Assertion {
+        result: this.value == other,
+        message: "Expected string:\n" + this.value + "\nto be equal to:\n" + other,
+        type: 'StringAssert.is_equal_to'
+    }
+    StringAssert {
+        value: this.value,
+        assertions: this.assertions + () => assertion
+    }
+
+fun StringAssert.starts_with(other: string): StringAssert =
+    let assertion = Assertion {
+       result: this.value.starts_with(other),
+       message: "Expected string:\n" + this.value + "\nto start with:\n" + other,
+        type: 'StringAssert.starts_with'
+    }
+    StringAssert {
+       value: this.value,
+       assertions: this.assertions + () => assertion
+    }
+
+fun StringAssert.does_not_start_with(other: string): StringAssert =
+    let assertion = Assertion {
+       result: this.value.starts_with(other) != true,
+       message: "Expected string:\n" + this.value + "\nnot to start with:\n" + other,
+        type: 'StringAssert.does_not_start_with'
+    }
+    StringAssert {
+       value: this.value,
+       assertions: this.assertions + () => assertion
+    }
+
+fun StringAssert.contains(other: string): StringAssert =
+    let assertion = Assertion {
+       result: this.value ? other,
+       message: "Expected string:\n" + this.value + "\nto contain:\n" + other,
+        type: 'StringAssert.contains'
+    }
+    StringAssert {
+       value: this.value,
+       assertions: this.assertions + () => assertion
+    }
+
+fun IntAssert.is_equal_to(other: int): IntAssert =
+    let assertion = Assertion {
+        result: this.value == other,
+        message: "Expected int:\n" + this.value + "\nto be equal to:\n" + other,
+        type: 'IntAssert.is_equal_to'
+    }
+    IntAssert {
+        value: this.value,
+        assertions: this.assertions + () => assertion
+    }
+
+fun LongAssert.is_equal_to(other: long): LongAssert =
+    let assertion = Assertion {
+        result: this.value == other,
+        message: "Expected long:\n" + this.value + "\nto be equal to:\n" + other,
+        type: 'LongAssert.is_equal_to'
+    }
+    LongAssert {
+        value: this.value,
+        assertions: this.assertions + () => assertion
+    }
+
+fun DoubleAssert.is_equal_to(other: double): DoubleAssert =
+    let assertion = Assertion {
+        result: this.value == other,
+        message: "Expected double:\n" + this.value + "\nto be equal to:\n" + other,
+        type: 'DoubleAssert.is_equal_to'
+    }
+    DoubleAssert {
+        value: this.value,
+        assertions: this.assertions + () => assertion
+    }
+
+fun FloatAssert.is_equal_to(other: float): FloatAssert =
+    let assertion = Assertion {
+        result: this.value == other,
+        message: "Expected float:\n" + this.value + "\nto be equal to:\n" + other,
+        type: 'FloatAssert.is_equal_to'
+    }
+    FloatAssert {
+        value: this.value,
+        assertions: this.assertions + () => assertion
+    }
+
+fun BoolAssert.is_equal_to(other: bool): BoolAssert =
+    let assertion = Assertion {
+        result: this.value == other,
+        message: "Expected bool:\n" + this.value + "\nto be equal to:\n" + other,
+        type: 'BoolAssert.is_equal_to'
+    }
+    BoolAssert {
+        value: this.value,
+        assertions: this.assertions + () => assertion
+    }
+
+fun DataAssert.is_equal_to(other: data): DataAssert =
+    let assertion = Assertion {
+        result: this.value == other,
+        message: "Expected data:\n" + this.value + "\nto be equal to:\n" + other,
+        type: 'DataAssert.is_equal_to'
+    }
+    DataAssert {
+        value: this.value,
+        assertions: this.assertions + () => assertion
+    }
+
+fun DataAssert.contains(other: any): DataAssert =
+    let assertion = Assertion {
+        result: ('' + this.value) ? ('' + other),
+        message: "Expected data:\n" + this.value + "\nto contain:\n" + other,
+        type: 'DataAssert.contains'
+    }
+    DataAssert {
+        value: this.value,
+        assertions: this.assertions + () => assertion
+    }
+
+fun OptionAssert[T].is_equal_to(other: /capy/lang/Option[T]): OptionAssert[T] =
+    let assertion = Assertion {
+        result: this.value == other,
+        message: "Expected data:\n" + this.value + "\nto be equal to:\n" + other,
+        type: 'OptionAssert[T].is_equal_to'
+    }
+    OptionAssert {
+        value: this.value,
+        assertions: this.assertions + () => assertion
+    }
+
+fun OptionAssert[T].contains(other: T): OptionAssert[T] =
+    let assertion = Assertion {
+        result: match this.value with
+            | Some s -> s == other
+            | _ -> false,
+        message: "Expected option:\n" + this.value + "\nto contains:\n" + other,
+        type: 'OptionAssert[T].contains'
+    }
+    OptionAssert {
+        value: this.value,
+        assertions: this.assertions + () => assertion
+    }
+
+fun OptionAssert[T].is_empty(): OptionAssert[T] =
+    let assertion = Assertion {
+        result: match this.value with
+            | None -> true
+            | _ -> false,
+        message: "Expected option:\n" + this.value + "\nto be empty",
+        type: 'OptionAssert[T].is_empty'
+    }
+    OptionAssert {
+        value: this.value,
+        assertions: this.assertions + () => assertion
+    }
+
+fun ResultAssert[T].is_equal_to(other: /capy/lang/Result[T]): ResultAssert[T] =
+    let assertion = Assertion {
+        result: this.value == other,
+        message: "Expected result:\n" + this.value + "\nto contains:\n" + other,
+        type: 'ResultAssert[T].is_equal_to'
+    }
+    ResultAssert {
+        value: this.value,
+        assertions: this.assertions + () => assertion
+    }
+
+fun ResultAssert[T].succeeds(): ResultAssert[T] =
+    let assertion = Assertion {
+        result:
+            match this.value with
+            | Error e  -> false
+            | Success s -> true,
+        message: "Expected result:\n" + this.value + "\nto succeed",
+        type: 'ResultAssert[T].succeeds'
+    }
+    ResultAssert {
+        value: this.value,
+        assertions: this.assertions + () => assertion
+    }
+
+fun ResultAssert[T].succeeds(other: T): ResultAssert[T] =
+    let assertion = Assertion {
+        result:
+            match this.value with
+            | Error e  -> false
+            | Success { v } -> v == other,
+        message: "Expected result:\n" + this.value + "\nto succeed with value:\n" + other,
+        type: 'ResultAssert[T].succeeds'
+    }
+    ResultAssert {
+        value: this.value,
+        assertions: this.assertions + () => assertion
+    }
+
+fun ResultAssert[T].fails(): ResultAssert[T] =
+    let assertion = Assertion {
+        result: {
+            match this.value with
+            | Error e -> true
+            | Success s -> false
+        },
+        message: "Expected result:\n" + this.value + "\nto fail",
+        type: 'ResultAssert[T].fails'
+    }
+    ResultAssert {
+        value: this.value,
+        assertions: this.assertions + () => assertion
+    }
+
+fun ResultAssert[T].fails(message: string): ResultAssert[T] =
+    let assertion = Assertion {
+        result: {
+            match this.value with
+            | Error e -> e.message == message
+            | Success s -> false
+        },
+        message: "Expected result:\n" + this.value + "\nto failed with message:\n" + message,
+        type: 'ResultAssert[T].fails'
+    }
+    ResultAssert {
+        value: this.value,
+        assertions: this.assertions + () => assertion
+    }
+
+fun ListAssert[T].is_equal_to(other: list[T]): ListAssert[T] =
+    let assertion = Assertion {
+        result: this.value == other,
+        message: "Expected list:\n" + this.value + "\nto be equal to:\n" + other,
+        type: 'ListAssert[T].is_equal_to'
+    }
+    ListAssert {
+        value: this.value,
+        assertions: this.assertions + () => assertion
+    }
+
+fun ListAssert[T].has_size(other: int): ListAssert[T] =
+    let assertion = Assertion {
+        result: this.value.size == other,
+        message: "Expected list size:\n" + this.value.size + "\nto be equal to:\n" + other,
+        type: 'ListAssert[T].has_size'
+    }
+    ListAssert {
+        value: this.value,
+        assertions: this.assertions + () => assertion
+    }
+
+fun ListAssert[T].is_empty(): ListAssert[T] =
+    let assertion = Assertion {
+        result: this.value.size == 0,
+        message: "Expected list:\n" + this.value + "\nto be empty",
+        type: 'ListAssert[T].is_empty'
+    }
+    ListAssert {
+        value: this.value,
+        assertions: this.assertions + () => assertion
+    }
+
+fun ListAssert[T].contains(other: T): ListAssert[T] =
+    let assertion = Assertion {
+        result: this.value |any? v => v == other,
+        message: "Expected list:\n" + this.value + "\nto contain:\n" + other,
+        type: 'ListAssert[T].contains'
+    }
+    ListAssert {
+        value: this.value,
+        assertions: this.assertions + () => assertion
+    }
+
+fun ListAssert[T].does_not_contain(other: T): ListAssert[T] =
+    let assertion = Assertion {
+        result: (this.value |any? v => v == other) == false,
+        message: "Expected list:\n" + this.value + "\nnot to contain:\n" + other,
+        type: 'ListAssert[T].does_not_contain'
+    }
+    ListAssert {
+        value: this.value,
+        assertions: this.assertions + () => assertion
+    }
+
+fun SetAssert[T].is_equal_to(other: set[T]): SetAssert[T] =
+    let assertion = Assertion {
+        result: this.value == other,
+        message: "Expected set:\n" + this.value + "\nto be equal to:\n" + other,
+        type: 'SetAssert[T].is_equal_to'
+    }
+    SetAssert {
+        value: this.value,
+        assertions: this.assertions + () => assertion
+    }
+
+fun SetAssert[T].has_size(other: int): SetAssert[T] =
+    let assertion = Assertion {
+        result: this.value.size == other,
+        message: "Expected set size:\n" + this.value.size + "\nto be equal to:\n" + other,
+        type: 'SetAssert[T].has_size'
+    }
+    SetAssert {
+        value: this.value,
+        assertions: this.assertions + () => assertion
+    }
+
+fun SetAssert[T].is_empty(): SetAssert[T] =
+    let assertion = Assertion {
+        result: this.value.size == 0,
+        message: "Expected set:\n" + this.value + "\nto be empty",
+        type: 'SetAssert[T].is_empty'
+    }
+    SetAssert {
+        value: this.value,
+        assertions: this.assertions + () => assertion
+    }
+
+fun SetAssert[T].contains(other: T): SetAssert[T] =
+    let assertion = Assertion {
+        result: this.value |any? v => v == other,
+        message: "Expected set:\n" + this.value + "\nto contain:\n" + other,
+        type: 'SetAssert[T].contains'
+    }
+    SetAssert {
+        value: this.value,
+        assertions: this.assertions + () => assertion
+    }
+
+fun SetAssert[T].does_not_contain(other: T): SetAssert[T] =
+    let assertion = Assertion {
+        result: (this.value |any? v => v == other) == false,
+        message: "Expected set:\n" + this.value + "\nnot to contain:\n" + other,
+        type: 'SetAssert[T].does_not_contain'
+    }
+    SetAssert {
+        value: this.value,
+        assertions: this.assertions + () => assertion
+    }
+
+fun DictAssert[T].is_equal_to(other: dict[T]): DictAssert[T] =
+    let assertion = Assertion {
+        result: this.value == other,
+        message: "Expected dict:\n" + this.value + "\nto be equal to:\n" + other,
+        type: 'DictAssert[T].is_equal_to'
+    }
+    DictAssert {
+        value: this.value,
+        assertions: this.assertions + () => assertion
+    }
+
+fun DictAssert[T].has_size(other: int): DictAssert[T] =
+    let assertion = Assertion {
+        result: this.value.size == other,
+        message: "Expected dict size:\n" + this.value.size + "\nto be equal to:\n" + other,
+        type: 'DictAssert[T].has_size'
+    }
+    DictAssert {
+        value: this.value,
+        assertions: this.assertions + () => assertion
+    }
+
+fun DictAssert[T].is_empty(): DictAssert[T] =
+    let assertion = Assertion {
+        result: this.value.size == 0,
+        message: "Expected dict:\n" + this.value + "\nto be empty",
+        type: 'DictAssert[T].is_empty'
+    }
+    DictAssert {
+        value: this.value,
+        assertions: this.assertions + () => assertion
+    }
+
+fun DictAssert[T].contains_key(other: string): DictAssert[T] =
+    let assertion = Assertion {
+        result: this.value |any? (k, v) => k == other,
+        message: "Expected dict:\n" + this.value + "\nto contain key:\n" + other,
+        type: 'DictAssert[T].contains_key'
+    }
+    DictAssert {
+        value: this.value,
+        assertions: this.assertions + () => assertion
+    }
+
+fun DictAssert[T].does_not_contain_key(other: string): DictAssert[T] =
+    let assertion = Assertion {
+        result: (this.value |any? (k, v) => k == other) == false,
+        message: "Expected dict:\n" + this.value + "\nnot to contain key:\n" + other,
+        type: 'DictAssert[T].does_not_contain_key'
+    }
+    DictAssert {
+        value: this.value,
+        assertions: this.assertions + () => assertion
+    }
+
+fun DictAssert[T].contains_value(other: T): DictAssert[T] =
+    let assertion = Assertion {
+        result: this.value |any? (k, v) => v == other,
+        message: "Expected dict:\n" + this.value + "\nto contain value:\n" + other,
+        type: 'DictAssert[T].contains_value'
+    }
+    DictAssert {
+        value: this.value,
+        assertions: this.assertions + () => assertion
+    }
+
+fun SeqAssert[T].is_equal_to(other: Seq[T]): SeqAssert[T] =
+    let assertion = Assertion {
+        result: this.value.as_list() == other.as_list(),
+        message: "Expected sequence:\n" + this.value.as_list() + "\nto be equal to:\n" + other.as_list(),
+        type: 'SeqAssert[T].is_equal_to'
+    }
+    SeqAssert {
+        value: this.value,
+        assertions: this.assertions + () => assertion
+    }
+
+fun SeqAssert[T].has_size(other: int): SeqAssert[T] =
+    let assertion = Assertion {
+        result: this.value.as_list().size == other,
+        message: "Expected sequence size:\n" + this.value.as_list().size + "\nto be equal to:\n" + other,
+        type: 'SeqAssert[T].has_size'
+    }
+    SeqAssert {
+        value: this.value,
+        assertions: this.assertions + () => assertion
+    }
+
+fun SeqAssert[T].is_empty(): SeqAssert[T] =
+    let assertion = Assertion {
+        result: this.value.as_list().size == 0,
+        message: "Expected sequence:\n" + this.value.as_list() + "\nto be empty",
+        type: 'SeqAssert[T].is_empty'
+    }
+    SeqAssert {
+        value: this.value,
+        assertions: this.assertions + () => assertion
+    }
+
+fun SeqAssert[T].contains(other: T): SeqAssert[T] =
+    let assertion = Assertion {
+        result: this.value.as_list() |any? v => v == other,
+        message: "Expected sequence:\n" + this.value.as_list() + "\nto contain:\n" + other,
+        type: 'SeqAssert[T].contains'
+    }
+    SeqAssert {
+        value: this.value,
+        assertions: this.assertions + () => assertion
+    }
+
+fun SeqAssert[T].does_not_contain(other: T): SeqAssert[T] =
+    let assertion = Assertion {
+        result: (this.value.as_list() |any? v => v == other) == false,
+        message: "Expected sequence:\n" + this.value.as_list() + "\nnot to contain:\n" + other,
+        type: 'SeqAssert[T].does_not_contain'
+    }
+    SeqAssert {
+        value: this.value,
+        assertions: this.assertions + () => assertion
+    }
+
+fun assert_that(value: string) = StringAssert { value: value, assertions: [] }
+fun assert_that(value: int) = IntAssert { value: value, assertions: [] }
+fun assert_that(value: long) = LongAssert { value: value, assertions: [] }
+fun assert_that(value: double) = DoubleAssert { value: value, assertions: [] }
+fun assert_that(value: float) = FloatAssert { value: value, assertions: [] }
+fun assert_that(value: bool) = BoolAssert { value: value, assertions: [] }
+fun assert_that(value: list[T]): ListAssert[T] = ListAssert { value: value, assertions: [] }
+fun assert_that(value: set[T]): SetAssert[T] = SetAssert { value: value, assertions: [] }
+fun assert_that(value: dict[T]): DictAssert[T] = DictAssert { value: value, assertions: [] }
+fun assert_that(value: Seq[T]): SeqAssert[T] = SeqAssert { value: value, assertions: [] }
+fun assert_that(value: Option[T]) = OptionAssert { value: value, assertions: [] }
+fun assert_that(value: Result[T]) = ResultAssert { value: value, assertions: [] }
+fun assert_that(value: data) = DataAssert { value: value, assertions: [] }

@@ -38,7 +38,7 @@
             {
               "name": "meta.interpolation.capybara",
               "contentName": "meta.embedded.expression.capybara",
-              "begin": "(?<!\\\\)\\{",
+              "begin": "(?<!\\\\)\\{(?=(?:[^\"\\\\]|\\\\.)*(?<!\\\\)\\})",
               "beginCaptures": {
                 "0": {
                   "name": "punctuation.section.embedded.begin.capybara"
@@ -51,6 +51,9 @@
                 }
               },
               "patterns": [
+                {
+                  "include": "#comments"
+                },
                 {
                   "include": "#strings"
                 },
@@ -66,19 +69,6 @@
                 {
                   "include": "#operatorsAndBrackets"
                 },
-                {
-                  "name": "constant.character.escape.capybara",
-                  "match": "\\\\."
-                }
-              ]
-            },
-              "end": "(?<!\\\\)\\}",
-              "endCaptures": {
-                "0": {
-                  "name": "punctuation.section.interpolation.end.capybara"
-                }
-              },
-              "patterns": [
                 {
                   "name": "constant.character.escape.capybara",
                   "match": "\\\\."
@@ -257,6 +247,7 @@
     }
   }
 }
+
 
 
 

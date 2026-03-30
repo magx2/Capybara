@@ -6,6 +6,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.api.Test;
 import dev.capylang.compiler.*;
 import dev.capylang.compiler.parser.RawModule;
+import dev.capylang.generator.JavaGenerator;
 
 import java.util.Collection;
 import java.util.List;
@@ -69,7 +70,11 @@ class JavaExpressionEvaluatorTest {
     }
 
     private static CompiledProgram compileProgram(String fun) {
-        var programResult = CapybaraCompiler.INSTANCE.compile(List.of(new RawModule("test", "/foo/boo", fun)), new java.util.TreeSet<>());
+        return compileProgram("test", "/foo/boo", fun);
+    }
+
+    private static CompiledProgram compileProgram(String name, String path, String source) {
+        var programResult = CapybaraCompiler.INSTANCE.compile(List.of(new RawModule(name, path, source)), new java.util.TreeSet<>());
         if (programResult instanceof Result.Error<CompiledProgram> er) {
             throw new AssertionError(er.errors()
                     .stream()
@@ -99,6 +104,85 @@ class JavaExpressionEvaluatorTest {
         var error = (Result.Error<CompiledProgram>) programResult;
         assertThat(error.errors().stream().map(Result.Error.SingleError::message).collect(joining(",")))
                 .contains("dict keys must be of type `STRING`");
+    }
+
+    @Test
+    void shouldGenerateCommentsForDataAndTypeDeclarations() {
+        var program = compileProgram("""
+                /// Complete report
+                data JUnitTestSuite { name: string }
+
+                /// Complete report
+                data JUnitReport { suites: list[JUnitTestSuite] }
+
+                /// Node type
+                type JUnitNode = JUnitReport
+                """);
+
+        var generated = new JavaGenerator().generate(program).modules().stream()
+                .map(dev.capylang.generator.GeneratedModule::code)
+                .collect(joining("\n"));
+
+        assertThat(generated).contains("/// Complete report\npublic record JUnitReport");
+        assertThat(generated).contains("/// Node type\npublic sealed interface JUnitNode");
+    }
+
+    @Test
+    void shouldGenerateTimedCapyTestMethodForCapyTestModule() {
+        var program = compileProgram("CapyTest", "/capy/test", """
+                data Assertion { result: bool, message: string, type: string }
+                data StringAssert { value: string, assertions: list[Assertion] }
+                type Assert { assertions: list[Assertion] } = StringAssert
+                single Passed
+                type TestResult = Passed
+                data TestCase { name: string, result: TestResult, assertions_count: int, execution_time: long }
+
+                fun _execute(assertions: list[Assertion]): TestResult = Passed
+                fun test(name: string, assert_: Assert): TestCase =
+                    TestCase {
+                        name: name,
+                        result: _execute(assert_.assertions),
+                        assertions_count: assert_.assertions.size,
+                        execution_time: -1
+                    }
+                """);
+
+        var generated = new JavaGenerator().generate(program).modules().stream()
+                .map(dev.capylang.generator.GeneratedModule::code)
+                .collect(joining("\n"));
+
+        assertThat(generated).contains("var start = System.currentTimeMillis();");
+        assertThat(generated).contains("var result = _execute((assert_).assertions());");
+        assertThat(generated).contains("var delta = System.currentTimeMillis() - start;");
+        assertThat(generated).contains("return new TestCase(name, result, ((assert_).assertions()).size(), (delta/1000));");
+    }
+
+    @Test
+    void shouldNotGenerateTimedCapyTestMethodOutsideCapyTestModule() {
+        var program = compileProgram("NotCapyTest", "/foo/bar", """
+                data Assertion { result: bool, message: string, type: string }
+                data StringAssert { value: string, assertions: list[Assertion] }
+                type Assert { assertions: list[Assertion] } = StringAssert
+                single Passed
+                type TestResult = Passed
+                data TestCase { name: string, result: TestResult, assertions_count: int, execution_time: long }
+
+                fun _execute(assertions: list[Assertion]): TestResult = Passed
+                fun test(name: string, assert_: Assert): TestCase =
+                    TestCase {
+                        name: name,
+                        result: _execute(assert_.assertions),
+                        assertions_count: assert_.assertions.size,
+                        execution_time: -1
+                    }
+                """);
+
+        var generated = new JavaGenerator().generate(program).modules().stream()
+                .map(dev.capylang.generator.GeneratedModule::code)
+                .collect(joining("\n"));
+
+        assertThat(generated).doesNotContain("var start = System.currentTimeMillis();");
+        assertThat(generated).contains("return new TestCase(name, _execute((assert_).assertions()), ((assert_).assertions()).size(), (0-1));");
     }
 
     static Stream<Arguments> wild() {
@@ -252,4 +336,3 @@ class JavaExpressionEvaluatorTest {
         );
     }
 }
-

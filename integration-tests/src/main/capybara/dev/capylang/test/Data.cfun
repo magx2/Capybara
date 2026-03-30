@@ -47,6 +47,7 @@ data WhiteCollar { intelligence: float }
 data PrintableData { foo: string, boo: int }
 data PositionalData { text: string, number: int }
 data KnightHolder { knight: Knight }
+data FooWithType { type: string }
 
 fun printable_data_to_string(): string =
     PrintableData { foo: "abc", boo: 123 } + ""
@@ -67,6 +68,11 @@ fun create_positional_data_expr(text: string, number: int): PositionalData =
     let new_text = text + "!"
     let new_number = number + 1
     PositionalData { new_text, new_number }
+
+fun create_data_with_type(value: string): FooWithType =
+    FooWithType { type: value }
+
+fun read_data_type(foo: FooWithType): string = foo.type
 
 data Box[T] { value: T }
 

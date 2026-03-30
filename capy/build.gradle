@@ -10,8 +10,7 @@ dependencies {
 }
 
 def capybaraVersion = project.version.toString()
-
-def javaLibSourceDir = rootProject.layout.projectDirectory.dir('lib/java-lib/src/main/java')
+def javaLibSourceDir = rootProject.layout.projectDirectory.dir('lib/capybara-lib/src/main/java')
 
 processResources {
     filesMatching('capybara-version.txt') {
@@ -23,7 +22,6 @@ processResources {
 }
 
 application {
-    // Define the main class for the application.
     mainClass = 'dev.capylang.Capy'
 }
 

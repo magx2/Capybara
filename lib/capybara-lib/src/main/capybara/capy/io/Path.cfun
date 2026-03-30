@@ -8,6 +8,41 @@ data Path {
     segments: list[string]
 }
 
+fun from_string(string: string): Path =
+    fun __segments(value: string, current: string, acc: list[string]): list[string] =
+        match value[0] with
+        | None ->
+            if current == ""
+            then acc
+            else acc + current
+        | Some { c } ->
+            if c == '/'
+            then
+                if current == ""
+                then __segments(value[1:], "", acc)
+                else __segments(value[1:], "", acc + current)
+            else
+                __segments(value[1:], current + c, acc)
+    let value =
+        if string.starts_with('/')
+        then string[1:]
+        else if string.starts_with('~')
+        then
+            match string[1] with
+            | Some { '/' } -> string[2:]
+            | _ -> string[1:]
+        else string
+    Path {
+        root:
+            if string.starts_with('/')
+            then PathRoot.ABSOLUTE
+            else if string.starts_with('~')
+            then PathRoot.HOME
+            else PathRoot.RELATIVE,
+        prefix: None {},
+        segments: __segments(value, "", [])
+    }.normalize()
+
 fun Path.`/`(segment: string) =
     Path {
         root: this.root,
@@ -71,3 +106,8 @@ fun Path.normalize(): Path =
         prefix: this.prefix,
         segments: __normalize_path(this.root, this.segments, [])
     }
+
+
+
+
+

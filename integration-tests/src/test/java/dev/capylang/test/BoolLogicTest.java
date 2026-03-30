@@ -44,6 +44,18 @@ class BoolLogicTest {
     }
 
     @Test
+    void notFieldAccess() {
+        assertThat(BoolLogic.notFieldAccess(new BoolLogic.BoolBox(true))).isFalse();
+        assertThat(BoolLogic.notFieldAccess(new BoolLogic.BoolBox(false))).isTrue();
+    }
+
+    @Test
+    void notMethodCall() {
+        assertThat(BoolLogic.notMethodCall(new BoolLogic.BoolBox(true))).isFalse();
+        assertThat(BoolLogic.notMethodCall(new BoolLogic.BoolBox(false))).isTrue();
+    }
+
+    @Test
     void complexLogic() {
         assertThat(BoolLogic.complexLogic(true, true)).isTrue();
         assertThat(BoolLogic.complexLogic(true, false)).isFalse();

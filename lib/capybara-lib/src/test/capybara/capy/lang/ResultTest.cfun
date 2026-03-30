@@ -1,40 +1,35 @@
-from /capy/assert/Assert import { * }
+from /capy/test/Assert import { * }
 from /capy/lang/Result import { * }
+from /capy/test/CapyTest import { * }
 
-fun main(args: list[string]): /capy/lang/Program =
-    let asserts: list[Assert] = [
-        // map
-        should_map_success(),
-        should_map_error(),
-        should_map_positive(),
-        should_map_negative(),
-        // flat map
-        should_flatmap_success(),
-        should_flatmap_error(),
-        should_flatmap_positive(),
-        should_flatmap_negative(),
-        should_flatmap_zero(),
-        // or_else
-        should_return_value_when_result_succeeded(),
-        should_return_other_when_result_failed(),
-        // or
-        should_return_this_result_if_succeeded(),
-        should_return_other_result_if_failed(),
-        // |>
-        should_reduce_success_result(),
-        should_reduce_error_result(),
-    ]
-    run_tests(asserts)
+fun tests(): TestFile =
+    test_file("/capy/lang/ResultTest.cfun", [
+        test("should map success", should_map_success()),
+        test("should map error", should_map_error()),
+        test("should map positive", should_map_positive()),
+        test("should map negative", should_map_negative()),
+        test("should flatmap success", should_flatmap_success()),
+        test("should flatmap error", should_flatmap_error()),
+        test("should flatmap positive", should_flatmap_positive()),
+        test("should flatmap negative", should_flatmap_negative()),
+        test("should flatmap zero", should_flatmap_zero()),
+        test("should return value when result succeeded", should_return_value_when_result_succeeded()),
+        test("should return other when result failed", should_return_other_when_result_failed()),
+        test("should return this result if succeeded", should_return_this_result_if_succeeded()),
+        test("should return other result if failed", should_return_other_result_if_failed()),
+        test("should reduce success result", should_reduce_success_result()),
+        test("should reduce error result", should_reduce_error_result()),
+    ])
 
 fun should_map_success(): Assert =
     let result: Result = Success { "success_value" }
     let mapped = result | value => Success { "mapped_" + value }
-    assert_that(mapped).succeeded("mapped_success_value")
+    assert_that(mapped).succeeds("mapped_success_value")
 
 fun should_map_error(): Assert =
     let result: Result = Error { "error message" }
     let mapped = result | value => Success { "mapped_" + value }
-    assert_that(mapped).failed("error message")
+    assert_that(mapped).fails("error message")
 
 fun _positive(x: int): Result[string] =
     if x > 0
@@ -49,37 +44,37 @@ fun _positive_not_zero(x: int): Result[Result[string]] =
 fun should_map_positive(): Assert =
     let result = Success { 420 }
     let mapped = result | :_positive
-    assert_that(mapped).succeeded("420 is positive")
+    assert_that(mapped).succeeds("420 is positive")
 
 fun should_map_negative(): Assert =
     let result = Success { -1337 }
     let mapped = result | :_positive
-    assert_that(mapped).failed("-1337 is NOT positive")
+    assert_that(mapped).fails("-1337 is NOT positive")
 
 fun should_flatmap_success(): Assert =
     let result: Result = Success { "success_value" }
     let mapped = result |* value => Success { Success { "mapped_" + value } }
-    assert_that(mapped).succeeded("mapped_success_value")
+    assert_that(mapped).succeeds("mapped_success_value")
 
 fun should_flatmap_error(): Assert =
     let result: Result = Error { "error message" }
     let mapped = result |* value => Success { Success { "mapped_" + value } }
-    assert_that(mapped).failed("error message")
+    assert_that(mapped).fails("error message")
 
 fun should_flatmap_positive(): Assert =
     let result = Success { 420 }
     let mapped = result |* :_positive_not_zero
-    assert_that(mapped).succeeded("420 is positive")
+    assert_that(mapped).succeeds("420 is positive")
 
 fun should_flatmap_negative(): Assert =
     let result = Success { -1337 }
     let mapped = result |* :_positive_not_zero
-    assert_that(mapped).failed("-1337 is NOT positive")
+    assert_that(mapped).fails("-1337 is NOT positive")
 
 fun should_flatmap_zero(): Assert =
     let result = Success { 0 }
     let mapped = result |* :_positive_not_zero
-    assert_that(mapped).failed("I don't like zero")
+    assert_that(mapped).fails("I don't like zero")
 
 fun should_return_value_when_result_succeeded(): Assert =
     let result = Success { 100 }
@@ -110,3 +105,5 @@ fun should_reduce_error_result(): Assert =
     let result: Result[int] = Error { "Unknown" }
     let reduced: string = result |> (x=>x+"", msg=>msg)
     assert_that(reduced).is_equal_to("Unknown")
+
+

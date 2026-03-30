@@ -17,11 +17,11 @@ def capyExecutionClasspath = files(
 
 def capybaraMainSourceDir = layout.projectDirectory.dir('src/main/capybara')
 def capybaraTestSourceDir = layout.projectDirectory.dir('src/test/capybara')
-def capybaraCombinedTestSourceDir = layout.buildDirectory.dir('tmp/capybara/test-sources')
 def capybaraGeneratedMainDir = layout.buildDirectory.dir('generated/sources/capybara/java/main')
 def capybaraGeneratedTestDir = layout.buildDirectory.dir('generated/sources/capybara/java/test')
 def capybaraLinkedMainDir = layout.buildDirectory.dir('generated/sources/capybara/linked/main')
 def capybaraLinkedTestDir = layout.buildDirectory.dir('generated/sources/capybara/linked/test')
+def capybaraTestResultsDir = layout.buildDirectory.dir('test-results/capybara')
 def capybaraDebugEnabled = gradle.startParameter.logLevel == org.gradle.api.logging.LogLevel.DEBUG
 
 def prepareEmptyDir = { File dir ->
@@ -36,12 +36,6 @@ def prepareEmptyDir = { File dir ->
     } else {
         dir.mkdirs()
     }
-}
-
-tasks.register('syncTestCapybaraSources', Sync) {
-    from(capybaraMainSourceDir)
-    from(capybaraTestSourceDir)
-    into(capybaraCombinedTestSourceDir)
 }
 
 tasks.register('linkCapybara', JavaExec) {
@@ -61,6 +55,15 @@ tasks.register('linkCapybara', JavaExec) {
             capybaraArgs.addAll(['--log', 'DEBUG'])
         }
         setArgs(capybaraArgs)
+    }
+
+    doLast {
+        def bundledJavaSupportDir = capybaraGeneratedMainDir.get().dir('dev/capylang').asFile.toPath()
+        if (java.nio.file.Files.exists(bundledJavaSupportDir)) {
+            java.nio.file.Files.walk(bundledJavaSupportDir)
+                    .sorted(java.util.Comparator.reverseOrder())
+                    .forEach { path -> java.nio.file.Files.deleteIfExists(path) }
+        }
     }
 }
 
@@ -83,15 +86,24 @@ tasks.register('compileCapybara', JavaExec) {
         }
         setArgs(capybaraArgs)
     }
+
+    doLast {
+        def bundledJavaSupportDir = capybaraGeneratedMainDir.get().dir('dev/capylang').asFile.toPath()
+        if (java.nio.file.Files.exists(bundledJavaSupportDir)) {
+            java.nio.file.Files.walk(bundledJavaSupportDir)
+                    .sorted(java.util.Comparator.reverseOrder())
+                    .forEach { path -> java.nio.file.Files.deleteIfExists(path) }
+        }
+    }
 }
 
 tasks.register('linkTestCapybara', JavaExec) {
     group = 'verification'
-    description = 'Compiles merged main and test Capybara files into linked JSON artifacts.'
-    dependsOn tasks.named('syncTestCapybaraSources')
+    description = 'Compiles test Capybara files into linked JSON artifacts using linked main modules as libraries.'
+    dependsOn tasks.named('linkCapybara')
 
-    inputs.dir(capybaraMainSourceDir)
     inputs.dir(capybaraTestSourceDir)
+    inputs.dir(capybaraLinkedMainDir)
     outputs.dir(capybaraLinkedTestDir)
 
     classpath = capyExecutionClasspath
@@ -101,19 +113,30 @@ tasks.register('linkTestCapybara', JavaExec) {
         prepareEmptyDir(capybaraLinkedTestDir.get().asFile)
         def capybaraArgs = [
                 'compile',
-                '-i', capybaraCombinedTestSourceDir.get().asFile.absolutePath,
-                '-o', capybaraLinkedTestDir.get().asFile.absolutePath
+                '-i', capybaraTestSourceDir.asFile.absolutePath,
+                '-o', capybaraLinkedTestDir.get().asFile.absolutePath,
+                '-l', capybaraLinkedMainDir.get().asFile.absolutePath,
+                '--compile-tests'
         ]
         if (capybaraDebugEnabled) {
             capybaraArgs.addAll(['--log', 'DEBUG'])
         }
         setArgs(capybaraArgs)
     }
+
+    doLast {
+        def bundledJavaSupportDir = capybaraGeneratedMainDir.get().dir('dev/capylang').asFile.toPath()
+        if (java.nio.file.Files.exists(bundledJavaSupportDir)) {
+            java.nio.file.Files.walk(bundledJavaSupportDir)
+                    .sorted(java.util.Comparator.reverseOrder())
+                    .forEach { path -> java.nio.file.Files.deleteIfExists(path) }
+        }
+    }
 }
 
 tasks.register('compileTestCapybara', JavaExec) {
     group = 'verification'
-    description = 'Generates Java from linked main+test Capybara sources.'
+    description = 'Generates Java from linked test Capybara sources.'
     dependsOn tasks.named('compileCapybara')
     dependsOn tasks.named('linkTestCapybara')
 
@@ -131,48 +154,36 @@ tasks.register('compileTestCapybara', JavaExec) {
         }
         setArgs(capybaraArgs)
     }
+
+    doLast {
+        def bundledJavaSupportDir = capybaraGeneratedMainDir.get().dir('dev/capylang').asFile.toPath()
+        if (java.nio.file.Files.exists(bundledJavaSupportDir)) {
+            java.nio.file.Files.walk(bundledJavaSupportDir)
+                    .sorted(java.util.Comparator.reverseOrder())
+                    .forEach { path -> java.nio.file.Files.deleteIfExists(path) }
+        }
+    }
 }
 
-tasks.register('runJsonTest', JavaExec) {
+tasks.register('testCapybara', JavaExec) {
     group = 'verification'
-    description = 'Runs `JsonTest` main function.'
-    dependsOn tasks.named('compileTestCapybara')
+    description = 'Runs Capybara tests from compiled test classes.'
+    dependsOn tasks.named('compileTestJava')
 
     classpath = sourceSets.test.runtimeClasspath
-    mainClass = 'lang.serialization.JsonTest'
-}
+    mainClass = 'dev.capylang.test.TestRunner'
 
-tasks.register('runResultTest', JavaExec) {
-    group = 'verification'
-    description = 'Runs `ResultTest` main function.'
-    dependsOn tasks.named('compileTestCapybara')
-
-    classpath = sourceSets.test.runtimeClasspath
-    mainClass = 'capy.lang.ResultTest'
-}
-
-tasks.register('runSeqTest', JavaExec) {
-    group = 'verification'
-    description = 'Runs `SeqTest` main function.'
-    dependsOn tasks.named('compileTestCapybara')
-
-    classpath = sourceSets.test.runtimeClasspath
-    mainClass = 'capy.lang.SeqTest'
-}
-
-tasks.register('runCollectionAssertTest', JavaExec) {
-    group = 'verification'
-    description = 'Runs `CollectionAssertTest` main function.'
-    dependsOn tasks.named('compileTestCapybara')
-
-    classpath = sourceSets.test.runtimeClasspath
-    mainClass = 'capy.assert_.CollectionAssertTest'
-}
-
-tasks.register('testCapybara') {
-    group = 'verification'
-    description = 'Runs all generated Capybara main-based tests.'
-    dependsOn tasks.named('runJsonTest'), tasks.named('runResultTest'), tasks.named('runSeqTest'), tasks.named('runCollectionAssertTest')
+    doFirst {
+        prepareEmptyDir(capybaraTestResultsDir.get().asFile)
+        def capybaraArgs = [
+                '-o', capybaraTestResultsDir.get().asFile.absolutePath,
+                '-rt', 'JUNIT'
+        ]
+        if (capybaraDebugEnabled) {
+            capybaraArgs.addAll(['-ll', 'DEBUG'])
+        }
+        setArgs(capybaraArgs)
+    }
 }
 
 sourceSets {
@@ -180,6 +191,7 @@ sourceSets {
         java.srcDir capybaraGeneratedMainDir
     }
     test {
+        java.srcDir capybaraGeneratedMainDir
         java.srcDir capybaraGeneratedTestDir
     }
 }
@@ -192,9 +204,13 @@ tasks.named('compileTestJava') {
     dependsOn tasks.named('compileTestCapybara')
 }
 
-tasks.named('test') {
+tasks.matching { it.name == 'test' }.configureEach {
     dependsOn tasks.named('testCapybara')
-    failOnNoDiscoveredTests = false
+    if (it.hasProperty('failOnNoDiscoveredTests')) {
+        failOnNoDiscoveredTests = false
+    }
 }
 
-
+tasks.matching { it.name == 'check' }.configureEach {
+    dependsOn tasks.named('testCapybara')
+}

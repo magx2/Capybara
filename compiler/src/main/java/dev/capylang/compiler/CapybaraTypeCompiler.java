@@ -173,6 +173,7 @@ public class CapybaraTypeCompiler {
                     parentType.fields(),
                     parentType.subTypes(),
                     mappedTypeArguments,
+                    parentType.comments(),
                     parentType.visibility(),
                     parentType.enumType()
             );
@@ -183,6 +184,7 @@ public class CapybaraTypeCompiler {
                             dataType.fields(),
                             mappedTypeArguments,
                             dataType.extendedTypes(),
+                            dataType.comments(),
                             dataType.visibility(),
                             dataType.singleton()
                     );
@@ -200,7 +202,8 @@ public class CapybaraTypeCompiler {
                         substitutedFields,
                         mappedTypeArguments,
                         dataType.extendedTypes(),
-                        dataType.visibility(),
+                            dataType.comments(),
+                            dataType.visibility(),
                         dataType.singleton()
                 );
             }
@@ -362,6 +365,7 @@ public class CapybaraTypeCompiler {
                     linkedDataType.fields(),
                     linkedDataType.typeParameters(),
                     linkedDataType.extendedTypes(),
+                    linkedDataType.comments(),
                     linkedDataType.visibility(),
                     linkedDataType.singleton()
             );
@@ -370,6 +374,7 @@ public class CapybaraTypeCompiler {
                     linkedDataParentType.fields(),
                     linkedDataParentType.subTypes(),
                     linkedDataParentType.typeParameters(),
+                    linkedDataParentType.comments(),
                     linkedDataParentType.visibility(),
                     linkedDataParentType.enumType()
             );

@@ -55,12 +55,14 @@ public final class JavaGenerator implements Generator {
                     codeTopLevelDeclaration(javaClass, declaration.code())
             ));
         }
+            var utilityStaticImports = new TreeSet<>(javaClass.staticImports());
+            javaClass.enums().forEach(javaEnum -> utilityStaticImports.add(javaClass.javaPackage() + "." + javaEnum.name() + ".*"));
         if (!javaClass.staticMethods().isEmpty()) {
             var utilityClass = new JavaClass(
                     javaClass.annotations(),
                     new JavaType(javaClass.name() + "Module"),
                     javaClass.javaPackage(),
-                    javaClass.staticImports(),
+                    utilityStaticImports,
                     javaClass.staticMethods(),
                     new TreeSet<>(),
                     new TreeSet<>(),
@@ -127,7 +129,7 @@ public final class JavaGenerator implements Generator {
         code.append('\n');
         javaClass.staticMethods()
                 .stream()
-                .map(method -> mapJavaMethod(method, allowPrivateStaticMethods))
+                .map(method -> mapJavaMethod(method, allowPrivateStaticMethods, javaClass.javaPackage().toString(), javaClass.name().toString()))
                 .forEach(code::append);
         code.append('\n').append(unsupportedHelperMethod());
 
@@ -178,7 +180,7 @@ public final class JavaGenerator implements Generator {
                 .map(this::removeVisibilityModifier)
                 .forEach(code::append);
         javaClass.staticMethods().stream()
-                .map(method -> mapJavaMethod(method, true))
+                .map(method -> mapJavaMethod(method, true, javaClass.javaPackage().toString(), javaClass.name().toString()))
                 .forEach(code::append);
         code.append('\n').append(unsupportedHelperMethod());
 
@@ -234,16 +236,28 @@ public final class JavaGenerator implements Generator {
     }
 
     private void appendImports(StringBuilder code, Set<String> staticImports) {
-        var classImports = staticImports.stream()
+        var classImports = new TreeSet<String>();
+        staticImports.stream()
                 .map(this::extractClassNameFromStaticImport)
                 .filter(className -> !className.isBlank())
-                .distinct()
-                .sorted()
-                .toList();
+                .forEach(classImport -> {
+                    classImports.add(classImport);
+                    var companionImport = extractCompanionOwnerImport(classImport);
+                    if (!companionImport.isBlank()) {
+                        classImports.add(companionImport);
+                    }
+                });
         classImports.forEach(classImport -> code.append("import ").append(classImport).append(";\n"));
         staticImports.stream()
                 .sorted()
                 .forEach(staticImport -> code.append("import static ").append(staticImport).append(";\n"));
+    }
+
+    private String extractCompanionOwnerImport(String classImport) {
+        if (!classImport.endsWith("Module")) {
+            return "";
+        }
+        return classImport.substring(0, classImport.length() - "Module".length());
     }
 
     private String extractClassNameFromStaticImport(String staticImport) {
@@ -292,14 +306,15 @@ public final class JavaGenerator implements Generator {
                 .collect(joining(", ", " implements ", " "))
                 : "";
         var staticMethods = record.staticMethods().stream()
-                .map(method -> mapJavaMethod(method, true))
+                .map(method -> mapJavaMethod(method, true, "", record.name().toString()))
                 .collect(joining("\n"));
         var methods = record.methods().stream()
                 .map(method -> mapJavaRecordMethod(method, helperCallOwnerName))
                 .collect(joining("\n"));
         var toStringMethod = mapJavaRecordToString(record);
         var visibility = record.isPrivate() ? "private" : "public";
-        return visibility + " record " + record.name() + typeParameters + "(" + fields + ")" + implementInterfaces + "{"
+        return mapJavaDoc(record.comments())
+               + visibility + " record " + record.name() + typeParameters + "(" + fields + ")" + implementInterfaces + "{"
                + staticMethods + methods + toStringMethod + "}\n";
     }
 
@@ -420,7 +435,8 @@ public final class JavaGenerator implements Generator {
         var defaultMethods = javaInterface.defaultMethods().stream()
                 .map(method -> mapJavaInterfaceDefaultMethod(method, helperCallOwnerName))
                 .collect(joining());
-        return "public interface " + javaInterface.name() + " {" + methods + defaultMethods + "}\n";
+        return mapJavaDoc(javaInterface.comments())
+               + "public interface " + javaInterface.name() + " {" + methods + defaultMethods + "}\n";
     }
 
     private String mapJavaSealedInterface(JavaSealedInterface javaInterface, String helperCallOwnerName) {
@@ -436,7 +452,8 @@ public final class JavaGenerator implements Generator {
         var defaultMethods = javaInterface.defaultMethods().stream()
                 .map(method -> mapJavaInterfaceDefaultMethod(method, helperCallOwnerName))
                 .collect(joining());
-        return "public sealed interface " + javaInterface.name() + typeParameters + " permits " + permits + " {" + methods + defaultMethods + "}\n";
+        return mapJavaDoc(javaInterface.comments())
+               + "public sealed interface " + javaInterface.name() + typeParameters + " permits " + permits + " {" + methods + defaultMethods + "}\n";
     }
 
     private String mapJavaInterfaceMethod(JavaInterface.JavaInterfaceMethod method) {
@@ -454,7 +471,7 @@ public final class JavaGenerator implements Generator {
                + "\n}\n";
     }
 
-    private String mapJavaMethod(JavaMethod method, boolean allowPrivateStaticMethods) {
+    private String mapJavaMethod(JavaMethod method, boolean allowPrivateStaticMethods, String ownerPackage, String ownerName) {
         if (method.programMain()) {
             return mapJavaProgramMainMethod(method);
         }
@@ -464,10 +481,39 @@ public final class JavaGenerator implements Generator {
         var visibility = method.isPrivate()
                 ? (allowPrivateStaticMethods ? "private " : "")
                 : "public ";
+        if (isCapyTestTimedMethod(ownerPackage, ownerName, method)) {
+            var nameParameter = method.parameters().get(0).generatedName();
+            var assertParameter = method.parameters().get(1).generatedName();
+            return mapJavaDoc(method.comments())
+                   + visibility + "static " + methodTypeParameters + method.returnType() + " " + mapMethodName(method.name()) + "(" + mapFunctionParameters(method.parameters()) + ") {\n"
+                   + "var start = System.currentTimeMillis();\n"
+                   + "var result = _execute((" + assertParameter + ").assertions());\n"
+                   + "var delta = System.currentTimeMillis() - start;\n"
+                   + "return new TestCase(" + nameParameter + ", result, ((" + assertParameter + ").assertions()).size(), (delta/1000));\n"
+                   + "}\n";
+        }
         return mapJavaDoc(method.comments())
                + visibility + "static " + methodTypeParameters + method.returnType() + " " + mapMethodName(method.name()) + "(" + mapFunctionParameters(method.parameters()) + ") {\n"
                + evaluateExpression(method.expression(), method.parameters())
                + "\n}\n";
+    }
+
+    private boolean isCapyTestTimedMethod(String ownerPackage, String ownerName, JavaMethod method) {
+        if (!"capy.test".equals(ownerPackage) || !"CapyTest".equals(ownerName)) {
+            return false;
+        }
+        if (!"test".equals(mapMethodName(method.name()))) {
+            return false;
+        }
+        if (!"TestCase".equals(method.returnType().toString())) {
+            return false;
+        }
+        if (method.parameters().size() != 2) {
+            return false;
+        }
+        var first = method.parameters().get(0);
+        var second = method.parameters().get(1);
+        return "java.lang.String".equals(first.type().toString()) && "Assert".equals(second.type().toString());
     }
 
     private String mapJavaRecordMethod(JavaMethod method, String helperCallOwnerName) {
@@ -489,7 +535,7 @@ public final class JavaGenerator implements Generator {
                         "__capybaraArgsList"
                 ));
         var programComputation = evaluateExpression(method.expression(), rewrittenParameters)
-                .replaceFirst("\\s*return\\s+", "var program = ");
+                .replaceFirst("(?m)^\\s*return\\s+", "var program = ");
         var programType = normalizeProgramTypeReference(method.returnType().toString());
         var successType = programType + ".Success";
         var failedType = programType + ".Failed";

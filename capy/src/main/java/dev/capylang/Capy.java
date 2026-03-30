@@ -8,17 +8,32 @@ import org.yaml.snakeyaml.DumperOptions;
 import org.yaml.snakeyaml.LoaderOptions;
 import org.yaml.snakeyaml.Yaml;
 import dev.capylang.compiler.CapybaraCompiler;
+import dev.capylang.compiler.CollectionLinkedType;
+import dev.capylang.compiler.CompiledFunction;
 import dev.capylang.compiler.CompiledModule;
 import dev.capylang.compiler.CompiledProgram;
 import dev.capylang.compiler.OutputType;
 import dev.capylang.compiler.Result;
+import dev.capylang.compiler.expression.CompiledExpression;
+import dev.capylang.compiler.expression.CompiledFunctionCall;
+import dev.capylang.compiler.expression.CompiledInfixExpression;
+import dev.capylang.compiler.expression.CompiledNewList;
 import dev.capylang.compiler.parser.RawModule;
+import dev.capylang.compiler.parser.InfixOperator;
 import dev.capylang.generator.Generator;
+import dev.capylang.generator.GeneratedProgram;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.io.PrintStream;
 import java.io.UncheckedIOException;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
+import java.net.URL;
+import java.net.URLClassLoader;
 import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileSystems;
@@ -27,16 +42,21 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.time.OffsetDateTime;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.TreeSet;
 import java.util.logging.Handler;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
+import javax.tools.DiagnosticCollector;
+import javax.tools.JavaFileObject;
+import javax.tools.ToolProvider;
 
 public class Capy {
     private static final Logger log = Logger.getLogger(Capy.class.getName());
@@ -46,6 +66,7 @@ public class Capy {
     private static final String MODULE_FILE = "capy.yml";
     private static final String VERSION_RESOURCE = "/capybara-version.txt";
     private static final String JAVA_LIB_RESOURCE_DIR = "/java-lib-src";
+    private static final ModuleRef CAP_TEST_RUNTIME_MODULE = new ModuleRef("CapyTestRuntime", "capy/test");
     private static final int EXIT_SUCCESS = 0;
     private static final int EXIT_USAGE = 1;
     private static final int EXIT_FAILURE = 2;
@@ -70,18 +91,19 @@ public class Capy {
     }
 
     public static int compile(Path input, Path linkedOutputDir, TreeSet<CompiledModule> libraries, PrintStream err) {
-        return compile(input, linkedOutputDir, libraries, err, readCompilerVersion());
+        return compile(input, linkedOutputDir, libraries, false, err, readCompilerVersion());
     }
 
     public static int compile(
             Path input,
             Path linkedOutputDir,
             TreeSet<CompiledModule> libraries,
+            boolean compileTests,
             PrintStream err,
             String compilerVersion
     ) {
         try {
-            return compileOrThrow(input, linkedOutputDir, libraries, err, compilerVersion);
+            return compileOrThrow(input, linkedOutputDir, libraries, compileTests, err, compilerVersion);
         } catch (CliException e) {
             err.println(e.getMessage());
             return EXIT_USAGE;
@@ -147,8 +169,9 @@ public class Capy {
         var input = requiredPath(options.values(), "input", "compile");
         var output = requiredPath(options.values(), "output", "compile");
         var libraries = readLibraryModules(options.values().get("libs"));
+        var compileTests = options.values().containsKey("compile-tests");
 
-        return compile(input, output, libraries, err);
+        return compile(input, output, libraries, compileTests, err, readCompilerVersion());
     }
 
     private static int executeGenerate(String[] args, PrintStream err) {
@@ -193,6 +216,16 @@ public class Capy {
                     values.put("output", value);
                     i++;
                 }
+                case "--type" -> {
+                    var value = nextValue(args, i, arg);
+                    values.put("type", value);
+                    i++;
+                }
+                case "--runtime" -> {
+                    var value = nextValue(args, i, arg);
+                    values.put("runtime", value);
+                    i++;
+                }
                 case "-l", "--libs" -> {
                     if (!allowLibs) {
                         throw new CliException("Option `" + arg + "` is supported only for `compile`.");
@@ -200,6 +233,12 @@ public class Capy {
                     var value = nextValue(args, i, arg);
                     values.put("libs", value);
                     i++;
+                }
+                case "--compile-tests" -> {
+                    if (!allowLibs) {
+                        throw new CliException("Option `" + arg + "` is supported only for `compile`.");
+                    }
+                    values.put("compile-tests", "true");
                 }
                 default -> throw new CliException("Unknown option `" + arg + "`.\n\n" + helpText());
             }
@@ -274,6 +313,14 @@ public class Capy {
         return Path.of(value);
     }
 
+    private static String requiredValue(Map<String, String> values, String key, String command) {
+        var value = values.get(key);
+        if (value == null || value.isBlank()) {
+            throw new CliException("Missing required option `--" + key + "` for `" + command + "`.\n\n" + helpText());
+        }
+        return value;
+    }
+
     private static Level parseLogLevel(String value) {
         return switch (value.toUpperCase(Locale.ROOT)) {
             case "DEBUG" -> Level.FINE;
@@ -311,6 +358,7 @@ public class Capy {
             Path input,
             Path linkedOutputDir,
             TreeSet<CompiledModule> libraries,
+            boolean compileTests,
             PrintStream err,
             String compilerVersion
     ) throws IOException {
@@ -331,8 +379,15 @@ public class Capy {
         }
 
         var linkedProgram = ((Result.Success<CompiledProgram>) linking).value();
-        writeLinkedModules(linkedOutputDir, linkedProgram);
-        writeBuildInfo(linkedOutputDir, compilerVersion);
+        var outputProgram = compileTests ? prepareCompiledTests(linkedProgram, libraries) : linkedProgram;
+        writeLinkedModules(linkedOutputDir, outputProgram);
+        var sourceModules = rawModules.stream()
+                .map(module -> new ModuleRef(module.name(), normalizeModulePath(module.path())))
+                .collect(java.util.stream.Collectors.toCollection(java.util.TreeSet::new));
+        if (compileTests) {
+            sourceModules.add(CAP_TEST_RUNTIME_MODULE);
+        }
+        writeBuildInfo(linkedOutputDir, compilerVersion, List.copyOf(sourceModules));
         return EXIT_SUCCESS;
     }
 
@@ -345,7 +400,7 @@ public class Capy {
         packageDefinition.put("capybara_compiler_version", readCompilerVersion());
         packageDefinition.put("build_date_time", OffsetDateTime.now().toString());
         packageDefinition.put("os", System.getProperty("os.name"));
-        options.capyOverrides().forEach(packageDefinition::put);
+        packageDefinition.putAll(options.capyOverrides());
 
         writePackageArchive(options.module().resolveSibling(PACKAGE_FILE), compiledInput, packageDefinition);
         return EXIT_SUCCESS;
@@ -359,22 +414,21 @@ public class Capy {
             throw new CliException("Generated output path is not a directory: " + generatedOutputDir);
         }
 
-        var linkedProgram = readLinkedProgram(linkedInputDir, true);
-        var compiledProgram = Generator.findGenerator(outputType).generate(linkedProgram);
+        var generationInput = selectGenerationInput(linkedInputDir, readLinkedProgram(linkedInputDir, true));
+        var compiledProgram = Generator.findGenerator(outputType).generate(generationInput.program());
         compiledProgram.modules().forEach(module -> writeCompiledModule(generatedOutputDir, module.relativePath(), module.code()));
-        if (outputType == OutputType.JAVA) {
+        if (outputType == OutputType.JAVA && generationInput.includeJavaLibResources()) {
             copyJavaLibResources(generatedOutputDir);
         }
         return EXIT_SUCCESS;
     }
-
     private static Path findCompiledInput(PackageOptions options, PrintStream err) throws IOException {
         if (options.compiledInput() != null) {
             return options.compiledInput();
         }
 
         var tempDir = Files.createTempDirectory("capy-package-");
-        var exitCode = compileOrThrow(options.input(), tempDir, new TreeSet<>(), err, readCompilerVersion());
+        var exitCode = compileOrThrow(options.input(), tempDir, new TreeSet<>(), false, err, readCompilerVersion());
         if (exitCode != EXIT_SUCCESS) {
             throw new CliException("Unable to compile package input from: " + options.input());
         }
@@ -412,6 +466,275 @@ public class Capy {
                 }
             }
         }
+    }
+
+    private static void writeGeneratedProgram(Path outputDir, GeneratedProgram program) {
+        program.modules().forEach(module -> writeCompiledModule(outputDir, module.relativePath(), module.code()));
+    }
+
+    private static void compileGeneratedProgram(Path sourceDir, Path classesDir) throws IOException {
+        var compiler = ToolProvider.getSystemJavaCompiler();
+        if (compiler == null) {
+            throw new IllegalStateException("Java compiler is not available. Use a JDK to run `capy test`.");
+        }
+
+        Files.createDirectories(classesDir);
+        List<Path> javaFiles;
+        try (var files = Files.walk(sourceDir)) {
+            javaFiles = files
+                    .filter(Files::isRegularFile)
+                    .filter(path -> path.getFileName().toString().endsWith(".java"))
+                    .toList();
+        }
+
+        if (javaFiles.isEmpty()) {
+            throw new CliException("No generated Java sources found for test execution.");
+        }
+
+        var diagnostics = new DiagnosticCollector<JavaFileObject>();
+        var output = new StringWriter();
+        try (var fileManager = compiler.getStandardFileManager(diagnostics, Locale.ROOT, StandardCharsets.UTF_8)) {
+            var compilationUnits = fileManager.getJavaFileObjectsFromFiles(javaFiles.stream().map(Path::toFile).toList());
+            var options = List.of(
+                    "--release", "21",
+                    "-classpath", System.getProperty("java.class.path"),
+                    "-d", classesDir.toString()
+            );
+            var success = compiler.getTask(new PrintWriter(output), fileManager, diagnostics, options, null, compilationUnits).call();
+            if (!Boolean.TRUE.equals(success)) {
+                var details = diagnostics.getDiagnostics().stream()
+                        .map(Objects::toString)
+                        .collect(java.util.stream.Collectors.joining(System.lineSeparator()));
+                var compilerOutput = output.toString();
+                throw new CliException("Unable to compile generated Capybara tests."
+                                       + System.lineSeparator()
+                                       + details
+                                       + (compilerOutput.isEmpty() ? "" : System.lineSeparator() + compilerOutput));
+            }
+        }
+    }
+
+    private static List<SuiteResult> executeTestMethods(GeneratedProgram program, Path classesDir) throws IOException {
+        var classNames = program.modules().stream()
+                .map(module -> toClassName(module.relativePath()))
+                .filter(name -> !name.isBlank())
+                .distinct()
+                .toList();
+
+        try (var classLoader = new URLClassLoader(new URL[]{classesDir.toUri().toURL()}, Capy.class.getClassLoader())) {
+            var results = new java.util.ArrayList<SuiteResult>();
+            for (var className : classNames) {
+                var type = classLoader.loadClass(className);
+                for (var method : type.getDeclaredMethods()) {
+                    if (!isTestMethod(method)) {
+                        continue;
+                    }
+                    results.addAll(invokeTestMethod(method));
+                }
+            }
+            return mergeSuiteResults(results);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException("Unable to execute generated Capybara tests", e);
+        }
+    }
+
+    private static String toClassName(Path relativePath) {
+        var normalized = relativePath.toString().replace('\\', '/');
+        if (!normalized.endsWith(".java")) {
+            return "";
+        }
+        return normalized.substring(0, normalized.length() - ".java".length()).replace('/', '.');
+    }
+
+    private static boolean isTestMethod(Method method) {
+        if (!Modifier.isPublic(method.getModifiers())
+            || !Modifier.isStatic(method.getModifiers())
+            || method.getParameterCount() != 0
+            || !"tests".equals(method.getName())) {
+            return false;
+        }
+        var returnType = method.getReturnType();
+        return "TestSuiteResults".equals(returnType.getSimpleName())
+               || "TestSuites".equals(returnType.getSimpleName())
+               || "TestFile".equals(returnType.getSimpleName())
+               || List.class.isAssignableFrom(returnType);
+    }
+
+    private static List<SuiteResult> invokeTestMethod(Method method) throws InvocationTargetException, IllegalAccessException {
+        var value = method.invoke(null);
+        if (value == null) {
+            return List.of();
+        }
+        if (value instanceof List<?> list) {
+            return list.stream()
+                    .flatMap(item -> toSuiteResults(item).stream())
+                    .toList();
+        }
+        return toSuiteResults(value);
+    }
+
+    private static List<SuiteResult> toSuiteResults(Object value) {
+        if (isSuiteResultObject(value)) {
+            return List.of(toSuiteResult(value));
+        }
+        if (isTestSuitesObject(value)) {
+            return toSuiteResultsFromSuites(value);
+        }
+        if (isTestFileObject(value)) {
+            return List.of(toSuiteResultFromTestFile(value));
+        }
+        return List.of();
+    }
+
+    private static boolean isSuiteResultObject(Object value) {
+        return value != null && "TestSuiteResults".equals(value.getClass().getSimpleName());
+    }
+
+    private static boolean isTestSuitesObject(Object value) {
+        return value != null && "TestSuites".equals(value.getClass().getSimpleName());
+    }
+
+    private static boolean isTestFileObject(Object value) {
+        return value != null && "TestFile".equals(value.getClass().getSimpleName());
+    }
+
+    private static SuiteResult toSuiteResult(Object suiteResult) {
+        var suite = (String) invokeAccessor(suiteResult, "suite");
+        var testResults = ((List<?>) invokeAccessor(suiteResult, "results")).stream()
+                .map(Capy::toTestResult)
+                .toList();
+        return new SuiteResult(suite, testResults);
+    }
+
+    private static TestResultRow toTestResult(Object testResult) {
+        var suite = (String) invokeAccessor(testResult, "suite");
+        var name = (String) invokeAccessor(testResult, "name");
+        var passed = (Boolean) invokeAccessor(testResult, "passed");
+        var failures = ((List<?>) invokeAccessor(testResult, "failures")).stream().map(String::valueOf).toList();
+        return new TestResultRow(suite, name, passed, failures);
+    }
+
+    private static List<SuiteResult> toSuiteResultsFromSuites(Object testSuites) {
+        var modules = (List<?>) invokeAccessor(testSuites, "modules");
+        return modules.stream()
+                .filter(Capy::isTestFileObject)
+                .map(Capy::toSuiteResultFromTestFile)
+                .toList();
+    }
+
+    private static SuiteResult toSuiteResultFromTestFile(Object testFile) {
+        var fileName = String.valueOf(invokeAccessor(testFile, "file_name"));
+        var suite = suiteNameFromTestFile(fileName);
+        var testCases = (List<?>) invokeAccessor(testFile, "test_cases");
+        var results = testCases.stream()
+                .map(testCase -> toTestResultFromTestCase(suite, testCase))
+                .toList();
+        return new SuiteResult(suite, results);
+    }
+
+    private static TestResultRow toTestResultFromTestCase(String suite, Object testCase) {
+        var name = String.valueOf(invokeAccessor(testCase, "name"));
+        var asserts = (List<?>) invokeAccessor(testCase, "asserts");
+        var failures = asserts.stream()
+                .flatMap(assertion -> assertionFailures(assertion).stream())
+                .toList();
+        return new TestResultRow(suite, name, failures.isEmpty(), failures);
+    }
+
+    private static List<String> assertionFailures(Object assertion) {
+        var assertions = (List<?>) invokeAccessor(assertion, "assertions");
+        return assertions.stream()
+                .filter(item -> !Boolean.TRUE.equals(invokeAccessor(item, "result")))
+                .map(item -> String.valueOf(invokeAccessor(item, "message")))
+                .toList();
+    }
+
+    private static String suiteNameFromTestFile(String fileName) {
+        var normalized = fileName.replace('\\', '/');
+        if (normalized.endsWith(".cfun")) {
+            normalized = normalized.substring(0, normalized.length() - ".cfun".length());
+        }
+        while (normalized.startsWith("/")) {
+            normalized = normalized.substring(1);
+        }
+        return normalized.replace('/', '.');
+    }
+
+    private static Object invokeAccessor(Object target, String name) {
+        try {
+            return target.getClass().getMethod(name).invoke(target);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException("Unable to read `" + name + "` from `" + target.getClass().getName() + "`", e);
+        }
+    }
+
+    private static List<SuiteResult> mergeSuiteResults(List<SuiteResult> results) {
+        var merged = new LinkedHashMap<String, java.util.ArrayList<TestResultRow>>();
+        for (var result : results) {
+            merged.computeIfAbsent(result.suite(), ignored -> new java.util.ArrayList<>()).addAll(result.results());
+        }
+        return merged.entrySet().stream()
+                .map(entry -> new SuiteResult(entry.getKey(), List.copyOf(entry.getValue())))
+                .toList();
+    }
+
+    private static int writeJUnitResults(Path outputDir, List<SuiteResult> suiteResults, PrintStream err) throws IOException {
+        Files.createDirectories(outputDir);
+        var failedTests = 0;
+        var totalTests = 0;
+        for (var suiteResult : suiteResults) {
+            failedTests += (int) suiteResult.results().stream().filter(test -> !test.passed()).count();
+            totalTests += suiteResult.results().size();
+            var report = outputDir.resolve("TEST-" + suiteResult.suite() + ".xml");
+            Files.writeString(report, renderJUnitSuite(suiteResult), StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE);
+        }
+
+        if (failedTests > 0) {
+            err.println("FAIL Some tests failed (" + failedTests + "/" + totalTests + ")");
+            suiteResults.stream()
+                    .flatMap(suite -> suite.results().stream())
+                    .filter(test -> !test.passed())
+                    .forEach(test -> {
+                        err.println("FAIL " + test.suite() + "." + test.name());
+                        test.failures().forEach(failure -> err.println("  " + failure));
+                    });
+            return EXIT_FAILURE;
+        }
+
+        return EXIT_SUCCESS;
+    }
+
+    private static String renderJUnitSuite(SuiteResult suiteResult) {
+        var failures = suiteResult.results().stream().filter(test -> !test.passed()).count();
+        var testcases = suiteResult.results().stream()
+                .map(Capy::renderJUnitTestCase)
+                .collect(java.util.stream.Collectors.joining(System.lineSeparator()));
+        return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+               + "<testsuite name=\"" + xmlEscape(suiteResult.suite()) + "\" tests=\"" + suiteResult.results().size()
+               + "\" failures=\"" + failures + "\" errors=\"0\" skipped=\"0\">\n"
+               + testcases + "\n"
+               + "</testsuite>\n";
+    }
+
+    private static String renderJUnitTestCase(TestResultRow testResult) {
+        if (testResult.passed()) {
+            return "  <testcase classname=\"" + xmlEscape(testResult.suite()) + "\" name=\"" + xmlEscape(testResult.name()) + "\"/>";
+        }
+        var failureText = String.join("\n", testResult.failures());
+        return "  <testcase classname=\"" + xmlEscape(testResult.suite()) + "\" name=\"" + xmlEscape(testResult.name()) + "\">\n"
+               + "    <failure message=\"" + xmlEscape(testResult.name()) + "\">"
+               + xmlEscape(failureText)
+               + "</failure>\n"
+               + "  </testcase>";
+    }
+
+    private static String xmlEscape(String value) {
+        return value
+                .replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+                .replace("\"", "&quot;")
+                .replace("'", "&apos;");
     }
 
     private static Map<String, Object> readModuleDefinition(Path moduleFile) {
@@ -511,6 +834,19 @@ public class Capy {
         }
     }
 
+    private static void recreateDirectory(Path directory) throws IOException {
+        if (Files.exists(directory)) {
+            try (var files = Files.walk(directory)) {
+                files.sorted(Comparator.reverseOrder()).forEach(path -> {
+                    if (!path.equals(directory)) {
+                        path.toFile().delete();
+                    }
+                });
+            }
+        }
+        Files.createDirectories(directory);
+    }
+
     private static void writeCompiledModule(Path outputDir, Path relativePath, String code) {
         var absolutePath = outputDir.resolve(relativePath);
         try {
@@ -549,10 +885,100 @@ public class Capy {
         }
     }
 
-    private static void writeBuildInfo(Path outputDir, String compilerVersion) {
-        var buildInfo = Map.of(
-                "build_date_time", OffsetDateTime.now().toString(),
-                "capybara_compiler_version", compilerVersion
+    private static CompiledProgram prepareCompiledTests(CompiledProgram linkedProgram, TreeSet<CompiledModule> libraries) {
+        var testFunctions = discoverTestFunctions(linkedProgram);
+        if (testFunctions.isEmpty()) {
+            throw new CliException("No Capybara functions returning TestFile or list[TestFile] were found.");
+        }
+
+        var outputModules = new java.util.ArrayList<>(readBundledLinkedModules());
+        outputModules.addAll(libraries);
+        outputModules.addAll(linkedProgram.modules());
+        outputModules.removeIf(module -> module.name().equals(CAP_TEST_RUNTIME_MODULE.name()) && normalizeModulePath(module.path()).equals(CAP_TEST_RUNTIME_MODULE.path()));
+        outputModules.add(createCapyTestRuntimeModule(testFunctions));
+        return new CompiledProgram(outputModules);
+    }
+
+    private static List<TestFunctionRef> discoverTestFunctions(CompiledProgram linkedProgram) {
+        return linkedProgram.modules().stream()
+                .flatMap(module -> module.functions().stream()
+                        .filter(function -> function.parameters().isEmpty())
+                        .filter(function -> isTestProducerType(function.returnType()))
+                        .map(function -> new TestFunctionRef(module, function)))
+                .toList();
+    }
+
+    private static boolean isTestProducerType(dev.capylang.compiler.CompiledType returnType) {
+        return isTestFileType(returnType.name()) || isTestFileListType(returnType);
+    }
+
+    private static boolean isTestFileType(String typeName) {
+        return "TestFile".equals(typeName)
+               || typeName.endsWith("/TestFile")
+               || typeName.endsWith(".TestFile");
+    }
+
+    private static boolean isTestFileListType(dev.capylang.compiler.CompiledType returnType) {
+        return returnType instanceof CollectionLinkedType.CompiledList listType
+               && isTestFileType(listType.elementType().name());
+    }
+
+    private static CompiledModule createCapyTestRuntimeModule(List<TestFunctionRef> testFunctions) {
+        return new CompiledModule(
+                CAP_TEST_RUNTIME_MODULE.name(),
+                CAP_TEST_RUNTIME_MODULE.path(),
+                java.util.Map.of(),
+                List.of(new CompiledFunction(
+                "gather_tests",
+                new CollectionLinkedType.CompiledList(testFileType()),
+                List.of(),
+                buildGatherTestsExpression(testFunctions),
+                List.of(),
+                false
+        )),
+                List.of(new CompiledModule.StaticImport("capy.test_.CapyTest", "TestFile"))
+        );
+    }
+
+    private static CompiledExpression buildGatherTestsExpression(List<TestFunctionRef> testFunctions) {
+        var testFileListType = new CollectionLinkedType.CompiledList(testFileType());
+        return testFunctions.stream()
+                .map(Capy::toGatherTestsExpression)
+                .reduce((left, right) -> new CompiledInfixExpression(left, InfixOperator.PLUS, right, testFileListType))
+                .orElseGet(() -> new CompiledNewList(List.of(), testFileListType));
+    }
+
+    private static CompiledExpression toGatherTestsExpression(TestFunctionRef testFunction) {
+        var functionCall = new CompiledFunctionCall(
+                moduleJavaClassName(testFunction.module()) + "." + testFunction.function().name(),
+                List.of(),
+                testFunction.function().returnType()
+        );
+        if (isTestFileListType(testFunction.function().returnType())) {
+            return functionCall;
+        }
+        return new CompiledNewList(List.of(functionCall), new CollectionLinkedType.CompiledList(testFileType()));
+    }
+
+    private static dev.capylang.compiler.CompiledDataType testFileType() {
+        return new dev.capylang.compiler.CompiledDataType("TestFile", List.of(), List.of(), List.of(), false);
+    }
+
+    private static String moduleJavaClassName(CompiledModule module) {
+        var packageName = normalizeModulePath(module.path()).replace('/', '.');
+        var className = module.types().containsKey(module.name()) ? module.name() + "Module" : module.name();
+        return packageName.isBlank() ? className : packageName + "." + className;
+    }
+
+    private static String normalizeModulePath(String path) {
+        return path.replace('\\', '/');
+    }
+
+    private static void writeBuildInfo(Path outputDir, String compilerVersion, List<ModuleRef> sourceModules) {
+        var buildInfo = new BuildInfo(
+                OffsetDateTime.now().toString(),
+                compilerVersion,
+                sourceModules
         );
         try {
             Files.createDirectories(outputDir);
@@ -562,6 +988,33 @@ public class Capy {
         } catch (IOException e) {
             throw new UncheckedIOException("Unable to write build info JSON to " + outputDir, e);
         }
+    }
+
+    private static BuildInfo readBuildInfo(Path linkedInputDir) {
+        var buildInfoFile = linkedInputDir.resolve(BUILD_INFO_FILE);
+        if (Files.notExists(buildInfoFile)) {
+            return null;
+        }
+
+        try (var input = Files.newInputStream(buildInfoFile)) {
+            return objectMapper().readValue(input, BuildInfo.class);
+        } catch (IOException e) {
+            throw new UncheckedIOException("Unable to read build info JSON: " + buildInfoFile, e);
+        }
+    }
+
+    private static GenerationInput selectGenerationInput(Path linkedInputDir, CompiledProgram linkedProgram) {
+        var buildInfo = readBuildInfo(linkedInputDir);
+        if (buildInfo == null || buildInfo.source_modules() == null || buildInfo.source_modules().isEmpty()) {
+            return new GenerationInput(linkedProgram, true);
+        }
+
+        var sourceModules = new TreeSet<>(buildInfo.source_modules());
+        var filteredProgram = new CompiledProgram(linkedProgram.modules().stream()
+                .filter(module -> sourceModules.contains(new ModuleRef(module.name(), normalizeModulePath(module.path()))))
+                .toList());
+        var includeJavaLibResources = filteredProgram.modules().size() == linkedProgram.modules().size();
+        return new GenerationInput(filteredProgram, includeJavaLibResources);
     }
 
     static ObjectMapper objectMapper() {
@@ -598,12 +1051,13 @@ public class Capy {
                 "Usage:",
                 "  capy -v | --version",
                 "  capy -h | --help",
-                "  capy compile [-l|--libs <dir1,dir2,...>] -i|--input <dir> -o|--output <dir> [--log <DEBUG|INFO|WARN|ERROR>]",
+                "  capy compile [-l|--libs <dir1,dir2,...>] [--compile-tests] -i|--input <dir> -o|--output <dir> [--log <DEBUG|INFO|WARN|ERROR>]",
                 "  capy generate <java|python|javascript|js> [-i|--input <dir>] -o|--output <dir> [--log <DEBUG|INFO|WARN|ERROR>]",
                 "  capy package (-ci|--compiled-input <dir> | -i|--input <dir>) -m|--module <capy.yml> [--capy.<field> <value>] [--log <DEBUG|INFO|WARN|ERROR>]",
                 "",
                 "Notes:",
                 "  compile output directory must already exist and be empty.",
+                "  compile --compile-tests writes bundled stdlib modules and injects discovered TestFile/list[TestFile] producers into capy/test/CapyTestRuntime.gather_tests.",
                 "  generate input directory defaults to the current directory.",
                 "  package writes `capy.cbin` next to the provided `capy.yml`."
         );
@@ -634,9 +1088,45 @@ public class Capy {
         }
     }
 
-    private static CompiledModule readLinkedModule(Path linkedModuleFile) {
+    private static List<CompiledModule> readBundledLinkedModules() {
         try {
-            return objectMapper().readValue(linkedModuleFile.toFile(), CompiledModule.class);
+            var resource = Capy.class.getResource("/capy");
+            if (resource == null) {
+                return List.of();
+            }
+            var resourceUri = resource.toURI();
+            if ("jar".equals(resourceUri.getScheme())) {
+                try (var fileSystem = findOrCreateFileSystem(resourceUri)) {
+                    return readBundledLinkedModules(fileSystem.getPath("/capy"));
+                }
+            }
+            return readBundledLinkedModules(Path.of(resourceUri));
+        } catch (URISyntaxException | IOException e) {
+            throw new UncheckedIOException("Unable to read bundled linked Capybara libraries", e instanceof IOException io ? io : new IOException(e));
+        }
+    }
+
+    private static java.nio.file.FileSystem findOrCreateFileSystem(java.net.URI resourceUri) throws IOException {
+        try {
+            return FileSystems.newFileSystem(resourceUri, Map.of());
+        } catch (java.nio.file.FileSystemAlreadyExistsException ignored) {
+            return FileSystems.getFileSystem(resourceUri);
+        }
+    }
+
+    private static List<CompiledModule> readBundledLinkedModules(Path root) throws IOException {
+        try (var files = Files.walk(root)) {
+            return files
+                    .filter(Files::isRegularFile)
+                    .filter(path -> path.getFileName().toString().endsWith(CompiledModule.EXTENSION))
+                    .map(Capy::readLinkedModule)
+                    .toList();
+        }
+    }
+
+    private static CompiledModule readLinkedModule(Path linkedModuleFile) {
+        try (var input = Files.newInputStream(linkedModuleFile)) {
+            return objectMapper().readValue(input, CompiledModule.class);
         } catch (IOException e) {
             throw new UncheckedIOException("Unable to read linked module JSON: " + linkedModuleFile, e);
         }
@@ -699,7 +1189,45 @@ public class Capy {
             Level logLevel
     ) {
     }
+
+    private record BuildInfo(
+            String build_date_time,
+            String capybara_compiler_version,
+            List<ModuleRef> source_modules
+    ) {
+    }
+
+    private record ModuleRef(String name, String path) implements Comparable<ModuleRef> {
+        @Override
+        public int compareTo(ModuleRef other) {
+            var byPath = path.compareTo(other.path);
+            return byPath != 0 ? byPath : name.compareTo(other.name);
+        }
+    }
+
+    private record SuiteResult(String suite, List<TestResultRow> results) {
+    }
+
+    private record TestResultRow(String suite, String name, boolean passed, List<String> failures) {
+    }
+
+    private record GenerationInput(CompiledProgram program, boolean includeJavaLibResources) {
+    }
+
+    private record TestFunctionRef(CompiledModule module, CompiledFunction function) {
+    }
 }
+
+
+
+
+
+
+
+
+
+
+
 
 
 

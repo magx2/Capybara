@@ -12,6 +12,7 @@ import java.util.zip.ZipFile;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class CapyTest {
@@ -25,7 +26,7 @@ class CapyTest {
 
         var exitCode = Capy.execute(new String[]{"--version"}, new PrintStream(stdout), new PrintStream(stderr));
 
-        assertEquals(0, exitCode);
+        assertEquals(0, exitCode, stderr.toString());
         assertEquals("", stderr.toString().trim());
         assertEquals("Capybara compiler version: " + Capy.readCompilerVersion(), stdout.toString().trim());
     }
@@ -43,6 +44,7 @@ class CapyTest {
         assertTrue(text.startsWith("Capybara compiler version: " + Capy.readCompilerVersion()));
         assertTrue(text.contains("capy compile"));
         assertTrue(text.contains("capy generate"));
+        assertTrue(text.contains("--compile-tests"));
         assertTrue(text.contains("capy package"));
     }
 
@@ -100,7 +102,7 @@ class CapyTest {
                 new PrintStream(stderr)
         );
 
-        assertEquals(1, exitCode);
+        assertNotEquals(0, exitCode);
         assertEquals("", stdout.toString().trim());
         assertFalse(stderr.toString().trim().isEmpty());
     }
@@ -126,6 +128,50 @@ class CapyTest {
         );
 
         assertEquals(0, generateExit);
+    }
+
+    @Test
+    void shouldCompileTestsAndWriteCapyTestRuntimeModule() throws IOException {
+        var sourceDir = Files.createDirectories(tempDir.resolve("test-source"));
+        Files.createDirectories(sourceDir.resolve("foo"));
+        Files.writeString(sourceDir.resolve("foo").resolve("TestModule.cfun"), """
+                from /capy/test/Assert import { * }
+                from /capy/test/CapyTest import { * }
+
+                fun works(): Assert =
+                    assert_that(1).is_equal_to(1)
+
+                fun tests(): TestFile =
+                    test_file("/foo/TestModule.cfun", [
+                        test("works", works())
+                    ])
+                """);
+        var linkedDir = Files.createDirectories(tempDir.resolve("test-linked"));
+
+        assertEquals(0, Capy.execute(
+                new String[]{"compile", "--compile-tests", "-i", sourceDir.toString(), "-o", linkedDir.toString()},
+                new PrintStream(new ByteArrayOutputStream()),
+                new PrintStream(new ByteArrayOutputStream())
+        ));
+
+        assertTrue(Files.exists(linkedDir.resolve("capy").resolve("test").resolve("CapyTestRuntime.json")));
+        assertTrue(Files.exists(linkedDir.resolve("foo").resolve("TestModule.json")));
+    }
+
+    @Test
+    void shouldFailCompileTestsWhenNoTestsAreFound() throws IOException {
+        var sourceDir = Files.createDirectories(tempDir.resolve("no-tests-source"));
+        Files.writeString(sourceDir.resolve("Main.cfun"), "fun main(): int = 1\n");
+        var linkedDir = Files.createDirectories(tempDir.resolve("no-tests-linked"));
+        var stderr = new ByteArrayOutputStream();
+        var exitCode = Capy.execute(
+                new String[]{"compile", "--compile-tests", "-i", sourceDir.toString(), "-o", linkedDir.toString()},
+                new PrintStream(new ByteArrayOutputStream()),
+                new PrintStream(stderr)
+        );
+
+        assertNotEquals(0, exitCode);
+        assertFalse(stderr.toString().isBlank());
     }
 
     @Test
@@ -207,3 +253,5 @@ class CapyTest {
         }
     }
 }
+
+

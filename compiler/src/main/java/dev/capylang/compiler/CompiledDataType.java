@@ -6,14 +6,24 @@ public record CompiledDataType(String name,
                              List<CompiledField> fields,
                              List<String> typeParameters,
                              List<String> extendedTypes,
+                             List<String> comments,
                              Visibility visibility,
                              boolean singleton) implements GenericDataType, Comparable<CompiledDataType> {
     public CompiledDataType(String name,
                             List<CompiledField> fields,
                             List<String> typeParameters,
                             List<String> extendedTypes,
+                            List<String> comments,
                             boolean singleton) {
-        this(name, fields, typeParameters, extendedTypes, null, singleton);
+        this(name, fields, typeParameters, extendedTypes, comments, null, singleton);
+    }
+
+    public CompiledDataType(String name,
+                            List<CompiledField> fields,
+                            List<String> typeParameters,
+                            List<String> extendedTypes,
+                            boolean singleton) {
+        this(name, fields, typeParameters, extendedTypes, List.of(), null, singleton);
     }
 
     @Override

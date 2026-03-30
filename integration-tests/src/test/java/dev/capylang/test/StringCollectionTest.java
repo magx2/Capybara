@@ -45,6 +45,13 @@ class StringCollectionTest {
     }
 
     @Test
+    void replaceMethod() {
+        assertThat(StringCollection.replaceMethod("capybara", "bara", "lang")).isEqualTo("capylang");
+        assertThat(StringCollection.replaceMethod("aaaa", "a", "b")).isEqualTo("bbbb");
+        assertThat(StringCollection.replaceMethod("capybara", "dog", "cat")).isEqualTo("capybara");
+    }
+
+    @Test
     void isEmptyMethod() {
         assertThat(StringCollection.isEmptyMethod("")).isTrue();
         assertThat(StringCollection.isEmptyMethod("capybara")).isFalse();
@@ -125,3 +132,4 @@ class StringCollectionTest {
                 .hasMessage("Cannot parse string to bool: abc");
     }
 }
+

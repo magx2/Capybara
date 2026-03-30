@@ -10,6 +10,14 @@ fun not_logic(a: bool): bool = !a
 
 fun complex_logic(a: bool, b: bool): bool = (!a & b) | (a == b)
 
+data BoolBox { failed: bool }
+
+fun BoolBox.has_failed(): bool = this.failed
+
+fun not_field_access(box: BoolBox): bool = !box.failed
+
+fun not_method_call(box: BoolBox): bool = !box.has_failed()
+
 fun byte_to_bool(v: byte): bool = if v then true else false
 
 fun int_to_bool(v: int): bool = if v then true else false

@@ -6,6 +6,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
+import java.util.Optional;
 import java.util.stream.Stream;
 
 import dev.capylang.compiler.parser.*;
@@ -30,6 +31,20 @@ class CapybaraParserTest {
                 .filter(f -> f.name().equals(name))
                 .findAny()
                 .orElseThrow(() -> new AssertionError("Function " + name + " not found"));
+    }
+
+    private static <T> T findDefinition(Class<T> type, String name, Functional functional) {
+        return functional.definitions()
+                .stream()
+                .filter(type::isInstance)
+                .map(type::cast)
+                .filter(definition -> switch (definition) {
+                    case DataDeclaration dataDeclaration -> dataDeclaration.name().equals(name);
+                    case TypeDeclaration typeDeclaration -> typeDeclaration.name().equals(name);
+                    default -> false;
+                })
+                .findAny()
+                .orElseThrow(() -> new AssertionError(type.getSimpleName() + " " + name + " not found"));
     }
 
     static Stream<Arguments> parse() {
@@ -147,6 +162,68 @@ class CapybaraParserTest {
         var listOfIntsType = new CollectionType.ListType(PrimitiveType.INT);
         assertThat(parameter.type()).isEqualTo(listOfIntsType);
         assertThat(function.returnType()).hasValue(listOfIntsType);
+    }
+
+    @Test
+    @DisplayName("should parse doc comments for data and type declarations")
+    void parseDataAndTypeComments() {
+        var module = new CapybaraParser().parseModule(new RawModule("Test", "/parser", """
+                /// See: [Complete JUnit XML example](https://github.com/testmoapp/junitxml?tab=readme-ov-file#complete-junit-xml-example)
+                data JUnitReport { suites: list[JUnitTestSuite] }
+
+                /// Represents a single suite
+                type JUnitNode = JUnitTestSuite
+                """));
+
+        var data = findDefinition(DataDeclaration.class, "JUnitReport", module.functional());
+        var type = findDefinition(TypeDeclaration.class, "JUnitNode", module.functional());
+
+        assertThat(data.comments()).containsExactly("See: [Complete JUnit XML example](https://github.com/testmoapp/junitxml?tab=readme-ov-file#complete-junit-xml-example)");
+        assertThat(type.comments()).containsExactly("Represents a single suite");
+    }
+
+    @Test
+    @DisplayName("should parse bang over field access")
+    void parseBangOverFieldAccess() {
+        var module = new CapybaraParser().parseModule(new RawModule("Test", "/parser", """
+                data Box { failed: bool }
+                fun test(box: Box): bool = !box.failed
+                """));
+
+        var function = findFunction("test", module.functional());
+        assertThat(function.expression()).isInstanceOf(InfixExpression.class);
+        var expression = (InfixExpression) function.expression();
+        assertThat(expression.operator()).isEqualTo(InfixOperator.EQUAL);
+        assertThat(expression.left()).isInstanceOf(FieldAccess.class);
+        var fieldAccess = (FieldAccess) expression.left();
+        assertThat(fieldAccess.field()).isEqualTo("failed");
+        assertThat(fieldAccess.source()).isInstanceOf(Value.class);
+        assertThat(((Value) fieldAccess.source()).name()).isEqualTo("box");
+        assertThat(expression.right()).isInstanceOf(BooleanValue.class);
+        assertThat(((BooleanValue) expression.right()).value()).isFalse();
+    }
+
+    @Test
+    @DisplayName("should parse bang over method call")
+    void parseBangOverMethodCall() {
+        var module = new CapybaraParser().parseModule(new RawModule("Test", "/parser", """
+                data Box { failed: bool }
+                fun Box.has_failed(): bool = this.failed
+                fun test(box: Box): bool = !box.has_failed()
+                """));
+
+        var function = findFunction("test", module.functional());
+        assertThat(function.expression()).isInstanceOf(InfixExpression.class);
+        var expression = (InfixExpression) function.expression();
+        assertThat(expression.operator()).isEqualTo(InfixOperator.EQUAL);
+        assertThat(expression.left()).isInstanceOf(FunctionCall.class);
+        var functionCall = (FunctionCall) expression.left();
+        assertThat(functionCall.moduleName()).isEmpty();
+        assertThat(functionCall.name()).isEqualTo("__invoke__has_failed");
+        assertThat(functionCall.arguments()).singleElement().isInstanceOf(Value.class);
+        assertThat(((Value) functionCall.arguments().getFirst()).name()).isEqualTo("box");
+        assertThat(expression.right()).isInstanceOf(BooleanValue.class);
+        assertThat(((BooleanValue) expression.right()).value()).isFalse();
     }
 }
 

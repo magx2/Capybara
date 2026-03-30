@@ -177,6 +177,9 @@ public class CapybaraParser {
                 context.genericTypeDeclaration().stream().skip(1).map(CapybaraParser::genericTypeName).toList(),
                 fieldDeclarationList,
                 genericTypeParameters(declaredType),
+                context.docComment().stream()
+                        .map(comment -> stripDocComment(comment.getText()))
+                        .toList(),
                 context.VISIBILITY() != null ? dev.capylang.compiler.Visibility.LOCAL : null,
                 position(context)
         );
@@ -190,6 +193,9 @@ public class CapybaraParser {
                 dataFields.fields(),
                 dataFields.extendsTypes(),
                 genericTypeParameters(declaration),
+                context.docComment().stream()
+                        .map(comment -> stripDocComment(comment.getText()))
+                        .toList(),
                 context.VISIBILITY() != null ? dev.capylang.compiler.Visibility.LOCAL : null,
                 position(context)
         );
@@ -235,7 +241,7 @@ public class CapybaraParser {
         if (context.SPREAD() != null) {
             throw new IllegalStateException("Spread field declaration is not allowed in this context: " + context.getText());
         }
-        return new DataDeclaration.DataField(fieldName(context.NAME(), context.STRING_LITERAL()), type(context.type()));
+        return new DataDeclaration.DataField(fieldName(context.identifier(), context.STRING_LITERAL()), type(context.type()));
     }
 
     private List<Definition> functionDeclaration(dev.capylang.parser.antlr.FunctionalParser.FunctionDeclarationContext functionDeclarationContext) {
@@ -482,6 +488,7 @@ public class CapybaraParser {
                 subTypes,
                 fieldDeclarationList,
                 genericTypeParameters(declaredType),
+                List.of(),
                 position(context)
         );
     }
@@ -509,6 +516,7 @@ public class CapybaraParser {
                         .map(name -> rewriteLocalTypeName(name, localTypeNameMap))
                         .toList(),
                 genericTypeParameters(declaration),
+                List.of(),
                 position(context)
         );
     }
@@ -810,31 +818,35 @@ public class CapybaraParser {
     }
 
     private Expression expression(dev.capylang.parser.antlr.FunctionalParser.ExpressionContext expression) {
-        if (expression.letExpression() != null) {
-            var letExpression = expression.letExpression();
-            return new LetExpression(
+        var result = expressionNoLet(expression.expressionNoLet());
+        var lets = expression.letExpression();
+        for (var i = lets.size() - 1; i >= 0; i--) {
+            var letExpression = lets.get(i);
+            result = new LetExpression(
                     letExpression.NAME().getText(),
                     Optional.ofNullable(letExpression.type()).map(CapybaraParser::type),
                     expressionNoLet(letExpression.expressionNoLet()),
-                    expression(letExpression.expression()),
+                    result,
                     position(letExpression)
             );
         }
-        return expressionNoLet(expression.expressionNoLet());
+        return result;
     }
 
     private Expression expressionNoPipe(dev.capylang.parser.antlr.FunctionalParser.ExpressionNoPipeContext expression) {
-        if (expression.letExpressionNoPipe() != null) {
-            var letExpression = expression.letExpressionNoPipe();
-            return new LetExpression(
+        var result = expressionNoLetNoPipe(expression.expressionNoLetNoPipe());
+        var lets = expression.letExpressionNoPipe();
+        for (var i = lets.size() - 1; i >= 0; i--) {
+            var letExpression = lets.get(i);
+            result = new LetExpression(
                     letExpression.NAME().getText(),
                     Optional.ofNullable(letExpression.type()).map(CapybaraParser::type),
                     expressionNoLet(letExpression.expressionNoLet()),
-                    expressionNoPipe(letExpression.expressionNoPipe()),
+                    result,
                     position(letExpression)
             );
         }
-        return expressionNoLetNoPipe(expression.expressionNoLetNoPipe());
+        return result;
     }
 
     private Expression expressionNoLet(dev.capylang.parser.antlr.FunctionalParser.ExpressionNoLetContext expression) {
@@ -928,23 +940,43 @@ public class CapybaraParser {
         }
 
         if (isIndex(expression)) {
+            var sourceContext = expression.expressionNoLet(0);
+            if (isUnaryBang(sourceContext)) {
+                return negate(indexExpression(sourceContext.expressionNoLet(0), expression.indexLiteral(), position(expression)), position(expression));
+            }
             return indexExpression(expression);
         }
 
         if (isSlice(expression)) {
+            var sourceContext = expression.expressionNoLet(0);
+            if (isUnaryBang(sourceContext)) {
+                return negate(sliceExpression(sourceContext.expressionNoLet(0), expression.sliceIndexLiteral(), expression.COLON().getSymbol().getTokenIndex(), position(expression)), position(expression));
+            }
             return sliceExpression(expression);
         }
 
         if (isFieldAccess(expression)) {
+            var sourceContext = expression.expressionNoLet(0);
+            if (isUnaryBang(sourceContext)) {
+                return negate(new FieldAccess(
+                        expressionNoLet(sourceContext.expressionNoLet(0)),
+                        identifier(expression.identifier()),
+                        position(expression)
+                ), position(expression));
+            }
             return new FieldAccess(
-                    expressionNoLet(expression.expressionNoLet(0)),
-                    expression.NAME().getText(),
+                    expressionNoLet(sourceContext),
+                    identifier(expression.identifier()),
                     position(expression)
             );
         }
 
         if (isMethodCall(expression)) {
-            var receiver = expressionNoLet(expression.expressionNoLet(0));
+            var receiverContext = expression.expressionNoLet(0);
+            if (isUnaryBang(receiverContext)) {
+                return negate(methodCall(receiverContext.expressionNoLet(0), expression.methodIdentifier(), expression.argumentList(), position(expression)), position(expression));
+            }
+            var receiver = expressionNoLet(receiverContext);
             var methodName = methodIdentifier(expression.methodIdentifier());
             var args = expression.argumentList() == null
                     ? new java.util.ArrayList<Expression>()
@@ -954,7 +986,11 @@ public class CapybaraParser {
         }
 
         if (isFunctionInvoke(expression)) {
-            var function = expressionNoLet(expression.expressionNoLet(0));
+            var functionContext = expression.expressionNoLet(0);
+            if (isUnaryBang(functionContext)) {
+                return negate(functionInvoke(functionContext.expressionNoLet(0), expression.argumentList(), position(expression)), position(expression));
+            }
+            var function = expressionNoLet(functionContext);
             var args = expression.argumentList() == null
                     ? List.<Expression>of()
                     : expression.argumentList().expression().stream().map(this::expression).toList();
@@ -973,12 +1009,7 @@ public class CapybaraParser {
         }
 
         if (expression.BANG() != null && expression.infixOperator() == null && expression.expressionNoLet().size() == 1) {
-            return new InfixExpression(
-                    expressionNoLet(expression.expressionNoLet(0)),
-                    InfixOperator.EQUAL,
-                    new BooleanValue(false, position(expression)),
-                    position(expression)
-            );
+            return negate(expressionNoLet(expression.expressionNoLet(0)), position(expression));
         }
 
         if (expression.BITWISE_NOT() != null && expression.infixOperator() == null && expression.expressionNoLet().size() == 1) {
@@ -1163,23 +1194,43 @@ public class CapybaraParser {
         }
 
         if (isIndex(expression)) {
+            var sourceContext = expression.expressionNoLetNoPipe(0);
+            if (isUnaryBang(sourceContext)) {
+                return negate(indexExpression(sourceContext.expressionNoLetNoPipe(0), expression.indexNoPipeLiteral(), position(expression)), position(expression));
+            }
             return indexExpression(expression);
         }
 
         if (isSlice(expression)) {
+            var sourceContext = expression.expressionNoLetNoPipe(0);
+            if (isUnaryBang(sourceContext)) {
+                return negate(sliceExpression(sourceContext.expressionNoLetNoPipe(0), expression.sliceIndexNoPipeLiteral(), expression.COLON().getSymbol().getTokenIndex(), position(expression)), position(expression));
+            }
             return sliceExpression(expression);
         }
 
         if (isFieldAccess(expression)) {
+            var sourceContext = expression.expressionNoLetNoPipe(0);
+            if (isUnaryBang(sourceContext)) {
+                return negate(new FieldAccess(
+                        expressionNoLetNoPipe(sourceContext.expressionNoLetNoPipe(0)),
+                        identifier(expression.identifier()),
+                        position(expression)
+                ), position(expression));
+            }
             return new FieldAccess(
-                    expressionNoLetNoPipe(expression.expressionNoLetNoPipe(0)),
-                    expression.NAME().getText(),
+                    expressionNoLetNoPipe(sourceContext),
+                    identifier(expression.identifier()),
                     position(expression)
             );
         }
 
         if (isMethodCall(expression)) {
-            var receiver = expressionNoLetNoPipe(expression.expressionNoLetNoPipe(0));
+            var receiverContext = expression.expressionNoLetNoPipe(0);
+            if (isUnaryBang(receiverContext)) {
+                return negate(methodCall(receiverContext.expressionNoLetNoPipe(0), expression.methodIdentifier(), expression.argumentList(), position(expression)), position(expression));
+            }
+            var receiver = expressionNoLetNoPipe(receiverContext);
             var methodName = methodIdentifier(expression.methodIdentifier());
             var args = expression.argumentList() == null
                     ? new java.util.ArrayList<Expression>()
@@ -1189,7 +1240,11 @@ public class CapybaraParser {
         }
 
         if (isFunctionInvoke(expression)) {
-            var function = expressionNoLetNoPipe(expression.expressionNoLetNoPipe(0));
+            var functionContext = expression.expressionNoLetNoPipe(0);
+            if (isUnaryBang(functionContext)) {
+                return negate(functionInvoke(functionContext.expressionNoLetNoPipe(0), expression.argumentList(), position(expression)), position(expression));
+            }
+            var function = expressionNoLetNoPipe(functionContext);
             var args = expression.argumentList() == null
                     ? List.<Expression>of()
                     : expression.argumentList().expression().stream().map(this::expression).toList();
@@ -1211,12 +1266,7 @@ public class CapybaraParser {
         }
 
         if (expression.BANG() != null && expression.infixOperatorNoPipe() == null && expression.expressionNoLetNoPipe().size() == 1) {
-            return new InfixExpression(
-                    expressionNoLetNoPipe(expression.expressionNoLetNoPipe(0)),
-                    InfixOperator.EQUAL,
-                    new BooleanValue(false, position(expression)),
-                    position(expression)
-            );
+            return negate(expressionNoLetNoPipe(expression.expressionNoLetNoPipe(0)), position(expression));
         }
 
         if (expression.BITWISE_NOT() != null && expression.infixOperatorNoPipe() == null && expression.expressionNoLetNoPipe().size() == 1) {
@@ -1402,7 +1452,14 @@ public class CapybaraParser {
                 ? List.<Expression>of()
                 : context.argumentList().expression().stream().map(this::expression).toList();
         var moduleName = context.TYPE() == null ? Optional.<String>empty() : Optional.of(context.TYPE().getText());
-        return new FunctionCall(moduleName, identifier(context.identifier()), arguments, position(context));
+        var functionName = context.identifier() != null
+                ? identifier(context.identifier())
+                : context.NAME() != null
+                        ? context.NAME().getText()
+                        : context.COLLECTION() != null
+                                ? context.COLLECTION().getText()
+                                : context.getChild(0).getText();
+        return new FunctionCall(moduleName, functionName, arguments, position(context));
     }
 
     private Expression newListExpression(dev.capylang.parser.antlr.FunctionalParser.New_listContext context) {
@@ -1484,7 +1541,7 @@ public class CapybaraParser {
         if (named == null) {
             throw new IllegalStateException("Named field assignment is not available in this context: " + context.getText());
         }
-        return new NewData.FieldAssignment(fieldName(named.NAME(), named.STRING_LITERAL()), expression(named.expression()));
+        return new NewData.FieldAssignment(fieldName(named.identifier(), named.STRING_LITERAL()), expression(named.expression()));
     }
 
     private DataFieldDeclarations dataFieldDeclarationList(FunctionalParser.FieldDeclarationListContext context) {
@@ -1546,6 +1603,13 @@ public class CapybaraParser {
         return Optional.of(SourcePosition.of(node));
     }
 
+    private static String fieldName(FunctionalParser.IdentifierContext identifier, TerminalNode stringLiteral) {
+        if (identifier != null) {
+            return identifier(identifier);
+        }
+        return fieldName((TerminalNode) null, stringLiteral);
+    }
+
     private static String fieldName(TerminalNode name, TerminalNode stringLiteral) {
         if (name != null) {
             return name.getText();
@@ -1577,7 +1641,7 @@ public class CapybaraParser {
                 continue;
             }
             if (current.length() > 0) {
-                parts.add(new StringValue(quoteDoubleQuotedSegment(current.toString()), Optional.of(position)));
+                parts.add(new StringValue(quoteDoubleQuotedSegment(normalizeDoubleQuotedContent(current.toString())), Optional.of(position)));
                 current.setLength(0);
             }
             var end = findInterpolationEnd(content, i + 1);
@@ -1592,7 +1656,7 @@ public class CapybaraParser {
             i = end;
         }
         if (current.length() > 0) {
-            parts.add(new StringValue(quoteDoubleQuotedSegment(current.toString()), Optional.of(position)));
+            parts.add(new StringValue(quoteDoubleQuotedSegment(normalizeDoubleQuotedContent(current.toString())), Optional.of(position)));
         }
         if (parts.isEmpty()) {
             return new StringValue("\"\"", Optional.of(position));
@@ -1823,6 +1887,28 @@ public class CapybaraParser {
                 .replace("\"", "\\\"") + "\"";
     }
 
+    private static String normalizeDoubleQuotedContent(String content) {
+        var normalized = new StringBuilder(content.length());
+        for (var i = 0; i < content.length(); i++) {
+            var ch = content.charAt(i);
+            if (ch == '\\' && i + 1 < content.length()) {
+                var next = content.charAt(i + 1);
+                if (next == '"' || next == '\\') {
+                    normalized.append(next);
+                    i++;
+                    continue;
+                }
+                if (next == '{') {
+                    normalized.append('\\').append('{');
+                    i++;
+                    continue;
+                }
+            }
+            normalized.append(ch);
+        }
+        return normalized.toString();
+    }
+
     private static IllegalStateException interpolationError(SourcePosition position, int interpolationOffset, String details) {
         return new IllegalStateException(
                 "line %d:%d: %s".formatted(position.line(), position.column() + interpolationOffset + 1, details)
@@ -1834,9 +1920,10 @@ public class CapybaraParser {
             return raw;
         }
         if (raw.charAt(0) == '"' && raw.charAt(raw.length() - 1) == '"') {
-            var content = raw.substring(1, raw.length() - 1)
-                    .replace("\\{", "\\\\{");
-            return "\"" + content + "\"";
+            var content = normalizeDoubleQuotedContent(raw.substring(1, raw.length() - 1));
+            return "\"" + content
+                    .replace("\\", "\\\\")
+                    .replace("\"", "\\\"") + "\"";
         }
         if (raw.charAt(0) == '\'' && raw.charAt(raw.length() - 1) == '\'') {
             var content = raw.substring(1, raw.length() - 1)
@@ -1924,11 +2011,23 @@ public class CapybaraParser {
     }
 
     private static boolean isFieldAccess(FunctionalParser.ExpressionNoLetContext expression) {
-        return expression.getChildCount() == 3 && ".".equals(expression.getChild(1).getText()) && expression.NAME() != null;
+        return expression.getChildCount() == 3 && ".".equals(expression.getChild(1).getText()) && expression.identifier() != null;
     }
 
     private static boolean isFieldAccess(FunctionalParser.ExpressionNoLetNoPipeContext expression) {
-        return expression.getChildCount() == 3 && ".".equals(expression.getChild(1).getText()) && expression.NAME() != null;
+        return expression.getChildCount() == 3 && ".".equals(expression.getChild(1).getText()) && expression.identifier() != null;
+    }
+
+    private static boolean isUnaryBang(FunctionalParser.ExpressionNoLetContext expression) {
+        return expression.BANG() != null
+               && expression.infixOperator() == null
+               && expression.expressionNoLet().size() == 1;
+    }
+
+    private static boolean isUnaryBang(FunctionalParser.ExpressionNoLetNoPipeContext expression) {
+        return expression.BANG() != null
+               && expression.infixOperatorNoPipe() == null
+               && expression.expressionNoLetNoPipe().size() == 1;
     }
 
     private static boolean isMethodCall(FunctionalParser.ExpressionNoLetContext expression) {
@@ -1979,10 +2078,26 @@ public class CapybaraParser {
         return new IndexExpression(source, index, position(expression));
     }
 
+    private IndexExpression indexExpression(
+            FunctionalParser.ExpressionNoLetContext sourceContext,
+            FunctionalParser.IndexLiteralContext indexContext,
+            Optional<SourcePosition> position
+    ) {
+        return new IndexExpression(expressionNoLet(sourceContext), indexExpression(indexContext), position);
+    }
+
     private IndexExpression indexExpression(FunctionalParser.ExpressionNoLetNoPipeContext expression) {
         var source = expressionNoLetNoPipe(expression.expressionNoLetNoPipe(0));
         var index = indexExpression(expression.indexNoPipeLiteral());
         return new IndexExpression(source, index, position(expression));
+    }
+
+    private IndexExpression indexExpression(
+            FunctionalParser.ExpressionNoLetNoPipeContext sourceContext,
+            FunctionalParser.IndexNoPipeLiteralContext indexContext,
+            Optional<SourcePosition> position
+    ) {
+        return new IndexExpression(expressionNoLetNoPipe(sourceContext), indexExpression(indexContext), position);
     }
 
     private Expression indexExpression(FunctionalParser.IndexLiteralContext index) {
@@ -2003,6 +2118,92 @@ public class CapybaraParser {
                 expression.COLON().getSymbol().getTokenIndex()
         );
         return new SliceExpression(source, bounds.start(), bounds.end(), position(expression));
+    }
+
+    private SliceExpression sliceExpression(
+            FunctionalParser.ExpressionNoLetContext sourceContext,
+            List<FunctionalParser.SliceIndexLiteralContext> indexContexts,
+            int colonTokenIndex,
+            Optional<SourcePosition> position
+    ) {
+        var bounds = parseSliceBounds(
+                indexContexts.stream().map(this::sliceIndexExpression).toList(),
+                indexContexts.stream().map(index -> index.start.getTokenIndex()).toList(),
+                colonTokenIndex
+        );
+        return new SliceExpression(expressionNoLet(sourceContext), bounds.start(), bounds.end(), position);
+    }
+
+    private SliceExpression sliceExpression(
+            FunctionalParser.ExpressionNoLetNoPipeContext sourceContext,
+            List<FunctionalParser.SliceIndexNoPipeLiteralContext> indexContexts,
+            int colonTokenIndex,
+            Optional<SourcePosition> position
+    ) {
+        var bounds = parseSliceBounds(
+                indexContexts.stream().map(this::sliceIndexExpression).toList(),
+                indexContexts.stream().map(index -> index.start.getTokenIndex()).toList(),
+                colonTokenIndex
+        );
+        return new SliceExpression(expressionNoLetNoPipe(sourceContext), bounds.start(), bounds.end(), position);
+    }
+
+    private FunctionCall methodCall(
+            FunctionalParser.ExpressionNoLetContext receiverContext,
+            FunctionalParser.MethodIdentifierContext methodIdentifierContext,
+            FunctionalParser.ArgumentListContext argumentListContext,
+            Optional<SourcePosition> position
+    ) {
+        var receiver = expressionNoLet(receiverContext);
+        var methodName = methodIdentifier(methodIdentifierContext);
+        var args = argumentListContext == null
+                ? new java.util.ArrayList<Expression>()
+                : new java.util.ArrayList<>(argumentListContext.expression().stream().map(this::expression).toList());
+        args.add(0, receiver);
+        return new FunctionCall(Optional.empty(), METHOD_INVOKE_PREFIX + methodName, List.copyOf(args), position);
+    }
+
+    private FunctionCall methodCall(
+            FunctionalParser.ExpressionNoLetNoPipeContext receiverContext,
+            FunctionalParser.MethodIdentifierContext methodIdentifierContext,
+            FunctionalParser.ArgumentListContext argumentListContext,
+            Optional<SourcePosition> position
+    ) {
+        var receiver = expressionNoLetNoPipe(receiverContext);
+        var methodName = methodIdentifier(methodIdentifierContext);
+        var args = argumentListContext == null
+                ? new java.util.ArrayList<Expression>()
+                : new java.util.ArrayList<>(argumentListContext.expression().stream().map(this::expression).toList());
+        args.add(0, receiver);
+        return new FunctionCall(Optional.empty(), METHOD_INVOKE_PREFIX + methodName, List.copyOf(args), position);
+    }
+
+    private FunctionInvoke functionInvoke(
+            FunctionalParser.ExpressionNoLetContext functionContext,
+            FunctionalParser.ArgumentListContext argumentListContext,
+            Optional<SourcePosition> position
+    ) {
+        var function = expressionNoLet(functionContext);
+        var args = argumentListContext == null
+                ? List.<Expression>of()
+                : argumentListContext.expression().stream().map(this::expression).toList();
+        return new FunctionInvoke(function, args, position);
+    }
+
+    private FunctionInvoke functionInvoke(
+            FunctionalParser.ExpressionNoLetNoPipeContext functionContext,
+            FunctionalParser.ArgumentListContext argumentListContext,
+            Optional<SourcePosition> position
+    ) {
+        var function = expressionNoLetNoPipe(functionContext);
+        var args = argumentListContext == null
+                ? List.<Expression>of()
+                : argumentListContext.expression().stream().map(this::expression).toList();
+        return new FunctionInvoke(function, args, position);
+    }
+
+    private static InfixExpression negate(Expression expression, Optional<SourcePosition> position) {
+        return new InfixExpression(expression, InfixOperator.EQUAL, new BooleanValue(false, position), position);
     }
 
     private Expression sliceIndexExpression(FunctionalParser.SliceIndexLiteralContext index) {
@@ -2077,6 +2278,7 @@ public class CapybaraParser {
     }
 
 }
+
 
 
 

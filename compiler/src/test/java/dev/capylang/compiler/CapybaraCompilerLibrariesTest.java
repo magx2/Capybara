@@ -31,7 +31,63 @@ class CapybaraCompilerLibrariesTest {
                 .containsExactlyInAnyOrder("consume", "unwrap");
     }
 
-    private static CompiledProgram compileProgram(List<RawModule> rawModules, SortedSet<CompiledModule> libraries) {
+    @Test
+    void shouldResolveImportedParentTypeFieldsAcrossModules() {
+        var compiled = compileProgram(List.of(
+                new RawModule("Assert", "/capy/test", """
+                        data Assertion { result: bool, message: string }
+                        type Assert { assertions: list[Assertion] } = StringAssert
+                        data StringAssert { value: string }
+                        """),
+                new RawModule("CapyTest", "/capy/test", """
+                        from Assert import { * }
+
+                        data TestCase { asserts: list[Assert] }
+                        fun assertion_count(test_case: TestCase): int =
+                            test_case.asserts
+                                |> 0, (acc, a) => acc + a.assertions.size
+                        """)
+        ), new java.util.TreeSet<>());
+
+        assertThat(compiled.modules())
+                .extracting(CompiledModule::name)
+                .containsExactlyInAnyOrder("Assert", "CapyTest");
+        assertThat(compiled.modules().stream()
+                .filter(module -> module.name().equals("CapyTest"))
+                .findFirst()
+                .orElseThrow()
+                .functions())
+                .extracting(CompiledFunction::name)
+                .contains("assertion_count");
+    }
+
+
+    @Test
+    void shouldResolveImportedDataFieldsNestedInCollectionsAcrossModules() {
+        var compiled = compileProgram(List.of(
+                new RawModule("CapyTest", "/capy/test", """
+                        data TestCase { asserts: list[string] }
+                        data TestFile { test_cases: list[TestCase] }
+                        """),
+                new RawModule("Runtime", "/capy/test", """
+                        from CapyTest import { * }
+
+                        fun assertion_count(test_file: TestFile): int =
+                            test_file.test_cases | tc => tc.asserts.size |> 0, (acc, count) => acc + count
+                        """)
+        ), new java.util.TreeSet<>());
+
+        assertThat(compiled.modules())
+                .extracting(CompiledModule::name)
+                .containsExactlyInAnyOrder("CapyTest", "Runtime");
+        assertThat(compiled.modules().stream()
+                .filter(module -> module.name().equals("Runtime"))
+                .findFirst()
+                .orElseThrow()
+                .functions())
+                .extracting(CompiledFunction::name)
+                .contains("assertion_count");
+    }    private static CompiledProgram compileProgram(List<RawModule> rawModules, SortedSet<CompiledModule> libraries) {
         var result = CapybaraCompiler.INSTANCE.compile(rawModules, libraries);
         if (result instanceof Result.Error<CompiledProgram> error) {
             fail(error.errors().toString());
@@ -39,3 +95,6 @@ class CapybaraCompilerLibrariesTest {
         return ((Result.Success<CompiledProgram>) result).value();
     }
 }
+
+
+

@@ -240,7 +240,7 @@ public class JavaExpressionEvaluator {
         if (functionInvoke.arguments().isEmpty()
             && functionInvoke.function().type() instanceof dev.capylang.compiler.CompiledFunctionType functionType
             && functionType.argumentType() == dev.capylang.compiler.PrimitiveLinkedType.NOTHING) {
-            call.append(".apply(null)");
+            call.append(".get()");
             return current.addExpression(call.toString());
         }
         for (var argument : functionInvoke.arguments()) {
@@ -589,6 +589,10 @@ public class JavaExpressionEvaluator {
     }
 
     private static Scope evaluateLambdaExpression(CompiledLambdaExpression lambdaExpression, Scope scope) {
+        if (lambdaExpression.functionType().argumentType() == dev.capylang.compiler.PrimitiveLinkedType.NOTHING) {
+            var bodyExSc = evaluateExpression(lambdaExpression.expression(), scope).popExpression();
+            return bodyExSc.scope().addExpression("() -> (" + bodyExSc.expression() + ")");
+        }
         var javaArgumentName = normalizeJavaLocalIdentifier(lambdaExpression.argumentName());
         var bodyExSc = evaluateExpression(
                 lambdaExpression.expression(),
@@ -1190,7 +1194,8 @@ public class JavaExpressionEvaluator {
     private static boolean shouldUseTypedLetDeclaration(CompiledExpression expression) {
         return (expression instanceof CompiledNewList linkedNewList && linkedNewList.values().isEmpty())
                || (expression instanceof CompiledNewSet linkedNewSet && linkedNewSet.values().isEmpty())
-               || (expression instanceof CompiledNewDict linkedNewDict && linkedNewDict.entries().isEmpty());
+               || (expression instanceof CompiledNewDict linkedNewDict && linkedNewDict.entries().isEmpty())
+               || expression.type() instanceof dev.capylang.compiler.CompiledFunctionType;
     }
 
     private static Scope evaluateSliceExpression(CompiledSliceExpression expression, Scope scope) {
@@ -1267,11 +1272,13 @@ public class JavaExpressionEvaluator {
     private static String javaCastTypeForLambdaLiteral(dev.capylang.compiler.CompiledType type) {
         return switch (type) {
             case dev.capylang.compiler.CompiledFunctionType linkedFunctionType ->
-                    "java.util.function.Function<"
-                    + javaCastTypeForLambdaLiteral(linkedFunctionType.argumentType())
-                    + ", "
-                    + javaCastTypeForLambdaLiteral(linkedFunctionType.returnType())
-                    + ">";
+                    linkedFunctionType.argumentType() == dev.capylang.compiler.PrimitiveLinkedType.NOTHING
+                            ? "java.util.function.Supplier<" + javaCastTypeForLambdaLiteral(linkedFunctionType.returnType()) + ">"
+                            : "java.util.function.Function<"
+                              + javaCastTypeForLambdaLiteral(linkedFunctionType.argumentType())
+                              + ", "
+                              + javaCastTypeForLambdaLiteral(linkedFunctionType.returnType())
+                              + ">";
             case dev.capylang.compiler.CollectionLinkedType.CompiledList linkedList ->
                     "java.util.List<" + javaCastTypeForLambdaLiteral(linkedList.elementType()) + ">";
             case dev.capylang.compiler.CollectionLinkedType.CompiledSet linkedSet ->
@@ -1308,11 +1315,13 @@ public class JavaExpressionEvaluator {
                     "java.util.Map<java.lang.String, " + javaCastType(linkedDict.valueType()) + ">";
             case dev.capylang.compiler.CompiledTupleType ignored -> "java.util.List<?>";
             case dev.capylang.compiler.CompiledFunctionType linkedFunctionType ->
-                    "java.util.function.Function<"
-                    + javaCastType(linkedFunctionType.argumentType())
-                    + ", "
-                    + javaCastType(linkedFunctionType.returnType())
-                    + ">";
+                    linkedFunctionType.argumentType() == dev.capylang.compiler.PrimitiveLinkedType.NOTHING
+                            ? "java.util.function.Supplier<" + javaCastType(linkedFunctionType.returnType()) + ">"
+                            : "java.util.function.Function<"
+                              + javaCastType(linkedFunctionType.argumentType())
+                              + ", "
+                              + javaCastType(linkedFunctionType.returnType())
+                              + ">";
             case dev.capylang.compiler.CompiledDataType linkedDataType ->
                     normalizeJavaTypeReference(linkedDataType.name());
             case dev.capylang.compiler.CompiledDataParentType linkedDataParentType ->
@@ -2044,7 +2053,11 @@ public class JavaExpressionEvaluator {
                                          + "(new dev.capylang.CapybaraException(" + args.get(0) + "))");
         }
         if (dataType.singleton()) {
-            return current.addExpression(normalizeJavaTypeReference(dataType.name()) + ".INSTANCE");
+            var javaType = normalizeJavaTypeReference(dataType.name());
+            if (isEnumValueType(dataType)) {
+                return current.addExpression(javaType);
+            }
+            return current.addExpression(javaType + ".INSTANCE");
         }
 
         var javaType = normalizeJavaTypeReference(dataType.name());
@@ -2052,6 +2065,9 @@ public class JavaExpressionEvaluator {
         return current.addExpression("new " + javaType + genericSuffix + "(" + String.join(", ", args) + ")");
     }
 
+    private static boolean isEnumValueType(CompiledDataType dataType) {
+        return dataType.name().equals(dataType.name().toUpperCase(java.util.Locale.ROOT));
+    }
     private static Scope evaluateStringValue(CompiledStringValue stringValue, Scope scope) {
         return scope.addExpression(stringValue.toString());
     }
@@ -2507,3 +2523,4 @@ public class JavaExpressionEvaluator {
     }
 
 }
+

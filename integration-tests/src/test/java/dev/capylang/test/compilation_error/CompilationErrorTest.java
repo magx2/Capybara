@@ -335,13 +335,13 @@ public class CompilationErrorTest {
                 ),
                 Arguments.of(
                         "lambda_outside_pipe_reports_clear_error",
-                        "fun foo(): int = (() => 1)",
-                        new Position(1, 17),
+                        "fun foo() = x => x",
+                        new Position(1, 12),
                         """
                                 error: mismatched types
                                  --> /foo/boo/lambda_outside_pipe_reports_clear_error.cfun:%d:%d
-                                fun foo(): int = (() => 1)
-                                                 ^ Lambda expression can only be used as the right side of `|`, `|-`, `|*`, `|all?` or `|any?`
+                                fun foo() = x => x
+                                            ^ Lambda expression with parameters requires expected function type
                                 """
                 ),
                 Arguments.of(
@@ -1050,6 +1050,9 @@ public class CompilationErrorTest {
         return out;
     }
 }
+
+
+
 
 
 

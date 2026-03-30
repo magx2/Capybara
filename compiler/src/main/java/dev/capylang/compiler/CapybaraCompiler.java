@@ -13,6 +13,7 @@ import java.io.IOException;
 import java.net.URI;
 import java.nio.file.FileSystemNotFoundException;
 import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.stream.Stream;
@@ -46,21 +47,41 @@ public class CapybaraCompiler {
     private static SortedSet<CompiledModule> loadBundledLibraries(Collection<RawModule> rawModules) {
         try {
             var resource = CapybaraCompiler.class.getClassLoader().getResource("capy");
-            if (resource == null) {
-                if (isStdlibBootstrap(rawModules)) {
-                    return new TreeSet<>();
+            if (resource != null) {
+                try (var paths = Files.walk(resourcePath(resource.toURI()))) {
+                    return readBundledLibraries(paths);
                 }
-                throw new IllegalStateException("Unable to find bundled Capybara libraries resource `capy`");
             }
-            try (var paths = Files.walk(resourcePath(resource.toURI()))) {
-                return paths
-                        .filter(path -> path.getFileName().toString().endsWith(CompiledModule.EXTENSION))
-                        .map(CapybaraCompiler::readBundledLibrary)
-                        .collect(java.util.stream.Collectors.toCollection(TreeSet::new));
+            var fallbackPath = bundledLibrariesFallbackPath();
+            if (fallbackPath != null) {
+                try (var paths = Files.walk(fallbackPath)) {
+                    return readBundledLibraries(paths);
+                }
             }
+            if (isStdlibBootstrap(rawModules)) {
+                return new TreeSet<>();
+            }
+            throw new IllegalStateException("Unable to find bundled Capybara libraries resource `capy`");
+        } catch (IllegalStateException e) {
+            throw e;
         } catch (Exception e) {
             throw new IllegalStateException("Unable to load bundled Capybara libraries", e);
         }
+    }
+
+    private static SortedSet<CompiledModule> readBundledLibraries(Stream<Path> paths) {
+        return paths
+                .filter(path -> path.getFileName().toString().endsWith(CompiledModule.EXTENSION))
+                .map(CapybaraCompiler::readBundledLibrary)
+                .collect(java.util.stream.Collectors.toCollection(TreeSet::new));
+    }
+
+    private static Path bundledLibrariesFallbackPath() {
+        var candidate = Paths.get("lib", "capybara-lib", "build", "generated", "sources", "capybara", "linked", "main", "capy");
+        if (Files.isDirectory(candidate)) {
+            return candidate;
+        }
+        return null;
     }
 
     private static boolean isStdlibBootstrap(Collection<RawModule> rawModules) {
@@ -106,12 +127,6 @@ public class CapybaraCompiler {
         var libraryModuleRefs = libraries.stream().map(module -> new ModuleRef(module.name(), module.path())).toList();
         var allModuleRefs = Stream.concat(programModuleRefs.stream(), libraryModuleRefs.stream()).toList();
         var modulesByName = allModuleRefs.stream().collect(toMap(ModuleRef::name, identity(), (first, second) -> first));
-        var moduleClassNameByModuleName = allModuleRefs.stream()
-                .collect(toMap(
-                        ModuleRef::name,
-                        module -> module.path().replace('/', '.').replace('\\', '.') + "." + module.name(),
-                        (first, second) -> first
-                ));
 
         var linkedTypesByModule = new HashMap<String, SortedMap<String, GenericDataType>>();
         for (var library : libraries) {
@@ -125,6 +140,13 @@ public class CapybaraCompiler {
             }
             linkedTypesByModule.put(module.name(), ((Result.Success<SortedMap<String, GenericDataType>>) linkedTypes).value());
         }
+
+        var moduleClassNameByModuleName = allModuleRefs.stream()
+                .collect(toMap(
+                        ModuleRef::name,
+                        module -> moduleJavaClassName(module, linkedTypesByModule.get(module.name())),
+                        (first, second) -> first
+                ));
 
         var visibleTypesByModule = new HashMap<String, Map<String, GenericDataType>>();
         for (var module : program.modules()) {
@@ -348,26 +370,37 @@ public class CapybaraCompiler {
     }
 
     private GenericDataType resolveGenericDataType(GenericDataType type, Map<String, GenericDataType> all) {
+        return resolveGenericDataType(type, all, Set.of());
+    }
+
+    private GenericDataType resolveGenericDataType(
+            GenericDataType type,
+            Map<String, GenericDataType> all,
+            Set<String> resolvingTypeNames
+    ) {
+        var nextResolvingTypeNames = appendResolvingTypeName(resolvingTypeNames, type.name());
         return switch (type) {
             case CompiledDataType linkedDataType -> new CompiledDataType(
                     linkedDataType.name(),
                     linkedDataType.fields().stream()
-                            .map(field -> new CompiledDataType.CompiledField(field.name(), resolveLinkedType(field.type(), all)))
+                            .map(field -> new CompiledDataType.CompiledField(field.name(), resolveLinkedType(field.type(), all, nextResolvingTypeNames)))
                             .toList(),
                     linkedDataType.typeParameters(),
                     linkedDataType.extendedTypes(),
+                    linkedDataType.comments(),
                     linkedDataType.visibility(),
                     linkedDataType.singleton()
             );
             case CompiledDataParentType linkedDataParentType -> new CompiledDataParentType(
                     linkedDataParentType.name(),
                     linkedDataParentType.fields().stream()
-                            .map(field -> new CompiledDataType.CompiledField(field.name(), resolveLinkedType(field.type(), all)))
+                            .map(field -> new CompiledDataType.CompiledField(field.name(), resolveLinkedType(field.type(), all, nextResolvingTypeNames)))
                             .toList(),
                     linkedDataParentType.subTypes().stream()
-                            .map(subType -> (CompiledDataType) resolveGenericDataType(subType, all))
+                            .map(subType -> (CompiledDataType) resolveGenericDataType(subType, all, nextResolvingTypeNames))
                             .toList(),
                     linkedDataParentType.typeParameters(),
+                    linkedDataParentType.comments(),
                     linkedDataParentType.visibility(),
                     linkedDataParentType.enumType()
             );
@@ -375,39 +408,83 @@ public class CapybaraCompiler {
     }
 
     private CompiledType resolveLinkedType(CompiledType type, Map<String, GenericDataType> all) {
+        return resolveLinkedType(type, all, Set.of());
+    }
+
+    private CompiledType resolveLinkedType(
+            CompiledType type,
+            Map<String, GenericDataType> all,
+            Set<String> resolvingTypeNames
+    ) {
         return switch (type) {
-            case CompiledDataType linkedDataType -> resolveGenericDataType(linkedDataType, all);
-            case CompiledDataParentType linkedDataParentType -> {
-                if (isQualifiedExternalPlaceholder(linkedDataParentType)) {
-                    var resolved = resolveQualifiedExternalType(all, linkedDataParentType.name());
+            case CompiledDataType linkedDataType -> {
+                if (isUnresolvedDataPlaceholder(linkedDataType)) {
+                    var resolved = resolveQualifiedExternalType(all, linkedDataType.name());
                     if (resolved != null) {
-                        yield withRequestedName(resolveGenericDataType(resolved, all), linkedDataParentType.name());
+                        if (resolvingTypeNames.contains(linkedDataType.name())) {
+                            yield withRequestedName(resolved, linkedDataType.name());
+                        }
+                        yield withRequestedName(
+                                resolveGenericDataType(resolved, all, appendResolvingTypeName(resolvingTypeNames, linkedDataType.name())),
+                                linkedDataType.name()
+                        );
                     }
                 }
-                yield resolveGenericDataType(linkedDataParentType, all);
+                yield resolveGenericDataType(linkedDataType, all, appendResolvingTypeName(resolvingTypeNames, linkedDataType.name()));
+            }
+            case CompiledDataParentType linkedDataParentType -> {
+                if (isUnresolvedTypePlaceholder(linkedDataParentType) || isQualifiedExternalPlaceholder(linkedDataParentType)) {
+                    var resolved = resolveQualifiedExternalType(all, linkedDataParentType.name());
+                    if (resolved != null) {
+                        if (resolvingTypeNames.contains(linkedDataParentType.name())) {
+                            yield withRequestedName(resolved, linkedDataParentType.name());
+                        }
+                        yield withRequestedName(
+                                resolveGenericDataType(resolved, all, appendResolvingTypeName(resolvingTypeNames, linkedDataParentType.name())),
+                                linkedDataParentType.name()
+                        );
+                    }
+                }
+                yield resolveGenericDataType(linkedDataParentType, all, appendResolvingTypeName(resolvingTypeNames, linkedDataParentType.name()));
             }
             case CollectionLinkedType.CompiledList linkedList ->
-                    new CollectionLinkedType.CompiledList(resolveLinkedType(linkedList.elementType(), all));
+                    new CollectionLinkedType.CompiledList(resolveLinkedType(linkedList.elementType(), all, resolvingTypeNames));
             case CollectionLinkedType.CompiledSet linkedSet ->
-                    new CollectionLinkedType.CompiledSet(resolveLinkedType(linkedSet.elementType(), all));
+                    new CollectionLinkedType.CompiledSet(resolveLinkedType(linkedSet.elementType(), all, resolvingTypeNames));
             case CollectionLinkedType.CompiledDict linkedDict ->
-                    new CollectionLinkedType.CompiledDict(resolveLinkedType(linkedDict.valueType(), all));
+                    new CollectionLinkedType.CompiledDict(resolveLinkedType(linkedDict.valueType(), all, resolvingTypeNames));
             case CompiledTupleType linkedTupleType -> new CompiledTupleType(
-                    linkedTupleType.elementTypes().stream().map(element -> resolveLinkedType(element, all)).toList()
+                    linkedTupleType.elementTypes().stream().map(element -> resolveLinkedType(element, all, resolvingTypeNames)).toList()
             );
             case CompiledFunctionType linkedFunctionType -> new CompiledFunctionType(
-                    resolveLinkedType(linkedFunctionType.argumentType(), all),
-                    resolveLinkedType(linkedFunctionType.returnType(), all)
+                    resolveLinkedType(linkedFunctionType.argumentType(), all, resolvingTypeNames),
+                    resolveLinkedType(linkedFunctionType.returnType(), all, resolvingTypeNames)
             );
             default -> type;
         };
     }
 
-    private boolean isQualifiedExternalPlaceholder(CompiledDataParentType type) {
-        return type.name().startsWith("/")
-               && type.fields().isEmpty()
+    private Set<String> appendResolvingTypeName(Set<String> resolvingTypeNames, String typeName) {
+        var next = new LinkedHashSet<>(resolvingTypeNames);
+        next.add(typeName);
+        return Set.copyOf(next);
+    }
+
+    private boolean isUnresolvedTypePlaceholder(CompiledDataParentType type) {
+        return type.fields().isEmpty()
                && type.subTypes().isEmpty()
                && type.typeParameters().isEmpty();
+    }
+
+    private boolean isUnresolvedDataPlaceholder(CompiledDataType type) {
+        return type.fields().isEmpty()
+               && type.typeParameters().isEmpty()
+               && type.extendedTypes().isEmpty()
+               && !type.singleton();
+    }
+
+    private boolean isQualifiedExternalPlaceholder(CompiledDataParentType type) {
+        return type.name().startsWith("/") && isUnresolvedTypePlaceholder(type);
     }
 
     private GenericDataType resolveQualifiedExternalType(Map<String, GenericDataType> all, String qualifiedTypeName) {
@@ -429,6 +506,7 @@ public class CapybaraCompiler {
                     linkedDataType.fields(),
                     linkedDataType.typeParameters(),
                     linkedDataType.extendedTypes(),
+                    linkedDataType.comments(),
                     linkedDataType.visibility(),
                     linkedDataType.singleton()
             );
@@ -437,6 +515,7 @@ public class CapybaraCompiler {
                     linkedDataParentType.fields(),
                     linkedDataParentType.subTypes(),
                     linkedDataParentType.typeParameters(),
+                    linkedDataParentType.comments(),
                     linkedDataParentType.visibility(),
                     linkedDataParentType.enumType()
             );
@@ -455,7 +534,7 @@ public class CapybaraCompiler {
             if (importedModule == null) {
                 continue;
             }
-            var className = importedModule.path().replace('/', '.').replace('\\', '.') + "." + importedModule.name();
+            var className = moduleJavaClassName(importedModule, linkedTypesByModule.get(importedModule.name()));
             var importedSignatures = visibleSignatures(module.path(), importedModule, signaturesByModule.get(importedModule.name()));
             var importedTypes = visibleTypes(module.path(), importedModule, linkedTypesByModule.get(importedModule.name()));
             if (importDeclaration.isStarImport() && importDeclaration.excludedSymbols().isEmpty()) {
@@ -507,6 +586,21 @@ public class CapybaraCompiler {
         }
 
         return null;
+    }
+
+    private String moduleJavaClassName(ModuleRef module, SortedMap<String, GenericDataType> linkedTypes) {
+        var className = module.path().replace('/', '.').replace('\\', '.') + "." + module.name();
+        if (linkedTypes == null) {
+            return className;
+        }
+        var ownerType = linkedTypes.get(module.name());
+        if (ownerType instanceof CompiledDataParentType) {
+            return className;
+        }
+        if (ownerType != null) {
+            return className + "Module";
+        }
+        return className;
     }
 
     private List<CapybaraExpressionCompiler.FunctionSignature> visibleSignatures(
@@ -2698,6 +2792,7 @@ public class CapybaraCompiler {
                             List.copyOf(fields),
                             dataDeclaration.typeParameters(),
                             dataDeclaration.extendsTypes(),
+                            dataDeclaration.comments(),
                             dataDeclaration.visibility(),
                             false
                     );
@@ -2765,6 +2860,7 @@ public class CapybaraCompiler {
                         List.of(),
                         declaration.typeParameters(),
                         declaration.extendsTypes(),
+                        declaration.comments(),
                         declaration.visibility(),
                         false
                 ));
@@ -2772,7 +2868,7 @@ public class CapybaraCompiler {
         });
         rawTypeDeclarationsByName.forEach((name, declaration) -> knownDataTypes.putIfAbsent(
                 name,
-                new CompiledDataParentType(name, List.of(), List.of(), declaration.typeParameters(), declaration.visibility(), false)
+                new CompiledDataParentType(name, List.of(), List.of(), declaration.typeParameters(), declaration.comments(), declaration.visibility(), false)
         ));
         additionalKnownTypes.forEach(knownDataTypes::putIfAbsent);
         genericTypes.forEach(genericTypeName -> knownDataTypes.putIfAbsent(
@@ -2825,6 +2921,7 @@ public class CapybaraCompiler {
                     parentType.fields(),
                     parentType.subTypes(),
                     parentType.typeParameters(),
+                    parentType.comments(),
                     parentType.visibility(),
                     parentType.enumType()
             );
@@ -2833,6 +2930,7 @@ public class CapybaraCompiler {
                     dataType.fields(),
                     dataType.typeParameters(),
                     dataType.extendedTypes(),
+                    dataType.comments(),
                     dataType.visibility(),
                     dataType.singleton()
             );
@@ -3003,6 +3101,7 @@ public class CapybaraCompiler {
                                     mergeParentFields(fields, subType.fields()),
                                     subType.typeParameters(),
                                     subType.extendedTypes(),
+                                    subType.comments(),
                                     subType.visibility(),
                                     subType.singleton()
                             ))
@@ -3012,6 +3111,7 @@ public class CapybaraCompiler {
                             fields,
                             inheritedSubtypes,
                             typeDeclaration.typeParameters(),
+                            typeDeclaration.comments(),
                             typeDeclaration.visibility(),
                             false
                     );
@@ -3119,6 +3219,12 @@ public class CapybaraCompiler {
                 .toList();
     }
 }
+
+
+
+
+
+
 
 
 
