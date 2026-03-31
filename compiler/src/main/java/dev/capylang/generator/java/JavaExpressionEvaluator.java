@@ -18,6 +18,8 @@ public class JavaExpressionEvaluator {
             new java.util.concurrent.atomic.AtomicLong();
     private static final java.util.concurrent.atomic.AtomicLong MATCH_BINDING_COUNTER =
             new java.util.concurrent.atomic.AtomicLong();
+    private static final java.util.concurrent.atomic.AtomicLong MATCH_SELECTOR_COUNTER =
+            new java.util.concurrent.atomic.AtomicLong();
     private static final java.util.concurrent.atomic.AtomicLong STRING_PARSE_VAR_COUNTER =
             new java.util.concurrent.atomic.AtomicLong();
     private static final java.util.concurrent.atomic.AtomicLong TUPLE_LET_VAR_COUNTER =
@@ -594,17 +596,22 @@ public class JavaExpressionEvaluator {
     private static Scope evaluateLambdaExpression(CompiledLambdaExpression lambdaExpression, Scope scope) {
         if (lambdaExpression.functionType().argumentType() == dev.capylang.compiler.PrimitiveLinkedType.NOTHING) {
             var bodyExSc = evaluateExpression(lambdaExpression.expression(), scope).popExpression();
-            return bodyExSc.scope().addExpression("() -> (" + bodyExSc.expression() + ")");
+            var addedStatements = addedStatements(scope, bodyExSc.scope());
+            if (addedStatements.isEmpty()) {
+                return scope.addExpression("() -> (" + bodyExSc.expression() + ")");
+            }
+            var statements = String.join("; ", addedStatements);
+            return scope.addExpression("() -> { " + statements + "; return (" + bodyExSc.expression() + "); }");
         }
         var javaArgumentName = normalizeJavaLocalIdentifier(lambdaExpression.argumentName());
-        var bodyExSc = evaluateExpression(
-                lambdaExpression.expression(),
-                scope.addLocalValue(lambdaExpression.argumentName())
-        ).popExpression();
-        var bodyExpression = lambdaExpression.argumentName().equals(javaArgumentName)
-                ? bodyExSc.expression()
-                : replaceIdentifier(bodyExSc.expression(), lambdaExpression.argumentName(), javaArgumentName);
-        return bodyExSc.scope().addExpression(javaArgumentName + " -> (" + bodyExpression + ")");
+        var baseScope = scope.addLocalValue(lambdaExpression.argumentName());
+        var bodyExSc = evaluateExpression(lambdaExpression.expression(), baseScope).popExpression();
+        return scope.addExpression(lambdaExpression(
+                lambdaExpression.argumentName(),
+                baseScope,
+                bodyExSc.scope(),
+                bodyExSc.expression()
+        ));
     }
 
     private static String replaceIdentifier(String expression, String sourceIdentifier, String targetIdentifier) {
@@ -1380,7 +1387,7 @@ public class JavaExpressionEvaluator {
     }
 
     private static Scope evaluateMatchExpression(CompiledMatchExpression matchExpression, Scope scope) {
-        var matchSelectorName = "__matchValue";
+        var matchSelectorName = "__matchValue" + MATCH_SELECTOR_COUNTER.incrementAndGet();
         var optionMatch = isOptionType(matchExpression.matchWith().type());
         var matchWithExSc = evaluateExpression(matchExpression.matchWith(), scope).popExpression();
         var selectorExpression = castMatchSelectorExpression(matchWithExSc.expression(), matchExpression.matchWith().type(), optionMatch);
@@ -1985,7 +1992,7 @@ public class JavaExpressionEvaluator {
             || resultType instanceof dev.capylang.compiler.CompiledGenericTypeParameter) {
             return expression;
         }
-        return "((" + javaPatternType(resultType) + ") (" + expression + "))";
+        return "((" + javaCastType(resultType) + ") (" + expression + "))";
     }
 
     private static String javaPatternType(dev.capylang.compiler.CompiledType type) {

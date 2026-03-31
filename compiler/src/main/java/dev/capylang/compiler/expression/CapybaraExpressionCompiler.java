@@ -716,12 +716,30 @@ public class CapybaraExpressionCompiler {
         var substitutions = new java.util.LinkedHashMap<String, CompiledType>();
         var count = Math.min(signature.parameterTypes().size(), arguments.size());
         for (var i = 0; i < count; i++) {
-            collectTypeSubstitutions(signature.parameterTypes().get(i), arguments.get(i).type(), substitutions);
+            var expectedType = signature.parameterTypes().get(i);
+            var argument = arguments.get(i);
+            collectTypeSubstitutions(expectedType, argument.type(), substitutions);
+            if (expectedType instanceof CompiledFunctionType expectedFunction
+                && argument instanceof CompiledLambdaExpression lambdaExpression) {
+                collectLambdaReturnTypeSubstitutions(expectedFunction, lambdaExpression, substitutions);
+            }
         }
         if (substitutions.isEmpty()) {
             return signature.returnType();
         }
         return substituteTypeParameters(signature.returnType(), substitutions);
+    }
+
+    private void collectLambdaReturnTypeSubstitutions(
+            CompiledFunctionType expectedFunction,
+            CompiledLambdaExpression lambdaExpression,
+            Map<String, CompiledType> substitutions
+    ) {
+        var lambdaReturnType = lambdaExpression.expression().type();
+        if (lambdaReturnType instanceof CompiledGenericTypeParameter || !isResolvedTypeForInference(lambdaReturnType)) {
+            return;
+        }
+        collectTypeSubstitutions(expectedFunction.returnType(), lambdaReturnType, substitutions);
     }
 
     private void collectTypeSubstitutions(CompiledType expected, CompiledType actual, Map<String, CompiledType> substitutions) {
@@ -1304,14 +1322,13 @@ public class CapybaraExpressionCompiler {
 
                     CompiledExpression nested = maybeCoerced.expression();
                     CompiledType nestedType = returnType;
-                    if (returnType instanceof CompiledGenericTypeParameter
-                        && !(nested.type() instanceof CompiledGenericTypeParameter)) {
+                    if (!(nested.type() instanceof CompiledGenericTypeParameter)
+                        && isResolvedTypeForInference(nested.type())) {
+                        // Preserve the concrete linked return type whenever coercion succeeded so
+                        // generic method inference can substitute placeholders like `Y`.
                         nestedType = nested.type();
-                    } else if (!returnType.equals(nested.type())
-                               && isTypeCompatible(nested.type(), returnType)
-                               && isResolvedTypeForInference(nested.type())) {
-                        // Keep concrete lambda return types (e.g. Result[JsonObject]) so generic
-                        // method return type inference does not fall back to unresolved placeholders.
+                    } else if (returnType instanceof CompiledGenericTypeParameter
+                               && !(nested.type() instanceof CompiledGenericTypeParameter)) {
                         nestedType = nested.type();
                     }
                     for (int idx = argumentNames.size() - 1; idx >= 0; idx--) {
@@ -1934,10 +1951,11 @@ public class CapybaraExpressionCompiler {
                     position
             );
         }
+        var returnType = resolveMethodReturnType(operatorSymbol, best.signature(), best.arguments());
         return Result.success(new CompiledFunctionCall(
                 best.signature().name(),
                 best.arguments(),
-                resolveReturnType(best.signature(), best.arguments())
+                returnType
         ));
     }
 
@@ -1992,11 +2010,38 @@ public class CapybaraExpressionCompiler {
                     position
             );
         }
+        var returnType = resolveMethodReturnType(operatorSymbol, best.signature(), best.arguments());
         return Result.success(new CompiledFunctionCall(
                 best.signature().name(),
                 best.arguments(),
-                resolveReturnType(best.signature(), best.arguments())
+                returnType
         ));
+    }
+
+    private CompiledType resolveMethodReturnType(
+            String operatorSymbol,
+            FunctionSignature signature,
+            List<CompiledExpression> arguments
+    ) {
+        var resolved = resolveReturnType(signature, arguments);
+        if (!"|".equals(operatorSymbol) || arguments.size() < 2) {
+            return resolved;
+        }
+        var mapper = arguments.get(1);
+        if (!(mapper instanceof CompiledLambdaExpression lambdaExpression)) {
+            return resolved;
+        }
+        if (!(signature.returnType() instanceof GenericDataType signatureReturnType)) {
+            return resolved;
+        }
+        if (!(lambdaExpression.expression().type() instanceof GenericDataType lambdaReturnType)) {
+            return resolved;
+        }
+        if (!sameRawTypeName(signatureReturnType.name(), lambdaReturnType.name())
+            || !isResolvedTypeForInference(lambdaReturnType)) {
+            return resolved;
+        }
+        return lambdaReturnType;
     }
 
     private static Result.Error.SingleError firstError(Result.Error<?> error) {
@@ -3482,7 +3527,7 @@ public class CapybaraExpressionCompiler {
                     .filter(parent -> isSubtypeOfParent(leftData, parent) && isSubtypeOfParent(rightData, parent))
                     .toList();
             if (sharedParents.size() == 1) {
-                return sharedParents.getFirst();
+                return specializeSharedParent(sharedParents.getFirst(), leftData, rightData);
             }
             if (!sharedParents.isEmpty()) {
                 var uniqueByRawName = sharedParents.stream()
@@ -3493,11 +3538,75 @@ public class CapybaraExpressionCompiler {
                                 java.util.LinkedHashMap::new
                         ));
                 if (uniqueByRawName.size() == 1) {
-                    return canonicalizeParentAlias(uniqueByRawName.values().iterator().next());
+                    return specializeSharedParent(
+                            canonicalizeParentAlias(uniqueByRawName.values().iterator().next()),
+                            leftData,
+                            rightData
+                    );
                 }
             }
         }
         return findHigherType(left, right);
+    }
+
+    private CompiledDataParentType specializeSharedParent(
+            CompiledDataParentType parent,
+            CompiledDataType leftData,
+            CompiledDataType rightData
+    ) {
+        if (parent.typeParameters().isEmpty()) {
+            return canonicalizeParentAlias(parent);
+        }
+        var specializedDescriptors = mergeSharedParentTypeParameters(parent, leftData, rightData);
+        if (specializedDescriptors.isEmpty()) {
+            return canonicalizeParentAlias(parent);
+        }
+        return new CompiledDataParentType(
+                canonicalizeParentAlias(parent).name(),
+                parent.fields(),
+                parent.subTypes(),
+                specializedDescriptors,
+                parent.enumType()
+        );
+    }
+
+    private List<String> mergeSharedParentTypeParameters(
+            CompiledDataParentType parent,
+            CompiledDataType leftData,
+            CompiledDataType rightData
+    ) {
+        var count = parent.typeParameters().size();
+        if (count == 0) {
+            return List.of();
+        }
+        var leftParameters = leftData.typeParameters();
+        var rightParameters = rightData.typeParameters();
+        if (leftParameters.isEmpty() && rightParameters.isEmpty()) {
+            return List.of();
+        }
+
+        var merged = new ArrayList<String>(count);
+        for (var i = 0; i < count; i++) {
+            var leftDescriptor = i < leftParameters.size() ? leftParameters.get(i) : null;
+            var rightDescriptor = i < rightParameters.size() ? rightParameters.get(i) : null;
+            if (leftDescriptor != null && rightDescriptor != null) {
+                if (leftDescriptor.equals(rightDescriptor)) {
+                    merged.add(leftDescriptor);
+                    continue;
+                }
+                return List.of();
+            }
+            if (leftDescriptor != null) {
+                merged.add(leftDescriptor);
+                continue;
+            }
+            if (rightDescriptor != null) {
+                merged.add(rightDescriptor);
+                continue;
+            }
+            return List.of();
+        }
+        return merged;
     }
 
     private CompiledDataParentType preferQualifiedParent(CompiledDataParentType first, CompiledDataParentType second) {

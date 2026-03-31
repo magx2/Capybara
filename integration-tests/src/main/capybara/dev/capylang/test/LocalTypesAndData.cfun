@@ -37,3 +37,14 @@ fun local_generic_data_used_in_local_function_return_type(v: int): string =
     match __parse(v) with
     | Success { value } -> "value:" + value.value
     | Error { message } -> "error:" + message
+
+fun local_generic_data_field_access_followed_by_index(buffer: string): string =
+    data __Parse[T] { buffer: string, value: T }
+    fun __parse(value: string): Result[__Parse[int]] =
+        Success { __Parse { buffer: value, value: 1 } }
+    match (__parse(buffer) | parse =>
+        match parse.buffer[0] with
+        | Some { value } -> Success { value }
+        | None -> Error { "" }) with
+    | Success { value } -> value
+    | Error { message } -> message

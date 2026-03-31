@@ -240,6 +240,26 @@ class CapybaraParserTest {
         assertThat(expression.right()).isInstanceOf(BooleanValue.class);
         assertThat(((BooleanValue) expression.right()).value()).isFalse();
     }
+
+    @Test
+    @DisplayName("should parse field access followed by index")
+    void parseFieldAccessFollowedByIndex() {
+        var module = new CapybaraParser().parseModule(new RawModule("Test", "/parser", """
+                data Parse { buffer: string }
+                fun test(parse: Parse): string = parse.buffer[0]
+                """));
+
+        var function = findFunction("test", module.functional());
+        assertThat(function.expression()).isInstanceOf(IndexExpression.class);
+        var indexExpression = (IndexExpression) function.expression();
+        assertThat(indexExpression.source()).isInstanceOf(FieldAccess.class);
+        var fieldAccess = (FieldAccess) indexExpression.source();
+        assertThat(fieldAccess.field()).isEqualTo("buffer");
+        assertThat(fieldAccess.source()).isInstanceOf(Value.class);
+        assertThat(((Value) fieldAccess.source()).name()).isEqualTo("parse");
+        assertThat(indexExpression.index()).isInstanceOf(IntValue.class);
+        assertThat(((IntValue) indexExpression.index()).intValue()).isEqualTo("0");
+    }
 }
 
 

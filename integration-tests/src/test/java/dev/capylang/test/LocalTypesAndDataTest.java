@@ -26,4 +26,9 @@ class LocalTypesAndDataTest {
     void localFunctionShouldResolveLocalGenericDataTypeInsideNestedReturnType() {
         assertThat(LocalTypesAndData.localGenericDataUsedInLocalFunctionReturnType(7)).isEqualTo("value:7");
     }
+
+    @Test
+    void localGenericDataFieldAccessShouldRemainVisibleBeforeIndexingInsidePipeLambda() {
+        assertThat(LocalTypesAndData.localGenericDataFieldAccessFollowedByIndex("abc")).isEqualTo("a");
+    }
 }
