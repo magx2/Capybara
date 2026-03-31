@@ -137,13 +137,37 @@
       <key>end</key><string>\]</string>
       <key>patterns</key>
       <array>
+        <dict><key>name</key><string>comment.block.capybara</string><key>begin</key><string>/\*</string><key>end</key><string>\*/</string></dict>
+        <dict><key>name</key><string>comment.block.documentation.capybara</string><key>match</key><string>///.*$</string></dict>
+        <dict><key>name</key><string>comment.line.double-slash.capybara</string><key>match</key><string>//.*$</string></dict>
+        <dict>
+          <key>name</key><string>string.quoted.double.capybara</string>
+          <key>begin</key><string>"</string>
+          <key>end</key><string>"</string>
+          <key>patterns</key>
+          <array>
+            <dict><key>name</key><string>constant.character.escape.capybara</string><key>match</key><string>\\.</string></dict>
+          </array>
+        </dict>
+        <dict>
+          <key>name</key><string>string.quoted.single.capybara</string>
+          <key>begin</key><string>'</string>
+          <key>end</key><string>'</string>
+          <key>patterns</key>
+          <array>
+            <dict><key>name</key><string>constant.character.escape.capybara</string><key>match</key><string>\\.</string></dict>
+          </array>
+        </dict>
         <dict><key>name</key><string>keyword.operator.capybara</string><key>match</key><string>:</string></dict>
+        <dict><key>name</key><string>keyword.operator.pipe.capybara</string><key>match</key><string>\|all\?|\|any\?|\|>|\|\*|\|-|\||\.and\.|\.nand\.|\.or\.|\.xor\.|\.not\.|==|!=|&lt;=|&gt;=|=&gt;|\+|\-|\*|/|%|\^|&lt;|&gt;|=|&amp;|\?|:|,</string></dict>
         <dict><key>name</key><string>constant.numeric.int.capybara</string><key>match</key><string>-?\d+</string></dict>
       </array>
     </dict>
   </array>
 </dict>
 </plist>
+
+
 
 
 

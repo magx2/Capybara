@@ -268,8 +268,47 @@
           "end": "\\]",
           "patterns": [
             {
+              "name": "comment.block.capybara",
+              "begin": "/\\*",
+              "end": "\\*/"
+            },
+            {
+              "name": "comment.block.documentation.capybara",
+              "match": "///.*$"
+            },
+            {
+              "name": "comment.line.double-slash.capybara",
+              "match": "//.*$"
+            },
+            {
+              "name": "string.quoted.double.capybara",
+              "begin": "\"",
+              "end": "\"",
+              "patterns": [
+                {
+                  "name": "constant.character.escape.capybara",
+                  "match": "\\\\."
+                }
+              ]
+            },
+            {
+              "name": "string.quoted.single.capybara",
+              "begin": "'",
+              "end": "'",
+              "patterns": [
+                {
+                  "name": "constant.character.escape.capybara",
+                  "match": "\\\\."
+                }
+              ]
+            },
+            {
               "name": "keyword.operator.capybara",
               "match": ":"
+            },
+            {
+              "name": "keyword.operator.pipe.capybara",
+              "match": "\\|all\\?|\\|any\\?|\\|>|\\|\\*|\\|-|\\||\\.and\\.|\\.nand\\.|\\.or\\.|\\.xor\\.|\\.not\\.|==|!=|<=|>=|=>|\\+|\\-|\\*|/|%|\\^|<|>|=|&|\\?|:|,"
             },
             {
               "name": "constant.numeric.int.capybara",
@@ -281,6 +320,8 @@
     }
   }
 }
+
+
 
 
 
