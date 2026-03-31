@@ -243,6 +243,10 @@
           "match": "(?<=\\(|,)\\s*(_) (?=\\s*(?:,|\\)\\s*=>))"
         },
         {
+          "name": "meta.lambda.tuple-destructure.capybara",
+          "match": "(\\()\\s*([A-Za-z_][A-Za-z0-9_]*|_)(\\s*,\\s*([A-Za-z_][A-Za-z0-9_]*|_))+\\s*(\\))\\s*(=>)"
+        },
+        {
           "name": "meta.lambda.no-args.capybara",
           "match": "(\\()\\s*(\\))\\s*(=>)"
         }

@@ -19,6 +19,7 @@ public class CapybaraExpressionCompiler {
     private static final String METHOD_DECL_PREFIX = "__method__";
     private static final String METHOD_INVOKE_PREFIX = "__invoke__";
     private static final String DICT_PIPE_ARGS_SEPARATOR = "::";
+    private static final String TUPLE_PIPE_ARGS_SEPARATOR = ";;";
     private final List<CompiledFunction.CompiledFunctionParameter> parameters;
     private final Map<String, GenericDataType> dataTypes;
     private final List<FunctionSignature> functionSignatures;
@@ -2125,22 +2126,14 @@ public class CapybaraExpressionCompiler {
                     expression.right().position()
             );
         }
-        var lambdaArgumentName = singleLambdaArgument(lambdaExpression)
-                .orElse(null);
-        if (lambdaArgumentName == null) {
-            return withPosition(
-                    Result.error("Right side lambda of `|` has to have exactly one argument"),
-                    lambdaExpression.position()
-            );
-        }
-        var lambdaScope = addLambdaBinding(scope, lambdaArgumentName, elementType);
-        return linkExpression(lambdaExpression.expression(), lambdaScope)
+        return linkPipeLambdaArguments(scope, lambdaExpression, elementType, "|")
+                .flatMap(lambdaBinding -> linkExpression(lambdaExpression.expression(), lambdaBinding.scope())
                 .map(mapper -> (CompiledExpression) new CompiledPipeExpression(
                         left,
-                        lambdaArgumentName,
+                        lambdaBinding.argumentName(),
                         mapper,
                         left.type()
-                ));
+                )));
     }
 
     private Result<CompiledExpression> linkCollectionPipeExpression(
@@ -2169,24 +2162,16 @@ public class CapybaraExpressionCompiler {
                     expression.right().position()
             );
         }
-        var lambdaArgumentName = singleLambdaArgument(lambdaExpression)
-                .orElse(null);
-        if (lambdaArgumentName == null) {
-            return withPosition(
-                    Result.error("Right side lambda of `|` has to have exactly one argument"),
-                    lambdaExpression.position()
-            );
-        }
-        var lambdaScope = addLambdaBinding(scope, lambdaArgumentName, elementType);
-        return linkExpression(lambdaExpression.expression(), lambdaScope)
+        return linkPipeLambdaArguments(scope, lambdaExpression, elementType, "|")
+                .flatMap(lambdaBinding -> linkExpression(lambdaExpression.expression(), lambdaBinding.scope())
                 .map(mapper -> (CompiledExpression) new CompiledPipeExpression(
                         left,
-                        lambdaArgumentName,
+                        lambdaBinding.argumentName(),
                         mapper,
                         left.type() instanceof CompiledSet
                                 ? new CompiledSet(mapper.type())
                                 : new CompiledList(mapper.type())
-                ));
+                )));
     }
 
     private Result<CompiledExpression> linkDictPipeExpression(
@@ -2562,16 +2547,8 @@ public class CapybaraExpressionCompiler {
                                 expression.right().position()
                         );
                     }
-                    var lambdaArgumentName = singleLambdaArgument(lambdaExpression)
-                            .orElse(null);
-                    if (lambdaArgumentName == null) {
-                        return withPosition(
-                                Result.error("Right side lambda of `|*` has to have exactly one argument"),
-                                lambdaExpression.position()
-                        );
-                    }
-                    var lambdaScope = addLambdaBinding(scope, lambdaArgumentName, elementType);
-                    return linkExpression(lambdaExpression.expression(), lambdaScope)
+                    return linkPipeLambdaArguments(scope, lambdaExpression, elementType, "|*")
+                            .flatMap(lambdaBinding -> linkExpression(lambdaExpression.expression(), lambdaBinding.scope())
                             .flatMap(mapper -> {
                                 var mappedElementType = collectionElementType(mapper.type());
                                 if (mappedElementType == null) {
@@ -2582,13 +2559,13 @@ public class CapybaraExpressionCompiler {
                                 }
                                 return Result.success((CompiledExpression) new CompiledPipeFlatMapExpression(
                                         left,
-                                        lambdaArgumentName,
+                                        lambdaBinding.argumentName(),
                                         mapper,
                                         left.type() instanceof CompiledSet
                                                 ? new CompiledSet(mappedElementType)
                                                 : new CompiledList(mappedElementType)
                                 ));
-                            });
+                            }));
                 });
     }
 
@@ -2649,16 +2626,8 @@ public class CapybaraExpressionCompiler {
                             expression.right().position()
                         );
                     }
-                    var lambdaArgumentName = singleLambdaArgument(lambdaExpression)
-                            .orElse(null);
-                    if (lambdaArgumentName == null) {
-                        return withPosition(
-                                Result.error("Right side lambda of `|-` has to have exactly one argument"),
-                                lambdaExpression.position()
-                        );
-                    }
-                    var lambdaScope = addLambdaBinding(scope, lambdaArgumentName, elementType);
-                    return linkExpression(lambdaExpression.expression(), lambdaScope)
+                    return linkPipeLambdaArguments(scope, lambdaExpression, elementType, "|-")
+                            .flatMap(lambdaBinding -> linkExpression(lambdaExpression.expression(), lambdaBinding.scope())
                             .flatMap(predicate -> {
                                 if (predicate.type() != BOOL) {
                                     return withPosition(
@@ -2668,13 +2637,13 @@ public class CapybaraExpressionCompiler {
                                 }
                                 return Result.success((CompiledExpression) new CompiledPipeFilterOutExpression(
                                         left,
-                                        lambdaArgumentName,
+                                        lambdaBinding.argumentName(),
                                         predicate,
                                         left.type() instanceof CompiledSet
                                                 ? new CompiledSet(elementType)
                                                 : new CompiledList(elementType)
                                 ));
-                            });
+                            }));
                 });
     }
 
@@ -2722,15 +2691,8 @@ public class CapybaraExpressionCompiler {
                                 expression.right().position()
                         );
                     }
-                    var lambdaArgumentName = singleLambdaArgument(lambdaExpression).orElse(null);
-                    if (lambdaArgumentName == null) {
-                        return withPosition(
-                                Result.error("Right side lambda of `" + expression.operator().symbol() + "` has to have exactly one argument"),
-                                lambdaExpression.position()
-                        );
-                    }
-                    var lambdaScope = addLambdaBinding(scope, lambdaArgumentName, elementType);
-                    return linkExpression(lambdaExpression.expression(), lambdaScope)
+                    return linkPipeLambdaArguments(scope, lambdaExpression, elementType, expression.operator().symbol())
+                            .flatMap(lambdaBinding -> linkExpression(lambdaExpression.expression(), lambdaBinding.scope())
                             .flatMap(predicate -> {
                                 if (predicate.type() != BOOL) {
                                     return withPosition(
@@ -2740,10 +2702,10 @@ public class CapybaraExpressionCompiler {
                                 }
                                 return Result.success(
                                         any
-                                                ? (CompiledExpression) new CompiledPipeAnyExpression(left, lambdaArgumentName, predicate, BOOL)
-                                                : (CompiledExpression) new CompiledPipeAllExpression(left, lambdaArgumentName, predicate, BOOL)
+                                                ? (CompiledExpression) new CompiledPipeAnyExpression(left, lambdaBinding.argumentName(), predicate, BOOL)
+                                                : (CompiledExpression) new CompiledPipeAllExpression(left, lambdaBinding.argumentName(), predicate, BOOL)
                                 );
-                            });
+                            }));
                 });
     }
 
@@ -3405,6 +3367,52 @@ public class CapybaraExpressionCompiler {
 
     private static String encodeDictPipeArguments(String keyName, String valueName) {
         return keyName + DICT_PIPE_ARGS_SEPARATOR + valueName;
+    }
+
+    private static String encodeTuplePipeArguments(List<String> argumentNames) {
+        return String.join(TUPLE_PIPE_ARGS_SEPARATOR, argumentNames);
+    }
+
+    private Result<PipeLambdaBinding> linkPipeLambdaArguments(
+            Scope scope,
+            LambdaExpression lambdaExpression,
+            CompiledType elementType,
+            String operator
+    ) {
+        var argumentNames = lambdaExpression.argumentNames();
+        if (argumentNames.size() == 1) {
+            var argumentName = argumentNames.getFirst();
+            return Result.success(new PipeLambdaBinding(argumentName, addLambdaBinding(scope, argumentName, elementType)));
+        }
+        if (argumentNames.isEmpty()) {
+            return withPosition(
+                    Result.error("Right side lambda of `" + operator + "` has to have exactly one argument"),
+                    lambdaExpression.position()
+            );
+        }
+        if (!(elementType instanceof CompiledTupleType tupleType)) {
+            return withPosition(
+                    Result.error("Right side lambda of `" + operator + "` can use tuple destructuring only for tuple elements"),
+                    lambdaExpression.position()
+            );
+        }
+        if (tupleType.elementTypes().size() != argumentNames.size()) {
+            return withPosition(
+                    Result.error("Tuple destructuring in `" + operator + "` expects "
+                                 + tupleType.elementTypes().size()
+                                 + " arguments, got "
+                                 + argumentNames.size()),
+                    lambdaExpression.position()
+            );
+        }
+        var lambdaScope = scope;
+        for (int i = 0; i < argumentNames.size(); i++) {
+            lambdaScope = addLambdaBinding(lambdaScope, argumentNames.get(i), tupleType.elementTypes().get(i));
+        }
+        return Result.success(new PipeLambdaBinding(encodeTuplePipeArguments(argumentNames), lambdaScope));
+    }
+
+    private record PipeLambdaBinding(String argumentName, Scope scope) {
     }
 
     private Result<CompiledExpression> linkIntValue(IntValue intValue, Scope scope) {

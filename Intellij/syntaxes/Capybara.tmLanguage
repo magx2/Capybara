@@ -122,6 +122,10 @@
       <key>match</key><string>(?&lt;=\(|,)\s*(_)(?=\s*(?:,|\)\s*=&gt;))</string>
     </dict>
     <dict>
+      <key>name</key><string>meta.lambda.tuple-destructure.capybara</string>
+      <key>match</key><string>(\()\s*([A-Za-z_][A-Za-z0-9_]*|_)(\s*,\s*([A-Za-z_][A-Za-z0-9_]*|_))+\s*(\))\s*(=&gt;)</string>
+    </dict>
+    <dict>
       <key>name</key><string>meta.lambda.no-args.capybara</string>
       <key>match</key><string>(\()\s*(\))\s*(=&gt;)</string>
     </dict>

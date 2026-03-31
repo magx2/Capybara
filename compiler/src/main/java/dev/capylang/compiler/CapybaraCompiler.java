@@ -11,6 +11,7 @@ import dev.capylang.compiler.parser.Module;
 
 import java.io.IOException;
 import java.net.URI;
+import java.nio.file.FileSystemAlreadyExistsException;
 import java.nio.file.FileSystemNotFoundException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
@@ -93,7 +94,11 @@ public class CapybaraCompiler {
             try {
                 return Path.of(resource);
             } catch (FileSystemNotFoundException ignored) {
-                java.nio.file.FileSystems.newFileSystem(resource, Map.of());
+                try {
+                    java.nio.file.FileSystems.newFileSystem(resource, Map.of());
+                } catch (FileSystemAlreadyExistsException alreadyExists) {
+                    java.nio.file.FileSystems.getFileSystem(resource);
+                }
                 return Path.of(resource);
             }
         }
@@ -3219,6 +3224,8 @@ public class CapybaraCompiler {
                 .toList();
     }
 }
+
+
 
 
 

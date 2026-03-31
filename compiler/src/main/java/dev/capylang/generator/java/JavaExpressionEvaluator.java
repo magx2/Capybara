@@ -20,8 +20,11 @@ public class JavaExpressionEvaluator {
             new java.util.concurrent.atomic.AtomicLong();
     private static final java.util.concurrent.atomic.AtomicLong STRING_PARSE_VAR_COUNTER =
             new java.util.concurrent.atomic.AtomicLong();
+    private static final java.util.concurrent.atomic.AtomicLong TUPLE_LET_VAR_COUNTER =
+            new java.util.concurrent.atomic.AtomicLong();
     private static final Logger log = Logger.getLogger(JavaExpressionEvaluator.class.getName());
     private static final String DICT_PIPE_ARGS_SEPARATOR = "::";
+    private static final String TUPLE_PIPE_ARGS_SEPARATOR = ";;";
     private static final String METHOD_DECL_PREFIX = "__method__";
     private static final java.util.Set<String> JAVA_KEYWORDS = java.util.Set.of(
             "abstract", "assert", "boolean", "break", "byte", "case", "catch", "char", "class",
@@ -695,13 +698,18 @@ public class JavaExpressionEvaluator {
         }
 
         var sourceStreamExSc = evaluateSourceAsStream(source, scope);
-        var predicateBaseScope = sourceStreamExSc.scope().addLocalValue(argumentName);
+        var predicateBinding = bindPipeLambdaArgument(
+                sourceStreamExSc.scope(),
+                argumentName,
+                streamElementType(source.type()).orElse(dev.capylang.compiler.PrimitiveLinkedType.ANY)
+        );
+        var predicateBaseScope = predicateBinding.scope();
         var predicateExSc = evaluateExpression(
                 predicate,
                 predicateBaseScope
         ).popExpression();
         var predicateLambda = lambdaExpression(
-                argumentName,
+                predicateBinding.lambdaArgumentName(),
                 predicateBaseScope,
                 predicateExSc.scope(),
                 predicateExSc.expression()
@@ -745,13 +753,18 @@ public class JavaExpressionEvaluator {
 
     private static Scope evaluateOptionPipeExpression(CompiledPipeExpression pipeExpression, Scope scope) {
         var sourceExSc = evaluateExpression(pipeExpression.source(), scope).popExpression();
-        var mapperBaseScope = sourceExSc.scope().addLocalValue(pipeExpression.argumentName());
+        var mapperBinding = bindPipeLambdaArgument(
+                sourceExSc.scope(),
+                pipeExpression.argumentName(),
+                optionElementType(pipeExpression.source().type()).orElse(dev.capylang.compiler.PrimitiveLinkedType.ANY)
+        );
+        var mapperBaseScope = mapperBinding.scope();
         var mapperExSc = evaluateExpression(
                 pipeExpression.mapper(),
                 mapperBaseScope
         ).popExpression();
         var mapperLambda = lambdaExpression(
-                pipeExpression.argumentName(),
+                mapperBinding.lambdaArgumentName(),
                 mapperBaseScope,
                 mapperExSc.scope(),
                 mapperExSc.expression()
@@ -764,7 +777,12 @@ public class JavaExpressionEvaluator {
 
     private static Scope evaluateOptionPipeFilterOutExpression(CompiledPipeFilterOutExpression pipeFilterOutExpression, Scope scope) {
         var sourceExSc = evaluateExpression(pipeFilterOutExpression.source(), scope).popExpression();
-        var predicateBaseScope = sourceExSc.scope().addLocalValue(pipeFilterOutExpression.argumentName());
+        var predicateBinding = bindPipeLambdaArgument(
+                sourceExSc.scope(),
+                pipeFilterOutExpression.argumentName(),
+                optionElementType(pipeFilterOutExpression.source().type()).orElse(dev.capylang.compiler.PrimitiveLinkedType.ANY)
+        );
+        var predicateBaseScope = predicateBinding.scope();
         var predicateExSc = evaluateExpression(
                 pipeFilterOutExpression.predicate(),
                 predicateBaseScope
@@ -776,7 +794,7 @@ public class JavaExpressionEvaluator {
                 : "java.util.Optional.of(" + sourceExSc.expression() + ")";
 
         var predicateLambda = lambdaExpression(
-                pipeFilterOutExpression.argumentName(),
+                predicateBinding.lambdaArgumentName(),
                 predicateBaseScope,
                 predicateExSc.scope(),
                 "!(" + predicateExSc.expression() + ")"
@@ -1029,7 +1047,12 @@ public class JavaExpressionEvaluator {
         }
 
         var sourceStreamExSc = evaluateSourceAsStream(pipeExpression.source(), scope);
-        var mapperBaseScope = sourceStreamExSc.scope().addLocalValue(pipeExpression.argumentName());
+        var mapperBinding = bindPipeLambdaArgument(
+                sourceStreamExSc.scope(),
+                pipeExpression.argumentName(),
+                streamElementType(pipeExpression.source().type()).orElse(dev.capylang.compiler.PrimitiveLinkedType.ANY)
+        );
+        var mapperBaseScope = mapperBinding.scope();
         var mapperExSc = evaluateExpression(
                 pipeExpression.mapper(),
                 mapperBaseScope
@@ -1044,7 +1067,7 @@ public class JavaExpressionEvaluator {
             mapperExpression = "(java.lang.Object) (" + mapperExpression + ")";
         }
         var mapperLambda = lambdaExpression(
-                pipeExpression.argumentName(),
+                mapperBinding.lambdaArgumentName(),
                 mapperBaseScope,
                 mapperExSc.scope(),
                 mapperExpression
@@ -1058,13 +1081,18 @@ public class JavaExpressionEvaluator {
 
     private static StreamExpressionScope evaluatePipeFilterOutExpressionAsStream(CompiledPipeFilterOutExpression pipeFilterOutExpression, Scope scope) {
         var sourceStreamExSc = evaluateSourceAsStream(pipeFilterOutExpression.source(), scope);
-        var predicateBaseScope = sourceStreamExSc.scope().addLocalValue(pipeFilterOutExpression.argumentName());
+        var predicateBinding = bindPipeLambdaArgument(
+                sourceStreamExSc.scope(),
+                pipeFilterOutExpression.argumentName(),
+                streamElementType(pipeFilterOutExpression.source().type()).orElse(dev.capylang.compiler.PrimitiveLinkedType.ANY)
+        );
+        var predicateBaseScope = predicateBinding.scope();
         var predicateExSc = evaluateExpression(
                 pipeFilterOutExpression.predicate(),
                 predicateBaseScope
         ).popExpression();
         var predicateLambda = lambdaExpressionNoOuterParens(
-                pipeFilterOutExpression.argumentName(),
+                predicateBinding.lambdaArgumentName(),
                 predicateBaseScope,
                 predicateExSc.scope(),
                 "!(" + predicateExSc.expression() + ")"
@@ -1078,7 +1106,12 @@ public class JavaExpressionEvaluator {
 
     private static StreamExpressionScope evaluatePipeFlatMapExpressionAsStream(CompiledPipeFlatMapExpression pipeFlatMapExpression, Scope scope) {
         var sourceStreamExSc = evaluateSourceAsStream(pipeFlatMapExpression.source(), scope);
-        var mapperBaseScope = sourceStreamExSc.scope().addLocalValue(pipeFlatMapExpression.argumentName());
+        var mapperBinding = bindPipeLambdaArgument(
+                sourceStreamExSc.scope(),
+                pipeFlatMapExpression.argumentName(),
+                streamElementType(pipeFlatMapExpression.source().type()).orElse(dev.capylang.compiler.PrimitiveLinkedType.ANY)
+        );
+        var mapperBaseScope = mapperBinding.scope();
         var mapperExSc = evaluateExpression(
                 pipeFlatMapExpression.mapper(),
                 mapperBaseScope
@@ -1089,7 +1122,7 @@ public class JavaExpressionEvaluator {
             default -> ".stream()";
         };
         var mapperLambda = lambdaExpressionNoOuterParens(
-                pipeFlatMapExpression.argumentName(),
+                mapperBinding.lambdaArgumentName(),
                 mapperBaseScope,
                 mapperExSc.scope(),
                 "(" + mapperExSc.expression() + ")" + streamExtractor
@@ -1185,6 +1218,20 @@ public class JavaExpressionEvaluator {
     private static Scope evaluateLetExpression(CompiledLetExpression let, Scope scope) {
         var valueScope = evaluateExpression(let.value(), scope);
         var valueExSc = valueScope.popExpression();
+        var tupleArgs = parseTuplePipeArguments(let.name());
+        if (tupleArgs.length > 0 && let.value().type() instanceof dev.capylang.compiler.CompiledTupleType tupleType) {
+            var tupleVarName = "__capybaraTupleLet" + TUPLE_LET_VAR_COUNTER.incrementAndGet();
+            var tupleScope = valueExSc.scope().addStatement("var " + tupleVarName + " = " + valueExSc.expression());
+            var size = Math.min(tupleArgs.length, tupleType.elementTypes().size());
+            for (int i = 0; i < size; i++) {
+                var tupleArg = tupleArgs[i];
+                if ("_".equals(tupleArg) || tupleArg.isBlank()) {
+                    continue;
+                }
+                tupleScope = tupleScope.addValueOverride(tupleArg, tupleElementAccessExpression(tupleVarName, tupleType.elementTypes().get(i), i));
+            }
+            return evaluateExpression(let.rest(), tupleScope);
+        }
         var scopeExpression = shouldUseTypedLetDeclaration(let.value())
                 ? valueExSc.scope().declareTypedValue(let.name(), javaCastType(let.value().type()), valueExSc.expression(), let.rest())
                 : valueExSc.scope().declareValue(let.name(), valueExSc.expression(), let.rest());
@@ -2343,6 +2390,58 @@ public class JavaExpressionEvaluator {
             return new String[0];
         }
         return parts;
+    }
+
+    private static String[] parseTuplePipeArguments(String argumentName) {
+        if (!argumentName.contains(TUPLE_PIPE_ARGS_SEPARATOR)) {
+            return new String[0];
+        }
+        return argumentName.split(java.util.regex.Pattern.quote(TUPLE_PIPE_ARGS_SEPARATOR), -1);
+    }
+
+    private static Optional<dev.capylang.compiler.CompiledType> optionElementType(dev.capylang.compiler.CompiledType sourceType) {
+        return switch (sourceType) {
+            case dev.capylang.compiler.CompiledDataParentType parentType when isOptionType(parentType) ->
+                    parentType.fields().stream().findFirst().map(dev.capylang.compiler.CompiledDataType.CompiledField::type);
+            default -> Optional.empty();
+        };
+    }
+
+    private static PipeLambdaBinding bindPipeLambdaArgument(
+            Scope scope,
+            String argumentName,
+            dev.capylang.compiler.CompiledType elementType
+    ) {
+        var tupleArgs = parseTuplePipeArguments(argumentName);
+        if (tupleArgs.length == 0 || !(elementType instanceof dev.capylang.compiler.CompiledTupleType tupleType)) {
+            return new PipeLambdaBinding(argumentName, scope.addLocalValue(argumentName));
+        }
+        var lambdaArgumentName = "__tupleItem";
+        var lambdaScope = scope.addLocalValue(lambdaArgumentName);
+        var tupleElementTypes = tupleType.elementTypes();
+        var size = Math.min(tupleElementTypes.size(), tupleArgs.length);
+        for (int i = 0; i < size; i++) {
+            var tupleArg = tupleArgs[i];
+            if ("_".equals(tupleArg) || tupleArg.isBlank()) {
+                continue;
+            }
+            lambdaScope = lambdaScope.addValueOverride(
+                    tupleArg,
+                    tupleElementAccessExpression(lambdaArgumentName, tupleElementTypes.get(i), i)
+            );
+        }
+        return new PipeLambdaBinding(lambdaArgumentName, lambdaScope);
+    }
+
+    private record PipeLambdaBinding(String lambdaArgumentName, Scope scope) {
+    }
+
+    private static String tupleElementAccessExpression(
+            String tupleValueExpression,
+            dev.capylang.compiler.CompiledType elementType,
+            int index
+    ) {
+        return "((" + javaCastType(elementType) + ") ((java.util.List<?>) " + tupleValueExpression + ").get(" + index + "))";
     }
 
     private static String stripNumericSuffix(String value) {
