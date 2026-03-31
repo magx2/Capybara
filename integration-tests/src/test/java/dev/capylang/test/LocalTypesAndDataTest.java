@@ -31,4 +31,9 @@ class LocalTypesAndDataTest {
     void localGenericDataFieldAccessShouldRemainVisibleBeforeIndexingInsidePipeLambda() {
         assertThat(LocalTypesAndData.localGenericDataFieldAccessFollowedByIndex("abc")).isEqualTo("a");
     }
+
+    @Test
+    void genericOptionConstructorPatternShouldBindConcreteType() {
+        assertThat(LocalTypesAndData.localGenericOptionConstructorPatternBinding(7)).isEqualTo(77);
+    }
 }

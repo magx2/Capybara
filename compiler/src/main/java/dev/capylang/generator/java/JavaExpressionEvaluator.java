@@ -1,8 +1,8 @@
 package dev.capylang.generator.java;
 
-import dev.capylang.compiler.expression.*;
 import dev.capylang.compiler.CompiledDataParentType;
 import dev.capylang.compiler.CompiledDataType;
+import dev.capylang.compiler.expression.*;
 import dev.capylang.compiler.parser.InfixOperator;
 
 import java.util.ArrayList;
@@ -1430,7 +1430,10 @@ public class JavaExpressionEvaluator {
                 if (optionMatch && isOptionSomePattern(constructorPattern.constructorName()) && constructorPattern.fieldPatterns().size() == 1) {
                     var firstPattern = constructorPattern.fieldPatterns().getFirst();
                     if (firstPattern instanceof CompiledMatchExpression.VariablePattern variablePattern) {
-                        var castType = bindingCastTypes.isEmpty() ? null : bindingCastTypes.getFirst();
+                        var castType = optionPayloadCastType(matchExpression.matchWith().type());
+                        if (castType == null) {
+                            castType = bindingCastTypes.isEmpty() ? null : bindingCastTypes.getFirst();
+                        }
                         var valueExpression = optionSomeBindingExpression(switchTarget + ".orElse(null)");
                         if (castType != null && !"java.lang.Object".equals(castType)) {
                             valueExpression = "((" + castType + ") " + valueExpression + ")";
@@ -1441,9 +1444,13 @@ public class JavaExpressionEvaluator {
                         );
                     }
                     if (firstPattern instanceof CompiledMatchExpression.TypedPattern typedPattern) {
+                        var castType = optionPayloadCastType(matchExpression.matchWith().type());
+                        if (castType == null) {
+                            castType = javaPatternType(typedPattern.type());
+                        }
                         branchScope = branchScope.addValueOverride(
                                 typedPattern.name(),
-                                "((" + javaPatternType(typedPattern.type()) + ") " + optionSomeBindingExpression(switchTarget + ".orElse(null)") + ")"
+                                "((" + castType + ") " + optionSomeBindingExpression(switchTarget + ".orElse(null)") + ")"
                         );
                     }
                 }
@@ -1592,6 +1599,17 @@ public class JavaExpressionEvaluator {
         return normalized.endsWith("/Result.Error")
                || normalized.endsWith(".Result.Error")
                || "Error".equals(constructorType.name());
+    }
+
+    private static String optionPayloadCastType(dev.capylang.compiler.CompiledType matchType) {
+        if (!(matchType instanceof CompiledDataParentType parentType) || parentType.typeParameters().isEmpty()) {
+            return null;
+        }
+        var normalized = normalizeQualifiedTypeName(parentType.name());
+        if (!normalized.endsWith("/Option") && !normalized.endsWith(".Option") && !"Option".equals(parentType.name())) {
+            return null;
+        }
+        return sanitizePatternCastType(javaCastTypeFromDescriptor(parentType.typeParameters().getFirst()));
     }
 
     private static java.util.Map<String, String> resolveGenericTypeCasts(

@@ -3898,27 +3898,102 @@ public class CapybaraExpressionCompiler {
         if (!(matchType instanceof CompiledDataParentType parentType)) {
             return constructorType.fields();
         }
-        if (constructorType.typeParameters().isEmpty() || parentType.typeParameters().isEmpty()) {
+        var instantiatedParentFields = resolveFieldsFromInstantiatedParent(constructorType.name(), parentType);
+        if (instantiatedParentFields != null) {
+            return instantiatedParentFields;
+        }
+        if (constructorType.fields().stream().map(CompiledDataType.CompiledField::type).noneMatch(this::containsGenericTypeParameter)) {
+            return constructorType.fields();
+        }
+        var rawConstructorType = resolveRawConstructorType(constructorType);
+        if (rawConstructorType.typeParameters().isEmpty() || parentType.typeParameters().isEmpty()) {
             if (parentType.typeParameters().isEmpty()) {
-                return constructorType.fields();
+                return rawConstructorType.fields();
             }
         }
         var substitutions = new java.util.HashMap<String, CompiledType>();
-        var constructorTypeParameters = constructorType.typeParameters().isEmpty()
-                ? inferGenericParameterNames(constructorType.fields())
+        var inferredTypeParameters = inferGenericParameterNames(rawConstructorType.fields());
+        var constructorTypeParameters = inferredTypeParameters.isEmpty()
+                ? rawConstructorType.typeParameters()
+                : inferredTypeParameters;
+        var actualTypeDescriptors = shouldUseParentTypeDescriptors(constructorType, rawConstructorType)
+                ? parentType.typeParameters()
                 : constructorType.typeParameters();
-        var max = Math.min(constructorTypeParameters.size(), parentType.typeParameters().size());
+        var max = Math.min(constructorTypeParameters.size(), actualTypeDescriptors.size());
         for (int i = 0; i < max; i++) {
             var typeParameterName = constructorTypeParameters.get(i);
-            parseLinkedTypeDescriptor(parentType.typeParameters().get(i))
+            parseLinkedTypeDescriptor(actualTypeDescriptors.get(i))
                     .ifPresent(type -> substitutions.put(typeParameterName, type));
         }
         if (substitutions.isEmpty()) {
-            return constructorType.fields();
+            return rawConstructorType.fields();
         }
-        return constructorType.fields().stream()
+        return rawConstructorType.fields().stream()
                 .map(field -> new CompiledDataType.CompiledField(field.name(), substituteTypeParameters(field.type(), substitutions)))
                 .toList();
+    }
+
+    private CompiledDataType resolveRawConstructorType(CompiledDataType constructorType) {
+        var resolvedType = resolveDataTypeByName(constructorType.name());
+        return resolvedType instanceof CompiledDataType linkedDataType ? linkedDataType : constructorType;
+    }
+
+    private List<CompiledDataType.CompiledField> resolveFieldsFromInstantiatedParent(String constructorName, CompiledDataParentType parentType) {
+        var rawParentType = resolveDataTypeByName(parentType.name());
+        if (!(rawParentType instanceof CompiledDataParentType linkedParentType) || linkedParentType.typeParameters().isEmpty()) {
+            return null;
+        }
+        var substitutions = new java.util.LinkedHashMap<String, CompiledType>();
+        var max = Math.min(linkedParentType.typeParameters().size(), parentType.typeParameters().size());
+        for (var i = 0; i < max; i++) {
+            var descriptor = parentType.typeParameters().get(i);
+            var parsed = parseLinkedTypeDescriptor(descriptor);
+            if (parsed.isEmpty()) {
+                return null;
+            }
+            substitutions.put(linkedParentType.typeParameters().get(i), parsed.orElseThrow());
+        }
+        var instantiatedParentType = (CompiledDataParentType) substituteTypeParameters(linkedParentType, substitutions);
+        return instantiatedParentType.subTypes().stream()
+                .filter(subType -> subType.name().equals(constructorName))
+                .findFirst()
+                .map(CompiledDataType::fields)
+                .orElse(null);
+    }
+
+    private boolean shouldUseParentTypeDescriptors(CompiledDataType constructorType, CompiledDataType rawConstructorType) {
+        if (constructorType.typeParameters().isEmpty()) {
+            return true;
+        }
+        if (rawConstructorType.typeParameters().isEmpty()) {
+            return constructorType.typeParameters().stream().allMatch(this::isGenericDescriptorName);
+        }
+        return constructorType.typeParameters().equals(rawConstructorType.typeParameters());
+    }
+
+    private boolean isGenericDescriptorName(String descriptor) {
+        return parseLinkedTypeDescriptor(descriptor)
+                .map(CompiledGenericTypeParameter.class::isInstance)
+                .orElseGet(() -> Character.isUpperCase(descriptor.charAt(0)));
+    }
+
+    private boolean containsGenericTypeParameter(CompiledType type) {
+        return switch (type) {
+            case CompiledGenericTypeParameter ignored -> true;
+            case CompiledList linkedList -> containsGenericTypeParameter(linkedList.elementType());
+            case CompiledSet linkedSet -> containsGenericTypeParameter(linkedSet.elementType());
+            case CompiledDict linkedDict -> containsGenericTypeParameter(linkedDict.valueType());
+            case CompiledFunctionType functionType ->
+                    containsGenericTypeParameter(functionType.argumentType()) || containsGenericTypeParameter(functionType.returnType());
+            case CompiledTupleType tupleType -> tupleType.elementTypes().stream().anyMatch(this::containsGenericTypeParameter);
+            case CompiledDataType linkedDataType -> linkedDataType.fields().stream()
+                    .map(CompiledDataType.CompiledField::type)
+                    .anyMatch(this::containsGenericTypeParameter);
+            case CompiledDataParentType linkedDataParentType -> linkedDataParentType.fields().stream()
+                    .map(CompiledDataType.CompiledField::type)
+                    .anyMatch(this::containsGenericTypeParameter);
+            default -> false;
+        };
     }
 
     private List<String> inferGenericParameterNames(List<CompiledDataType.CompiledField> fields) {
@@ -4080,13 +4155,30 @@ public class CapybaraExpressionCompiler {
             var typeArguments = parsedTypeArguments.stream().map(Optional::orElseThrow).toList();
             var typeArgumentDescriptors = typeArguments.stream().map(this::linkedTypeDescriptor).toList();
             return Optional.of(switch (baseType) {
-                case CompiledDataParentType parentType -> new CompiledDataParentType(
-                        parentType.name(),
-                        parentType.fields(),
-                        parentType.subTypes(),
-                        typeArgumentDescriptors,
-                        parentType.enumType()
-                );
+                case CompiledDataParentType parentType -> {
+                    if (parentType.typeParameters().isEmpty()) {
+                        yield new CompiledDataParentType(
+                                parentType.name(),
+                                parentType.fields(),
+                                parentType.subTypes(),
+                                typeArgumentDescriptors,
+                                parentType.enumType()
+                        );
+                    }
+                    var substitutions = new java.util.LinkedHashMap<String, CompiledType>();
+                    var max = Math.min(parentType.typeParameters().size(), typeArguments.size());
+                    for (var i = 0; i < max; i++) {
+                        substitutions.put(parentType.typeParameters().get(i), typeArguments.get(i));
+                    }
+                    var substituted = (CompiledDataParentType) substituteTypeParameters(parentType, substitutions);
+                    yield new CompiledDataParentType(
+                            substituted.name(),
+                            substituted.fields(),
+                            substituted.subTypes(),
+                            typeArgumentDescriptors,
+                            substituted.enumType()
+                    );
+                }
                 case CompiledDataType dataType -> {
                     if (dataType.typeParameters().isEmpty()) {
                         yield new CompiledDataType(

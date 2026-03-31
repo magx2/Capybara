@@ -48,3 +48,10 @@ fun local_generic_data_field_access_followed_by_index(buffer: string): string =
         | None -> Error { "" }) with
     | Success { value } -> value
     | Error { message } -> message
+
+fun local_generic_option_constructor_pattern_binding(v: int): int =
+    data __Parse[T] { value: T }
+    let parse: __Parse[Option[int]] = __Parse { Some { v } }
+    match parse.value with
+    | Some { value } -> value * 10 + v
+    | None -> 0
