@@ -756,9 +756,43 @@ public class CapybaraParser {
             return localTypeNameMap.getOrDefault(typeName, typeName);
         }
         var baseName = typeName.substring(0, genericStart);
-        var suffix = typeName.substring(genericStart);
         var mappedBaseName = localTypeNameMap.get(baseName);
-        return mappedBaseName == null ? typeName : mappedBaseName + suffix;
+        var rewrittenBaseName = mappedBaseName == null ? baseName : mappedBaseName;
+        var genericArguments = typeName.substring(genericStart + 1, typeName.length() - 1);
+        var rewrittenArguments = splitTopLevelGenericArguments(genericArguments).stream()
+                .map(argument -> rewriteLocalTypeName(argument, localTypeNameMap))
+                .toList();
+        return rewrittenBaseName + "[" + String.join(", ", rewrittenArguments) + "]";
+    }
+
+    private List<String> splitTopLevelGenericArguments(String genericArguments) {
+        if (genericArguments.isBlank()) {
+            return List.of();
+        }
+        var arguments = new java.util.ArrayList<String>();
+        var current = new StringBuilder();
+        var depth = 0;
+        for (int i = 0; i < genericArguments.length(); i++) {
+            var ch = genericArguments.charAt(i);
+            if (ch == '[') {
+                depth++;
+                current.append(ch);
+                continue;
+            }
+            if (ch == ']') {
+                depth--;
+                current.append(ch);
+                continue;
+            }
+            if (ch == ',' && depth == 0) {
+                arguments.add(current.toString().trim());
+                current.setLength(0);
+                continue;
+            }
+            current.append(ch);
+        }
+        arguments.add(current.toString().trim());
+        return List.copyOf(arguments);
     }
 
     private Optional<Type> functionType(dev.capylang.parser.antlr.FunctionalParser.FunctionTypeContext context) {

@@ -16,4 +16,14 @@ class LocalTypesAndDataTest {
     void localDataShouldResolveImportedResultTypeWithoutFullyQualifiedName() {
         assertThat(LocalTypesAndData.localDataWithImportedResult(7)).isEqualTo("ok:7");
     }
+
+    @Test
+    void localFunctionShouldResolveLocalDataTypeInSignature() {
+        assertThat(LocalTypesAndData.localDataUsedInLocalFunction(7)).isEqualTo("value:7");
+    }
+
+    @Test
+    void localFunctionShouldResolveLocalGenericDataTypeInsideNestedReturnType() {
+        assertThat(LocalTypesAndData.localGenericDataUsedInLocalFunctionReturnType(7)).isEqualTo("value:7");
+    }
 }

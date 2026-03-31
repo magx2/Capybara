@@ -23,3 +23,17 @@ fun local_data_with_imported_result(v: int): string =
     match entry.value with
     | Success { value } -> "ok:" + value
     | Error { message } -> "err:" + message
+
+fun local_data_used_in_local_function(v: int): string =
+    data __Parse[T] { value: T }
+    fun __unwrap(parse: __Parse[int]): string =
+        "value:" + parse.value
+    __unwrap(__Parse { v })
+
+fun local_generic_data_used_in_local_function_return_type(v: int): string =
+    data __Parse[T] { value: T }
+    fun __parse(value: int): Result[__Parse[int]] =
+        Success { __Parse { value } }
+    match __parse(v) with
+    | Success { value } -> "value:" + value.value
+    | Error { message } -> "error:" + message
