@@ -20,7 +20,7 @@ localDefinition: localFunctionDeclaration
                | localTypeDeclaration
                | localDataDeclaration
                | localConstDeclaration;
-localFunctionDeclaration: 'fun' NAME '(' parameters? ')' functionType? '=' expression;
+localFunctionDeclaration: docComment* 'fun' NAME '(' parameters? ')' functionType? '=' expression;
 localTypeDeclaration: 'type' genericTypeDeclaration '=' genericTypeDeclaration (PIPE genericTypeDeclaration)*
                     | 'type' genericTypeDeclaration '{' fieldDeclarationList? '}' '=' genericTypeDeclaration (PIPE genericTypeDeclaration)*;
 localDataDeclaration: 'data' genericTypeDeclaration '{' fieldDeclarationList? '}'

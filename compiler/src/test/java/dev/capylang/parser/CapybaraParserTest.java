@@ -183,6 +183,21 @@ class CapybaraParserTest {
     }
 
     @Test
+    @DisplayName("should parse doc comments for local function declarations")
+    void parseLocalFunctionComments() {
+        var module = new CapybaraParser().parseModule(new RawModule("Test", "/parser", """
+                fun accumulate(n: int): int =
+                    /// Internal accumulate
+                    fun __accumulate(n: int, acc: int): int =
+                        if n <= 0 then acc else __accumulate(n-1, acc+n)
+                    __accumulate(n, 0)
+                """));
+
+        var localFunction = findFunction("__accumulate__local_fun_0_accumulate", module.functional());
+        assertThat(localFunction.comments()).containsExactly("Internal accumulate");
+    }
+
+    @Test
     @DisplayName("should parse bang over field access")
     void parseBangOverFieldAccess() {
         var module = new CapybaraParser().parseModule(new RawModule("Test", "/parser", """

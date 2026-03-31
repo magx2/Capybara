@@ -428,7 +428,9 @@ public class CapybaraParser {
                 parameters,
                 rewrittenReturnType,
                 expression,
-                List.of(),
+                context.docComment().stream()
+                        .map(comment -> stripDocComment(comment.getText()))
+                        .toList(),
                 position(context)
         );
     }

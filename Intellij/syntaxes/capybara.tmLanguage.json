@@ -145,6 +145,36 @@
     "typesAndFunctions": {
       "patterns": [
         {
+          "name": "meta.function.documented.private.capybara",
+          "match": "((?:^\\s*///.*\\r?\\n)+)(\\s*)(fun)(\\s+)(__[A-Za-z0-9_]+)",
+          "captures": {
+            "1": {
+              "name": "comment.block.documentation.capybara"
+            },
+            "3": {
+              "name": "keyword.control.capybara"
+            },
+            "5": {
+              "name": "entity.name.function.private.capybara"
+            }
+          }
+        },
+        {
+          "name": "meta.function.documented.capybara",
+          "match": "((?:^\\s*///.*\\r?\\n)+)(\\s*)(fun)(\\s+)([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": {
+              "name": "comment.block.documentation.capybara"
+            },
+            "3": {
+              "name": "keyword.control.capybara"
+            },
+            "5": {
+              "name": "entity.name.function.capybara"
+            }
+          }
+        },
+        {
           "name": "entity.name.type.capybara",
           "match": "\\b_*[A-Z][A-Za-z0-9_]*\\b"
         },

@@ -63,6 +63,26 @@
     <dict><key>name</key><string>constant.numeric.capybara</string><key>match</key><string>\b(?:0[xX][0-9a-fA-F]+|\d+[lL]|\d+\.\d*(?:[eE][+\-]?\d+)?[fFdD]?|\d+[eE][+\-]?\d+[fFdD]?|\d+)\b</string></dict>
     <dict><key>name</key><string>constant.language.boolean.capybara</string><key>match</key><string>\b(true|false)\b</string></dict>
     <dict><key>name</key><string>constant.language.unimplemented.capybara</string><key>match</key><string>\?\?\?</string></dict>
+    <dict>
+      <key>name</key><string>meta.function.documented.private.capybara</string>
+      <key>match</key><string>((?:^\s*///.*\r?\n)+)(\s*)(fun)(\s+)(__[A-Za-z0-9_]+)</string>
+      <key>captures</key>
+      <dict>
+        <key>1</key><dict><key>name</key><string>comment.block.documentation.capybara</string></dict>
+        <key>3</key><dict><key>name</key><string>keyword.control.capybara</string></dict>
+        <key>5</key><dict><key>name</key><string>entity.name.function.private.capybara</string></dict>
+      </dict>
+    </dict>
+    <dict>
+      <key>name</key><string>meta.function.documented.capybara</string>
+      <key>match</key><string>((?:^\s*///.*\r?\n)+)(\s*)(fun)(\s+)([A-Za-z_][A-Za-z0-9_]*)</string>
+      <key>captures</key>
+      <dict>
+        <key>1</key><dict><key>name</key><string>comment.block.documentation.capybara</string></dict>
+        <key>3</key><dict><key>name</key><string>keyword.control.capybara</string></dict>
+        <key>5</key><dict><key>name</key><string>entity.name.function.capybara</string></dict>
+      </dict>
+    </dict>
     <dict><key>name</key><string>entity.name.type.capybara</string><key>match</key><string>\b_*[A-Z][A-Za-z0-9_]*\b</string></dict>
     <dict><key>name</key><string>entity.name.type.private.capybara</string><key>match</key><string>\b(type|enum|data|single)\s+(__[A-Za-z0-9_]*)</string></dict>
     <dict><key>name</key><string>entity.name.function.private.capybara</string><key>match</key><string>\bfun\s+(__[A-Za-z0-9_]+)</string></dict>
