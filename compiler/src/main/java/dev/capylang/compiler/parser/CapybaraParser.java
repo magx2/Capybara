@@ -1082,8 +1082,33 @@ public class CapybaraParser {
             var leftContext = expression.expressionNoLet(0);
             var operator = InfixOperator.fromSymbol(infixOperator.getText());
             var rightContext = expression.expressionNoLet(1);
+            var left = expressionNoLet(leftContext);
+            if (isPipeOperator(operator) && rightContext.lambdaExpression() != null) {
+                var lambdaContext = rightContext.lambdaExpression();
+                var lambdaBody = lambdaContext.expressionNoPipe();
+                var lambdaBodyStartsOnArrowLine = lambdaBody.getStart().getLine() == lambdaContext.FAT_ARROW().getSymbol().getLine();
+                if (lambdaBodyStartsOnArrowLine) {
+                    var trailingPostfix = findTrailingPostfixPosition(lambdaBody);
+                    if (trailingPostfix.isPresent()) {
+                        throw invalidPipeLambdaPostfix(trailingPostfix.get());
+                    }
+                }
+            }
+            if (isPipeOperator(operator)) {
+                var trailingPostfix = splitTrailingPostfix(rightContext);
+                if (trailingPostfix.isPresent() && trailingPostfix.get().base() instanceof LambdaExpression lambdaExpression) {
+                    var pipeExpression = rebalanceInfixByPrecedence(
+                            left,
+                            isGrouped(leftContext),
+                            operator,
+                            lambdaExpression,
+                            position(infixOperator)
+                    );
+                    return trailingPostfix.get().apply().apply(pipeExpression);
+                }
+            }
             return rebalanceInfixByPrecedence(
-                    expressionNoLet(leftContext),
+                    left,
                     isGrouped(leftContext),
                     operator,
                     expressionNoLet(rightContext),
@@ -1362,6 +1387,127 @@ public class CapybaraParser {
 
     private static boolean isGrouped(FunctionalParser.ExpressionNoLetContext context) {
         return context.expression() != null;
+    }
+
+    private static boolean isPipeOperator(InfixOperator operator) {
+        return operator == InfixOperator.PIPE
+               || operator == InfixOperator.PIPE_MINUS
+               || operator == InfixOperator.PIPE_FLATMAP
+               || operator == InfixOperator.PIPE_REDUCE
+               || operator == InfixOperator.PIPE_ANY
+               || operator == InfixOperator.PIPE_ALL;
+    }
+
+    private IllegalStateException invalidPipeLambdaPostfix(SourcePosition position) {
+        return new IllegalStateException(
+                "line %d:%d: Parenthesize lambda before chaining postfix operations".formatted(
+                        position.line(),
+                        position.column()
+                )
+        );
+    }
+
+    private java.util.Optional<SourcePosition> findTrailingPostfixPosition(FunctionalParser.ExpressionNoPipeContext expression) {
+        if (!expression.letExpressionNoPipe().isEmpty()) {
+            return java.util.Optional.empty();
+        }
+        return findTrailingPostfixPosition(expression.expressionNoLetNoPipe());
+    }
+
+    private java.util.Optional<TrailingPostfix> splitTrailingPostfix(FunctionalParser.ExpressionNoLetContext expression) {
+        if (isMethodCall(expression)) {
+            var receiverContext = expression.expressionNoLet(0);
+            var nested = splitTrailingPostfix(receiverContext)
+                    .orElseGet(() -> new TrailingPostfix(expressionNoLet(receiverContext), java.util.function.UnaryOperator.identity()));
+            return java.util.Optional.of(new TrailingPostfix(
+                    nested.base(),
+                    source -> methodCall(nested.apply().apply(source), expression.methodIdentifier(), expression.argumentList(), position(expression))
+            ));
+        }
+        if (isFieldAccess(expression)) {
+            var sourceContext = expression.expressionNoLet(0);
+            var nested = splitTrailingPostfix(sourceContext)
+                    .orElseGet(() -> new TrailingPostfix(expressionNoLet(sourceContext), java.util.function.UnaryOperator.identity()));
+            return java.util.Optional.of(new TrailingPostfix(
+                    nested.base(),
+                    source -> new FieldAccess(nested.apply().apply(source), identifier(expression.identifier()), position(expression))
+            ));
+        }
+        if (isIndex(expression)) {
+            var sourceContext = expression.expressionNoLet(0);
+            var nested = splitTrailingPostfix(sourceContext)
+                    .orElseGet(() -> new TrailingPostfix(expressionNoLet(sourceContext), java.util.function.UnaryOperator.identity()));
+            return java.util.Optional.of(new TrailingPostfix(
+                    nested.base(),
+                    source -> indexExpression(nested.apply().apply(source), expression.indexLiteral(), position(expression))
+            ));
+        }
+        if (isSlice(expression)) {
+            var sourceContext = expression.expressionNoLet(0);
+            var nested = splitTrailingPostfix(sourceContext)
+                    .orElseGet(() -> new TrailingPostfix(expressionNoLet(sourceContext), java.util.function.UnaryOperator.identity()));
+            return java.util.Optional.of(new TrailingPostfix(
+                    nested.base(),
+                    source -> sliceExpression(
+                            nested.apply().apply(source),
+                            expression.sliceIndexLiteral(),
+                            expression.COLON().getSymbol().getTokenIndex(),
+                            position(expression)
+                    )
+            ));
+        }
+        if (isFunctionInvoke(expression)) {
+            var functionContext = expression.expressionNoLet(0);
+            var nested = splitTrailingPostfix(functionContext)
+                    .orElseGet(() -> new TrailingPostfix(expressionNoLet(functionContext), java.util.function.UnaryOperator.identity()));
+            return java.util.Optional.of(new TrailingPostfix(
+                    nested.base(),
+                    source -> functionInvoke(nested.apply().apply(source), expression.argumentList(), position(expression))
+            ));
+        }
+        if (expression.expression() != null) {
+            return splitTrailingPostfix(expression.expression().expressionNoLet());
+        }
+        return java.util.Optional.empty();
+    }
+
+    private java.util.Optional<SourcePosition> findTrailingPostfixPosition(FunctionalParser.ExpressionNoLetNoPipeContext expression) {
+        if (isMethodCall(expression)) {
+            var receiverContext = expression.expressionNoLetNoPipe(0);
+            if (expression.DOT().getSymbol().getLine() > receiverContext.getStart().getLine()) {
+                var nested = findTrailingPostfixPosition(receiverContext);
+                return nested.isPresent() ? nested : Optional.of(SourcePosition.of(expression.DOT().getSymbol()));
+            }
+        }
+        if (isFieldAccess(expression)) {
+            var sourceContext = expression.expressionNoLetNoPipe(0);
+            if (expression.DOT().getSymbol().getLine() > sourceContext.getStart().getLine()) {
+                var nested = findTrailingPostfixPosition(sourceContext);
+                return nested.isPresent() ? nested : Optional.of(SourcePosition.of(expression.DOT().getSymbol()));
+            }
+        }
+        if (isIndex(expression)) {
+            var sourceContext = expression.expressionNoLetNoPipe(0);
+            if (expression.LBRACK().getSymbol().getLine() > sourceContext.getStart().getLine()) {
+                var nested = findTrailingPostfixPosition(sourceContext);
+                return nested.isPresent() ? nested : Optional.of(SourcePosition.of(expression.LBRACK().getSymbol()));
+            }
+        }
+        if (isSlice(expression)) {
+            var sourceContext = expression.expressionNoLetNoPipe(0);
+            if (expression.LBRACK().getSymbol().getLine() > sourceContext.getStart().getLine()) {
+                var nested = findTrailingPostfixPosition(sourceContext);
+                return nested.isPresent() ? nested : Optional.of(SourcePosition.of(expression.LBRACK().getSymbol()));
+            }
+        }
+        if (isFunctionInvoke(expression)) {
+            var functionContext = expression.expressionNoLetNoPipe(0);
+            if (expression.LPAREN().getSymbol().getLine() > functionContext.getStart().getLine()) {
+                var nested = findTrailingPostfixPosition(functionContext);
+                return nested.isPresent() ? nested : Optional.of(SourcePosition.of(expression.LPAREN().getSymbol()));
+            }
+        }
+        return java.util.Optional.empty();
     }
 
     private static Expression rebalanceInfixByPrecedence(Expression left,
@@ -2147,6 +2293,14 @@ public class CapybaraParser {
         return new IndexExpression(expressionNoLetNoPipe(sourceContext), indexExpression(indexContext), position);
     }
 
+    private IndexExpression indexExpression(
+            Expression source,
+            FunctionalParser.IndexLiteralContext indexContext,
+            Optional<SourcePosition> position
+    ) {
+        return new IndexExpression(source, indexExpression(indexContext), position);
+    }
+
     private Expression indexExpression(FunctionalParser.IndexLiteralContext index) {
         var sign = index.MINUS() == null ? "" : "-";
         return new IntValue(sign + index.INT_LITERAL().getText(), position(index));
@@ -2195,6 +2349,20 @@ public class CapybaraParser {
         return new SliceExpression(expressionNoLetNoPipe(sourceContext), bounds.start(), bounds.end(), position);
     }
 
+    private SliceExpression sliceExpression(
+            Expression source,
+            List<FunctionalParser.SliceIndexLiteralContext> indexContexts,
+            int colonTokenIndex,
+            Optional<SourcePosition> position
+    ) {
+        var bounds = parseSliceBounds(
+                indexContexts.stream().map(this::sliceIndexExpression).toList(),
+                indexContexts.stream().map(index -> index.start.getTokenIndex()).toList(),
+                colonTokenIndex
+        );
+        return new SliceExpression(source, bounds.start(), bounds.end(), position);
+    }
+
     private FunctionCall methodCall(
             FunctionalParser.ExpressionNoLetContext receiverContext,
             FunctionalParser.MethodIdentifierContext methodIdentifierContext,
@@ -2225,6 +2393,20 @@ public class CapybaraParser {
         return new FunctionCall(Optional.empty(), METHOD_INVOKE_PREFIX + methodName, List.copyOf(args), position);
     }
 
+    private FunctionCall methodCall(
+            Expression receiver,
+            FunctionalParser.MethodIdentifierContext methodIdentifierContext,
+            FunctionalParser.ArgumentListContext argumentListContext,
+            Optional<SourcePosition> position
+    ) {
+        var methodName = methodIdentifier(methodIdentifierContext);
+        var args = argumentListContext == null
+                ? new java.util.ArrayList<Expression>()
+                : new java.util.ArrayList<>(argumentListContext.expression().stream().map(this::expression).toList());
+        args.add(0, receiver);
+        return new FunctionCall(Optional.empty(), METHOD_INVOKE_PREFIX + methodName, List.copyOf(args), position);
+    }
+
     private FunctionInvoke functionInvoke(
             FunctionalParser.ExpressionNoLetContext functionContext,
             FunctionalParser.ArgumentListContext argumentListContext,
@@ -2243,6 +2425,17 @@ public class CapybaraParser {
             Optional<SourcePosition> position
     ) {
         var function = expressionNoLetNoPipe(functionContext);
+        var args = argumentListContext == null
+                ? List.<Expression>of()
+                : argumentListContext.expression().stream().map(this::expression).toList();
+        return new FunctionInvoke(function, args, position);
+    }
+
+    private FunctionInvoke functionInvoke(
+            Expression function,
+            FunctionalParser.ArgumentListContext argumentListContext,
+            Optional<SourcePosition> position
+    ) {
         var args = argumentListContext == null
                 ? List.<Expression>of()
                 : argumentListContext.expression().stream().map(this::expression).toList();
@@ -2322,6 +2515,9 @@ public class CapybaraParser {
     }
 
     private record SliceBounds(Optional<Expression> start, Optional<Expression> end) {
+    }
+
+    private record TrailingPostfix(Expression base, java.util.function.UnaryOperator<Expression> apply) {
     }
 
 }

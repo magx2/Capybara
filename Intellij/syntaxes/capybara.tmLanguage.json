@@ -239,6 +239,18 @@
           "match": "(\\|)\\s*(_*[A-Z][A-Za-z0-9_]*)\\s*(\\{)\\s*([A-Za-z_][A-Za-z0-9_]*)"
         },
         {
+          "name": "meta.pipe.lambda.grouped.single.capybara",
+          "match": "(\\|all\\?|\\|any\\?|\\|>|\\|\\*|\\|-|\\|)\\s*(\\()\\s*([A-Za-z_][A-Za-z0-9_]*|_)\\s*(=>)"
+        },
+        {
+          "name": "meta.pipe.lambda.grouped.tuple.capybara",
+          "match": "(\\|all\\?|\\|any\\?|\\|>|\\|\\*|\\|-|\\|)\\s*(\\()\\s*([A-Za-z_][A-Za-z0-9_]*|_)(\\s*,\\s*([A-Za-z_][A-Za-z0-9_]*|_))+\\s*(\\))\\s*(=>)"
+        },
+        {
+          "name": "meta.pipe.lambda.grouped.no-args.capybara",
+          "match": "(\\|all\\?|\\|any\\?|\\|>|\\|\\*|\\|-|\\|)\\s*(\\()\\s*(\\))\\s*(=>)"
+        },
+        {
           "name": "variable.parameter.unused.capybara",
           "match": "(?<=\\(|,)\\s*(_) (?=\\s*(?:,|\\)\\s*=>))"
         },

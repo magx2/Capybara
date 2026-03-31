@@ -1,6 +1,7 @@
 from Assert import {*}
 from /capy/lang/Option import { None }
 from /capy/io/Path import {*}
+from /capy/lang/Seq import {*}
 
 data TestFile { file_name: string, test_cases: list[TestCase], timestamp: string }
 data TestCase { name: string, result: TestResult, assertions_count: int, execution_time: long }
@@ -24,24 +25,23 @@ fun test(name: string, assert: Assert): TestCase =
     }
 
 fun _execute(assertions: list[() => Assertion]): TestResult =
-    let failed_assertions = assertions
-        | supplier => supplier()
-        |- assertion => assertion.result
-    if failed_assertions.size == 0
-    then Passed {}
-    else match failed_assertions[0] with
-        | Some { value } -> Failed {
-            message: value.message,
-            type: value.type
-        }
-        | None -> Passed {}
+    let failed_assertion = to_seq(assertions)
+        | (supplier => supplier())
+        .drop_until(assertion => !assertion.result)
+        .first()
+    match failed_assertion with
+    | Some { value } -> Failed {
+        message: value.message,
+        type: value.type
+    }
+    | None -> Passed {}
 
 fun TestCase.succeeded(): bool = !this.failed()
 
 fun TestCase.failed(): bool =
     match this.result with
     | Passed -> false
-    | Failed _ -> true
+    | Failed -> true
 
 enum ReportType { JUNIT }
 type Report = JUnitReport

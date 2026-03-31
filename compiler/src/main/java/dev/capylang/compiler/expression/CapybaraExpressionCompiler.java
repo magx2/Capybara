@@ -1038,9 +1038,10 @@ public class CapybaraExpressionCompiler {
     ) {
         var coerced = new java.util.ArrayList<CompiledExpression>(arguments.size());
         var coercions = 0;
+        var substitutions = new java.util.LinkedHashMap<String, CompiledType>();
         for (var i = 0; i < arguments.size(); i++) {
             var argument = arguments.get(i);
-            var expected = expectedTypes.get(i);
+            var expected = substituteTypeParameters(expectedTypes.get(i), substitutions);
             var maybeCoerced = linkArgumentForExpectedType(argument, scope, expected);
             if (maybeCoerced instanceof Result.Error<CoercedArgument> error) {
                 return new Result.Error<>(error.errors());
@@ -1048,6 +1049,11 @@ public class CapybaraExpressionCompiler {
             var value = ((Result.Success<CoercedArgument>) maybeCoerced).value();
             coerced.add(value.expression());
             coercions += value.coercions();
+            collectTypeSubstitutions(expected, value.expression().type(), substitutions);
+            if (expected instanceof CompiledFunctionType expectedFunction
+                && value.expression() instanceof CompiledLambdaExpression lambdaExpression) {
+                collectLambdaReturnTypeSubstitutions(expectedFunction, lambdaExpression, substitutions);
+            }
         }
         return Result.success(new CoercedArguments(List.copyOf(coerced), coercions));
     }
@@ -4021,6 +4027,20 @@ public class CapybaraExpressionCompiler {
         if (normalizedDescriptor.isEmpty()) {
             return Optional.empty();
         }
+        if (normalizedDescriptor.startsWith("(") && normalizedDescriptor.endsWith(")")) {
+            var inner = normalizedDescriptor.substring(1, normalizedDescriptor.length() - 1).trim();
+            var arrowIndex = findTopLevelFunctionArrow(inner);
+            if (arrowIndex > 0) {
+                var argumentDescriptor = inner.substring(0, arrowIndex).trim();
+                var returnDescriptor = inner.substring(arrowIndex + 2).trim();
+                var argumentType = parseLinkedTypeDescriptor(argumentDescriptor);
+                var returnType = parseLinkedTypeDescriptor(returnDescriptor);
+                if (argumentType.isPresent() && returnType.isPresent()) {
+                    return Optional.of(new CompiledFunctionType(argumentType.orElseThrow(), returnType.orElseThrow()));
+                }
+                return Optional.empty();
+            }
+        }
         if (normalizedDescriptor.startsWith("list[") && normalizedDescriptor.endsWith("]")) {
             return parseLinkedTypeDescriptor(normalizedDescriptor.substring(5, normalizedDescriptor.length() - 1))
                     .map(CompiledList::new);
@@ -4128,21 +4148,32 @@ public class CapybaraExpressionCompiler {
 
     private List<String> splitTopLevelTypeDescriptors(String text) {
         var values = new java.util.ArrayList<String>();
-        var depth = 0;
+        var bracketDepth = 0;
+        var parenDepth = 0;
         var current = new StringBuilder();
         for (int i = 0; i < text.length(); i++) {
             var ch = text.charAt(i);
             if (ch == '[') {
-                depth++;
+                bracketDepth++;
                 current.append(ch);
                 continue;
             }
             if (ch == ']') {
-                depth = Math.max(0, depth - 1);
+                bracketDepth = Math.max(0, bracketDepth - 1);
                 current.append(ch);
                 continue;
             }
-            if (ch == ',' && depth == 0) {
+            if (ch == '(') {
+                parenDepth++;
+                current.append(ch);
+                continue;
+            }
+            if (ch == ')') {
+                parenDepth = Math.max(0, parenDepth - 1);
+                current.append(ch);
+                continue;
+            }
+            if (ch == ',' && bracketDepth == 0 && parenDepth == 0) {
                 var token = current.toString().trim();
                 if (!token.isEmpty()) {
                     values.add(token);
@@ -4157,6 +4188,34 @@ public class CapybaraExpressionCompiler {
             values.add(token);
         }
         return List.copyOf(values);
+    }
+
+    private int findTopLevelFunctionArrow(String text) {
+        var bracketDepth = 0;
+        var parenDepth = 0;
+        for (int i = 0; i < text.length() - 1; i++) {
+            var ch = text.charAt(i);
+            if (ch == '[') {
+                bracketDepth++;
+                continue;
+            }
+            if (ch == ']') {
+                bracketDepth = Math.max(0, bracketDepth - 1);
+                continue;
+            }
+            if (ch == '(') {
+                parenDepth++;
+                continue;
+            }
+            if (ch == ')') {
+                parenDepth = Math.max(0, parenDepth - 1);
+                continue;
+            }
+            if (ch == '=' && text.charAt(i + 1) == '>' && bracketDepth == 0 && parenDepth == 0) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     private String linkedTypeDescriptor(CompiledType type) {

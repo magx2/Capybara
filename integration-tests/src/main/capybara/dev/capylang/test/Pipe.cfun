@@ -1,3 +1,5 @@
+from /capy/lang/Seq import {*}
+
 fun map1(l: list[int]): list[int] =
     l | x => x * 2
 
@@ -128,3 +130,40 @@ fun type_pipe_optional(x: int): /capy/lang/Option[Boxed] =
         | bx => keep_boxed(bx)
         |- by => x > 0
         | bz => add_to_boxed(bz)
+
+fun pipe_then_chain_after_lambda(): int =
+    match ([1, 2, 3]
+        | (value => value + 1))[1] with
+    | Some { value } -> value
+    | None -> 0
+
+fun pipe_then_chain_methods_after_lambda(): string =
+    let ok: () => string = () => "ok"
+    let failed: () => string = () => "failed"
+    let later: () => string = () => "later"
+    let suppliers: list[() => string] = [ok, failed, later]
+    match to_seq(suppliers)
+        | (supplier => supplier())
+        .first() with
+    | Some { value } -> value
+    | None -> ""
+
+fun pipe_lambda_body_multiline_without_parentheses(): list[string] =
+    [" x ", " y "]
+        | value =>
+            value
+                .trim()
+
+fun pipe_filter_lambda_body_multiline_without_parentheses(): list[string] =
+    [" a ", "bb", " c "]
+        |- value =>
+            value
+                .trim()
+                .starts_with("b")
+
+fun pipe_any_lambda_body_multiline_without_parentheses(): bool =
+    [" a ", "bb"]
+        |any? value =>
+            value
+                .trim()
+                .starts_with("a")

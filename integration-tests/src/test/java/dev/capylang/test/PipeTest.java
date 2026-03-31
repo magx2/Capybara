@@ -245,4 +245,29 @@ class PipeTest {
         assertThat(nonPositive.get()).isInstanceOf(Pipe.IntBox.class);
         assertThat(((Pipe.IntBox) nonPositive.get()).value()).isEqualTo(1);
     }
+
+    @Test
+    void pipeThenChainAfterLambda() {
+        assertThat(Pipe.pipeThenChainAfterLambda()).isEqualTo(3);
+    }
+
+    @Test
+    void pipeThenChainMethodsAfterLambda() {
+        assertThat(Pipe.pipeThenChainMethodsAfterLambda()).isEqualTo("ok");
+    }
+
+    @Test
+    void pipeLambdaBodyMultilineWithoutParentheses() {
+        assertThat(Pipe.pipeLambdaBodyMultilineWithoutParentheses()).isEqualTo(List.of("x", "y"));
+    }
+
+    @Test
+    void pipeFilterLambdaBodyMultilineWithoutParentheses() {
+        assertThat(Pipe.pipeFilterLambdaBodyMultilineWithoutParentheses()).isEqualTo(List.of(" a ", " c "));
+    }
+
+    @Test
+    void pipeAnyLambdaBodyMultilineWithoutParentheses() {
+        assertThat(Pipe.pipeAnyLambdaBodyMultilineWithoutParentheses()).isTrue();
+    }
 }

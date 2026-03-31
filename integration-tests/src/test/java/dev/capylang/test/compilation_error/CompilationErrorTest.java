@@ -345,6 +345,25 @@ public class CompilationErrorTest {
                                 """
                 ),
                 Arguments.of(
+                        "pipe_lambda_postfix_requires_parentheses",
+                        """
+                                fun foo(): string =
+                                    " x "
+                                        | value => value.trim()
+                                        .trim()
+                                """,
+                        new Position(4, 8),
+                        """
+                                error: mismatched types
+                                 --> /foo/boo/pipe_lambda_postfix_requires_parentheses.cfun:%d:%d
+                                fun foo(): string =
+                                    " x "
+                                        | value => value.trim()
+                                        .trim()
+                                %s^ Parenthesize lambda before chaining postfix operations
+                                """
+                ),
+                Arguments.of(
                         "seq_match_case_wrong_arrow",
                         """
                                 type Seq[T] = Cons[T] | End
@@ -1068,6 +1087,11 @@ public class CompilationErrorTest {
         return out;
     }
 }
+
+
+
+
+
 
 
 

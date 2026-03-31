@@ -11,7 +11,9 @@ import java.util.stream.Stream;
 
 import dev.capylang.compiler.parser.*;
 
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class CapybaraParserTest {
 
@@ -259,6 +261,60 @@ class CapybaraParserTest {
         assertThat(((Value) fieldAccess.source()).name()).isEqualTo("parse");
         assertThat(indexExpression.index()).isInstanceOf(IntValue.class);
         assertThat(((IntValue) indexExpression.index()).intValue()).isEqualTo("0");
+    }
+
+    @Test
+    @DisplayName("should reject chained postfix after unparenthesized pipe lambda")
+    void rejectChainedPostfixAfterUnparenthesizedPipeLambda() {
+        assertThatThrownBy(() -> new CapybaraParser().parseModule(new RawModule("Test", "/parser", """
+                fun test(): /capy/lang/Option[string] =
+                    to_seq([() => "ok", () => "failed", () => "later"])
+                        | supplier => supplier()
+                        .drop_until(value => value == "failed")
+                        .first()
+                """)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("line 4:8: Parenthesize lambda before chaining postfix operations");
+    }
+
+    @Test
+    @DisplayName("should parse chained postfix after parenthesized pipe lambda")
+    void parseChainedPostfixAfterParenthesizedPipeLambda() {
+        var module = new CapybaraParser().parseModule(new RawModule("Test", "/parser", """
+                fun test(): /capy/lang/Option[string] =
+                    to_seq([() => "ok", () => "failed", () => "later"])
+                        | (supplier => supplier())
+                        .drop_until(value => value == "failed")
+                        .first()
+                """));
+
+        var function = findFunction("test", module.functional());
+        assertThat(function.expression()).isInstanceOf(FunctionCall.class);
+        var firstCall = (FunctionCall) function.expression();
+        assertThat(firstCall.name()).isEqualTo("__invoke__first");
+        assertThat(firstCall.arguments()).hasSize(1);
+        assertThat(firstCall.arguments().getFirst()).isInstanceOf(FunctionCall.class);
+
+        var dropUntilCall = (FunctionCall) firstCall.arguments().getFirst();
+        assertThat(dropUntilCall.name()).isEqualTo("__invoke__drop_until");
+        assertThat(dropUntilCall.arguments()).hasSize(2);
+        assertThat(dropUntilCall.arguments().getFirst()).isInstanceOf(InfixExpression.class);
+
+        var pipeExpression = (InfixExpression) dropUntilCall.arguments().getFirst();
+        assertThat(pipeExpression.operator()).isEqualTo(InfixOperator.PIPE);
+        assertThat(pipeExpression.right()).isInstanceOf(LambdaExpression.class);
+    }
+
+    @Test
+    @DisplayName("should allow multiline postfix formatting inside unparenthesized pipe lambda body")
+    void allowMultilinePostfixInsideUnparenthesizedPipeLambdaBody() {
+        assertThatCode(() -> new CapybaraParser().parseModule(new RawModule("Test", "/parser", """
+                fun test(): string =
+                    " x "
+                        | value =>
+                            value
+                                .trim()
+                """))).doesNotThrowAnyException();
     }
 }
 
