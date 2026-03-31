@@ -1659,6 +1659,10 @@ public class CapybaraExpressionCompiler {
         if (normalizedExpression != expression) {
             return linkInfixExpression(normalizedExpression, scope);
         }
+        var minLiteral = tryLinkMinLiteralExpression(expression);
+        if (minLiteral.isPresent()) {
+            return minLiteral.get();
+        }
         if (expression.operator() == InfixOperator.PIPE) {
             return linkExpression(expression.left(), scope)
                     .flatMap(left -> {
@@ -2979,6 +2983,50 @@ public class CapybaraExpressionCompiler {
             return withPosition(Result.error("Cannot apply `" + op + "` to `" + left.type() + "` and `" + right.type() + "`"), position);
         }
         return Result.success(new CompiledInfixExpression(left, operator, right, type));
+    }
+
+    private Optional<Result<CompiledExpression>> tryLinkMinLiteralExpression(InfixExpression expression) {
+        if (expression.operator() != InfixOperator.MINUS) {
+            return Optional.empty();
+        }
+        if (!(expression.left() instanceof IntValue leftInt) || !"0".equals(leftInt.intValue())) {
+            if (!(expression.left() instanceof LongValue leftLong) || !"0".equals(stripLongSuffix(leftLong.longValue()))) {
+                return Optional.empty();
+            }
+        }
+
+        if (expression.right() instanceof IntValue intValue) {
+            var parsed = parseBigInteger(intValue.intValue());
+            if (parsed != null
+                && BigInteger.valueOf(Integer.MAX_VALUE).add(BigInteger.ONE).equals(parsed)) {
+                return Optional.of(Result.success(new CompiledIntValue(Integer.toString(Integer.MIN_VALUE))));
+            }
+            return Optional.empty();
+        }
+
+        if (expression.right() instanceof LongValue longValue) {
+            var normalized = stripLongSuffix(longValue.longValue());
+            var parsed = parseBigInteger(normalized);
+            if (parsed != null
+                && BigInteger.valueOf(Long.MAX_VALUE).add(BigInteger.ONE).equals(parsed)) {
+                return Optional.of(Result.success(new CompiledLongValue(Long.toString(Long.MIN_VALUE) + "L")));
+            }
+        }
+        return Optional.empty();
+    }
+
+    private BigInteger parseBigInteger(String value) {
+        try {
+            return new BigInteger(value, 10);
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    private static String stripLongSuffix(String value) {
+        return value.endsWith("l") || value.endsWith("L")
+                ? value.substring(0, value.length() - 1)
+                : value;
     }
 
     private static CompiledType findPlusType(CompiledType left, CompiledType right) {

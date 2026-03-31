@@ -1,0 +1,25 @@
+from /capy/test/Assert import { * }
+from /capy/lang/Math import { * }
+from /capy/lang/Result import { * }
+from /capy/test/CapyTest import { * }
+
+fun tests(): TestFile =
+    test_file("/capy/lang/Math.cfun", [
+        test("digits(0) should return 1", _test_digits(0, 1)),
+        test("digits(1) should return 1", _test_digits(1, 1)),
+        test("digits(9) should return 1", _test_digits(9, 1)),
+        test("digits(10) should return 2", _test_digits(10, 2)),
+        test("digits(99) should return 2", _test_digits(99, 2)),
+        test("digits(100) should return 3", _test_digits(100, 3)),
+        test("digits(999) should return 3", _test_digits(999, 3)),
+        test("digits(2147483647) should return 10", _test_digits(2147483647, 10)),
+        test("digits(-1) should return 1", _test_digits(-1, 1)),
+        test("digits(-9) should return 1", _test_digits(-9, 1)),
+        test("digits(-10) should return 2", _test_digits(-10, 2)),
+        test("digits(-99) should return 2", _test_digits(-99, 2)),
+        test("digits(-100) should return 3", _test_digits(-100, 3)),
+        test("digits(-999) should return 3", _test_digits(-999, 3)),
+        test("digits(-2147483648) should return 10", _test_digits(-2147483648, 10)),
+    ])
+
+fun _test_digits(number: int, expected: int): Assert = assert_that(digits(number) == expected).is_equal_to(true)

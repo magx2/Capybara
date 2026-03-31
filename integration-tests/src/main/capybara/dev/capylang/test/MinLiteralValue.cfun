@@ -1,0 +1,7 @@
+from /capy/lang/Math import { * }
+
+fun min_int(): int = -2147483648
+
+fun min_int_digits(): int = digits(-2147483648)
+
+fun min_long(): long = -9223372036854775808L
