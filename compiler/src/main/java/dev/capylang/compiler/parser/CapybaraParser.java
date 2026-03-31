@@ -26,6 +26,7 @@ public class CapybaraParser {
     private static final Pattern COLLECTION_SET_PATTERN = Pattern.compile("set\\[(.+?)]");
     private static final Pattern COLLECTION_DICT_PATTERN = Pattern.compile("dict\\[(.+?)]");
     private static final Pattern NO_VIABLE_ALTERNATIVE_PATTERN = Pattern.compile("no viable alternative at input '(.+)'");
+    private static final Pattern MISMATCHED_INPUT_PATTERN = Pattern.compile("mismatched input '(.+)' expecting '(.+)'");
     private static final Pattern CONST_NAME_PATTERN = Pattern.compile("^_?[A-Z_][A-Z0-9_]*$");
     private static final Pattern ENUM_VALUE_NAME_PATTERN = Pattern.compile("^[A-Z]+(?:_[A-Z]+)*$");
     private static final Pattern IMPORT_PATTERN = Pattern.compile(
@@ -116,9 +117,19 @@ public class CapybaraParser {
                     : offendingInput;
             return "line %d:%d: Syntax error near `%s`".formatted(syntaxError.line(), syntaxError.column(), preview);
         }
+        if (syntaxError.message().contains("mismatched input '=' expecting {']', ','}")
+            || syntaxError.message().equals("Expected `]`, found `=`")) {
+            return "line %d:%d: Expected `]`, found `=`".formatted(syntaxError.line(), syntaxError.column());
+        }
         if (syntaxError.message().contains("mismatched input '=' expecting '->'")
             || syntaxError.message().equals("Expected `->`, found `=`")) {
             return "line %d:%d: Expected `->`, found `=`".formatted(syntaxError.line(), syntaxError.column());
+        }
+        var mismatchedInputMatcher = MISMATCHED_INPUT_PATTERN.matcher(syntaxError.message());
+        if (mismatchedInputMatcher.matches()) {
+            var found = mismatchedInputMatcher.group(1);
+            var expected = mismatchedInputMatcher.group(2);
+            return "line %d:%d: Expected `%s`, found `%s`".formatted(syntaxError.line(), syntaxError.column(), expected, found);
         }
         return "line %d:%d: %s".formatted(syntaxError.line(), syntaxError.column(), syntaxError.message());
     }
@@ -2280,6 +2291,9 @@ public class CapybaraParser {
     }
 
 }
+
+
+
 
 
 

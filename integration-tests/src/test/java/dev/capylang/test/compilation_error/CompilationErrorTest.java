@@ -24,7 +24,7 @@ public class CompilationErrorTest {
             Position expectedPosition,
             String errorMessage) {
         // given
-        var finalErrorMessage = errorMessage.formatted(expectedPosition.line(), expectedPosition.column());
+        var finalErrorMessage = errorMessage.formatted(expectedPosition.line(), expectedPosition.column(), " ".repeat(expectedPosition.column()));
 
         // when
         var errors = compileProgram(code, moduleName);
@@ -48,7 +48,7 @@ public class CompilationErrorTest {
             String errorMessage,
             List<ImportDeclaration> imports) {
         // given
-        var finalErrorMessage = errorMessage.formatted(expectedPosition.line(), expectedPosition.column());
+        var finalErrorMessage = errorMessage.formatted(expectedPosition.line(), expectedPosition.column(), " ".repeat(expectedPosition.column()));
 
         // when
         var errors = compileProgram(code, moduleName, imports);
@@ -363,6 +363,24 @@ public class CompilationErrorTest {
                                     match this with
                                     | End => []
                                           ^ Expected `->`, found `=`
+                                """
+                ),
+                Arguments.of(
+                        "missing_generic_type_closing_bracket_in_let_annotation",
+                        """
+                                fun parse(): int =
+                                    let new_parse: __Parse[Option[int] = __Parse {
+                                        value: None
+                                    }
+                                    1
+                                """,
+                        new Position(2, 39),
+                        """
+                                error: mismatched types
+                                 --> /foo/boo/missing_generic_type_closing_bracket_in_let_annotation.cfun:%d:%d
+                                fun parse(): int =
+                                    let new_parse: __Parse[Option[int] = __Parse {
+                                %s^ Expected `]`, found `=`
                                 """
                 ),
                 Arguments.of(
@@ -1050,6 +1068,9 @@ public class CompilationErrorTest {
         return out;
     }
 }
+
+
+
 
 
 
