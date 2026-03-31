@@ -987,30 +987,27 @@ public class CapybaraParser {
         }
 
         if (isIndex(expression)) {
-            var sourceContext = expression.expressionNoLet(0);
-            if (isUnaryBang(sourceContext)) {
-                return negate(indexExpression(sourceContext.expressionNoLet(0), expression.indexLiteral(), position(expression)), position(expression));
+            var negatedPostfix = splitUnaryBangTrailingPostfix(expression);
+            if (negatedPostfix.isPresent()) {
+                return negate(negatedPostfix.get().apply().apply(negatedPostfix.get().base()), position(expression));
             }
             return indexExpression(expression);
         }
 
         if (isSlice(expression)) {
-            var sourceContext = expression.expressionNoLet(0);
-            if (isUnaryBang(sourceContext)) {
-                return negate(sliceExpression(sourceContext.expressionNoLet(0), expression.sliceIndexLiteral(), expression.COLON().getSymbol().getTokenIndex(), position(expression)), position(expression));
+            var negatedPostfix = splitUnaryBangTrailingPostfix(expression);
+            if (negatedPostfix.isPresent()) {
+                return negate(negatedPostfix.get().apply().apply(negatedPostfix.get().base()), position(expression));
             }
             return sliceExpression(expression);
         }
 
         if (isFieldAccess(expression)) {
-            var sourceContext = expression.expressionNoLet(0);
-            if (isUnaryBang(sourceContext)) {
-                return negate(new FieldAccess(
-                        expressionNoLet(sourceContext.expressionNoLet(0)),
-                        identifier(expression.identifier()),
-                        position(expression)
-                ), position(expression));
+            var negatedPostfix = splitUnaryBangTrailingPostfix(expression);
+            if (negatedPostfix.isPresent()) {
+                return negate(negatedPostfix.get().apply().apply(negatedPostfix.get().base()), position(expression));
             }
+            var sourceContext = expression.expressionNoLet(0);
             return new FieldAccess(
                     expressionNoLet(sourceContext),
                     identifier(expression.identifier()),
@@ -1019,10 +1016,11 @@ public class CapybaraParser {
         }
 
         if (isMethodCall(expression)) {
-            var receiverContext = expression.expressionNoLet(0);
-            if (isUnaryBang(receiverContext)) {
-                return negate(methodCall(receiverContext.expressionNoLet(0), expression.methodIdentifier(), expression.argumentList(), position(expression)), position(expression));
+            var negatedPostfix = splitUnaryBangTrailingPostfix(expression);
+            if (negatedPostfix.isPresent()) {
+                return negate(negatedPostfix.get().apply().apply(negatedPostfix.get().base()), position(expression));
             }
+            var receiverContext = expression.expressionNoLet(0);
             var receiver = expressionNoLet(receiverContext);
             var methodName = methodIdentifier(expression.methodIdentifier());
             var args = expression.argumentList() == null
@@ -1033,10 +1031,11 @@ public class CapybaraParser {
         }
 
         if (isFunctionInvoke(expression)) {
-            var functionContext = expression.expressionNoLet(0);
-            if (isUnaryBang(functionContext)) {
-                return negate(functionInvoke(functionContext.expressionNoLet(0), expression.argumentList(), position(expression)), position(expression));
+            var negatedPostfix = splitUnaryBangTrailingPostfix(expression);
+            if (negatedPostfix.isPresent()) {
+                return negate(negatedPostfix.get().apply().apply(negatedPostfix.get().base()), position(expression));
             }
+            var functionContext = expression.expressionNoLet(0);
             var function = expressionNoLet(functionContext);
             var args = expression.argumentList() == null
                     ? List.<Expression>of()
@@ -1266,30 +1265,27 @@ public class CapybaraParser {
         }
 
         if (isIndex(expression)) {
-            var sourceContext = expression.expressionNoLetNoPipe(0);
-            if (isUnaryBang(sourceContext)) {
-                return negate(indexExpression(sourceContext.expressionNoLetNoPipe(0), expression.indexNoPipeLiteral(), position(expression)), position(expression));
+            var negatedPostfix = splitUnaryBangTrailingPostfix(expression);
+            if (negatedPostfix.isPresent()) {
+                return negate(negatedPostfix.get().apply().apply(negatedPostfix.get().base()), position(expression));
             }
             return indexExpression(expression);
         }
 
         if (isSlice(expression)) {
-            var sourceContext = expression.expressionNoLetNoPipe(0);
-            if (isUnaryBang(sourceContext)) {
-                return negate(sliceExpression(sourceContext.expressionNoLetNoPipe(0), expression.sliceIndexNoPipeLiteral(), expression.COLON().getSymbol().getTokenIndex(), position(expression)), position(expression));
+            var negatedPostfix = splitUnaryBangTrailingPostfix(expression);
+            if (negatedPostfix.isPresent()) {
+                return negate(negatedPostfix.get().apply().apply(negatedPostfix.get().base()), position(expression));
             }
             return sliceExpression(expression);
         }
 
         if (isFieldAccess(expression)) {
-            var sourceContext = expression.expressionNoLetNoPipe(0);
-            if (isUnaryBang(sourceContext)) {
-                return negate(new FieldAccess(
-                        expressionNoLetNoPipe(sourceContext.expressionNoLetNoPipe(0)),
-                        identifier(expression.identifier()),
-                        position(expression)
-                ), position(expression));
+            var negatedPostfix = splitUnaryBangTrailingPostfix(expression);
+            if (negatedPostfix.isPresent()) {
+                return negate(negatedPostfix.get().apply().apply(negatedPostfix.get().base()), position(expression));
             }
+            var sourceContext = expression.expressionNoLetNoPipe(0);
             return new FieldAccess(
                     expressionNoLetNoPipe(sourceContext),
                     identifier(expression.identifier()),
@@ -1298,10 +1294,11 @@ public class CapybaraParser {
         }
 
         if (isMethodCall(expression)) {
-            var receiverContext = expression.expressionNoLetNoPipe(0);
-            if (isUnaryBang(receiverContext)) {
-                return negate(methodCall(receiverContext.expressionNoLetNoPipe(0), expression.methodIdentifier(), expression.argumentList(), position(expression)), position(expression));
+            var negatedPostfix = splitUnaryBangTrailingPostfix(expression);
+            if (negatedPostfix.isPresent()) {
+                return negate(negatedPostfix.get().apply().apply(negatedPostfix.get().base()), position(expression));
             }
+            var receiverContext = expression.expressionNoLetNoPipe(0);
             var receiver = expressionNoLetNoPipe(receiverContext);
             var methodName = methodIdentifier(expression.methodIdentifier());
             var args = expression.argumentList() == null
@@ -1312,10 +1309,11 @@ public class CapybaraParser {
         }
 
         if (isFunctionInvoke(expression)) {
-            var functionContext = expression.expressionNoLetNoPipe(0);
-            if (isUnaryBang(functionContext)) {
-                return negate(functionInvoke(functionContext.expressionNoLetNoPipe(0), expression.argumentList(), position(expression)), position(expression));
+            var negatedPostfix = splitUnaryBangTrailingPostfix(expression);
+            if (negatedPostfix.isPresent()) {
+                return negate(negatedPostfix.get().apply().apply(negatedPostfix.get().base()), position(expression));
             }
+            var functionContext = expression.expressionNoLetNoPipe(0);
             var function = expressionNoLetNoPipe(functionContext);
             var args = expression.argumentList() == null
                     ? List.<Expression>of()
@@ -1471,6 +1469,98 @@ public class CapybaraParser {
         return java.util.Optional.empty();
     }
 
+    private java.util.Optional<TrailingPostfix> splitUnaryBangTrailingPostfix(FunctionalParser.ExpressionNoLetContext expression) {
+        if (isMethodCall(expression)) {
+            var receiverContext = expression.expressionNoLet(0);
+            if (isUnaryBang(receiverContext)) {
+                return java.util.Optional.of(new TrailingPostfix(
+                        expressionNoLet(receiverContext.expressionNoLet(0)),
+                        source -> methodCall(source, expression.methodIdentifier(), expression.argumentList(), position(expression))
+                ));
+            }
+            var nested = splitUnaryBangTrailingPostfix(receiverContext);
+            if (nested.isPresent()) {
+                return java.util.Optional.of(new TrailingPostfix(
+                        nested.get().base(),
+                        source -> methodCall(nested.get().apply().apply(source), expression.methodIdentifier(), expression.argumentList(), position(expression))
+                ));
+            }
+        }
+        if (isFieldAccess(expression)) {
+            var sourceContext = expression.expressionNoLet(0);
+            if (isUnaryBang(sourceContext)) {
+                return java.util.Optional.of(new TrailingPostfix(
+                        expressionNoLet(sourceContext.expressionNoLet(0)),
+                        source -> new FieldAccess(source, identifier(expression.identifier()), position(expression))
+                ));
+            }
+            var nested = splitUnaryBangTrailingPostfix(sourceContext);
+            if (nested.isPresent()) {
+                return java.util.Optional.of(new TrailingPostfix(
+                        nested.get().base(),
+                        source -> new FieldAccess(nested.get().apply().apply(source), identifier(expression.identifier()), position(expression))
+                ));
+            }
+        }
+        if (isIndex(expression)) {
+            var sourceContext = expression.expressionNoLet(0);
+            if (isUnaryBang(sourceContext)) {
+                return java.util.Optional.of(new TrailingPostfix(
+                        expressionNoLet(sourceContext.expressionNoLet(0)),
+                        source -> indexExpression(source, expression.indexLiteral(), position(expression))
+                ));
+            }
+            var nested = splitUnaryBangTrailingPostfix(sourceContext);
+            if (nested.isPresent()) {
+                return java.util.Optional.of(new TrailingPostfix(
+                        nested.get().base(),
+                        source -> indexExpression(nested.get().apply().apply(source), expression.indexLiteral(), position(expression))
+                ));
+            }
+        }
+        if (isSlice(expression)) {
+            var sourceContext = expression.expressionNoLet(0);
+            if (isUnaryBang(sourceContext)) {
+                return java.util.Optional.of(new TrailingPostfix(
+                        expressionNoLet(sourceContext.expressionNoLet(0)),
+                        source -> sliceExpression(source, expression.sliceIndexLiteral(), expression.COLON().getSymbol().getTokenIndex(), position(expression))
+                ));
+            }
+            var nested = splitUnaryBangTrailingPostfix(sourceContext);
+            if (nested.isPresent()) {
+                return java.util.Optional.of(new TrailingPostfix(
+                        nested.get().base(),
+                        source -> sliceExpression(
+                                nested.get().apply().apply(source),
+                                expression.sliceIndexLiteral(),
+                                expression.COLON().getSymbol().getTokenIndex(),
+                                position(expression)
+                        )
+                ));
+            }
+        }
+        if (isFunctionInvoke(expression)) {
+            var functionContext = expression.expressionNoLet(0);
+            if (isUnaryBang(functionContext)) {
+                return java.util.Optional.of(new TrailingPostfix(
+                        expressionNoLet(functionContext.expressionNoLet(0)),
+                        source -> functionInvoke(source, expression.argumentList(), position(expression))
+                ));
+            }
+            var nested = splitUnaryBangTrailingPostfix(functionContext);
+            if (nested.isPresent()) {
+                return java.util.Optional.of(new TrailingPostfix(
+                        nested.get().base(),
+                        source -> functionInvoke(nested.get().apply().apply(source), expression.argumentList(), position(expression))
+                ));
+            }
+        }
+        if (expression.expression() != null) {
+            return splitUnaryBangTrailingPostfix(expression.expression().expressionNoLet());
+        }
+        return java.util.Optional.empty();
+    }
+
     private java.util.Optional<SourcePosition> findTrailingPostfixPosition(FunctionalParser.ExpressionNoLetNoPipeContext expression) {
         if (isMethodCall(expression)) {
             var receiverContext = expression.expressionNoLetNoPipe(0);
@@ -1505,6 +1595,95 @@ public class CapybaraParser {
             if (expression.LPAREN().getSymbol().getLine() > functionContext.getStart().getLine()) {
                 var nested = findTrailingPostfixPosition(functionContext);
                 return nested.isPresent() ? nested : Optional.of(SourcePosition.of(expression.LPAREN().getSymbol()));
+            }
+        }
+        return java.util.Optional.empty();
+    }
+
+    private java.util.Optional<TrailingPostfix> splitUnaryBangTrailingPostfix(FunctionalParser.ExpressionNoLetNoPipeContext expression) {
+        if (isMethodCall(expression)) {
+            var receiverContext = expression.expressionNoLetNoPipe(0);
+            if (isUnaryBang(receiverContext)) {
+                return java.util.Optional.of(new TrailingPostfix(
+                        expressionNoLetNoPipe(receiverContext.expressionNoLetNoPipe(0)),
+                        source -> methodCall(source, expression.methodIdentifier(), expression.argumentList(), position(expression))
+                ));
+            }
+            var nested = splitUnaryBangTrailingPostfix(receiverContext);
+            if (nested.isPresent()) {
+                return java.util.Optional.of(new TrailingPostfix(
+                        nested.get().base(),
+                        source -> methodCall(nested.get().apply().apply(source), expression.methodIdentifier(), expression.argumentList(), position(expression))
+                ));
+            }
+        }
+        if (isFieldAccess(expression)) {
+            var sourceContext = expression.expressionNoLetNoPipe(0);
+            if (isUnaryBang(sourceContext)) {
+                return java.util.Optional.of(new TrailingPostfix(
+                        expressionNoLetNoPipe(sourceContext.expressionNoLetNoPipe(0)),
+                        source -> new FieldAccess(source, identifier(expression.identifier()), position(expression))
+                ));
+            }
+            var nested = splitUnaryBangTrailingPostfix(sourceContext);
+            if (nested.isPresent()) {
+                return java.util.Optional.of(new TrailingPostfix(
+                        nested.get().base(),
+                        source -> new FieldAccess(nested.get().apply().apply(source), identifier(expression.identifier()), position(expression))
+                ));
+            }
+        }
+        if (isIndex(expression)) {
+            var sourceContext = expression.expressionNoLetNoPipe(0);
+            if (isUnaryBang(sourceContext)) {
+                return java.util.Optional.of(new TrailingPostfix(
+                        expressionNoLetNoPipe(sourceContext.expressionNoLetNoPipe(0)),
+                        source -> indexExpression(source, expression.indexNoPipeLiteral(), position(expression))
+                ));
+            }
+            var nested = splitUnaryBangTrailingPostfix(sourceContext);
+            if (nested.isPresent()) {
+                return java.util.Optional.of(new TrailingPostfix(
+                        nested.get().base(),
+                        source -> indexExpression(nested.get().apply().apply(source), expression.indexNoPipeLiteral(), position(expression))
+                ));
+            }
+        }
+        if (isSlice(expression)) {
+            var sourceContext = expression.expressionNoLetNoPipe(0);
+            var bounds = parseSliceBounds(
+                    expression.sliceIndexNoPipeLiteral().stream().map(this::sliceIndexExpression).toList(),
+                    expression.sliceIndexNoPipeLiteral().stream().map(index -> index.start.getTokenIndex()).toList(),
+                    expression.COLON().getSymbol().getTokenIndex()
+            );
+            if (isUnaryBang(sourceContext)) {
+                return java.util.Optional.of(new TrailingPostfix(
+                        expressionNoLetNoPipe(sourceContext.expressionNoLetNoPipe(0)),
+                        source -> new SliceExpression(source, bounds.start(), bounds.end(), position(expression))
+                ));
+            }
+            var nested = splitUnaryBangTrailingPostfix(sourceContext);
+            if (nested.isPresent()) {
+                return java.util.Optional.of(new TrailingPostfix(
+                        nested.get().base(),
+                        source -> new SliceExpression(nested.get().apply().apply(source), bounds.start(), bounds.end(), position(expression))
+                ));
+            }
+        }
+        if (isFunctionInvoke(expression)) {
+            var functionContext = expression.expressionNoLetNoPipe(0);
+            if (isUnaryBang(functionContext)) {
+                return java.util.Optional.of(new TrailingPostfix(
+                        expressionNoLetNoPipe(functionContext.expressionNoLetNoPipe(0)),
+                        source -> functionInvoke(source, expression.argumentList(), position(expression))
+                ));
+            }
+            var nested = splitUnaryBangTrailingPostfix(functionContext);
+            if (nested.isPresent()) {
+                return java.util.Optional.of(new TrailingPostfix(
+                        nested.get().base(),
+                        source -> functionInvoke(nested.get().apply().apply(source), expression.argumentList(), position(expression))
+                ));
             }
         }
         return java.util.Optional.empty();
@@ -2296,6 +2475,14 @@ public class CapybaraParser {
     private IndexExpression indexExpression(
             Expression source,
             FunctionalParser.IndexLiteralContext indexContext,
+            Optional<SourcePosition> position
+    ) {
+        return new IndexExpression(source, indexExpression(indexContext), position);
+    }
+
+    private IndexExpression indexExpression(
+            Expression source,
+            FunctionalParser.IndexNoPipeLiteralContext indexContext,
             Optional<SourcePosition> position
     ) {
         return new IndexExpression(source, indexExpression(indexContext), position);

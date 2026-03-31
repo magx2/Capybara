@@ -138,6 +138,18 @@ class DictCollectionTest {
     }
 
     @Test
+    void notIsEmpty() {
+        assertThat(DictCollection.notIsEmpty(Map.of())).isFalse();
+        assertThat(DictCollection.notIsEmpty(EXPECTED)).isTrue();
+    }
+
+    @Test
+    void notNestedIsEmpty() {
+        assertThat(DictCollection.notNestedIsEmpty(new DictCollection.DictHolder(Map.of()))).isFalse();
+        assertThat(DictCollection.notNestedIsEmpty(new DictCollection.DictHolder(EXPECTED))).isTrue();
+    }
+
+    @Test
     void size() {
         assertThat(DictCollection.size(EXPECTED)).isEqualTo(3);
         assertThat(DictCollection.size(Map.of())).isEqualTo(0);

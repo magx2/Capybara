@@ -14,6 +14,14 @@ fun replace_method(s: string, old: string, new: string): string = s.replace(old,
 
 fun is_empty_method(s: string): bool = s.is_empty
 
+data BufferHolder { buffer: string }
+
+fun not_is_empty_method(s: string): bool = !s.is_empty
+
+fun not_nested_is_empty(holder: BufferHolder): bool = !holder.buffer.is_empty
+
+fun not_trimmed_is_empty(s: string): bool = !s.trim().is_empty
+
 fun size(s: string): int = s.size
 
 fun to_int_method(s: string): Result[int] = s.to_int()

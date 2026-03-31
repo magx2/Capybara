@@ -18,4 +18,10 @@ fun contains(s: set[int], value: int): bool = s ? value
 
 fun is_empty(s: set[int]): bool = s.is_empty
 
+data SetHolder { values: set[int] }
+
+fun not_is_empty(s: set[int]): bool = !s.is_empty
+
+fun not_nested_is_empty(holder: SetHolder): bool = !holder.values.is_empty
+
 fun size(s: set[int]): int = s.size

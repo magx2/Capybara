@@ -32,6 +32,12 @@ fun contains(d: dict[int], key: string): bool = d ? key
 
 fun is_empty(d: dict[int]): bool = d.is_empty
 
+data DictHolder { values: dict[int] }
+
+fun not_is_empty(d: dict[int]): bool = !d.is_empty
+
+fun not_nested_is_empty(holder: DictHolder): bool = !holder.values.is_empty
+
 fun size(d: dict[int]): int = d.size
 
 data Entry {k: string, v: int}

@@ -80,6 +80,18 @@ class ListCollectionTest {
     }
 
     @Test
+    void notIsEmpty() {
+        assertThat(ListCollection.notIsEmpty(List.of())).isFalse();
+        assertThat(ListCollection.notIsEmpty(List.of(1, 2, 3))).isTrue();
+    }
+
+    @Test
+    void notNestedIsEmpty() {
+        assertThat(ListCollection.notNestedIsEmpty(new ListCollection.ListHolder(List.of()))).isFalse();
+        assertThat(ListCollection.notNestedIsEmpty(new ListCollection.ListHolder(List.of(1, 2, 3)))).isTrue();
+    }
+
+    @Test
     void size() {
         assertThat(ListCollection.size(List.of(1, 2, 3))).isEqualTo(3);
         assertThat(ListCollection.size(List.of())).isEqualTo(0);

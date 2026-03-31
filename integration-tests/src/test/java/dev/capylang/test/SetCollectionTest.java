@@ -85,6 +85,18 @@ class SetCollectionTest {
     }
 
     @Test
+    void notIsEmpty() {
+        assertThat(SetCollection.notIsEmpty(Set.of())).isFalse();
+        assertThat(SetCollection.notIsEmpty(Set.of(1, 2, 3))).isTrue();
+    }
+
+    @Test
+    void notNestedIsEmpty() {
+        assertThat(SetCollection.notNestedIsEmpty(new SetCollection.SetHolder(Set.of()))).isFalse();
+        assertThat(SetCollection.notNestedIsEmpty(new SetCollection.SetHolder(Set.of(1, 2, 3)))).isTrue();
+    }
+
+    @Test
     void size() {
         assertThat(SetCollection.size(Set.of(1, 2, 3))).isEqualTo(3);
         assertThat(SetCollection.size(Set.of())).isEqualTo(0);

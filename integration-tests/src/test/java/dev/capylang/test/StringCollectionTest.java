@@ -58,6 +58,24 @@ class StringCollectionTest {
     }
 
     @Test
+    void notIsEmptyMethod() {
+        assertThat(StringCollection.notIsEmptyMethod("")).isFalse();
+        assertThat(StringCollection.notIsEmptyMethod("capybara")).isTrue();
+    }
+
+    @Test
+    void notNestedIsEmpty() {
+        assertThat(StringCollection.notNestedIsEmpty(new StringCollection.BufferHolder(""))).isFalse();
+        assertThat(StringCollection.notNestedIsEmpty(new StringCollection.BufferHolder("capybara"))).isTrue();
+    }
+
+    @Test
+    void notTrimmedIsEmpty() {
+        assertThat(StringCollection.notTrimmedIsEmpty("   ")).isFalse();
+        assertThat(StringCollection.notTrimmedIsEmpty(" capybara ")).isTrue();
+    }
+
+    @Test
     void size() {
         assertThat(StringCollection.size("capybara")).isEqualTo(8);
         assertThat(StringCollection.size("")).isZero();

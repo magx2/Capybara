@@ -16,4 +16,10 @@ fun contains(l: list[int], value: int): bool = l ? value
 
 fun is_empty(l: list[int]): bool = l.is_empty
 
+data ListHolder { values: list[int] }
+
+fun not_is_empty(l: list[int]): bool = !l.is_empty
+
+fun not_nested_is_empty(holder: ListHolder): bool = !holder.values.is_empty
+
 fun size(l: list[int]): int = l.size
