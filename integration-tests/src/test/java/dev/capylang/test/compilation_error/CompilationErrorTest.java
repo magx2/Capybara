@@ -384,6 +384,9 @@ public class CompilationErrorTest {
                         """
                                 error: mismatched types
                                  --> /foo/boo/parser_syntax_error_missing_brace_in_then_branch.cfun:%d:%d
+                                type Seq[T] = Cons[T] | End
+                                data Cons[T] { value: T, rest: Seq[T] }
+                                single End
                                 fun to_seq(list: list[int]): Seq[int] =
                                     if list.size > 0
                                     then Cons { list[0], to_seq(list[1:])
@@ -436,6 +439,9 @@ public class CompilationErrorTest {
                         """
                                 error: mismatched types
                                  --> /foo/boo/seq_match_case_wrong_arrow.cfun:%d:%d
+                                type Seq[T] = Cons[T] | End
+                                data Cons[T] { value: T, rest: Seq[T] }
+                                single End
                                 fun Seq[T].take(n: int): list[T] =
                                     match this with
                                     | End => []
@@ -968,82 +974,14 @@ public class CompilationErrorTest {
     );
 
     private static SortedSet<Result.Error.SingleError> compileProgram(String fun, String moduleName, List<ImportDeclaration> imports) {
-        try {
-            var rawModules = new ArrayList<>(DEFAULT_MODULES);
-            rawModules.add(new RawModule(moduleName, "/foo/boo", prependImports(imports, fun)));
-            var programResult = CapybaraCompiler.INSTANCE.compile(rawModules, new java.util.TreeSet<>());
-            if (programResult instanceof Result.Success<CompiledProgram> value) {
-                throw new AssertionError("Expected compilation error but got CompiledProgram: " + value);
-            }
-            var errors = ((Result.Error<?>) programResult).errors();
-            return adjustImportLineOffsets(normalizeLinkerErrors(errors, fun, moduleName), imports.size());
-        } catch (IllegalStateException e) {
-            var parserError = java.util.regex.Pattern.compile("line (\\d+):(\\d+): (.+)").matcher(e.getMessage());
-            if (parserError.matches()) {
-                var line = Integer.parseInt(parserError.group(1));
-                var column = Integer.parseInt(parserError.group(2));
-                var details = parserError.group(3);
-                var lines = fun.split("\\R", -1);
-                var functionLine = 0;
-                for (var i = 0; i < lines.length; i++) {
-                    if (lines[i].stripLeading().startsWith("fun ")) {
-                        functionLine = i;
-                        break;
-                    }
-                }
-                var renderedLines = new ArrayList<String>();
-                var endLine = Math.min(Math.max(line - 1, functionLine), Math.max(lines.length - 1, 0));
-                for (var idx = functionLine; idx <= endLine && idx < lines.length; idx++) {
-                    if (!lines[idx].isEmpty()) {
-                        renderedLines.add(lines[idx]);
-                    }
-                }
-                var message = "error: mismatched types\n"
-                              + " --> /foo/boo/%s.cfun:%d:%d\n".formatted(moduleName, line, column)
-                              + String.join("\n", renderedLines) + "\n"
-                              + " ".repeat(Math.max(column, 0)) + "^ " + details + "\n";
-                return new TreeSet<>(Set.of(new Result.Error.SingleError(
-                        line,
-                        column,
-                        "/foo/boo/%s.cfun".formatted(moduleName),
-                        message
-                )));
-            }
-            var unknownTypeError = java.util.regex.Pattern.compile("Data type \"([^\"]+)\" not found").matcher(e.getMessage());
-            if (unknownTypeError.matches()) {
-                var missingType = unknownTypeError.group(1);
-                var lines = fun.split("\\R", -1);
-                var lineNumber = 0;
-                var column = 0;
-                var codeLine = "";
-                for (var i = 0; i < lines.length; i++) {
-                    var idx = lines[i].indexOf(missingType);
-                    if (idx >= 0) {
-                        lineNumber = i + 1;
-                        column = idx;
-                        codeLine = lines[i];
-                        break;
-                    }
-                }
-                var details = "Data type `" + missingType + "` not found";
-                var message = "error: mismatched types\n"
-                              + " --> /foo/boo/%s.cfun:%d:%d\n".formatted(moduleName, lineNumber, column)
-                              + codeLine + "\n"
-                              + " ".repeat(Math.max(column, 0)) + "^ " + details + "\n";
-                return new TreeSet<>(Set.of(new Result.Error.SingleError(
-                        lineNumber,
-                        column,
-                        "/foo/boo/%s.cfun".formatted(moduleName),
-                        message
-                )));
-            }
-            return new TreeSet<>(Set.of(new Result.Error.SingleError(
-                    0,
-                    0,
-                    "/foo/boo/%s.cfun".formatted(moduleName),
-                    e.getMessage()
-            )));
+        var rawModules = new ArrayList<>(DEFAULT_MODULES);
+        rawModules.add(new RawModule(moduleName, "/foo/boo", prependImports(imports, fun)));
+        var programResult = CapybaraCompiler.INSTANCE.compile(rawModules, new java.util.TreeSet<>());
+        if (programResult instanceof Result.Success<CompiledProgram> value) {
+            throw new AssertionError("Expected compilation error but got CompiledProgram: " + value);
         }
+        var errors = ((Result.Error<?>) programResult).errors();
+        return adjustImportLineOffsets(normalizeLinkerErrors(errors, fun, moduleName), imports.size());
     }
     private static SortedSet<Result.Error.SingleError> normalizeLinkerErrors(
             SortedSet<Result.Error.SingleError> errors,

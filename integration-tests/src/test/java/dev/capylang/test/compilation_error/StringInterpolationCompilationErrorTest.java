@@ -8,10 +8,8 @@ import dev.capylang.compiler.CompiledProgram;
 import dev.capylang.compiler.Result;
 import dev.capylang.compiler.parser.RawModule;
 
-import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeSet;
-import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -86,32 +84,13 @@ class StringInterpolationCompilationErrorTest {
     }
 
     private static SortedSet<Result.Error.SingleError> compileProgram(String fun, String moduleName) {
-        try {
-            var programResult = CapybaraCompiler.INSTANCE.compile(
-                    java.util.List.of(new RawModule(moduleName, "/foo/boo", fun)),
-                    new TreeSet<>()
-            );
-            if (programResult instanceof Result.Success<CompiledProgram> value) {
-                throw new AssertionError("Expected compilation error but got CompiledProgram: " + value);
-            }
-            return ((Result.Error<?>) programResult).errors();
-        } catch (IllegalStateException e) {
-            var parserError = Pattern.compile("line (\\d+):(\\d+): (.+)").matcher(e.getMessage());
-            if (!parserError.matches()) {
-                throw e;
-            }
-            var line = Integer.parseInt(parserError.group(1));
-            var column = Integer.parseInt(parserError.group(2));
-            var details = parserError.group(3);
-            var message = "error: mismatched types\n"
-                          + " --> /foo/boo/%s.cfun:%d:%d\n".formatted(moduleName, line, column)
-                          + " ".repeat(Math.max(column, 0)) + "^ " + details + "\n";
-            return new TreeSet<>(Set.of(new Result.Error.SingleError(
-                    line,
-                    column,
-                    "/foo/boo/%s.cfun".formatted(moduleName),
-                    message
-            )));
+        var programResult = CapybaraCompiler.INSTANCE.compile(
+                java.util.List.of(new RawModule(moduleName, "/foo/boo", fun)),
+                new TreeSet<>()
+        );
+        if (programResult instanceof Result.Success<CompiledProgram> value) {
+            throw new AssertionError("Expected compilation error but got CompiledProgram: " + value);
         }
+        return ((Result.Error<?>) programResult).errors();
     }
 }

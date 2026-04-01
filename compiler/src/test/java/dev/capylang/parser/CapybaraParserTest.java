@@ -9,18 +9,17 @@ import org.junit.jupiter.params.provider.MethodSource;
 import java.util.Optional;
 import java.util.stream.Stream;
 
+import dev.capylang.compiler.Result;
 import dev.capylang.compiler.parser.*;
 
-import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class CapybaraParserTest {
 
     @ParameterizedTest(name = "{index}: should parse function {0}")
     @MethodSource
     void parse(String name, String code) {
-        var module = new CapybaraParser().parseModule(new RawModule("Test", "/parser", code));
+        var module = parseSuccess(new RawModule("Test", "/parser", code));
         findFunction(name, module.functional());
         System.out.println(module);
     }
@@ -47,6 +46,12 @@ class CapybaraParserTest {
                 })
                 .findAny()
                 .orElseThrow(() -> new AssertionError(type.getSimpleName() + " " + name + " not found"));
+    }
+
+    private static dev.capylang.compiler.parser.Module parseSuccess(RawModule module) {
+        var result = new CapybaraParser().parseModule(module);
+        assertThat(result).isInstanceOf(Result.Success.class);
+        return ((Result.Success<dev.capylang.compiler.parser.Module>) result).value();
     }
 
     static Stream<Arguments> parse() {
@@ -139,7 +144,7 @@ class CapybaraParserTest {
     @Test
     @DisplayName("should parse const declaration as zero-arg function")
     void parseConstDeclaration() {
-        var module = new CapybaraParser().parseModule(new RawModule("Test", "/parser", "const E: double = 2."));
+        var module = parseSuccess(new RawModule("Test", "/parser", "const E: double = 2."));
         var function = findFunction("E", module.functional());
         assertThat(function.parameters()).isEmpty();
         assertThat(function.returnType()).contains(PrimitiveType.DOUBLE);
@@ -153,7 +158,7 @@ class CapybaraParserTest {
         var code = "fun list_identity(l: list[int]): list[int] = l";
 
         // when
-        var module = new CapybaraParser().parseModule(new RawModule("Test", "/parser", code));
+        var module = parseSuccess(new RawModule("Test", "/parser", code));
 
         // then
         var function = findFunction(name, module.functional());
@@ -169,7 +174,7 @@ class CapybaraParserTest {
     @Test
     @DisplayName("should parse doc comments for data and type declarations")
     void parseDataAndTypeComments() {
-        var module = new CapybaraParser().parseModule(new RawModule("Test", "/parser", """
+        var module = parseSuccess(new RawModule("Test", "/parser", """
                 /// See: [Complete JUnit XML example](https://github.com/testmoapp/junitxml?tab=readme-ov-file#complete-junit-xml-example)
                 data JUnitReport { suites: list[JUnitTestSuite] }
 
@@ -187,7 +192,7 @@ class CapybaraParserTest {
     @Test
     @DisplayName("should parse doc comments for local function declarations")
     void parseLocalFunctionComments() {
-        var module = new CapybaraParser().parseModule(new RawModule("Test", "/parser", """
+        var module = parseSuccess(new RawModule("Test", "/parser", """
                 fun accumulate(n: int): int =
                     /// Internal accumulate
                     fun __accumulate(n: int, acc: int): int =
@@ -202,7 +207,7 @@ class CapybaraParserTest {
     @Test
     @DisplayName("should parse bang over field access")
     void parseBangOverFieldAccess() {
-        var module = new CapybaraParser().parseModule(new RawModule("Test", "/parser", """
+        var module = parseSuccess(new RawModule("Test", "/parser", """
                 data Box { failed: bool }
                 fun test(box: Box): bool = !box.failed
                 """));
@@ -223,7 +228,7 @@ class CapybaraParserTest {
     @Test
     @DisplayName("should parse bang over method call")
     void parseBangOverMethodCall() {
-        var module = new CapybaraParser().parseModule(new RawModule("Test", "/parser", """
+        var module = parseSuccess(new RawModule("Test", "/parser", """
                 data Box { failed: bool }
                 fun Box.has_failed(): bool = this.failed
                 fun test(box: Box): bool = !box.has_failed()
@@ -246,7 +251,7 @@ class CapybaraParserTest {
     @Test
     @DisplayName("should parse bang over nested field access")
     void parseBangOverNestedFieldAccess() {
-        var module = new CapybaraParser().parseModule(new RawModule("Test", "/parser", """
+        var module = parseSuccess(new RawModule("Test", "/parser", """
                 data Parse { buffer: string }
                 fun test(parse: Parse): bool = !parse.buffer.is_empty
                 """));
@@ -270,7 +275,7 @@ class CapybaraParserTest {
     @Test
     @DisplayName("should parse field access followed by index")
     void parseFieldAccessFollowedByIndex() {
-        var module = new CapybaraParser().parseModule(new RawModule("Test", "/parser", """
+        var module = parseSuccess(new RawModule("Test", "/parser", """
                 data Parse { buffer: string }
                 fun test(parse: Parse): string = parse.buffer[0]
                 """));
@@ -290,21 +295,29 @@ class CapybaraParserTest {
     @Test
     @DisplayName("should reject chained postfix after unparenthesized pipe lambda")
     void rejectChainedPostfixAfterUnparenthesizedPipeLambda() {
-        assertThatThrownBy(() -> new CapybaraParser().parseModule(new RawModule("Test", "/parser", """
+        var result = new CapybaraParser().parseModule(new RawModule("Test", "/parser", """
                 fun test(): /capy/lang/Option[string] =
                     to_seq([() => "ok", () => "failed", () => "later"])
                         | supplier => supplier()
                         .drop_until(value => value == "failed")
                         .first()
-                """)))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessage("line 4:8: Parenthesize lambda before chaining postfix operations");
+                """));
+
+        assertThat(result).isInstanceOf(Result.Error.class);
+        assertThat(((Result.Error<dev.capylang.compiler.parser.Module>) result).errors())
+                .singleElement()
+                .satisfies(error -> {
+                    assertThat(error.file()).isEqualTo("/parser/Test.cfun");
+                    assertThat(error.line()).isEqualTo(4);
+                    assertThat(error.column()).isEqualTo(8);
+                    assertThat(error.message()).contains("Parenthesize lambda before chaining postfix operations");
+                });
     }
 
     @Test
     @DisplayName("should parse chained postfix after parenthesized pipe lambda")
     void parseChainedPostfixAfterParenthesizedPipeLambda() {
-        var module = new CapybaraParser().parseModule(new RawModule("Test", "/parser", """
+        var module = parseSuccess(new RawModule("Test", "/parser", """
                 fun test(): /capy/lang/Option[string] =
                     to_seq([() => "ok", () => "failed", () => "later"])
                         | (supplier => supplier())
@@ -332,19 +345,21 @@ class CapybaraParserTest {
     @Test
     @DisplayName("should allow multiline postfix formatting inside unparenthesized pipe lambda body")
     void allowMultilinePostfixInsideUnparenthesizedPipeLambdaBody() {
-        assertThatCode(() -> new CapybaraParser().parseModule(new RawModule("Test", "/parser", """
+        var result = new CapybaraParser().parseModule(new RawModule("Test", "/parser", """
                 fun test(): string =
                     " x "
                         | value =>
                             value
                                 .trim()
-                """))).doesNotThrowAnyException();
+                """));
+
+        assertThat(result).isInstanceOf(Result.Success.class);
     }
 
     @Test
     @DisplayName("should parse with expression with named assignments")
     void parseWithExpression() {
-        var module = new CapybaraParser().parseModule(new RawModule("Test", "/parser", """
+        var module = parseSuccess(new RawModule("Test", "/parser", """
                 data Foo { a: int, b: string }
                 fun test(foo: Foo): Foo = foo.with(a = foo.a + 1, b = "x")
                 """));
@@ -360,7 +375,7 @@ class CapybaraParserTest {
     @Test
     @DisplayName("should parse chained with expressions")
     void parseChainedWithExpression() {
-        var module = new CapybaraParser().parseModule(new RawModule("Test", "/parser", """
+        var module = parseSuccess(new RawModule("Test", "/parser", """
                 data Foo { a: int, b: string }
                 fun test(foo: Foo): Foo = foo.with(a = 1).with(b = "x")
                 """));
@@ -377,7 +392,7 @@ class CapybaraParserTest {
     @Test
     @DisplayName("should parse match case when guard")
     void parseMatchCaseWhenGuard() {
-        var module = new CapybaraParser().parseModule(new RawModule("Test", "/parser", """
+        var module = parseSuccess(new RawModule("Test", "/parser", """
                 from /capy/lang/Option import { * }
                 fun test(option: Option[string]): string =
                     match option with

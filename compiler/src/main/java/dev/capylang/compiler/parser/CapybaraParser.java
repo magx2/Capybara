@@ -9,6 +9,7 @@ import org.antlr.v4.runtime.Token;
 import org.antlr.v4.runtime.Recognizer;
 import org.antlr.v4.runtime.tree.TerminalNode;
 import dev.capylang.compiler.ImportDeclaration;
+import dev.capylang.compiler.Result;
 import dev.capylang.parser.antlr.FunctionalParser;
 
 import java.util.*;
@@ -33,46 +34,70 @@ public class CapybaraParser {
             "^\\s*from\\s+([A-Za-z_][A-Za-z0-9_]*|/[A-Za-z_][A-Za-z0-9_]*(?:/[A-Za-z_][A-Za-z0-9_]*)+)\\s+import\\s*\\{\\s*([^}]*)\\s*}(?:\\s+except\\s*\\{\\s*([^}]*)\\s*})?\\s*$"
     );
 
-    public Program parseModule(Collection<RawModule> rawModules) {
-        var modules = rawModules.stream().map(this::parseModule).toList();
-        return new Program(modules);
+    public Result<Program> parseModule(Collection<RawModule> rawModules) {
+        try {
+            var modules = new ArrayList<Module>();
+            var errors = new TreeSet<Result.Error.SingleError>();
+            for (var rawModule : rawModules) {
+                var parsedModule = parseModule(rawModule);
+                if (parsedModule instanceof Result.Success<Module> success) {
+                    modules.add(success.value());
+                } else if (parsedModule instanceof Result.Error<Module> error) {
+                    errors.addAll(error.errors());
+                }
+            }
+            if (!errors.isEmpty()) {
+                return new Result.Error<>(errors);
+            }
+            return Result.success(new Program(List.copyOf(modules)));
+        } catch (RuntimeException e) {
+            return new Result.Error<>(new Result.Error.SingleError(boundaryErrorMessage(e)));
+        }
     }
 
-    public Module parseModule(RawModule module) {
-        var parsedSource = parseSource(module.input());
-        var lexer = new dev.capylang.parser.antlr.FunctionalLexer(CharStreams.fromString(parsedSource.source()));
-        var tokens = new CommonTokenStream(lexer);
-        tokens.fill();
-        var parser = new dev.capylang.parser.antlr.FunctionalParser(tokens);
-        var syntaxErrors = new ArrayList<SyntaxError>();
-        var errorListener = new org.antlr.v4.runtime.BaseErrorListener() {
-            @Override
-            public void syntaxError(
-                    Recognizer<?, ?> recognizer,
-                    Object offendingSymbol,
-                    int line,
-                    int charPositionInLine,
-                    String msg,
-                    RecognitionException e
-            ) {
-                syntaxErrors.add(new SyntaxError(line, charPositionInLine, msg));
+    public Result<Module> parseModule(RawModule module) {
+        try {
+            var parsedSource = parseSource(module.input());
+            var lexer = new dev.capylang.parser.antlr.FunctionalLexer(CharStreams.fromString(parsedSource.source()));
+            var tokens = new CommonTokenStream(lexer);
+            tokens.fill();
+            var parser = new dev.capylang.parser.antlr.FunctionalParser(tokens);
+            var syntaxErrors = new ArrayList<SyntaxError>();
+            var errorListener = new org.antlr.v4.runtime.BaseErrorListener() {
+                @Override
+                public void syntaxError(
+                        Recognizer<?, ?> recognizer,
+                        Object offendingSymbol,
+                        int line,
+                        int charPositionInLine,
+                        String msg,
+                        RecognitionException e
+                ) {
+                    syntaxErrors.add(new SyntaxError(line, charPositionInLine, msg));
+                }
+            };
+            lexer.removeErrorListeners();
+            parser.removeErrorListeners();
+            lexer.addErrorListener(errorListener);
+            parser.addErrorListener(errorListener);
+
+            var program = parser.program();
+            if (!syntaxErrors.isEmpty()) {
+                return new Result.Error<>(formatSyntaxError(module, parsedSource.source(), syntaxErrors.get(0)));
             }
-        };
-        lexer.removeErrorListeners();
-        parser.removeErrorListeners();
-        lexer.addErrorListener(errorListener);
-        parser.addErrorListener(errorListener);
 
-        var program = parser.program();
-        if (!syntaxErrors.isEmpty()) {
-            throw new IllegalStateException(formatSyntaxError(syntaxErrors.get(0)));
+            var definitions = program.definition().stream()
+                    .map(this::definition)
+                    .flatMap(Collection::stream)
+                    .collect(toSet());
+            return Result.success(new Module(module.name(), module.path(), new Functional(definitions), parsedSource.imports()));
+        } catch (RuntimeException e) {
+            return new Result.Error<>(formatParserException(module, e));
         }
+    }
 
-        var definitions = program.definition().stream()
-                .map(this::definition)
-                .flatMap(Collection::stream)
-                .collect(toSet());
-        return new Module(module.name(),module.path(), new Functional(definitions), parsedSource.imports());
+    private static String boundaryErrorMessage(RuntimeException exception) {
+        return Objects.toString(exception.getMessage(), exception.getClass().getSimpleName());
     }
 
     private ParsedSource parseSource(String source) {
@@ -135,6 +160,61 @@ public class CapybaraParser {
             return "line %d:%d: Expected `%s`, found `%s`".formatted(syntaxError.line(), syntaxError.column(), expected, found);
         }
         return "line %d:%d: %s".formatted(syntaxError.line(), syntaxError.column(), syntaxError.message());
+    }
+
+    private Result.Error.SingleError formatSyntaxError(RawModule module, String source, SyntaxError syntaxError) {
+        return formatParserError(module, source, formatSyntaxError(syntaxError));
+    }
+
+    private Result.Error.SingleError formatParserException(RawModule module, RuntimeException exception) {
+        return formatParserError(module, module.input(), exception.getMessage());
+    }
+
+    private Result.Error.SingleError formatParserError(RawModule module, String source, String rawMessage) {
+        var parserError = Pattern.compile("line (\\d+):(\\d+): (.+)").matcher(String.valueOf(rawMessage));
+        if (!parserError.matches()) {
+            return new Result.Error.SingleError(0, 0, moduleFile(module), String.valueOf(rawMessage));
+        }
+
+        var line = Integer.parseInt(parserError.group(1));
+        var column = Integer.parseInt(parserError.group(2));
+        var details = parserError.group(3);
+        var lines = source.split("\\R", -1);
+        var firstDefinitionLine = 0;
+        for (var i = 0; i < lines.length; i++) {
+            var stripped = lines[i].stripLeading();
+            if (stripped.startsWith("fun ")
+                || stripped.startsWith("data ")
+                || stripped.startsWith("type ")
+                || stripped.startsWith("enum ")
+                || stripped.startsWith("single ")
+                || stripped.startsWith("const ")
+                || stripped.startsWith("local ")
+                || stripped.startsWith("///")) {
+                firstDefinitionLine = i;
+                break;
+            }
+        }
+        var renderedLines = new ArrayList<String>();
+        var endLine = Math.min(Math.max(line - 1, firstDefinitionLine), Math.max(lines.length - 1, 0));
+        for (var idx = firstDefinitionLine; idx <= endLine && idx < lines.length; idx++) {
+            if (!lines[idx].isEmpty()) {
+                renderedLines.add(lines[idx]);
+            }
+        }
+        var message = "error: mismatched types\n"
+                      + " --> %s:%d:%d\n".formatted(moduleFile(module), line, column)
+                      + String.join("\n", renderedLines) + "\n"
+                      + " ".repeat(Math.max(column, 0)) + "^ " + details + "\n";
+        return new Result.Error.SingleError(line, column, moduleFile(module), message);
+    }
+
+    private static String moduleFile(RawModule module) {
+        var path = module.path().replace('\\', '/');
+        if (!path.startsWith("/")) {
+            path = "/" + path;
+        }
+        return "%s/%s.cfun".formatted(path, module.name());
     }
 
     private record ParsedSource(String source, List<ImportDeclaration> imports) {

@@ -30,8 +30,21 @@ public class CapybaraCompiler {
     private static final java.util.regex.Pattern IDENTIFIER_PATTERN = java.util.regex.Pattern.compile("[A-Za-z_][A-Za-z0-9_]*");
 
     public Result<CompiledProgram> compile(Collection<RawModule> rawModules, SortedSet<CompiledModule> libraries) {
-        var program = CapybaraParser.INSTANCE.parseModule(rawModules);
-        return compile(program, mergeLibraries(rawModules, libraries));
+        try {
+            var program = CapybaraParser.INSTANCE.parseModule(rawModules);
+            if (program instanceof Result.Error<Program> error) {
+                return new Result.Error<>(error.errors());
+            }
+            var mergedLibraries = mergeLibraries(rawModules, libraries);
+            return compile(((Result.Success<Program>) program).value(), mergedLibraries);
+        } catch (RuntimeException e) {
+            // Public boundary: source/compiler errors should not escape as exceptions.
+            return new Result.Error<>(new Result.Error.SingleError(boundaryErrorMessage(e)));
+        }
+    }
+
+    private static String boundaryErrorMessage(RuntimeException exception) {
+        return Objects.toString(exception.getMessage(), exception.getClass().getSimpleName());
     }
 
     private SortedSet<CompiledModule> mergeLibraries(Collection<RawModule> rawModules, SortedSet<CompiledModule> libraries) {
@@ -3233,6 +3246,7 @@ public class CapybaraCompiler {
                 .toList();
     }
 }
+
 
 
 

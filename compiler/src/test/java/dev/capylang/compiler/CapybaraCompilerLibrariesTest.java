@@ -11,6 +11,16 @@ import static org.assertj.core.api.Assertions.fail;
 
 class CapybaraCompilerLibrariesTest {
     @Test
+    void shouldReturnErrorInsteadOfThrowingForSyntaxError() {
+        var result = CapybaraCompiler.INSTANCE.compile(
+                List.of(new RawModule("Broken", "/foo/app", "fun broken(): int = if true then {")),
+                new java.util.TreeSet<>()
+        );
+
+        assertThat(result).isInstanceOf(Result.Error.class);
+    }
+
+    @Test
     void shouldCompileAgainstLibrariesWithoutIncludingThemInOutput() {
         var librarySource = """
                 data Message { value: string }
