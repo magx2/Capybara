@@ -404,6 +404,15 @@ public class JavaAstBuilder {
     }
 
     private String normalizeRawTypeReference(String rawTypeName) {
+        if ("Option".equals(rawTypeName) || isOptionTypeName(rawTypeName) || isOptionSomeTypeName(rawTypeName)) {
+            return "java.util.Optional";
+        }
+        if ("None".equals(rawTypeName) || normalizeQualifiedTypeName(rawTypeName).endsWith("/Option.None")) {
+            return "java.util.Optional";
+        }
+        if ("Program".equals(rawTypeName) || isProgramTypeName(rawTypeName)) {
+            return "capy.lang.Program";
+        }
         if (rawTypeName.startsWith("/") && !rawTypeName.contains(".")) {
             var slashIndex = rawTypeName.lastIndexOf('/');
             if (slashIndex > 0 && slashIndex < rawTypeName.length() - 1) {

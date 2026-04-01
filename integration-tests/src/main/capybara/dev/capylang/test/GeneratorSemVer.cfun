@@ -1,0 +1,17 @@
+from /capy/lang/Option import { Option, Some, None }
+from /capy/lang/Result import { * }
+
+data Pretty { value: string }
+
+fun Pretty.to_string(): string = "pretty:" + this.value
+
+fun custom_to_string(value: string): string = Pretty { value }.to_string()
+
+fun parse_local_option(value: int): Result[int] =
+    data __Parse[T] { buffer: string, value: T }
+    fun __unwrap(parse: __Parse[Option[int]]): Result[__Parse[int]] =
+        match parse.value with
+        | Some { inner } -> Success { __Parse { buffer: parse.buffer, value: inner } }
+        | None -> Error { "missing value" }
+    __unwrap(__Parse { buffer: "", value: Some { value } })
+    | parsed => Success { parsed.value }

@@ -1377,7 +1377,9 @@ public class JavaExpressionEvaluator {
                               + javaCastType(linkedFunctionType.returnType())
                               + ">";
             case dev.capylang.compiler.CompiledDataType linkedDataType ->
-                    normalizeJavaTypeReference(linkedDataType.name());
+                    isOptionSomeTypeName(linkedDataType.name()) || isOptionNoneTypeName(linkedDataType.name())
+                            ? "java.util.Optional"
+                            : normalizeJavaTypeReference(linkedDataType.name());
             case dev.capylang.compiler.CompiledDataParentType linkedDataParentType ->
                     normalizeJavaTypeReference(linkedDataParentType.name());
             case dev.capylang.compiler.CompiledGenericTypeParameter genericTypeParameter ->
@@ -1723,6 +1725,19 @@ public class JavaExpressionEvaluator {
             return true;
         }
         return normalized.matches("[A-Z]");
+    }
+
+    private static boolean hasUnresolvedTypeDescriptor(String descriptor) {
+        var normalized = descriptor == null ? "" : descriptor.trim();
+        if (isUnknownTypeDescriptor(normalized)) {
+            return true;
+        }
+        var genericStart = normalized.indexOf('[');
+        if (genericStart > 0 && normalized.endsWith("]")) {
+            var argsDescriptor = normalized.substring(genericStart + 1, normalized.length() - 1);
+            return splitTopLevelDescriptors(argsDescriptor).stream().anyMatch(JavaExpressionEvaluator::hasUnresolvedTypeDescriptor);
+        }
+        return false;
     }
 
     private static List<String> splitTopLevelDescriptors(String descriptors) {
@@ -2133,7 +2148,14 @@ public class JavaExpressionEvaluator {
         }
 
         var javaType = normalizeJavaTypeReference(dataType.name());
-        var genericSuffix = dataType.typeParameters().isEmpty() ? "" : "<>";
+        var genericSuffix = dataType.typeParameters().isEmpty()
+                ? ""
+                : dataType.typeParameters().stream().anyMatch(JavaExpressionEvaluator::hasUnresolvedTypeDescriptor)
+                ? "<>"
+                : "<" + dataType.typeParameters().stream()
+                        .map(JavaExpressionEvaluator::javaCastTypeFromDescriptor)
+                        .collect(java.util.stream.Collectors.joining(", "))
+                  + ">";
         return current.addExpression("new " + javaType + genericSuffix + "(" + String.join(", ", args) + ")");
     }
 
@@ -2647,4 +2669,3 @@ public class JavaExpressionEvaluator {
     }
 
 }
-

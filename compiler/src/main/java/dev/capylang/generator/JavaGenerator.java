@@ -115,7 +115,7 @@ public final class JavaGenerator implements Generator {
         code.append('\n');
         javaClass.records()
                 .stream()
-                .map(record -> mapJavaRecord(record, helperCallOwnerName))
+                .map(record -> mapJavaRecord(record, helperCallOwnerName, false))
                 .forEach(code::append);
 
         // enums
@@ -172,7 +172,7 @@ public final class JavaGenerator implements Generator {
                 .map(this::removeVisibilityModifier)
                 .forEach(code::append);
         javaClass.records().stream()
-                .map(record -> mapJavaRecord(record, helperCallOwnerName))
+                .map(record -> mapJavaRecord(record, helperCallOwnerName, false))
                 .map(this::removeVisibilityModifier)
                 .forEach(code::append);
         javaClass.enums().stream()
@@ -238,7 +238,7 @@ public final class JavaGenerator implements Generator {
     private void appendImports(StringBuilder code, Set<String> staticImports) {
         var classImports = new TreeSet<String>();
         staticImports.stream()
-                .map(this::extractClassNameFromStaticImport)
+                .map(this::classImportForStaticImport)
                 .filter(className -> !className.isBlank())
                 .forEach(classImport -> {
                     classImports.add(classImport);
@@ -250,7 +250,33 @@ public final class JavaGenerator implements Generator {
         classImports.forEach(classImport -> code.append("import ").append(classImport).append(";\n"));
         staticImports.stream()
                 .sorted()
+                .filter(staticImport -> !isTypeImport(staticImport))
                 .forEach(staticImport -> code.append("import static ").append(staticImport).append(";\n"));
+    }
+
+    private String classImportForStaticImport(String staticImport) {
+        if (!isTypeImport(staticImport)) {
+            return extractClassNameFromStaticImport(staticImport);
+        }
+        var ownerImport = extractClassNameFromStaticImport(staticImport);
+        if (ownerImport.isBlank()) {
+            return "";
+        }
+        var member = staticImport.substring(staticImport.lastIndexOf('.') + 1);
+        var ownerSimpleName = ownerImport.substring(ownerImport.lastIndexOf('.') + 1);
+        return ownerSimpleName.equals(member) ? ownerImport : staticImport;
+    }
+
+    private boolean isTypeImport(String staticImport) {
+        if (staticImport.endsWith(".*")) {
+            return false;
+        }
+        var lastDot = staticImport.lastIndexOf('.');
+        if (lastDot <= 0 || lastDot == staticImport.length() - 1) {
+            return false;
+        }
+        var member = staticImport.substring(lastDot + 1);
+        return Character.isUpperCase(member.charAt(0));
     }
 
     private String extractCompanionOwnerImport(String classImport) {
@@ -284,7 +310,7 @@ public final class JavaGenerator implements Generator {
                 new TopLevelDeclaration(javaInterface.name().toString(), mapJavaInterface(javaInterface, helperCallOwnerName))
         ));
         javaClass.records().forEach(javaRecord -> declarations.add(
-                new TopLevelDeclaration(javaRecord.name().toString(), mapJavaRecord(javaRecord, helperCallOwnerName))
+                new TopLevelDeclaration(javaRecord.name().toString(), mapJavaRecord(javaRecord, helperCallOwnerName, true))
         ));
         javaClass.enums().forEach(javaEnum -> declarations.add(
                 new TopLevelDeclaration(javaEnum.name().toString(), mapJavaEnum(javaEnum))
@@ -295,7 +321,7 @@ public final class JavaGenerator implements Generator {
     private record TopLevelDeclaration(String name, String code) {
     }
 
-    private String mapJavaRecord(JavaRecord record, String helperCallOwnerName) {
+    private String mapJavaRecord(JavaRecord record, String helperCallOwnerName, boolean topLevel) {
         var fields = record.fields().stream().map(this::mapJavaRecordField).collect(joining(", "));
         var typeParameters = record.typeParameters().isEmpty()
                 ? ""
@@ -312,7 +338,7 @@ public final class JavaGenerator implements Generator {
                 .map(method -> mapJavaRecordMethod(method, helperCallOwnerName))
                 .collect(joining("\n"));
         var toStringMethod = mapJavaRecordToString(record);
-        var visibility = record.isPrivate() ? "private" : "public";
+        var visibility = record.isPrivate() ? (topLevel ? "" : "private ") : "public ";
         return mapJavaDoc(record.comments())
                + visibility + " record " + record.name() + typeParameters + "(" + fields + ")" + implementInterfaces + "{"
                + staticMethods + methods + toStringMethod + "}\n";
@@ -323,6 +349,9 @@ public final class JavaGenerator implements Generator {
     }
 
     private String mapJavaRecordToString(JavaRecord record) {
+        if (record.methods().stream().anyMatch(method -> "toString".equals(method.name()))) {
+            return "";
+        }
         if (record.fields().isEmpty()) {
             return "@Override public java.lang.String toString() { return \"" + record.name() + " { }\"; }\n";
         }

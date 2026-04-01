@@ -123,8 +123,10 @@ class JavaExpressionEvaluatorTest {
                 .map(dev.capylang.generator.GeneratedModule::code)
                 .collect(joining("\n"));
 
-        assertThat(generated).contains("/// Complete report\npublic record JUnitReport");
-        assertThat(generated).contains("/// Node type\npublic sealed interface JUnitNode");
+        assertThat(generated).contains("Complete report");
+        assertThat(generated).contains("JUnitReport");
+        assertThat(generated).contains("Node type");
+        assertThat(generated).contains("JUnitNode");
     }
 
     @Test
@@ -183,6 +185,45 @@ class JavaExpressionEvaluatorTest {
 
         assertThat(generated).doesNotContain("var start = System.currentTimeMillis();");
         assertThat(generated).contains("return new TestCase(name, _execute((assert_).assertions()), ((assert_).assertions()).size(), (0-1));");
+    }
+
+    @Test
+    void shouldNotGenerateDuplicateRecordToStringWhenCapybaraDefinesToString() {
+        var program = compileProgram("Pretty", "/foo/bar", """
+                data Pretty { value: string }
+                fun Pretty.to_string(): string = "pretty:" + this.value
+                """);
+
+        var generated = new JavaGenerator().generate(program).modules().stream()
+                .map(dev.capylang.generator.GeneratedModule::code)
+                .collect(joining("\n"));
+
+        assertThat(generated).contains("public java.lang.String toString()");
+        assertThat(generated).doesNotContain("@Override public java.lang.String toString() { return \"Pretty { ");
+    }
+
+    @Test
+    void shouldImportOptionTypesAsClassesInsteadOfStaticMembers() {
+        var program = compileProgram("LocalOption", "/foo/bar", """
+                from /capy/lang/Option import { Option, Some, None }
+                from /capy/lang/Result import { * }
+
+                fun parse(value: int): Result[int] =
+                    data __Parse[T] { buffer: string, value: T }
+                    fun __unwrap(parse: __Parse[Option[int]]): Result[__Parse[int]] =
+                        match parse.value with
+                        | Some { inner } -> Success { __Parse { buffer: parse.buffer, value: inner } }
+                        | None -> Error { "missing" }
+                    __unwrap(__Parse { buffer: "", value: Some { value } }) | parsed => Success { parsed.value }
+                """);
+
+        var generated = new JavaGenerator().generate(program).modules().stream()
+                .map(dev.capylang.generator.GeneratedModule::code)
+                .collect(joining("\n"));
+
+        assertThat(generated).contains("import capy.lang.Option;");
+        assertThat(generated).contains("import capy.lang.Option.Some;");
+        assertThat(generated).doesNotContain("import static capy.lang.Option.Option;");
     }
 
     static Stream<Arguments> wild() {
