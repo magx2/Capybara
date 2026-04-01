@@ -9,24 +9,24 @@ data A { a: string }
 data B { b: int }
 data C { c: double }
 
-fun data_with_single(foo: Foo): Foo = foo.with(a = foo.a + 1)
+fun data_with_single(foo: Foo): Foo = foo.with(a: foo.a + 1)
 
-fun data_with_multiple(foo: Foo): Foo = foo.with(a = foo.a + 1, b = "new value")
+fun data_with_multiple(foo: Foo): Foo = foo.with(a: foo.a + 1, b: "new value")
 
 fun data_with_chain(foo: Foo): Foo =
     foo
-        .with(a = foo.a + 1)
-        .with(b = "new value")
+        .with(a: foo.a + 1)
+        .with(b: "new value")
 
-fun parent_with(letter: Letter): Letter = letter.with(x = letter.x + 1)
+fun parent_with(letter: Letter): Letter = letter.with(x: letter.x + 1)
 
 fun parent_with_chain(letter: Letter): Letter =
     letter
-        .with(x = letter.x + 1)
-        .with(x = 100)
+        .with(x: letter.x + 1)
+        .with(x: 100)
 
 fun parent_with_preserves_subtype(letter: Letter): string =
-    match letter.with(x = letter.x + 1) with
+    match letter.with(x: letter.x + 1) with
     | A { x, a } -> "A:" + x + ":" + a
     | B { x, b } -> "B:" + x + ":" + b
     | C { x, c } -> "C:" + x + ":" + c

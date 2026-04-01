@@ -361,7 +361,7 @@ class CapybaraParserTest {
     void parseWithExpression() {
         var module = parseSuccess(new RawModule("Test", "/parser", """
                 data Foo { a: int, b: string }
-                fun test(foo: Foo): Foo = foo.with(a = foo.a + 1, b = "x")
+                fun test(foo: Foo): Foo = foo.with(a: foo.a + 1, b: "x")
                 """));
 
         var function = findFunction("test", module.functional());
@@ -377,7 +377,7 @@ class CapybaraParserTest {
     void parseChainedWithExpression() {
         var module = parseSuccess(new RawModule("Test", "/parser", """
                 data Foo { a: int, b: string }
-                fun test(foo: Foo): Foo = foo.with(a = 1).with(b = "x")
+                fun test(foo: Foo): Foo = foo.with(a: 1).with(b: "x")
                 """));
 
         var function = findFunction("test", module.functional());

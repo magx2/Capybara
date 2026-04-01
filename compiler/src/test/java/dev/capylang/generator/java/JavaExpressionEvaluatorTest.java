@@ -230,7 +230,7 @@ class JavaExpressionEvaluatorTest {
     void shouldGenerateRecordWithMethod() {
         var program = compileProgram("With", "/foo/bar", """
                 data Foo { a: int, b: string, c: double }
-                fun update(foo: Foo): Foo = foo.with(a = foo.a + 1, b = \"x\")
+                fun update(foo: Foo): Foo = foo.with(a: foo.a + 1, b: \"x\")
                 """);
 
         var generated = new JavaGenerator().generate(program).modules().stream()
@@ -245,7 +245,7 @@ class JavaExpressionEvaluatorTest {
     void shouldGenerateChainedWithCalls() {
         var evaluated = JavaExpressionEvaluator.evaluateExpression(findFunction("update", compileProgram("With", "/foo/bar", """
                 data Foo { a: int, b: string, c: double }
-                fun update(foo: Foo): Foo = foo.with(a = foo.a + 1).with(b = \"x\")
+                fun update(foo: Foo): Foo = foo.with(a: foo.a + 1).with(b: \"x\")
                 """)).orElseThrow().expression());
 
         assertThat(evaluated).contains(".with(");

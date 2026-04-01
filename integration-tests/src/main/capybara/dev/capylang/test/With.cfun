@@ -10,19 +10,19 @@ data A { a: string }
 data B { b: int }
 data C { c: double }
 
-fun update_foo(foo: Foo): Foo = foo.with(a = foo.a + 1, b = "new value")
+fun update_foo(foo: Foo): Foo = foo.with(a: foo.a + 1, b: "new value")
 
 fun chain_foo(foo: Foo): Foo =
     foo
-        .with(a = foo.a + 1)
-        .with(b = "new value")
+        .with(a: foo.a + 1)
+        .with(b: "new value")
 
-fun update_letter(letter: Letter): Letter = letter.with(x = letter.x + 1)
+fun update_letter(letter: Letter): Letter = letter.with(x: letter.x + 1)
 
 fun chain_letter(letter: Letter): Letter =
     letter
-        .with(x = letter.x + 1)
-        .with(x = 99)
+        .with(x: letter.x + 1)
+        .with(x: 99)
 
-fun update_a(a: A): A = a.with(x = a.x + 1, a = a.a + "!")
+fun update_a(a: A): A = a.with(x: a.x + 1, a: a.a + "!")
 

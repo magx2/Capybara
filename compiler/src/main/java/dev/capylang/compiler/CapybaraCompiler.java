@@ -1510,7 +1510,7 @@ public class CapybaraCompiler {
 
     private String formatWithPreview(WithExpression withExpression) {
         var assignments = withExpression.assignments().stream()
-                .map(assignment -> assignment.name() + " = " + formatExpressionPreview(assignment.value()))
+                .map(assignment -> assignment.name() + ": " + formatExpressionPreview(assignment.value()))
                 .collect(java.util.stream.Collectors.joining(", "));
         return formatExpressionPreview(withExpression.source()) + ".with(" + assignments + ")";
     }

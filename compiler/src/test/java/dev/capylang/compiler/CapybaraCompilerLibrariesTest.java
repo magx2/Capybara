@@ -104,7 +104,7 @@ class CapybaraCompilerLibrariesTest {
         var compiled = compileProgram(List.of(
                 new RawModule("WithData", "/foo/with", """
                         data Foo { a: int, b: string }
-                        fun update(foo: Foo): Foo = foo.with(a = foo.a + 1, b = "x")
+                        fun update(foo: Foo): Foo = foo.with(a: foo.a + 1, b: "x")
                         """)
         ), new java.util.TreeSet<>());
 
@@ -124,7 +124,7 @@ class CapybaraCompilerLibrariesTest {
                         type Letter { x: int } = A | B
                         data A { a: string }
                         data B { b: int }
-                        fun update(letter: Letter): Letter = letter.with(x = letter.x + 1)
+                        fun update(letter: Letter): Letter = letter.with(x: letter.x + 1)
                         """)
         ), new java.util.TreeSet<>());
 

@@ -152,7 +152,7 @@ value: literal | identifier | qualifiedType;
 argumentList: expression (',' expression)*;
 methodArgumentList: methodArgument (',' methodArgument)*;
 methodArgument: namedMethodArgument | expression;
-namedMethodArgument: identifier ASSIGN expression;
+namedMethodArgument: identifier COLON expression;
 literal: BYTE_LITERAL | LONG_LITERAL | DOUBLE_LITERAL | INT_LITERAL | BOOL_LITERAL | STRING_LITERAL | FLOAT_LITERAL | NOTHING_LITERAL;
 BYTE_LITERAL: '0' [xX] [0-9a-fA-F]+;
 LONG_LITERAL: [0-9]+ [lL];

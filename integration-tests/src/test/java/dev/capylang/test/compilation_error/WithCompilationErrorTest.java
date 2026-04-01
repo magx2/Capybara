@@ -31,7 +31,7 @@ class WithCompilationErrorTest {
                         "unknown field",
                         """
                                 data Foo { a: int }
-                                fun foo(foo: Foo): Foo = foo.with(b = 1)
+                                fun foo(foo: Foo): Foo = foo.with(b: 1)
                                 """,
                         "Field `b` not found in type `Foo`"
                 ),
@@ -39,7 +39,7 @@ class WithCompilationErrorTest {
                         "duplicate field",
                         """
                                 data Foo { a: int }
-                                fun foo(foo: Foo): Foo = foo.with(a = 1, a = 2)
+                                fun foo(foo: Foo): Foo = foo.with(a: 1, a: 2)
                                 """,
                         "Field `a` is assigned more than once"
                 ),
@@ -47,14 +47,14 @@ class WithCompilationErrorTest {
                         "wrong field type",
                         """
                                 data Foo { a: int }
-                                fun foo(foo: Foo): Foo = foo.with(a = \"x\")
+                                fun foo(foo: Foo): Foo = foo.with(a: \"x\")
                                 """,
                         "Expected `INT`, got `STRING`"
                 ),
                 Arguments.of(
                         "non data receiver",
                         """
-                                fun foo(x: int): int = x.with(a = 1)
+                                fun foo(x: int): int = x.with(a: 1)
                                 """,
                         "`.with(...)` requires data/type receiver"
                 ),
@@ -64,7 +64,7 @@ class WithCompilationErrorTest {
                                 type Letter { x: int } = A | B
                                 data A { a: string }
                                 data B { b: int }
-                                fun foo(letter: Letter): Letter = letter.with(a = \"x\")
+                                fun foo(letter: Letter): Letter = letter.with(a: \"x\")
                                 """,
                         "Field `a` not found in type `Letter`"
                 )
