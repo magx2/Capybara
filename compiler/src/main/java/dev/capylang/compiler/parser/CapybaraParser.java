@@ -668,6 +668,16 @@ public class CapybaraParser {
                             .toList(),
                     newData.position()
             );
+            case WithExpression withExpression -> new WithExpression(
+                    rewriteLocalNames(withExpression.source(), localFunctionNameMap, localTypeNameMap, localConstNameMap),
+                    withExpression.assignments().stream()
+                            .map(assignment -> new NewData.FieldAssignment(
+                                    assignment.name(),
+                                    rewriteLocalNames(assignment.value(), localFunctionNameMap, localTypeNameMap, localConstNameMap)
+                            ))
+                            .toList(),
+                    withExpression.position()
+            );
             case NewListExpression newListExpression -> new NewListExpression(
                     newListExpression.values().stream()
                             .map(value -> rewriteLocalNames(value, localFunctionNameMap, localTypeNameMap, localConstNameMap))
@@ -1021,13 +1031,7 @@ public class CapybaraParser {
                 return negate(negatedPostfix.get().apply().apply(negatedPostfix.get().base()), position(expression));
             }
             var receiverContext = expression.expressionNoLet(0);
-            var receiver = expressionNoLet(receiverContext);
-            var methodName = methodIdentifier(expression.methodIdentifier());
-            var args = expression.argumentList() == null
-                    ? new java.util.ArrayList<Expression>()
-                    : new java.util.ArrayList<>(expression.argumentList().expression().stream().map(this::expression).toList());
-            args.add(0, receiver);
-            return new FunctionCall(Optional.empty(), METHOD_INVOKE_PREFIX + methodName, List.copyOf(args), position(expression));
+            return methodCall(expressionNoLet(receiverContext), expression.methodIdentifier(), expression.methodArgumentList(), position(expression));
         }
 
         if (isFunctionInvoke(expression)) {
@@ -1299,13 +1303,7 @@ public class CapybaraParser {
                 return negate(negatedPostfix.get().apply().apply(negatedPostfix.get().base()), position(expression));
             }
             var receiverContext = expression.expressionNoLetNoPipe(0);
-            var receiver = expressionNoLetNoPipe(receiverContext);
-            var methodName = methodIdentifier(expression.methodIdentifier());
-            var args = expression.argumentList() == null
-                    ? new java.util.ArrayList<Expression>()
-                    : new java.util.ArrayList<>(expression.argumentList().expression().stream().map(this::expression).toList());
-            args.add(0, receiver);
-            return new FunctionCall(Optional.empty(), METHOD_INVOKE_PREFIX + methodName, List.copyOf(args), position(expression));
+            return methodCall(expressionNoLetNoPipe(receiverContext), expression.methodIdentifier(), expression.methodArgumentList(), position(expression));
         }
 
         if (isFunctionInvoke(expression)) {
@@ -1419,7 +1417,7 @@ public class CapybaraParser {
                     .orElseGet(() -> new TrailingPostfix(expressionNoLet(receiverContext), java.util.function.UnaryOperator.identity()));
             return java.util.Optional.of(new TrailingPostfix(
                     nested.base(),
-                    source -> methodCall(nested.apply().apply(source), expression.methodIdentifier(), expression.argumentList(), position(expression))
+                    source -> methodCall(nested.apply().apply(source), expression.methodIdentifier(), expression.methodArgumentList(), position(expression))
             ));
         }
         if (isFieldAccess(expression)) {
@@ -1475,14 +1473,14 @@ public class CapybaraParser {
             if (isUnaryBang(receiverContext)) {
                 return java.util.Optional.of(new TrailingPostfix(
                         expressionNoLet(receiverContext.expressionNoLet(0)),
-                        source -> methodCall(source, expression.methodIdentifier(), expression.argumentList(), position(expression))
+                        source -> methodCall(source, expression.methodIdentifier(), expression.methodArgumentList(), position(expression))
                 ));
             }
             var nested = splitUnaryBangTrailingPostfix(receiverContext);
             if (nested.isPresent()) {
                 return java.util.Optional.of(new TrailingPostfix(
                         nested.get().base(),
-                        source -> methodCall(nested.get().apply().apply(source), expression.methodIdentifier(), expression.argumentList(), position(expression))
+                        source -> methodCall(nested.get().apply().apply(source), expression.methodIdentifier(), expression.methodArgumentList(), position(expression))
                 ));
             }
         }
@@ -1606,14 +1604,14 @@ public class CapybaraParser {
             if (isUnaryBang(receiverContext)) {
                 return java.util.Optional.of(new TrailingPostfix(
                         expressionNoLetNoPipe(receiverContext.expressionNoLetNoPipe(0)),
-                        source -> methodCall(source, expression.methodIdentifier(), expression.argumentList(), position(expression))
+                        source -> methodCall(source, expression.methodIdentifier(), expression.methodArgumentList(), position(expression))
                 ));
             }
             var nested = splitUnaryBangTrailingPostfix(receiverContext);
             if (nested.isPresent()) {
                 return java.util.Optional.of(new TrailingPostfix(
                         nested.get().base(),
-                        source -> methodCall(nested.get().apply().apply(source), expression.methodIdentifier(), expression.argumentList(), position(expression))
+                        source -> methodCall(nested.get().apply().apply(source), expression.methodIdentifier(), expression.methodArgumentList(), position(expression))
                 ));
             }
         }
@@ -1955,6 +1953,26 @@ public class CapybaraParser {
         );
     }
 
+    private MethodArguments methodArguments(FunctionalParser.MethodArgumentListContext context) {
+        if (context == null) {
+            return new MethodArguments(List.of(), List.of());
+        }
+        var assignments = new java.util.ArrayList<NewData.FieldAssignment>();
+        var positionalArguments = new java.util.ArrayList<Expression>();
+        for (var argument : context.methodArgument()) {
+            if (argument.namedMethodArgument() != null) {
+                var named = argument.namedMethodArgument();
+                assignments.add(new NewData.FieldAssignment(
+                        identifier(named.identifier()),
+                        expression(named.expression())
+                ));
+            } else {
+                positionalArguments.add(expression(argument.expression()));
+            }
+        }
+        return new MethodArguments(List.copyOf(assignments), List.copyOf(positionalArguments));
+    }
+
     private static BooleanValue boolLiteral(TerminalNode node) {
         return switch (node.getText()) {
             case "true" -> new BooleanValue(true, position(node));
@@ -2153,6 +2171,14 @@ public class CapybaraParser {
                     )).toList(),
                     value.positionalArguments().stream().map(argument -> shiftInterpolationPositions(argument, stringPosition, interpolationOffset)).toList(),
                     value.spreads().stream().map(argument -> shiftInterpolationPositions(argument, stringPosition, interpolationOffset)).toList(),
+                    shiftPosition(value.position(), stringPosition, interpolationOffset)
+            );
+            case WithExpression value -> new WithExpression(
+                    shiftInterpolationPositions(value.source(), stringPosition, interpolationOffset),
+                    value.assignments().stream().map(assignment -> new NewData.FieldAssignment(
+                            assignment.name(),
+                            shiftInterpolationPositions(assignment.value(), stringPosition, interpolationOffset)
+                    )).toList(),
                     shiftPosition(value.position(), stringPosition, interpolationOffset)
             );
             case NewDictExpression value -> new NewDictExpression(
@@ -2370,6 +2396,9 @@ public class CapybaraParser {
         if (context.identifier() != null) {
             return identifier(context.identifier());
         }
+        if ("with".equals(context.getText())) {
+            return "with";
+        }
         var infixLiteral = context.INFIX_METHOD_LITERAL();
         if (infixLiteral != null) {
             var text = infixLiteral.getText();
@@ -2550,46 +2579,48 @@ public class CapybaraParser {
         return new SliceExpression(source, bounds.start(), bounds.end(), position);
     }
 
-    private FunctionCall methodCall(
+    private Expression methodCall(
             FunctionalParser.ExpressionNoLetContext receiverContext,
             FunctionalParser.MethodIdentifierContext methodIdentifierContext,
-            FunctionalParser.ArgumentListContext argumentListContext,
+            FunctionalParser.MethodArgumentListContext argumentListContext,
             Optional<SourcePosition> position
     ) {
-        var receiver = expressionNoLet(receiverContext);
-        var methodName = methodIdentifier(methodIdentifierContext);
-        var args = argumentListContext == null
-                ? new java.util.ArrayList<Expression>()
-                : new java.util.ArrayList<>(argumentListContext.expression().stream().map(this::expression).toList());
-        args.add(0, receiver);
-        return new FunctionCall(Optional.empty(), METHOD_INVOKE_PREFIX + methodName, List.copyOf(args), position);
+        return methodCall(expressionNoLet(receiverContext), methodIdentifierContext, argumentListContext, position);
     }
 
-    private FunctionCall methodCall(
+    private Expression methodCall(
             FunctionalParser.ExpressionNoLetNoPipeContext receiverContext,
             FunctionalParser.MethodIdentifierContext methodIdentifierContext,
-            FunctionalParser.ArgumentListContext argumentListContext,
+            FunctionalParser.MethodArgumentListContext argumentListContext,
             Optional<SourcePosition> position
     ) {
-        var receiver = expressionNoLetNoPipe(receiverContext);
-        var methodName = methodIdentifier(methodIdentifierContext);
-        var args = argumentListContext == null
-                ? new java.util.ArrayList<Expression>()
-                : new java.util.ArrayList<>(argumentListContext.expression().stream().map(this::expression).toList());
-        args.add(0, receiver);
-        return new FunctionCall(Optional.empty(), METHOD_INVOKE_PREFIX + methodName, List.copyOf(args), position);
+        return methodCall(expressionNoLetNoPipe(receiverContext), methodIdentifierContext, argumentListContext, position);
     }
 
-    private FunctionCall methodCall(
+    private Expression methodCall(
             Expression receiver,
             FunctionalParser.MethodIdentifierContext methodIdentifierContext,
-            FunctionalParser.ArgumentListContext argumentListContext,
+            FunctionalParser.MethodArgumentListContext argumentListContext,
             Optional<SourcePosition> position
     ) {
         var methodName = methodIdentifier(methodIdentifierContext);
-        var args = argumentListContext == null
-                ? new java.util.ArrayList<Expression>()
-                : new java.util.ArrayList<>(argumentListContext.expression().stream().map(this::expression).toList());
+        var methodArguments = methodArguments(argumentListContext);
+        if ("with".equals(methodName)) {
+            if (!methodArguments.positionalArguments().isEmpty()) {
+                throw new IllegalStateException("line %d:%d: `.with(...)` accepts only named assignments".formatted(
+                        position.map(SourcePosition::line).orElse(0),
+                        position.map(SourcePosition::column).orElse(0)
+                ));
+            }
+            return new WithExpression(receiver, methodArguments.assignments(), position);
+        }
+        if (!methodArguments.assignments().isEmpty()) {
+            throw new IllegalStateException("line %d:%d: Named method arguments are supported only for `.with(...)`".formatted(
+                    position.map(SourcePosition::line).orElse(0),
+                    position.map(SourcePosition::column).orElse(0)
+            ));
+        }
+        var args = new java.util.ArrayList<Expression>(methodArguments.positionalArguments());
         args.add(0, receiver);
         return new FunctionCall(Optional.empty(), METHOD_INVOKE_PREFIX + methodName, List.copyOf(args), position);
     }
@@ -2701,6 +2732,12 @@ public class CapybaraParser {
     ) {
     }
 
+    private record MethodArguments(
+            List<NewData.FieldAssignment> assignments,
+            List<Expression> positionalArguments
+    ) {
+    }
+
     private record SliceBounds(Optional<Expression> start, Optional<Expression> end) {
     }
 
@@ -2708,6 +2745,7 @@ public class CapybaraParser {
     }
 
 }
+
 
 
 

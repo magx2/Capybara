@@ -141,6 +141,10 @@
       <key>name</key><string>meta.lambda.no-args.capybara</string>
       <key>match</key><string>(\()\s*(\))\s*(=&gt;)</string>
     </dict>
+    <dict>
+      <key>name</key><string>meta.method.with.named-argument.capybara</string>
+      <key>match</key><string>((?:\.with\(|,)\s*)([A-Za-z_][A-Za-z0-9_]*)(\s*=)</string>
+    </dict>
     <dict><key>name</key><string>keyword.operator.function-type.capybara</string><key>match</key><string>=&gt;</string></dict>
     <dict><key>name</key><string>keyword.operator.pipe.capybara</string><key>match</key><string>\|all\?|\|any\?|\|>|\|\*|\|-|\||\.and\.|\.nand\.|\.or\.|\.xor\.|\.not\.|==|!=|&lt;=|&gt;=|=&gt;|\+|\-|\*|/|%|\^|&lt;|&gt;|=|&amp;|\?|:|,</string></dict>
     <dict>
@@ -178,6 +182,9 @@
   </array>
 </dict>
 </plist>
+
+
+
 
 
 

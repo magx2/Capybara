@@ -340,7 +340,41 @@ class CapybaraParserTest {
                                 .trim()
                 """))).doesNotThrowAnyException();
     }
+
+    @Test
+    @DisplayName("should parse with expression with named assignments")
+    void parseWithExpression() {
+        var module = new CapybaraParser().parseModule(new RawModule("Test", "/parser", """
+                data Foo { a: int, b: string }
+                fun test(foo: Foo): Foo = foo.with(a = foo.a + 1, b = "x")
+                """));
+
+        var function = findFunction("test", module.functional());
+        assertThat(function.expression()).isInstanceOf(WithExpression.class);
+        var withExpression = (WithExpression) function.expression();
+        assertThat(withExpression.assignments()).hasSize(2);
+        assertThat(withExpression.assignments().get(0).name()).isEqualTo("a");
+        assertThat(withExpression.assignments().get(1).name()).isEqualTo("b");
+    }
+
+    @Test
+    @DisplayName("should parse chained with expressions")
+    void parseChainedWithExpression() {
+        var module = new CapybaraParser().parseModule(new RawModule("Test", "/parser", """
+                data Foo { a: int, b: string }
+                fun test(foo: Foo): Foo = foo.with(a = 1).with(b = "x")
+                """));
+
+        var function = findFunction("test", module.functional());
+        assertThat(function.expression()).isInstanceOf(WithExpression.class);
+        var outerWith = (WithExpression) function.expression();
+        assertThat(outerWith.assignments()).singleElement().extracting(NewData.FieldAssignment::name).isEqualTo("b");
+        assertThat(outerWith.source()).isInstanceOf(WithExpression.class);
+        var innerWith = (WithExpression) outerWith.source();
+        assertThat(innerWith.assignments()).singleElement().extracting(NewData.FieldAssignment::name).isEqualTo("a");
+    }
 }
+
 
 
 

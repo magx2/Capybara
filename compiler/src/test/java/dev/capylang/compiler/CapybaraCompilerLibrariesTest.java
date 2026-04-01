@@ -87,7 +87,47 @@ class CapybaraCompilerLibrariesTest {
                 .functions())
                 .extracting(CompiledFunction::name)
                 .contains("assertion_count");
-    }    private static CompiledProgram compileProgram(List<RawModule> rawModules, SortedSet<CompiledModule> libraries) {
+    }
+
+    @Test
+    void shouldCompileDataWithExpression() {
+        var compiled = compileProgram(List.of(
+                new RawModule("WithData", "/foo/with", """
+                        data Foo { a: int, b: string }
+                        fun update(foo: Foo): Foo = foo.with(a = foo.a + 1, b = "x")
+                        """)
+        ), new java.util.TreeSet<>());
+
+        assertThat(compiled.modules().stream()
+                .filter(module -> module.name().equals("WithData"))
+                .findFirst()
+                .orElseThrow()
+                .functions())
+                .extracting(CompiledFunction::name)
+                .contains("update");
+    }
+
+    @Test
+    void shouldCompileParentWithExpression() {
+        var compiled = compileProgram(List.of(
+                new RawModule("WithParent", "/foo/with", """
+                        type Letter { x: int } = A | B
+                        data A { a: string }
+                        data B { b: int }
+                        fun update(letter: Letter): Letter = letter.with(x = letter.x + 1)
+                        """)
+        ), new java.util.TreeSet<>());
+
+        assertThat(compiled.modules().stream()
+                .filter(module -> module.name().equals("WithParent"))
+                .findFirst()
+                .orElseThrow()
+                .functions())
+                .extracting(CompiledFunction::name)
+                .contains("update");
+    }
+
+    private static CompiledProgram compileProgram(List<RawModule> rawModules, SortedSet<CompiledModule> libraries) {
         var result = CapybaraCompiler.INSTANCE.compile(rawModules, libraries);
         if (result instanceof Result.Error<CompiledProgram> error) {
             fail(error.errors().toString());
@@ -95,6 +135,4 @@ class CapybaraCompilerLibrariesTest {
         return ((Result.Success<CompiledProgram>) result).value();
     }
 }
-
-
 

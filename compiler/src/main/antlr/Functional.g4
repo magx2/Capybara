@@ -27,7 +27,7 @@ localDataDeclaration: 'data' genericTypeDeclaration '{' fieldDeclarationList? '}
                     | 'data' genericTypeDeclaration '=' '{' fieldDeclarationList? '}';
 localConstDeclaration: 'const' TYPE (':' type)? '=' expressionNoLet;
 functionNameDeclaration: identifier | genericTypeDeclaration DOT methodIdentifier;
-methodIdentifier: identifier | INFIX_METHOD_LITERAL;
+methodIdentifier: identifier | 'with' | INFIX_METHOD_LITERAL;
 docComment: DOC_COMMENT;
 
 typeDeclaration: docComment* VISIBILITY? 'type' genericTypeDeclaration '=' genericTypeDeclaration (PIPE genericTypeDeclaration)*
@@ -93,7 +93,7 @@ expressionNoLet: ifExpression
                | expressionNoLet LBRACK indexLiteral RBRACK
                | expressionNoLet LBRACK sliceIndexLiteral? COLON sliceIndexLiteral? RBRACK
                | expressionNoLet LPAREN argumentList? RPAREN
-               | expressionNoLet DOT methodIdentifier LPAREN argumentList? RPAREN
+               | expressionNoLet DOT methodIdentifier LPAREN methodArgumentList? RPAREN
                | expressionNoLet INFIX_METHOD_LITERAL expressionNoLet
                | expressionNoLet DOT identifier
                | expressionNoLet infixOperator expressionNoLet
@@ -122,7 +122,7 @@ expressionNoLetNoPipe: ifExpression
                      | expressionNoLetNoPipe LBRACK indexNoPipeLiteral RBRACK
                      | expressionNoLetNoPipe LBRACK sliceIndexNoPipeLiteral? COLON sliceIndexNoPipeLiteral? RBRACK
                      | expressionNoLetNoPipe LPAREN argumentList? RPAREN
-                     | expressionNoLetNoPipe DOT methodIdentifier LPAREN argumentList? RPAREN
+                     | expressionNoLetNoPipe DOT methodIdentifier LPAREN methodArgumentList? RPAREN
                      | expressionNoLetNoPipe INFIX_METHOD_LITERAL expressionNoLetNoPipe
                      | expressionNoLetNoPipe DOT identifier
                      | expressionNoLetNoPipe infixOperatorNoPipe expressionNoLetNoPipe
@@ -150,6 +150,9 @@ functionCall: NAME '(' argumentList? ')'
             | TYPE DOT identifier '(' argumentList? ')';
 value: literal | identifier | qualifiedType;
 argumentList: expression (',' expression)*;
+methodArgumentList: methodArgument (',' methodArgument)*;
+methodArgument: namedMethodArgument | expression;
+namedMethodArgument: identifier ASSIGN expression;
 literal: BYTE_LITERAL | LONG_LITERAL | DOUBLE_LITERAL | INT_LITERAL | BOOL_LITERAL | STRING_LITERAL | FLOAT_LITERAL | NOTHING_LITERAL;
 BYTE_LITERAL: '0' [xX] [0-9a-fA-F]+;
 LONG_LITERAL: [0-9]+ [lL];
@@ -317,6 +320,8 @@ DOC_COMMENT : '///' ~[\r\n]*;
 LINE_COMMENT : '//' ~[\r\n]* -> skip;
 BLOCK_COMMENT : '/*' .*? '*/' -> skip;
 WS : [ \t\r\n]+ -> skip;
+
+
 
 
 

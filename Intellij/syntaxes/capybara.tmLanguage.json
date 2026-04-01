@@ -261,6 +261,10 @@
         {
           "name": "meta.lambda.no-args.capybara",
           "match": "(\\()\\s*(\\))\\s*(=>)"
+        },
+        {
+          "name": "meta.method.with.named-argument.capybara",
+          "match": "((?:\\.with\\(|,)\\s*)([A-Za-z_][A-Za-z0-9_]*)(\\s*=)"
         }
       ]
     },
@@ -332,6 +336,8 @@
     }
   }
 }
+
+
 
 
 

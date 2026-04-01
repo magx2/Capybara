@@ -69,6 +69,7 @@ public class CapybaraExpressionCompiler {
             case NewListExpression newListExpression -> linkNewListExpression(newListExpression, scope);
             case NewSetExpression newSetExpression -> linkNewSetExpression(newSetExpression, scope);
             case NewData newData -> linkNewData(newData, scope);
+            case WithExpression withExpression -> linkWithExpression(withExpression, scope);
             case NothingValue nothingValue -> linkNothingValue(nothingValue);
             case StringValue stringValue -> linkStringValue(stringValue, scope);
             case TupleExpression tupleExpression -> linkTupleExpression(tupleExpression, scope);
@@ -1887,6 +1888,10 @@ public class CapybaraExpressionCompiler {
                     containsValueReference(matchExpression.matchWith(), variableName)
                     || matchExpression.cases().stream()
                     .anyMatch(matchCase -> containsValueReference(matchCase.expression(), variableName));
+            case WithExpression withExpression ->
+                    containsValueReference(withExpression.source(), variableName)
+                    || withExpression.assignments().stream()
+                    .anyMatch(assignment -> containsValueReference(assignment.value(), variableName));
             case NewData newData ->
                     newData.assignments().stream().anyMatch(assignment -> containsValueReference(assignment.value(), variableName))
                     || newData.positionalArguments().stream().anyMatch(argument -> containsValueReference(argument, variableName))
@@ -4441,6 +4446,143 @@ public class CapybaraExpressionCompiler {
         return Result.success((CompiledExpression) new CompiledNewDict(List.copyOf(entries), new CompiledDict(valueType)));
     }
 
+    private Result<CompiledExpression> linkWithExpression(WithExpression expression, Scope scope) {
+        return linkExpression(expression.source(), scope).flatMap(source -> {
+            if (!(source.type() instanceof GenericDataType genericDataType)) {
+                return withPosition(
+                        Result.error("`.with(...)` requires data/type receiver, was `" + source.type() + "`"),
+                        expression.position()
+                );
+            }
+            if (expression.assignments().isEmpty()) {
+                return withPosition(Result.error("`.with(...)` requires at least one named assignment"), expression.position());
+            }
+            var duplicate = firstDuplicateAssignment(expression.assignments());
+            if (duplicate.isPresent()) {
+                return withPosition(Result.error("Field `" + duplicate.get() + "` is assigned more than once"), expression.position());
+            }
+
+            var visibleFieldTypes = fieldTypesByName(genericDataType);
+            for (var assignment : expression.assignments()) {
+                if (!visibleFieldTypes.containsKey(assignment.name())) {
+                    return withPosition(
+                            Result.error("Field `" + assignment.name() + "` not found in type `" + genericDataType.name() + "`"),
+                            assignment.value().position().or(() -> expression.position())
+                    );
+                }
+            }
+
+            var linkedUpdates = new java.util.LinkedHashMap<String, CompiledExpression>();
+            for (var assignment : expression.assignments()) {
+                var expectedType = visibleFieldTypes.get(assignment.name());
+                var linked = linkArgumentForExpectedType(assignment.value(), scope, expectedType)
+                        .map(CoercedArgument::expression);
+                if (linked instanceof Result.Error<CompiledExpression> error) {
+                    return new Result.Error<>(error.errors());
+                }
+                linkedUpdates.put(assignment.name(), ((Result.Success<CompiledExpression>) linked).value());
+            }
+
+            return switch (genericDataType) {
+                case CompiledDataType dataType -> linkWithForData(source, dataType, linkedUpdates, expression.position());
+                case CompiledDataParentType parentType -> linkWithForParent(source, parentType, linkedUpdates, expression.position());
+            };
+        });
+    }
+
+    private Optional<String> firstDuplicateAssignment(List<NewData.FieldAssignment> assignments) {
+        var names = new java.util.LinkedHashSet<String>();
+        for (var assignment : assignments) {
+            if (!names.add(assignment.name())) {
+                return Optional.of(assignment.name());
+            }
+        }
+        return Optional.empty();
+    }
+
+    private Result<CompiledExpression> linkWithForData(
+            CompiledExpression source,
+            CompiledDataType dataType,
+            Map<String, CompiledExpression> linkedUpdates,
+            Optional<SourcePosition> position
+    ) {
+        var args = new java.util.ArrayList<CompiledExpression>(dataType.fields().size() + 1);
+        args.add(source);
+        for (var field : dataType.fields()) {
+            var fieldType = resolveFieldType(dataType, field);
+            var updated = linkedUpdates.get(field.name());
+            if (updated != null) {
+                var coerced = coerceExpressionToType(updated, fieldType);
+                if (coerced.isEmpty()) {
+                    return withPosition(
+                            Result.error("Cannot coerce assigned value for field `" + field.name() + "` to `" + fieldType + "`"),
+                            position
+                    );
+                }
+                args.add(coerced.orElseThrow());
+            } else {
+                args.add(new CompiledFieldAccess(source, field.name(), fieldType));
+            }
+        }
+        return Result.success((CompiledExpression) new CompiledFunctionCall(
+                METHOD_DECL_PREFIX + dataType.name() + "__with",
+                List.copyOf(args),
+                source.type()
+        ));
+    }
+
+    private Result<CompiledExpression> linkWithForParent(
+            CompiledExpression source,
+            CompiledDataParentType parentType,
+            Map<String, CompiledExpression> linkedUpdates,
+            Optional<SourcePosition> position
+    ) {
+        var cases = new java.util.ArrayList<CompiledMatchExpression.MatchCase>(parentType.subTypes().size());
+        for (var subtype : parentType.subTypes()) {
+            var subtypeFields = resolveConstructorFields(subtype, parentType);
+            var fieldPatterns = new java.util.ArrayList<CompiledMatchExpression.Pattern>(subtypeFields.size());
+            var constructorAssignments = new java.util.ArrayList<CompiledNewData.FieldAssignment>(subtypeFields.size());
+            for (var i = 0; i < subtypeFields.size(); i++) {
+                var field = subtypeFields.get(i);
+                var variableName = "__with_" + field.name() + "_" + i;
+                fieldPatterns.add(new CompiledMatchExpression.VariablePattern(variableName));
+                var updated = linkedUpdates.get(field.name());
+                if (updated != null) {
+                    var coerced = coerceExpressionToType(updated, field.type());
+                    if (coerced.isEmpty()) {
+                        return withPosition(
+                                Result.error("Cannot coerce assigned value for field `" + field.name() + "` to `" + field.type() + "`"),
+                                position
+                        );
+                    }
+                    constructorAssignments.add(new CompiledNewData.FieldAssignment(field.name(), coerced.orElseThrow()));
+                } else {
+                    constructorAssignments.add(new CompiledNewData.FieldAssignment(
+                            field.name(),
+                            new CompiledVariable(variableName, field.type())
+                        ));
+                }
+            }
+            cases.add(new CompiledMatchExpression.MatchCase(
+                    new CompiledMatchExpression.ConstructorPattern(subtype.name(), List.copyOf(fieldPatterns)),
+                    new CompiledNewData(subtype, List.copyOf(constructorAssignments))
+            ));
+        }
+        return Result.success((CompiledExpression) new CompiledMatchExpression(
+                source,
+                List.copyOf(cases),
+                parentType
+        ));
+    }
+
+    private Optional<CompiledExpression> coerceExpressionToType(CompiledExpression expression, CompiledType expectedType) {
+        var coerced = coerceArgument(expression, expectedType);
+        if (coerced == null) {
+            return Optional.empty();
+        }
+        return Optional.of(coerced.expression());
+    }
+
     private Result<CompiledExpression> linkNewData(NewData newData, Scope scope) {
         return linkTypeInScope(newData.type(), scope)
                 .flatMap(type -> linkSpreadAssignments(newData.spreads(), scope)
@@ -4692,7 +4834,7 @@ public class CapybaraExpressionCompiler {
         return genericDataType.fields().stream()
                 .collect(java.util.stream.Collectors.toMap(
                         CompiledDataType.CompiledField::name,
-                        CompiledDataType.CompiledField::type,
+                        field -> resolveFieldType(genericDataType, field),
                         (first, second) -> first
                 ));
     }

@@ -226,6 +226,32 @@ class JavaExpressionEvaluatorTest {
         assertThat(generated).doesNotContain("import static capy.lang.Option.Option;");
     }
 
+    @Test
+    void shouldGenerateRecordWithMethod() {
+        var program = compileProgram("With", "/foo/bar", """
+                data Foo { a: int, b: string, c: double }
+                fun update(foo: Foo): Foo = foo.with(a = foo.a + 1, b = \"x\")
+                """);
+
+        var generated = new JavaGenerator().generate(program).modules().stream()
+                .map(dev.capylang.generator.GeneratedModule::code)
+                .collect(joining("\n"));
+
+        assertThat(generated).contains("public Foo with(int a, java.lang.String b, double c)");
+        assertThat(generated).contains("return new Foo(a, b, c);");
+    }
+
+    @Test
+    void shouldGenerateChainedWithCalls() {
+        var evaluated = JavaExpressionEvaluator.evaluateExpression(findFunction("update", compileProgram("With", "/foo/bar", """
+                data Foo { a: int, b: string, c: double }
+                fun update(foo: Foo): Foo = foo.with(a = foo.a + 1).with(b = \"x\")
+                """)).orElseThrow().expression());
+
+        assertThat(evaluated).contains(".with(");
+        assertThat(evaluated).contains(").with(");
+    }
+
     static Stream<Arguments> wild() {
         return Stream.of(
                 Arguments.of(
@@ -377,3 +403,4 @@ class JavaExpressionEvaluatorTest {
         );
     }
 }
+

@@ -337,15 +337,31 @@ public final class JavaGenerator implements Generator {
         var methods = record.methods().stream()
                 .map(method -> mapJavaRecordMethod(method, helperCallOwnerName))
                 .collect(joining("\n"));
+        var withMethods = mapJavaRecordWithMethods(record);
         var toStringMethod = mapJavaRecordToString(record);
         var visibility = record.isPrivate() ? (topLevel ? "" : "private ") : "public ";
         return mapJavaDoc(record.comments())
                + visibility + " record " + record.name() + typeParameters + "(" + fields + ")" + implementInterfaces + "{"
-               + staticMethods + methods + toStringMethod + "}\n";
+               + staticMethods + methods + withMethods + toStringMethod + "}\n";
     }
 
     private String mapJavaRecordField(JavaRecord.JavaRecordField field) {
         return field.type() + " " + field.name();
+    }
+
+
+    private String mapJavaRecordWithMethods(JavaRecord record) {
+        if (record.methods().stream().anyMatch(method -> "with".equals(method.name()))) {
+            return "";
+        }
+        var parameters = record.fields().stream().map(this::mapJavaRecordField).collect(joining(", "));
+        var arguments = record.fields().stream().map(JavaRecord.JavaRecordField::name).collect(joining(", "));
+        if (record.fields().isEmpty()) {
+            return "public " + record.name() + " with() { return this; }\n";
+        }
+        return "public " + record.name() + " with(" + parameters + ") {\n"
+               + "return new " + record.name() + "(" + arguments + ");\n"
+               + "}\n";
     }
 
     private String mapJavaRecordToString(JavaRecord record) {
@@ -629,4 +645,7 @@ public final class JavaGenerator implements Generator {
     }
 
 }
+
+
+
 

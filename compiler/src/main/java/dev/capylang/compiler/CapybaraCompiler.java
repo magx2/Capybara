@@ -1404,6 +1404,7 @@ public class CapybaraCompiler {
                                                           .collect(java.util.stream.Collectors.joining(", ")) + ")";
             case FunctionReference functionReference -> ":" + functionReference.name();
             case NewData newData -> formatNewDataPreview(newData);
+            case WithExpression withExpression -> formatWithPreview(withExpression);
             case NewListExpression newListExpression -> "["
                                                         + newListExpression.values().stream()
                                                                 .map(this::formatExpressionPreview)
@@ -1492,6 +1493,13 @@ public class CapybaraCompiler {
         var start = sliceExpression.start().map(this::formatExpressionPreview).orElse("");
         var end = sliceExpression.end().map(this::formatExpressionPreview).orElse("");
         return formatExpressionPreview(sliceExpression.source()) + "[" + start + ":" + end + "]";
+    }
+
+    private String formatWithPreview(WithExpression withExpression) {
+        var assignments = withExpression.assignments().stream()
+                .map(assignment -> assignment.name() + " = " + formatExpressionPreview(assignment.value()))
+                .collect(java.util.stream.Collectors.joining(", "));
+        return formatExpressionPreview(withExpression.source()) + ".with(" + assignments + ")";
     }
 
     private String normalizeReportedTypeName(String typeName) {
@@ -3224,6 +3232,9 @@ public class CapybaraCompiler {
                 .toList();
     }
 }
+
+
+
 
 
 
