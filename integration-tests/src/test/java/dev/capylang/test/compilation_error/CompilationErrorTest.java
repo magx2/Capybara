@@ -186,6 +186,26 @@ public class CompilationErrorTest {
                                     match letter with
                                     ^ `match` is not exhaustive. Use wildcard `| _ -> ...` or add missing branches:`A`.
                                 """
+                ),
+                Arguments.of(
+                        "match_guard_where_keyword_syntax_error",
+                        """
+                                from /capy/lang/Option import { * }
+                                fun foo(option: Option[string]): string =
+                                    match option with
+                                    | Some { value } where value == "+" -> "plus"
+                                    | Some { value } -> "other"
+                                    | None -> "none"
+                                """,
+                        new Position(4, 21),
+                        """
+                                error: mismatched types
+                                 --> /foo/boo/match_guard_where_keyword_syntax_error.cfun:4:21
+                                fun foo(option: Option[string]): string =
+                                    match option with
+                                    | Some { value } where value == "+" -> "plus"
+                                                     ^ Syntax error, `where` not expected here. Use `when` for match guards
+                                """
                 ));
         var primitiveTypes = List.of("string", "byte", "int", "long", "float", "double", "bool");
         var primitiveCases = primitiveTypes.stream().map(CompilationErrorTest::primitiveMatchNotExhaustiveCase);

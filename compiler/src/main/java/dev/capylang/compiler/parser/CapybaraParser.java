@@ -112,6 +112,9 @@ public class CapybaraParser {
             var offendingInput = noViableAlternativeMatcher.group(1)
                     .replaceAll("\\s+", " ")
                     .trim();
+            if (offendingInput.contains("where")) {
+                return "line %d:%d: Syntax error, `where` not expected here. Use `when` for match guards".formatted(syntaxError.line(), syntaxError.column());
+            }
             var preview = offendingInput.length() > 80
                     ? offendingInput.substring(0, 77) + "..."
                     : offendingInput;
