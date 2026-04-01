@@ -647,6 +647,7 @@ public class CapybaraParser {
                     matchExpression.cases().stream()
                             .map(matchCase -> new MatchExpression.MatchCase(
                                     rewriteLocalTypeNames(matchCase.pattern(), localTypeNameMap),
+                                    matchCase.guard().map(guard -> rewriteLocalNames(guard, localFunctionNameMap, localTypeNameMap, localConstNameMap)),
                                     rewriteLocalNames(matchCase.expression(), localFunctionNameMap, localTypeNameMap, localConstNameMap)
                             ))
                             .toList(),
@@ -1734,7 +1735,7 @@ public class CapybaraParser {
                         .flatMap(Collection::stream)
                         .flatMap(matchCase -> matchCase.pattern()
                                 .stream()
-                                .map(pattern -> matchCase(pattern, matchCase.expressionNoPipe())))
+                                .map(pattern -> matchCase(pattern, matchCase.expression(), matchCase.expressionNoPipe())))
                         .toList(),
                 position(context)
         );
@@ -1742,10 +1743,12 @@ public class CapybaraParser {
 
     private MatchExpression.MatchCase matchCase(
             FunctionalParser.PatternContext pattern,
+            FunctionalParser.ExpressionContext guard,
             FunctionalParser.ExpressionNoPipeContext expression
     ) {
         return new MatchExpression.MatchCase(
                 matchExpressionPattern(pattern),
+                Optional.ofNullable(guard).map(this::expression),
                 expressionNoPipe(expression)
 
         );
@@ -2159,6 +2162,7 @@ public class CapybaraParser {
                     shiftInterpolationPositions(value.matchWith(), stringPosition, interpolationOffset),
                     value.cases().stream().map(matchCase -> new MatchExpression.MatchCase(
                             matchCase.pattern(),
+                            matchCase.guard().map(guard -> shiftInterpolationPositions(guard, stringPosition, interpolationOffset)),
                             shiftInterpolationPositions(matchCase.expression(), stringPosition, interpolationOffset)
                     )).toList(),
                     shiftPosition(value.position(), stringPosition, interpolationOffset)

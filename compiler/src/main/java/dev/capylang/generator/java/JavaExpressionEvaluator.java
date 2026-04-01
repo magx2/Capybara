@@ -1469,9 +1469,24 @@ public class JavaExpressionEvaluator {
                         typedPattern.name(),
                         ignored -> "__capybaraMatchBinding" + MATCH_BINDING_COUNTER.incrementAndGet()
                 );
+                var typedPatternValue = generatedName;
+                if (optionMatch && isOptionSomePattern(typedPattern.type().name())) {
+                    var castType = optionPayloadCastType(matchExpression.matchWith().type());
+                    var payloadExpression = optionSomeBindingExpression(generatedName + ".orElse(null)");
+                    if (castType != null && !"java.lang.Object".equals(castType)) {
+                        payloadExpression = "((" + castType + ") " + payloadExpression + ")";
+                    }
+                    typedPatternValue = "new "
+                                        + normalizeJavaTypeReference(stripGenericSuffix(typedPattern.type().name()))
+                                        + "<>("
+                                        + payloadExpression
+                                        + ")";
+                } else if (optionMatch && isOptionNonePattern(typedPattern.type().name())) {
+                    typedPatternValue = normalizeJavaTypeReference(stripGenericSuffix(typedPattern.type().name())) + ".INSTANCE";
+                }
                 branchScope = branchScope
                         .addLocalValue(typedPattern.name())
-                        .addValueOverride(typedPattern.name(), generatedName);
+                        .addValueOverride(typedPattern.name(), typedPatternValue);
             }
             if (matchCase.pattern() instanceof CompiledMatchExpression.TypedPattern typedPattern
                 && matchExpression.matchWith() instanceof CompiledVariable matchedVariable) {
@@ -1487,6 +1502,14 @@ public class JavaExpressionEvaluator {
                 branchScope = branchScope
                         .addLocalValue(wildcardBindingPattern.name())
                         .addValueOverride(wildcardBindingPattern.name(), generatedName);
+            }
+            var casePattern = matchCasePattern(matchCase.pattern(), matchExpression.matchWith().type(), optionCaseVar, caseBindingNames);
+            if (matchCase.guard().isPresent()) {
+                var guardScope = evaluateExpression(matchCase.guard().orElseThrow(), branchScope).popExpression();
+                var guardStatements = guardScope.scope().getStatements()
+                        .subList(branchScope.getStatements().size(), guardScope.scope().getStatements().size());
+                var guardExpression = wrapGuardExpression(guardStatements, guardScope.expression());
+                casePattern = appendCaseGuard(casePattern, guardExpression);
             }
             var expressionScope = evaluateExpression(matchCase.expression(), branchScope).popExpression();
             var caseExpression = expressionScope.expression();
@@ -1508,8 +1531,8 @@ public class JavaExpressionEvaluator {
                     .map(statement -> statement + ";")
                     .toList());
             var caseRule = caseStatements.isEmpty()
-                    ? matchCasePattern(matchCase.pattern(), matchExpression.matchWith().type(), optionCaseVar, caseBindingNames) + " -> (" + caseExpression + ");"
-                    : matchCasePattern(matchCase.pattern(), matchExpression.matchWith().type(), optionCaseVar, caseBindingNames)
+                    ? casePattern + " -> (" + caseExpression + ");"
+                    : casePattern
                       + " -> { " + caseStatementsCode + " yield (" + caseExpression + "); }";
             cases.add(caseRule);
         }
@@ -1524,6 +1547,25 @@ public class JavaExpressionEvaluator {
         }
 
         return current.addExpression("switch (" + switchTarget + ") { " + String.join(" ", cases) + " }");
+    }
+
+    private static String appendCaseGuard(String casePattern, String guardExpression) {
+        if (casePattern.startsWith("default")) {
+            return casePattern;
+        }
+        var whenIndex = casePattern.indexOf(" when ");
+        if (whenIndex >= 0) {
+            return casePattern + " && (" + guardExpression + ")";
+        }
+        return casePattern + " when " + guardExpression;
+    }
+
+    private static String wrapGuardExpression(List<String> guardStatements, String guardExpression) {
+        if (guardStatements.isEmpty()) {
+            return "(" + guardExpression + ")";
+        }
+        var statements = String.join(" ", guardStatements.stream().map(statement -> statement + ";").toList());
+        return "((java.util.function.Supplier<java.lang.Boolean>) () -> { " + statements + " return (" + guardExpression + "); }).get()";
     }
 
     private static List<String> constructorBindingCastTypes(
@@ -2669,3 +2711,4 @@ public class JavaExpressionEvaluator {
     }
 
 }
+

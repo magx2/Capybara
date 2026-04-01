@@ -12,7 +12,7 @@ public record MatchExpression(Expression matchWith, List<MatchCase> cases,
         // todo check if all cases have the same type
     }
 
-    public record MatchCase(Pattern pattern, Expression expression) {
+    public record MatchCase(Pattern pattern, Optional<Expression> guard, Expression expression) {
     }
 
     public sealed interface Pattern {

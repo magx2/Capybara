@@ -4,6 +4,7 @@ import dev.capylang.compiler.CompiledType;
 import dev.capylang.compiler.PrimitiveLinkedType;
 
 import java.util.List;
+import java.util.Optional;
 
 public record CompiledMatchExpression(CompiledExpression matchWith, List<MatchCase> cases, CompiledType type) implements CompiledExpression {
     public CompiledMatchExpression {
@@ -12,7 +13,7 @@ public record CompiledMatchExpression(CompiledExpression matchWith, List<MatchCa
         }
     }
 
-    public record MatchCase(Pattern pattern, CompiledExpression expression) {
+    public record MatchCase(Pattern pattern, Optional<CompiledExpression> guard, CompiledExpression expression) {
     }
 
     public sealed interface Pattern {

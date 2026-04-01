@@ -1817,6 +1817,7 @@ public class CapybaraCompiler {
                             enrichNothing(value.matchWith(), functionName, moduleSourceFile),
                             value.cases().stream().map(matchCase -> new dev.capylang.compiler.expression.CompiledMatchExpression.MatchCase(
                                     matchCase.pattern(),
+                                    matchCase.guard().map(guard -> enrichNothing(guard, functionName, moduleSourceFile)),
                                     enrichNothing(matchCase.expression(), functionName, moduleSourceFile)
                             )).toList(),
                             value.type()
@@ -3232,6 +3233,9 @@ public class CapybaraCompiler {
                 .toList();
     }
 }
+
+
+
 
 
 

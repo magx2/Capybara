@@ -3506,6 +3506,7 @@ public class CapybaraExpressionCompiler {
                 .flatMap(matchWith -> matchExpression.cases().stream()
                         .map(matchCase -> linkMatchCase(matchCase, matchWith, scope))
                         .collect(new ResultCollectionCollector<>())
+                        .map(this::orderMatchCases)
                         .flatMap(cases -> validateMatchExhaustiveness(matchExpression, matchWith.type(), cases)
                                 .map(ignored -> {
                             var matchType = cases.stream()
@@ -3695,6 +3696,9 @@ public class CapybaraExpressionCompiler {
     ) {
         var covered = new java.util.LinkedHashSet<String>();
         for (var matchCase : cases) {
+            if (matchCase.guard().isPresent()) {
+                continue;
+            }
             var pattern = matchCase.pattern();
             if (pattern instanceof CompiledMatchExpression.VariablePattern variablePattern) {
                 if (requiredConstructors.contains(variablePattern.name())) {
@@ -3726,15 +3730,47 @@ public class CapybaraExpressionCompiler {
     ) {
         return linkPattern(matchCase.pattern(), matchWith.type(), scope)
                 .flatMap(patternAndScope -> {
-                    var caseScope = patternAndScope.scope();
+                    var branchScope = patternAndScope.scope();
                     if (patternAndScope.pattern() instanceof CompiledMatchExpression.TypedPattern typedPattern
                         && matchWith instanceof CompiledVariable matchedVariable) {
                         // Flow typing: inside a typed match branch, treat the matched variable as narrowed too.
-                        caseScope = caseScope.add(matchedVariable.name(), typedPattern.type());
+                        branchScope = branchScope.add(matchedVariable.name(), typedPattern.type());
                     }
-                    return linkExpression(matchCase.expression(), caseScope)
-                            .map(expression -> new CompiledMatchExpression.MatchCase(patternAndScope.pattern(), expression));
+                    var caseScope = branchScope;
+                    return linkGuard(matchCase.guard(), caseScope)
+                            .flatMap(guard -> linkExpression(matchCase.expression(), caseScope)
+                                    .map(expression -> new CompiledMatchExpression.MatchCase(patternAndScope.pattern(), guard, expression)));
                 });
+    }
+
+    private Result<Optional<CompiledExpression>> linkGuard(Optional<Expression> guard, Scope scope) {
+        if (guard.isEmpty()) {
+            return Result.success(Optional.empty());
+        }
+        return linkExpression(guard.get(), scope)
+                .flatMap(linkedGuard -> {
+                    if (linkedGuard.type() != PrimitiveLinkedType.BOOL) {
+                        return withPosition(
+                                Result.error("`when` guard has to be `bool`, was `" + linkedGuard.type() + "`"),
+                                guard.get().position()
+                        );
+                    }
+                    return Result.success(Optional.of(linkedGuard));
+                });
+    }
+
+    private List<CompiledMatchExpression.MatchCase> orderMatchCases(List<CompiledMatchExpression.MatchCase> cases) {
+        var guarded = new ArrayList<CompiledMatchExpression.MatchCase>();
+        var unguarded = new ArrayList<CompiledMatchExpression.MatchCase>();
+        for (var matchCase : cases) {
+            if (matchCase.guard().isPresent()) {
+                guarded.add(matchCase);
+            } else {
+                unguarded.add(matchCase);
+            }
+        }
+        guarded.addAll(unguarded);
+        return List.copyOf(guarded);
     }
 
     private InfixExpression reAssociatePipeChain(InfixExpression expression) {
@@ -3828,9 +3864,17 @@ public class CapybaraExpressionCompiler {
                     if (!isTypedPatternCompatible(matchType, patternType)) {
                         return Result.error("Cannot match `" + matchType + "` with typed pattern `" + patternType + "`");
                     }
+                    var effectivePatternType = patternType;
+                    if (patternType instanceof CompiledDataType patternDataType
+                        && matchType instanceof CompiledDataParentType parentType) {
+                        var subtype = findSubtype(patternDataType.name(), parentType);
+                        if (subtype instanceof Result.Success<CompiledDataType> value) {
+                            effectivePatternType = value.value();
+                        }
+                    }
                     return Result.success(new PatternAndScope(
-                            new CompiledMatchExpression.TypedPattern(patternType, typedPattern.name()),
-                            scope.add(typedPattern.name(), patternType)
+                            new CompiledMatchExpression.TypedPattern(effectivePatternType, typedPattern.name()),
+                            scope.add(typedPattern.name(), effectivePatternType)
                     ));
                 });
     }
@@ -4565,6 +4609,7 @@ public class CapybaraExpressionCompiler {
             }
             cases.add(new CompiledMatchExpression.MatchCase(
                     new CompiledMatchExpression.ConstructorPattern(subtype.name(), List.copyOf(fieldPatterns)),
+                    Optional.empty(),
                     new CompiledNewData(subtype, List.copyOf(constructorAssignments))
             ));
         }
@@ -5157,6 +5202,7 @@ public class CapybaraExpressionCompiler {
     private record ResolvedModule(String javaModuleName, List<FunctionSignature> signatures) {
     }
 }
+
 
 
 

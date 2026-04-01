@@ -168,7 +168,7 @@ NOTHING_LITERAL: '???';
 
 matchExpression: 'match' expression 'with' matchCaseList+;
 matchCaseList: matchCase (',' matchCase)*;
-matchCase: PIPE pattern (COMMA pattern)* MATCH_ARROW expressionNoPipe;
+matchCase: PIPE pattern (COMMA pattern)* ('when' expression)? MATCH_ARROW expressionNoPipe;
 pattern: TYPE
         | INT_LITERAL
         | BOOL_LITERAL

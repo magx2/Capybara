@@ -148,6 +148,44 @@ public class CompilationErrorTest {
                                     match color with
                                     ^ `match` is not exhaustive. Use wildcard `| _ -> ...` or add missing branches:`GREEN_BLUE`.
                                 """
+                ),
+                Arguments.of(
+                        "match_guard_not_bool",
+                        """
+                                from /capy/lang/Option import { * }
+                                fun foo(option: Option[int]): string =
+                                    match option with
+                                    | Some { value } when value + 1 -> "x"
+                                    | None -> "none"
+                                """,
+                        new Position(4, 32),
+                        """
+                                error: mismatched types
+                                 --> /foo/boo/match_guard_not_bool.cfun:4:32
+                                fun foo(option: Option[int]): string =
+                                    match option with ...
+                                %3$s^ `when` guard has to be `bool`, was `INT`
+                                """
+                ),
+                Arguments.of(
+                        "match_guard_does_not_make_case_exhaustive",
+                        """
+                                type Letter = A | B
+                                data A { a: int }
+                                data B { b: int }
+                                fun foo(letter: Letter): int =
+                                    match letter with
+                                    | A { a } when a > 0 -> a
+                                    | B { b } -> b
+                                """,
+                        new Position(5, 4),
+                        """
+                                error: mismatched types
+                                 --> /foo/boo/match_guard_does_not_make_case_exhaustive.cfun:5:4
+                                fun foo(letter: Letter): int =
+                                    match letter with
+                                    ^ `match` is not exhaustive. Use wildcard `| _ -> ...` or add missing branches:`A`.
+                                """
                 ));
         var primitiveTypes = List.of("string", "byte", "int", "long", "float", "double", "bool");
         var primitiveCases = primitiveTypes.stream().map(CompilationErrorTest::primitiveMatchNotExhaustiveCase);
@@ -1087,6 +1125,12 @@ public class CompilationErrorTest {
         return out;
     }
 }
+
+
+
+
+
+
 
 
 

@@ -373,6 +373,27 @@ class CapybaraParserTest {
         var innerWith = (WithExpression) outerWith.source();
         assertThat(innerWith.assignments()).singleElement().extracting(NewData.FieldAssignment::name).isEqualTo("a");
     }
+
+    @Test
+    @DisplayName("should parse match case when guard")
+    void parseMatchCaseWhenGuard() {
+        var module = new CapybaraParser().parseModule(new RawModule("Test", "/parser", """
+                from /capy/lang/Option import { * }
+                fun test(option: Option[string]): string =
+                    match option with
+                    | Some { char } when char == "-" -> "minus"
+                    | Some { char } -> "other"
+                    | None -> "none"
+                """));
+
+        var function = findFunction("test", module.functional());
+        assertThat(function.expression()).isInstanceOf(MatchExpression.class);
+        var expression = (MatchExpression) function.expression();
+        assertThat(expression.cases()).hasSize(3);
+        assertThat(expression.cases().getFirst().guard()).isPresent();
+        assertThat(expression.cases().get(1).guard()).isEmpty();
+        assertThat(expression.cases().get(2).guard()).isEmpty();
+    }
 }
 
 
