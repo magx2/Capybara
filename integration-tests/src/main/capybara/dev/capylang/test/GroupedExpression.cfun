@@ -1,0 +1,12 @@
+from /capy/lang/Result import { *}
+
+fun nested_pipe_in_match_branch(value: int): Result[int] =
+    Success { value }
+    | parsed => {
+        match parsed with
+        | int v when v > 0 -> {
+            Success { v + 1 }
+            | next => Success { next + 1 }
+        }
+        | _ -> Error { "invalid" }
+    }

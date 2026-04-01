@@ -180,6 +180,21 @@ public class CapybaraParser {
         var column = Integer.parseInt(parserError.group(2));
         var details = parserError.group(3);
         var lines = source.split("\\R", -1);
+        var currentLine = line > 0 && line <= lines.length ? lines[line - 1].stripLeading() : "";
+        var previousNonBlankLine = "";
+        for (var idx = Math.min(line - 2, lines.length - 1); idx >= 0; idx--) {
+            var candidate = lines[idx].stripLeading();
+            if (!candidate.isBlank()) {
+                previousNonBlankLine = candidate;
+                break;
+            }
+        }
+        if ("Expected `->`, found `=`".equals(details)
+            && currentLine.contains("=>")
+            && !previousNonBlankLine.startsWith("match ")
+            && !previousNonBlankLine.startsWith("| ")) {
+            details = "Pipe expressions inside `match` branches must be wrapped in `{ ... }` or `(...)`";
+        }
         var firstDefinitionLine = 0;
         for (var i = 0; i < lines.length; i++) {
             var stripped = lines[i].stripLeading();

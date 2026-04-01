@@ -409,6 +409,89 @@ class CapybaraParserTest {
         assertThat(expression.cases().get(1).guard()).isEmpty();
         assertThat(expression.cases().get(2).guard()).isEmpty();
     }
+
+    @Test
+    @DisplayName("should parse grouped brace expression in pipe lambda body with nested match")
+    void parseGroupedBraceExpressionInPipeLambdaBodyWithNestedMatch() {
+        var module = parseSuccess(new RawModule("Test", "/parser", """
+                from /capy/lang/Result import { * }
+                fun test(value: int): Result[int] =
+                    Success { value }
+                    | parsed => {
+                        match parsed with
+                        | v when v > 0 -> Success { v + 1 }
+                        | _ -> Error { "invalid" }
+                    }
+                """));
+
+        var function = findFunction("test", module.functional());
+        assertThat(function.expression()).isInstanceOf(InfixExpression.class);
+        var pipeExpression = (InfixExpression) function.expression();
+        assertThat(pipeExpression.operator()).isEqualTo(InfixOperator.PIPE);
+        assertThat(pipeExpression.right()).isInstanceOf(LambdaExpression.class);
+        var lambda = (LambdaExpression) pipeExpression.right();
+        assertThat(lambda.expression()).isInstanceOf(MatchExpression.class);
+    }
+
+    @Test
+    @DisplayName("should parse chained pipe with grouped brace expression in later lambda body")
+    void parseChainedPipeWithGroupedBraceExpressionInLaterLambdaBody() {
+        var module = parseSuccess(new RawModule("Test", "/parser", """
+                from /capy/lang/Result import { * }
+                fun test(value: int): Result[int] =
+                    Success { value }
+                    | parsed => Success { parsed + 1 }
+                    | parse => {
+                        match parse with
+                        | v when v > 0 -> Success { v }
+                        | _ -> Error { "invalid" }
+                    }
+                """));
+
+        var function = findFunction("test", module.functional());
+        assertThat(function.expression()).isInstanceOf(InfixExpression.class);
+    }
+
+    @Test
+    @DisplayName("should parse semver style grouped branch with nested pipe and match")
+    void parseSemVerStyleGroupedBranchWithNestedPipeAndMatch() {
+        var module = parseSuccess(new RawModule("Test", "/parser", """
+                from /capy/lang/Option import { * }
+                from /capy/lang/Result import { * }
+
+                data SemVer { pre_release: Option[string], build_metadata: Option[string] }
+
+                fun test(version: string): Result[SemVer] =
+                    data __Parse[T] { buffer: string, value: T }
+                    fun __parse_pre_release(version: string): Result[__Parse[string]] = Success { __Parse { version, "rc1" } }
+                    fun __parse_build(version: string): Result[__Parse[string]] = Success { __Parse { version, "001" } }
+                    let raw_sem_ver = SemVer { None {}, None {} }
+                    let parse_patch: __Parse[string] = __Parse { version, "1.2.3" }
+                    match parse_patch.buffer[0] with
+                    | Some { next_char } when next_char == "-" -> {
+                        __parse_pre_release(parse_patch.buffer[1:])
+                        | parse_pre_release => Success { __Parse {
+                            buffer: parse_pre_release.buffer,
+                            value: raw_sem_ver.with(pre_release: Some { parse_pre_release.value })
+                        }}
+                        | parse => {
+                            match parse.buffer[0] with
+                            | None -> Success { parse }
+                            | Some { char } when char == "+" -> {
+                                __parse_build(parse.buffer[1:])
+                                | parse_build => Success { __Parse {
+                                    buffer: parse_build.buffer,
+                                    value: parse.value.with(build_metadata: Some { parse_build.value })
+                                }}
+                            }
+                            | Some { char } -> Error { "bad" }
+                        }
+                    }
+                    | _ -> Success { raw_sem_ver }
+                """));
+
+        findFunction("test", module.functional());
+    }
 }
 
 
