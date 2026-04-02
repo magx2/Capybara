@@ -41,3 +41,67 @@ fun grouped_guarded_match_is_exhaustive(input: string): Result[string] =
         | parse_build => Success { "plus:" + parse_build.value }
     case Some { ch } -> Success { "other:" + ch }
     case None -> Success { "none" }
+
+fun semver_style_mixed_case_pipe_bodies(input: string): Result[string] =
+    data __Parse[T] { buffer: string, value: T }
+    fun __parse_pre_release(buffer: string): Result[__Parse[string]] =
+        Success { __Parse { buffer, "rc1" } }
+    fun __parse_build(buffer: string): Result[__Parse[string]] =
+        Success { __Parse { buffer, "001" } }
+
+    let parse_patch: __Parse[string] = __Parse { input, "1.2.3" }
+    let raw_sem_ver = "1.2.3"
+    match parse_patch.buffer[0] with
+    case Some { next_char } when next_char == '-' -> {
+        __parse_pre_release(parse_patch.buffer[1:])
+        | parse_pre_release => Success { __Parse {
+            buffer: parse_pre_release.buffer,
+            value: raw_sem_ver + "-" + parse_pre_release.value
+        }}
+        | parse => {
+            match parse.buffer[0] with
+            case None -> Success { parse.value }
+            case Some { char } when char == '+' -> {
+                __parse_build(parse.buffer[1:])
+                | parse_build => Success { parse.value + "+" + parse_build.value }
+            }
+            case Some { char } -> Error { "bad:" + char }
+        }
+    }
+    case Some { next_char } when next_char == '+' ->
+        __parse_build(parse_patch.buffer[1:])
+        | parse_build => Success { raw_sem_ver + "+" + parse_build.value }
+    case Some { next_char } -> Error { "unexpected:" + next_char }
+    case None -> Success { raw_sem_ver }
+
+fun inner_ungrouped_pipe_in_match_inside_lambda(input: string): Result[string] =
+    data __Parse[T] { buffer: string, value: T }
+    fun __parse_pre_release(buffer: string): Result[__Parse[string]] =
+        Success { __Parse { buffer, "rc1" } }
+    fun __parse_build(buffer: string): Result[__Parse[string]] =
+        Success { __Parse { buffer, "001" } }
+
+    let parse_patch: __Parse[string] = __Parse { input, "1.2.3" }
+    let raw_sem_ver = "1.2.3"
+    match parse_patch.buffer[0] with
+    case Some { next_char } when next_char == '-' -> {
+        __parse_pre_release(parse_patch.buffer[1:])
+        | parse_pre_release => Success { __Parse {
+            buffer: parse_pre_release.buffer,
+            value: raw_sem_ver + "-" + parse_pre_release.value
+        }}
+        | parse => {
+            match parse.buffer[0] with
+            case None -> Success { parse.value }
+            case Some { char } when char == '+' ->
+                __parse_build(parse.buffer[1:])
+                | parse_build => Success { parse.value + "+" + parse_build.value }
+            case Some { char } -> Error { "bad:" + char }
+        }
+    }
+    case Some { next_char } when next_char == '+' -> {
+        __parse_build(parse_patch.buffer[1:])
+        | parse_build => Success { raw_sem_ver + "+" + parse_build.value }
+    }
+    case Some { next_char } -> Error { "unexpected:" + next_char }
+    case None -> Success { raw_sem_ver }

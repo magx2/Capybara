@@ -23,4 +23,37 @@ class GroupedExpressionTest {
         assertThat(GroupedExpression.groupedGuardedMatchIsExhaustive("xabc")).isEqualTo(new Result.Success<>("other:x"));
         assertThat(GroupedExpression.groupedGuardedMatchIsExhaustive("")).isEqualTo(new Result.Success<>("none"));
     }
+
+    @Test
+    void semverStyleMixedCasePipeBodies() {
+        assertThat(GroupedExpression.semverStyleMixedCasePipeBodies("-+meta"))
+                .isEqualTo(new Result.Success<>("1.2.3-rc1+001"));
+        assertThat(GroupedExpression.semverStyleMixedCasePipeBodies("+meta"))
+                .isEqualTo(new Result.Success<>("1.2.3+001"));
+        var bad = GroupedExpression.semverStyleMixedCasePipeBodies("-meta");
+        assertThat(bad).isInstanceOf(Result.Error.class);
+        assertThat(((Result.Error<String>) bad).ex().getMessage()).isEqualTo("bad:m");
+        var unexpected = GroupedExpression.semverStyleMixedCasePipeBodies("xmeta");
+        assertThat(unexpected).isInstanceOf(Result.Error.class);
+        assertThat(((Result.Error<String>) unexpected).ex().getMessage()).isEqualTo("unexpected:x");
+        assertThat(GroupedExpression.semverStyleMixedCasePipeBodies(""))
+                .isEqualTo(new Result.Success<>("1.2.3"));
+    }
+
+    @Test
+    void innerUngroupedPipeInMatchInsideLambda() {
+        assertThat(GroupedExpression.innerUngroupedPipeInMatchInsideLambda("-+meta"))
+                .isEqualTo(new Result.Success<>("1.2.3-rc1+001"));
+        assertThat(GroupedExpression.innerUngroupedPipeInMatchInsideLambda("+meta"))
+                .isEqualTo(new Result.Success<>("1.2.3+001"));
+        var bad = GroupedExpression.innerUngroupedPipeInMatchInsideLambda("-meta");
+        assertThat(bad).isInstanceOf(Result.Error.class);
+        assertThat(((Result.Error<String>) bad).ex().getMessage()).isEqualTo("bad:m");
+        var unexpected = GroupedExpression.innerUngroupedPipeInMatchInsideLambda("xmeta");
+        assertThat(unexpected).isInstanceOf(Result.Error.class);
+        assertThat(((Result.Error<String>) unexpected).ex().getMessage()).isEqualTo("unexpected:x");
+        assertThat(GroupedExpression.innerUngroupedPipeInMatchInsideLambda(""))
+                .isEqualTo(new Result.Success<>("1.2.3"));
+    }
 }
+
