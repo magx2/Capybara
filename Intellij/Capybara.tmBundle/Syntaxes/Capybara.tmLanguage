@@ -106,6 +106,10 @@
       <key>match</key><string>\b(const)\s+(_*[A-Z_][A-Z0-9_]*)\b</string>
     </dict>
     <dict>
+      <key>name</key><string>meta.match.case-branch.capybara</string>
+      <key>match</key><string>(\bcase\b)([^\n]*?)(-&gt;)</string>
+    </dict>
+    <dict>
       <key>name</key><string>meta.match.typed-pattern.capybara</string>
       <key>match</key><string>(\bcase\b)\s*(_*[A-Z][A-Za-z0-9_]*)\s+([A-Za-z_][A-Za-z0-9_]*|_)\s*(=&gt;)</string>
     </dict>

@@ -22,6 +22,9 @@ public record CompiledMatchExpression(CompiledExpression matchWith, List<MatchCa
     public record IntPattern(String value) implements Pattern {
     }
 
+    public record LongPattern(String value) implements Pattern {
+    }
+
     public record StringPattern(String value) implements Pattern {
     }
 

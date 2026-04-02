@@ -1855,6 +1855,11 @@ public class JavaExpressionEvaluator {
         }
         return switch (pattern) {
             case CompiledMatchExpression.IntPattern intPattern -> "case " + intPattern.value();
+            case CompiledMatchExpression.LongPattern longPattern -> {
+                var longBindingName = "__capybaraLongLiteral" + MATCH_BINDING_COUNTER.incrementAndGet();
+                yield "case java.lang.Long " + longBindingName
+                      + " when java.util.Objects.equals(" + longBindingName + ", " + longPattern.value() + ")";
+            }
             case CompiledMatchExpression.StringPattern stringPattern -> "case " + stringPattern.value();
             case CompiledMatchExpression.BoolPattern boolPattern -> "case " + boolPattern.value();
             case CompiledMatchExpression.FloatPattern floatPattern -> "case " + floatPattern.value();
@@ -2017,6 +2022,8 @@ public class JavaExpressionEvaluator {
         return switch (pattern) {
             case CompiledMatchExpression.IntPattern intPattern ->
                     java.util.Optional.of("java.util.Objects.equals(" + valueExpression + ", " + intPattern.value() + ")");
+            case CompiledMatchExpression.LongPattern longPattern ->
+                    java.util.Optional.of("java.util.Objects.equals(" + valueExpression + ", " + longPattern.value() + ")");
             case CompiledMatchExpression.StringPattern stringPattern ->
                     java.util.Optional.of("java.util.Objects.equals(" + valueExpression + ", " + stringPattern.value() + ")");
             case CompiledMatchExpression.BoolPattern boolPattern ->

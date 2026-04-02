@@ -21,6 +21,9 @@ public record MatchExpression(Expression matchWith, List<MatchCase> cases,
     public record IntPattern(String value) implements Pattern {
     }
 
+    public record LongPattern(String value) implements Pattern {
+    }
+
     public record StringPattern(String value) implements Pattern {
     }
 

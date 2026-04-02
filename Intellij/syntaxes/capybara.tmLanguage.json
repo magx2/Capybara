@@ -227,6 +227,10 @@
           "match": "\\b(const)\\s+(_*[A-Z_][A-Z0-9_]*)\\b"
         },
         {
+          "name": "meta.match.case-branch.capybara",
+          "match": "(\\bcase\\b)([^\\n]*?)(->)"
+        },
+        {
           "name": "meta.match.typed-pattern.capybara",
           "match": "(\\bcase\\b)\\s*(_*[A-Z][A-Za-z0-9_]*)\\s+([A-Za-z_][A-Za-z0-9_]*|_)\\s*(=>)"
         },

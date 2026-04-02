@@ -1903,6 +1903,11 @@ public class CapybaraParser {
             return new MatchExpression.IntPattern(intLiteral.getText());
         }
 
+        var longLiteral = context.LONG_LITERAL();
+        if (longLiteral != null) {
+            return new MatchExpression.LongPattern(longLiteral.getText());
+        }
+
         var stringLiteral = context.STRING_LITERAL();
         if (stringLiteral != null) {
             return new MatchExpression.StringPattern(normalizeStringLiteral(stringLiteral.getText()));

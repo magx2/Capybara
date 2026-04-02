@@ -411,6 +411,32 @@ class CapybaraParserTest {
     }
 
     @Test
+    @DisplayName("should parse match case with pattern alternatives")
+    void parseMatchCaseWithPatternAlternatives() {
+        var module = parseSuccess(new RawModule("Test", "/parser", """
+                fun test(char: string): string =
+                    match char with
+                    case "1" | "2" | "3" -> "digit"
+                    case _ -> "other"
+                """));
+
+        var function = findFunction("test", module.functional());
+        assertThat(function.expression()).isInstanceOf(MatchExpression.class);
+        var expression = (MatchExpression) function.expression();
+        assertThat(expression.cases()).hasSize(4);
+        assertThat(expression.cases().get(0).pattern()).isEqualTo(new MatchExpression.StringPattern("\"1\""));
+        assertThat(expression.cases().get(1).pattern()).isEqualTo(new MatchExpression.StringPattern("\"2\""));
+        assertThat(expression.cases().get(2).pattern()).isEqualTo(new MatchExpression.StringPattern("\"3\""));
+        assertThat(expression.cases().get(3).pattern()).isEqualTo(MatchExpression.WildcardPattern.WILDCARD);
+        assertThat(expression.cases().subList(0, 3))
+                .extracting(MatchExpression.MatchCase::expression)
+                .allSatisfy(caseExpression -> {
+                    assertThat(caseExpression).isInstanceOf(StringValue.class);
+                    assertThat(((StringValue) caseExpression).stringValue()).isEqualTo("\"digit\"");
+                });
+    }
+
+    @Test
     @DisplayName("should parse grouped brace expression in pipe lambda body with nested match")
     void parseGroupedBraceExpressionInPipeLambdaBodyWithNestedMatch() {
         var module = parseSuccess(new RawModule("Test", "/parser", """

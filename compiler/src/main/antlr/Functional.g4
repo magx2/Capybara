@@ -168,12 +168,13 @@ NOTHING_LITERAL: '???';
 
 matchExpression: 'match' expression 'with' matchCaseList+;
 matchCaseList: matchCase (',' matchCase)*;
-matchCase: 'case' pattern (COMMA pattern)* ('when' guard=expression)? MATCH_ARROW body=expression;
+matchCase: 'case' pattern ((PIPE | COMMA) pattern)* ('when' guard=expression)? MATCH_ARROW body=expression;
 matchExpressionNoPipe: 'match' expressionNoPipe 'with' matchCaseNoPipeList+;
 matchCaseNoPipeList: matchCaseNoPipe (',' matchCaseNoPipe)*;
-matchCaseNoPipe: 'case' pattern (COMMA pattern)* ('when' guard=expressionNoPipe)? MATCH_ARROW body=expressionNoPipe;
+matchCaseNoPipe: 'case' pattern ((PIPE | COMMA) pattern)* ('when' guard=expressionNoPipe)? MATCH_ARROW body=expressionNoPipe;
 pattern: TYPE
         | INT_LITERAL
+        | LONG_LITERAL
         | BOOL_LITERAL
         | STRING_LITERAL
         | FLOAT_LITERAL

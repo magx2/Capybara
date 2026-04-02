@@ -4003,6 +4003,7 @@ public class CapybaraExpressionCompiler {
     private Result<PatternAndScope> linkPattern(MatchExpression.Pattern pattern, CompiledType matchType, Scope scope) {
         return switch (pattern) {
             case MatchExpression.IntPattern intPattern -> validateLiteralPattern(intPattern, matchType, scope, PrimitiveLinkedType.INT);
+            case MatchExpression.LongPattern longPattern -> validateLiteralPattern(longPattern, matchType, scope, PrimitiveLinkedType.LONG);
             case MatchExpression.StringPattern stringPattern -> validateLiteralPattern(stringPattern, matchType, scope, PrimitiveLinkedType.STRING);
             case MatchExpression.BoolPattern boolPattern -> validateLiteralPattern(boolPattern, matchType, scope, PrimitiveLinkedType.BOOL);
             case MatchExpression.FloatPattern floatPattern -> validateLiteralPattern(floatPattern, matchType, scope, PrimitiveLinkedType.FLOAT);
@@ -4031,6 +4032,8 @@ public class CapybaraExpressionCompiler {
         return switch (pattern) {
             case MatchExpression.IntPattern intPattern ->
                     Result.success(new PatternAndScope(new CompiledMatchExpression.IntPattern(intPattern.value()), scope));
+            case MatchExpression.LongPattern longPattern ->
+                    Result.success(new PatternAndScope(new CompiledMatchExpression.LongPattern(longPattern.value()), scope));
             case MatchExpression.StringPattern stringPattern ->
                     Result.success(new PatternAndScope(new CompiledMatchExpression.StringPattern(stringPattern.value()), scope));
             case MatchExpression.BoolPattern boolPattern ->
