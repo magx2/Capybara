@@ -20,3 +20,7 @@ config_file = "agents/senior-developer.toml"
 [agents.reviewer]
 description = "Reviews Capybara code changes for correctness, regressions, missing tests, and adherence to repository guidelines."
 config_file = "agents/reviewer.toml"
+
+[agents.principal_FP_developer]
+description = "Principal FP language reviewer focused on idiomatic functional programming and Capybara Functional design. Reviews .cfun code for purity, immutability, composability, and expression-oriented style, and evaluates Functional.g4 syntax against conventions from Scala, F#, Haskell, and OCaml."
+config_file = "agents/principal-fp-developer.toml"
