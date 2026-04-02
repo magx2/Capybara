@@ -729,12 +729,12 @@ public class CapybaraCompiler {
                 ).flatMap(ex -> function.returnType()
                         .map(type -> linkType(type, dataTypes, functionGenericTypeNames))
                         .orElseGet(() -> Result.success(ex.type()))
-                        .flatMap(rtype -> validateFunctionReturnType(function, ex, rtype, moduleSourceFile)
+                        .flatMap(rtype -> validateFunctionReturnType(function, ex, rtype, dataTypes, moduleSourceFile)
                                 .map(validatedExpression -> new CompiledFunction(
                                         function.name(),
                                         rtype,
                                         parameters,
-                                        enrichNothing(coerceReturnExpression(validatedExpression, rtype), function.name(), moduleSourceFile),
+                                        enrichNothing(validatedExpression, function.name(), moduleSourceFile),
                                         function.comments(),
                                         function.visibility(),
                                         isProgramMain(function.name(), rtype, parameters)
@@ -873,7 +873,6 @@ public class CapybaraCompiler {
                       + pointer + "\n";
         return new Result.Error.SingleError(line, column, file, message);
     }
-
     private Result<CompiledFunction> normalizeMatchExhaustivenessErrors(
             Result<CompiledFunction> linked,
             Function function,
@@ -1036,10 +1035,12 @@ public class CapybaraCompiler {
             Function function,
             dev.capylang.compiler.expression.CompiledExpression expression,
             CompiledType declaredReturnType,
+            Map<String, GenericDataType> dataTypes,
             String moduleSourceFile
     ) {
-        if (isAssignableReturnType(declaredReturnType, expression.type())) {
-            return Result.success(expression);
+        var coercedExpression = coerceReturnExpression(expression, declaredReturnType, dataTypes);
+        if (isAssignableReturnType(declaredReturnType, coercedExpression.type(), dataTypes)) {
+            return Result.success(coercedExpression);
         }
         var returnExpression = terminalReturnExpression(function.expression());
         var position = returnExpressionPosition(function.expression()).or(() -> function.position()).orElse(SourcePosition.EMPTY);
@@ -1049,7 +1050,7 @@ public class CapybaraCompiler {
         var functionPreview = formatReturnTypeMismatchSourceLine(function, returnExpression, position, declaredReturnType);
         var pointer = " ".repeat(Math.max(column, 0))
                       + "^ expected `" + formatLinkedType(declaredReturnType)
-                      + "`, found `" + formatLinkedType(expression.type()) + "`";
+                      + "`, found `" + formatLinkedType(coercedExpression.type()) + "`";
         return Result.error(
                 "error: mismatched types\n"
                 + " --> " + file + ":" + line + ":" + column + "\n"
@@ -1057,7 +1058,6 @@ public class CapybaraCompiler {
                 + pointer + "\n"
         );
     }
-
     private String formatReturnTypeMismatchSourceLine(
             Function function,
             Expression returnExpression,
@@ -1580,7 +1580,7 @@ public class CapybaraCompiler {
         };
     }
 
-    private boolean isAssignableReturnType(CompiledType expected, CompiledType actual) {
+    private boolean isAssignableReturnType(CompiledType expected, CompiledType actual, Map<String, GenericDataType> dataTypes) {
         if (expected == actual || expected.equals(actual)) {
             return true;
         }
@@ -1598,15 +1598,15 @@ public class CapybaraCompiler {
         }
         if (expected instanceof CollectionLinkedType.CompiledList expectedList
             && actual instanceof CollectionLinkedType.CompiledList actualList) {
-            return isAssignableReturnType(expectedList.elementType(), actualList.elementType());
+            return isAssignableReturnType(expectedList.elementType(), actualList.elementType(), dataTypes);
         }
         if (expected instanceof CollectionLinkedType.CompiledSet expectedSet
             && actual instanceof CollectionLinkedType.CompiledSet actualSet) {
-            return isAssignableReturnType(expectedSet.elementType(), actualSet.elementType());
+            return isAssignableReturnType(expectedSet.elementType(), actualSet.elementType(), dataTypes);
         }
         if (expected instanceof CollectionLinkedType.CompiledDict expectedDict
             && actual instanceof CollectionLinkedType.CompiledDict actualDict) {
-            return isAssignableReturnType(expectedDict.valueType(), actualDict.valueType());
+            return isAssignableReturnType(expectedDict.valueType(), actualDict.valueType(), dataTypes);
         }
         if (expected instanceof CompiledTupleType expectedTuple
             && actual instanceof CompiledTupleType actualTuple) {
@@ -1614,7 +1614,7 @@ public class CapybaraCompiler {
                 return false;
             }
             for (int i = 0; i < expectedTuple.elementTypes().size(); i++) {
-                if (!isAssignableReturnType(expectedTuple.elementTypes().get(i), actualTuple.elementTypes().get(i))) {
+                if (!isAssignableReturnType(expectedTuple.elementTypes().get(i), actualTuple.elementTypes().get(i), dataTypes)) {
                     return false;
                 }
             }
@@ -1622,35 +1622,60 @@ public class CapybaraCompiler {
         }
         if (expected instanceof CompiledFunctionType expectedFunction
             && actual instanceof CompiledFunctionType actualFunction) {
-            return isAssignableReturnType(expectedFunction.argumentType(), actualFunction.argumentType())
-                   && isAssignableReturnType(expectedFunction.returnType(), actualFunction.returnType());
+            return isAssignableReturnType(expectedFunction.argumentType(), actualFunction.argumentType(), dataTypes)
+                   && isAssignableReturnType(expectedFunction.returnType(), actualFunction.returnType(), dataTypes);
         }
         if (expected instanceof CompiledDataParentType expectedParent) {
             if (actual instanceof CompiledDataParentType actualParent) {
                 return sameTypeName(expectedParent.name(), actualParent.name())
-                       && areAssignableDataTypeParameters(expectedParent.typeParameters(), actualParent.typeParameters());
+                       && areAssignableDataTypeParameters(expectedParent.typeParameters(), actualParent.typeParameters(), dataTypes);
             }
             if (actual instanceof CompiledDataType actualData) {
-                if (sameTypeName(expectedParent.name(), actualData.name())) {
-                    if (actualData.typeParameters().isEmpty()) {
-                        return true;
-                    }
-                    return areAssignableDataTypeParameters(expectedParent.typeParameters(), actualData.typeParameters());
+                var matchingExtendedParent = actualData.extendedTypes().stream()
+                        .map(this::normalizeDescriptor)
+                        .map(this::parseGenericTypeName)
+                        .filter(parent -> sameTypeName(expectedParent.name(), parent.baseName()))
+                        .findFirst();
+                if (matchingExtendedParent.isPresent()) {
+                    return areAssignableDataTypeParameters(
+                            expectedParent.typeParameters(),
+                            matchingExtendedParent.orElseThrow().typeArguments(),
+                            dataTypes
+                    );
                 }
-                return expectedParent.subTypes().stream()
-                               .anyMatch(subType -> sameTypeName(subType.name(), actualData.name()))
-                       && (actualData.typeParameters().isEmpty()
-                           || areAssignableDataTypeParameters(expectedParent.typeParameters(), actualData.typeParameters()));
+                var matchingSubtype = expectedParent.subTypes().stream()
+                        .filter(subType -> sameTypeName(subType.name(), actualData.name()))
+                        .findFirst();
+                if (matchingSubtype.isPresent()) {
+                    if (!actualData.typeParameters().isEmpty()) {
+                        return areAssignableDataTypeParameters(expectedParent.typeParameters(), actualData.typeParameters(), dataTypes);
+                    }
+                    var expectedSubtype = matchingSubtype.orElseThrow();
+                    if (expectedSubtype.fields().size() != actualData.fields().size()) {
+                        return false;
+                    }
+                    for (int i = 0; i < expectedSubtype.fields().size(); i++) {
+                        if (!isAssignableReturnType(expectedSubtype.fields().get(i).type(), actualData.fields().get(i).type(), dataTypes)) {
+                            return false;
+                        }
+                    }
+                    return true;
+                }
+                if (sameTypeName(expectedParent.name(), actualData.name())) {
+                    return actualData.typeParameters().isEmpty()
+                           || areAssignableDataTypeParameters(expectedParent.typeParameters(), actualData.typeParameters(), dataTypes);
+                }
+                return false;
             }
         }
         if (expected instanceof CompiledDataType expectedData) {
             if (actual instanceof CompiledDataType actualData) {
                 return sameTypeName(expectedData.name(), actualData.name())
-                       && areAssignableDataTypeParameters(expectedData.typeParameters(), actualData.typeParameters());
+                       && areAssignableDataTypeParameters(expectedData.typeParameters(), actualData.typeParameters(), dataTypes);
             }
             if (actual instanceof CompiledDataParentType actualParent) {
                 return sameTypeName(expectedData.name(), actualParent.name())
-                       && areAssignableDataTypeParameters(expectedData.typeParameters(), actualParent.typeParameters());
+                       && areAssignableDataTypeParameters(expectedData.typeParameters(), actualParent.typeParameters(), dataTypes);
             }
         }
         if (expected instanceof CompiledGenericTypeParameter) {
@@ -1680,7 +1705,6 @@ public class CapybaraCompiler {
         }
         return numericRank(actual) <= numericRank(expected);
     }
-
     private int numericRank(PrimitiveLinkedType type) {
         return switch (type) {
             case BYTE -> 0;
@@ -1715,7 +1739,8 @@ public class CapybaraCompiler {
 
     private dev.capylang.compiler.expression.CompiledExpression coerceReturnExpression(
             dev.capylang.compiler.expression.CompiledExpression expression,
-            CompiledType returnType
+            CompiledType returnType,
+            Map<String, GenericDataType> dataTypes
     ) {
         if (returnType instanceof CollectionLinkedType.CompiledDict dictType
             && expression instanceof dev.capylang.compiler.expression.CompiledNewSet linkedNewSet
@@ -1725,9 +1750,35 @@ public class CapybaraCompiler {
                     new CollectionLinkedType.CompiledDict(dictType.valueType())
             );
         }
+        if (returnType instanceof CompiledDataParentType parentType
+            && expression instanceof dev.capylang.compiler.expression.CompiledNewData newData
+            && newData.type() instanceof CompiledDataType actualDataType) {
+            var matchingSubtype = parentType.subTypes().stream()
+                    .filter(subType -> sameTypeName(subType.name(), actualDataType.name()))
+                    .findFirst();
+            if (matchingSubtype.isPresent()) {
+                var expectedSubtype = matchingSubtype.orElseThrow();
+                if (expectedSubtype.fields().size() != newData.assignments().size()) {
+                    return expression;
+                }
+                var coercedAssignments = new ArrayList<dev.capylang.compiler.expression.CompiledNewData.FieldAssignment>();
+                for (int i = 0; i < newData.assignments().size(); i++) {
+                    var expectedField = expectedSubtype.fields().get(i);
+                    var assignment = newData.assignments().get(i);
+                    var coercedValue = coerceReturnExpression(assignment.value(), expectedField.type(), dataTypes);
+                    if (!isAssignableReturnType(expectedField.type(), coercedValue.type(), dataTypes)) {
+                        return expression;
+                    }
+                    coercedAssignments.add(new dev.capylang.compiler.expression.CompiledNewData.FieldAssignment(
+                            assignment.name(),
+                            coercedValue
+                    ));
+                }
+                return new dev.capylang.compiler.expression.CompiledNewData(expectedSubtype, coercedAssignments);
+            }
+        }
         return expression;
     }
-
     private boolean isProgramMain(String name, CompiledType returnType, List<CompiledFunctionParameter> parameters) {
         if (!"main".equals(name)) {
             return false;
@@ -1822,6 +1873,7 @@ public class CapybaraCompiler {
                     new dev.capylang.compiler.expression.CompiledLetExpression(
                             value.name(),
                             enrichNothing(value.value(), functionName, moduleSourceFile),
+                            value.declaredType(),
                             enrichNothing(value.rest(), functionName, moduleSourceFile)
                     );
             case dev.capylang.compiler.expression.CompiledLongValue value -> value;
@@ -1951,7 +2003,7 @@ public class CapybaraCompiler {
                 .collect(new ResultCollectionCollector<>());
     }
 
-    private boolean areAssignableDataTypeParameters(List<String> expectedParameters, List<String> actualParameters) {
+    private boolean areAssignableDataTypeParameters(List<String> expectedParameters, List<String> actualParameters, Map<String, GenericDataType> dataTypes) {
         if (expectedParameters.isEmpty()) {
             return true;
         }
@@ -1959,14 +2011,14 @@ public class CapybaraCompiler {
             return false;
         }
         for (int i = 0; i < expectedParameters.size(); i++) {
-            if (!isAssignableTypeDescriptor(expectedParameters.get(i), actualParameters.get(i))) {
+            if (!isAssignableTypeDescriptor(expectedParameters.get(i), actualParameters.get(i), dataTypes)) {
                 return false;
             }
         }
         return true;
     }
 
-    private boolean isAssignableTypeDescriptor(String expectedDescriptor, String actualDescriptor) {
+    private boolean isAssignableTypeDescriptor(String expectedDescriptor, String actualDescriptor, Map<String, GenericDataType> dataTypes) {
         var expected = normalizeDescriptor(expectedDescriptor);
         var actual = normalizeDescriptor(actualDescriptor);
         if (expected.equals(actual)) {
@@ -1975,9 +2027,7 @@ public class CapybaraCompiler {
         if (expected.matches("[A-Z]")) {
             return true;
         }
-        if (actual.matches("[A-Z]")) {
-            return true;
-        }
+
         if ("any".equals(expected) || "nothing".equals(actual)) {
             return true;
         }
@@ -1990,21 +2040,24 @@ public class CapybaraCompiler {
             && actual.startsWith("list[") && actual.endsWith("]")) {
             return isAssignableTypeDescriptor(
                     expected.substring(5, expected.length() - 1),
-                    actual.substring(5, actual.length() - 1)
+                    actual.substring(5, actual.length() - 1),
+                    dataTypes
             );
         }
         if (expected.startsWith("set[") && expected.endsWith("]")
             && actual.startsWith("set[") && actual.endsWith("]")) {
             return isAssignableTypeDescriptor(
                     expected.substring(4, expected.length() - 1),
-                    actual.substring(4, actual.length() - 1)
+                    actual.substring(4, actual.length() - 1),
+                    dataTypes
             );
         }
         if (expected.startsWith("dict[") && expected.endsWith("]")
             && actual.startsWith("dict[") && actual.endsWith("]")) {
             return isAssignableTypeDescriptor(
                     expected.substring(5, expected.length() - 1),
-                    actual.substring(5, actual.length() - 1)
+                    actual.substring(5, actual.length() - 1),
+                    dataTypes
             );
         }
         var expectedArrow = indexOfTopLevelArrow(expected, "=>");
@@ -2012,16 +2065,21 @@ public class CapybaraCompiler {
         if (expectedArrow > 0 && actualArrow > 0) {
             return isAssignableTypeDescriptor(
                     stripOptionalParentheses(expected.substring(0, expectedArrow)),
-                    stripOptionalParentheses(actual.substring(0, actualArrow))
+                    stripOptionalParentheses(actual.substring(0, actualArrow)),
+                    dataTypes
             ) && isAssignableTypeDescriptor(
                     expected.substring(expectedArrow + 2).trim(),
-                    actual.substring(actualArrow + 2).trim()
+                    actual.substring(actualArrow + 2).trim(),
+                    dataTypes
             );
         }
         var expectedParsed = parseGenericTypeName(expected);
         var actualParsed = parseGenericTypeName(actual);
         if (!sameTypeName(expectedParsed.baseName(), actualParsed.baseName())) {
-            return false;
+            if (!isSubtypeDescriptorAssignable(actualParsed, expectedParsed, dataTypes)) {
+                return false;
+            }
+            return true;
         }
         if (expectedParsed.typeArguments().isEmpty()) {
             return true;
@@ -2030,13 +2088,56 @@ public class CapybaraCompiler {
             return false;
         }
         for (int i = 0; i < expectedParsed.typeArguments().size(); i++) {
-            if (!isAssignableTypeDescriptor(expectedParsed.typeArguments().get(i), actualParsed.typeArguments().get(i))) {
+            if (!isAssignableTypeDescriptor(expectedParsed.typeArguments().get(i), actualParsed.typeArguments().get(i), dataTypes)) {
                 return false;
             }
         }
         return true;
     }
 
+    private boolean isSubtypeDescriptorAssignable(ParsedGenericTypeName actual, ParsedGenericTypeName expected, Map<String, GenericDataType> dataTypes) {
+        if (!isSubtypeNameOfParent(actual.baseName(), expected.baseName(), dataTypes, new HashSet<>())) {
+            return false;
+        }
+        if (actual.typeArguments().isEmpty() || expected.typeArguments().isEmpty()) {
+            return true;
+        }
+        if (actual.typeArguments().size() != expected.typeArguments().size()) {
+            return false;
+        }
+        for (int i = 0; i < expected.typeArguments().size(); i++) {
+            if (!isAssignableTypeDescriptor(expected.typeArguments().get(i), actual.typeArguments().get(i), dataTypes)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private boolean isSubtypeNameOfParent(String actualTypeName, String expectedParentName, Map<String, GenericDataType> dataTypes, Set<String> visited) {
+        var normalizedActual = normalizeDescriptor(actualTypeName);
+        if (!visited.add(normalizedActual)) {
+            return false;
+        }
+        var maybeActual = dataTypes.values().stream()
+                .filter(CompiledDataType.class::isInstance)
+                .map(CompiledDataType.class::cast)
+                .filter(dataType -> sameTypeName(dataType.name(), normalizedActual))
+                .findFirst();
+        if (maybeActual.isEmpty()) {
+            return false;
+        }
+        var actualData = maybeActual.orElseThrow();
+        for (var extendedType : actualData.extendedTypes()) {
+            var parsedExtended = parseGenericTypeName(normalizeDescriptor(extendedType));
+            if (sameTypeName(parsedExtended.baseName(), expectedParentName)) {
+                return true;
+            }
+            if (isSubtypeNameOfParent(parsedExtended.baseName(), expectedParentName, dataTypes, visited)) {
+                return true;
+            }
+        }
+        return false;
+    }
     private String normalizeDescriptor(String descriptor) {
         return descriptor.replaceAll("\\s+", "").replace("->", "=>");
     }
@@ -2390,13 +2491,27 @@ public class CapybaraCompiler {
     private CompiledType instantiateTypeArguments(CompiledType linkedType, List<CompiledType> typeArguments) {
         var mappedTypeArguments = typeArguments.stream().map(this::typeDescriptor).toList();
         return switch (linkedType) {
-            case CompiledDataParentType parentType -> new CompiledDataParentType(
-                    parentType.name(),
-                    parentType.fields(),
-                    parentType.subTypes(),
-                    mappedTypeArguments,
-                    parentType.enumType()
-            );
+            case CompiledDataParentType parentType -> {
+                var substitutions = new LinkedHashMap<String, CompiledType>();
+                var max = Math.min(parentType.typeParameters().size(), typeArguments.size());
+                for (int i = 0; i < max; i++) {
+                    substitutions.put(parentType.typeParameters().get(i), typeArguments.get(i));
+                }
+                yield new CompiledDataParentType(
+                        parentType.name(),
+                        parentType.fields().stream()
+                                .map(field -> new CompiledDataType.CompiledField(
+                                        field.name(),
+                                        substituteTypeParameters(field.type(), substitutions)
+                                ))
+                                .toList(),
+                        parentType.subTypes().stream()
+                                .map(subType -> (CompiledDataType) substituteTypeParameters(subType, substitutions))
+                                .toList(),
+                        mappedTypeArguments,
+                        parentType.enumType()
+                );
+            }
             case CompiledDataType dataType -> {
                 if (dataType.typeParameters().isEmpty()) {
                     yield new CompiledDataType(
@@ -3031,18 +3146,19 @@ public class CapybaraCompiler {
 
     private CompiledDataParentType optionExternalPlaceholder(String typeName) {
         var optionTypeParameter = optionExternalTypeParameter(typeName);
+        var optionParentDescriptor = baseTypeName(typeName) + "[T]";
         var some = new CompiledDataType(
                 "Some",
                 List.of(new CompiledDataType.CompiledField("value", new CompiledGenericTypeParameter("T"))),
                 List.of("T"),
-                List.of(),
+                List.of(optionParentDescriptor),
                 false
         );
         var none = new CompiledDataType(
                 "None",
                 List.of(),
                 List.of(),
-                List.of(),
+                List.of(optionParentDescriptor),
                 true
         );
         return new CompiledDataParentType(
@@ -3055,18 +3171,19 @@ public class CapybaraCompiler {
 
     private CompiledDataParentType resultExternalPlaceholder(String typeName) {
         var resultTypeParameter = resultExternalTypeParameter(typeName);
+        var resultParentDescriptor = baseTypeName(typeName) + "[T]";
         var success = new CompiledDataType(
                 "Success",
                 List.of(new CompiledDataType.CompiledField("value", new CompiledGenericTypeParameter("T"))),
                 List.of("T"),
-                List.of(),
+                List.of(resultParentDescriptor),
                 false
         );
         var error = new CompiledDataType(
                 "Error",
                 List.of(new CompiledDataType.CompiledField("message", PrimitiveLinkedType.STRING)),
                 List.of(),
-                List.of(),
+                List.of(resultParentDescriptor),
                 false
         );
         return new CompiledDataParentType(
@@ -3246,6 +3363,23 @@ public class CapybaraCompiler {
                 .toList();
     }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

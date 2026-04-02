@@ -770,13 +770,19 @@ public class JavaAstBuilder {
         var fieldsByName = new java.util.LinkedHashMap<String, JavaRecord.JavaRecordField>();
         Stream.concat(interfaceFields, recordFields).forEach(field -> fieldsByName.put(field.name(), field));
         var fields = List.copyOf(fieldsByName.values());
+        var recordTypeParameters = type.typeParameters().isEmpty() && javaInterface != null
+                ? javaInterface.stream()
+                        .flatMap(parent -> interfaceTypeParameters(parent).stream())
+                        .distinct()
+                        .toList()
+                : type.typeParameters();
         return new JavaRecord(
                 buildClassName(type.name()),
                 type.name().startsWith("_"),
                 type.comments(),
                 implementInterfaces,
                 fields,
-                type.typeParameters(),
+                recordTypeParameters,
                 new TreeSet<JavaMethod>(),
                 buildRecordMethods(type, functions));
     }
@@ -855,15 +861,25 @@ public class JavaAstBuilder {
         }
     }
 
-    private JavaType implementedInterfaceType(CompiledDataType type, JavaInterface javaInterface) {
-        var interfaceTypeParameters = switch (javaInterface) {
+    private List<String> interfaceTypeParameters(JavaInterface javaInterface) {
+        return switch (javaInterface) {
             case JavaSealedInterface javaSealedInterface -> javaSealedInterface.typeParameters();
             case JavaNormalInterface javaNormalInterface -> List.<String>of();
         };
-        if (interfaceTypeParameters.isEmpty() || type.typeParameters().size() != interfaceTypeParameters.size()) {
+    }
+
+    private JavaType implementedInterfaceType(CompiledDataType type, JavaInterface javaInterface) {
+        var interfaceTypeParameters = interfaceTypeParameters(javaInterface);
+        if (interfaceTypeParameters.isEmpty()) {
             return javaInterface.name();
         }
-        return new JavaType(javaInterface.name() + "<" + String.join(", ", type.typeParameters()) + ">");
+        var implementedTypeParameters = type.typeParameters().isEmpty()
+                ? interfaceTypeParameters
+                : type.typeParameters();
+        if (implementedTypeParameters.size() != interfaceTypeParameters.size()) {
+            return javaInterface.name();
+        }
+        return new JavaType(javaInterface.name() + "<" + String.join(", ", implementedTypeParameters) + ">");
     }
 
     private SortedSet<JavaEnum> buildEnums(

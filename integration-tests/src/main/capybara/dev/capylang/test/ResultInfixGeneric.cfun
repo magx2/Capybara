@@ -28,8 +28,17 @@ fun map_to_nested_ok(v: int): MyResult[MyResult[string]] = Ok { value: Ok { valu
 
 fun map_to_nested_fail(v: int): MyResult[MyResult[string]] = Ok { value: Fail { message: "nested_bad:" + v } }
 
+fun wrap_nested_ok(v: int): MyResult[MyResult[string]] = Ok { value: Ok { value: "wrapped_" + v } }
+
+fun wrap_nested_fail(v: int): MyResult[MyResult[string]] = Ok { value: Fail { message: "wrapped_bad:" + v } }
+
 fun apply_mapper(r: MyResult[T], map: T => MyResult[Y]): MyResult[Y] = r | map
 
 fun propagate_fail(r: MyResult[T], map: T => MyResult[Y]): MyResult[Y] = r | map
 
 fun apply_flat_mapper(r: MyResult[T], map: T => MyResult[MyResult[Y]]): MyResult[Y] = r |* map
+
+fun nested_identity(r: MyResult[MyResult[string]]): MyResult[MyResult[string]] = r
+
+fun flatten_nested_result(r: MyResult[MyResult[string]]): MyResult[string] =
+    r |* nested => Ok { value: nested }

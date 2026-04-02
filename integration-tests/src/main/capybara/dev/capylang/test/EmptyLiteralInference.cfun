@@ -21,6 +21,12 @@ fun duplicate_strings(values: list[string]): list[string] =
 fun empty_list_of_type_param(v: T): list[T] =
     []
 
+data JsonBox { value: string }
+
+fun typed_empty_dict_then_append_json_box(name: string): int =
+    let values: dict[JsonBox] = {:}
+    (values + (name, JsonBox { value: "box:" + name })).size
+
 type SeqEnd[T] = ConsEnd[T] | EndEnd
 data ConsEnd[T] { value: T, rest: () => SeqEnd[T] }
 single EndEnd

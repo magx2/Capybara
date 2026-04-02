@@ -168,15 +168,25 @@ public class CapybaraTypeCompiler {
     private static CompiledType instantiateTypeArguments(CompiledType linkedType, List<CompiledType> typeArguments) {
         var mappedTypeArguments = typeArguments.stream().map(CapybaraTypeCompiler::typeDescriptor).toList();
         return switch (linkedType) {
-            case CompiledDataParentType parentType -> new CompiledDataParentType(
-                    parentType.name(),
-                    parentType.fields(),
-                    parentType.subTypes(),
-                    mappedTypeArguments,
-                    parentType.comments(),
-                    parentType.visibility(),
-                    parentType.enumType()
-            );
+            case CompiledDataParentType parentType -> {
+                var substitutions = substitutionsFor(parentType.typeParameters(), typeArguments);
+                yield new CompiledDataParentType(
+                        parentType.name(),
+                        parentType.fields().stream()
+                                .map(field -> new CompiledDataType.CompiledField(
+                                        field.name(),
+                                        substituteTypeParameters(field.type(), substitutions)
+                                ))
+                                .toList(),
+                        parentType.subTypes().stream()
+                                .map(subType -> (CompiledDataType) substituteTypeParameters(subType, substitutions))
+                                .toList(),
+                        mappedTypeArguments,
+                        parentType.comments(),
+                        parentType.visibility(),
+                        parentType.enumType()
+                );
+            }
             case CompiledDataType dataType -> {
                 if (dataType.typeParameters().isEmpty()) {
                     yield new CompiledDataType(
@@ -189,26 +199,35 @@ public class CapybaraTypeCompiler {
                             dataType.singleton()
                     );
                 }
-                var substitutions = new LinkedHashMap<String, CompiledType>();
-                var max = Math.min(dataType.typeParameters().size(), typeArguments.size());
-                for (int i = 0; i < max; i++) {
-                    substitutions.put(dataType.typeParameters().get(i), typeArguments.get(i));
-                }
+                var substitutions = substitutionsFor(dataType.typeParameters(), typeArguments);
                 var substitutedFields = dataType.fields().stream()
                         .map(field -> new CompiledDataType.CompiledField(field.name(), substituteTypeParameters(field.type(), substitutions)))
                         .toList();
                 yield new CompiledDataType(
                         dataType.name(),
                         substitutedFields,
-                        mappedTypeArguments,
-                        dataType.extendedTypes(),
-                            dataType.comments(),
-                            dataType.visibility(),
+                        dataType.typeParameters().stream()
+                                .map(typeDescriptor -> substituteTypeDescriptor(typeDescriptor, substitutions))
+                                .toList(),
+                        dataType.extendedTypes().stream()
+                                .map(typeDescriptor -> substituteTypeDescriptor(typeDescriptor, substitutions))
+                                .toList(),
+                        dataType.comments(),
+                        dataType.visibility(),
                         dataType.singleton()
                 );
             }
             default -> linkedType;
         };
+    }
+
+    private static Map<String, CompiledType> substitutionsFor(List<String> typeParameters, List<CompiledType> typeArguments) {
+        var substitutions = new LinkedHashMap<String, CompiledType>();
+        var max = Math.min(typeParameters.size(), typeArguments.size());
+        for (int i = 0; i < max; i++) {
+            substitutions.put(typeParameters.get(i), typeArguments.get(i));
+        }
+        return substitutions;
     }
 
     private static String typeDescriptor(CompiledType type) {
@@ -249,8 +268,86 @@ public class CapybaraTypeCompiler {
                             .map(elementType -> substituteTypeParameters(elementType, substitutions))
                             .toList()
             );
+            case CompiledDataType linkedDataType -> new CompiledDataType(
+                    linkedDataType.name(),
+                    linkedDataType.fields().stream()
+                            .map(field -> new CompiledDataType.CompiledField(
+                                    field.name(),
+                                    substituteTypeParameters(field.type(), substitutions)
+                            ))
+                            .toList(),
+                    linkedDataType.typeParameters().stream()
+                            .map(typeDescriptor -> substituteTypeDescriptor(typeDescriptor, substitutions))
+                            .toList(),
+                    linkedDataType.extendedTypes().stream()
+                            .map(typeDescriptor -> substituteTypeDescriptor(typeDescriptor, substitutions))
+                            .toList(),
+                    linkedDataType.comments(),
+                    linkedDataType.visibility(),
+                    linkedDataType.singleton()
+            );
+            case CompiledDataParentType linkedDataParentType -> new CompiledDataParentType(
+                    linkedDataParentType.name(),
+                    linkedDataParentType.fields().stream()
+                            .map(field -> new CompiledDataType.CompiledField(
+                                    field.name(),
+                                    substituteTypeParameters(field.type(), substitutions)
+                            ))
+                            .toList(),
+                    linkedDataParentType.subTypes().stream()
+                            .map(subType -> (CompiledDataType) substituteTypeParameters(subType, substitutions))
+                            .toList(),
+                    linkedDataParentType.typeParameters().stream()
+                            .map(typeDescriptor -> substituteTypeDescriptor(typeDescriptor, substitutions))
+                            .toList(),
+                    linkedDataParentType.comments(),
+                    linkedDataParentType.visibility(),
+                    linkedDataParentType.enumType()
+            );
             default -> type;
         };
+    }
+
+    private static String substituteTypeDescriptor(String descriptor, Map<String, CompiledType> substitutions) {
+        if (descriptor == null || descriptor.isBlank()) {
+            return descriptor;
+        }
+        var trimmed = descriptor.trim();
+        var direct = substitutions.get(trimmed);
+        if (direct != null) {
+            return typeDescriptor(direct);
+        }
+        if (trimmed.startsWith("list[") && trimmed.endsWith("]")) {
+            return "list[" + substituteTypeDescriptor(trimmed.substring(5, trimmed.length() - 1), substitutions) + "]";
+        }
+        if (trimmed.startsWith("set[") && trimmed.endsWith("]")) {
+            return "set[" + substituteTypeDescriptor(trimmed.substring(4, trimmed.length() - 1), substitutions) + "]";
+        }
+        if (trimmed.startsWith("dict[") && trimmed.endsWith("]")) {
+            return "dict[" + substituteTypeDescriptor(trimmed.substring(5, trimmed.length() - 1), substitutions) + "]";
+        }
+        if (trimmed.startsWith("tuple[") && trimmed.endsWith("]")) {
+            var inner = trimmed.substring(6, trimmed.length() - 1);
+            return "tuple[" + splitTopLevelTypeArguments(inner).stream()
+                    .map(arg -> substituteTypeDescriptor(arg, substitutions))
+                    .collect(java.util.stream.Collectors.joining(", ")) + "]";
+        }
+        var arrowIndex = indexOfTopLevelArrow(trimmed, "=>");
+        if (trimmed.startsWith("(") && trimmed.endsWith(")") && arrowIndex > 0) {
+            var inner = trimmed.substring(1, trimmed.length() - 1).trim();
+            var innerArrow = indexOfTopLevelArrow(inner, "=>");
+            if (innerArrow > 0) {
+                return "(" + substituteTypeDescriptor(inner.substring(0, innerArrow).trim(), substitutions)
+                        + " => " + substituteTypeDescriptor(inner.substring(innerArrow + 2).trim(), substitutions) + ")";
+            }
+        }
+        var parsed = parseDataTypeName(trimmed);
+        if (!parsed.typeArguments().isEmpty()) {
+            return parsed.baseName() + "[" + parsed.typeArguments().stream()
+                    .map(arg -> substituteTypeDescriptor(arg, substitutions))
+                    .collect(java.util.stream.Collectors.joining(", ")) + "]";
+        }
+        return trimmed;
     }
 
     private static ParsedDataTypeName parseDataTypeName(String rawName) {
@@ -422,5 +519,8 @@ public class CapybaraTypeCompiler {
                 .map(CompiledTupleType::new);
     }
 }
+
+
+
 
 

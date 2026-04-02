@@ -776,6 +776,23 @@ public class CapybaraExpressionCompiler {
             if (!isSubtypeOfParent(actualData, expectedParent)) {
                 return;
             }
+            var matchedExtendedParent = actualData.extendedTypes().stream()
+                    .map(this::parseLinkedTypeDescriptor)
+                    .flatMap(Optional::stream)
+                    .filter(GenericDataType.class::isInstance)
+                    .map(GenericDataType.class::cast)
+                    .filter(parentType -> sameRawTypeName(parentType.name(), expectedParent.name()))
+                    .findFirst();
+            if (matchedExtendedParent.isEmpty()) {
+                matchedExtendedParent = instantiateExtendedParentFromSubtypeFields(actualData, expectedParent);
+            }
+            if (matchedExtendedParent.isEmpty()) {
+                matchedExtendedParent = specializeParentFromSubtypeFields(actualData, expectedParent);
+            }
+            if (matchedExtendedParent.isPresent()) {
+                collectTypeSubstitutions(expectedParent, matchedExtendedParent.orElseThrow(), substitutions);
+                return;
+            }
             var expectedTypeParameters = expectedParent.typeParameters();
             var actualTypeParameters = actualData.typeParameters();
             var count = Math.min(expectedTypeParameters.size(), actualTypeParameters.size());
@@ -809,6 +826,94 @@ public class CapybaraExpressionCompiler {
                 );
             }
         }
+    }
+
+    private Optional<GenericDataType> instantiateExtendedParentFromSubtypeFields(
+            CompiledDataType actualData,
+            CompiledDataParentType expectedParent
+    ) {
+        var resolvedType = resolveDataTypeByName(actualData.name());
+        if (!(resolvedType instanceof CompiledDataType rawDataType)) {
+            return Optional.empty();
+        }
+        var substitutions = new java.util.LinkedHashMap<String, CompiledType>();
+        var actualFieldsByName = actualData.fields().stream()
+                .collect(java.util.stream.Collectors.toMap(
+                        CompiledDataType.CompiledField::name,
+                        CompiledDataType.CompiledField::type,
+                        (first, second) -> first,
+                        java.util.LinkedHashMap::new
+                ));
+        for (var rawField : rawDataType.fields()) {
+            var actualFieldType = actualFieldsByName.get(rawField.name());
+            if (actualFieldType == null) {
+                continue;
+            }
+            collectTypeSubstitutions(rawField.type(), actualFieldType, substitutions);
+        }
+        if (substitutions.isEmpty()) {
+            return Optional.empty();
+        }
+        return rawDataType.extendedTypes().stream()
+                .map(this::parseLinkedTypeDescriptor)
+                .flatMap(Optional::stream)
+                .map(parentType -> substituteTypeParameters(parentType, substitutions))
+                .filter(GenericDataType.class::isInstance)
+                .map(GenericDataType.class::cast)
+                .filter(parentType -> sameRawTypeName(parentType.name(), expectedParent.name()))
+                .findFirst();
+    }
+
+    private Optional<GenericDataType> specializeParentFromSubtypeFields(
+            CompiledDataType actualData,
+            CompiledDataParentType expectedParent
+    ) {
+        var canonicalParent = dataTypes.values().stream()
+                .filter(CompiledDataParentType.class::isInstance)
+                .map(CompiledDataParentType.class::cast)
+                .filter(parentType -> sameRawTypeName(parentType.name(), expectedParent.name()))
+                .findFirst()
+                .orElse(expectedParent);
+        var rawSubtype = canonicalParent.subTypes().stream()
+                .filter(subType -> sameRawTypeName(subType.name(), actualData.name()))
+                .findFirst();
+        if (rawSubtype.isEmpty()) {
+            return Optional.empty();
+        }
+        var subtypeSubstitutions = new java.util.LinkedHashMap<String, CompiledType>();
+        var actualFieldsByName = actualData.fields().stream()
+                .collect(java.util.stream.Collectors.toMap(
+                        CompiledDataType.CompiledField::name,
+                        CompiledDataType.CompiledField::type,
+                        (first, second) -> first,
+                        java.util.LinkedHashMap::new
+                ));
+        for (var rawField : rawSubtype.orElseThrow().fields()) {
+            var actualFieldType = actualFieldsByName.get(rawField.name());
+            if (actualFieldType == null) {
+                continue;
+            }
+            collectTypeSubstitutions(rawField.type(), actualFieldType, subtypeSubstitutions);
+        }
+        if (subtypeSubstitutions.isEmpty()) {
+            return Optional.empty();
+        }
+        var parentSubstitutions = new java.util.LinkedHashMap<String, CompiledType>();
+        var max = Math.min(canonicalParent.typeParameters().size(), rawSubtype.orElseThrow().typeParameters().size());
+        for (var i = 0; i < max; i++) {
+            var rawSubtypeTypeParameter = rawSubtype.orElseThrow().typeParameters().get(i);
+            var concreteType = subtypeSubstitutions.get(rawSubtypeTypeParameter);
+            if (concreteType != null) {
+                parentSubstitutions.put(canonicalParent.typeParameters().get(i), concreteType);
+            }
+        }
+        if (parentSubstitutions.isEmpty()) {
+            return Optional.empty();
+        }
+        var specializedParent = substituteTypeParameters(canonicalParent, parentSubstitutions);
+        return specializedParent instanceof GenericDataType genericDataType
+                ? Optional.of(genericDataType)
+                : Optional.empty();
     }
 
     private void collectTypeSubstitutionsFromDescriptors(
@@ -1395,6 +1500,26 @@ public class CapybaraExpressionCompiler {
             return new CoercedArgument(argument, 1);
         }
         if (expected instanceof CompiledList expectedList
+            && argument instanceof CompiledNewList linkedNewList
+            && linkedNewList.values().isEmpty()) {
+            return new CoercedArgument(new CompiledNewList(List.of(), new CompiledList(expectedList.elementType())), 1);
+        }
+        if (expected instanceof CompiledSet expectedSet
+            && argument instanceof CompiledNewSet linkedNewSet
+            && linkedNewSet.values().isEmpty()) {
+            return new CoercedArgument(new CompiledNewSet(List.of(), new CompiledSet(expectedSet.elementType())), 1);
+        }
+        if (expected instanceof CompiledDict expectedDict
+            && argument instanceof CompiledNewSet linkedNewSet
+            && linkedNewSet.values().isEmpty()) {
+            return new CoercedArgument(new CompiledNewDict(List.of(), new CompiledDict(expectedDict.valueType())), 1);
+        }
+        if (expected instanceof CompiledDict expectedDict
+            && argument instanceof CompiledNewDict linkedNewDict
+            && linkedNewDict.entries().isEmpty()) {
+            return new CoercedArgument(new CompiledNewDict(List.of(), new CompiledDict(expectedDict.valueType())), 1);
+        }
+        if (expected instanceof CompiledList expectedList
             && argument.type() instanceof CompiledList argumentList
             && isTypeCompatible(argumentList.elementType(), expectedList.elementType())) {
             return new CoercedArgument(argument, 1);
@@ -1422,26 +1547,6 @@ public class CapybaraExpressionCompiler {
             if (invokedCoerced != null) {
                 return new CoercedArgument(invokedCoerced.expression(), invokedCoerced.coercions() + 1);
             }
-        }
-        if (expected instanceof CompiledList expectedList
-            && argument instanceof CompiledNewList linkedNewList
-            && linkedNewList.values().isEmpty()) {
-            return new CoercedArgument(new CompiledNewList(List.of(), new CompiledList(expectedList.elementType())), 1);
-        }
-        if (expected instanceof CompiledSet expectedSet
-            && argument instanceof CompiledNewSet linkedNewSet
-            && linkedNewSet.values().isEmpty()) {
-            return new CoercedArgument(new CompiledNewSet(List.of(), new CompiledSet(expectedSet.elementType())), 1);
-        }
-        if (expected instanceof CompiledDict expectedDict
-            && argument instanceof CompiledNewSet linkedNewSet
-            && linkedNewSet.values().isEmpty()) {
-            return new CoercedArgument(new CompiledNewDict(List.of(), new CompiledDict(expectedDict.valueType())), 1);
-        }
-        if (expected instanceof CompiledDict expectedDict
-            && argument instanceof CompiledNewDict linkedNewDict
-            && linkedNewDict.entries().isEmpty()) {
-            return new CoercedArgument(new CompiledNewDict(List.of(), new CompiledDict(expectedDict.valueType())), 1);
         }
         if (argument.type() == NOTHING) {
             return new CoercedArgument(argument, 0);
@@ -1478,10 +1583,23 @@ public class CapybaraExpressionCompiler {
         }
         if (expected instanceof CompiledDataParentType expectedParentType
             && argument.type() instanceof CompiledDataType argumentDataType
-            && isSubtypeOfParent(argumentDataType, expectedParentType)
-            && (argumentDataType.typeParameters().isEmpty()
-                || areTypeParameterDescriptorsCompatible(argumentDataType.typeParameters(), expectedParentType.typeParameters()))) {
-            return new CoercedArgument(argument, 1);
+            && isSubtypeOfParent(argumentDataType, expectedParentType)) {
+            var specializedParent = argumentDataType.extendedTypes().stream()
+                    .map(this::parseLinkedTypeDescriptor)
+                    .flatMap(Optional::stream)
+                    .filter(GenericDataType.class::isInstance)
+                    .map(GenericDataType.class::cast)
+                    .filter(parentType -> sameRawTypeName(parentType.name(), expectedParentType.name()))
+                    .findFirst()
+                    .or(() -> specializeParentFromSubtypeFields(argumentDataType, expectedParentType))
+                    .or(() -> instantiateExtendedParentFromSubtypeFields(argumentDataType, expectedParentType));
+            if (specializedParent.isPresent() && isTypeCompatible(specializedParent.orElseThrow(), expectedParentType)) {
+                return new CoercedArgument(argument, 1);
+            }
+            if (argumentDataType.typeParameters().isEmpty()
+                || areTypeParameterDescriptorsCompatible(argumentDataType.typeParameters(), expectedParentType.typeParameters())) {
+                return new CoercedArgument(argument, 1);
+            }
         }
         return null;
     }
@@ -1529,18 +1647,33 @@ public class CapybaraExpressionCompiler {
             return areFunctionTypesCompatible(actualFunction, expectedFunction);
         }
         if (expected instanceof GenericDataType expectedData && actual instanceof GenericDataType actualData) {
-            if (!sameRawTypeName(expectedData.name(), actualData.name())) {
-                return false;
+            if (sameRawTypeName(expectedData.name(), actualData.name())) {
+                var expectedTypeParameters = switch (expectedData) {
+                    case CompiledDataType linkedDataType -> linkedDataType.typeParameters();
+                    case CompiledDataParentType linkedDataParentType -> linkedDataParentType.typeParameters();
+                };
+                var actualTypeParameters = switch (actualData) {
+                    case CompiledDataType linkedDataType -> linkedDataType.typeParameters();
+                    case CompiledDataParentType linkedDataParentType -> linkedDataParentType.typeParameters();
+                };
+                return areTypeParameterDescriptorsCompatible(actualTypeParameters, expectedTypeParameters);
             }
-            var expectedTypeParameters = switch (expectedData) {
-                case CompiledDataType linkedDataType -> linkedDataType.typeParameters();
-                case CompiledDataParentType linkedDataParentType -> linkedDataParentType.typeParameters();
-            };
-            var actualTypeParameters = switch (actualData) {
-                case CompiledDataType linkedDataType -> linkedDataType.typeParameters();
-                case CompiledDataParentType linkedDataParentType -> linkedDataParentType.typeParameters();
-            };
-            return areTypeParameterDescriptorsCompatible(actualTypeParameters, expectedTypeParameters);
+            if (expectedData instanceof CompiledDataParentType expectedParent && actualData instanceof CompiledDataType actualSubtype) {
+                if (!isSubtypeOfParent(actualSubtype, expectedParent)) {
+                    return false;
+                }
+                var specializedParent = actualSubtype.extendedTypes().stream()
+                        .map(this::parseLinkedTypeDescriptor)
+                        .flatMap(Optional::stream)
+                        .filter(GenericDataType.class::isInstance)
+                        .map(GenericDataType.class::cast)
+                        .filter(parentType -> sameRawTypeName(parentType.name(), expectedParent.name()))
+                        .findFirst()
+                        .or(() -> specializeParentFromSubtypeFields(actualSubtype, expectedParent))
+                        .or(() -> instantiateExtendedParentFromSubtypeFields(actualSubtype, expectedParent));
+                return specializedParent.map(parent -> isTypeCompatible(parent, expectedParent)).orElse(false);
+            }
+            return false;
         }
         return false;
     }
@@ -1648,7 +1781,9 @@ public class CapybaraExpressionCompiler {
         var withoutGenerics = stripGenericSuffix(typeName);
         return withoutGenerics
                 .replace("/capy/lang/Option", "/cap/lang/Option")
-                .replace(".capy.lang.Option", ".cap.lang.Option");
+                .replace(".capy.lang.Option", ".cap.lang.Option")
+                .replace("/capy/lang/Result", "/cap/lang/Result")
+                .replace(".capy.lang.Result", ".cap.lang.Result");
     }
 
     private static String stripGenericSuffix(String typeName) {
@@ -2048,6 +2183,38 @@ public class CapybaraExpressionCompiler {
         if (!(lambdaExpression.expression().type() instanceof GenericDataType lambdaReturnType)) {
             return resolved;
         }
+        if (signatureReturnType instanceof CompiledDataParentType signatureParentType
+            && lambdaReturnType instanceof CompiledDataType lambdaReturnData) {
+            if (signatureParentType.typeParameters().size() == 1
+                && lambdaExpression.expression() instanceof CompiledNewData lambdaNewData) {
+                var valueAssignment = lambdaNewData.assignments().stream()
+                        .filter(assignment -> "value".equals(assignment.name()))
+                        .findFirst();
+                if (valueAssignment.isPresent()) {
+                    var specializedParent = substituteTypeParameters(
+                            signatureParentType,
+                            java.util.Map.of(signatureParentType.typeParameters().getFirst(), valueAssignment.orElseThrow().value().type())
+                    );
+                    if (!specializedParent.equals(signatureParentType)) {
+                        return specializedParent;
+                    }
+                }
+            }
+            var specializedParent = specializeParentFromSubtypeFields(lambdaReturnData, signatureParentType)
+                    .or(() -> instantiateExtendedParentFromSubtypeFields(lambdaReturnData, signatureParentType));
+            if (specializedParent.isPresent()) {
+                return specializedParent.orElseThrow();
+            }
+            if (isSubtypeOfParent(lambdaReturnData, signatureParentType)
+                && isResolvedTypeForInference(lambdaReturnType)) {
+                var substitutions = new java.util.LinkedHashMap<String, CompiledType>();
+                collectTypeSubstitutions(signatureReturnType, lambdaReturnType, substitutions);
+                var specialized = substituteTypeParameters(signatureReturnType, substitutions);
+                if (!specialized.equals(signatureReturnType)) {
+                    return specialized;
+                }
+            }
+        }
         if (!sameRawTypeName(signatureReturnType.name(), lambdaReturnType.name())
             || !isResolvedTypeForInference(lambdaReturnType)) {
             return resolved;
@@ -2144,7 +2311,8 @@ public class CapybaraExpressionCompiler {
         }
         return linkExpression(expression.left(), scope)
                 .flatMap(left -> {
-                    if (isOptionType(left.type())) {
+                    var specializedOptionType = resolveSpecializedOptionType(left.type()).orElse(null);
+                    if (specializedOptionType != null) {
                         return linkOptionPipeExpression(expression, scope, left, optionElementType(left));
                     }
                     var elementType = switch (left.type()) {
@@ -2296,6 +2464,7 @@ public class CapybaraExpressionCompiler {
                         .map(linked -> (CompiledExpression) new CompiledLetExpression(
                                 linked.argumentName(),
                                 left,
+                                Optional.empty(),
                                 linked.expression()
                         ));
             }
@@ -2317,6 +2486,7 @@ public class CapybaraExpressionCompiler {
                 .map(mapper -> (CompiledExpression) new CompiledLetExpression(
                         lambdaArgumentName,
                         left,
+                        Optional.empty(),
                         mapper
                 ));
     }
@@ -2631,8 +2801,9 @@ public class CapybaraExpressionCompiler {
                     if (left.type() instanceof CompiledDict dictType) {
                         return linkDictPipeFilterOutExpression(expression, scope, left, dictType);
                     }
-                    if (isOptionType(left.type())) {
-                        return linkOptionPipeFilterOutExpression(expression, scope, left, optionElementType(left), left.type());
+                    var specializedOptionType = resolveSpecializedOptionType(left.type()).orElse(null);
+                    if (specializedOptionType != null) {
+                        return linkOptionPipeFilterOutExpression(expression, scope, left, optionElementType(left), specializedOptionType);
                     }
                     var elementType = switch (left.type()) {
                         case CompiledList linkedList -> linkedList.elementType();
@@ -2643,14 +2814,14 @@ public class CapybaraExpressionCompiler {
                     };
                     if (elementType == null) {
                         if (left.type() instanceof GenericDataType) {
-                            var optionType = findOptionType();
+                            var optionType = resolveSpecializedOptionType(left.type()).orElseGet(() -> optionTypeFor(left.type()));
                             if (optionType == null) {
                                 return withPosition(
                                         Result.error("`|-` on data/type requires `Option` type to be available"),
                                         expression.left().position()
                                 );
                             }
-                            return linkOptionPipeFilterOutExpression(expression, scope, left, left.type(), optionType);
+                            return linkOptionPipeFilterOutExpression(expression, scope, left, optionElementType(left), optionType);
                         }
                         return withPosition(
                                 Result.error("Left side of `|-` has to be a collection or data/type, was `" + left.type() + "`"),
@@ -3375,19 +3546,50 @@ public class CapybaraExpressionCompiler {
                || normalized.endsWith("/Option");
     }
 
+    private Optional<CompiledDataParentType> resolveSpecializedOptionType(CompiledType type) {
+        if (type instanceof CompiledDataParentType optionParent && isOptionType(optionParent)) {
+            return Optional.of(optionParent);
+        }
+        if (!(type instanceof CompiledDataType optionSubtype)) {
+            return Optional.empty();
+        }
+        var optionType = findOptionType();
+        if (optionType == null || !isSubtypeOfParent(optionSubtype, optionType)) {
+            return Optional.empty();
+        }
+        return optionSubtype.extendedTypes().stream()
+                .map(this::parseLinkedTypeDescriptor)
+                .flatMap(Optional::stream)
+                .filter(CompiledDataParentType.class::isInstance)
+                .map(CompiledDataParentType.class::cast)
+                .filter(parentType -> sameRawTypeName(parentType.name(), optionType.name()))
+                .findFirst()
+                .or(() -> specializeParentFromSubtypeFields(optionSubtype, optionType)
+                        .filter(CompiledDataParentType.class::isInstance)
+                        .map(CompiledDataParentType.class::cast))
+                .or(() -> instantiateExtendedParentFromSubtypeFields(optionSubtype, optionType)
+                        .filter(CompiledDataParentType.class::isInstance)
+                        .map(CompiledDataParentType.class::cast));
+    }
+
     private CompiledType optionElementType(CompiledExpression expression) {
-        if (expression instanceof CompiledPipeExpression pipeExpression && isOptionType(pipeExpression.type())) {
+        if (expression instanceof CompiledPipeExpression pipeExpression
+            && resolveSpecializedOptionType(pipeExpression.type()).isPresent()) {
             return pipeExpression.mapper().type();
         }
-        if (expression instanceof CompiledPipeFilterOutExpression filterOutExpression && isOptionType(filterOutExpression.type())) {
+        if (expression instanceof CompiledPipeFilterOutExpression filterOutExpression
+            && resolveSpecializedOptionType(filterOutExpression.type()).isPresent()) {
             return optionElementType(filterOutExpression.source());
         }
-        if (isOptionType(expression.type())) {
+        var optionType = resolveSpecializedOptionType(expression.type()).orElse(null);
+        if (optionType != null && !optionType.typeParameters().isEmpty()) {
+            return parseLinkedTypeDescriptor(optionType.typeParameters().getFirst()).orElse(ANY);
+        }
+        if (optionType != null) {
             return ANY;
         }
         return expression.type();
     }
-
     private boolean isOptionTypeKey(String key) {
         var normalized = normalizeTypeName(key);
         return normalized.endsWith("/capy/lang/Option.Option")
@@ -4108,7 +4310,9 @@ public class CapybaraExpressionCompiler {
                     linkedDataType.typeParameters().stream()
                             .map(typeDescriptor -> substituteTypeDescriptor(typeDescriptor, substitutions))
                             .toList(),
-                    linkedDataType.extendedTypes(),
+                    linkedDataType.extendedTypes().stream()
+                            .map(typeDescriptor -> substituteTypeDescriptor(typeDescriptor, substitutions))
+                            .toList(),
                     linkedDataType.singleton()
             );
             case CompiledDataParentType linkedDataParentType -> new CompiledDataParentType(
@@ -4670,7 +4874,7 @@ public class CapybaraExpressionCompiler {
     }
 
     private CompiledType inferDataTypeFromAssignments(CompiledType type, List<CompiledNewData.FieldAssignment> assignments) {
-        if (!(type instanceof GenericDataType genericDataType) || !hasGenericTypeParameters(type)) {
+        if (!(type instanceof GenericDataType genericDataType) || !containsGenericTypeParameter(type)) {
             return type;
         }
         var fieldsByName = genericDataType.fields().stream()
@@ -4736,15 +4940,27 @@ public class CapybaraExpressionCompiler {
                     isConcreteResolvedType(linkedFunctionType.argumentType())
                     && isConcreteResolvedType(linkedFunctionType.returnType());
             case CompiledDataType linkedDataType -> {
-                if (linkedDataType.singleton() && linkedDataType.typeParameters().isEmpty()) {
-                    yield true;
-                }
-                if (linkedDataType.typeParameters().isEmpty()) {
+                if (containsGenericTypeParameter(linkedDataType)) {
                     yield false;
                 }
-                yield linkedDataType.typeParameters().stream().allMatch(this::isSingletonDataDescriptor);
+                if (linkedDataType.typeParameters().isEmpty()) {
+                    yield true;
+                }
+                yield linkedDataType.typeParameters().stream()
+                        .map(this::parseLinkedTypeDescriptor)
+                        .allMatch(maybeType -> maybeType.map(this::isConcreteResolvedType).orElse(false));
             }
-            case CompiledDataParentType ignored -> false;
+            case CompiledDataParentType linkedDataParentType -> {
+                if (containsGenericTypeParameter(linkedDataParentType)) {
+                    yield false;
+                }
+                if (linkedDataParentType.typeParameters().isEmpty()) {
+                    yield true;
+                }
+                yield linkedDataParentType.typeParameters().stream()
+                        .map(this::parseLinkedTypeDescriptor)
+                        .allMatch(maybeType -> maybeType.map(this::isConcreteResolvedType).orElse(false));
+            }
         };
     }
 
@@ -5070,17 +5286,263 @@ public class CapybaraExpressionCompiler {
                                             .map(rest -> new CompiledLetExpression(
                                                     expression.name(),
                                                     typedValue,
+                                                    Optional.of(linkedDeclaredType),
                                                     rest
                                             ));
                                 }))
-                        .orElseGet(() ->
-                                linkExpression(expression.rest(), scope.add(expression.name(), value.type()))
-                                        .map(rest ->
-                                                new CompiledLetExpression(
-                                                        expression.name(),
-                                                        value,
-                                                        rest
-                                                ))));
+                        .orElseGet(() -> {
+                            var inferredDeclarationType = inferImplicitLetDeclarationType(
+                                    expression.name(),
+                                    value.type(),
+                                    expression.rest(),
+                                    scope
+                            );
+                            var letType = inferredDeclarationType.orElse(value.type());
+                            return linkExpression(expression.rest(), scope.add(expression.name(), letType))
+                                    .map(rest ->
+                                            new CompiledLetExpression(
+                                                    expression.name(),
+                                                    value,
+                                                    inferredDeclarationType,
+                                                    rest
+                                            ));
+                        }));
+    }
+
+    private Optional<CompiledType> inferImplicitLetDeclarationType(
+            String variableName,
+            CompiledType type,
+            Expression rest,
+            Scope scope
+    ) {
+        if (!(type instanceof CompiledDataType dataType) || !dataType.typeParameters().isEmpty()) {
+            return Optional.empty();
+        }
+        if (containsGenericTypeParameter(dataType)) {
+            return Optional.empty();
+        }
+        var genericParent = dataTypes.values().stream()
+                .filter(CompiledDataParentType.class::isInstance)
+                .map(CompiledDataParentType.class::cast)
+                .filter(parentType -> parentType.subTypes().stream()
+                        .anyMatch(subType -> sameRawTypeName(subType.name(), dataType.name())))
+                .filter(parentType -> !parentType.typeParameters().isEmpty())
+                .findFirst();
+        if (genericParent.isEmpty()) {
+            return Optional.empty();
+        }
+        var inferred = inferGenericBindingsFromRest(variableName, genericParent.orElseThrow(), rest, scope);
+        if (inferred.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(substituteTypeParameters(genericParent.orElseThrow(), inferred));
+    }
+
+    private Map<String, CompiledType> inferGenericBindingsFromRest(
+            String variableName,
+            CompiledDataParentType parentType,
+            Expression expression,
+            Scope scope
+    ) {
+        var bindings = new LinkedHashMap<String, CompiledType>();
+        collectGenericBindingsFromExpression(variableName, parentType, expression, scope, bindings);
+        return bindings;
+    }
+
+    private void collectGenericBindingsFromExpression(
+            String variableName,
+            CompiledDataParentType parentType,
+            Expression expression,
+            Scope scope,
+            Map<String, CompiledType> bindings
+    ) {
+        switch (expression) {
+            case FunctionCall functionCall -> {
+                collectBindingsFromFunctionCall(variableName, parentType, functionCall, scope, bindings);
+                functionCall.arguments().forEach(argument ->
+                        collectGenericBindingsFromExpression(variableName, parentType, argument, scope, bindings));
+            }
+            case LetExpression letExpression -> {
+                collectGenericBindingsFromExpression(variableName, parentType, letExpression.value(), scope, bindings);
+                var nestedScope = scope;
+                var linkedValue = linkExpression(letExpression.value(), scope);
+                if (linkedValue instanceof Result.Success<CompiledExpression> success) {
+                    nestedScope = nestedScope.add(letExpression.name(), success.value().type());
+                }
+                collectGenericBindingsFromExpression(variableName, parentType, letExpression.rest(), nestedScope, bindings);
+            }
+            case IfExpression ifExpression -> {
+                collectGenericBindingsFromExpression(variableName, parentType, ifExpression.condition(), scope, bindings);
+                collectGenericBindingsFromExpression(variableName, parentType, ifExpression.thenBranch(), scope, bindings);
+                collectGenericBindingsFromExpression(variableName, parentType, ifExpression.elseBranch(), scope, bindings);
+            }
+            case InfixExpression infixExpression -> {
+                collectGenericBindingsFromExpression(variableName, parentType, infixExpression.left(), scope, bindings);
+                collectGenericBindingsFromExpression(variableName, parentType, infixExpression.right(), scope, bindings);
+            }
+            case MatchExpression matchExpression -> {
+                collectGenericBindingsFromExpression(variableName, parentType, matchExpression.matchWith(), scope, bindings);
+                matchExpression.cases().forEach(matchCase ->
+                        collectGenericBindingsFromExpression(variableName, parentType, matchCase.expression(), scope, bindings));
+            }
+            case FunctionInvoke functionInvoke -> {
+                collectGenericBindingsFromExpression(variableName, parentType, functionInvoke.function(), scope, bindings);
+                functionInvoke.arguments().forEach(argument ->
+                        collectGenericBindingsFromExpression(variableName, parentType, argument, scope, bindings));
+            }
+            case FieldAccess fieldAccess ->
+                    collectGenericBindingsFromExpression(variableName, parentType, fieldAccess.source(), scope, bindings);
+            case TupleExpression tupleExpression ->
+                    tupleExpression.values().forEach(value ->
+                            collectGenericBindingsFromExpression(variableName, parentType, value, scope, bindings));
+            case NewListExpression newListExpression ->
+                    newListExpression.values().forEach(value ->
+                            collectGenericBindingsFromExpression(variableName, parentType, value, scope, bindings));
+            case NewSetExpression newSetExpression ->
+                    newSetExpression.values().forEach(value ->
+                            collectGenericBindingsFromExpression(variableName, parentType, value, scope, bindings));
+            case NewDictExpression newDictExpression -> {
+                newDictExpression.entries().forEach(entry -> {
+                    collectGenericBindingsFromExpression(variableName, parentType, entry.key(), scope, bindings);
+                    collectGenericBindingsFromExpression(variableName, parentType, entry.value(), scope, bindings);
+                });
+            }
+            case NewData newData -> newData.assignments().forEach(assignment ->
+                    collectGenericBindingsFromExpression(variableName, parentType, assignment.value(), scope, bindings));
+            case WithExpression withExpression -> {
+                collectGenericBindingsFromExpression(variableName, parentType, withExpression.source(), scope, bindings);
+                withExpression.assignments().forEach(assignment ->
+                        collectGenericBindingsFromExpression(variableName, parentType, assignment.value(), scope, bindings));
+            }
+            case SliceExpression sliceExpression -> {
+                collectGenericBindingsFromExpression(variableName, parentType, sliceExpression.source(), scope, bindings);
+                sliceExpression.start().ifPresent(value ->
+                        collectGenericBindingsFromExpression(variableName, parentType, value, scope, bindings));
+                sliceExpression.end().ifPresent(value ->
+                        collectGenericBindingsFromExpression(variableName, parentType, value, scope, bindings));
+            }
+            case IndexExpression indexExpression -> {
+                collectGenericBindingsFromExpression(variableName, parentType, indexExpression.source(), scope, bindings);
+                collectGenericBindingsFromExpression(variableName, parentType, indexExpression.index(), scope, bindings);
+            }
+            case LambdaExpression lambdaExpression ->
+                    collectGenericBindingsFromExpression(variableName, parentType, lambdaExpression.expression(), scope, bindings);
+            default -> {
+            }
+        }
+    }
+
+    private void collectBindingsFromFunctionCall(
+            String variableName,
+            CompiledDataParentType parentType,
+            FunctionCall functionCall,
+            Scope scope,
+            Map<String, CompiledType> bindings
+    ) {
+        if (functionCall.arguments().isEmpty() || !containsValueReference(functionCall.arguments().get(0), variableName)) {
+            return;
+        }
+        functionSignatures.stream()
+                .filter(signature -> matchesInferenceSignature(functionCall, signature, parentType))
+                .findFirst()
+                .ifPresent(signature -> {
+                    for (var i = 1; i < functionCall.arguments().size(); i++) {
+                        if (containsValueReference(functionCall.arguments().get(i), variableName)) {
+                            continue;
+                        }
+                        var linkedArgument = linkExpression(functionCall.arguments().get(i), scope);
+                        if (linkedArgument instanceof Result.Success<CompiledExpression> success) {
+                            collectTypeBindings(signature.parameterTypes().get(i), success.value().type(), bindings);
+                        }
+                    }
+                });
+    }
+
+    private boolean matchesInferenceSignature(
+            FunctionCall functionCall,
+            FunctionSignature signature,
+            CompiledDataParentType parentType
+    ) {
+        if (signature.parameterTypes().size() != functionCall.arguments().size()) {
+            return false;
+        }
+        if (!(signature.parameterTypes().getFirst() instanceof CompiledDataParentType signatureParent)
+            || !sameRawTypeName(signatureParent.name(), parentType.name())) {
+            return false;
+        }
+        if (signature.name().equals(functionCall.name())) {
+            return true;
+        }
+        if (!functionCall.name().startsWith(METHOD_INVOKE_PREFIX)) {
+            return false;
+        }
+        var methodName = functionCall.name().substring(METHOD_INVOKE_PREFIX.length());
+        return signature.name().startsWith(METHOD_DECL_PREFIX)
+               && signature.name().endsWith("__" + methodName);
+    }
+
+    private void collectTypeBindings(
+            CompiledType expected,
+            CompiledType actual,
+            Map<String, CompiledType> bindings
+    ) {
+        switch (expected) {
+            case CompiledGenericTypeParameter genericTypeParameter -> bindings.putIfAbsent(genericTypeParameter.name(), actual);
+            case CompiledList expectedList when actual instanceof CompiledList actualList ->
+                    collectTypeBindings(expectedList.elementType(), actualList.elementType(), bindings);
+            case CompiledSet expectedSet when actual instanceof CompiledSet actualSet ->
+                    collectTypeBindings(expectedSet.elementType(), actualSet.elementType(), bindings);
+            case CompiledDict expectedDict when actual instanceof CompiledDict actualDict ->
+                    collectTypeBindings(expectedDict.valueType(), actualDict.valueType(), bindings);
+            case CompiledTupleType expectedTuple when actual instanceof CompiledTupleType actualTuple -> {
+                var max = Math.min(expectedTuple.elementTypes().size(), actualTuple.elementTypes().size());
+                for (var i = 0; i < max; i++) {
+                    collectTypeBindings(expectedTuple.elementTypes().get(i), actualTuple.elementTypes().get(i), bindings);
+                }
+            }
+            case CompiledFunctionType expectedFunction when actual instanceof CompiledFunctionType actualFunction -> {
+                collectTypeBindings(expectedFunction.argumentType(), actualFunction.argumentType(), bindings);
+                collectTypeBindings(expectedFunction.returnType(), actualFunction.returnType(), bindings);
+            }
+            case CompiledDataParentType expectedParent -> collectParentTypeBindings(expectedParent, actual, bindings);
+            case CompiledDataType expectedData when actual instanceof CompiledDataType actualData -> {
+                var max = Math.min(expectedData.fields().size(), actualData.fields().size());
+                for (var i = 0; i < max; i++) {
+                    collectTypeBindings(expectedData.fields().get(i).type(), actualData.fields().get(i).type(), bindings);
+                }
+            }
+            default -> {
+            }
+        }
+    }
+
+    private void collectParentTypeBindings(
+            CompiledDataParentType expectedParent,
+            CompiledType actual,
+            Map<String, CompiledType> bindings
+    ) {
+        if (actual instanceof CompiledDataParentType actualParent && sameRawTypeName(expectedParent.name(), actualParent.name())) {
+            var max = Math.min(expectedParent.typeParameters().size(), actualParent.typeParameters().size());
+            for (var i = 0; i < max; i++) {
+                var expectedType = parseLinkedTypeDescriptor(expectedParent.typeParameters().get(i));
+                var actualType = parseLinkedTypeDescriptor(actualParent.typeParameters().get(i));
+                if (expectedType.isPresent() && actualType.isPresent()) {
+                    collectTypeBindings(expectedType.orElseThrow(), actualType.orElseThrow(), bindings);
+                }
+            }
+            return;
+        }
+        if (!(actual instanceof CompiledDataType actualData) || !isSubtypeOfParent(actualData, expectedParent)) {
+            return;
+        }
+        var max = Math.min(expectedParent.typeParameters().size(), actualData.typeParameters().size());
+        for (var i = 0; i < max; i++) {
+            var expectedType = parseLinkedTypeDescriptor(expectedParent.typeParameters().get(i));
+            var actualType = parseLinkedTypeDescriptor(actualData.typeParameters().get(i));
+            if (expectedType.isPresent() && actualType.isPresent()) {
+                collectTypeBindings(expectedType.orElseThrow(), actualType.orElseThrow(), bindings);
+            }
+        }
     }
 
     private Result<CompiledType> linkTypeInScope(Type type, Scope scope) {
@@ -5202,10 +5664,4 @@ public class CapybaraExpressionCompiler {
     private record ResolvedModule(String javaModuleName, List<FunctionSignature> signatures) {
     }
 }
-
-
-
-
-
-
 

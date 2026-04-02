@@ -1239,14 +1239,16 @@ public class JavaExpressionEvaluator {
             }
             return evaluateExpression(let.rest(), tupleScope);
         }
-        var scopeExpression = shouldUseTypedLetDeclaration(let.value())
-                ? valueExSc.scope().declareTypedValue(let.name(), javaCastType(let.value().type()), valueExSc.expression(), let.rest())
+        var letDeclarationType = let.declaredType().orElse(let.value().type());
+        var scopeExpression = shouldUseTypedLetDeclaration(let.value(), let.declaredType().isPresent())
+                ? valueExSc.scope().declareTypedValue(let.name(), javaCastType(letDeclarationType), valueExSc.expression(), let.rest())
                 : valueExSc.scope().declareValue(let.name(), valueExSc.expression(), let.rest());
         return evaluateExpression(scopeExpression.expression(), scopeExpression.scope());
     }
 
-    private static boolean shouldUseTypedLetDeclaration(CompiledExpression expression) {
-        return (expression instanceof CompiledNewList linkedNewList && linkedNewList.values().isEmpty())
+    private static boolean shouldUseTypedLetDeclaration(CompiledExpression expression, boolean hasDeclaredType) {
+        return hasDeclaredType
+               || (expression instanceof CompiledNewList linkedNewList && linkedNewList.values().isEmpty())
                || (expression instanceof CompiledNewSet linkedNewSet && linkedNewSet.values().isEmpty())
                || (expression instanceof CompiledNewDict linkedNewDict && linkedNewDict.entries().isEmpty())
                || expression.type() instanceof dev.capylang.compiler.CompiledFunctionType;
@@ -1714,6 +1716,10 @@ public class JavaExpressionEvaluator {
                     var javaArgs = splitTopLevelDescriptors(argsDescriptor).stream()
                             .map(JavaExpressionEvaluator::javaCastTypeFromDescriptor)
                             .toList();
+                    if (isOptionSomeTypeName(rawType) || isOptionNoneTypeName(rawType)) {
+                        var optionalElementType = javaArgs.isEmpty() ? "java.lang.Object" : javaArgs.getFirst();
+                        yield "java.util.Optional<" + optionalElementType + ">";
+                    }
                     var javaRaw = normalizeJavaTypeReference(rawType);
                     if (rawArgs.stream().anyMatch(arg -> arg.matches("[A-Z]"))) {
                         yield javaRaw;

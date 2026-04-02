@@ -129,12 +129,14 @@ public class ValueNameRewriter {
             return new CompiledLetExpression(
                     uniqueName,
                     expression.value(),
+                    expression.declaredType(),
                     rewriteValueInExpression(name, uniqueName, expression.rest()));
         }
 
         return new CompiledLetExpression(
                 expression.name(),
                 expression.value(),
+                expression.declaredType(),
                 rewriteValueInExpression(name, uniqueName, expression.rest()));
     }
 

@@ -26,6 +26,11 @@ class EmptyLiteralInferenceTest {
     }
 
     @Test
+    void typedEmptyDictKeepsConcreteValueTypeAfterAppend() {
+        assertThat(EmptyLiteralInference.typedEmptyDictThenAppendJsonBox("capy")).isEqualTo(1);
+    }
+
+    @Test
     void toSeqUsingEndLiteralCompilesAndBuildsSequence() {
         var seq = EmptyLiteralInference.toSeqUsingEndLiteral(List.of(4, 5));
         assertThat(EmptyLiteralInference.seqEndHeadOrDefault(seq, -1)).isEqualTo(5);

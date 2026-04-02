@@ -53,4 +53,23 @@ class ResultInfixGenericTest {
         assertThat(((ResultInfixGeneric.Fail) result).message()).isEqualTo("boom");
     }
 
+    @Test
+    void nestedIdentityKeepsNestedGenericSubtypeCompatibility() {
+        var input = ResultInfixGeneric.wrapNestedOk(5);
+        var result = ResultInfixGeneric.nestedIdentity(input);
+
+        assertThat(result).isInstanceOf(ResultInfixGeneric.Ok.class);
+        assertThat(((ResultInfixGeneric.Ok<?>) result).value()).isInstanceOf(ResultInfixGeneric.Ok.class);
+        assertThat(((ResultInfixGeneric.Ok<String>) ((ResultInfixGeneric.Ok<?>) result).value()).value()).isEqualTo("wrapped_5");
+    }
+
+    @Test
+    void flattenNestedResultAcceptsNestedFailSubtype() {
+        var input = ResultInfixGeneric.wrapNestedFail(5);
+        var result = ResultInfixGeneric.flattenNestedResult(input);
+
+        assertThat(result).isInstanceOf(ResultInfixGeneric.Fail.class);
+        assertThat(((ResultInfixGeneric.Fail) result).message()).isEqualTo("wrapped_bad:5");
+    }
+
 }

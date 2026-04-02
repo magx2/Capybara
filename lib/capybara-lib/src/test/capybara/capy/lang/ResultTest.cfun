@@ -106,4 +106,3 @@ fun should_reduce_error_result(): Assert =
     let reduced: string = result |> (x=>x+"", msg=>msg)
     assert_that(reduced).is_equal_to("Unknown")
 
-
