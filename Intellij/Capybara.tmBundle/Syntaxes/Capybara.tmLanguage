@@ -12,6 +12,8 @@
   </array>
   <key>patterns</key>
   <array>
+    <dict><key>name</key><string>markup.quote.todo.comment.line.capybara</string><key>match</key><string>//[/]?\s*(?i:todo)\b.*$</string></dict>
+    <dict><key>name</key><string>markup.changed.fixme.comment.line.capybara</string><key>match</key><string>//[/]?\s*(?i:fixme)\b.*$</string></dict>
     <dict><key>name</key><string>comment.block.capybara</string><key>begin</key><string>/\*</string><key>end</key><string>\*/</string></dict>
     <dict><key>name</key><string>comment.block.documentation.capybara</string><key>match</key><string>///.*$</string></dict>
     <dict><key>name</key><string>comment.line.double-slash.capybara</string><key>match</key><string>//.*$</string></dict>
@@ -157,6 +159,8 @@
       <key>end</key><string>\]</string>
       <key>patterns</key>
       <array>
+        <dict><key>name</key><string>markup.quote.todo.comment.line.capybara</string><key>match</key><string>//[/]?\s*(?i:todo)\b.*$</string></dict>
+        <dict><key>name</key><string>markup.changed.fixme.comment.line.capybara</string><key>match</key><string>//[/]?\s*(?i:fixme)\b.*$</string></dict>
         <dict><key>name</key><string>comment.block.capybara</string><key>begin</key><string>/\*</string><key>end</key><string>\*/</string></dict>
         <dict><key>name</key><string>comment.block.documentation.capybara</string><key>match</key><string>///.*$</string></dict>
         <dict><key>name</key><string>comment.line.double-slash.capybara</string><key>match</key><string>//.*$</string></dict>

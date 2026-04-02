@@ -14,6 +14,14 @@
     "comments": {
       "patterns": [
         {
+          "name": "markup.quote.todo.comment.line.capybara",
+          "match": "//[/]?\\s*(?i:todo)\\b.*$"
+        },
+        {
+          "name": "markup.changed.fixme.comment.line.capybara",
+          "match": "//[/]?\\s*(?i:fixme)\\b.*$"
+        },
+        {
           "name": "comment.block.capybara",
           "begin": "/\\*",
           "end": "\\*/"
@@ -286,11 +294,19 @@
           "name": "meta.index.capybara",
           "begin": "\\[",
           "end": "\\]",
-          "patterns": [
-            {
-              "name": "comment.block.capybara",
-              "begin": "/\\*",
-              "end": "\\*/"
+        "patterns": [
+          {
+            "name": "markup.quote.todo.comment.line.capybara",
+            "match": "//[/]?\\s*(?i:todo)\\b.*$"
+          },
+          {
+            "name": "markup.changed.fixme.comment.line.capybara",
+            "match": "//[/]?\\s*(?i:fixme)\\b.*$"
+          },
+          {
+            "name": "comment.block.capybara",
+            "begin": "/\\*",
+            "end": "\\*/"
             },
             {
               "name": "comment.block.documentation.capybara",
