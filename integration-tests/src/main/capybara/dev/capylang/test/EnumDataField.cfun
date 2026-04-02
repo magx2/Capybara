@@ -9,5 +9,5 @@ fun root_name(path: Path): string = path.root.name
 
 fun is_absolute(path: Path): bool =
     match path.root with
-    | ABSOLUTE -> true
-    | _ -> false
+    case ABSOLUTE -> true
+    case _ -> false

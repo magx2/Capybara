@@ -27,8 +27,8 @@ fun parent_with_chain(letter: Letter): Letter =
 
 fun parent_with_preserves_subtype(letter: Letter): string =
     match letter.with(x: letter.x + 1) with
-    | A { x, a } -> "A:" + x + ":" + a
-    | B { x, b } -> "B:" + x + ":" + b
-    | C { x, c } -> "C:" + x + ":" + c
+    case A { x, a } -> "A:" + x + ":" + a
+    case B { x, b } -> "B:" + x + ":" + b
+    case C { x, c } -> "C:" + x + ":" + c
 
 

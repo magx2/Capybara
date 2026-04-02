@@ -3858,7 +3858,7 @@ public class CapybaraExpressionCompiler {
         var requiredConstructors = requiredConstructorsForMatch(matchType);
         if (requiredConstructors.isEmpty()) {
             return withPosition(
-                    Result.error("`match` is not exhaustive. Use wildcard `| _ -> ...`."),
+                    Result.error("`match` is not exhaustive. Use wildcard `case _ -> ...`."),
                     matchExpression.position()
             );
         }
@@ -3873,7 +3873,7 @@ public class CapybaraExpressionCompiler {
                 .map(name -> "`" + name + "`")
                 .collect(java.util.stream.Collectors.joining(", "));
         return withPosition(
-                Result.error("`match` is not exhaustive. Use wildcard `| _ -> ...` or add missing branches:" + missingText + "."),
+                Result.error("`match` is not exhaustive. Use wildcard `case _ -> ...` or add missing branches:" + missingText + "."),
                 matchExpression.position()
         );
     }
@@ -5664,4 +5664,3 @@ public class CapybaraExpressionCompiler {
     private record ResolvedModule(String javaModuleName, List<FunctionSignature> signatures) {
     }
 }
-

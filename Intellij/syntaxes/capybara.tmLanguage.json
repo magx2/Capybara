@@ -122,7 +122,7 @@
       "patterns": [
         {
           "name": "keyword.control.capybara",
-          "match": "\\b(fun|type|enum|data|single|const|local|match|with|when|if|then|else|let|from|import|except)\\b"
+          "match": "\\b(fun|type|enum|data|single|const|local|match|with|case|when|if|then|else|let|from|import|except)\\b"
         },
         {
           "name": "keyword.operator.word.capybara",
@@ -228,15 +228,15 @@
         },
         {
           "name": "meta.match.typed-pattern.capybara",
-          "match": "(\\|)\\s*(_*[A-Z][A-Za-z0-9_]*)\\s+([A-Za-z_][A-Za-z0-9_]*|_)\\s*(=>)"
+          "match": "(\\bcase\\b)\\s*(_*[A-Z][A-Za-z0-9_]*)\\s+([A-Za-z_][A-Za-z0-9_]*|_)\\s*(=>)"
         },
         {
           "name": "meta.match.wildcard-binding.capybara",
-          "match": "(\\|)\\s*(_)\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*(=>)"
+          "match": "(\\bcase\\b)\\s*(_)\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*(=>)"
         },
         {
           "name": "meta.match.constructor-pattern.capybara",
-          "match": "(\\|)\\s*(_*[A-Z][A-Za-z0-9_]*)\\s*(\\{)\\s*([A-Za-z_][A-Za-z0-9_]*)"
+          "match": "(\\bcase\\b)\\s*(_*[A-Z][A-Za-z0-9_]*)\\s*(\\{)\\s*([A-Za-z_][A-Za-z0-9_]*)"
         },
         {
           "name": "meta.pipe.lambda.grouped.single.capybara",

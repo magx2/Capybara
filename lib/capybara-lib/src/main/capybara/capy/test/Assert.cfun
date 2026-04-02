@@ -162,8 +162,8 @@ fun OptionAssert[T].is_equal_to(other: /capy/lang/Option[T]): OptionAssert[T] =
 fun OptionAssert[T].contains(other: T): OptionAssert[T] =
     let assertion = Assertion {
         result: match this.value with
-            | Some s -> s == other
-            | _ -> false,
+            case Some s -> s == other
+            case _ -> false,
         message: "Expected option:\n" + this.value + "\nto contains:\n" + other,
         type: 'OptionAssert[T].contains'
     }
@@ -175,8 +175,8 @@ fun OptionAssert[T].contains(other: T): OptionAssert[T] =
 fun OptionAssert[T].is_empty(): OptionAssert[T] =
     let assertion = Assertion {
         result: match this.value with
-            | None -> true
-            | _ -> false,
+            case None -> true
+            case _ -> false,
         message: "Expected option:\n" + this.value + "\nto be empty",
         type: 'OptionAssert[T].is_empty'
     }
@@ -200,8 +200,8 @@ fun ResultAssert[T].succeeds(): ResultAssert[T] =
     let assertion = Assertion {
         result:
             match this.value with
-            | Error e  -> false
-            | Success s -> true,
+            case Error e  -> false
+            case Success s -> true,
         message: "Expected result:\n" + this.value + "\nto succeed",
         type: 'ResultAssert[T].succeeds'
     }
@@ -214,8 +214,8 @@ fun ResultAssert[T].succeeds(other: T): ResultAssert[T] =
     let assertion = Assertion {
         result:
             match this.value with
-            | Error e  -> false
-            | Success { v } -> v == other,
+            case Error e  -> false
+            case Success { v } -> v == other,
         message: "Expected result:\n" + this.value + "\nto succeed with value:\n" + other,
         type: 'ResultAssert[T].succeeds'
     }
@@ -228,8 +228,8 @@ fun ResultAssert[T].fails(): ResultAssert[T] =
     let assertion = Assertion {
         result: {
             match this.value with
-            | Error e -> true
-            | Success s -> false
+            case Error e -> true
+            case Success s -> false
         },
         message: "Expected result:\n" + this.value + "\nto fail",
         type: 'ResultAssert[T].fails'
@@ -243,8 +243,8 @@ fun ResultAssert[T].fails(message: string): ResultAssert[T] =
     let assertion = Assertion {
         result: {
             match this.value with
-            | Error e -> e.message == message
-            | Success s -> false
+            case Error e -> e.message == message
+            case Success s -> false
         },
         message: "Expected result:\n" + this.value + "\nto failed with message:\n" + message,
         type: 'ResultAssert[T].fails'

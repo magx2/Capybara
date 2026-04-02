@@ -4,8 +4,8 @@ fun reverse_ints(values: list[int]): list[int] =
         then acc
         else
             match left[0] with
-            | Some { v } -> __rev(left[1:], [v] + acc)
-            | None -> acc
+            case Some { v } -> __rev(left[1:], [v] + acc)
+            case None -> acc
     __rev(values, [])
 
 fun duplicate_strings(values: list[string]): list[string] =
@@ -14,8 +14,8 @@ fun duplicate_strings(values: list[string]): list[string] =
         then acc
         else
             match left[0] with
-            | Some { v } -> __dup(left[1:], acc + [v, v])
-            | None -> acc
+            case Some { v } -> __dup(left[1:], acc + [v, v])
+            case None -> acc
     __dup(values, [])
 
 fun empty_list_of_type_param(v: T): list[T] =
@@ -37,5 +37,5 @@ fun to_seq_using_end_literal(list: list[T]): SeqEnd[T] =
 
 fun seq_end_head_or_default(s: SeqEnd[int], d: int): int =
     match s with
-    | EndEnd -> d
-    | ConsEnd { value, rest } -> value
+    case EndEnd -> d
+    case ConsEnd { value, rest } -> value

@@ -30,18 +30,18 @@ fun _execute(assertions: list[() => Assertion]): TestResult =
         .drop_until(assertion => !assertion.result)
         .first()
     match failed_assertion with
-    | Some { value } -> Failed {
+    case Some { value } -> Failed {
         message: value.message,
         type: value.type
     }
-    | None -> Passed {}
+    case None -> Passed {}
 
 fun TestCase.succeeded(): bool = !this.failed()
 
 fun TestCase.failed(): bool =
     match this.result with
-    | Passed -> false
-    | Failed -> true
+    case Passed -> false
+    case Failed -> true
 
 enum ReportType { JUNIT }
 type Report = JUnitReport
@@ -86,7 +86,7 @@ data TestOutput { path: Path, content: string, failed: bool }
 
 fun run_tests(rtype: ReportType, test_files: list[TestFile]): list[TestOutput] =
     match rtype with
-    | JUNIT -> _junit_run_tests(test_files)
+    case JUNIT -> _junit_run_tests(test_files)
 
 const JUNIT_PREFIX = 'TEST-'
 
@@ -117,8 +117,8 @@ fun _junit_run_test_case(file_name: string, test_case: TestCase): string =
 
 fun _junit_run_test_case_message(test_case: TestCase): string =
     match test_case.result with
-    | Passed -> ''
-    | Failed { message, type } ->
+    case Passed -> ''
+    case Failed { message, type } ->
         let xml_message = _junit_escape_xml_attribute(message)
         let xml_type = _junit_escape_xml_attribute(type)
         "<failure message=\"{xml_message}\" type=\"{xml_type}\"><![CDATA["

@@ -7,22 +7,22 @@ fun foo_me(name: string): string =
     data __Unknown { unkn: string }
     fun __name(value: __Name): string =
         match value with
-        | __Foo { foo } -> foo
-        | __Boo { boo } -> boo
-        | __Unknown { unkn } -> unkn
+        case __Foo { foo } -> foo
+        case __Boo { boo } -> boo
+        case __Unknown { unkn } -> unkn
     let x =
         match name with
-        | "foo" -> __Foo { "xyz" }
-        | "boo" -> __Boo { "zyx" }
-        | _ -> __Unknown { name }
+        case "foo" -> __Foo { "xyz" }
+        case "boo" -> __Boo { "zyx" }
+        case _ -> __Unknown { name }
     __name(x)
 
 fun local_data_with_imported_result(v: int): string =
     data __Entry { key: string, value: Result[int] }
     let entry = __Entry { "k", Success { value: v } }
     match entry.value with
-    | Success { value } -> "ok:" + value
-    | Error { message } -> "err:" + message
+    case Success { value } -> "ok:" + value
+    case Error { message } -> "err:" + message
 
 fun local_data_used_in_local_function(v: int): string =
     data __Parse[T] { value: T }
@@ -35,8 +35,8 @@ fun local_generic_data_used_in_local_function_return_type(v: int): string =
     fun __parse(value: int): Result[__Parse[int]] =
         Success { __Parse { value } }
     match __parse(v) with
-    | Success { value } -> "value:" + value.value
-    | Error { message } -> "error:" + message
+    case Success { value } -> "value:" + value.value
+    case Error { message } -> "error:" + message
 
 fun local_generic_data_field_access_followed_by_index(buffer: string): string =
     data __Parse[T] { buffer: string, value: T }
@@ -44,14 +44,14 @@ fun local_generic_data_field_access_followed_by_index(buffer: string): string =
         Success { __Parse { buffer: value, value: 1 } }
     match (__parse(buffer) | parse =>
         match parse.buffer[0] with
-        | Some { value } -> Success { value }
-        | None -> Error { "" }) with
-    | Success { value } -> value
-    | Error { message } -> message
+        case Some { value } -> Success { value }
+        case None -> Error { "" }) with
+    case Success { value } -> value
+    case Error { message } -> message
 
 fun local_generic_option_constructor_pattern_binding(v: int): int =
     data __Parse[T] { value: T }
     let parse: __Parse[Option[int]] = __Parse { Some { v } }
     match parse.value with
-    | Some { value } -> value * 10 + v
-    | None -> 0
+    case Some { value } -> value * 10 + v
+    case None -> 0

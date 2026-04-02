@@ -53,13 +53,13 @@ class CompilationTest {
                                 
                                 fun area(shape: Shape): float =
                                     match shape with
-                                    | Circle { radius } -> 3.14 * radius ^ 2
-                                    | Rectangle { width, height } -> width * height
+                                    case Circle { radius } -> 3.14 * radius ^ 2
+                                    case Rectangle { width, height } -> width * height
                                 
                                 fun da_vinci(shape: Shape): Shape =
                                     match shape with
-                                    | Circle { radius } -> Rectangle { width : radius * 2, height : radius * 2 }
-                                    | Rectangle { width, height } -> Circle { radius : (width + height) / 4 }
+                                    case Circle { radius } -> Rectangle { width : radius * 2, height : radius * 2 }
+                                    case Rectangle { width, height } -> Circle { radius : (width + height) / 4 }
                                 
                                 // type with common value
                                 type Person { name: string, age: int } = Student | Teacher
@@ -79,13 +79,13 @@ class CompilationTest {
                                 
                                 fun area(shape: Shape): float =
                                     match shape with
-                                    | Circle { radius } -> 3.14 * radius * radius
-                                    | Rectangle { width, height } -> width * height
+                                    case Circle { radius } -> 3.14 * radius * radius
+                                    case Rectangle { width, height } -> width * height
                                 
                                 fun da_vinci(shape: Shape): Shape =
                                     match shape with
-                                    | Circle { radius } -> Rectangle { width = radius * 2, height = radius * 2 }
-                                    | Rectangle { width, height } -> Circle { radius = (width + height) / 4 }
+                                    case Circle { radius } -> Rectangle { width = radius * 2, height = radius * 2 }
+                                    case Rectangle { width, height } -> Circle { radius = (width + height) / 4 }
                                 """,
                         """
                                 // algebraic type
@@ -95,13 +95,13 @@ class CompilationTest {
                                 
                                 fun area(shape: Shape): float =
                                     match shape with
-                                    | Circle { radius } -> 3.14 * radius ^ 2
-                                    | Rectangle { width, height } -> width * height
+                                    case Circle { radius } -> 3.14 * radius ^ 2
+                                    case Rectangle { width, height } -> width * height
                                 
                                 fun da_vinci(shape: Shape): Shape =
                                     match shape with
-                                    | Circle { radius } -> Rectangle { width : radius * 2, height : radius * 2 }
-                                    | Rectangle { width, height } -> Circle { radius : (width + height) / 4 }
+                                    case Circle { radius } -> Rectangle { width : radius * 2, height : radius * 2 }
+                                    case Rectangle { width, height } -> Circle { radius : (width + height) / 4 }
                                 """,
                         """
                                 // type with common value

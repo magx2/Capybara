@@ -41,5 +41,5 @@ fun dog_data_name(): string = DOG_DATA.name
 
 fun animal_type_text(): string =
     match ANIMAL_TYPE with
-    | Dog { name } -> "dog:" + name
-    | Cat { age } -> "cat:" + age
+    case Dog { name } -> "dog:" + name
+    case Cat { age } -> "cat:" + age

@@ -75,8 +75,8 @@ public class CompilationErrorTest {
                         """
                                 fun Name[T].foo(map: T => Name[Y]): Name[Y] =
                                    match this with
-                                   | Boo e -> e
-                                   | Foo s -> map(s.value)
+                                   case Boo e -> e
+                                   case Foo s -> map(s.value)
                                 """,
                         new Position(3, 14),
                         """
@@ -92,8 +92,8 @@ public class CompilationErrorTest {
                         """
                                 fun Name[T].`+`(map: T => Name[Y]): Name[Y] =
                                    match this with
-                                   | Boo e -> e
-                                   | Foo s -> map(s.value)
+                                   case Boo e -> e
+                                   case Foo s -> map(s.value)
                                 """,
                         new Position(3, 13),
                         """
@@ -119,8 +119,8 @@ public class CompilationErrorTest {
                                 data D { d: int }
                                 fun foo(letter: Letter): int =
                                     match letter with
-                                    | A { a } -> a
-                                    | B { b } -> b
+                                    case A { a } -> a
+                                    case B { b } -> b
                                 """,
                         new Position(7, 4),
                         """
@@ -128,7 +128,7 @@ public class CompilationErrorTest {
                                  --> /foo/boo/match_not_exhaustive.cfun:7:4
                                 fun foo(letter: Letter): int =
                                     match letter with
-                                    ^ `match` is not exhaustive. Use wildcard `| _ -> ...` or add missing branches:`C`, `D`.
+                                    ^ `match` is not exhaustive. Use wildcard `case _ -> ...` or add missing branches:`C`, `D`.
                                 """
                 ),
                 Arguments.of(
@@ -137,8 +137,8 @@ public class CompilationErrorTest {
                                 enum Color { RED, BLUE, GREEN_BLUE }
                                 fun foo(color: Color): int =
                                     match color with
-                                    | RED -> 1
-                                    | BLUE -> 2
+                                    case RED -> 1
+                                    case BLUE -> 2
                                 """,
                         new Position(3, 4),
                         """
@@ -146,7 +146,7 @@ public class CompilationErrorTest {
                                  --> /foo/boo/match_enum_not_exhaustive.cfun:3:4
                                 fun foo(color: Color): int =
                                     match color with
-                                    ^ `match` is not exhaustive. Use wildcard `| _ -> ...` or add missing branches:`GREEN_BLUE`.
+                                    ^ `match` is not exhaustive. Use wildcard `case _ -> ...` or add missing branches:`GREEN_BLUE`.
                                 """
                 ),
                 Arguments.of(
@@ -155,13 +155,13 @@ public class CompilationErrorTest {
                                 from /capy/lang/Option import { * }
                                 fun foo(option: Option[int]): string =
                                     match option with
-                                    | Some { value } when value + 1 -> "x"
-                                    | None -> "none"
+                                    case Some { value } when value + 1 -> "x"
+                                    case None -> "none"
                                 """,
-                        new Position(4, 32),
+                        new Position(4, 35),
                         """
                                 error: mismatched types
-                                 --> /foo/boo/match_guard_not_bool.cfun:4:32
+                                 --> /foo/boo/match_guard_not_bool.cfun:4:35
                                 fun foo(option: Option[int]): string =
                                     match option with ...
                                 %3$s^ `when` guard has to be `bool`, was `INT`
@@ -175,8 +175,8 @@ public class CompilationErrorTest {
                                 data B { b: int }
                                 fun foo(letter: Letter): int =
                                     match letter with
-                                    | A { a } when a > 0 -> a
-                                    | B { b } -> b
+                                    case A { a } when a > 0 -> a
+                                    case B { b } -> b
                                 """,
                         new Position(5, 4),
                         """
@@ -184,7 +184,7 @@ public class CompilationErrorTest {
                                  --> /foo/boo/match_guard_does_not_make_case_exhaustive.cfun:5:4
                                 fun foo(letter: Letter): int =
                                     match letter with
-                                    ^ `match` is not exhaustive. Use wildcard `| _ -> ...` or add missing branches:`A`.
+                                    ^ `match` is not exhaustive. Use wildcard `case _ -> ...` or add missing branches:`A`.
                                 """
                 ),
                 Arguments.of(
@@ -193,18 +193,18 @@ public class CompilationErrorTest {
                                 from /capy/lang/Option import { * }
                                 fun foo(option: Option[string]): string =
                                     match option with
-                                    | Some { value } where value == "+" -> "plus"
-                                    | Some { value } -> "other"
-                                    | None -> "none"
+                                    case Some { value } where value == "+" -> "plus"
+                                    case Some { value } -> "other"
+                                    case None -> "none"
                                 """,
-                        new Position(4, 21),
+                        new Position(4, 24),
                         """
                                 error: mismatched types
-                                 --> /foo/boo/match_guard_where_keyword_syntax_error.cfun:4:21
+                                 --> /foo/boo/match_guard_where_keyword_syntax_error.cfun:4:24
                                 fun foo(option: Option[string]): string =
                                     match option with
-                                    | Some { value } where value == "+" -> "plus"
-                                                     ^ Syntax error, `where` not expected here. Use `when` for match guards
+                                    case Some { value } where value == "+" -> "plus"
+                                %3$s^ Syntax error, `where` not expected here. Use `when` for match guards
                                 """
                 ));
         var primitiveTypes = List.of("string", "byte", "int", "long", "float", "double", "bool");
@@ -217,15 +217,15 @@ public class CompilationErrorTest {
         var code = """
                 fun foo(x: %s): int =
                     match x with
-                    | %s a -> 1
-                    | %s b -> 2
+                    case %s a -> 1
+                    case %s b -> 2
                 """.formatted(primitive, primitive, primitive);
         var message = """
                 error: mismatched types
                  --> /foo/boo/%s.cfun:2:4
                 fun foo(x: %s): int =
                     match x with
-                    ^ `match` is not exhaustive. Use wildcard `| _ -> ...`.
+                    ^ `match` is not exhaustive. Use wildcard `case _ -> ...`.
                 """.formatted(moduleName, primitive);
         return Arguments.of(moduleName, code, new Position(2, 4), message);
     }
@@ -432,10 +432,10 @@ public class CompilationErrorTest {
                                 single End
                                 fun Seq[T].take(n: int): list[T] =
                                     match this with
-                                    | End => []
-                                    | Cons { value, rest } -> []
+                                    case End => []
+                                    case Cons { value, rest } -> []
                                 """,
-                        new Position(6, 10),
+                        new Position(6, 13),
                         """
                                 error: mismatched types
                                  --> /foo/boo/seq_match_case_wrong_arrow.cfun:%d:%d
@@ -444,8 +444,8 @@ public class CompilationErrorTest {
                                 single End
                                 fun Seq[T].take(n: int): list[T] =
                                     match this with
-                                    | End => []
-                                          ^ Expected `->`, found `=`
+                                    case End => []
+                                %3$s^ Expected `->`, found `=`
                                 """
                 ),
                 Arguments.of(
@@ -524,17 +524,17 @@ public class CompilationErrorTest {
                         """ 
                                 fun broken(result: /capy/lang/Result.Result[any]): bool =
                                     match result with
-                                    | Error _ = true
-                                    | Success s -> false
+                                    case Error _ = true
+                                    case Success s -> false
                                 """,
-                        new Position(3, 14),
+                        new Position(3, 17),
                         """
                                 error: mismatched types
-                                 --> /foo/boo/match_case_wrong_operator.cfun:3:14
+                                 --> /foo/boo/match_case_wrong_operator.cfun:3:17
                                 fun broken(result: /capy/lang/Result.Result[any]): bool =
                                     match result with
-                                    | Error _ = true
-                                              ^ Expected `->`, found `=`
+                                    case Error _ = true
+                                %3$s^ Expected `->`, found `=`
                                 """
                 ),
                 Arguments.of(
@@ -843,9 +843,9 @@ public class CompilationErrorTest {
                                     data __Boo { boo: string }
                                     data __Unknown { unkn: string }
                                     match name with
-                                    | "foo" -> __Foo { foo: "xyz" }
-                                    | "boo" -> __Boo { boo: "xyz" }
-                                    | _ -> __Unknown { unkn: name }
+                                    case "foo" -> __Foo { foo: "xyz" }
+                                    case "boo" -> __Boo { boo: "xyz" }
+                                    case _ -> __Unknown { unkn: name }
                                 """,
                         new Position(1, 26),
                         """

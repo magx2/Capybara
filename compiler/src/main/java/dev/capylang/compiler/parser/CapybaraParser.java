@@ -137,6 +137,10 @@ public class CapybaraParser {
             var offendingInput = noViableAlternativeMatcher.group(1)
                     .replaceAll("\\s+", " ")
                     .trim();
+            if (offendingInput.startsWith("|")
+                || offendingInput.contains("with|")) {
+                return "line %d:%d: Syntax error, `|` not expected here. Use `case` for match branches".formatted(syntaxError.line(), syntaxError.column());
+            }
             if (offendingInput.contains("where")) {
                 return "line %d:%d: Syntax error, `where` not expected here. Use `when` for match guards".formatted(syntaxError.line(), syntaxError.column());
             }
@@ -148,6 +152,9 @@ public class CapybaraParser {
         if (syntaxError.message().contains("mismatched input '=' expecting {']', ','}")
             || syntaxError.message().equals("Expected `]`, found `=`")) {
             return "line %d:%d: Expected `]`, found `=`".formatted(syntaxError.line(), syntaxError.column());
+        }
+        if (syntaxError.message().contains("mismatched input '|' expecting 'case'")) {
+            return "line %d:%d: Syntax error, `|` not expected here. Use `case` for match branches".formatted(syntaxError.line(), syntaxError.column());
         }
         if (syntaxError.message().contains("mismatched input '=' expecting '->'")
             || syntaxError.message().equals("Expected `->`, found `=`")) {
@@ -192,7 +199,7 @@ public class CapybaraParser {
         if ("Expected `->`, found `=`".equals(details)
             && currentLine.contains("=>")
             && !previousNonBlankLine.startsWith("match ")
-            && !previousNonBlankLine.startsWith("| ")) {
+            && !previousNonBlankLine.startsWith("case ")) {
             details = "Pipe expressions inside `match` branches must be wrapped in `{ ... }` or `(...)`";
         }
         var firstDefinitionLine = 0;

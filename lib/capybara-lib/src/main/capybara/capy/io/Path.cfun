@@ -11,11 +11,11 @@ data Path {
 fun from_string(string: string): Path =
     fun __segments(value: string, current: string, acc: list[string]): list[string] =
         match value[0] with
-        | None ->
+        case None ->
             if current == ""
             then acc
             else acc + current
-        | Some { c } ->
+        case Some { c } ->
             if c == '/'
             then
                 if current == ""
@@ -29,8 +29,8 @@ fun from_string(string: string): Path =
         else if string.starts_with('~')
         then
             match string[1] with
-            | Some { '/' } -> string[2:]
-            | _ -> string[1:]
+            case Some { '/' } -> string[2:]
+            case _ -> string[1:]
         else string
     Path {
         root:
@@ -59,12 +59,12 @@ fun Path.`/`(other: Path) =
 
 fun Path.name(): string =
     match this.prefix with
-    | Some { v } -> v
-    | None ->
+    case Some { v } -> v
+    case None ->
         match this.root with
-        | RELATIVE -> '.'
-        | ABSOLUTE -> '/'
-        | HOME -> '~'
+        case RELATIVE -> '.'
+        case ABSOLUTE -> '/'
+        case HOME -> '~'
 
 fun Path.parent(): Option[Path] =
     if this.segments.is_empty then None {}
@@ -78,16 +78,16 @@ fun Path.parent(): Option[Path] =
 
 fun Path.is_absolute(): bool =
     match this.root with
-    | RELATIVE -> false
-    | _ -> true
+    case RELATIVE -> false
+    case _ -> true
 
 fun Path.is_root(): bool = this.segments.size == 0
 
 fun Path.normalize(): Path =
     fun __normalize_path(root: PathRoot, segments: list[string], acc: list[string]): list[string] =
         match segments[0] with
-        | None -> acc
-        | Some { seg } ->
+        case None -> acc
+        case Some { seg } ->
             let rest = segments[1:]
             if seg == "" | seg == "."
             then __normalize_path(root, rest, acc)
@@ -97,8 +97,8 @@ fun Path.normalize(): Path =
                 then __normalize_path(root, rest, acc[:-1])
                 else
                     match root with
-                    | RELATIVE -> __normalize_path(root, rest, acc + "..")
-                    | _ -> __normalize_path(root, rest, acc)
+                    case RELATIVE -> __normalize_path(root, rest, acc + "..")
+                    case _ -> __normalize_path(root, rest, acc)
             else
                 __normalize_path(root, rest, acc + seg)
     Path {

@@ -89,7 +89,7 @@ class CapybaraParserTest {
                         """
                                 fun let_inside_match_branch(v: int): int =
                                     match v with
-                                    | _ ->
+                                    case _ ->
                                         let x = v + 1
                                         x * 2
                                 """
@@ -122,8 +122,8 @@ class CapybaraParserTest {
 
                                 fun seq_first_wildcard(s: Seq[int]): Option[int] =
                                     match s with
-                                    | End -> None {}
-                                    | Cons { value, _ } -> Some { value }
+                                    case End -> None {}
+                                    case Cons { value, _ } -> Some { value }
                                 """
                 ),
                 Arguments.of(
@@ -135,8 +135,8 @@ class CapybaraParserTest {
 
                                 fun seq_first_wildcard_fq_singleton(s: Seq[int]): /capy/lang/Option[int] =
                                     match s with
-                                    | End -> /capy/lang/Option.None {}
-                                    | Cons { value, _ } -> Some { value }
+                                    case End -> /capy/lang/Option.None {}
+                                    case Cons { value, _ } -> Some { value }
                                 """
                 ));
     }
@@ -396,9 +396,9 @@ class CapybaraParserTest {
                 from /capy/lang/Option import { * }
                 fun test(option: Option[string]): string =
                     match option with
-                    | Some { char } when char == "-" -> "minus"
-                    | Some { char } -> "other"
-                    | None -> "none"
+                    case Some { char } when char == "-" -> "minus"
+                    case Some { char } -> "other"
+                    case None -> "none"
                 """));
 
         var function = findFunction("test", module.functional());
@@ -419,8 +419,8 @@ class CapybaraParserTest {
                     Success { value }
                     | parsed => {
                         match parsed with
-                        | v when v > 0 -> Success { v + 1 }
-                        | _ -> Error { "invalid" }
+                        case v when v > 0 -> Success { v + 1 }
+                        case _ -> Error { "invalid" }
                     }
                 """));
 
@@ -443,8 +443,8 @@ class CapybaraParserTest {
                     | parsed => Success { parsed + 1 }
                     | parse => {
                         match parse with
-                        | v when v > 0 -> Success { v }
-                        | _ -> Error { "invalid" }
+                        case v when v > 0 -> Success { v }
+                        case _ -> Error { "invalid" }
                     }
                 """));
 
@@ -468,7 +468,7 @@ class CapybaraParserTest {
                     let raw_sem_ver = SemVer { None {}, None {} }
                     let parse_patch: __Parse[string] = __Parse { version, "1.2.3" }
                     match parse_patch.buffer[0] with
-                    | Some { next_char } when next_char == "-" -> {
+                    case Some { next_char } when next_char == "-" -> {
                         __parse_pre_release(parse_patch.buffer[1:])
                         | parse_pre_release => Success { __Parse {
                             buffer: parse_pre_release.buffer,
@@ -476,18 +476,18 @@ class CapybaraParserTest {
                         }}
                         | parse => {
                             match parse.buffer[0] with
-                            | None -> Success { parse }
-                            | Some { char } when char == "+" -> {
+                            case None -> Success { parse }
+                            case Some { char } when char == "+" -> {
                                 __parse_build(parse.buffer[1:])
                                 | parse_build => Success { __Parse {
                                     buffer: parse_build.buffer,
                                     value: parse.value.with(build_metadata: Some { parse_build.value })
                                 }}
                             }
-                            | Some { char } -> Error { "bad" }
+                            case Some { char } -> Error { "bad" }
                         }
                     }
-                    | _ -> Success { raw_sem_ver }
+                    case _ -> Success { raw_sem_ver }
                 """));
 
         findFunction("test", module.functional());

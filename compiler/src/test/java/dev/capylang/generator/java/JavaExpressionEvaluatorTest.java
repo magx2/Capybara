@@ -212,8 +212,8 @@ class JavaExpressionEvaluatorTest {
                     data __Parse[T] { buffer: string, value: T }
                     fun __unwrap(parse: __Parse[Option[int]]): Result[__Parse[int]] =
                         match parse.value with
-                        | Some { inner } -> Success { __Parse { buffer: parse.buffer, value: inner } }
-                        | None -> Error { "missing" }
+                        case Some { inner } -> Success { __Parse { buffer: parse.buffer, value: inner } }
+                        case None -> Error { "missing" }
                     __unwrap(__Parse { buffer: "", value: Some { value } }) | parsed => Success { parsed.value }
                 """);
 

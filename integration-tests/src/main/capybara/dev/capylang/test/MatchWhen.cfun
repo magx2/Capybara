@@ -2,23 +2,23 @@ from /capy/lang/Option import {*}
 
 fun foo(option: Option[string]): string =
     match option with
-    | Some { char } -> "other"
-    | Some { char } when char == '-' -> "minus"
-    | Some { char } when char == '+' -> "plus"
-    | None -> "none"
+    case Some { char } -> "other"
+    case Some { char } when char == '-' -> "minus"
+    case Some { char } when char == '+' -> "plus"
+    case None -> "none"
 
 fun boo(option: Option[int]): string =
     match option with
-    | Some { value } -> '' + value
-    | Some { value } when value == 1 -> "one"
-    | Some { value } when value == 2 -> "two"
-    | None -> "none"
+    case Some { value } -> '' + value
+    case Some { value } when value == 1 -> "one"
+    case Some { value } when value == 2 -> "two"
+    case None -> "none"
 
 fun nested_guard(option: Option[int]): string =
     match option with
-    | Some { value } when value > 10 -> "big"
-    | Some { value } -> '' + value
-    | None -> "none"
+    case Some { value } when value > 10 -> "big"
+    case Some { value } -> '' + value
+    case None -> "none"
 
 data Sign { value: string, weight: int, enabled: bool }
 
@@ -28,26 +28,26 @@ single Consonant
 
 fun sign(sign: Sign): string =
     match sign with
-    | Sign { value, weight, enabled } when enabled & value == '-' & weight > 10 -> "heavy minus"
-    | Sign { value, weight, enabled } when enabled & value == '+' & weight > 10 -> "heavy plus"
-    | Sign { value, _, _ } -> "other"
-    | Sign { value, _, _ } when value == '-' -> "minus"
-    | Sign { value, _, _ } when value == '+' -> "plus"
+    case Sign { value, weight, enabled } when enabled & value == '-' & weight > 10 -> "heavy minus"
+    case Sign { value, weight, enabled } when enabled & value == '+' & weight > 10 -> "heavy plus"
+    case Sign { value, _, _ } -> "other"
+    case Sign { value, _, _ } when value == '-' -> "minus"
+    case Sign { value, _, _ } when value == '+' -> "plus"
 
 fun letter(letter: Letter): string =
     match letter with
-    | Vowel when letter == Vowel -> "vowel"
-    | Consonant when letter == Consonant -> "hard"
-    | Consonant -> "consonant"
-    | Vowel -> "other vowel"
+    case Vowel when letter == Vowel -> "vowel"
+    case Consonant when letter == Consonant -> "hard"
+    case Consonant -> "consonant"
+    case Vowel -> "other vowel"
 
 data Range { start: int, stop: int, step: int, enabled: bool }
 
 fun range_label(range: Range): string =
     match range with
-    | Range { start, stop, step, enabled } when enabled & start < stop & step == 1 -> "ascending"
-    | Range { start, stop, step, enabled } when enabled & start > stop & step == -1 -> "descending"
-    | Range { start, _, _, enabled } when enabled == false -> "disabled " + start
-    | Range { _, _, step, _ } when step == 0 -> "stuck"
-    | Range -> "other"
+    case Range { start, stop, step, enabled } when enabled & start < stop & step == 1 -> "ascending"
+    case Range { start, stop, step, enabled } when enabled & start > stop & step == -1 -> "descending"
+    case Range { start, _, _, enabled } when enabled == false -> "disabled " + start
+    case Range { _, _, step, _ } when step == 0 -> "stuck"
+    case Range -> "other"
 

@@ -46,8 +46,8 @@ fun Seq[T].take(n: int): list[T] =
         then list
         else
             match seq with
-            | End -> list
-            | Cons { value, rest } -> __take(rest(), n-1, list + value)
+            case End -> list
+            case Cons { value, rest } -> __take(rest(), n-1, list + value)
     __take(this, n, [])
 
 /// Collects the entire sequence into a `list`.
@@ -56,8 +56,8 @@ fun Seq[T].take(n: int): list[T] =
 fun Seq[T].as_list(): list[T] =
     fun __as_list(seq: Seq[T], list: list[T]): list[T] =
         match seq with
-        | End -> list
-        | Cons { value, rest } -> __as_list(rest(), list + value)
+        case End -> list
+        case Cons { value, rest } -> __as_list(rest(), list + value)
     __as_list(this, [])
 
 /// Converts a `list` into a finite `Seq`.
@@ -82,8 +82,8 @@ fun Seq[T].take_last(n: int): list[T] =
         then list
         else
             match seq with
-            | End -> list
-            | Cons { value, rest } -> __take_last(rest(), max, n-1, __add_to_list(max, list, value))
+            case End -> list
+            case Cons { value, rest } -> __take_last(rest(), max, n-1, __add_to_list(max, list, value))
     __take_last(this, n, n, [])
 
 /// Returns a sequence containing only elements that satisfy `pred`.
@@ -95,8 +95,8 @@ fun Seq[T].take_last(n: int): list[T] =
 fun Seq[T].filter(pred: T => bool): Seq[T] =
     fun __filter(seq: Seq[T], pred: T => bool): Seq[T] =
         match seq with
-        | End -> End
-        | Cons { value, rest } ->
+        case End -> End
+        case Cons { value, rest } ->
             if pred(value)
             then Cons { value, () => __filter(rest(), pred) }
             else __filter(rest(), pred)
@@ -109,8 +109,8 @@ fun Seq[T].drop(n: int): Seq[T] =
         then seq
         else
             match seq with
-            | End -> End
-            | Cons { value, rest } -> __drop(rest(), n - 1)
+            case End -> End
+            case Cons { value, rest } -> __drop(rest(), n - 1)
     __drop(this, n)
 
 /// Drops elements until `pred` becomes `true`.
@@ -123,8 +123,8 @@ fun Seq[T].drop(n: int): Seq[T] =
 fun Seq[T].drop_until(pred: T => bool): Seq[T] =
     fun __drop_until(seq: Seq[T], pred: T => bool) =
         match seq with
-        | End -> End
-        | Cons { value, rest } ->
+        case End -> End
+        case Cons { value, rest } ->
             if pred(value)
             then Cons { value, rest }
             else __drop_until(rest(), pred)
@@ -136,8 +136,8 @@ fun Seq[T].drop_until(pred: T => bool): Seq[T] =
 fun Seq[T].until(pred: T => bool): Seq[T] =
     fun __until(seq: Seq[T], pred: T => bool) =
         match seq with
-        | End -> End
-        | Cons { value, rest } ->
+        case End -> End
+        case Cons { value, rest } ->
             if pred(value)
             then End
             else Cons { value, () => __until(rest(), pred) }
@@ -149,15 +149,15 @@ fun Seq[T].until(pred: T => bool): Seq[T] =
 fun Seq[T].`+`(other: Seq[T]): Seq[T] =
     fun __add(seq: Seq[T], other: Seq[T]) =
         match seq with
-        | End -> other
-        | Cons { value, rest } -> Cons { value, () => __add(rest(), other) }
+        case End -> other
+        case Cons { value, rest } -> Cons { value, () => __add(rest(), other) }
     __add(this, other)
 
 /// Transforms each element using `map`.
 fun Seq[T].`|`(map: T => Y): Seq[Y] =
     match this with
-    | End -> End
-    | Cons { value, rest } -> Cons { map(value), () => (rest() | map) }
+    case End -> End
+    case Cons { value, rest } -> Cons { map(value), () => (rest() | map) }
 
 /// Applies `map` and flattens the resulting sequences.
 ///
@@ -168,8 +168,8 @@ fun Seq[T].`|`(map: T => Y): Seq[Y] =
 fun Seq[T].`|*`(map: T => Seq[Y]): Seq[Y] =
     fun __flat_map(seq: Seq[T], map: T => Seq[Y]) =
         match seq with
-        | End -> End
-        | Cons { value, rest } ->
+        case End -> End
+        case Cons { value, rest } ->
             map(value) + __flat_map(rest(), map)
     __flat_map(this, map)
 
@@ -184,11 +184,11 @@ fun Seq[T].`|*`(map: T => Seq[Y]): Seq[Y] =
 fun Seq[T].zip(other: Seq[Y]): Seq[tuple[T,Y]] =
     fun __zip(this: Seq[T], other: Seq[Y]): Seq[tuple[T,Y]] =
         match this with
-        | End -> End
-        | Cons { v1, r1 } ->
+        case End -> End
+        case Cons { v1, r1 } ->
             match other with
-            | End -> End
-            | Cons { v2, r2 } -> Cons { (v1, v2), () => __zip(r1, r2) }
+            case End -> End
+            case Cons { v2, r2 } -> Cons { (v1, v2), () => __zip(r1, r2) }
     __zip(this, other)
 
 /// Returns the first element wrapped in `Option`.
@@ -196,8 +196,8 @@ fun Seq[T].zip(other: Seq[Y]): Seq[tuple[T,Y]] =
 /// Returns `None` for an empty sequence.
 fun Seq[T].first(): /capy/lang/Option[T] =
     match this with
-    | End -> /capy/lang/Option.None
-    | Cons { value, _ } -> /capy/lang/Option.Some { value }
+    case End -> /capy/lang/Option.None
+    case Cons { value, _ } -> /capy/lang/Option.Some { value }
 
 /// Returns the first element matching `pred`, wrapped in `Option`.
 ///
@@ -209,5 +209,5 @@ fun Seq[T].first_match(pred: T => bool): /capy/lang/Option[T] = this.filter(pred
 /// This is equivalent to checking whether `first_match(pred)` returns `Some`.
 fun Seq[T].any(pred: T => bool): bool =
     match this.first_match(pred) with
-    | None -> false
-    | Some { _ } -> true
+    case None -> false
+    case Some { _ } -> true

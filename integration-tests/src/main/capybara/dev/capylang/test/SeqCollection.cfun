@@ -7,33 +7,33 @@ fun one_two_three(): Seq[int] =
 
 fun head_or_default(s: Seq[int], d: int): int =
     match s with
-    | Cons { value, rest } -> value
-    | End -> d
+    case Cons { value, rest } -> value
+    case End -> d
 
 fun head_or_default_wildcard(s: Seq[int], d: int): int =
     match s with
-    | Cons { value, _ } -> value
-    | End -> d
+    case Cons { value, _ } -> value
+    case End -> d
 
 fun first_fq_singleton(s: Seq[int]): /capy/lang/Option[int] =
     match s with
-    | End -> /capy/lang/Option.None {}
-    | Cons { value, _ } -> /capy/lang/Option.Some { value }
+    case End -> /capy/lang/Option.None {}
+    case Cons { value, _ } -> /capy/lang/Option.Some { value }
 
 fun first_short_singleton(s: Seq[int]): /capy/lang/Option[int] =
     match s with
-    | End -> None {}
-    | Cons { value, _ } -> /capy/lang/Option.Some { value }
+    case End -> None {}
+    case Cons { value, _ } -> /capy/lang/Option.Some { value }
 
 fun tail(s: Seq[int]): Seq[int] =
     match s with
-    | Cons { value, rest } -> rest
-    | End -> End
+    case Cons { value, rest } -> rest
+    case End -> End
 
 fun sum_first_two(s: Seq[int]): int =
     match s with
-    | Cons { value, rest } -> value + head_or_default(rest, 0)
-    | End -> 0
+    case Cons { value, rest } -> value + head_or_default(rest, 0)
+    case End -> 0
 
 fun drop_local(s: Seq[int], n: int): Seq[int] =
     fun __drop(seq: Seq[int], left: int) =
@@ -41,15 +41,15 @@ fun drop_local(s: Seq[int], n: int): Seq[int] =
         then seq
         else
             match seq with
-            | End -> End
-            | Cons { value, rest } -> __drop(rest, left - 1)
+            case End -> End
+            case Cons { value, rest } -> __drop(rest, left - 1)
     __drop(s, n)
 
 fun until_local(s: Seq[int], stop: int): Seq[int] =
     fun __until(seq: Seq[int], x: int) =
         match seq with
-        | End -> End
-        | Cons { value, rest } ->
+        case End -> End
+        case Cons { value, rest } ->
             if value == x
             then End
             else Cons { value, __until(rest, x) }

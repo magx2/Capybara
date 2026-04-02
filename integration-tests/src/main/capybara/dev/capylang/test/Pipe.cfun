@@ -112,8 +112,8 @@ fun keep_boxed(boxed: Boxed): Boxed = boxed
 
 fun add_to_boxed(boxed: Boxed): Boxed =
     match boxed with
-    | IntBox { value } -> IntBox { value: value + 1 }
-    | LongBox { value } -> LongBox { value: value + 1L }
+    case IntBox { value } -> IntBox { value: value + 1 }
+    case LongBox { value } -> LongBox { value: value + 1L }
 
 fun type_pipe_lambda(x: int): Boxed =
     IntBox { value: x }
@@ -134,8 +134,8 @@ fun type_pipe_optional(x: int): /capy/lang/Option[Boxed] =
 fun pipe_then_chain_after_lambda(): int =
     match ([1, 2, 3]
         | (value => value + 1))[1] with
-    | Some { value } -> value
-    | None -> 0
+    case Some { value } -> value
+    case None -> 0
 
 fun pipe_then_chain_methods_after_lambda(): string =
     let ok: () => string = () => "ok"
@@ -145,8 +145,8 @@ fun pipe_then_chain_methods_after_lambda(): string =
     match to_seq(suppliers)
         | (supplier => supplier())
         .first() with
-    | Some { value } -> value
-    | None -> ""
+    case Some { value } -> value
+    case None -> ""
 
 fun pipe_lambda_body_multiline_without_parentheses(): list[string] =
     [" x ", " y "]

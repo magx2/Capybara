@@ -2,18 +2,18 @@ enum Color { RED, BLUE, GREEN_BLUE, YELLOW, BLACK, WHITE }
 
 fun color_match(c: Color): int =
     match c with
-    | RED -> 1
-    | BLUE -> 2
-    | GREEN_BLUE -> 3
-    | YELLOW -> 4
-    | BLACK -> 5
-    | WHITE -> 6
+    case RED -> 1
+    case BLUE -> 2
+    case GREEN_BLUE -> 3
+    case YELLOW -> 4
+    case BLACK -> 5
+    case WHITE -> 6
 
 fun color_match_wildcard(c: Color): int =
     match c with
-    | RED -> 1
-    | BLUE -> 2
-    | _ -> 0
+    case RED -> 1
+    case BLUE -> 2
+    case _ -> 0
 
 fun color_order(c: Color): int = c.order
 
