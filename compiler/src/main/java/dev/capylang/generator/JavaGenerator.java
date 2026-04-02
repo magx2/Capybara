@@ -614,8 +614,8 @@ public final class JavaGenerator implements Generator {
             return "";
         }
         return comments.stream()
-                .map(line -> line.isEmpty() ? "///" : "/// " + line)
-                .collect(joining("\n", "", "\n"));
+                .map(line -> line.isEmpty() ? " *" : " * " + line)
+                .collect(joining("\n", "/**\n", "\n */\n"));
     }
 
     private String mapMethodName(String name) {

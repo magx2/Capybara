@@ -1544,7 +1544,8 @@ public class JavaExpressionEvaluator {
                 .anyMatch(pattern ->
                         pattern instanceof CompiledMatchExpression.WildcardPattern
                         || pattern instanceof CompiledMatchExpression.WildcardBindingPattern);
-        if (optionMatch && !hasWildcard) {
+        var hasDefaultCase = cases.stream().anyMatch(caseRule -> caseRule.startsWith("default"));
+        if (optionMatch && !hasWildcard && !hasDefaultCase) {
             cases.add("case java.lang.Object __capybaraUnexpected -> throw new java.lang.IllegalStateException(\"Unexpected value: \" + " + switchTarget + ");");
         }
 
@@ -1746,6 +1747,9 @@ public class JavaExpressionEvaluator {
         if (!isResultType || parentType.typeParameters().isEmpty()) {
             return receiverExpression;
         }
+        if ("or".equals(methodName)) {
+            return "((" + resultParentRawJavaTypeReference(parentType) + ") (" + receiverExpression + "))";
+        }
         var needsTypedReceiver = switch (methodName) {
             case "pipe", "pipeStar", "pipeGreater", "or", "orElse" -> true;
             default -> false;
@@ -1838,6 +1842,8 @@ public class JavaExpressionEvaluator {
     ) {
         if (isOptionType(matchType)) {
             return switch (pattern) {
+                case CompiledMatchExpression.VariablePattern variablePattern when isOptionSomePattern(variablePattern.name()) ->
+                        "case java.util.Optional " + optionCaseVar + " when " + optionCaseVar + ".isPresent()";
                 case CompiledMatchExpression.VariablePattern variablePattern when isOptionNonePattern(variablePattern.name()) ->
                         "case java.util.Optional " + optionCaseVar + " when " + optionCaseVar + ".isEmpty()";
                 case CompiledMatchExpression.TypedPattern typedPattern when isOptionSomePattern(typedPattern.type().name()) ->
@@ -1878,6 +1884,12 @@ public class JavaExpressionEvaluator {
             case CompiledMatchExpression.VariablePattern variablePattern -> {
                 if (matchType instanceof CompiledDataParentType parentType && parentType.enumType()) {
                     yield "case " + variablePattern.name();
+                }
+                if (matchType instanceof CompiledDataParentType) {
+                    var constructorType = resolveConstructorType(matchType, variablePattern.name());
+                    if (constructorType != null) {
+                        yield "case " + constructorPatternTypeName(matchType, constructorType, variablePattern.name()) + " __ignored";
+                    }
                 }
                 yield "case " + variablePattern.name() + " __ignored";
             }

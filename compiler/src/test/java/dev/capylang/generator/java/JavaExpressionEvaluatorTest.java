@@ -127,6 +127,10 @@ class JavaExpressionEvaluatorTest {
         assertThat(generated).contains("JUnitReport");
         assertThat(generated).contains("Node type");
         assertThat(generated).contains("JUnitNode");
+        assertThat(generated).contains("/**");
+        assertThat(generated).contains(" * Complete report");
+        assertThat(generated).contains(" */");
+        assertThat(generated).doesNotContain("///");
     }
 
     @Test
@@ -250,6 +254,41 @@ class JavaExpressionEvaluatorTest {
 
         assertThat(evaluated).contains(".with(");
         assertThat(evaluated).contains(").with(");
+    }
+
+    @Test
+    void shouldGeneratePresentOptionCaseForBareSomePattern() {
+        var generated = new JavaGenerator().generate(compileProgram("OptionMatch", "/foo/bar", """
+                from /capy/lang/Option import { Option, Some, None }
+
+                fun read(value: Option[string]): string =
+                    match value with
+                    case None -> "none"
+                    case Some -> "some"
+                """)).modules().stream()
+                .map(dev.capylang.generator.GeneratedModule::code)
+                .collect(joining("\n"));
+
+        assertThat(generated).contains(".isPresent()");
+        assertThat(generated).doesNotContain("default -> (((java.lang.String) (\"some\")))");
+    }
+
+    @Test
+    void shouldQualifyBareResultErrorPattern() {
+        var generated = new JavaGenerator().generate(compileProgram("ResultMatch", "/foo/bar", """
+                from /capy/lang/Result import { * }
+
+                fun recover(value: Result[string]): string =
+                    match value with
+                    case Error -> "bad"
+                    case Success { ok } -> ok
+                """)).modules().stream()
+                .map(dev.capylang.generator.GeneratedModule::code)
+                .collect(joining("\n"));
+
+        assertThat(generated).contains("case");
+        assertThat(generated).contains("Result.Error __ignored");
+        assertThat(generated).doesNotContain("case Error __ignored");
     }
 
     static Stream<Arguments> wild() {
