@@ -490,7 +490,67 @@ class CapybaraParserTest {
                     case _ -> Success { raw_sem_ver }
                 """));
 
-        findFunction("test", module.functional());
+        var function = findFunction("test", module.functional());
+        var expression = function.expression();
+        while (expression instanceof LetExpression letExpression) {
+            expression = letExpression.rest();
+        }
+        assertThat(expression).isInstanceOf(MatchExpression.class);
+        var outerMatch = (MatchExpression) expression;
+        assertThat(outerMatch.cases()).hasSize(2);
+        assertThat(outerMatch.cases().getFirst().expression()).isInstanceOf(InfixExpression.class);
+        var firstCasePipe = (InfixExpression) outerMatch.cases().getFirst().expression();
+        assertThat(firstCasePipe.right()).isInstanceOf(LambdaExpression.class);
+        var laterLambda = (LambdaExpression) firstCasePipe.right();
+        assertThat(laterLambda.expression()).isInstanceOf(MatchExpression.class);
+        var innerMatch = (MatchExpression) laterLambda.expression();
+        assertThat(innerMatch.cases()).hasSize(3);
+    }
+
+    @Test
+    @DisplayName("should parse grouped match branch with later nested match over piped parse value without leaking cases")
+    void parseGroupedMatchBranchWithLaterNestedMatchOverPipedParseValueWithoutLeakingCases() {
+        var module = parseSuccess(new RawModule("Test", "/parser", """
+                from /capy/lang/Result import { * }
+
+                fun test(input: string): string =
+                    data __Parse[T] { buffer: string, value: T }
+                    fun __parse_tail(buffer: string): Result[__Parse[string]] = Success { __Parse { buffer, "tail" } }
+                    fun __parse_build(buffer: string): Result[__Parse[string]] = Success { __Parse { buffer, "build" } }
+                    let parse_patch: __Parse[string] = __Parse { input, "base" }
+                    match parse_patch.buffer[0] with
+                    case Some { ch } when ch == "-" -> {
+                        __parse_tail(parse_patch.buffer[1:])
+                        | parse_tail => Success { __Parse {
+                            buffer: parse_tail.buffer,
+                            value: "pre:" + parse_tail.value
+                        }}
+                        | parse => {
+                            match parse.buffer[0] with
+                            case None -> parse.value
+                            case Some { ch } when ch == "+" -> {
+                                __parse_build(parse.buffer[1:])
+                                | parse_build => "plus:" + parse.value + ":" + parse_build.value
+                            }
+                            case Some { ch } -> "bad:" + ch
+                        }
+                    }
+                    case Some { ch } when ch == "+" ->
+                        __parse_build(parse_patch.buffer[1:])
+                        | parse_build => Success { "plus:" + parse_build.value }
+                    case Some { ch } -> "other:" + ch
+                    case None -> "none"
+                """));
+
+        var function = findFunction("test", module.functional());
+        var expression = function.expression();
+        while (expression instanceof LetExpression letExpression) {
+            expression = letExpression.rest();
+        }
+        assertThat(expression).isInstanceOf(MatchExpression.class);
+        var outerMatch = (MatchExpression) expression;
+        assertThat(outerMatch.cases()).hasSize(4);
+        assertThat(outerMatch.cases().getFirst().expression()).isInstanceOf(InfixExpression.class);
     }
 }
 

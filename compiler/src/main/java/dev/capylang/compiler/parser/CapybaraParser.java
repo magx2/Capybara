@@ -1369,9 +1369,9 @@ public class CapybaraParser {
             );
         }
 
-        var matchExpression = expression.matchExpression();
-        if (matchExpression != null) {
-            return matchExpression(matchExpression);
+        var matchExpressionNoPipe = expression.matchExpressionNoPipe();
+        if (matchExpressionNoPipe != null) {
+            return matchExpression(matchExpressionNoPipe);
         }
 
         if (isIndex(expression)) {
@@ -1840,7 +1840,22 @@ public class CapybaraParser {
                         .flatMap(Collection::stream)
                         .flatMap(matchCase -> matchCase.pattern()
                                 .stream()
-                                .map(pattern -> matchCase(pattern, matchCase.expression(), matchCase.expressionNoPipe())))
+                                .map(pattern -> matchCase(pattern, matchCase.guard, matchCase.body)))
+                        .toList(),
+                position(context)
+        );
+    }
+
+    private MatchExpression matchExpression(FunctionalParser.MatchExpressionNoPipeContext context) {
+        return new MatchExpression(
+                expressionNoPipe(context.expressionNoPipe()),
+                context.matchCaseNoPipeList()
+                        .stream()
+                        .map(FunctionalParser.MatchCaseNoPipeListContext::matchCaseNoPipe)
+                        .flatMap(Collection::stream)
+                        .flatMap(matchCase -> matchCase.pattern()
+                                .stream()
+                                .map(pattern -> matchCase(pattern, matchCase.guard, matchCase.body)))
                         .toList(),
                 position(context)
         );
@@ -1849,11 +1864,24 @@ public class CapybaraParser {
     private MatchExpression.MatchCase matchCase(
             FunctionalParser.PatternContext pattern,
             FunctionalParser.ExpressionContext guard,
-            FunctionalParser.ExpressionNoPipeContext expression
+            FunctionalParser.ExpressionContext expression
     ) {
         return new MatchExpression.MatchCase(
                 matchExpressionPattern(pattern),
                 Optional.ofNullable(guard).map(this::expression),
+                this.expression(expression)
+
+        );
+    }
+
+    private MatchExpression.MatchCase matchCase(
+            FunctionalParser.PatternContext pattern,
+            FunctionalParser.ExpressionNoPipeContext guard,
+            FunctionalParser.ExpressionNoPipeContext expression
+    ) {
+        return new MatchExpression.MatchCase(
+                matchExpressionPattern(pattern),
+                Optional.ofNullable(guard).map(this::expressionNoPipe),
                 expressionNoPipe(expression)
 
         );
