@@ -7,6 +7,7 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
 import java.util.Optional;
+import java.lang.reflect.Method;
 import java.util.stream.Stream;
 
 import dev.capylang.compiler.Result;
@@ -187,6 +188,31 @@ class CapybaraParserTest {
 
         assertThat(data.comments()).containsExactly("See: [Complete JUnit XML example](https://github.com/testmoapp/junitxml?tab=readme-ov-file#complete-junit-xml-example)");
         assertThat(type.comments()).containsExactly("Represents a single suite");
+    }
+
+    @Test
+    @DisplayName("should format duplicate local function fallback with first occurrence and all locations")
+    void formatDuplicateLocalFunctionFallback() throws Exception {
+        var parser = new CapybaraParser();
+        Method method = CapybaraParser.class.getDeclaredMethod("formatParserError", RawModule.class, String.class, String.class);
+        method.setAccessible(true);
+        var module = new RawModule("SemVer", "/capy/util", """
+                fun parse(): int =
+                    fun __parse_positive_digit(value: int): int = value
+                    fun __parse_positive_digit(value: int): int = value + 1
+                    0
+                """);
+
+        var error = (Result.Error.SingleError) method.invoke(
+                parser,
+                module,
+                module.input(),
+                "Duplicate local function name: __parse_positive_digit"
+        );
+
+        assertThat(error.line()).isEqualTo(2);
+        assertThat(error.column()).isEqualTo(4);
+        assertThat(error.message()).contains("Duplicate local function name: __parse_positive_digit. Declared at: 2:4, 3:4");
     }
 
     @Test

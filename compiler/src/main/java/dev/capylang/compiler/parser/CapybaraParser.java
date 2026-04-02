@@ -33,6 +33,9 @@ public class CapybaraParser {
     private static final Pattern IMPORT_PATTERN = Pattern.compile(
             "^\\s*from\\s+([A-Za-z_][A-Za-z0-9_]*|/[A-Za-z_][A-Za-z0-9_]*(?:/[A-Za-z_][A-Za-z0-9_]*)+)\\s+import\\s*\\{\\s*([^}]*)\\s*}(?:\\s+except\\s*\\{\\s*([^}]*)\\s*})?\\s*$"
     );
+    private final List<Result.Error.SingleError> parserErrors = new ArrayList<>();
+    private RawModule currentModule;
+    private String currentSource;
 
     public Result<Program> parseModule(Collection<RawModule> rawModules) {
         try {
@@ -58,6 +61,9 @@ public class CapybaraParser {
     public Result<Module> parseModule(RawModule module) {
         try {
             var parsedSource = parseSource(module.input());
+            parserErrors.clear();
+            currentModule = module;
+            currentSource = parsedSource.source();
             var lexer = new dev.capylang.parser.antlr.FunctionalLexer(CharStreams.fromString(parsedSource.source()));
             var tokens = new CommonTokenStream(lexer);
             tokens.fill();
@@ -86,13 +92,25 @@ public class CapybaraParser {
                 return new Result.Error<>(formatSyntaxError(module, parsedSource.source(), syntaxErrors.get(0)));
             }
 
-            var definitions = program.definition().stream()
+            var parsedDefinitions = program.definition().stream()
                     .map(this::definition)
                     .flatMap(Collection::stream)
-                    .collect(toSet());
+                    .toList();
+            var duplicateLocalFunctions = findDuplicateLocalFunctions(parsedDefinitions);
+            if (!duplicateLocalFunctions.isEmpty()) {
+                return new Result.Error<>(duplicateLocalFunctions);
+            }
+            if (!parserErrors.isEmpty()) {
+                return new Result.Error<>(parserErrors);
+            }
+            var definitions = new java.util.LinkedHashSet<>(parsedDefinitions);
             return Result.success(new Module(module.name(), module.path(), new Functional(definitions), parsedSource.imports()));
         } catch (RuntimeException e) {
             return new Result.Error<>(formatParserException(module, e));
+        } finally {
+            parserErrors.clear();
+            currentModule = null;
+            currentSource = null;
         }
     }
 
@@ -177,9 +195,76 @@ public class CapybaraParser {
         return formatParserError(module, module.input(), exception.getMessage());
     }
 
+    private void reportDuplicateLocalFunction(String localName, java.util.List<Token> occurrences) {
+        if (currentModule == null || currentSource == null) {
+            return;
+        }
+        var firstDeclaration = occurrences.getFirst();
+        var locations = occurrences.stream()
+                .map(token -> "%d:%d".formatted(token.getLine(), token.getCharPositionInLine()))
+                .collect(java.util.stream.Collectors.joining(", "));
+        parserErrors.add(
+                formatParserError(
+                        currentModule,
+                        currentSource,
+                        "line %d:%d: Duplicate local function name: %s. Declared at: %s"
+                                .formatted(firstDeclaration.getLine(), firstDeclaration.getCharPositionInLine(), localName, locations)
+                )
+        );
+    }
+
+    private List<Result.Error.SingleError> findDuplicateLocalFunctions(List<Definition> definitions) {
+        if (currentModule == null || currentSource == null) {
+            return List.of();
+        }
+        return definitions.stream()
+                .filter(Function.class::isInstance)
+                .map(Function.class::cast)
+                .filter(function -> function.name().contains("__local_fun_"))
+                .collect(java.util.stream.Collectors.groupingBy(Function::name, java.util.LinkedHashMap::new, java.util.stream.Collectors.toList()))
+                .values().stream()
+                .filter(functions -> functions.size() > 1)
+                .map(this::duplicateLocalFunctionError)
+                .toList();
+    }
+
+    private Result.Error.SingleError duplicateLocalFunctionError(List<Function> functions) {
+        var firstFunction = functions.getFirst();
+        var firstPosition = firstFunction.position().orElseThrow();
+        var originalName = "__" + firstFunction.name().replaceFirst("^.*__local_fun_\\d+_", "");
+        var locations = functions.stream()
+                .map(function -> function.position().orElseThrow())
+                .map(position -> "%d:%d".formatted(position.line(), position.column()))
+                .distinct()
+                .collect(java.util.stream.Collectors.joining(", "));
+        return formatParserError(
+                currentModule,
+                currentSource,
+                "line %d:%d: Duplicate local function name: %s. Declared at: %s"
+                        .formatted(firstPosition.line(), firstPosition.column(), originalName, locations)
+        );
+    }
+
     private Result.Error.SingleError formatParserError(RawModule module, String source, String rawMessage) {
         var parserError = Pattern.compile("line (\\d+):(\\d+): (.+)").matcher(String.valueOf(rawMessage));
         if (!parserError.matches()) {
+            var duplicateLocalFunctionMatcher = Pattern.compile("Duplicate local function name: ([A-Za-z_][A-Za-z0-9_]*)").matcher(String.valueOf(rawMessage));
+            if (duplicateLocalFunctionMatcher.find()) {
+                var localName = duplicateLocalFunctionMatcher.group(1);
+                var locations = findLocalFunctionLocations(source, localName);
+                if (!locations.isEmpty()) {
+                    var first = locations.getFirst();
+                    var renderedLocations = locations.stream()
+                            .map(position -> "%d:%d".formatted(position.line(), position.column()))
+                            .collect(java.util.stream.Collectors.joining(", "));
+                    return formatParserError(
+                            module,
+                            source,
+                            "line %d:%d: Duplicate local function name: %s. Declared at: %s"
+                                    .formatted(first.line(), first.column(), localName, renderedLocations)
+                    );
+                }
+            }
             return new Result.Error.SingleError(0, 0, moduleFile(module), String.valueOf(rawMessage));
         }
 
@@ -229,6 +314,19 @@ public class CapybaraParser {
                       + String.join("\n", renderedLines) + "\n"
                       + " ".repeat(Math.max(column, 0)) + "^ " + details + "\n";
         return new Result.Error.SingleError(line, column, moduleFile(module), message);
+    }
+
+    private List<SourcePosition> findLocalFunctionLocations(String source, String localName) {
+        var locations = new ArrayList<SourcePosition>();
+        var pattern = Pattern.compile("(^|\\R)([ \\t]*)fun\\s+" + Pattern.quote(localName) + "\\s*\\(");
+        var matcher = pattern.matcher(source);
+        while (matcher.find()) {
+            var prefix = source.substring(0, matcher.start(2));
+            var line = (int) prefix.chars().filter(ch -> ch == '\n').count() + 1;
+            var column = matcher.group(2).length();
+            locations.add(new SourcePosition(line, column, Optional.empty()));
+        }
+        return List.copyOf(locations);
     }
 
     private static String moduleFile(RawModule module) {
@@ -384,18 +482,22 @@ public class CapybaraParser {
         var localFunctionNameMap = new java.util.LinkedHashMap<String, String>();
         var localTypeNameMap = new java.util.LinkedHashMap<String, String>();
         var localConstNameMap = new java.util.LinkedHashMap<String, String>();
+        var localFunctionPositions = new java.util.LinkedHashMap<String, java.util.List<Token>>();
         var localFunctionIndex = 0;
         var localTypeIndex = 0;
         var localConstIndex = 0;
         for (var localDefinition : localDefinitions) {
             var localFunction = localDefinition.localFunctionDeclaration();
             if (localFunction != null) {
-                var localName = localFunction.NAME().getText();
+                var localNameToken = localFunction.NAME().getSymbol();
+                var localName = localNameToken.getText();
                 if (!localName.startsWith("__")) {
                     throw new IllegalStateException("Local function name has to start with `__`: " + localName);
                 }
+                var occurrences = localFunctionPositions.computeIfAbsent(localName, ignored -> new java.util.ArrayList<>());
+                occurrences.add(localNameToken);
                 if (localFunctionNameMap.containsKey(localName)) {
-                    throw new IllegalStateException("Duplicate local function name: " + localName);
+                    continue;
                 }
                 localFunctionNameMap.put(
                         localName,
@@ -450,7 +552,11 @@ public class CapybaraParser {
                 localConstIndex++;
             }
         }
-
+        localFunctionPositions.forEach((localName, occurrences) -> {
+            if (occurrences.size() > 1) {
+                reportDuplicateLocalFunction(localName, occurrences);
+            }
+        });
         var extractedLocalDefinitions = new java.util.ArrayList<Definition>();
         for (var localDefinition : localDefinitions) {
             if (localDefinition.localFunctionDeclaration() != null) {
