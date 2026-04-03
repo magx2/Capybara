@@ -55,4 +55,16 @@ class EmptyLiteralInferenceTest {
         var seq = EmptyLiteralInference.toSeqUsingEndLiteral(List.of(4, 5));
         assertThat(EmptyLiteralInference.seqEndHeadOrDefault(seq, -1)).isEqualTo(5);
     }
+
+    @Test
+    void concatInferredSubtypeListsCanFlowIntoParentTypedSink() {
+        var batch = EmptyLiteralInference.concatInferredParentSubtypeLists(List.of("ok", "err"));
+        assertThat(batch.outcomes()).hasSize(4);
+        assertThat(batch.outcomes()).allMatch(outcome -> outcome instanceof EmptyLiteralInference.Outcome);
+    }
+
+    @Test
+    void threeInferredTestCaseListsCanBeConcatenatedIntoTestFile() {
+        assertThat(EmptyLiteralInference.buildTestFileFromThreeInferredTestCaseLists()).isEqualTo(3);
+    }
 }
