@@ -856,6 +856,7 @@ public class Capy {
                 Files.createDirectories(parent);
             }
             log.info("Writing module to file: " + absolutePath);
+            var startedAt = System.nanoTime();
             Files.writeString(
                     absolutePath,
                     code,
@@ -863,6 +864,8 @@ public class Capy {
                     StandardOpenOption.TRUNCATE_EXISTING,
                     StandardOpenOption.WRITE
             );
+            var duration = Duration.ofNanos(System.nanoTime() - startedAt);
+            log.info("Wrote module to file: " + absolutePath + " in " + duration);
         } catch (IOException e) {
             throw new UncheckedIOException("Unable to write file: " + absolutePath, e);
         }
@@ -878,8 +881,11 @@ public class Capy {
                         ? outputDir.resolve(module.name() + CompiledModule.EXTENSION)
                         : outputDir.resolve(modulePath).resolve(module.name() + CompiledModule.EXTENSION);
                 Files.createDirectories(moduleJson.getParent());
-                mapper.writerWithDefaultPrettyPrinter().writeValue(moduleJson.toFile(), module);
                 log.info("Writing linked module to file: " + moduleJson);
+                var startedAt = System.nanoTime();
+                mapper.writerWithDefaultPrettyPrinter().writeValue(moduleJson.toFile(), module);
+                var duration = Duration.ofNanos(System.nanoTime() - startedAt);
+                log.info("Wrote linked module to file: " + moduleJson + " in " + duration);
             }
         } catch (IOException e) {
             throw new UncheckedIOException("Unable to write linked JSON output to " + outputDir, e);
