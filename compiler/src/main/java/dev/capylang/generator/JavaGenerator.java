@@ -5,35 +5,44 @@ import dev.capylang.compiler.CompiledModule;
 import dev.capylang.compiler.CompiledProgram;
 
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.function.Supplier;
+import java.util.logging.Logger;
 
 import static java.lang.String.join;
 import static java.util.stream.Collectors.joining;
 import static dev.capylang.generator.java.JavaExpressionEvaluator.evaluateExpression;
 
 public final class JavaGenerator implements Generator {
+    private static final Logger log = Logger.getLogger(JavaGenerator.class.getName());
     private final JavaAstBuilder astBuilder = new JavaAstBuilder();
     private static final String METHOD_DECL_PREFIX = "__method__";
 
     @Override
     public GeneratedProgram generate(CompiledProgram program) {
+        var timings = new GenerationTimings();
         var modules = program.modules().stream()
-                .map(this::modules)
+                .map(module -> modules(module, timings))
                 .flatMap(List::stream)
                 .toList();
+        log.info(() -> "Java generation timings: AST build="
+                       + Duration.ofNanos(timings.astBuildNanos())
+                       + ", Java source rendering="
+                       + Duration.ofNanos(timings.sourceRenderNanos()));
         return new GeneratedProgram(modules);
     }
 
-    private List<GeneratedModule> modules(CompiledModule module) {
-        var javaClass = astBuilder.build(module);
+    private List<GeneratedModule> modules(CompiledModule module, GenerationTimings timings) {
+        var javaClass = time(timings::addAstBuildNanos, () -> astBuilder.build(module));
         if (!hasTypeOrDataNameConflictWithFile(javaClass)) {
             return List.of(new GeneratedModule(
                     relativePath(javaClass, javaClass.name().toString()),
-                    code(javaClass, javaClass.name().toString(), true)
+                    time(timings::addSourceRenderNanos, () -> code(javaClass, javaClass.name().toString(), true))
             ));
         }
 
@@ -43,7 +52,7 @@ public final class JavaGenerator implements Generator {
         if (ownerInterface.isPresent()) {
             return List.of(new GeneratedModule(
                     relativePath(javaClass, javaClass.name().toString()),
-                    codeNestedInOwnerInterface(javaClass, ownerInterface.get(), ownerInterface.get().name().toString())
+                    time(timings::addSourceRenderNanos, () -> codeNestedInOwnerInterface(javaClass, ownerInterface.get(), ownerInterface.get().name().toString()))
             ));
         }
 
@@ -52,7 +61,7 @@ public final class JavaGenerator implements Generator {
         for (var declaration : topLevelDeclarations(javaClass, helperCallOwnerName)) {
             compiled.add(new GeneratedModule(
                     relativePath(javaClass, declaration.name()),
-                    codeTopLevelDeclaration(javaClass, declaration.code())
+                    time(timings::addSourceRenderNanos, () -> codeTopLevelDeclaration(javaClass, declaration.code()))
             ));
         }
             var utilityStaticImports = new TreeSet<>(javaClass.staticImports());
@@ -70,10 +79,38 @@ public final class JavaGenerator implements Generator {
             );
             compiled.add(new GeneratedModule(
                     relativePath(javaClass, utilityClass.name().toString()),
-                    code(utilityClass, utilityClass.name().toString(), false)
+                    time(timings::addSourceRenderNanos, () -> code(utilityClass, utilityClass.name().toString(), false))
             ));
         }
         return List.copyOf(compiled);
+    }
+
+    private <T> T time(java.util.function.LongConsumer recorder, Supplier<T> action) {
+        var startedAt = System.nanoTime();
+        var result = action.get();
+        recorder.accept(System.nanoTime() - startedAt);
+        return result;
+    }
+
+    private static final class GenerationTimings {
+        private long astBuildNanos;
+        private long sourceRenderNanos;
+
+        private void addAstBuildNanos(long nanos) {
+            astBuildNanos += nanos;
+        }
+
+        private void addSourceRenderNanos(long nanos) {
+            sourceRenderNanos += nanos;
+        }
+
+        private long astBuildNanos() {
+            return astBuildNanos;
+        }
+
+        private long sourceRenderNanos() {
+            return sourceRenderNanos;
+        }
     }
 
     private Path relativePath(JavaClass javaClass, String simpleName) {

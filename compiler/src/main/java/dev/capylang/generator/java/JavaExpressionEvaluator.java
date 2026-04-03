@@ -8,6 +8,8 @@ import dev.capylang.compiler.parser.InfixOperator;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.logging.Logger;
 
 import static java.lang.System.lineSeparator;
@@ -25,6 +27,10 @@ public class JavaExpressionEvaluator {
     private static final java.util.concurrent.atomic.AtomicLong TUPLE_LET_VAR_COUNTER =
             new java.util.concurrent.atomic.AtomicLong();
     private static final Logger log = Logger.getLogger(JavaExpressionEvaluator.class.getName());
+    private static final ConcurrentMap<String, String> JAVA_CAST_TYPE_CACHE = new ConcurrentHashMap<>();
+    private static final ConcurrentMap<String, List<String>> TOP_LEVEL_DESCRIPTOR_CACHE = new ConcurrentHashMap<>();
+    private static final ConcurrentMap<String, String> NORMALIZED_TYPE_REFERENCE_CACHE = new ConcurrentHashMap<>();
+    private static final ConcurrentMap<String, String> NORMALIZED_QUALIFIED_TYPE_NAME_CACHE = new ConcurrentHashMap<>();
     private static final String DICT_PIPE_ARGS_SEPARATOR = "::";
     private static final String TUPLE_PIPE_ARGS_SEPARATOR = ";;";
     private static final String METHOD_DECL_PREFIX = "__method__";
@@ -1716,6 +1722,16 @@ public class JavaExpressionEvaluator {
         if (normalized.isEmpty()) {
             return "java.lang.Object";
         }
+        var cached = JAVA_CAST_TYPE_CACHE.get(normalized);
+        if (cached != null) {
+            return cached;
+        }
+        var javaType = computeJavaCastTypeFromDescriptor(normalized);
+        JAVA_CAST_TYPE_CACHE.put(normalized, javaType);
+        return javaType;
+    }
+
+    private static String computeJavaCastTypeFromDescriptor(String normalized) {
         return switch (normalized.toLowerCase(java.util.Locale.ROOT)) {
             case "byte" -> "java.lang.Byte";
             case "int" -> "java.lang.Integer";
@@ -1749,7 +1765,7 @@ public class JavaExpressionEvaluator {
                     var rawType = normalized.substring(0, genericStart).trim();
                     var argsDescriptor = normalized.substring(genericStart + 1, normalized.length() - 1);
                     var rawArgs = splitTopLevelDescriptors(argsDescriptor);
-                    var javaArgs = splitTopLevelDescriptors(argsDescriptor).stream()
+                    var javaArgs = rawArgs.stream()
                             .map(JavaExpressionEvaluator::javaCastTypeFromDescriptor)
                             .toList();
                     if (isOptionSomeTypeName(rawType) || isOptionNoneTypeName(rawType)) {
@@ -1828,6 +1844,10 @@ public class JavaExpressionEvaluator {
     }
 
     private static List<String> splitTopLevelDescriptors(String descriptors) {
+        return TOP_LEVEL_DESCRIPTOR_CACHE.computeIfAbsent(descriptors, JavaExpressionEvaluator::computeSplitTopLevelDescriptors);
+    }
+
+    private static List<String> computeSplitTopLevelDescriptors(String descriptors) {
         var result = new ArrayList<String>();
         var depth = 0;
         var start = 0;
@@ -1849,7 +1869,7 @@ public class JavaExpressionEvaluator {
         if (!tail.isEmpty()) {
             result.add(tail);
         }
-        return result;
+        return List.copyOf(result);
     }
 
     private static String castMatchSelectorExpression(
@@ -2454,6 +2474,10 @@ public class JavaExpressionEvaluator {
     }
 
     private static String normalizeJavaTypeReference(String typeName) {
+        return NORMALIZED_TYPE_REFERENCE_CACHE.computeIfAbsent(typeName, JavaExpressionEvaluator::computeNormalizedJavaTypeReference);
+    }
+
+    private static String computeNormalizedJavaTypeReference(String typeName) {
         var rawTypeName = stripGenericSuffix(typeName);
         var normalizedTypeName = normalizeQualifiedTypeName(rawTypeName);
         if ("Option".equals(rawTypeName)
@@ -2670,11 +2694,13 @@ public class JavaExpressionEvaluator {
     }
 
     private static String normalizeQualifiedTypeName(String typeName) {
-        var normalized = typeName.replace('\\', '/');
-        if (!normalized.startsWith("/")) {
-            normalized = "/" + normalized;
-        }
-        return normalized;
+        return NORMALIZED_QUALIFIED_TYPE_NAME_CACHE.computeIfAbsent(typeName, rawTypeName -> {
+            var normalized = rawTypeName.replace('\\', '/');
+            if (!normalized.startsWith("/")) {
+                normalized = "/" + normalized;
+            }
+            return normalized;
+        });
     }
 
     private static String stripGenericSuffix(String typeName) {

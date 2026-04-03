@@ -454,6 +454,8 @@ public class Capy {
     }
 
     private static void copyJavaLibResources(Path generatedOutputDir) {
+        log.info("Copying bundled java-lib sources to: " + generatedOutputDir);
+        var startedAt = System.nanoTime();
         try {
             var resourceUri = Capy.class.getResource(JAVA_LIB_RESOURCE_DIR).toURI();
             if ("jar".equals(resourceUri.getScheme())) {
@@ -466,22 +468,32 @@ public class Capy {
         } catch (URISyntaxException | IOException e) {
             throw new UncheckedIOException("Unable to copy bundled java-lib sources", e instanceof IOException io ? io : new IOException(e));
         }
+        var duration = Duration.ofNanos(System.nanoTime() - startedAt);
+        log.info("Copied bundled java-lib sources to: " + generatedOutputDir + " in " + duration);
     }
 
     private static void copyDirectoryContents(Path sourceDir, Path targetDir) throws IOException {
         try (var files = Files.walk(sourceDir)) {
-            for (var source : files.toList()) {
-                var relative = sourceDir.relativize(source);
-                var target = targetDir.resolve(relative.toString());
-                if (Files.isDirectory(source)) {
-                    Files.createDirectories(target);
-                } else {
-                    var parent = target.getParent();
-                    if (parent != null) {
-                        Files.createDirectories(parent);
+            try {
+                files.forEach(source -> {
+                    var relative = sourceDir.relativize(source);
+                    var target = targetDir.resolve(relative.toString());
+                    try {
+                        if (Files.isDirectory(source)) {
+                            Files.createDirectories(target);
+                        } else {
+                            var parent = target.getParent();
+                            if (parent != null) {
+                                Files.createDirectories(parent);
+                            }
+                            Files.copy(source, target, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                        }
+                    } catch (IOException e) {
+                        throw new UncheckedIOException(e);
                     }
-                    Files.copy(source, target, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-                }
+                });
+            } catch (UncheckedIOException e) {
+                throw e.getCause();
             }
         }
     }
@@ -491,8 +503,15 @@ public class Capy {
     }
 
     private static void generateProgram(OutputType outputType, Path generatedOutputDir, GenerationInput generationInput) {
+        log.info("Generating " + outputType + " sources");
+        var generationStartedAt = System.nanoTime();
         var compiledProgram = Generator.findGenerator(outputType).generate(generationInput.program());
-        compiledProgram.modules().forEach(module -> writeCompiledModule(generatedOutputDir, module.relativePath(), module.code()));
+        log.info("Generated " + outputType + " sources in " + Duration.ofNanos(System.nanoTime() - generationStartedAt));
+
+        log.info("Writing generated " + outputType + " sources to: " + generatedOutputDir);
+        var writeStartedAt = System.nanoTime();
+        writeGeneratedProgram(generatedOutputDir, compiledProgram);
+        log.info("Wrote generated " + outputType + " sources to: " + generatedOutputDir + " in " + Duration.ofNanos(System.nanoTime() - writeStartedAt));
         if (outputType == OutputType.JAVA && generationInput.includeJavaLibResources()) {
             copyJavaLibResources(generatedOutputDir);
         }
