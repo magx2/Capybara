@@ -40,6 +40,7 @@ import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.Arrays;
 import java.util.Comparator;
@@ -1134,13 +1135,17 @@ public class Capy {
 
     private static RawModule buildModule(SourceFile sourceFile) {
         log.info("Building module from file: " + sourceFile.path());
+        var startedAt = System.nanoTime();
         var fileName = sourceFile.path().getFileName().toString();
         var fileNameWithoutExtension = fileName.substring(0, fileName.lastIndexOf('.'));
-        return new RawModule(
+        var module = new RawModule(
                 fileNameWithoutExtension,
                 findModulePath(sourceFile),
                 readFile(sourceFile.path())
         );
+        var duration = Duration.ofNanos(System.nanoTime() - startedAt);
+        log.info("Built module from file: " + sourceFile.path() + " in " + duration);
+        return module;
     }
 
     private static List<SourceFile> listSourceFiles(Path directory) {
