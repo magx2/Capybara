@@ -1038,11 +1038,24 @@ public class CapybaraCompiler {
             Map<String, GenericDataType> dataTypes,
             String moduleSourceFile
     ) {
+        var branchMismatch = firstConcreteReturnMismatch(expression, declaredReturnType, dataTypes);
+        if (branchMismatch.isPresent()) {
+            return returnTypeMismatchError(function, function.expression(), declaredReturnType, branchMismatch.orElseThrow(), moduleSourceFile);
+        }
         var coercedExpression = coerceReturnExpression(expression, declaredReturnType, dataTypes);
         if (isAssignableReturnType(declaredReturnType, coercedExpression.type(), dataTypes)) {
             return Result.success(coercedExpression);
         }
-        var returnExpression = terminalReturnExpression(function.expression());
+        return returnTypeMismatchError(function, terminalReturnExpression(function.expression()), declaredReturnType, coercedExpression.type(), moduleSourceFile);
+    }
+
+    private Result<dev.capylang.compiler.expression.CompiledExpression> returnTypeMismatchError(
+            Function function,
+            Expression returnExpression,
+            CompiledType declaredReturnType,
+            CompiledType actualReturnType,
+            String moduleSourceFile
+    ) {
         var position = returnExpressionPosition(function.expression()).or(() -> function.position()).orElse(SourcePosition.EMPTY);
         var line = Math.max(position.line(), 1);
         var column = Math.max(position.column(), 1);
@@ -1050,7 +1063,7 @@ public class CapybaraCompiler {
         var functionPreview = formatReturnTypeMismatchSourceLine(function, returnExpression, position, declaredReturnType);
         var pointer = " ".repeat(Math.max(column, 0))
                       + "^ expected `" + formatLinkedType(declaredReturnType)
-                      + "`, found `" + formatLinkedType(coercedExpression.type()) + "`";
+                      + "`, found `" + formatLinkedType(actualReturnType) + "`";
         return Result.error(
                 "error: mismatched types\n"
                 + " --> " + file + ":" + line + ":" + column + "\n"
@@ -1778,6 +1791,49 @@ public class CapybaraCompiler {
             }
         }
         return expression;
+    }
+
+    private Optional<CompiledType> firstConcreteReturnMismatch(
+            dev.capylang.compiler.expression.CompiledExpression expression,
+            CompiledType expectedReturnType,
+            Map<String, GenericDataType> dataTypes
+    ) {
+        return switch (expression) {
+            case dev.capylang.compiler.expression.CompiledLetExpression letExpression ->
+                    firstConcreteReturnMismatch(letExpression.rest(), expectedReturnType, dataTypes);
+            case dev.capylang.compiler.expression.CompiledIfExpression ifExpression -> {
+                var thenMismatch = firstConcreteReturnMismatch(ifExpression.thenBranch(), expectedReturnType, dataTypes);
+                if (thenMismatch.isPresent()) {
+                    yield thenMismatch;
+                }
+                yield firstConcreteReturnMismatch(ifExpression.elseBranch(), expectedReturnType, dataTypes);
+            }
+            case dev.capylang.compiler.expression.CompiledMatchExpression matchExpression ->
+                    matchExpression.cases().stream()
+                            .map(matchCase -> firstConcreteReturnMismatch(matchCase.expression(), expectedReturnType, dataTypes))
+                            .flatMap(Optional::stream)
+                            .findFirst();
+            default -> {
+                var coercedExpression = coerceReturnExpression(expression, expectedReturnType, dataTypes);
+                if (coercedExpression.type() != PrimitiveLinkedType.ANY
+                    && coercedExpression.type() != PrimitiveLinkedType.NOTHING
+                    && shouldReportConcreteBranchMismatch(expectedReturnType, coercedExpression.type(), dataTypes)) {
+                    yield Optional.of(coercedExpression.type());
+                }
+                yield Optional.empty();
+            }
+        };
+    }
+
+    private boolean shouldReportConcreteBranchMismatch(
+            CompiledType expectedReturnType,
+            CompiledType actualReturnType,
+            Map<String, GenericDataType> dataTypes
+    ) {
+        if (isAssignableReturnType(expectedReturnType, actualReturnType, dataTypes)) {
+            return false;
+        }
+        return !(expectedReturnType instanceof GenericDataType && actualReturnType instanceof GenericDataType);
     }
     private boolean isProgramMain(String name, CompiledType returnType, List<CompiledFunctionParameter> parameters) {
         if (!"main".equals(name)) {
@@ -3363,9 +3419,6 @@ public class CapybaraCompiler {
                 .toList();
     }
 }
-
-
-
 
 
 

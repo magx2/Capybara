@@ -206,6 +206,62 @@ public class CompilationErrorTest {
                                     case Some { value } where value == "+" -> "plus"
                                 %3$s^ Syntax error, `where` not expected here. Use `when` for match guards
                                 """
+                ),
+                Arguments.of(
+                        "match_result_branch_type_mismatch",
+                        """
+                                from /capy/lang/Option import { * }
+                                from /capy/lang/Result import { * }
+                                fun foo(v: string): Result[string] =
+                                    match v[0] with
+                                    case None -> Error { "missing" }
+                                    case Some { value } -> value + ""
+                                """,
+                        new Position(4, 4),
+                        """
+                                error: mismatched types
+                                 --> /foo/boo/match_result_branch_type_mismatch.cfun:4:4
+                                fun foo(v: string): Result[string] =
+                                    match v[0] with
+                                    ^ expected `Result[string]`, found `string`
+                                """
+                ),
+                Arguments.of(
+                        "match_result_branch_type_mismatch_to_int",
+                        """
+                                from /capy/lang/Option import { * }
+                                from /capy/lang/Result import { * }
+                                fun foo(v: string): Result[int] =
+                                    match v[0] with
+                                    case None -> Error { "missing" }
+                                    case Some { value } -> value
+                                """,
+                        new Position(4, 4),
+                        """
+                                error: mismatched types
+                                 --> /foo/boo/match_result_branch_type_mismatch_to_int.cfun:4:4
+                                fun foo(v: string): Result[int] =
+                                    match v[0] with
+                                    ^ expected `Result[int]`, found `string`
+                                """
+                ),
+                Arguments.of(
+                        "match_option_branch_type_mismatch",
+                        """
+                                from /capy/lang/Option import { * }
+                                fun foo(v: string): Option[string] =
+                                    match v[0] with
+                                    case None -> None
+                                    case Some { value } -> value + ""
+                                """,
+                        new Position(3, 4),
+                        """
+                                error: mismatched types
+                                 --> /foo/boo/match_option_branch_type_mismatch.cfun:3:4
+                                fun foo(v: string): Option[string] =
+                                    match v[0] with
+                                    ^ expected `Option[string]`, found `string`
+                                """
                 ));
         var primitiveTypes = List.of("string", "byte", "int", "long", "float", "double", "bool");
         var primitiveCases = primitiveTypes.stream().map(CompilationErrorTest::primitiveMatchNotExhaustiveCase);
