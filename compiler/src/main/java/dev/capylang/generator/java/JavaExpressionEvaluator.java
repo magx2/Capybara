@@ -481,10 +481,14 @@ public class JavaExpressionEvaluator {
     }
 
     private static String evaluateListAppendExpression(CompiledInfixExpression infixExpression, String left, String right) {
+        var resultElementType = infixExpression.type() instanceof dev.capylang.compiler.CollectionLinkedType.CompiledList listType
+                ? javaCastType(listType.elementType())
+                : "java.lang.Object";
+        var concat = "java.util.stream.Stream.<" + resultElementType + ">concat";
         if (infixExpression.right().type() instanceof dev.capylang.compiler.CollectionLinkedType.CompiledList) {
-            return "java.util.stream.Stream.concat((" + left + ").stream(), (" + right + ").stream()).toList()";
+            return concat + "((" + left + ").stream(), (" + right + ").stream()).toList()";
         }
-        return "java.util.stream.Stream.concat((" + left + ").stream(), java.util.stream.Stream.of(" + right + ")).toList()";
+        return concat + "((" + left + ").stream(), java.util.stream.Stream.of(" + right + ")).toList()";
     }
 
     private static String evaluateSetAppendExpression(CompiledInfixExpression infixExpression, String left, String right) {

@@ -221,8 +221,7 @@ public class CompilationErrorTest {
                         """
                                 error: mismatched types
                                  --> /foo/boo/match_result_branch_type_mismatch.cfun:4:4
-                                fun foo(v: string): Result[string] =
-                                    match v[0] with
+                                fun foo(v: string): Result[string] = match v[0] with ...
                                     ^ expected `Result[string]`, found `string`
                                 """
                 ),
@@ -240,8 +239,7 @@ public class CompilationErrorTest {
                         """
                                 error: mismatched types
                                  --> /foo/boo/match_result_branch_type_mismatch_to_int.cfun:4:4
-                                fun foo(v: string): Result[int] =
-                                    match v[0] with
+                                fun foo(v: string): Result[int] = match v[0] with ...
                                     ^ expected `Result[int]`, found `string`
                                 """
                 ),
@@ -258,8 +256,7 @@ public class CompilationErrorTest {
                         """
                                 error: mismatched types
                                  --> /foo/boo/match_option_branch_type_mismatch.cfun:3:4
-                                fun foo(v: string): Option[string] =
-                                    match v[0] with
+                                fun foo(v: string): Option[string] = match v[0] with ...
                                     ^ expected `Option[string]`, found `string`
                                 """
                 ));

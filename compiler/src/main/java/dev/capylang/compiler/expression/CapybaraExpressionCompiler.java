@@ -406,6 +406,11 @@ public class CapybaraExpressionCompiler {
                 continue;
             }
             var resolved = resolvedValue.value();
+            var unsafeCollectionError = findUnsafeCollectionArgumentError(functionCall.arguments(), resolved.arguments(), candidate.parameterTypes());
+            if (unsafeCollectionError != null) {
+                deepestError = preferDeeperError(deepestError, unsafeCollectionError);
+                continue;
+            }
             if (best == null || resolved.coercions() < best.coercions()) {
                 best = new ResolvedFunctionCall(candidate, resolved.arguments(), resolved.coercions());
             }
@@ -543,6 +548,11 @@ public class CapybaraExpressionCompiler {
                 continue;
             }
             var resolved = resolvedValue.value();
+            var unsafeCollectionError = findUnsafeCollectionArgumentError(functionCall.arguments(), resolved.arguments(), candidate.parameterTypes());
+            if (unsafeCollectionError != null) {
+                deepestError = preferDeeperError(deepestError, unsafeCollectionError);
+                continue;
+            }
             if (best == null || resolved.coercions() < best.coercions()) {
                 best = new ResolvedFunctionCall(candidate, resolved.arguments(), resolved.coercions());
             }
@@ -708,6 +718,46 @@ public class CapybaraExpressionCompiler {
                 best.arguments(),
                 resolveReturnType(best.signature(), best.arguments())
         ));
+    }
+
+    private Result.Error.SingleError findUnsafeCollectionArgumentError(
+            List<Expression> rawArguments,
+            List<CompiledExpression> resolvedArguments,
+            List<CompiledType> expectedTypes
+    ) {
+        for (var i = 0; i < Math.min(rawArguments.size(), Math.min(resolvedArguments.size(), expectedTypes.size())); i++) {
+            var actual = resolvedArguments.get(i).type();
+            var expected = expectedTypes.get(i);
+            if (!isUnsafeCollectionNarrowing(actual, expected)) {
+                continue;
+            }
+            var position = rawArguments.get(i).position();
+            var message = "Expected `" + expected + "`, got `" + actual + "`";
+            return withPosition(Result.error(message), position) instanceof Result.Error<?> error
+                    ? error.errors().first()
+                    : null;
+        }
+        return null;
+    }
+
+    private boolean isUnsafeCollectionNarrowing(CompiledType actual, CompiledType expected) {
+        if (actual instanceof CompiledList actualList && expected instanceof CompiledList expectedList) {
+            return isUnsafeCollectionElementNarrowing(actualList.elementType(), expectedList.elementType());
+        }
+        if (actual instanceof CompiledSet actualSet && expected instanceof CompiledSet expectedSet) {
+            return isUnsafeCollectionElementNarrowing(actualSet.elementType(), expectedSet.elementType());
+        }
+        if (actual instanceof CompiledDict actualDict && expected instanceof CompiledDict expectedDict) {
+            return isUnsafeCollectionElementNarrowing(actualDict.valueType(), expectedDict.valueType());
+        }
+        return false;
+    }
+
+    private boolean isUnsafeCollectionElementNarrowing(CompiledType actualElement, CompiledType expectedElement) {
+        if (expectedElement == ANY || expectedElement == DATA) {
+            return false;
+        }
+        return actualElement == ANY || actualElement == DATA;
     }
 
     private CompiledType resolveReturnType(FunctionSignature signature, List<CompiledExpression> arguments) {
@@ -1521,16 +1571,19 @@ public class CapybaraExpressionCompiler {
         }
         if (expected instanceof CompiledList expectedList
             && argument.type() instanceof CompiledList argumentList
+            && argumentList.elementType() != ANY
             && isTypeCompatible(argumentList.elementType(), expectedList.elementType())) {
             return new CoercedArgument(argument, 1);
         }
         if (expected instanceof CompiledSet expectedSet
             && argument.type() instanceof CompiledSet argumentSet
+            && argumentSet.elementType() != ANY
             && isTypeCompatible(argumentSet.elementType(), expectedSet.elementType())) {
             return new CoercedArgument(argument, 1);
         }
         if (expected instanceof CompiledDict expectedDict
             && argument.type() instanceof CompiledDict argumentDict
+            && argumentDict.valueType() != ANY
             && isTypeCompatible(argumentDict.valueType(), expectedDict.valueType())) {
             return new CoercedArgument(argument, 1);
         }
@@ -1625,20 +1678,29 @@ public class CapybaraExpressionCompiler {
         if (actual.equals(expected)) {
             return true;
         }
+        if (expected instanceof CompiledList expectedList && actual instanceof CompiledList actualList) {
+            if (actualList.elementType() == ANY && expectedList.elementType() != ANY) {
+                return false;
+            }
+            return isTypeCompatible(actualList.elementType(), expectedList.elementType());
+        }
+        if (expected instanceof CompiledSet expectedSet && actual instanceof CompiledSet actualSet) {
+            if (actualSet.elementType() == ANY && expectedSet.elementType() != ANY) {
+                return false;
+            }
+            return isTypeCompatible(actualSet.elementType(), expectedSet.elementType());
+        }
+        if (expected instanceof CompiledDict expectedDict && actual instanceof CompiledDict actualDict) {
+            if (actualDict.valueType() == ANY && expectedDict.valueType() != ANY) {
+                return false;
+            }
+            return isTypeCompatible(actualDict.valueType(), expectedDict.valueType());
+        }
         if (expected == ANY || actual == ANY || actual == NOTHING) {
             return true;
         }
         if (expected instanceof CompiledGenericTypeParameter || actual instanceof CompiledGenericTypeParameter) {
             return true;
-        }
-        if (expected instanceof CompiledList expectedList && actual instanceof CompiledList actualList) {
-            return isTypeCompatible(actualList.elementType(), expectedList.elementType());
-        }
-        if (expected instanceof CompiledSet expectedSet && actual instanceof CompiledSet actualSet) {
-            return isTypeCompatible(actualSet.elementType(), expectedSet.elementType());
-        }
-        if (expected instanceof CompiledDict expectedDict && actual instanceof CompiledDict actualDict) {
-            return isTypeCompatible(actualDict.valueType(), expectedDict.valueType());
         }
         if (expected instanceof CompiledTupleType expectedTuple && actual instanceof CompiledTupleType actualTuple) {
             return areTupleTypesCompatible(actualTuple, expectedTuple);
@@ -3149,7 +3211,7 @@ public class CapybaraExpressionCompiler {
                 });
     }
 
-    private static Result<CompiledInfixExpression> getLinkedInfixExpression(
+    private Result<CompiledInfixExpression> getLinkedInfixExpression(
             CompiledExpression left,
             InfixOperator operator,
             CompiledExpression right,
@@ -3218,7 +3280,7 @@ public class CapybaraExpressionCompiler {
                 : value;
     }
 
-    private static CompiledType findPlusType(CompiledType left, CompiledType right) {
+    private CompiledType findPlusType(CompiledType left, CompiledType right) {
         if (left == STRING && isDataLikeType(right)) {
             return STRING;
         }
@@ -3254,7 +3316,7 @@ public class CapybaraExpressionCompiler {
         return findHigherType(left, right);
     }
 
-    private static CompiledType findMinusType(CompiledType left, CompiledType right) {
+    private CompiledType findMinusType(CompiledType left, CompiledType right) {
         if (left instanceof CompiledList leftList) {
             if (right instanceof CompiledList rightList) {
                 return new CompiledList(mergeCollectionElementType(leftList.elementType(), rightList.elementType()));
@@ -3289,14 +3351,69 @@ public class CapybaraExpressionCompiler {
         return findHigherType(left, right);
     }
 
-    private static CompiledType mergeCollectionElementType(CompiledType left, CompiledType right) {
+    private CompiledType mergeCollectionElementType(CompiledType left, CompiledType right) {
         if (left == ANY) {
             return right;
         }
         if (right == ANY) {
             return left;
         }
+        var sharedDataParent = findSharedCollectionParentType(left, right);
+        if (sharedDataParent != null) {
+            return sharedDataParent;
+        }
         return findHigherType(left, right);
+    }
+
+    private CompiledType findSharedCollectionParentType(CompiledType left, CompiledType right) {
+        if (left instanceof CompiledDataParentType leftParent
+            && right instanceof CompiledDataType rightData
+            && isSubtypeOfParent(rightData, leftParent)) {
+            return leftParent;
+        }
+        if (right instanceof CompiledDataParentType rightParent
+            && left instanceof CompiledDataType leftData
+            && isSubtypeOfParent(leftData, rightParent)) {
+            return rightParent;
+        }
+        if (left instanceof CompiledDataParentType leftParent
+            && right instanceof CompiledDataParentType rightParent
+            && sameRawTypeName(leftParent.name(), rightParent.name())
+            && areTypeParameterDescriptorsCompatible(rightParent.typeParameters(), leftParent.typeParameters())) {
+            return leftParent;
+        }
+        if (!(left instanceof CompiledDataType leftData) || !(right instanceof CompiledDataType rightData)) {
+            return null;
+        }
+        for (var leftParentDescriptor : leftData.extendedTypes()) {
+            var leftParentName = rawTypeName(leftParentDescriptor);
+            for (var rightParentDescriptor : rightData.extendedTypes()) {
+                var rightParentName = rawTypeName(rightParentDescriptor);
+                if (!sameRawTypeName(leftParentName, rightParentName)) {
+                    continue;
+                }
+                var shared = resolveDataTypeByName(leftParentName);
+                if (shared != null) {
+                    return shared;
+                }
+            }
+        }
+        for (var type : dataTypes.values()) {
+            if (!(type instanceof CompiledDataParentType parentType)) {
+                continue;
+            }
+            var hasLeft = parentType.subTypes().stream()
+                    .anyMatch(subType -> sameRawTypeName(subType.name(), leftData.name()));
+            if (!hasLeft) {
+                continue;
+            }
+            var hasRight = parentType.subTypes().stream()
+                    .anyMatch(subType -> sameRawTypeName(subType.name(), rightData.name()));
+            if (hasRight) {
+                return parentType;
+            }
+        }
+        return null;
     }
 
     private static CompiledType findBitwiseType(CompiledType left, CompiledType right) {

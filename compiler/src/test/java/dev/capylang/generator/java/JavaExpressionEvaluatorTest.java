@@ -274,6 +274,51 @@ class JavaExpressionEvaluatorTest {
     }
 
     @Test
+    void shouldInferSharedParentForConcatenatedSubtypeLists() {
+        var program = compileProgram("EmptyLiteralInference", "/foo/bar", """
+                type Outcome = ParseSucceeded | ParseFailed
+                data ParseSucceeded { source: string }
+                data ParseFailed { source: string }
+
+                fun merged_outcomes(values: list[string]) =
+                    let succeeded = values |> [], (acc, source) => acc + ParseSucceeded { source }
+                    let failed = values |> [], (acc, source) => acc + ParseFailed { source }
+                    succeeded + failed
+                """);
+
+        var returnType = findFunction("merged_outcomes", program).orElseThrow().returnType();
+
+        assertThat(returnType).isInstanceOf(CollectionLinkedType.CompiledList.class);
+        var elementType = ((CollectionLinkedType.CompiledList) returnType).elementType();
+        assertThat(elementType).isInstanceOf(CompiledDataParentType.class);
+        assertThat(((CompiledDataParentType) elementType).name()).isEqualTo("Outcome");
+    }
+
+    @Test
+    void shouldGenerateTypedConcatForSubtypeListsWithSharedParent() {
+        var program = compileProgram("EmptyLiteralInference", "/foo/bar", """
+                type Outcome = ParseSucceeded | ParseFailed
+                data ParseSucceeded { source: string }
+                data ParseFailed { source: string }
+                data OutcomeBatch { outcomes: list[Outcome] }
+
+                fun batch_outcomes(outcomes: list[Outcome]): OutcomeBatch =
+                    OutcomeBatch { outcomes }
+
+                fun concat_inferred_parent_subtype_lists(values: list[string]): OutcomeBatch =
+                    let succeeded = values |> [], (acc, source) => acc + ParseSucceeded { source }
+                    let failed = values |> [], (acc, source) => acc + ParseFailed { source }
+                    batch_outcomes(succeeded + failed)
+                """);
+
+        var generated = new JavaGenerator().generate(program).modules().stream()
+                .map(dev.capylang.generator.GeneratedModule::code)
+                .collect(joining("\n"));
+
+        assertThat(generated).contains("java.util.stream.Stream.<Outcome>concat");
+    }
+
+    @Test
     void shouldQualifyBareResultErrorPattern() {
         var generated = new JavaGenerator().generate(compileProgram("ResultMatch", "/foo/bar", """
                 from /capy/lang/Result import { * }
