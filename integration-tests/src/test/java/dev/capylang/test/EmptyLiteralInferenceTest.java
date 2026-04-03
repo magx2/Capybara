@@ -31,6 +31,26 @@ class EmptyLiteralInferenceTest {
     }
 
     @Test
+    void reduceWithUntypedEmptyListAccumulatorInfersConcreteElementType() {
+        assertThat(EmptyLiteralInference.reduceDictToNamedValuesSize(java.util.Map.of("a", 1, "b", 2))).isEqualTo(2);
+    }
+
+    @Test
+    void reduceWithUntypedEmptyListAccumulatorInfersConcreteRecordTypeFromKeyValuePairs() {
+        assertThat(EmptyLiteralInference.reduceDictToParseCasesSize(java.util.Map.of("a", 1, "b", 2))).isEqualTo(2);
+    }
+
+    @Test
+    void reduceWithUntypedEmptyListAccumulatorSupportsSwappedKeyValueNames() {
+        assertThat(EmptyLiteralInference.reduceDictToFormatCasesSize(java.util.Map.of("a", 1, "b", 2))).isEqualTo(2);
+    }
+
+    @Test
+    void twoIndependentlyInferredReduceListsCanBeConcatenated() {
+        assertThat(EmptyLiteralInference.reduceDictToTwoListsAndConcatSizes(java.util.Map.of("a", 1, "b", 2))).isEqualTo(4);
+    }
+
+    @Test
     void toSeqUsingEndLiteralCompilesAndBuildsSequence() {
         var seq = EmptyLiteralInference.toSeqUsingEndLiteral(List.of(4, 5));
         assertThat(EmptyLiteralInference.seqEndHeadOrDefault(seq, -1)).isEqualTo(5);

@@ -22,10 +22,29 @@ fun empty_list_of_type_param(v: T): list[T] =
     []
 
 data JsonBox { value: string }
+data NamedValue { name: string, value: int }
+data ParseCase { source: string, expected: int }
 
 fun typed_empty_dict_then_append_json_box(name: string): int =
     let values: dict[JsonBox] = {:}
     (values + (name, JsonBox { value: "box:" + name })).size
+
+fun reduce_dict_to_named_values_size(values: dict[int]): int =
+    let named_values = values |> [], (acc, name, value) => acc + NamedValue { name, value }
+    named_values.size
+
+fun reduce_dict_to_parse_cases_size(values: dict[int]): int =
+    let parse_test_cases = values |> [], (acc, source, expected) => acc + ParseCase { source, expected }
+    parse_test_cases.size
+
+fun reduce_dict_to_format_cases_size(values: dict[int]): int =
+    let format_test_cases = values |> [], (acc, expected, value) => acc + NamedValue { name: expected, value }
+    format_test_cases.size
+
+fun reduce_dict_to_two_lists_and_concat_sizes(values: dict[int]): int =
+    let parse_test_cases = values |> [], (acc, source, expected) => acc + NamedValue { name: "parse:" + source, value: expected }
+    let format_test_cases = values |> [], (acc, expected, value) => acc + NamedValue { name: "format:" + expected, value }
+    (parse_test_cases + format_test_cases).size
 
 type SeqEnd[T] = ConsEnd[T] | EndEnd
 data ConsEnd[T] { value: T, rest: () => SeqEnd[T] }

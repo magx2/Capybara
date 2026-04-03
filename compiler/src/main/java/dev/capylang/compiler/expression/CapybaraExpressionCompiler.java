@@ -3227,24 +3227,24 @@ public class CapybaraExpressionCompiler {
         }
         if (left instanceof CompiledList leftList) {
             if (right instanceof CompiledList rightList) {
-                return new CompiledList(findHigherType(leftList.elementType(), rightList.elementType()));
+                return new CompiledList(mergeCollectionElementType(leftList.elementType(), rightList.elementType()));
             }
-            return new CompiledList(findHigherType(leftList.elementType(), right));
+            return new CompiledList(mergeCollectionElementType(leftList.elementType(), right));
         }
         if (left instanceof CompiledSet leftSet) {
             if (right instanceof CompiledSet rightSet) {
-                return new CompiledSet(findHigherType(leftSet.elementType(), rightSet.elementType()));
+                return new CompiledSet(mergeCollectionElementType(leftSet.elementType(), rightSet.elementType()));
             }
-            return new CompiledSet(findHigherType(leftSet.elementType(), right));
+            return new CompiledSet(mergeCollectionElementType(leftSet.elementType(), right));
         }
         if (left instanceof CompiledDict leftDict) {
             if (right instanceof CompiledDict rightDict) {
-                return new CompiledDict(findHigherType(leftDict.valueType(), rightDict.valueType()));
+                return new CompiledDict(mergeCollectionElementType(leftDict.valueType(), rightDict.valueType()));
             }
             if (right instanceof CompiledTupleType tupleType
                 && tupleType.elementTypes().size() == 2
                 && tupleType.elementTypes().getFirst() == STRING) {
-                return new CompiledDict(findHigherType(leftDict.valueType(), tupleType.elementTypes().get(1)));
+                return new CompiledDict(mergeCollectionElementType(leftDict.valueType(), tupleType.elementTypes().get(1)));
             }
             return null;
         }
@@ -3257,19 +3257,19 @@ public class CapybaraExpressionCompiler {
     private static CompiledType findMinusType(CompiledType left, CompiledType right) {
         if (left instanceof CompiledList leftList) {
             if (right instanceof CompiledList rightList) {
-                return new CompiledList(findHigherType(leftList.elementType(), rightList.elementType()));
+                return new CompiledList(mergeCollectionElementType(leftList.elementType(), rightList.elementType()));
             }
-            return new CompiledList(findHigherType(leftList.elementType(), right));
+            return new CompiledList(mergeCollectionElementType(leftList.elementType(), right));
         }
         if (left instanceof CompiledSet leftSet) {
             if (right instanceof CompiledSet rightSet) {
-                return new CompiledSet(findHigherType(leftSet.elementType(), rightSet.elementType()));
+                return new CompiledSet(mergeCollectionElementType(leftSet.elementType(), rightSet.elementType()));
             }
-            return new CompiledSet(findHigherType(leftSet.elementType(), right));
+            return new CompiledSet(mergeCollectionElementType(leftSet.elementType(), right));
         }
         if (left instanceof CompiledDict leftDict) {
             if (right instanceof CompiledDict rightDict) {
-                return new CompiledDict(findHigherType(leftDict.valueType(), rightDict.valueType()));
+                return new CompiledDict(mergeCollectionElementType(leftDict.valueType(), rightDict.valueType()));
             }
             if (right == STRING) {
                 return new CompiledDict(leftDict.valueType());
@@ -3285,6 +3285,16 @@ public class CapybaraExpressionCompiler {
     private static CompiledType findMathType(CompiledType left, CompiledType right) {
         if (left instanceof PrimitiveLinkedType leftPrimitive && right instanceof PrimitiveLinkedType rightPrimitive) {
             return findMathPrimitiveType(leftPrimitive, rightPrimitive);
+        }
+        return findHigherType(left, right);
+    }
+
+    private static CompiledType mergeCollectionElementType(CompiledType left, CompiledType right) {
+        if (left == ANY) {
+            return right;
+        }
+        if (right == ANY) {
+            return left;
         }
         return findHigherType(left, right);
     }

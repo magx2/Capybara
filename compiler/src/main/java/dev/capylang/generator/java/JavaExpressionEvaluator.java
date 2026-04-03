@@ -945,10 +945,7 @@ public class JavaExpressionEvaluator {
                             .addValueOverride(keyName, entryVar + ".getKey()")
                             .addValueOverride(pipeReduceExpression.valueName(), entryVar + ".getValue()")
             ).popExpression();
-            var reduceInitialExpression = initialExSc.expression();
-            if (!pipeReduceExpression.initialValue().type().equals(pipeReduceExpression.type())) {
-                reduceInitialExpression = "((" + javaCastType(pipeReduceExpression.type()) + ") (" + reduceInitialExpression + "))";
-            }
+            var reduceInitialExpression = reduceInitialExpression(pipeReduceExpression.initialValue(), pipeReduceExpression.type(), initialExSc.expression());
             var javaAccumulatorName = normalizeJavaLocalIdentifier(pipeReduceExpression.accumulatorName());
             var javaReducerExpression = pipeReduceExpression.accumulatorName().equals(javaAccumulatorName)
                     ? reducerExSc.expression()
@@ -972,10 +969,7 @@ public class JavaExpressionEvaluator {
                         .addLocalValue(pipeReduceExpression.accumulatorName())
                         .addLocalValue(pipeReduceExpression.valueName())
         ).popExpression();
-        var reduceInitialExpression = initialExSc.expression();
-        if (!pipeReduceExpression.initialValue().type().equals(pipeReduceExpression.type())) {
-            reduceInitialExpression = "((" + javaCastType(pipeReduceExpression.type()) + ") (" + reduceInitialExpression + "))";
-        }
+        var reduceInitialExpression = reduceInitialExpression(pipeReduceExpression.initialValue(), pipeReduceExpression.type(), initialExSc.expression());
         var javaAccumulatorName = normalizeJavaLocalIdentifier(pipeReduceExpression.accumulatorName());
         var javaValueName = normalizeJavaLocalIdentifier(pipeReduceExpression.valueName());
         var javaReducerExpression = reducerExSc.expression();
@@ -1029,6 +1023,43 @@ public class JavaExpressionEvaluator {
                     java.util.Optional.of(dev.capylang.compiler.PrimitiveLinkedType.STRING);
             default -> java.util.Optional.empty();
         };
+    }
+
+    private static String reduceInitialExpression(
+            CompiledExpression initialValue,
+            dev.capylang.compiler.CompiledType resultType,
+            String expression
+    ) {
+        if (initialValue.type().equals(resultType)) {
+            return expression;
+        }
+        var typedEmptyLiteral = typedEmptyCollectionLiteral(initialValue, resultType);
+        if (typedEmptyLiteral != null) {
+            return typedEmptyLiteral;
+        }
+        return "((" + javaCastType(resultType) + ") (" + expression + "))";
+    }
+
+    private static String typedEmptyCollectionLiteral(
+            CompiledExpression expression,
+            dev.capylang.compiler.CompiledType type
+    ) {
+        if (expression instanceof CompiledNewList newList && newList.values().isEmpty()
+            && type instanceof dev.capylang.compiler.CollectionLinkedType.CompiledList listType
+            && listType.elementType() != dev.capylang.compiler.PrimitiveLinkedType.ANY) {
+            return "java.util.List.<" + javaCastType(listType.elementType()) + ">of()";
+        }
+        if (expression instanceof CompiledNewSet newSet && newSet.values().isEmpty()
+            && type instanceof dev.capylang.compiler.CollectionLinkedType.CompiledSet setType
+            && setType.elementType() != dev.capylang.compiler.PrimitiveLinkedType.ANY) {
+            return "java.util.Set.<" + javaCastType(setType.elementType()) + ">of()";
+        }
+        if (expression instanceof CompiledNewDict newDict && newDict.entries().isEmpty()
+            && type instanceof dev.capylang.compiler.CollectionLinkedType.CompiledDict dictType
+            && dictType.valueType() != dev.capylang.compiler.PrimitiveLinkedType.ANY) {
+            return "java.util.Map.<java.lang.String, " + javaCastType(dictType.valueType()) + ">of()";
+        }
+        return null;
     }
 
     private static StreamExpressionScope evaluatePipeExpressionAsStream(CompiledPipeExpression pipeExpression, Scope scope) {
@@ -2124,6 +2155,11 @@ public class JavaExpressionEvaluator {
             var exSc = evaluateExpression(value, current).popExpression();
             current = exSc.scope();
             values.add(exSc.expression());
+        }
+        if (newList.values().isEmpty()
+            && newList.type() instanceof dev.capylang.compiler.CollectionLinkedType.CompiledList listType
+            && listType.elementType() != dev.capylang.compiler.PrimitiveLinkedType.ANY) {
+            return current.addExpression("java.util.List.<" + javaCastType(listType.elementType()) + ">of()");
         }
         return current.addExpression("java.util.List.of(" + String.join(", ", values) + ")");
     }
