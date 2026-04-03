@@ -20,6 +20,7 @@ import java.util.*;
 import java.util.stream.Stream;
 
 import static java.util.Collections.unmodifiableSortedSet;
+import static java.util.Collections.unmodifiableSortedMap;
 import static java.util.function.Function.identity;
 import static java.util.stream.Collectors.toMap;
 
@@ -28,6 +29,7 @@ public class CapybaraCompiler {
     public static final CapybaraCompiler INSTANCE = new CapybaraCompiler();
     private static final String METHOD_DECL_PREFIX = "__method__";
     private static final java.util.regex.Pattern IDENTIFIER_PATTERN = java.util.regex.Pattern.compile("[A-Za-z_][A-Za-z0-9_]*");
+    private static final ObjectMapper OBJECT_MAPPER = objectMapper();
 
     public Result<CompiledProgram> compile(Collection<RawModule> rawModules, SortedSet<CompiledModule> libraries) {
         try {
@@ -120,7 +122,7 @@ public class CapybaraCompiler {
 
     private static CompiledModule readBundledLibrary(Path path) {
         try {
-            return objectMapper().readValue(Files.readString(path), CompiledModule.class);
+            return OBJECT_MAPPER.readValue(Files.readString(path), CompiledModule.class);
         } catch (IOException e) {
             throw new IllegalStateException("Unable to read bundled Capybara library `" + path + "`", e);
         }
@@ -141,6 +143,7 @@ public class CapybaraCompiler {
         return mapper;
     }
     private Result<CompiledProgram> compile(Program program, SortedSet<CompiledModule> libraries) {
+        var compileCache = new CompileCache();
         var programModuleRefs = program.modules().stream().map(module -> new ModuleRef(module.name(), module.path())).toList();
         var libraryModuleRefs = libraries.stream().map(module -> new ModuleRef(module.name(), module.path())).toList();
         var allModuleRefs = Stream.concat(programModuleRefs.stream(), libraryModuleRefs.stream()).toList();
@@ -169,7 +172,7 @@ public class CapybaraCompiler {
         var visibleTypesByModule = new HashMap<String, Map<String, GenericDataType>>();
         for (var module : program.modules()) {
             var sourceFile = moduleSourceFile(module);
-            var visibleTypes = withFile(availableTypes(module, modulesByName, linkedTypesByModule, allModuleRefs), sourceFile);
+            var visibleTypes = withFile(availableTypes(module, modulesByName, linkedTypesByModule, allModuleRefs, compileCache), sourceFile);
             if (visibleTypes instanceof Result.Error<Map<String, GenericDataType>> error) {
                 return new Result.Error<>(error.errors());
             }
@@ -198,7 +201,8 @@ public class CapybaraCompiler {
                     linkedTypesByModule,
                     visibleTypesByModule,
                     signaturesByModule,
-                    moduleClassNameByModuleName
+                    moduleClassNameByModuleName,
+                    compileCache
             );
             firstPassFunctions = withFile(firstPassFunctions, moduleSourceFile(module));
             if (firstPassFunctions instanceof Result.Error<List<CompiledFunction>> error) {
@@ -218,7 +222,8 @@ public class CapybaraCompiler {
                         linkedTypesByModule,
                         visibleTypesByModule,
                         refinedSignaturesByModule,
-                        moduleClassNameByModuleName
+                        moduleClassNameByModuleName,
+                        compileCache
                 ))
                 .collect(new ResultCollectionCollector<>())
                 .map(CompiledProgram::new);
@@ -233,13 +238,14 @@ public class CapybaraCompiler {
             Map<String, SortedMap<String, GenericDataType>> linkedTypesByModule,
             Map<String, Map<String, GenericDataType>> visibleTypesByModule,
             Map<String, List<CapybaraExpressionCompiler.FunctionSignature>> signaturesByModule,
-            Map<String, String> moduleClassNameByModuleName
+            Map<String, String> moduleClassNameByModuleName,
+            CompileCache compileCache
     ) {
         var dataTypes = visibleTypesByModule.get(module.name());
         var localTypeNames = linkedTypesByModule.get(module.name()).keySet();
         var functions = findFunctions(module.functional().definitions());
         var moduleSourceFile = moduleSourceFile(module);
-        var availableSignatures = availableSignatures(module, modulesByName, linkedTypesByModule, signaturesByModule);
+        var availableSignatures = availableSignatures(module, modulesByName, linkedTypesByModule, signaturesByModule, compileCache);
         if (availableSignatures instanceof Result.Error<List<CapybaraExpressionCompiler.FunctionSignature>> error) {
             return withFile(new Result.Error<>(error.errors()), moduleSourceFile);
         }
@@ -253,13 +259,14 @@ public class CapybaraCompiler {
             Map<String, SortedMap<String, GenericDataType>> linkedTypesByModule,
             Map<String, Map<String, GenericDataType>> visibleTypesByModule,
             Map<String, List<CapybaraExpressionCompiler.FunctionSignature>> signaturesByModule,
-            Map<String, String> moduleClassNameByModuleName
+            Map<String, String> moduleClassNameByModuleName,
+            CompileCache compileCache
     ) {
         var localTypes = linkedTypesByModule.get(module.name());
         var visibleTypes = visibleTypesByModule.get(module.name());
         var functions = findFunctions(module.functional().definitions());
         var moduleSourceFile = moduleSourceFile(module);
-        var availableSignatures = availableSignatures(module, modulesByName, linkedTypesByModule, signaturesByModule);
+        var availableSignatures = availableSignatures(module, modulesByName, linkedTypesByModule, signaturesByModule, compileCache);
         if (availableSignatures instanceof Result.Error<List<CapybaraExpressionCompiler.FunctionSignature>> error) {
             return withFile(new Result.Error<>(error.errors()), moduleSourceFile);
         }
@@ -270,6 +277,15 @@ public class CapybaraCompiler {
                             signaturesByModule.get(module.name()),
                             signaturesFromLinkedFunctions(firstPassFunctions)
                     );
+                    if (refinedSignatures.equals(signaturesByModule.get(module.name()))) {
+                        return Result.success(new CompiledModule(
+                                module.name(),
+                                module.path(),
+                                localTypes,
+                                deduplicateFunctions(firstPassFunctions),
+                                staticImports(module, modulesByName, linkedTypesByModule, signaturesByModule, compileCache)
+                        ));
+                    }
                     var refinedAvailableSignatures = mergeSignatures(initialSignatures, refinedSignatures);
                     return linkFunctions(functions, visibleTypes, localTypes.keySet(), refinedAvailableSignatures, signaturesByModule, moduleClassNameByModuleName, moduleSourceFile)
                             .map(linkedFunctions -> new CompiledModule(
@@ -277,7 +293,7 @@ public class CapybaraCompiler {
                                     module.path(),
                                     localTypes,
                                     deduplicateFunctions(linkedFunctions),
-                                    staticImports(module, modulesByName, linkedTypesByModule, signaturesByModule)
+                                    staticImports(module, modulesByName, linkedTypesByModule, signaturesByModule, compileCache)
                             ));
                 }), moduleSourceFile);
     }
@@ -285,7 +301,8 @@ public class CapybaraCompiler {
             Module module,
             Map<String, ModuleRef> modulesByName,
             Map<String, SortedMap<String, GenericDataType>> linkedTypesByModule,
-            Map<String, List<CapybaraExpressionCompiler.FunctionSignature>> signaturesByModule
+            Map<String, List<CapybaraExpressionCompiler.FunctionSignature>> signaturesByModule,
+            CompileCache compileCache
     ) {
         var all = new ArrayList<CapybaraExpressionCompiler.FunctionSignature>(signaturesByModule.get(module.name()));
         for (var importDeclaration : module.imports()) {
@@ -293,11 +310,9 @@ public class CapybaraCompiler {
             if (importedModule == null) {
                 return Result.error("Module `" + module.name() + "` imports unknown module `" + importDeclaration.moduleName() + "`");
             }
-            var importedSignatures = visibleSignatures(module.path(), importedModule, signaturesByModule.get(importedModule.name()));
-            var availableFunctionMembers = importedSignatures.stream()
-                    .map(CapybaraExpressionCompiler.FunctionSignature::name)
-                    .collect(java.util.stream.Collectors.toSet());
-            var availableTypeMembers = visibleTypes(module.path(), importedModule, linkedTypesByModule.get(importedModule.name())).keySet();
+            var importedSignaturesByName = visibleSignaturesByName(module.path(), importedModule, signaturesByModule.get(importedModule.name()), compileCache);
+            var availableFunctionMembers = importedSignaturesByName.keySet();
+            var availableTypeMembers = visibleTypes(module.path(), importedModule, linkedTypesByModule.get(importedModule.name()), compileCache).keySet();
             var availableMembers = new HashSet<String>(availableFunctionMembers);
             availableMembers.addAll(availableTypeMembers);
             for (var excludedSymbol : importDeclaration.excludedSymbols()) {
@@ -319,8 +334,7 @@ public class CapybaraCompiler {
                 }
             }
             for (var symbol : importDeclaration.selectedSymbols(availableMembers)) {
-                var matched = importedSignatures.stream().filter(signature -> signature.name().equals(symbol)).toList();
-                all.addAll(matched);
+                all.addAll(importedSignaturesByName.getOrDefault(symbol, List.of()));
             }
         }
         return Result.success(List.copyOf(all));
@@ -330,7 +344,8 @@ public class CapybaraCompiler {
             Module module,
             Map<String, ModuleRef> modulesByName,
             Map<String, SortedMap<String, GenericDataType>> linkedTypesByModule,
-            List<ModuleRef> allModules
+            List<ModuleRef> allModules,
+            CompileCache compileCache
     ) {
         var localTypes = linkedTypesByModule.get(module.name());
         var all = new LinkedHashMap<String, GenericDataType>(localTypes);
@@ -340,7 +355,7 @@ public class CapybaraCompiler {
             if (importedModule == null) {
                 return Result.error("Module `" + module.name() + "` imports unknown module `" + importDeclaration.moduleName() + "`");
             }
-            var importedTypes = visibleTypes(module.path(), importedModule, linkedTypesByModule.get(importedModule.name()));
+            var importedTypes = visibleTypes(module.path(), importedModule, linkedTypesByModule.get(importedModule.name()), compileCache);
             addQualifiedTypeAliases(all, importedModule, importedTypes);
             if (importDeclaration.isStarImport() && importDeclaration.excludedSymbols().isEmpty()) {
                 importedTypes.forEach(all::put);
@@ -355,7 +370,7 @@ public class CapybaraCompiler {
                 }
             }
         }
-        allModules.forEach(knownModule -> addQualifiedTypeAliases(all, knownModule, visibleTypes(module.path(), knownModule, linkedTypesByModule.get(knownModule.name()))));
+        allModules.forEach(knownModule -> addQualifiedTypeAliases(all, knownModule, visibleTypes(module.path(), knownModule, linkedTypesByModule.get(knownModule.name()), compileCache)));
         resolveQualifiedExternalFieldTypes(all);
         return Result.success(Map.copyOf(all));
     }
@@ -544,7 +559,8 @@ public class CapybaraCompiler {
             Module module,
             Map<String, ModuleRef> modulesByName,
             Map<String, SortedMap<String, GenericDataType>> linkedTypesByModule,
-            Map<String, List<CapybaraExpressionCompiler.FunctionSignature>> signaturesByModule
+            Map<String, List<CapybaraExpressionCompiler.FunctionSignature>> signaturesByModule,
+            CompileCache compileCache
     ) {
         var imports = new HashSet<CompiledModule.StaticImport>();
         for (var importDeclaration : module.imports()) {
@@ -553,15 +569,13 @@ public class CapybaraCompiler {
                 continue;
             }
             var className = moduleJavaClassName(importedModule, linkedTypesByModule.get(importedModule.name()));
-            var importedSignatures = visibleSignatures(module.path(), importedModule, signaturesByModule.get(importedModule.name()));
-            var importedTypes = visibleTypes(module.path(), importedModule, linkedTypesByModule.get(importedModule.name()));
+            var importedSignaturesByName = visibleSignaturesByName(module.path(), importedModule, signaturesByModule.get(importedModule.name()), compileCache);
+            var importedTypes = visibleTypes(module.path(), importedModule, linkedTypesByModule.get(importedModule.name()), compileCache);
             if (importDeclaration.isStarImport() && importDeclaration.excludedSymbols().isEmpty()) {
                 imports.add(new CompiledModule.StaticImport(className, "*"));
                 continue;
             }
-            var availableFunctionMembers = importedSignatures.stream()
-                    .map(CapybaraExpressionCompiler.FunctionSignature::name)
-                    .collect(java.util.stream.Collectors.toSet());
+            var availableFunctionMembers = importedSignaturesByName.keySet();
             var availableTypeMembers = new HashSet<>(importedTypes.keySet());
             var availableMembers = new HashSet<String>(availableFunctionMembers);
             availableMembers.addAll(availableTypeMembers);
@@ -624,27 +638,70 @@ public class CapybaraCompiler {
     private List<CapybaraExpressionCompiler.FunctionSignature> visibleSignatures(
             String currentModulePath,
             ModuleRef ownerModule,
-            List<CapybaraExpressionCompiler.FunctionSignature> signatures
+            List<CapybaraExpressionCompiler.FunctionSignature> signatures,
+            CompileCache compileCache
     ) {
-        return signatures.stream()
+        var key = signatureVisibilityCacheKey(currentModulePath, ownerModule, signatures);
+        return compileCache.visibleSignaturesByScope.computeIfAbsent(key, ignored -> signatures.stream()
                 .filter(signature -> signature.visibility() != Visibility.LOCAL || isVisibleFromModule(currentModulePath, ownerModule.path()))
-                .toList();
+                .toList());
     }
 
     private SortedMap<String, GenericDataType> visibleTypes(
             String currentModulePath,
             ModuleRef ownerModule,
-            SortedMap<String, GenericDataType> types
+            SortedMap<String, GenericDataType> types,
+            CompileCache compileCache
     ) {
-        return types.entrySet().stream()
-                .filter(entry -> entry.getValue().visibility() != Visibility.LOCAL
-                                 || isVisibleFromModule(currentModulePath, ownerModule.path()))
-                .collect(java.util.stream.Collectors.toMap(
-                        Map.Entry::getKey,
-                        Map.Entry::getValue,
-                        (first, second) -> first,
-                        TreeMap::new
-                ));
+        var key = visibilityCacheKey(currentModulePath, ownerModule);
+        return compileCache.visibleTypesByScope.computeIfAbsent(key, ignored -> {
+            var filteredTypes = types.entrySet().stream()
+                    .filter(entry -> entry.getValue().visibility() != Visibility.LOCAL
+                                     || isVisibleFromModule(currentModulePath, ownerModule.path()))
+                    .collect(java.util.stream.Collectors.toMap(
+                            Map.Entry::getKey,
+                            Map.Entry::getValue,
+                            (first, second) -> first,
+                            TreeMap::new
+                    ));
+            return unmodifiableSortedMap(filteredTypes);
+        });
+    }
+
+    private Map<String, List<CapybaraExpressionCompiler.FunctionSignature>> visibleSignaturesByName(
+            String currentModulePath,
+            ModuleRef ownerModule,
+            List<CapybaraExpressionCompiler.FunctionSignature> signatures,
+            CompileCache compileCache
+    ) {
+        var key = signatureVisibilityCacheKey(currentModulePath, ownerModule, signatures);
+        return compileCache.visibleSignaturesByNameByScope.computeIfAbsent(key, ignored -> {
+            var visibleSignatures = visibleSignatures(currentModulePath, ownerModule, signatures, compileCache);
+            var signaturesByName = new LinkedHashMap<String, List<CapybaraExpressionCompiler.FunctionSignature>>();
+            for (var signature : visibleSignatures) {
+                signaturesByName.computeIfAbsent(signature.name(), ignoredName -> new ArrayList<>()).add(signature);
+            }
+            var immutableSignaturesByName = new LinkedHashMap<String, List<CapybaraExpressionCompiler.FunctionSignature>>();
+            signaturesByName.forEach((name, items) -> immutableSignaturesByName.put(name, List.copyOf(items)));
+            return Map.copyOf(immutableSignaturesByName);
+        });
+    }
+
+    private VisibilityCacheKey visibilityCacheKey(String currentModulePath, ModuleRef ownerModule) {
+        return new VisibilityCacheKey(normalizeModulePath(currentModulePath), ownerModule.name(), normalizeModulePath(ownerModule.path()));
+    }
+
+    private SignatureVisibilityCacheKey signatureVisibilityCacheKey(
+            String currentModulePath,
+            ModuleRef ownerModule,
+            List<CapybaraExpressionCompiler.FunctionSignature> signatures
+    ) {
+        return new SignatureVisibilityCacheKey(
+                normalizeModulePath(currentModulePath),
+                ownerModule.name(),
+                normalizeModulePath(ownerModule.path()),
+                System.identityHashCode(signatures)
+        );
     }
 
     private boolean isVisibleFromModule(String currentModulePath, String ownerModulePath) {
@@ -2833,6 +2890,23 @@ public class CapybaraCompiler {
     private record ParsedGenericTypeName(String baseName, List<String> typeArguments) {
     }
 
+    private static final class CompileCache {
+        private final Map<SignatureVisibilityCacheKey, List<CapybaraExpressionCompiler.FunctionSignature>> visibleSignaturesByScope = new HashMap<>();
+        private final Map<VisibilityCacheKey, SortedMap<String, GenericDataType>> visibleTypesByScope = new HashMap<>();
+        private final Map<SignatureVisibilityCacheKey, Map<String, List<CapybaraExpressionCompiler.FunctionSignature>>> visibleSignaturesByNameByScope = new HashMap<>();
+    }
+
+    private record VisibilityCacheKey(String currentModulePath, String ownerModuleName, String ownerModulePath) {
+    }
+
+    private record SignatureVisibilityCacheKey(
+            String currentModulePath,
+            String ownerModuleName,
+            String ownerModulePath,
+            int signaturesIdentity
+    ) {
+    }
+
     private Result<SortedMap<String, GenericDataType>> types(Module module) {
         var normalizedFile = normalizeFile(moduleSourceFile(module));
         var rawTypeDeclarations = castList(module, TypeDeclaration.class);
@@ -3419,10 +3493,6 @@ public class CapybaraCompiler {
                 .toList();
     }
 }
-
-
-
-
 
 
 
