@@ -363,32 +363,12 @@ public class Capy {
             PrintStream err,
             String compilerVersion
     ) throws IOException {
-        validateInputDirectory(input);
         validateEmptyExistingDirectory(linkedOutputDir, "Compile output path");
-
-        log.info("Compiling files from: " + input);
-        var rawModules = listSourceFiles(input).stream()
-                .filter(sourceFile -> sourceFile.path().getFileName().toString().endsWith(".cfun"))
-                .map(Capy::buildModule)
-                .toList();
-
-        var linking = CapybaraCompiler.INSTANCE.compile(rawModules, libraries);
-        if (linking instanceof Result.Error<CompiledProgram> error) {
-            err.println("Compilation failed with " + error.errors().size() + " error(s):");
-            error.errors().forEach(err::println);
+        var compilation = compileSources(input, libraries, compileTests, err);
+        if (compilation == null) {
             return EXIT_COMPILATION_ERROR;
         }
-
-        var linkedProgram = ((Result.Success<CompiledProgram>) linking).value();
-        var outputProgram = compileTests ? prepareCompiledTests(linkedProgram, libraries) : linkedProgram;
-        writeLinkedModules(linkedOutputDir, outputProgram);
-        var sourceModules = rawModules.stream()
-                .map(module -> new ModuleRef(module.name(), normalizeModulePath(module.path())))
-                .collect(java.util.stream.Collectors.toCollection(java.util.TreeSet::new));
-        if (compileTests) {
-            sourceModules.add(CAP_TEST_RUNTIME_MODULE);
-        }
-        writeBuildInfo(linkedOutputDir, compilerVersion, List.copyOf(sourceModules));
+        writeCompilationOutput(linkedOutputDir, compilation, compilerVersion);
         return EXIT_SUCCESS;
     }
 
@@ -416,12 +396,49 @@ public class Capy {
         }
 
         var generationInput = selectGenerationInput(linkedInputDir, readLinkedProgram(linkedInputDir, true));
-        var compiledProgram = Generator.findGenerator(outputType).generate(generationInput.program());
-        compiledProgram.modules().forEach(module -> writeCompiledModule(generatedOutputDir, module.relativePath(), module.code()));
-        if (outputType == OutputType.JAVA && generationInput.includeJavaLibResources()) {
-            copyJavaLibResources(generatedOutputDir);
-        }
+        generateProgram(outputType, generatedOutputDir, generationInput);
         return EXIT_SUCCESS;
+    }
+
+    static CompilationArtifacts compileSources(Path input, TreeSet<CompiledModule> libraries, boolean compileTests, PrintStream err) throws IOException {
+        validateInputDirectory(input);
+
+        log.info("Compiling files from: " + input);
+        var rawModules = listSourceFiles(input).stream()
+                .filter(sourceFile -> sourceFile.path().getFileName().toString().endsWith(".cfun"))
+                .map(Capy::buildModule)
+                .toList();
+
+        var linking = CapybaraCompiler.INSTANCE.compile(rawModules, libraries);
+        if (linking instanceof Result.Error<CompiledProgram> error) {
+            err.println("Compilation failed with " + error.errors().size() + " error(s):");
+            error.errors().forEach(err::println);
+            return null;
+        }
+
+        var linkedProgram = ((Result.Success<CompiledProgram>) linking).value();
+        var outputProgram = compileTests ? prepareCompiledTests(linkedProgram, libraries) : linkedProgram;
+        var sourceModules = rawModules.stream()
+                .map(module -> new ModuleRef(module.name(), normalizeModulePath(module.path())))
+                .collect(java.util.stream.Collectors.toCollection(java.util.TreeSet::new));
+        if (compileTests) {
+            sourceModules.add(CAP_TEST_RUNTIME_MODULE);
+        }
+        return new CompilationArtifacts(outputProgram, List.copyOf(sourceModules));
+    }
+
+    static void writeCompilationOutput(Path outputDir, CompilationArtifacts compilation, String compilerVersion) {
+        writeLinkedModules(outputDir, compilation.program());
+        writeBuildInfo(outputDir, compilerVersion, compilation.sourceModules());
+    }
+
+    static void generateCompiledProgram(OutputType outputType, Path generatedOutputDir, CompilationArtifacts compilation) throws IOException {
+        if (Files.notExists(generatedOutputDir)) {
+            Files.createDirectories(generatedOutputDir);
+        } else if (!Files.isDirectory(generatedOutputDir)) {
+            throw new CliException("Generated output path is not a directory: " + generatedOutputDir);
+        }
+        generateProgram(outputType, generatedOutputDir, selectGenerationInput(compilation.program(), compilation.sourceModules()));
     }
     private static Path findCompiledInput(PackageOptions options, PrintStream err) throws IOException {
         if (options.compiledInput() != null) {
@@ -471,6 +488,14 @@ public class Capy {
 
     private static void writeGeneratedProgram(Path outputDir, GeneratedProgram program) {
         program.modules().forEach(module -> writeCompiledModule(outputDir, module.relativePath(), module.code()));
+    }
+
+    private static void generateProgram(OutputType outputType, Path generatedOutputDir, GenerationInput generationInput) {
+        var compiledProgram = Generator.findGenerator(outputType).generate(generationInput.program());
+        compiledProgram.modules().forEach(module -> writeCompiledModule(generatedOutputDir, module.relativePath(), module.code()));
+        if (outputType == OutputType.JAVA && generationInput.includeJavaLibResources()) {
+            copyJavaLibResources(generatedOutputDir);
+        }
     }
 
     private static void compileGeneratedProgram(Path sourceDir, Path classesDir) throws IOException {
@@ -1012,13 +1037,17 @@ public class Capy {
 
     private static GenerationInput selectGenerationInput(Path linkedInputDir, CompiledProgram linkedProgram) {
         var buildInfo = readBuildInfo(linkedInputDir);
-        if (buildInfo == null || buildInfo.source_modules() == null || buildInfo.source_modules().isEmpty()) {
+        return selectGenerationInput(linkedProgram, buildInfo == null ? null : buildInfo.source_modules());
+    }
+
+    private static GenerationInput selectGenerationInput(CompiledProgram linkedProgram, List<ModuleRef> sourceModules) {
+        if (sourceModules == null || sourceModules.isEmpty()) {
             return new GenerationInput(linkedProgram, true);
         }
 
-        var sourceModules = new TreeSet<>(buildInfo.source_modules());
+        var sourceModuleRefs = new TreeSet<>(sourceModules);
         var filteredProgram = new CompiledProgram(linkedProgram.modules().stream()
-                .filter(module -> sourceModules.contains(new ModuleRef(module.name(), normalizeModulePath(module.path()))))
+                .filter(module -> sourceModuleRefs.contains(new ModuleRef(module.name(), normalizeModulePath(module.path()))))
                 .toList());
         var includeJavaLibResources = filteredProgram.modules().size() == linkedProgram.modules().size();
         return new GenerationInput(filteredProgram, includeJavaLibResources);
@@ -1078,7 +1107,7 @@ public class Capy {
         return new Yaml(loaderOptions, dumperOptions);
     }
 
-    private static CompiledProgram readLinkedProgram(Path linkedInputDir, boolean requireModules) {
+    static CompiledProgram readLinkedProgram(Path linkedInputDir, boolean requireModules) {
         try (var files = Files.walk(linkedInputDir)) {
             var modules = files
                     .filter(Files::isRegularFile)
@@ -1226,6 +1255,9 @@ public class Capy {
     }
 
     private record TestFunctionRef(CompiledModule module, CompiledFunction function) {
+    }
+
+    record CompilationArtifacts(CompiledProgram program, List<ModuleRef> sourceModules) {
     }
 }
 

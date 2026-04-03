@@ -51,9 +51,7 @@ tasks.register('linkCapybara', JavaExec) {
     doFirst {
         prepareEmptyDir(capybaraLinkedMainDir.get().asFile)
         def capybaraArgs = ['compile', '-i', capybaraMainSourceDir.asFile.absolutePath, '-o', capybaraLinkedMainDir.get().asFile.absolutePath]
-        if (capybaraDebugEnabled) {
-            capybaraArgs.addAll(['--log', 'DEBUG'])
-        }
+        capybaraArgs.addAll(capybaraDebugEnabled ? ['--log', 'DEBUG'] : ['--log', 'WARN'])
         setArgs(capybaraArgs)
     }
 
@@ -81,9 +79,7 @@ tasks.register('compileCapybara', JavaExec) {
     doFirst {
         prepareEmptyDir(capybaraGeneratedMainDir.get().asFile)
         def capybaraArgs = ['generate', 'java', '-i', capybaraLinkedMainDir.get().asFile.absolutePath, '-o', capybaraGeneratedMainDir.get().asFile.absolutePath]
-        if (capybaraDebugEnabled) {
-            capybaraArgs.addAll(['--log', 'DEBUG'])
-        }
+        capybaraArgs.addAll(capybaraDebugEnabled ? ['--log', 'DEBUG'] : ['--log', 'WARN'])
         setArgs(capybaraArgs)
     }
 
@@ -118,26 +114,14 @@ tasks.register('linkTestCapybara', JavaExec) {
                 '-l', capybaraLinkedMainDir.get().asFile.absolutePath,
                 '--compile-tests'
         ]
-        if (capybaraDebugEnabled) {
-            capybaraArgs.addAll(['--log', 'DEBUG'])
-        }
+        capybaraArgs.addAll(capybaraDebugEnabled ? ['--log', 'DEBUG'] : ['--log', 'WARN'])
         setArgs(capybaraArgs)
-    }
-
-    doLast {
-        def bundledJavaSupportDir = capybaraGeneratedMainDir.get().dir('dev/capylang').asFile.toPath()
-        if (java.nio.file.Files.exists(bundledJavaSupportDir)) {
-            java.nio.file.Files.walk(bundledJavaSupportDir)
-                    .sorted(java.util.Comparator.reverseOrder())
-                    .forEach { path -> java.nio.file.Files.deleteIfExists(path) }
-        }
     }
 }
 
 tasks.register('compileTestCapybara', JavaExec) {
     group = 'verification'
     description = 'Generates Java from linked test Capybara sources.'
-    dependsOn tasks.named('compileCapybara')
     dependsOn tasks.named('linkTestCapybara')
 
     inputs.dir(capybaraLinkedTestDir)
@@ -149,14 +133,12 @@ tasks.register('compileTestCapybara', JavaExec) {
     doFirst {
         prepareEmptyDir(capybaraGeneratedTestDir.get().asFile)
         def capybaraArgs = ['generate', 'java', '-i', capybaraLinkedTestDir.get().asFile.absolutePath, '-o', capybaraGeneratedTestDir.get().asFile.absolutePath]
-        if (capybaraDebugEnabled) {
-            capybaraArgs.addAll(['--log', 'DEBUG'])
-        }
+        capybaraArgs.addAll(capybaraDebugEnabled ? ['--log', 'DEBUG'] : ['--log', 'WARN'])
         setArgs(capybaraArgs)
     }
 
     doLast {
-        def bundledJavaSupportDir = capybaraGeneratedMainDir.get().dir('dev/capylang').asFile.toPath()
+        def bundledJavaSupportDir = capybaraGeneratedTestDir.get().dir('dev/capylang').asFile.toPath()
         if (java.nio.file.Files.exists(bundledJavaSupportDir)) {
             java.nio.file.Files.walk(bundledJavaSupportDir)
                     .sorted(java.util.Comparator.reverseOrder())
