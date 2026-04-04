@@ -327,7 +327,7 @@ public class CapybaraCompiler {
             return withFile(new Result.Error<>(error.errors()), moduleSourceFile);
         }
         var initialSignatures = ((Result.Success<List<CapybaraExpressionCompiler.FunctionSignature>>) availableSignatures).value();
-        return withFile(linkFunctions(functions, dataTypes, localTypeNames, initialSignatures, signaturesByModule, moduleClassNameByModuleName, moduleSourceFile), moduleSourceFile);
+        return withFile(linkFunctions(functions, dataTypes, localTypeNames, initialSignatures, signaturesByModule, moduleClassNameByModuleName, moduleSourceFile, compileCache), moduleSourceFile);
     }
 
     private Result<CompiledModule> linkModule(
@@ -348,7 +348,7 @@ public class CapybaraCompiler {
             return withFile(new Result.Error<>(error.errors()), moduleSourceFile);
         }
         var initialSignatures = ((Result.Success<List<CapybaraExpressionCompiler.FunctionSignature>>) availableSignatures).value();
-        return withFile(linkFunctions(functions, visibleTypes, localTypes.keySet(), initialSignatures, signaturesByModule, moduleClassNameByModuleName, moduleSourceFile)
+        return withFile(linkFunctions(functions, visibleTypes, localTypes.keySet(), initialSignatures, signaturesByModule, moduleClassNameByModuleName, moduleSourceFile, compileCache)
                 .flatMap(firstPassFunctions -> {
                     var refinedSignatures = mergeSignatures(
                             signaturesByModule.get(module.name()),
@@ -364,7 +364,7 @@ public class CapybaraCompiler {
                         ));
                     }
                     var refinedAvailableSignatures = mergeSignatures(initialSignatures, refinedSignatures);
-                    return linkFunctions(functions, visibleTypes, localTypes.keySet(), refinedAvailableSignatures, signaturesByModule, moduleClassNameByModuleName, moduleSourceFile)
+                    return linkFunctions(functions, visibleTypes, localTypes.keySet(), refinedAvailableSignatures, signaturesByModule, moduleClassNameByModuleName, moduleSourceFile, compileCache)
                             .map(linkedFunctions -> new CompiledModule(
                                     module.name(),
                                     module.path(),
@@ -829,9 +829,13 @@ public class CapybaraCompiler {
             List<CapybaraExpressionCompiler.FunctionSignature> signatures,
             Map<String, List<CapybaraExpressionCompiler.FunctionSignature>> signaturesByModule,
             Map<String, String> moduleClassNameByModuleName,
-            String moduleSourceFile
+            String moduleSourceFile,
+            CompileCache compileCache
     ) {
-        var linkCache = new CapybaraExpressionCompiler.LinkCache(dataTypes);
+        var linkCache = compileCache.expressionLinkCaches.computeIfAbsent(
+                dataTypes,
+                CapybaraExpressionCompiler.LinkCache::new
+        );
         return functions.stream()
                 .map(f -> linkFunction(f, dataTypes, localTypeNames, signatures, signaturesByModule, moduleClassNameByModuleName, moduleSourceFile, linkCache))
                 .collect(new ResultCollectionCollector<>());
@@ -2979,6 +2983,7 @@ public class CapybaraCompiler {
         private final Map<SignatureVisibilityCacheKey, List<CapybaraExpressionCompiler.FunctionSignature>> visibleSignaturesByScope = new HashMap<>();
         private final Map<VisibilityCacheKey, SortedMap<String, GenericDataType>> visibleTypesByScope = new HashMap<>();
         private final Map<SignatureVisibilityCacheKey, Map<String, List<CapybaraExpressionCompiler.FunctionSignature>>> visibleSignaturesByNameByScope = new HashMap<>();
+        private final IdentityHashMap<Map<String, GenericDataType>, CapybaraExpressionCompiler.LinkCache> expressionLinkCaches = new IdentityHashMap<>();
         private long staticImportGenerationNanos;
     }
 
@@ -3579,7 +3584,6 @@ public class CapybaraCompiler {
                 .toList();
     }
 }
-
 
 
 
