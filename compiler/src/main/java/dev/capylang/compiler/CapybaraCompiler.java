@@ -189,7 +189,7 @@ public class CapybaraCompiler {
         for (var module : program.modules()) {
             var functions = findFunctions(module.functional().definitions());
             var sourceFile = moduleSourceFile(module);
-            var signatures = withFile(linkFunctionSignatures(functions, visibleTypesByModule.get(module.name()), sourceFile), sourceFile);
+            var signatures = withFile(linkFunctionSignatures(functions, visibleTypesByModule.get(module.name()), compileCache, sourceFile), sourceFile);
             if (signatures instanceof Result.Error<List<CapybaraExpressionCompiler.FunctionSignature>> error) {
                 return new Result.Error<>(error.errors());
             }
@@ -862,7 +862,7 @@ public class CapybaraCompiler {
                 CapybaraExpressionCompiler.LinkCache::new
         );
         return functions.stream()
-                .map(f -> linkFunction(f, dataTypes, localTypeNames, signatures, signaturesByModule, moduleClassNameByModuleName, moduleSourceFile, linkCache))
+                .map(f -> linkFunction(f, dataTypes, localTypeNames, signatures, signaturesByModule, moduleClassNameByModuleName, moduleSourceFile, linkCache, compileCache))
                 .collect(new ResultCollectionCollector<>());
     }
 
@@ -874,7 +874,8 @@ public class CapybaraCompiler {
             Map<String, List<CapybaraExpressionCompiler.FunctionSignature>> signaturesByModule,
             Map<String, String> moduleClassNameByModuleName,
             String moduleSourceFile,
-            CapybaraExpressionCompiler.LinkCache linkCache
+            CapybaraExpressionCompiler.LinkCache linkCache,
+            CompileCache compileCache
     ) {
         var privateTypeSignatureError = privateTypeEscapingFunctionSignatureError(function, moduleSourceFile);
         if (privateTypeSignatureError.isPresent()) {
@@ -885,7 +886,7 @@ public class CapybaraCompiler {
             return localMethodValidationError.get();
         }
         var functionGenericTypeNames = functionGenericTypeNames(function, dataTypes);
-        var linked = linkParameters(function.parameters(), dataTypes, functionGenericTypeNames)
+        var linked = linkParameters(function.parameters(), dataTypes, functionGenericTypeNames, compileCache)
                 .flatMap(parameters -> linkExpressionWithRecursiveInference(
                         function,
                         parameters,
@@ -895,7 +896,7 @@ public class CapybaraCompiler {
                         moduleClassNameByModuleName,
                         linkCache
                 ).flatMap(ex -> function.returnType()
-                        .map(type -> linkType(type, dataTypes, functionGenericTypeNames))
+                        .map(type -> linkType(type, dataTypes, functionGenericTypeNames, compileCache))
                         .orElseGet(() -> Result.success(ex.type()))
                         .flatMap(rtype -> validateFunctionReturnType(function, ex, rtype, dataTypes, moduleSourceFile)
                                 .map(validatedExpression -> new CompiledFunction(
@@ -2213,13 +2214,14 @@ public class CapybaraCompiler {
     private Result<List<CapybaraExpressionCompiler.FunctionSignature>> linkFunctionSignatures(
             List<Function> functions,
             Map<String, GenericDataType> dataTypes,
+            CompileCache compileCache,
             String moduleSourceFile
     ) {
         return functions.stream()
                 .map(function -> {
                     var functionGenericTypeNames = functionGenericTypeNames(function, dataTypes);
-                    return linkParameters(function.parameters(), dataTypes, functionGenericTypeNames)
-                            .flatMap(parameters -> linkSignatureReturnType(function, dataTypes, functionGenericTypeNames, moduleSourceFile)
+                    return linkParameters(function.parameters(), dataTypes, functionGenericTypeNames, compileCache)
+                            .flatMap(parameters -> linkSignatureReturnType(function, dataTypes, functionGenericTypeNames, compileCache, moduleSourceFile)
                                     .map(returnType -> new CapybaraExpressionCompiler.FunctionSignature(
                                             function.name(),
                                             parameters.stream().map(CompiledFunctionParameter::type).toList(),
@@ -2388,10 +2390,11 @@ public class CapybaraCompiler {
             Function function,
             Map<String, GenericDataType> dataTypes,
             Set<String> functionGenericTypeNames,
+            CompileCache compileCache,
             String moduleSourceFile
     ) {
         var linked = function.returnType()
-                .map(type -> linkType(type, dataTypes, functionGenericTypeNames))
+                .map(type -> linkType(type, dataTypes, functionGenericTypeNames, compileCache))
                 .orElseGet(() -> Result.success(PrimitiveLinkedType.ANY));
         if (!(linked instanceof Result.Error<CompiledType> error)) {
             return linked;
@@ -2611,30 +2614,32 @@ public class CapybaraCompiler {
     }
 
     private Result<List<CompiledFunctionParameter>> linkParameters(List<Parameter> parameters, Map<String, GenericDataType> dataTypes) {
-        return linkParameters(parameters, dataTypes, Set.of());
+        return linkParameters(parameters, dataTypes, Set.of(), new CompileCache());
     }
 
     private Result<List<CompiledFunctionParameter>> linkParameters(
             List<Parameter> parameters,
             Map<String, GenericDataType> dataTypes,
-            Set<String> functionGenericTypeNames
+            Set<String> functionGenericTypeNames,
+            CompileCache compileCache
     ) {
         return parameters.stream()
-                .map(p -> linkParameter(p, dataTypes, functionGenericTypeNames))
+                .map(p -> linkParameter(p, dataTypes, functionGenericTypeNames, compileCache))
                 .collect(new ResultCollectionCollector<>());
     }
 
     private Result<CompiledFunctionParameter> linkParameter(Parameter parameter, Map<String, GenericDataType> dataTypes) {
-        return linkParameter(parameter, dataTypes, Set.of());
+        return linkParameter(parameter, dataTypes, Set.of(), new CompileCache());
     }
 
     private Result<CompiledFunctionParameter> linkParameter(
             Parameter parameter,
             Map<String, GenericDataType> dataTypes,
-            Set<String> functionGenericTypeNames
+            Set<String> functionGenericTypeNames,
+            CompileCache compileCache
     ) {
         return withPosition(
-                linkType(parameter.type(), dataTypes, functionGenericTypeNames)
+                linkType(parameter.type(), dataTypes, functionGenericTypeNames, compileCache)
                         .map(type -> new CompiledFunctionParameter(parameter.name(), type)),
                 parameter.position(),
                 "");
@@ -2644,16 +2649,29 @@ public class CapybaraCompiler {
             Type type,
             Map<String, GenericDataType> dataTypes
     ) {
-        return CapybaraTypeCompiler.linkType(type, dataTypes);
+        return linkType(type, dataTypes, new CompileCache());
     }
 
     private Result<CompiledType> linkType(
             Type type,
             Map<String, GenericDataType> dataTypes,
-            Set<String> functionGenericTypeNames
+            CompileCache compileCache
+    ) {
+        var linkCache = compileCache.typeLinkCaches.computeIfAbsent(
+                dataTypes,
+                ignored -> new CapybaraTypeCompiler.LinkCache()
+        );
+        return CapybaraTypeCompiler.linkType(type, dataTypes, linkCache);
+    }
+
+    private Result<CompiledType> linkType(
+            Type type,
+            Map<String, GenericDataType> dataTypes,
+            Set<String> functionGenericTypeNames,
+            CompileCache compileCache
     ) {
         if (functionGenericTypeNames.isEmpty()) {
-            return linkType(type, dataTypes);
+            return linkType(type, dataTypes, compileCache);
         }
         return switch (type) {
             case PrimitiveType primitiveType -> Result.success(switch (primitiveType) {
@@ -2669,38 +2687,39 @@ public class CapybaraCompiler {
                 case NOTHING -> PrimitiveLinkedType.NOTHING;
             });
             case CollectionType.ListType listType ->
-                    linkType(listType.elementType(), dataTypes, functionGenericTypeNames)
+                    linkType(listType.elementType(), dataTypes, functionGenericTypeNames, compileCache)
                             .map(CollectionLinkedType.CompiledList::new)
                             .map(CompiledType.class::cast);
-            case CollectionType.SetType setType -> linkType(setType.elementType(), dataTypes, functionGenericTypeNames)
+            case CollectionType.SetType setType -> linkType(setType.elementType(), dataTypes, functionGenericTypeNames, compileCache)
                     .map(CollectionLinkedType.CompiledSet::new)
                     .map(CompiledType.class::cast);
-            case CollectionType.DictType dictType -> linkType(dictType.valueType(), dataTypes, functionGenericTypeNames)
+            case CollectionType.DictType dictType -> linkType(dictType.valueType(), dataTypes, functionGenericTypeNames, compileCache)
                     .map(CollectionLinkedType.CompiledDict::new)
                     .map(CompiledType.class::cast);
-            case FunctionType functionType -> linkType(functionType.argumentType(), dataTypes, functionGenericTypeNames)
-                    .flatMap(argumentType -> linkType(functionType.returnType(), dataTypes, functionGenericTypeNames)
+            case FunctionType functionType -> linkType(functionType.argumentType(), dataTypes, functionGenericTypeNames, compileCache)
+                    .flatMap(argumentType -> linkType(functionType.returnType(), dataTypes, functionGenericTypeNames, compileCache)
                             .map(returnType -> (CompiledType) new CompiledFunctionType(argumentType, returnType)));
             case TupleType tupleType -> tupleType.elementTypes().stream()
-                    .map(elementType -> linkType(elementType, dataTypes, functionGenericTypeNames))
+                    .map(elementType -> linkType(elementType, dataTypes, functionGenericTypeNames, compileCache))
                     .collect(new ResultCollectionCollector<>())
                     .map(linkedTypes -> (CompiledType) new CompiledTupleType(linkedTypes));
             case DataType dataType ->
-                    linkDataTypeWithFunctionGenerics(dataType.name(), dataTypes, functionGenericTypeNames);
+                    linkDataTypeWithFunctionGenerics(dataType.name(), dataTypes, functionGenericTypeNames, compileCache);
         };
     }
 
     private Result<CompiledType> linkDataTypeWithFunctionGenerics(
             String rawTypeName,
             Map<String, GenericDataType> dataTypes,
-            Set<String> functionGenericTypeNames
+            Set<String> functionGenericTypeNames,
+            CompileCache compileCache
     ) {
         var parsed = parseGenericTypeName(rawTypeName);
         if (parsed.typeArguments().isEmpty() && functionGenericTypeNames.contains(parsed.baseName())) {
             return Result.success(new CompiledGenericTypeParameter(parsed.baseName()));
         }
 
-        var linkedBase = linkType(new DataType(parsed.baseName()), dataTypes);
+        var linkedBase = linkType(new DataType(parsed.baseName()), dataTypes, compileCache);
         if (linkedBase instanceof Result.Error<CompiledType> error) {
             return new Result.Error<>(error.errors());
         }
@@ -2710,7 +2729,7 @@ public class CapybaraCompiler {
         }
 
         return parsed.typeArguments().stream()
-                .map(argument -> linkType(parseTypeArgument(argument), dataTypes, functionGenericTypeNames))
+                .map(argument -> linkType(parseTypeArgument(argument), dataTypes, functionGenericTypeNames, compileCache))
                 .collect(new ResultCollectionCollector<>())
                 .map(arguments -> instantiateTypeArguments(baseType, arguments));
     }
@@ -2998,7 +3017,7 @@ public class CapybaraCompiler {
     }
 
     private boolean isKnownTypeName(String typeName, Map<String, GenericDataType> dataTypes) {
-        return linkType(new DataType(typeName), dataTypes) instanceof Result.Success<CompiledType>;
+        return CapybaraTypeCompiler.linkType(new DataType(typeName), dataTypes) instanceof Result.Success<CompiledType>;
     }
 
     private record ParsedGenericTypeName(String baseName, List<String> typeArguments) {
@@ -3012,6 +3031,7 @@ public class CapybaraCompiler {
         private final IdentityHashMap<Map<String, List<CapybaraExpressionCompiler.FunctionSignature>>, Map<ModuleCacheKey, Result<List<CapybaraExpressionCompiler.FunctionSignature>>>> availableSignaturesByModulePhase = new IdentityHashMap<>();
         private final IdentityHashMap<Map<String, List<CapybaraExpressionCompiler.FunctionSignature>>, Map<ModuleCacheKey, SortedSet<CompiledModule.StaticImport>>> staticImportsByModulePhase = new IdentityHashMap<>();
         private final IdentityHashMap<Map<String, GenericDataType>, CapybaraExpressionCompiler.LinkCache> expressionLinkCaches = new IdentityHashMap<>();
+        private final IdentityHashMap<Map<String, GenericDataType>, CapybaraTypeCompiler.LinkCache> typeLinkCaches = new IdentityHashMap<>();
         private long staticImportGenerationNanos;
     }
 
@@ -3618,9 +3638,6 @@ public class CapybaraCompiler {
                 .toList();
     }
 }
-
-
-
 
 
 
