@@ -137,12 +137,70 @@ class CapybaraCompilerLibrariesTest {
                 .contains("update");
     }
 
+    @Test
+    void shouldResolveModuleQualifiedTypeWithoutImport() {
+        var compiled = compileProgram(List.of(
+                new RawModule("Types", "/foo/lib", """
+                        data Thing { value: int }
+                        """),
+                new RawModule("Consumer", "/foo/app", """
+                        data Thing { label: string }
+
+                        fun local_thing(): Thing = Thing { label: "local" }
+                        fun imported_thing(value: int): Types.Thing = Types.Thing { value: value }
+                        """)
+        ), new java.util.TreeSet<>());
+
+        assertThat(compiledFunction(compiled, "Consumer", "local_thing").returnType().name()).isEqualTo("Thing");
+        assertThat(compiledFunction(compiled, "Consumer", "imported_thing").returnType().name()).isEqualTo("Types.Thing");
+    }
+
+    @Test
+    void shouldResolvePathQualifiedTypeWithoutImport() {
+        var compiled = compileProgram(List.of(
+                new RawModule("Types", "/foo/bar", """
+                        data Thing { value: int }
+                        """),
+                new RawModule("Consumer", "/foo/app", """
+                        fun imported_thing(value: int): /foo/bar/Types.Thing = /foo/bar/Types.Thing { value: value }
+                        """)
+        ), new java.util.TreeSet<>());
+
+        assertThat(compiledFunction(compiled, "Consumer", "imported_thing").returnType().name())
+                .isEqualTo("/foo/bar/Types.Thing");
+    }
+
+    @Test
+    void shouldResolvePathQualifiedModuleShorthandWhenModuleNameMatchesType() {
+        var compiled = compileProgram(List.of(
+                new RawModule("Program", "/foo/bar", """
+                        data Program { value: int }
+                        """),
+                new RawModule("Consumer", "/foo/app", """
+                        fun build(value: int): /foo/bar/Program = /foo/bar/Program { value: value }
+                        """)
+        ), new java.util.TreeSet<>());
+
+        assertThat(compiledFunction(compiled, "Consumer", "build").returnType().name()).isEqualTo("/foo/bar/Program");
+    }
+
     private static CompiledProgram compileProgram(List<RawModule> rawModules, SortedSet<CompiledModule> libraries) {
         var result = CapybaraCompiler.INSTANCE.compile(rawModules, libraries);
         if (result instanceof Result.Error<CompiledProgram> error) {
             fail(error.errors().toString());
         }
         return ((Result.Success<CompiledProgram>) result).value();
+    }
+
+    private static CompiledFunction compiledFunction(CompiledProgram program, String moduleName, String functionName) {
+        return program.modules().stream()
+                .filter(module -> module.name().equals(moduleName))
+                .findFirst()
+                .orElseThrow()
+                .functions().stream()
+                .filter(function -> function.name().equals(functionName))
+                .findFirst()
+                .orElseThrow();
     }
 }
 
