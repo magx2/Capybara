@@ -404,12 +404,16 @@ public class Capy {
         validateInputDirectory(input);
 
         log.info("Compiling files from: " + input);
+        var rawModuleBuildStartedAt = System.nanoTime();
         var rawModules = listSourceFiles(input).stream()
                 .filter(sourceFile -> sourceFile.path().getFileName().toString().endsWith(".cfun"))
                 .map(Capy::buildModule)
                 .toList();
+        log.info("Built " + rawModules.size() + " raw modules from " + input + " in " + Duration.ofNanos(System.nanoTime() - rawModuleBuildStartedAt));
 
+        var linkingStartedAt = System.nanoTime();
         var linking = CapybaraCompiler.INSTANCE.compile(rawModules, libraries);
+        log.info("Linked " + rawModules.size() + " modules from " + input + " in " + Duration.ofNanos(System.nanoTime() - linkingStartedAt));
         if (linking instanceof Result.Error<CompiledProgram> error) {
             err.println("Compilation failed with " + error.errors().size() + " error(s):");
             error.errors().forEach(err::println);
@@ -417,7 +421,11 @@ public class Capy {
         }
 
         var linkedProgram = ((Result.Success<CompiledProgram>) linking).value();
-        var outputProgram = compileTests ? prepareCompiledTests(linkedProgram, libraries) : linkedProgram;
+        var testAugmentationStartedAt = System.nanoTime();
+        var outputProgram = compileTests ? prepareCompiledTests(linkedProgram) : linkedProgram;
+        if (compileTests) {
+            log.info("Prepared compiled tests for " + input + " in " + Duration.ofNanos(System.nanoTime() - testAugmentationStartedAt));
+        }
         var sourceModules = rawModules.stream()
                 .map(module -> new ModuleRef(module.name(), normalizeModulePath(module.path())))
                 .collect(java.util.stream.Collectors.toCollection(java.util.TreeSet::new));
@@ -917,6 +925,8 @@ public class Capy {
 
     private static void writeLinkedModules(Path outputDir, CompiledProgram program) {
         var mapper = objectMapper();
+        log.info("Writing " + program.modules().size() + " linked modules to: " + outputDir);
+        var totalStartedAt = System.nanoTime();
         try {
             Files.createDirectories(outputDir);
             for (var module : program.modules()) {
@@ -931,22 +941,28 @@ public class Capy {
                 var duration = Duration.ofNanos(System.nanoTime() - startedAt);
                 log.info("Wrote linked module to file: " + moduleJson + " in " + duration);
             }
+            log.info("Wrote " + program.modules().size() + " linked modules to: " + outputDir + " in " + Duration.ofNanos(System.nanoTime() - totalStartedAt));
         } catch (IOException e) {
             throw new UncheckedIOException("Unable to write linked JSON output to " + outputDir, e);
         }
     }
 
-    private static CompiledProgram prepareCompiledTests(CompiledProgram linkedProgram, TreeSet<CompiledModule> libraries) {
+    private static CompiledProgram prepareCompiledTests(CompiledProgram linkedProgram) {
+        log.info("Preparing compiled tests for " + linkedProgram.modules().size() + " linked modules");
+        var totalStartedAt = System.nanoTime();
+        var discoverStartedAt = System.nanoTime();
         var testFunctions = discoverTestFunctions(linkedProgram);
+        log.info("Discovered " + testFunctions.size() + " Capybara test producers in " + Duration.ofNanos(System.nanoTime() - discoverStartedAt));
         if (testFunctions.isEmpty()) {
             throw new CliException("No Capybara functions returning TestFile or list[TestFile] were found.");
         }
 
-        var outputModules = new java.util.ArrayList<>(readBundledLinkedModules());
-        outputModules.addAll(libraries);
-        outputModules.addAll(linkedProgram.modules());
+        var outputModules = new java.util.ArrayList<>(linkedProgram.modules());
         outputModules.removeIf(module -> module.name().equals(CAP_TEST_RUNTIME_MODULE.name()) && normalizeModulePath(module.path()).equals(CAP_TEST_RUNTIME_MODULE.path()));
+        var runtimeModuleStartedAt = System.nanoTime();
         outputModules.add(createCapyTestRuntimeModule(testFunctions));
+        log.info("Created CapyTestRuntime module in " + Duration.ofNanos(System.nanoTime() - runtimeModuleStartedAt));
+        log.info("Prepared compiled tests in " + Duration.ofNanos(System.nanoTime() - totalStartedAt));
         return new CompiledProgram(outputModules);
     }
 

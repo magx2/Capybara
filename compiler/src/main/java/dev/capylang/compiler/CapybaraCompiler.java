@@ -16,7 +16,9 @@ import java.nio.file.FileSystemNotFoundException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.*;
+import java.util.logging.Logger;
 import java.util.stream.Stream;
 
 import static java.util.Collections.unmodifiableSortedSet;
@@ -30,6 +32,7 @@ public class CapybaraCompiler {
     private static final String METHOD_DECL_PREFIX = "__method__";
     private static final java.util.regex.Pattern IDENTIFIER_PATTERN = java.util.regex.Pattern.compile("[A-Za-z_][A-Za-z0-9_]*");
     private static final ObjectMapper OBJECT_MAPPER = objectMapper();
+    private static final Logger log = Logger.getLogger(CapybaraCompiler.class.getName());
 
     public Result<CompiledProgram> compile(Collection<RawModule> rawModules, SortedSet<CompiledModule> libraries) {
         try {
@@ -143,6 +146,7 @@ public class CapybaraCompiler {
         return mapper;
     }
     private Result<CompiledProgram> compile(Program program, SortedSet<CompiledModule> libraries) {
+        var totalStartedAt = System.nanoTime();
         var compileCache = new CompileCache();
         var programModuleRefs = program.modules().stream().map(module -> new ModuleRef(module.name(), module.path())).toList();
         var libraryModuleRefs = libraries.stream().map(module -> new ModuleRef(module.name(), module.path())).toList();
@@ -162,13 +166,10 @@ public class CapybaraCompiler {
             linkedTypesByModule.put(module.name(), ((Result.Success<SortedMap<String, GenericDataType>>) linkedTypes).value());
         }
 
-        var moduleClassNameByModuleName = allModuleRefs.stream()
-                .collect(toMap(
-                        ModuleRef::name,
-                        module -> moduleJavaClassName(module, linkedTypesByModule.get(module.name())),
-                        (first, second) -> first
-                ));
+        var moduleLinkIndex = buildModuleLinkIndex(allModuleRefs, linkedTypesByModule);
+        var moduleClassNameByModuleName = moduleLinkIndex.moduleJavaClassNameByModuleName();
 
+        var availableTypesStartedAt = System.nanoTime();
         var visibleTypesByModule = new HashMap<String, Map<String, GenericDataType>>();
         for (var module : program.modules()) {
             var sourceFile = moduleSourceFile(module);
@@ -178,7 +179,9 @@ public class CapybaraCompiler {
             }
             visibleTypesByModule.put(module.name(), ((Result.Success<Map<String, GenericDataType>>) visibleTypes).value());
         }
+        log.info("Prepared available types for " + program.modules().size() + " modules in " + Duration.ofNanos(System.nanoTime() - availableTypesStartedAt));
 
+        var availableSignaturesStartedAt = System.nanoTime();
         var signaturesByModule = new HashMap<String, List<CapybaraExpressionCompiler.FunctionSignature>>();
         for (var library : libraries) {
             signaturesByModule.put(library.name(), signaturesFromLinkedFunctions(List.copyOf(library.functions())));
@@ -192,8 +195,10 @@ public class CapybaraCompiler {
             }
             signaturesByModule.put(module.name(), ((Result.Success<List<CapybaraExpressionCompiler.FunctionSignature>>) signatures).value());
         }
+        log.info("Prepared available signatures for " + program.modules().size() + " modules in " + Duration.ofNanos(System.nanoTime() - availableSignaturesStartedAt));
 
         var refinedSignaturesByModule = new HashMap<>(signaturesByModule);
+        var firstPassStartedAt = System.nanoTime();
         for (var module : program.modules()) {
             var firstPassFunctions = firstPassLinkedFunctions(
                     module,
@@ -214,8 +219,10 @@ public class CapybaraCompiler {
             );
             refinedSignaturesByModule.put(module.name(), refined);
         }
+        log.info("Completed first-pass linking for " + program.modules().size() + " modules in " + Duration.ofNanos(System.nanoTime() - firstPassStartedAt));
 
-        return program.modules().stream()
+        var finalLinkStartedAt = System.nanoTime();
+        var result = program.modules().stream()
                 .map(module -> linkModule(
                         module,
                         modulesByName,
@@ -227,9 +234,79 @@ public class CapybaraCompiler {
                 ))
                 .collect(new ResultCollectionCollector<>())
                 .map(CompiledProgram::new);
+        log.info("Completed final linking for " + program.modules().size() + " modules in " + Duration.ofNanos(System.nanoTime() - finalLinkStartedAt));
+        log.info("Generated static imports in " + Duration.ofNanos(compileCache.staticImportGenerationNanos));
+        log.info("Compiled program with " + allModuleRefs.size() + " total modules in " + Duration.ofNanos(System.nanoTime() - totalStartedAt));
+        return result;
     }
 
     private record ModuleRef(String name, String path) {
+    }
+
+    private ModuleLinkIndex buildModuleLinkIndex(
+            List<ModuleRef> allModuleRefs,
+            Map<String, SortedMap<String, GenericDataType>> linkedTypesByModule
+    ) {
+        var modulesByExactName = new LinkedHashMap<String, ModuleRef>();
+        var modulesByQualifiedName = new LinkedHashMap<String, ModuleRef>();
+        var modulesByTailName = new LinkedHashMap<String, ModuleRef>();
+        var ambiguousTailNames = new LinkedHashSet<String>();
+        var linkedTypesByModuleName = new LinkedHashMap<String, SortedMap<String, GenericDataType>>();
+        var moduleJavaClassNameByModuleName = new LinkedHashMap<String, String>();
+
+        for (var module : allModuleRefs) {
+            modulesByExactName.putIfAbsent(module.name(), module);
+            modulesByQualifiedName.putIfAbsent(qualifiedModuleName(module), module);
+
+            linkedTypesByModuleName.putIfAbsent(module.name(), linkedTypesByModule.get(module.name()));
+            moduleJavaClassNameByModuleName.putIfAbsent(module.name(), moduleJavaClassName(module, linkedTypesByModule.get(module.name())));
+
+            var tailName = moduleTailName(module);
+            if (tailName == null || ambiguousTailNames.contains(tailName)) {
+                continue;
+            }
+            var existing = modulesByTailName.putIfAbsent(tailName, module);
+            if (existing != null && !existing.equals(module)) {
+                modulesByTailName.remove(tailName);
+                ambiguousTailNames.add(tailName);
+            }
+        }
+
+        return new ModuleLinkIndex(
+                Map.copyOf(modulesByExactName),
+                Map.copyOf(modulesByQualifiedName),
+                Map.copyOf(modulesByTailName),
+                Set.copyOf(ambiguousTailNames),
+                Map.copyOf(linkedTypesByModuleName),
+                Map.copyOf(moduleJavaClassNameByModuleName)
+        );
+    }
+
+    private String qualifiedModuleName(ModuleRef module) {
+        var normalizedPath = normalizeModulePath(module.path());
+        if (".".equals(normalizedPath) || normalizedPath.isBlank()) {
+            return module.name();
+        }
+        return normalizedPath + "/" + module.name();
+    }
+
+    private String moduleTailName(ModuleRef module) {
+        var qualifiedName = qualifiedModuleName(module);
+        var lastSlash = qualifiedName.lastIndexOf('/');
+        if (lastSlash < 0 || lastSlash == qualifiedName.length() - 1) {
+            return null;
+        }
+        return qualifiedName.substring(lastSlash + 1);
+    }
+
+    private record ModuleLinkIndex(
+            Map<String, ModuleRef> modulesByExactName,
+            Map<String, ModuleRef> modulesByQualifiedName,
+            Map<String, ModuleRef> modulesByTailName,
+            Set<String> ambiguousTailNames,
+            Map<String, SortedMap<String, GenericDataType>> linkedTypesByModuleName,
+            Map<String, String> moduleJavaClassNameByModuleName
+    ) {
     }
 
     private Result<List<CompiledFunction>> firstPassLinkedFunctions(
@@ -562,6 +639,7 @@ public class CapybaraCompiler {
             Map<String, List<CapybaraExpressionCompiler.FunctionSignature>> signaturesByModule,
             CompileCache compileCache
     ) {
+        var startedAt = System.nanoTime();
         var imports = new HashSet<CompiledModule.StaticImport>();
         for (var importDeclaration : module.imports()) {
             var importedModule = resolveImportedModule(importDeclaration.moduleName(), modulesByName);
@@ -585,6 +663,7 @@ public class CapybaraCompiler {
                 }
             }
         }
+        compileCache.staticImportGenerationNanos += System.nanoTime() - startedAt;
         return unmodifiableSortedSet(new TreeSet<>(imports));
     }
     private SortedSet<CompiledFunction> deduplicateFunctions(List<CompiledFunction> linkedFunctions) {
@@ -2894,6 +2973,7 @@ public class CapybaraCompiler {
         private final Map<SignatureVisibilityCacheKey, List<CapybaraExpressionCompiler.FunctionSignature>> visibleSignaturesByScope = new HashMap<>();
         private final Map<VisibilityCacheKey, SortedMap<String, GenericDataType>> visibleTypesByScope = new HashMap<>();
         private final Map<SignatureVisibilityCacheKey, Map<String, List<CapybaraExpressionCompiler.FunctionSignature>>> visibleSignaturesByNameByScope = new HashMap<>();
+        private long staticImportGenerationNanos;
     }
 
     private record VisibilityCacheKey(String currentModulePath, String ownerModuleName, String ownerModulePath) {
@@ -3493,7 +3573,6 @@ public class CapybaraCompiler {
                 .toList();
     }
 }
-
 
 
 
