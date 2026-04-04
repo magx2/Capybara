@@ -20,8 +20,21 @@ public class CapybaraExpressionCompiler {
     private static final String METHOD_INVOKE_PREFIX = "__invoke__";
     private static final String DICT_PIPE_ARGS_SEPARATOR = "::";
     private static final String TUPLE_PIPE_ARGS_SEPARATOR = ";;";
+
+    public static final class LinkCache {
+        private final Map<String, GenericDataType> fallbackDataTypesBySuffix;
+        private final Map<String, GenericDataType> resolvedDataTypesByNameCache = new HashMap<>();
+        private final Map<String, Optional<CompiledType>> parsedTypeDescriptorCache = new HashMap<>();
+        private final Map<String, List<String>> splitTopLevelTypeDescriptorCache = new HashMap<>();
+
+        public LinkCache(Map<String, GenericDataType> dataTypes) {
+            this.fallbackDataTypesBySuffix = buildFallbackDataTypesBySuffix(dataTypes);
+        }
+    }
+
     private final List<CompiledFunction.CompiledFunctionParameter> parameters;
     private final Map<String, GenericDataType> dataTypes;
+    private final LinkCache linkCache;
     private final List<FunctionSignature> functionSignatures;
     private final Map<String, List<FunctionSignature>> functionSignaturesByModule;
     private final Map<String, String> moduleClassNameByModuleName;
@@ -33,8 +46,20 @@ public class CapybaraExpressionCompiler {
             Map<String, List<FunctionSignature>> functionSignaturesByModule,
             Map<String, String> moduleClassNameByModuleName
     ) {
+        this(parameters, dataTypes, functionSignatures, functionSignaturesByModule, moduleClassNameByModuleName, new LinkCache(dataTypes));
+    }
+
+    public CapybaraExpressionCompiler(
+            List<CompiledFunction.CompiledFunctionParameter> parameters,
+            Map<String, GenericDataType> dataTypes,
+            List<FunctionSignature> functionSignatures,
+            Map<String, List<FunctionSignature>> functionSignaturesByModule,
+            Map<String, String> moduleClassNameByModuleName,
+            LinkCache linkCache
+    ) {
         this.parameters = parameters;
         this.dataTypes = dataTypes;
+        this.linkCache = linkCache;
         this.functionSignatures = functionSignatures;
         this.functionSignaturesByModule = functionSignaturesByModule;
         this.moduleClassNameByModuleName = moduleClassNameByModuleName;
@@ -4482,6 +4507,16 @@ public class CapybaraExpressionCompiler {
 
     private Optional<CompiledType> parseLinkedTypeDescriptor(String descriptor) {
         var normalizedDescriptor = descriptor == null ? "" : descriptor.trim();
+        var cached = linkCache.parsedTypeDescriptorCache.get(normalizedDescriptor);
+        if (cached != null) {
+            return cached;
+        }
+        var parsed = parseLinkedTypeDescriptorUncached(normalizedDescriptor);
+        linkCache.parsedTypeDescriptorCache.put(normalizedDescriptor, parsed);
+        return parsed;
+    }
+
+    private Optional<CompiledType> parseLinkedTypeDescriptorUncached(String normalizedDescriptor) {
         if (normalizedDescriptor.isEmpty()) {
             return Optional.empty();
         }
@@ -4610,18 +4645,42 @@ public class CapybaraExpressionCompiler {
     }
 
     private GenericDataType resolveDataTypeByName(String typeName) {
+        var cached = linkCache.resolvedDataTypesByNameCache.get(typeName);
+        if (cached != null || linkCache.resolvedDataTypesByNameCache.containsKey(typeName)) {
+            return cached;
+        }
         var direct = dataTypes.get(typeName);
         if (direct != null) {
+            linkCache.resolvedDataTypesByNameCache.put(typeName, direct);
             return direct;
         }
-        return dataTypes.entrySet().stream()
-                .filter(entry -> entry.getKey().endsWith("." + typeName) || entry.getKey().endsWith("/" + typeName))
-                .map(Map.Entry::getValue)
-                .findFirst()
-                .orElse(null);
+        var resolved = linkCache.fallbackDataTypesBySuffix.get(typeName);
+        linkCache.resolvedDataTypesByNameCache.put(typeName, resolved);
+        return resolved;
+    }
+
+    private static Map<String, GenericDataType> buildFallbackDataTypesBySuffix(Map<String, GenericDataType> availableDataTypes) {
+        var fallbackBySuffix = new LinkedHashMap<String, GenericDataType>();
+        for (var entry : availableDataTypes.entrySet()) {
+            var key = entry.getKey();
+            for (int i = 0; i < key.length(); i++) {
+                var ch = key.charAt(i);
+                if (ch == '.' || ch == '/') {
+                    var suffix = key.substring(i + 1);
+                    if (!suffix.isEmpty()) {
+                        fallbackBySuffix.putIfAbsent(suffix, entry.getValue());
+                    }
+                }
+            }
+        }
+        return Map.copyOf(fallbackBySuffix);
     }
 
     private List<String> splitTopLevelTypeDescriptors(String text) {
+        var cached = linkCache.splitTopLevelTypeDescriptorCache.get(text);
+        if (cached != null) {
+            return cached;
+        }
         var values = new java.util.ArrayList<String>();
         var bracketDepth = 0;
         var parenDepth = 0;
@@ -4662,7 +4721,9 @@ public class CapybaraExpressionCompiler {
         if (!token.isEmpty()) {
             values.add(token);
         }
-        return List.copyOf(values);
+        var split = List.copyOf(values);
+        linkCache.splitTopLevelTypeDescriptorCache.put(text, split);
+        return split;
     }
 
     private int findTopLevelFunctionArrow(String text) {

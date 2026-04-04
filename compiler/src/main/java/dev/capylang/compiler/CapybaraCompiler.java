@@ -831,8 +831,9 @@ public class CapybaraCompiler {
             Map<String, String> moduleClassNameByModuleName,
             String moduleSourceFile
     ) {
+        var linkCache = new CapybaraExpressionCompiler.LinkCache(dataTypes);
         return functions.stream()
-                .map(f -> linkFunction(f, dataTypes, localTypeNames, signatures, signaturesByModule, moduleClassNameByModuleName, moduleSourceFile))
+                .map(f -> linkFunction(f, dataTypes, localTypeNames, signatures, signaturesByModule, moduleClassNameByModuleName, moduleSourceFile, linkCache))
                 .collect(new ResultCollectionCollector<>());
     }
 
@@ -843,7 +844,8 @@ public class CapybaraCompiler {
             List<CapybaraExpressionCompiler.FunctionSignature> signatures,
             Map<String, List<CapybaraExpressionCompiler.FunctionSignature>> signaturesByModule,
             Map<String, String> moduleClassNameByModuleName,
-            String moduleSourceFile
+            String moduleSourceFile,
+            CapybaraExpressionCompiler.LinkCache linkCache
     ) {
         var privateTypeSignatureError = privateTypeEscapingFunctionSignatureError(function, moduleSourceFile);
         if (privateTypeSignatureError.isPresent()) {
@@ -861,7 +863,8 @@ public class CapybaraCompiler {
                         dataTypes,
                         signatures,
                         signaturesByModule,
-                        moduleClassNameByModuleName
+                        moduleClassNameByModuleName,
+                        linkCache
                 ).flatMap(ex -> function.returnType()
                         .map(type -> linkType(type, dataTypes, functionGenericTypeNames))
                         .orElseGet(() -> Result.success(ex.type()))
@@ -891,14 +894,16 @@ public class CapybaraCompiler {
             Map<String, GenericDataType> dataTypes,
             List<CapybaraExpressionCompiler.FunctionSignature> signatures,
             Map<String, List<CapybaraExpressionCompiler.FunctionSignature>> signaturesByModule,
-            Map<String, String> moduleClassNameByModuleName
+            Map<String, String> moduleClassNameByModuleName,
+            CapybaraExpressionCompiler.LinkCache linkCache
     ) {
         var linker = new CapybaraExpressionCompiler(
                 parameters,
                 dataTypes,
                 signatures,
                 signaturesByModule,
-                moduleClassNameByModuleName
+                moduleClassNameByModuleName,
+                linkCache
         );
         return linker.linkExpression(function.expression()).flatMap(expression -> {
             if (function.returnType().isPresent()
@@ -921,7 +926,8 @@ public class CapybaraCompiler {
                     dataTypes,
                     selfSignatureAsNothing,
                     signaturesByModule,
-                    moduleClassNameByModuleName
+                    moduleClassNameByModuleName,
+                    linkCache
             );
             return retryLinker.linkExpression(function.expression()).map(retry ->
                     retry.type() != PrimitiveLinkedType.ANY ? retry : expression
@@ -3573,7 +3579,6 @@ public class CapybaraCompiler {
                 .toList();
     }
 }
-
 
 
 
