@@ -26,9 +26,17 @@ public class CapybaraExpressionCompiler {
         private final Map<String, GenericDataType> resolvedDataTypesByNameCache = new HashMap<>();
         private final Map<String, Optional<CompiledType>> parsedTypeDescriptorCache = new HashMap<>();
         private final Map<String, List<String>> splitTopLevelTypeDescriptorCache = new HashMap<>();
+        private final Map<String, Set<String>> methodOwnerCandidatesBySimpleType;
+        private final Map<String, Set<String>> subtypeParentOwnerCandidatesBySimpleType;
+        private final CompiledDataParentType optionType;
+        private final CompiledDataParentType resultType;
 
         public LinkCache(Map<String, GenericDataType> dataTypes) {
             this.fallbackDataTypesBySuffix = buildFallbackDataTypesBySuffix(dataTypes);
+            this.methodOwnerCandidatesBySimpleType = buildMethodOwnerCandidatesBySimpleType(dataTypes);
+            this.subtypeParentOwnerCandidatesBySimpleType = buildSubtypeParentOwnerCandidatesBySimpleType(dataTypes);
+            this.optionType = findParentType(dataTypes, CapybaraExpressionCompiler::isOptionTypeKeyStatic, "Option");
+            this.resultType = findParentType(dataTypes, CapybaraExpressionCompiler::isResultTypeKeyStatic, "Result");
         }
     }
 
@@ -2340,27 +2348,9 @@ public class CapybaraExpressionCompiler {
         var receiverBase = baseTypeName(receiverType.name());
         var receiverSimple = simpleTypeName(receiverBase);
         ownerNames.add(receiverBase);
-        dataTypes.keySet().stream()
-                .map(this::baseTypeName)
-                .filter(name -> simpleTypeName(name).equals(receiverSimple))
-                .forEach(ownerNames::add);
-        if (receiverType instanceof CompiledDataType receiverDataType) {
-            var receiverDataSimple = simpleTypeName(baseTypeName(receiverDataType.name()));
-            dataTypes.values().stream()
-                    .filter(CompiledDataParentType.class::isInstance)
-                    .map(CompiledDataParentType.class::cast)
-                    .filter(parentType -> parentType.subTypes().stream()
-                            .anyMatch(subType -> simpleTypeName(baseTypeName(subType.name())).equals(receiverDataSimple)))
-                    .map(CompiledDataParentType::name)
-                    .map(this::baseTypeName)
-                    .forEach(ownerNames::add);
-            dataTypes.entrySet().stream()
-                    .filter(entry -> entry.getValue() instanceof CompiledDataParentType parentType
-                            && parentType.subTypes().stream()
-                                    .anyMatch(subType -> simpleTypeName(baseTypeName(subType.name())).equals(receiverDataSimple)))
-                    .map(Map.Entry::getKey)
-                    .map(this::baseTypeName)
-                    .forEach(ownerNames::add);
+        ownerNames.addAll(linkCache.methodOwnerCandidatesBySimpleType.getOrDefault(receiverSimple, Set.of()));
+        if (receiverType instanceof CompiledDataType) {
+            ownerNames.addAll(linkCache.subtypeParentOwnerCandidatesBySimpleType.getOrDefault(receiverSimple, Set.of()));
         }
         return Set.copyOf(ownerNames);
     }
@@ -3637,18 +3627,7 @@ public class CapybaraExpressionCompiler {
     }
 
     private CompiledDataParentType findOptionType() {
-        return dataTypes.entrySet().stream()
-                .filter(entry -> isOptionTypeKey(entry.getKey()))
-                .map(Map.Entry::getValue)
-                .filter(CompiledDataParentType.class::isInstance)
-                .map(CompiledDataParentType.class::cast)
-                .findFirst()
-                .orElseGet(() -> dataTypes.values().stream()
-                        .filter(CompiledDataParentType.class::isInstance)
-                        .map(CompiledDataParentType.class::cast)
-                        .filter(type -> "Option".equals(type.name()))
-                        .findFirst()
-                        .orElse(null));
+        return linkCache.optionType;
     }
 
     private CompiledDataParentType optionTypeFor(CompiledType elementType) {
@@ -3663,18 +3642,7 @@ public class CapybaraExpressionCompiler {
     }
 
     private CompiledDataParentType findResultType() {
-        return dataTypes.entrySet().stream()
-                .filter(entry -> isResultTypeKey(entry.getKey()))
-                .map(Map.Entry::getValue)
-                .filter(CompiledDataParentType.class::isInstance)
-                .map(CompiledDataParentType.class::cast)
-                .findFirst()
-                .orElseGet(() -> dataTypes.values().stream()
-                        .filter(CompiledDataParentType.class::isInstance)
-                        .map(CompiledDataParentType.class::cast)
-                        .filter(type -> "Result".equals(type.name()))
-                        .findFirst()
-                        .orElse(null));
+        return linkCache.resultType;
     }
 
     private CompiledDataParentType resultTypeFor(CompiledType elementType) {
@@ -3743,20 +3711,32 @@ public class CapybaraExpressionCompiler {
         return expression.type();
     }
     private boolean isOptionTypeKey(String key) {
-        var normalized = normalizeTypeName(key);
+        return isOptionTypeKeyStatic(key);
+    }
+
+    private boolean isResultTypeKey(String key) {
+        return isResultTypeKeyStatic(key);
+    }
+
+    private String normalizeTypeName(String name) {
+        return normalizeTypeNameStatic(name);
+    }
+
+    private static boolean isOptionTypeKeyStatic(String key) {
+        var normalized = normalizeTypeNameStatic(key);
         return normalized.endsWith("/capy/lang/Option.Option")
                || normalized.endsWith("/cap/lang/Option.Option")
                || normalized.endsWith("/Option.Option");
     }
 
-    private boolean isResultTypeKey(String key) {
-        var normalized = normalizeTypeName(key);
+    private static boolean isResultTypeKeyStatic(String key) {
+        var normalized = normalizeTypeNameStatic(key);
         return normalized.endsWith("/capy/lang/Result.Result")
                || normalized.endsWith("/cap/lang/Result.Result")
                || normalized.endsWith("/Result.Result");
     }
 
-    private String normalizeTypeName(String name) {
+    private static String normalizeTypeNameStatic(String name) {
         var normalized = name.replace('\\', '/');
         if (!normalized.startsWith("/")) {
             normalized = "/" + normalized;
@@ -4674,6 +4654,68 @@ public class CapybaraExpressionCompiler {
             }
         }
         return Map.copyOf(fallbackBySuffix);
+    }
+
+    private static Map<String, Set<String>> buildMethodOwnerCandidatesBySimpleType(Map<String, GenericDataType> availableDataTypes) {
+        var ownersBySimpleType = new LinkedHashMap<String, LinkedHashSet<String>>();
+        for (var key : availableDataTypes.keySet()) {
+            var baseName = baseTypeNameStatic(key);
+            ownersBySimpleType.computeIfAbsent(simpleTypeNameStatic(baseName), ignored -> new LinkedHashSet<>()).add(baseName);
+        }
+        var immutable = new LinkedHashMap<String, Set<String>>();
+        ownersBySimpleType.forEach((name, values) -> immutable.put(name, Set.copyOf(values)));
+        return Map.copyOf(immutable);
+    }
+
+    private static Map<String, Set<String>> buildSubtypeParentOwnerCandidatesBySimpleType(Map<String, GenericDataType> availableDataTypes) {
+        var ownersBySimpleType = new LinkedHashMap<String, LinkedHashSet<String>>();
+        for (var entry : availableDataTypes.entrySet()) {
+            if (!(entry.getValue() instanceof CompiledDataParentType parentType)) {
+                continue;
+            }
+            var parentBaseName = baseTypeNameStatic(entry.getKey());
+            for (var subType : parentType.subTypes()) {
+                var subtypeSimple = simpleTypeNameStatic(baseTypeNameStatic(subType.name()));
+                var owners = ownersBySimpleType.computeIfAbsent(subtypeSimple, ignored -> new LinkedHashSet<>());
+                owners.add(baseTypeNameStatic(parentType.name()));
+                owners.add(parentBaseName);
+            }
+        }
+        var immutable = new LinkedHashMap<String, Set<String>>();
+        ownersBySimpleType.forEach((name, values) -> immutable.put(name, Set.copyOf(values)));
+        return Map.copyOf(immutable);
+    }
+
+    private static CompiledDataParentType findParentType(
+            Map<String, GenericDataType> availableDataTypes,
+            java.util.function.Predicate<String> qualifiedKeyMatcher,
+            String simpleName
+    ) {
+        return availableDataTypes.entrySet().stream()
+                .filter(entry -> qualifiedKeyMatcher.test(entry.getKey()))
+                .map(Map.Entry::getValue)
+                .filter(CompiledDataParentType.class::isInstance)
+                .map(CompiledDataParentType.class::cast)
+                .findFirst()
+                .orElseGet(() -> availableDataTypes.values().stream()
+                        .filter(CompiledDataParentType.class::isInstance)
+                        .map(CompiledDataParentType.class::cast)
+                        .filter(type -> simpleName.equals(type.name()))
+                        .findFirst()
+                        .orElse(null));
+    }
+
+    private static String baseTypeNameStatic(String typeName) {
+        var genericStart = typeName.indexOf('[');
+        return genericStart > 0 ? typeName.substring(0, genericStart) : typeName;
+    }
+
+    private static String simpleTypeNameStatic(String typeName) {
+        var normalized = baseTypeNameStatic(typeName);
+        var slash = normalized.lastIndexOf('/');
+        var dot = normalized.lastIndexOf('.');
+        var index = Math.max(slash, dot);
+        return index >= 0 ? normalized.substring(index + 1) : normalized;
     }
 
     private List<String> splitTopLevelTypeDescriptors(String text) {

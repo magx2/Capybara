@@ -381,6 +381,13 @@ public class CapybaraCompiler {
             Map<String, List<CapybaraExpressionCompiler.FunctionSignature>> signaturesByModule,
             CompileCache compileCache
     ) {
+        var cacheKey = moduleCacheKey(module);
+        var cachedByModule = compileCache.availableSignaturesByModulePhase
+                .computeIfAbsent(signaturesByModule, ignored -> new HashMap<>());
+        var cached = cachedByModule.get(cacheKey);
+        if (cached != null) {
+            return cached;
+        }
         var all = new ArrayList<CapybaraExpressionCompiler.FunctionSignature>(signaturesByModule.get(module.name()));
         for (var importDeclaration : module.imports()) {
             var importedModule = resolveImportedModule(importDeclaration.moduleName(), modulesByName);
@@ -414,7 +421,9 @@ public class CapybaraCompiler {
                 all.addAll(importedSignaturesByName.getOrDefault(symbol, List.of()));
             }
         }
-        return Result.success(List.copyOf(all));
+        var result = Result.success(List.copyOf(all));
+        cachedByModule.put(cacheKey, result);
+        return result;
     }
 
     private Result<Map<String, GenericDataType>> availableTypes(
@@ -639,6 +648,13 @@ public class CapybaraCompiler {
             Map<String, List<CapybaraExpressionCompiler.FunctionSignature>> signaturesByModule,
             CompileCache compileCache
     ) {
+        var cacheKey = moduleCacheKey(module);
+        var cachedByModule = compileCache.staticImportsByModulePhase
+                .computeIfAbsent(signaturesByModule, ignored -> new HashMap<>());
+        var cached = cachedByModule.get(cacheKey);
+        if (cached != null) {
+            return cached;
+        }
         var startedAt = System.nanoTime();
         var imports = new HashSet<CompiledModule.StaticImport>();
         for (var importDeclaration : module.imports()) {
@@ -664,7 +680,9 @@ public class CapybaraCompiler {
             }
         }
         compileCache.staticImportGenerationNanos += System.nanoTime() - startedAt;
-        return unmodifiableSortedSet(new TreeSet<>(imports));
+        var result = unmodifiableSortedSet(new TreeSet<>(imports));
+        cachedByModule.put(cacheKey, result);
+        return result;
     }
     private SortedSet<CompiledFunction> deduplicateFunctions(List<CompiledFunction> linkedFunctions) {
         var byKey = new LinkedHashMap<String, CompiledFunction>();
@@ -780,6 +798,13 @@ public class CapybaraCompiler {
                 ownerModule.name(),
                 normalizeModulePath(ownerModule.path()),
                 System.identityHashCode(signatures)
+        );
+    }
+
+    private ModuleCacheKey moduleCacheKey(Module module) {
+        return new ModuleCacheKey(
+                normalizeModulePath(module.path()),
+                module.name()
         );
     }
 
@@ -2983,6 +3008,9 @@ public class CapybaraCompiler {
         private final Map<SignatureVisibilityCacheKey, List<CapybaraExpressionCompiler.FunctionSignature>> visibleSignaturesByScope = new HashMap<>();
         private final Map<VisibilityCacheKey, SortedMap<String, GenericDataType>> visibleTypesByScope = new HashMap<>();
         private final Map<SignatureVisibilityCacheKey, Map<String, List<CapybaraExpressionCompiler.FunctionSignature>>> visibleSignaturesByNameByScope = new HashMap<>();
+        // CompileCache is compile-local; modulesByName and linkedTypesByModule are invariant for its lifetime.
+        private final IdentityHashMap<Map<String, List<CapybaraExpressionCompiler.FunctionSignature>>, Map<ModuleCacheKey, Result<List<CapybaraExpressionCompiler.FunctionSignature>>>> availableSignaturesByModulePhase = new IdentityHashMap<>();
+        private final IdentityHashMap<Map<String, List<CapybaraExpressionCompiler.FunctionSignature>>, Map<ModuleCacheKey, SortedSet<CompiledModule.StaticImport>>> staticImportsByModulePhase = new IdentityHashMap<>();
         private final IdentityHashMap<Map<String, GenericDataType>, CapybaraExpressionCompiler.LinkCache> expressionLinkCaches = new IdentityHashMap<>();
         private long staticImportGenerationNanos;
     }
@@ -2995,6 +3023,12 @@ public class CapybaraCompiler {
             String ownerModuleName,
             String ownerModulePath,
             int signaturesIdentity
+    ) {
+    }
+
+    private record ModuleCacheKey(
+            String modulePath,
+            String moduleName
     ) {
     }
 
@@ -3584,8 +3618,6 @@ public class CapybaraCompiler {
                 .toList();
     }
 }
-
-
 
 
 
