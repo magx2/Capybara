@@ -885,7 +885,7 @@ public class CapybaraCompiler {
         if (localMethodValidationError.isPresent()) {
             return localMethodValidationError.get();
         }
-        var functionGenericTypeNames = functionGenericTypeNames(function, dataTypes);
+        var functionGenericTypeNames = functionGenericTypeNames(function, dataTypes, compileCache);
         var linked = linkParameters(function.parameters(), dataTypes, functionGenericTypeNames, compileCache)
                 .flatMap(parameters -> linkExpressionWithRecursiveInference(
                         function,
@@ -2219,7 +2219,7 @@ public class CapybaraCompiler {
     ) {
         return functions.stream()
                 .map(function -> {
-                    var functionGenericTypeNames = functionGenericTypeNames(function, dataTypes);
+                    var functionGenericTypeNames = functionGenericTypeNames(function, dataTypes, compileCache);
                     return linkParameters(function.parameters(), dataTypes, functionGenericTypeNames, compileCache)
                             .flatMap(parameters -> linkSignatureReturnType(function, dataTypes, functionGenericTypeNames, compileCache, moduleSourceFile)
                                     .map(returnType -> new CapybaraExpressionCompiler.FunctionSignature(
@@ -2673,7 +2673,15 @@ public class CapybaraCompiler {
         if (functionGenericTypeNames.isEmpty()) {
             return linkType(type, dataTypes, compileCache);
         }
-        return switch (type) {
+        var linkedTypesByGenerics = compileCache.genericTypeLinkCaches
+                .computeIfAbsent(dataTypes, ignored -> new HashMap<>())
+                .computeIfAbsent(functionGenericTypeNames, ignored -> new HashMap<>());
+        var cacheKey = typeCacheKey(type);
+        var cached = linkedTypesByGenerics.get(cacheKey);
+        if (cached != null) {
+            return cached;
+        }
+        Result<CompiledType> linked = switch (type) {
             case PrimitiveType primitiveType -> Result.success(switch (primitiveType) {
                 case BYTE -> PrimitiveLinkedType.BYTE;
                 case INT -> PrimitiveLinkedType.INT;
@@ -2706,6 +2714,8 @@ public class CapybaraCompiler {
             case DataType dataType ->
                     linkDataTypeWithFunctionGenerics(dataType.name(), dataTypes, functionGenericTypeNames, compileCache);
         };
+        linkedTypesByGenerics.put(cacheKey, linked);
+        return linked;
     }
 
     private Result<CompiledType> linkDataTypeWithFunctionGenerics(
@@ -2714,7 +2724,7 @@ public class CapybaraCompiler {
             Set<String> functionGenericTypeNames,
             CompileCache compileCache
     ) {
-        var parsed = parseGenericTypeName(rawTypeName);
+        var parsed = parseGenericTypeName(rawTypeName, compileCache);
         if (parsed.typeArguments().isEmpty() && functionGenericTypeNames.contains(parsed.baseName())) {
             return Result.success(new CompiledGenericTypeParameter(parsed.baseName()));
         }
@@ -2729,9 +2739,24 @@ public class CapybaraCompiler {
         }
 
         return parsed.typeArguments().stream()
-                .map(argument -> linkType(parseTypeArgument(argument), dataTypes, functionGenericTypeNames, compileCache))
+                .map(argument -> linkType(parseTypeArgument(argument, compileCache), dataTypes, functionGenericTypeNames, compileCache))
                 .collect(new ResultCollectionCollector<>())
                 .map(arguments -> instantiateTypeArguments(baseType, arguments));
+    }
+
+    private String typeCacheKey(Type type) {
+        return switch (type) {
+            case PrimitiveType primitiveType -> primitiveType.name();
+            case CollectionType.ListType listType -> "list[" + typeCacheKey(listType.elementType()) + "]";
+            case CollectionType.SetType setType -> "set[" + typeCacheKey(setType.elementType()) + "]";
+            case CollectionType.DictType dictType -> "dict[" + typeCacheKey(dictType.valueType()) + "]";
+            case DataType dataType -> dataType.name();
+            case FunctionType functionType ->
+                    "(" + typeCacheKey(functionType.argumentType()) + " => " + typeCacheKey(functionType.returnType()) + ")";
+            case TupleType tupleType -> "tuple[" + tupleType.elementTypes().stream()
+                    .map(this::typeCacheKey)
+                    .collect(java.util.stream.Collectors.joining(", ")) + "]";
+        };
     }
 
     private CompiledType instantiateTypeArguments(CompiledType linkedType, List<CompiledType> typeArguments) {
@@ -2834,17 +2859,33 @@ public class CapybaraCompiler {
         };
     }
 
-    private ParsedGenericTypeName parseGenericTypeName(String rawName) {
+    private ParsedGenericTypeName parseGenericTypeName(String rawName, CompileCache compileCache) {
+        var cached = compileCache.parsedGenericTypeNames.get(rawName);
+        if (cached != null) {
+            return cached;
+        }
         var idx = rawName.indexOf('[');
         if (idx <= 0 || !rawName.endsWith("]")) {
-            return new ParsedGenericTypeName(rawName, List.of());
+            var parsed = new ParsedGenericTypeName(rawName, List.of());
+            compileCache.parsedGenericTypeNames.put(rawName, parsed);
+            return parsed;
         }
         var baseName = rawName.substring(0, idx);
         var argsContent = rawName.substring(idx + 1, rawName.length() - 1);
-        return new ParsedGenericTypeName(baseName, splitTopLevelTypeArguments(argsContent));
+        var parsed = new ParsedGenericTypeName(baseName, splitTopLevelTypeArguments(argsContent, compileCache));
+        compileCache.parsedGenericTypeNames.put(rawName, parsed);
+        return parsed;
     }
 
-    private List<String> splitTopLevelTypeArguments(String content) {
+    private ParsedGenericTypeName parseGenericTypeName(String rawName) {
+        return parseGenericTypeName(rawName, new CompileCache());
+    }
+
+    private List<String> splitTopLevelTypeArguments(String content, CompileCache compileCache) {
+        var cached = compileCache.splitTopLevelGenericTypeArguments.get(content);
+        if (cached != null) {
+            return cached;
+        }
         var result = new ArrayList<String>();
         var depthSquare = 0;
         var depthParen = 0;
@@ -2885,27 +2926,37 @@ public class CapybaraCompiler {
         if (!token.isEmpty()) {
             result.add(token);
         }
-        return List.copyOf(result);
+        var parsed = List.copyOf(result);
+        compileCache.splitTopLevelGenericTypeArguments.put(content, parsed);
+        return parsed;
     }
 
-    private Type parseTypeArgument(String raw) {
+    private List<String> splitTopLevelTypeArguments(String content) {
+        return splitTopLevelTypeArguments(content, new CompileCache());
+    }
+
+    private Type parseTypeArgument(String raw, CompileCache compileCache) {
+        var cached = compileCache.parsedGenericTypeArguments.get(raw);
+        if (cached != null) {
+            return cached;
+        }
         var trimmed = raw.trim();
-        return PrimitiveType.find(trimmed)
+        var parsed = PrimitiveType.find(trimmed)
                 .map(Type.class::cast)
                 .orElseGet(() -> {
                     if (trimmed.startsWith("list[") && trimmed.endsWith("]")) {
-                        return new CollectionType.ListType(parseTypeArgument(trimmed.substring(5, trimmed.length() - 1)));
+                        return new CollectionType.ListType(parseTypeArgument(trimmed.substring(5, trimmed.length() - 1), compileCache));
                     }
                     if (trimmed.startsWith("set[") && trimmed.endsWith("]")) {
-                        return new CollectionType.SetType(parseTypeArgument(trimmed.substring(4, trimmed.length() - 1)));
+                        return new CollectionType.SetType(parseTypeArgument(trimmed.substring(4, trimmed.length() - 1), compileCache));
                     }
                     if (trimmed.startsWith("dict[") && trimmed.endsWith("]")) {
-                        return new CollectionType.DictType(parseTypeArgument(trimmed.substring(5, trimmed.length() - 1)));
+                        return new CollectionType.DictType(parseTypeArgument(trimmed.substring(5, trimmed.length() - 1), compileCache));
                     }
                     if (trimmed.startsWith("tuple[") && trimmed.endsWith("]")) {
                         var inner = trimmed.substring(6, trimmed.length() - 1);
-                        var elements = splitTopLevelTypeArguments(inner).stream()
-                                .map(this::parseTypeArgument)
+                        var elements = splitTopLevelTypeArguments(inner, compileCache).stream()
+                                .map(argument -> parseTypeArgument(argument, compileCache))
                                 .toList();
                         return new TupleType(elements);
                     }
@@ -2913,16 +2964,22 @@ public class CapybaraCompiler {
                     if (arrowIndex > 0) {
                         var left = trimmed.substring(0, arrowIndex).trim();
                         var right = trimmed.substring(arrowIndex + 2).trim();
-                        return new FunctionType(parseTypeArgument(stripOptionalParentheses(left)), parseTypeArgument(right));
+                        return new FunctionType(parseTypeArgument(stripOptionalParentheses(left), compileCache), parseTypeArgument(right, compileCache));
                     }
                     arrowIndex = indexOfTopLevelArrow(trimmed, "->");
                     if (arrowIndex > 0) {
                         var left = trimmed.substring(0, arrowIndex).trim();
                         var right = trimmed.substring(arrowIndex + 2).trim();
-                        return new FunctionType(parseTypeArgument(stripOptionalParentheses(left)), parseTypeArgument(right));
+                        return new FunctionType(parseTypeArgument(stripOptionalParentheses(left), compileCache), parseTypeArgument(right, compileCache));
                     }
                     return new DataType(trimmed);
                 });
+        compileCache.parsedGenericTypeArguments.put(raw, parsed);
+        return parsed;
+    }
+
+    private Type parseTypeArgument(String raw) {
+        return parseTypeArgument(raw, new CompileCache());
     }
 
     private int indexOfTopLevelArrow(String value, String arrow) {
@@ -2973,11 +3030,17 @@ public class CapybaraCompiler {
         return trimmed.substring(1, trimmed.length() - 1).trim();
     }
 
-    private Set<String> functionGenericTypeNames(Function function, Map<String, GenericDataType> dataTypes) {
+    private Set<String> functionGenericTypeNames(Function function, Map<String, GenericDataType> dataTypes, CompileCache compileCache) {
+        var cached = compileCache.functionGenericTypeNamesByFunction.get(function);
+        if (cached != null) {
+            return cached;
+        }
         var names = new LinkedHashSet<String>();
         function.parameters().forEach(parameter -> collectFunctionGenericTypeNames(parameter.type(), dataTypes, names));
         function.returnType().ifPresent(type -> collectFunctionGenericTypeNames(type, dataTypes, names));
-        return Set.copyOf(names);
+        var resolved = Set.copyOf(names);
+        compileCache.functionGenericTypeNamesByFunction.put(function, resolved);
+        return resolved;
     }
 
     private void collectFunctionGenericTypeNames(
@@ -3032,6 +3095,11 @@ public class CapybaraCompiler {
         private final IdentityHashMap<Map<String, List<CapybaraExpressionCompiler.FunctionSignature>>, Map<ModuleCacheKey, SortedSet<CompiledModule.StaticImport>>> staticImportsByModulePhase = new IdentityHashMap<>();
         private final IdentityHashMap<Map<String, GenericDataType>, CapybaraExpressionCompiler.LinkCache> expressionLinkCaches = new IdentityHashMap<>();
         private final IdentityHashMap<Map<String, GenericDataType>, CapybaraTypeCompiler.LinkCache> typeLinkCaches = new IdentityHashMap<>();
+        private final IdentityHashMap<Map<String, GenericDataType>, Map<Set<String>, Map<String, Result<CompiledType>>>> genericTypeLinkCaches = new IdentityHashMap<>();
+        private final IdentityHashMap<Function, Set<String>> functionGenericTypeNamesByFunction = new IdentityHashMap<>();
+        private final Map<String, ParsedGenericTypeName> parsedGenericTypeNames = new HashMap<>();
+        private final Map<String, Type> parsedGenericTypeArguments = new HashMap<>();
+        private final Map<String, List<String>> splitTopLevelGenericTypeArguments = new HashMap<>();
         private long staticImportGenerationNanos;
     }
 
@@ -3638,8 +3706,6 @@ public class CapybaraCompiler {
                 .toList();
     }
 }
-
-
 
 
 
