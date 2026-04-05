@@ -26,6 +26,7 @@ public class CapybaraExpressionCompiler {
         private final Map<String, GenericDataType> resolvedDataTypesByNameCache = new HashMap<>();
         private final Map<String, Optional<CompiledType>> parsedTypeDescriptorCache = new HashMap<>();
         private final Map<String, List<String>> splitTopLevelTypeDescriptorCache = new HashMap<>();
+        private final IdentityHashMap<List<FunctionSignature>, SignatureIndex> signatureIndexes = new IdentityHashMap<>();
         private final Map<String, Set<String>> methodOwnerCandidatesBySimpleType;
         private final Map<String, Set<String>> subtypeParentOwnerCandidatesBySimpleType;
         private final CompiledDataParentType optionType;
@@ -38,6 +39,16 @@ public class CapybaraExpressionCompiler {
             this.optionType = findParentType(dataTypes, CapybaraExpressionCompiler::isOptionTypeKeyStatic, "Option");
             this.resultType = findParentType(dataTypes, CapybaraExpressionCompiler::isResultTypeKeyStatic, "Result");
         }
+    }
+
+    private record SignatureKey(String name, int arity) {
+    }
+
+    private record SignatureIndex(
+            Map<SignatureKey, List<FunctionSignature>> functionsByNameAndArity,
+            Map<String, List<FunctionSignature>> functionsByName,
+            Map<SignatureKey, List<FunctionSignature>> methodsByNameAndArity
+    ) {
     }
 
     private final List<CompiledFunction.CompiledFunctionParameter> parameters;
@@ -413,10 +424,7 @@ public class CapybaraExpressionCompiler {
         }
         var signatures = resolvedModule.signatures();
 
-        var candidates = signatures.stream()
-                .filter(signature -> signature.name().equals(functionCall.name()))
-                .filter(signature -> signature.parameterTypes().size() == functionCall.arguments().size())
-                .toList();
+        var candidates = functionsByNameAndArity(signatures, functionCall.name(), functionCall.arguments().size());
         if (candidates.isEmpty()) {
             return withPosition(
                     Result.error(
@@ -551,10 +559,7 @@ public class CapybaraExpressionCompiler {
         if (functionCall.name().startsWith(METHOD_INVOKE_PREFIX)) {
             return resolveMethodInvokeCall(functionCall, scope);
         }
-        var candidates = functionSignatures.stream()
-                .filter(signature -> signature.name().equals(functionCall.name()))
-                .filter(signature -> signature.parameterTypes().size() == functionCall.arguments().size())
-                .toList();
+        var candidates = functionsByNameAndArity(functionSignatures, functionCall.name(), functionCall.arguments().size());
         if (candidates.isEmpty()) {
             if (functionCall.arguments().isEmpty()) {
                 var singleton = findSingletonDataType(functionCall.name());
@@ -695,13 +700,75 @@ public class CapybaraExpressionCompiler {
         return normalized;
     }
 
+    private List<FunctionSignature> functionsByNameAndArity(
+            List<FunctionSignature> signatures,
+            String functionName,
+            int arity
+    ) {
+        return signatureIndex(signatures).functionsByNameAndArity()
+                .getOrDefault(new SignatureKey(functionName, arity), List.of());
+    }
+
+    private List<FunctionSignature> functionsByName(
+            List<FunctionSignature> signatures,
+            String functionName
+    ) {
+        return signatureIndex(signatures).functionsByName()
+                .getOrDefault(functionName, List.of());
+    }
+
+    private List<FunctionSignature> methodsByNameAndArity(
+            List<FunctionSignature> signatures,
+            String methodName,
+            int arity
+    ) {
+        return signatureIndex(signatures).methodsByNameAndArity()
+                .getOrDefault(new SignatureKey(methodName, arity), List.of());
+    }
+
+    private SignatureIndex signatureIndex(List<FunctionSignature> signatures) {
+        return linkCache.signatureIndexes.computeIfAbsent(signatures, this::buildSignatureIndex);
+    }
+
+    private SignatureIndex buildSignatureIndex(List<FunctionSignature> signatures) {
+        var mutableFunctionsByNameAndArity = new LinkedHashMap<SignatureKey, ArrayList<FunctionSignature>>();
+        var mutableFunctionsByName = new LinkedHashMap<String, ArrayList<FunctionSignature>>();
+        var mutableMethodsByNameAndArity = new LinkedHashMap<SignatureKey, ArrayList<FunctionSignature>>();
+        for (var signature : signatures) {
+            var arity = signature.parameterTypes().size();
+            if (signature.name().startsWith(METHOD_DECL_PREFIX)) {
+                var separator = signature.name().indexOf("__", METHOD_DECL_PREFIX.length());
+                if (separator >= 0 && separator + 2 <= signature.name().length()) {
+                    var methodName = signature.name().substring(separator + 2);
+                    mutableMethodsByNameAndArity.computeIfAbsent(
+                            new SignatureKey(methodName, arity),
+                            ignored -> new ArrayList<>()
+                    ).add(signature);
+                }
+                continue;
+            }
+            mutableFunctionsByNameAndArity.computeIfAbsent(
+                    new SignatureKey(signature.name(), arity),
+                    ignored -> new ArrayList<>()
+            ).add(signature);
+            mutableFunctionsByName.computeIfAbsent(signature.name(), ignored -> new ArrayList<>()).add(signature);
+        }
+        var functionsByNameAndArity = new LinkedHashMap<SignatureKey, List<FunctionSignature>>();
+        mutableFunctionsByNameAndArity.forEach((key, value) -> functionsByNameAndArity.put(key, List.copyOf(value)));
+        var functionsByName = new LinkedHashMap<String, List<FunctionSignature>>();
+        mutableFunctionsByName.forEach((key, value) -> functionsByName.put(key, List.copyOf(value)));
+        var methodsByNameAndArity = new LinkedHashMap<SignatureKey, List<FunctionSignature>>();
+        mutableMethodsByNameAndArity.forEach((key, value) -> methodsByNameAndArity.put(key, List.copyOf(value)));
+        return new SignatureIndex(
+                Map.copyOf(functionsByNameAndArity),
+                Map.copyOf(functionsByName),
+                Map.copyOf(methodsByNameAndArity)
+        );
+    }
+
     private Result<CompiledExpression> resolveMethodInvokeCall(FunctionCall functionCall, Scope scope) {
         var methodName = functionCall.name().substring(METHOD_INVOKE_PREFIX.length());
-        var candidates = functionSignatures.stream()
-                .filter(signature -> signature.name().startsWith(METHOD_DECL_PREFIX))
-                .filter(signature -> signature.name().endsWith("__" + methodName))
-                .filter(signature -> signature.parameterTypes().size() == functionCall.arguments().size())
-                .toList();
+        var candidates = methodsByNameAndArity(functionSignatures, methodName, functionCall.arguments().size());
         if (candidates.isEmpty()) {
             return resolveBuiltinMethodInvoke(functionCall, scope, methodName)
                     .orElseGet(() -> withPosition(
@@ -1357,10 +1424,7 @@ public class CapybaraExpressionCompiler {
 
     private Result<CompiledExpression> linkFunctionReference(FunctionReference functionReference, CompiledFunctionType expectedType) {
         var expectedShape = flattenFunctionType(expectedType);
-        var candidates = functionSignatures.stream()
-                .filter(signature -> signature.name().equals(functionReference.name()))
-                .filter(signature -> signature.parameterTypes().size() == expectedShape.parameterTypes().size())
-                .toList();
+        var candidates = functionsByNameAndArity(functionSignatures, functionReference.name(), expectedShape.parameterTypes().size());
         if (candidates.isEmpty()) {
             return withPosition(
                     Result.error("Function `" + functionReference.name() + "` with "
@@ -1389,9 +1453,7 @@ public class CapybaraExpressionCompiler {
     }
 
     private Result<CompiledExpression> linkFunctionReference(FunctionReference functionReference, Scope scope) {
-        var candidates = functionSignatures.stream()
-                .filter(signature -> signature.name().equals(functionReference.name()))
-                .toList();
+        var candidates = functionsByName(functionSignatures, functionReference.name());
         if (candidates.isEmpty()) {
             return withPosition(
                     Result.error("Function `" + functionReference.name() + "` not found"),
@@ -2155,9 +2217,8 @@ public class CapybaraExpressionCompiler {
             Optional<SourcePosition> position
     ) {
         var ownerNames = methodOwnerCandidates(left.type());
-        var candidates = functionSignatures.stream()
+        var candidates = methodsByNameAndArity(functionSignatures, operatorSymbol, 2).stream()
                 .filter(signature -> matchesMethodOwner(signature.name(), ownerNames, operatorSymbol))
-                .filter(signature -> signature.parameterTypes().size() == 2)
                 .toList();
         if (candidates.isEmpty()) {
             return Result.error(List.of());
@@ -2208,9 +2269,8 @@ public class CapybaraExpressionCompiler {
             Optional<SourcePosition> position
     ) {
         var ownerNames = methodOwnerCandidates(left.type());
-        var candidates = functionSignatures.stream()
+        var candidates = methodsByNameAndArity(functionSignatures, operatorSymbol, 2).stream()
                 .filter(signature -> matchesMethodOwner(signature.name(), ownerNames, operatorSymbol))
-                .filter(signature -> signature.parameterTypes().size() == 2)
                 .toList();
         if (candidates.isEmpty()) {
             return Result.error(List.of());
@@ -2571,10 +2631,7 @@ public class CapybaraExpressionCompiler {
     private Result<PipeMapper> resolvePipeFunctionReference(FunctionReference functionReference, CompiledType inputType) {
         var argumentName = "it";
         var argument = new CompiledVariable(argumentName, inputType);
-        var candidates = functionSignatures.stream()
-                .filter(signature -> signature.name().equals(functionReference.name()))
-                .filter(signature -> signature.parameterTypes().size() == 1)
-                .toList();
+        var candidates = functionsByNameAndArity(functionSignatures, functionReference.name(), 1);
         if (candidates.isEmpty()) {
             return withPosition(
                     Result.error("Function `" + functionReference.name() + "` with one argument not found"),
