@@ -343,6 +343,16 @@ def capybaraTestBuildRequested = providers.provider {
                 taskName == 'testCapybara' || taskName.endsWith(':testCapybara')
     }
 }
+def singleJavaVerificationBuild = providers.provider {
+    gradle.startParameter.taskNames.any { taskName ->
+        taskName == 'check' || taskName.endsWith(':check') ||
+                taskName == 'test' || taskName.endsWith(':test') ||
+                taskName == 'testClasses' || taskName.endsWith(':testClasses') ||
+                taskName == 'compileTestJava' || taskName.endsWith(':compileTestJava') ||
+                taskName == 'compileTestCapybara' || taskName.endsWith(':compileTestCapybara') ||
+                taskName == 'testCapybara' || taskName.endsWith(':testCapybara')
+    } && !hasMainResources.get()
+}
 
 tasks.register('linkCapybaraDirect', InProcessCapybaraCompileTask) {
     group = 'build'
@@ -435,7 +445,7 @@ tasks.register('testCapybara', InProcessCapybaraTestTask) {
     dependsOn tasks.named('compileTestJava')
 
     runtimeClasspath.from(
-            capybaraTestBuildRequested.get() && !hasJvmMainSources.get()
+            singleJavaVerificationBuild.get()
                     ? files(configurations.runtimeClasspath, sourceSets.test.output.classesDirs)
                     : capybaraTestRuntimeClasspath
     )
@@ -450,8 +460,9 @@ sourceSets {
     }
     test {
         java.srcDir capybaraGeneratedTestDir
-        if (capybaraTestBuildRequested.get() && !hasJvmMainSources.get()) {
+        if (singleJavaVerificationBuild.get()) {
             java.srcDir capybaraGeneratedMainDir
+            java.srcDir layout.projectDirectory.dir('src/main/java')
             compileClasspath -= sourceSets.main.output
             runtimeClasspath -= sourceSets.main.output
         }
@@ -459,7 +470,7 @@ sourceSets {
 }
 
 tasks.named('compileJava') {
-    enabled = !capybaraTestBuildRequested.get() || hasJvmMainSources.get()
+    enabled = !singleJavaVerificationBuild.get()
     if (capybaraTestBuildRequested.get()) {
         dependsOn tasks.named('prepareCapybaraForCheck')
     } else {
@@ -471,7 +482,7 @@ tasks.named('compileJava') {
 }
 
 tasks.named('compileTestJava') {
-    if (capybaraTestBuildRequested.get() && !hasJvmMainSources.get()) {
+    if (singleJavaVerificationBuild.get()) {
         setDependsOn(dependsOn.findAll { dependency ->
             !(dependency instanceof TaskProvider && (dependency.name == 'classes' || dependency.name == 'compileJava' || dependency.name == 'processResources')) &&
                     !(dependency instanceof Task && (dependency.name == 'classes' || dependency.name == 'compileJava' || dependency.name == 'processResources')) &&

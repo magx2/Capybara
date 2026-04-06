@@ -2025,3 +2025,46 @@
 - `git diff --check` passed.
 - I could not run the requested Gradle build or produce a fresh profile in this sandbox because Gradle still fails before project execution with `Could not determine a usable wildcard IP for this machine`.
 - Verification for this pass is limited to source inspection.
+
+## 2026-04-06 build optimization pass single Java verification compile for lib capybara check path
+
+### Requested baseline
+- Re-ran the requested command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- Gradle still failed during startup before any task execution in this sandbox:
+  - `Could not create service of type FileLockContentionHandler`
+  - `Could not determine a usable wildcard IP for this machine`
+- Checked `build/reports/profile` after the failed run; no fresh profile HTML was produced, so this pass still relies on the saved profile reports plus current task wiring inspection.
+
+### Findings
+- The saved `build/reports/profile/profile-2026-04-04-19-07-42.html` report still shows separate `:lib:capybara-lib:compileJava` and `:lib:capybara-lib:compileTestJava` work on the `check` path.
+- Unlike some earlier notes in this file, the current tree for `lib/capybara-lib` does contain handwritten JVM sources and tests:
+  - `src/main/java/dev/capylang/**`
+  - `src/test/java/dev/capylang/**`
+- For verification-oriented entrypoints such as `check`, `test`, `compileTestJava`, and `testCapybara`, those main Java classes are only needed so the test compilation and test runtime can see them; they are not being packaged into a jar on that path.
+- `prepareCapybaraForCheck` already generates both main and test Capybara Java in one pass, so keeping a separate `compileJava` javac pass on top of `compileTestJava` is avoidable for this narrow verification flow when the module has no main resources.
+
+### Changes made
+- Added a `singleJavaVerificationBuild` detector in `lib/capybara-lib/build.gradle` for verification-style entrypoints only:
+  - `check`
+  - `test`
+  - `testClasses`
+  - `compileTestJava`
+  - `compileTestCapybara`
+  - `testCapybara`
+- For that narrow path:
+  - added generated main Capybara Java and `src/main/java` to the `test` source set;
+  - removed `sourceSets.main.output` from the `test` compile/runtime classpaths;
+  - switched `testCapybara` to use dependency runtime classpath plus `test` classes;
+  - disabled `compileJava`;
+  - pruned `compileTestJava` dependencies on `classes`, `compileJava`, and `processResources`.
+- Left broader lifecycle requests such as `build`, `buildNeeded`, and `buildDependents` on the normal main-output path so packaging behavior is unchanged.
+
+### Expected impact
+- `:lib:capybara-lib:check --rerun-tasks` should avoid the standalone `compileJava` javac pass and compile main/test Java once through `compileTestJava`.
+- The verification path should also stop retaining `main.output`-driven lifecycle work once the main Java sources are compiled directly into the `test` source set for that run.
+- Non-verification packaging flows keep the existing main-output behavior.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run the requested Gradle build or produce a fresh profile in this sandbox because Gradle still fails before project execution with `Could not determine a usable wildcard IP for this machine`.
+- Verification for this pass is limited to source inspection of the task graph and saved profile data.
