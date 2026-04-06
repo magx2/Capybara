@@ -13,9 +13,32 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.util.Set;
 import java.util.function.Consumer;
 
 public class CapybaraPlugin implements Plugin<Project> {
+    private static final Set<String> CAPYBARA_TEST_BUILD_TASKS = Set.of(
+            "build",
+            "buildNeeded",
+            "buildDependents",
+            "check",
+            "test",
+            "testClasses",
+            "compileTestJava",
+            "compileTestCapybara",
+            "generateTestCapybaraJava",
+            "testCapybara"
+    );
+    private static final Set<String> SINGLE_JAVA_VERIFICATION_TASKS = Set.of(
+            "check",
+            "test",
+            "testClasses",
+            "compileTestJava",
+            "compileTestCapybara",
+            "generateTestCapybaraJava",
+            "testCapybara"
+    );
+
     @Override
     public void apply(Project project) {
         var layout = project.getLayout();
@@ -31,20 +54,12 @@ public class CapybaraPlugin implements Plugin<Project> {
         var hasJvmTestSources = testSourceLayout.hasJvmSources();
         var hasAnyTestResources = testSourceLayout.hasAnyResources();
         var hasNonJvmTestResources = testSourceLayout.hasNonJvmResources();
-        var requestedTaskNames = project.getGradle().getStartParameter().getTaskNames();
-        var capybaraTestBuildRequested = requestedTaskNames.stream().anyMatch(taskName ->
-                taskName.equals("build") || taskName.endsWith(":build") ||
-                        taskName.equals("buildNeeded") || taskName.endsWith(":buildNeeded") ||
-                        taskName.equals("buildDependents") || taskName.endsWith(":buildDependents") ||
-                        taskName.equals("check") || taskName.endsWith(":check") ||
-                        taskName.equals("test") || taskName.endsWith(":test") ||
-                        taskName.equals("testClasses") || taskName.endsWith(":testClasses") ||
-                        taskName.equals("compileTestJava") || taskName.endsWith(":compileTestJava") ||
-                        taskName.equals("compileTestCapybara") || taskName.endsWith(":compileTestCapybara") ||
-                        taskName.equals("generateTestCapybaraJava") || taskName.endsWith(":generateTestCapybaraJava") ||
-                        taskName.equals("testCapybara") || taskName.endsWith(":testCapybara")
-        );
-        var singleJavaVerificationBuild = capybaraTestBuildRequested && !hasMainResources;
+        var requestedTaskBasenames = project.getGradle().getStartParameter().getTaskNames().stream()
+                .map(CapybaraPlugin::taskBasename)
+                .collect(java.util.stream.Collectors.toSet());
+        var capybaraTestBuildRequested = requestedTaskBasenames.stream().anyMatch(CAPYBARA_TEST_BUILD_TASKS::contains);
+        var singleJavaVerificationBuild = !hasMainResources
+                && requestedTaskBasenames.stream().anyMatch(SINGLE_JAVA_VERIFICATION_TASKS::contains);
 
         var compileCapybara = project.getTasks().register(
                 "compileCapybara",
@@ -282,6 +297,11 @@ public class CapybaraPlugin implements Plugin<Project> {
 
     private static String normalizeRelativePath(Path root, Path path) {
         return root.relativize(path).toString().replace('\\', '/');
+    }
+
+    private static String taskBasename(String taskName) {
+        var separator = taskName.lastIndexOf(':');
+        return separator >= 0 ? taskName.substring(separator + 1) : taskName;
     }
 
     private record SourceLayout(boolean hasJvmSources, boolean hasAnyResources, boolean hasNonJvmResources) {

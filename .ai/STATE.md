@@ -2350,3 +2350,29 @@
 ### Verification status
 - `git diff --check` passed.
 - I could not run Gradle task verification in this sandbox because the requested wrapper invocation still fails before project execution with `Could not determine a usable wildcard IP for this machine`.
+
+## 2026-04-06 build optimization pass normalized lifecycle task detection
+
+### Requested baseline
+- Re-ran the requested command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- It still failed before project execution in this sandbox with:
+  - `Could not determine a usable wildcard IP for this machine`.
+- Checked `build/reports/profile` after the failed run; no new profile HTML was produced, so this pass is based on source inspection of the configuration path exercised before task execution.
+
+### Findings
+- The handwritten `lib/capybara-lib` build script still derived `capybaraTestBuildRequested` and `singleJavaVerificationBuild` by repeatedly scanning raw requested task names with overlapping `==` and `endsWith(...)` checks.
+- The reusable `CapybaraPlugin` still did the same work with overlapping `taskName.equals(...) || taskName.endsWith(...)` branches.
+- That overhead is paid on every invocation, including the exact requested `:lib:capybara-lib:check --profile --rerun-tasks` command, even when Gradle fails before realizing the task graph.
+
+### Changes made
+- Normalized requested task names once to their basename in `lib/capybara-lib/build.gradle`, then derived lifecycle booleans from small membership sets instead of repeated suffix scans.
+- Applied the same normalization in `build-tool/gradle`'s `CapybaraPlugin` using shared task-name sets plus a `taskBasename(...)` helper.
+- Added plugin regression coverage proving a fully qualified request like `:lib:capybara-lib:check` still selects the fused verification path.
+
+### Expected impact
+- Every Capybara build invocation should spend less configuration time classifying requested lifecycle tasks.
+- The improvement applies directly to the exact qualified-task form used by the requested profiling command and to plugin consumers using fully qualified task paths.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle task verification in this sandbox because the requested wrapper invocation still fails before project execution with `Could not determine a usable wildcard IP for this machine`.

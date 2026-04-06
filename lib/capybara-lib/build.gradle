@@ -366,25 +366,32 @@ def capybaraTestLogLevel = switch (gradle.startParameter.logLevel) {
     default -> 'WARN'
 }
 def requestedTaskNames = gradle.startParameter.taskNames
-def capybaraTestBuildRequested = requestedTaskNames.any { taskName ->
-    taskName == 'build' || taskName.endsWith(':build') ||
-            taskName == 'buildNeeded' || taskName.endsWith(':buildNeeded') ||
-            taskName == 'buildDependents' || taskName.endsWith(':buildDependents') ||
-            taskName == 'check' || taskName.endsWith(':check') ||
-            taskName == 'test' || taskName.endsWith(':test') ||
-            taskName == 'testClasses' || taskName.endsWith(':testClasses') ||
-            taskName == 'compileTestJava' || taskName.endsWith(':compileTestJava') ||
-            taskName == 'compileTestCapybara' || taskName.endsWith(':compileTestCapybara') ||
-            taskName == 'testCapybara' || taskName.endsWith(':testCapybara')
-}
-def singleJavaVerificationBuild = requestedTaskNames.any { taskName ->
-    taskName == 'check' || taskName.endsWith(':check') ||
-            taskName == 'test' || taskName.endsWith(':test') ||
-            taskName == 'testClasses' || taskName.endsWith(':testClasses') ||
-            taskName == 'compileTestJava' || taskName.endsWith(':compileTestJava') ||
-            taskName == 'compileTestCapybara' || taskName.endsWith(':compileTestCapybara') ||
-            taskName == 'testCapybara' || taskName.endsWith(':testCapybara')
-} && !hasMainResources
+def requestedTaskBasenames = requestedTaskNames.collect { taskName ->
+    def separator = taskName.lastIndexOf(':')
+    separator >= 0 ? taskName.substring(separator + 1) : taskName
+}.toSet()
+def capybaraTestLifecycleTasks = [
+        'build',
+        'buildNeeded',
+        'buildDependents',
+        'check',
+        'test',
+        'testClasses',
+        'compileTestJava',
+        'compileTestCapybara',
+        'testCapybara'
+] as Set
+def singleJavaVerificationLifecycleTasks = [
+        'check',
+        'test',
+        'testClasses',
+        'compileTestJava',
+        'compileTestCapybara',
+        'testCapybara'
+] as Set
+def capybaraTestBuildRequested = requestedTaskBasenames.any { capybaraTestLifecycleTasks.contains(it) }
+def singleJavaVerificationBuild = !hasMainResources &&
+        requestedTaskBasenames.any { singleJavaVerificationLifecycleTasks.contains(it) }
 
 tasks.register('linkCapybaraDirect', InProcessCapybaraCompileTask) {
     group = 'build'
