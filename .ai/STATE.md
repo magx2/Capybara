@@ -2178,3 +2178,36 @@
 ### Verification status
 - `git diff --check` passed.
 - I could not run Gradle task verification in this sandbox because the requested wrapper invocation still fails before project execution with `Could not determine a usable wildcard IP for this machine`.
+
+## 2026-04-06 build optimization pass configuration scan pruning
+
+### Requested baseline
+- Re-ran the requested command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- It still failed before project execution in this sandbox with:
+  - `Could not determine a usable wildcard IP for this machine`.
+- Checked `build/reports/profile` again after the run; no new profile HTML was produced, so this pass is based on source inspection of the current build logic plus the existing profile reports already present under `build/reports/profile`.
+
+### Findings
+- The current handwritten `lib/capybara-lib` build and the reusable Gradle plugin both compute several build-shape booleans during configuration:
+  - JVM main sources present;
+  - main resources present;
+  - JVM test sources present;
+  - non-JVM test resources present;
+  - whether the requested tasks should take the fused verification path.
+- Those checks were implemented with repeated `fileTree(...).files` scans and repeated provider/task-name evaluation across task wiring branches.
+- For the requested `--profile --rerun-tasks` workflow, that configuration work is paid on every invocation even before any tasks start, and it gets more expensive as source trees grow because `fileTree(...).files` materializes full matching sets instead of stopping at the first relevant file.
+
+### Changes made
+- Reworked `lib/capybara-lib/build.gradle` to:
+  - probe each source/resource category once during configuration;
+  - use early-exit filesystem checks instead of building whole Gradle file sets;
+  - evaluate the requested task-name set once and reuse the resulting booleans across task wiring.
+- Applied the same configuration-path optimization to `build-tool/gradle`’s `CapybaraPlugin` so plugin consumers avoid the same repeated scans.
+
+### Expected impact
+- Every Capybara build invocation should do less configuration-time filesystem work before the task graph is realized.
+- Projects with larger `src/main` or `src/test` trees should avoid repeated full-set allocation for simple presence checks, which reduces overhead on the exact rerun-heavy profiling workflow requested here.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle task verification in this sandbox because the requested wrapper invocation still fails before project execution with `Could not determine a usable wildcard IP for this machine`.

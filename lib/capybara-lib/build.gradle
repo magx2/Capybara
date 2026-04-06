@@ -300,60 +300,70 @@ def capybaraGeneratedCheckDir = layout.buildDirectory.dir('generated/sources/cap
 def capybaraLinkedMainDir = layout.buildDirectory.dir('generated/sources/capybara/linked/main')
 def capybaraTestResultsDir = layout.buildDirectory.dir('test-results/capybara')
 def capybaraTestRuntimeClasspath = files(sourceSets.main.runtimeClasspath, sourceSets.test.output.classesDirs)
-def hasJvmMainSources = providers.provider {
-    fileTree(layout.projectDirectory.dir('src/main').asFile) {
-        include '**/*.java'
-        include '**/*.kt'
-        include '**/*.kts'
-        include '**/*.groovy'
-        exclude 'capybara/**'
-    }.files.any()
+def containsMatchingFile = { directory, matcher ->
+    Path root = directory.asFile.toPath()
+    if (Files.notExists(root) || !Files.isDirectory(root)) {
+        return false
+    }
+
+    def matchingFiles = Files.find(root, Integer.MAX_VALUE) { path, attributes ->
+        if (!attributes.isRegularFile()) {
+            return false
+        }
+        def relativePath = root.relativize(path).toString().replace(File.separatorChar, '/' as char)
+        matcher(relativePath)
+    }
+    try {
+        matchingFiles.findAny().present
+    } finally {
+        matchingFiles.close()
+    }
 }
-def hasMainResources = providers.provider {
-    fileTree(layout.projectDirectory.dir('src/main/resources').asFile).files.any()
+def hasJvmMainSources = containsMatchingFile(layout.projectDirectory.dir('src/main')) { relativePath ->
+    !relativePath.startsWith('capybara/') && (
+            relativePath.endsWith('.java') ||
+                    relativePath.endsWith('.kt') ||
+                    relativePath.endsWith('.kts') ||
+                    relativePath.endsWith('.groovy')
+    )
 }
-def hasJvmTestSources = providers.provider {
-    fileTree(layout.projectDirectory.dir('src/test').asFile) {
-        include '**/*.java'
-        include '**/*.kt'
-        include '**/*.kts'
-        include '**/*.groovy'
-        exclude 'capybara/**'
-    }.files.any()
+def hasMainResources = containsMatchingFile(layout.projectDirectory.dir('src/main/resources')) { true }
+def hasJvmTestSources = containsMatchingFile(layout.projectDirectory.dir('src/test')) { relativePath ->
+    !relativePath.startsWith('capybara/') && (
+            relativePath.endsWith('.java') ||
+                    relativePath.endsWith('.kt') ||
+                    relativePath.endsWith('.kts') ||
+                    relativePath.endsWith('.groovy')
+    )
 }
-def hasNonJvmTestResources = providers.provider {
-    fileTree(layout.projectDirectory.dir('src/test/resources').asFile) {
-        exclude 'junit-platform.properties'
-    }.files.any()
+def hasNonJvmTestResources = containsMatchingFile(layout.projectDirectory.dir('src/test/resources')) { relativePath ->
+    relativePath != 'junit-platform.properties'
 }
 def capybaraTestLogLevel = switch (gradle.startParameter.logLevel) {
     case org.gradle.api.logging.LogLevel.DEBUG -> 'DEBUG'
     case org.gradle.api.logging.LogLevel.INFO -> 'INFO'
     default -> 'WARN'
 }
-def capybaraTestBuildRequested = providers.provider {
-    gradle.startParameter.taskNames.any { taskName ->
-        taskName == 'build' || taskName.endsWith(':build') ||
-                taskName == 'buildNeeded' || taskName.endsWith(':buildNeeded') ||
-                taskName == 'buildDependents' || taskName.endsWith(':buildDependents') ||
-        taskName == 'check' || taskName.endsWith(':check') ||
-                taskName == 'test' || taskName.endsWith(':test') ||
-                taskName == 'testClasses' || taskName.endsWith(':testClasses') ||
-                taskName == 'compileTestJava' || taskName.endsWith(':compileTestJava') ||
-                taskName == 'compileTestCapybara' || taskName.endsWith(':compileTestCapybara') ||
-                taskName == 'testCapybara' || taskName.endsWith(':testCapybara')
-    }
+def requestedTaskNames = gradle.startParameter.taskNames
+def capybaraTestBuildRequested = requestedTaskNames.any { taskName ->
+    taskName == 'build' || taskName.endsWith(':build') ||
+            taskName == 'buildNeeded' || taskName.endsWith(':buildNeeded') ||
+            taskName == 'buildDependents' || taskName.endsWith(':buildDependents') ||
+            taskName == 'check' || taskName.endsWith(':check') ||
+            taskName == 'test' || taskName.endsWith(':test') ||
+            taskName == 'testClasses' || taskName.endsWith(':testClasses') ||
+            taskName == 'compileTestJava' || taskName.endsWith(':compileTestJava') ||
+            taskName == 'compileTestCapybara' || taskName.endsWith(':compileTestCapybara') ||
+            taskName == 'testCapybara' || taskName.endsWith(':testCapybara')
 }
-def singleJavaVerificationBuild = providers.provider {
-    gradle.startParameter.taskNames.any { taskName ->
-        taskName == 'check' || taskName.endsWith(':check') ||
-                taskName == 'test' || taskName.endsWith(':test') ||
-                taskName == 'testClasses' || taskName.endsWith(':testClasses') ||
-                taskName == 'compileTestJava' || taskName.endsWith(':compileTestJava') ||
-                taskName == 'compileTestCapybara' || taskName.endsWith(':compileTestCapybara') ||
-                taskName == 'testCapybara' || taskName.endsWith(':testCapybara')
-    } && !hasMainResources.get()
-}
+def singleJavaVerificationBuild = requestedTaskNames.any { taskName ->
+    taskName == 'check' || taskName.endsWith(':check') ||
+            taskName == 'test' || taskName.endsWith(':test') ||
+            taskName == 'testClasses' || taskName.endsWith(':testClasses') ||
+            taskName == 'compileTestJava' || taskName.endsWith(':compileTestJava') ||
+            taskName == 'compileTestCapybara' || taskName.endsWith(':compileTestCapybara') ||
+            taskName == 'testCapybara' || taskName.endsWith(':testCapybara')
+} && !hasMainResources
 
 tasks.register('linkCapybaraDirect', InProcessCapybaraCompileTask) {
     group = 'build'
@@ -366,7 +376,7 @@ tasks.register('linkCapybaraDirect', InProcessCapybaraCompileTask) {
     compileTests.set(false)
     includeJavaLibResources.set(false)
     compilerVersion.set(project.version.toString())
-    onlyIf { !capybaraTestBuildRequested.get() }
+    onlyIf { !capybaraTestBuildRequested }
 }
 
 tasks.register('linkCapybaraLinkedOnly', InProcessCapybaraCompileTask) {
@@ -379,7 +389,7 @@ tasks.register('linkCapybaraLinkedOnly', InProcessCapybaraCompileTask) {
     compileTests.set(false)
     includeJavaLibResources.set(false)
     compilerVersion.set(project.version.toString())
-    onlyIf { !capybaraTestBuildRequested.get() }
+    onlyIf { !capybaraTestBuildRequested }
 }
 
 tasks.register('prepareCapybaraForCheck', InProcessCapybaraCompileTask) {
@@ -394,7 +404,7 @@ tasks.register('prepareCapybaraForCheck', InProcessCapybaraCompileTask) {
     compileTests.set(false)
     includeJavaLibResources.set(false)
     compilerVersion.set(project.version.toString())
-    onlyIf { capybaraTestBuildRequested.get() }
+    onlyIf { capybaraTestBuildRequested }
 }
 
 tasks.register('linkCapybara') {
@@ -427,13 +437,13 @@ tasks.register('compileTestCapybaraDirect', InProcessCapybaraCompileTask) {
     compileTests.set(true)
     includeJavaLibResources.set(false)
     compilerVersion.set(project.version.toString())
-    onlyIf { !capybaraTestBuildRequested.get() }
+    onlyIf { !capybaraTestBuildRequested }
 }
 
 tasks.register('compileTestCapybara') {
     group = 'verification'
     description = 'Compiles test Capybara files and generates Java without writing linked intermediates.'
-    if (capybaraTestBuildRequested.get()) {
+    if (capybaraTestBuildRequested) {
         dependsOn tasks.named('prepareCapybaraForCheck')
     } else {
         dependsOn tasks.named('compileTestCapybaraDirect')
@@ -446,7 +456,7 @@ tasks.register('testCapybara', InProcessCapybaraTestTask) {
     dependsOn tasks.named('compileTestJava')
 
     runtimeClasspath.from(
-            singleJavaVerificationBuild.get()
+            singleJavaVerificationBuild
                     ? files(configurations.runtimeClasspath, sourceSets.test.output.classesDirs)
                     : capybaraTestRuntimeClasspath
     )
@@ -460,7 +470,7 @@ sourceSets {
         java.srcDir capybaraGeneratedMainDir
     }
     test {
-        if (singleJavaVerificationBuild.get()) {
+        if (singleJavaVerificationBuild) {
             java.srcDir capybaraGeneratedCheckDir
             java.srcDir layout.projectDirectory.dir('src/main/java')
             compileClasspath -= sourceSets.main.output
@@ -472,8 +482,8 @@ sourceSets {
 }
 
 tasks.named('compileJava') {
-    enabled = !singleJavaVerificationBuild.get()
-    if (capybaraTestBuildRequested.get()) {
+    enabled = !singleJavaVerificationBuild
+    if (capybaraTestBuildRequested) {
         dependsOn tasks.named('prepareCapybaraForCheck')
     } else {
         dependsOn tasks.named('compileCapybara')
@@ -484,7 +494,7 @@ tasks.named('compileJava') {
 }
 
 tasks.named('compileTestJava') {
-    if (singleJavaVerificationBuild.get()) {
+    if (singleJavaVerificationBuild) {
         setDependsOn(dependsOn.findAll { dependency ->
             !(dependency instanceof TaskProvider && (dependency.name == 'classes' || dependency.name == 'compileJava' || dependency.name == 'processResources')) &&
                     !(dependency instanceof Task && (dependency.name == 'classes' || dependency.name == 'compileJava' || dependency.name == 'processResources')) &&
@@ -493,7 +503,7 @@ tasks.named('compileTestJava') {
                     dependency != 'processResources'
         })
     }
-    if (capybaraTestBuildRequested.get()) {
+    if (capybaraTestBuildRequested) {
         dependsOn tasks.named('prepareCapybaraForCheck')
     } else {
         dependsOn tasks.named('compileTestCapybara')
@@ -501,22 +511,22 @@ tasks.named('compileTestJava') {
 }
 
 tasks.named('processResources') {
-    enabled = hasMainResources.get()
+    enabled = hasMainResources
 }
 
 tasks.named('processTestResources') {
-    enabled = hasJvmTestSources.get() || hasNonJvmTestResources.get()
+    enabled = hasJvmTestSources || hasNonJvmTestResources
 }
 
 tasks.named('classes') {
-    enabled = hasJvmMainSources.get() || hasMainResources.get()
+    enabled = hasJvmMainSources || hasMainResources
     if (!enabled) {
         setDependsOn([])
     }
 }
 
 tasks.named('testClasses') {
-    enabled = hasJvmTestSources.get() || hasNonJvmTestResources.get()
+    enabled = hasJvmTestSources || hasNonJvmTestResources
     if (!enabled) {
         setDependsOn([])
     }
@@ -525,8 +535,8 @@ tasks.named('testClasses') {
 tasks.matching { it.name == 'test' }.configureEach {
     dependsOn tasks.named('testCapybara')
     exclude 'capy/**'
-    enabled = hasJvmTestSources.get()
-    if (!hasJvmTestSources.get()) {
+    enabled = hasJvmTestSources
+    if (!hasJvmTestSources) {
         setDependsOn([])
     }
     if (it.hasProperty('failOnNoDiscoveredTests')) {
@@ -535,7 +545,7 @@ tasks.matching { it.name == 'test' }.configureEach {
 }
 
 tasks.matching { it.name == 'check' }.configureEach {
-    if (!hasJvmTestSources.get()) {
+    if (!hasJvmTestSources) {
         setDependsOn(dependsOn.findAll { dependency ->
             !(dependency instanceof TaskProvider && dependency.name == 'test') &&
                     !(dependency instanceof Task && dependency.name == 'test') &&
