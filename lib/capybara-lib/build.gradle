@@ -237,6 +237,11 @@ def hasJvmTestSources = providers.provider {
         exclude 'capybara/**'
     }.files.any()
 }
+def hasNonJvmTestResources = providers.provider {
+    fileTree(layout.projectDirectory.dir('src/test/resources').asFile) {
+        exclude 'junit-platform.properties'
+    }.files.any()
+}
 def capybaraTestLogLevel = switch (gradle.startParameter.logLevel) {
     case org.gradle.api.logging.LogLevel.DEBUG -> 'DEBUG'
     case org.gradle.api.logging.LogLevel.INFO -> 'INFO'
@@ -402,6 +407,10 @@ tasks.named('compileTestJava') {
 
 tasks.named('processResources') {
     enabled = hasMainResources.get()
+}
+
+tasks.named('processTestResources') {
+    enabled = hasJvmTestSources.get() || hasNonJvmTestResources.get()
 }
 
 tasks.matching { it.name == 'test' }.configureEach {

@@ -234,6 +234,41 @@ class CapybaraPluginTest {
     }
 
     @Test
+    void shouldDisableProcessTestResourcesTaskWhenOnlyJUnitPlatformConfigExistsWithoutJvmTests() throws IOException {
+        var resourcesDir = Files.createDirectories(tempDir.resolve("src/test/resources"));
+        Files.writeString(resourcesDir.resolve("junit-platform.properties"), "junit.jupiter.execution.parallel.enabled=true\n");
+
+        var project = newProject();
+        var processTestResources = project.getTasks().named("processTestResources").get();
+
+        assertFalse(processTestResources.getEnabled());
+    }
+
+    @Test
+    void shouldKeepProcessTestResourcesTaskEnabledWhenNonJvmTestResourcesExist() throws IOException {
+        var resourcesDir = Files.createDirectories(tempDir.resolve("src/test/resources/fixtures"));
+        Files.writeString(resourcesDir.resolve("sample.txt"), "fixture\n");
+
+        var project = newProject();
+        var processTestResources = project.getTasks().named("processTestResources").get();
+
+        assertTrue(processTestResources.getEnabled());
+    }
+
+    @Test
+    void shouldKeepProcessTestResourcesTaskEnabledWhenJvmTestSourcesExist() throws IOException {
+        var jvmTestSourceDir = Files.createDirectories(tempDir.resolve("src/test/java/dev/capylang"));
+        Files.writeString(jvmTestSourceDir.resolve("PluginJvmTest.java"), "class PluginJvmTest {}");
+        var resourcesDir = Files.createDirectories(tempDir.resolve("src/test/resources"));
+        Files.writeString(resourcesDir.resolve("junit-platform.properties"), "junit.jupiter.execution.parallel.enabled=true\n");
+
+        var project = newProject();
+        var processTestResources = project.getTasks().named("processTestResources").get();
+
+        assertTrue(processTestResources.getEnabled());
+    }
+
+    @Test
     void shouldUseInProcessTaskForCapybaraTests() {
         var project = newProject();
 

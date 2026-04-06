@@ -32,6 +32,11 @@ public class CapybaraPlugin implements Plugin<Project> {
                     spec.exclude("capybara/**");
                 }).getFiles().stream().findAny().isPresent()
         );
+        var hasNonJvmTestResources = project.provider(() ->
+                project.fileTree(project.file("src/test/resources"), spec ->
+                        spec.exclude("junit-platform.properties")
+                ).getFiles().stream().findAny().isPresent()
+        );
         var capybaraTestBuildRequested = project.provider(() ->
                 project.getGradle().getStartParameter().getTaskNames().stream().anyMatch(taskName ->
                         taskName.equals("build") || taskName.endsWith(":build") ||
@@ -127,6 +132,8 @@ public class CapybaraPlugin implements Plugin<Project> {
             project.getTasks().named("compileJava", task ->
                     task.onlyIf(ignored -> !(capybaraTestBuildRequested.get() && !hasJvmMainSources.get())));
             project.getTasks().named("processResources", task -> task.setEnabled(hasMainResources.get()));
+            project.getTasks().named("processTestResources", task ->
+                    task.setEnabled(hasJvmTestSources.get() || hasNonJvmTestResources.get()));
             project.getTasks().named("compileTestJava", task ->
                     task.dependsOn(capybaraTestBuildRequested.get() ? compileCapybara : generateTestCapybaraJava));
 

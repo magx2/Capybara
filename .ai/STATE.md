@@ -1727,6 +1727,8 @@
 - I could not run Gradle task verification or produce a fresh profile in this sandbox because the requested wrapper command still fails before project execution with `Could not determine a usable wildcard IP for this machine`.
 - Verification for this pass is limited to source inspection and the added plugin test coverage.
 
+
+
 ## 2026-04-06 build optimization pass fused lifecycle task detection
 
 ### Requested baseline
@@ -1758,6 +1760,7 @@
 - I could not run Gradle task verification or produce a fresh profile in this sandbox because the requested wrapper command still fails before project execution with `Could not determine a usable wildcard IP for this machine`.
 - Verification for this pass is limited to source inspection and the added plugin test coverage.
 
+
 ## 2026-04-06 build optimization pass remove main-output edges from Capybara-only check builds
 
 ### Requested baseline
@@ -1784,6 +1787,41 @@
 ### Expected impact
 - `:lib:capybara-lib:check --rerun-tasks` should stop retaining `main.output`-driven lifecycle work after main generated sources are folded into `compileTestJava`.
 - This should further reduce no-op or skipped-task overhead around `compileJava`/`classes`/`processResources` on Capybara-only check builds while preserving the existing behavior for mixed JVM/Capybara projects.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle task verification or produce a fresh profile in this sandbox because the requested wrapper command still fails before project execution with `Could not determine a usable wildcard IP for this machine`.
+- Verification for this pass is limited to source inspection and the added plugin test coverage.
+
+## 2026-04-06 build optimization pass skip JUnit-only test resources for Capybara-only test runs
+
+### Requested baseline
+- Re-ran the requested baseline command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- The wrapper now gets past the earlier read-only Gradle home failure, but Gradle still cannot start in this sandbox:
+  - `Could not create service of type FileLockContentionHandler`
+  - `Could not determine a usable wildcard IP for this machine`
+- Checked `build/reports/profile` after the failed run; no fresh profile HTML was produced, so this pass still relies on the existing reports already present there.
+
+### Findings
+- The saved profile for `:lib:capybara-lib:check` still shows a small but real `:lib:capybara-lib:processTestResources` execution cost (`0.019s`) on the old rerun path.
+- `lib/capybara-lib` has no JVM test sources under `src/test/java`, `src/test/kotlin`, `src/test/kts`, or `src/test/groovy`.
+- Its only test resource is `src/test/resources/junit-platform.properties`, which is only relevant to the standard Gradle/JUnit `test` task.
+- Earlier passes already disable that JVM `test` task for this module, so the remaining `processTestResources` work is dead weight on Capybara-only `check` builds.
+- The reusable `CapybaraPlugin` had the same behavior for plugin consumers that only carry `junit-platform.properties` in `src/test/resources` but no JVM test sources.
+
+### Changes made
+- In `lib/capybara-lib/build.gradle`, added `hasNonJvmTestResources` detection that ignores `junit-platform.properties`.
+- Disabled `processTestResources` unless the project has JVM test sources or non-JUnit-only test resources that may still be needed by Capybara tests.
+- Applied the same safe rule in `build-tool/gradle`’s `CapybaraPlugin`.
+- Added plugin tests covering:
+  - disabling `processTestResources` when only `junit-platform.properties` exists and there are no JVM tests;
+  - keeping `processTestResources` enabled when non-JUnit test resources exist;
+  - keeping `processTestResources` enabled when JVM test sources exist.
+
+### Expected impact
+- `:lib:capybara-lib:check --rerun-tasks` should stop spending time copying JUnit-only test resources for a disabled JVM test path.
+- Plugin consumers with Capybara-only tests and only `junit-platform.properties` should avoid the same dead `processTestResources` work.
+- Projects that do have real test resources or JVM tests keep the existing behavior.
 
 ### Verification status
 - `git diff --check` passed.
