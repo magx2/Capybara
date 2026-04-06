@@ -240,9 +240,10 @@ class CapybaraPluginTest {
         assertEquals(expectedLogLevel, CapybaraPlugin.capybaraTestLogLevel(gradleLogLevel));
     }
 
-    @Test
-    void shouldWireCheckBuildJavaCompilationDirectlyToFusedCompileTask() {
-        var project = newProject(List.of("check"));
+    @ParameterizedTest
+    @MethodSource("fusedCapybaraLifecycleTasks")
+    void shouldWireLifecycleBuildJavaCompilationDirectlyToFusedCompileTask(String requestedTask) {
+        var project = newProject(List.of(requestedTask));
         var compileJava = project.getTasks().named("compileJava").get();
         var compileJavaDependencies = compileJava.getTaskDependencies().getDependencies(compileJava);
         var compileTestJava = project.getTasks().named("compileTestJava").get();
@@ -256,9 +257,10 @@ class CapybaraPluginTest {
         assertFalse(compileTestJavaDependencies.contains(compileJava));
     }
 
-    @Test
-    void shouldSkipCompileJavaForCheckBuildsWithoutJvmMainSources() {
-        var project = newProject(List.of("check"));
+    @ParameterizedTest
+    @MethodSource("fusedCapybaraLifecycleTasks")
+    void shouldSkipCompileJavaForLifecycleBuildsWithoutJvmMainSources(String requestedTask) {
+        var project = newProject(List.of(requestedTask));
         var compileJava = project.getTasks().named("compileJava").get();
 
         assertFalse(compileJava.getOnlyIf().isSatisfiedBy(compileJava));
@@ -301,6 +303,15 @@ class CapybaraPluginTest {
                 arguments(LogLevel.WARN, "WARN"),
                 arguments(LogLevel.QUIET, "WARN"),
                 arguments(LogLevel.ERROR, "WARN")
+        );
+    }
+
+    private static Stream<org.junit.jupiter.params.provider.Arguments> fusedCapybaraLifecycleTasks() {
+        return Stream.of(
+                arguments("check"),
+                arguments("build"),
+                arguments("buildNeeded"),
+                arguments("buildDependents")
         );
     }
 

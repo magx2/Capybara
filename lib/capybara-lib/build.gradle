@@ -241,6 +241,9 @@ def capybaraTestLogLevel = switch (gradle.startParameter.logLevel) {
 }
 def capybaraTestBuildRequested = providers.provider {
     gradle.startParameter.taskNames.any { taskName ->
+        taskName == 'build' || taskName.endsWith(':build') ||
+                taskName == 'buildNeeded' || taskName.endsWith(':buildNeeded') ||
+                taskName == 'buildDependents' || taskName.endsWith(':buildDependents') ||
         taskName == 'check' || taskName.endsWith(':check') ||
                 taskName == 'test' || taskName.endsWith(':test') ||
                 taskName == 'testClasses' || taskName.endsWith(':testClasses') ||

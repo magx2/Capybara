@@ -31,7 +31,10 @@ public class CapybaraPlugin implements Plugin<Project> {
         );
         var capybaraTestBuildRequested = project.provider(() ->
                 project.getGradle().getStartParameter().getTaskNames().stream().anyMatch(taskName ->
-                        taskName.equals("check") || taskName.endsWith(":check") ||
+                        taskName.equals("build") || taskName.endsWith(":build") ||
+                                taskName.equals("buildNeeded") || taskName.endsWith(":buildNeeded") ||
+                                taskName.equals("buildDependents") || taskName.endsWith(":buildDependents") ||
+                                taskName.equals("check") || taskName.endsWith(":check") ||
                                 taskName.equals("test") || taskName.endsWith(":test") ||
                                 taskName.equals("testClasses") || taskName.endsWith(":testClasses") ||
                                 taskName.equals("compileTestJava") || taskName.endsWith(":compileTestJava") ||

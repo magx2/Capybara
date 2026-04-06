@@ -1670,6 +1670,37 @@
 - I could not run Gradle task verification or produce a fresh profile in this sandbox because the requested wrapper command still fails before project execution with `Could not determine a usable wildcard IP for this machine`.
 - Verification for this pass is limited to source inspection and the added plugin test coverage.
 
+## 2026-04-06 build optimization pass fused lifecycle task detection
+
+### Requested baseline
+- Re-ran the requested baseline command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- In this sandbox the wrapper still fails before project execution with:
+  - `Could not create service of type FileLockContentionHandler`
+  - `Could not determine a usable wildcard IP for this machine`
+- Checked `build/reports/profile` after the failed run; no fresh profile HTML was produced, so this pass still relies on the latest existing reports already present there.
+
+### Findings
+- The handwritten `lib/capybara-lib` build and the reusable `CapybaraPlugin` both decide whether to use the fused test-oriented Capybara path by inspecting the explicitly requested task names.
+- That detection already covered direct verification tasks like `check`, `test`, `compileTestJava`, and `testCapybara`, but it did not cover composite lifecycle tasks such as `build`, `buildNeeded`, or `buildDependents`.
+- As a result, invoking those broader lifecycle tasks could still fall back to the older split Capybara compile flow even though they eventually run `check` anyway.
+- This gap affects clean full-build paths more than the exact requested `:lib:capybara-lib:check`, but it leaves avoidable extra Capybara work in common repository and plugin-consumer build entrypoints.
+
+### Changes made
+- Expanded `capybaraTestBuildRequested` in `lib/capybara-lib/build.gradle` to also treat `build`, `buildNeeded`, and `buildDependents` as fused test-oriented lifecycle requests.
+- Applied the same task-name expansion in `build-tool/gradle`’s `CapybaraPlugin`.
+- Added plugin coverage asserting that those lifecycle tasks now:
+  - wire `compileJava` and `compileTestJava` directly to the fused `compileCapybara` task;
+  - keep `compileJava` skipped for Capybara-only main sources, just like the existing `check` path.
+
+### Expected impact
+- Full lifecycle builds such as `build`, `buildNeeded`, and `buildDependents` should now reuse the same reduced Capybara task graph that earlier passes already applied to explicit `check`/`test` requests.
+- This should avoid falling back to the older split compile/generate path for common higher-level build entrypoints.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle task verification or produce a fresh profile in this sandbox because the requested wrapper command still fails before project execution with `Could not determine a usable wildcard IP for this machine`.
+- Verification for this pass is limited to source inspection and the added plugin test coverage.
+
 ## 2026-04-06 build optimization pass remove main-output edges from Capybara-only check builds
 
 ### Requested baseline
