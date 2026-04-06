@@ -20,6 +20,9 @@ public class CapybaraPlugin implements Plugin<Project> {
                     spec.exclude("capybara/**");
                 }).getFiles().stream().findAny().isPresent()
         );
+        var hasMainResources = project.provider(() ->
+                project.fileTree(project.file("src/main/resources")).getFiles().stream().findAny().isPresent()
+        );
         var hasJvmTestSources = project.provider(() ->
                 project.fileTree(project.file("src/test"), spec -> {
                     spec.include("**/*.java");
@@ -123,6 +126,7 @@ public class CapybaraPlugin implements Plugin<Project> {
             });
             project.getTasks().named("compileJava", task ->
                     task.onlyIf(ignored -> !(capybaraTestBuildRequested.get() && !hasJvmMainSources.get())));
+            project.getTasks().named("processResources", task -> task.setEnabled(hasMainResources.get()));
             project.getTasks().named("compileTestJava", task ->
                     task.dependsOn(capybaraTestBuildRequested.get() ? compileCapybara : generateTestCapybaraJava));
 

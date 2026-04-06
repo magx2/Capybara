@@ -225,6 +225,9 @@ def hasJvmMainSources = providers.provider {
         exclude 'capybara/**'
     }.files.any()
 }
+def hasMainResources = providers.provider {
+    fileTree(layout.projectDirectory.dir('src/main/resources').asFile).files.any()
+}
 def hasJvmTestSources = providers.provider {
     fileTree(layout.projectDirectory.dir('src/test').asFile) {
         include '**/*.java'
@@ -382,6 +385,10 @@ tasks.named('compileTestJava') {
     } else {
         dependsOn tasks.named('compileTestCapybara')
     }
+}
+
+tasks.named('processResources') {
+    enabled = hasMainResources.get()
 }
 
 tasks.matching { it.name == 'test' }.configureEach {

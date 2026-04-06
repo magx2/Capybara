@@ -215,6 +215,25 @@ class CapybaraPluginTest {
     }
 
     @Test
+    void shouldDisableProcessResourcesTaskWhenProjectHasNoMainResources() {
+        var project = newProject();
+        var processResources = project.getTasks().named("processResources").get();
+
+        assertFalse(processResources.getEnabled());
+    }
+
+    @Test
+    void shouldKeepProcessResourcesTaskEnabledWhenProjectHasMainResources() throws IOException {
+        var resourcesDir = Files.createDirectories(tempDir.resolve("src/main/resources"));
+        Files.writeString(resourcesDir.resolve("plugin.properties"), "name=test\n");
+
+        var project = newProject();
+        var processResources = project.getTasks().named("processResources").get();
+
+        assertTrue(processResources.getEnabled());
+    }
+
+    @Test
     void shouldUseInProcessTaskForCapybaraTests() {
         var project = newProject();
 

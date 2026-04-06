@@ -419,6 +419,36 @@
 - `:lib:capybara-lib:testCapybara` should avoid a full pre-run tree walk/delete under `build/test-results/capybara` on every `--rerun-tasks` build.
 - Repeated local builds should do less filesystem churn while still removing obsolete JUnit XML files when tests disappear or report paths change.
 
+## 2026-04-06 build optimization pass skip empty main resources
+
+### Requested baseline
+- Re-ran the requested baseline command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- In this sandbox it still failed before task execution with:
+  - `Could not create service of type FileLockContentionHandler`
+  - `Could not determine a usable wildcard IP for this machine`
+- Checked `build/reports/profile` again afterward; no new profile HTML was produced, so the latest available timing artifact remains `build/reports/profile/profile-2026-04-04-19-07-42.html`.
+
+### Findings
+- `lib/capybara-lib` has no files under `src/main/resources`; only `src/test/resources/junit-platform.properties` exists.
+- Even with the Capybara-specific compile/test optimizations already in place, the standard Java `processResources` task remains part of the main lifecycle unless explicitly disabled.
+- For Capybara-only modules with no main resources, that task adds avoidable lifecycle overhead to `classes` and any paths that still touch the main Java lifecycle.
+- The reusable `CapybaraPlugin` had the same default behavior for plugin consumers with no `src/main/resources` content.
+
+### Changes made
+- Added main-resource detection to `lib/capybara-lib/build.gradle` and disabled `processResources` when `src/main/resources` is empty.
+- Applied the same optimization in `build-tool/gradle`’s `CapybaraPlugin`.
+- Added plugin tests covering both cases:
+  - projects without main resources disable `processResources`;
+  - projects with main resources keep `processResources` enabled.
+
+### Expected impact
+- Capybara-only modules should avoid the empty main-resource processing task on clean and rerun builds.
+- Plugin consumers with the same structure should get the same lifecycle reduction automatically.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle task verification or produce a fresh profile in this sandbox because the requested Gradle invocation still fails before project execution with `Could not determine a usable wildcard IP for this machine`.
+
 ### Verification status
 - `git diff --check` passed.
 - I could not run Gradle task verification in this sandbox because the wrapper still fails before task execution with a read-only lockfile path under `/home/martin/.gradle`.
