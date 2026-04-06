@@ -221,10 +221,11 @@ public class TestRunner {
                 return;
             }
             var manifestFile = outputDir.resolve(OUTPUT_MANIFEST_FILE);
-            for (var staleFile : staleFiles(outputDir, manifestFile, expectedFiles)) {
-                Files.deleteIfExists(staleFile);
-                LOG.fine(() -> "Deleted stale test output `%s`".formatted(staleFile));
-                deleteEmptyParentDirectories(staleFile.getParent(), outputDir);
+            var staleFiles = new HashSet<>(staleFiles(outputDir, manifestFile, expectedFiles));
+            try (var paths = Files.walk(outputDir).sorted(Comparator.reverseOrder())) {
+                paths
+                        .filter(path -> !path.equals(outputDir))
+                        .forEach(path -> deleteStalePath(outputDir, path, manifestFile, staleFiles));
             }
             writeOutputManifest(manifestFile, expectedFiles);
         } catch (IOException e) {
@@ -242,7 +243,6 @@ public class TestRunner {
                         .map(Path::of)
                         .map(Path::normalize)
                         .filter(path -> !expectedFiles.contains(path))
-                        .map(outputDir::resolve)
                         .toList();
             }
         }
@@ -252,24 +252,29 @@ public class TestRunner {
                     .filter(path -> !path.equals(outputDir))
                     .filter(Files::isRegularFile)
                     .filter(path -> !path.equals(manifestFile))
-                    .filter(path -> !expectedFiles.contains(outputDir.relativize(path).normalize()))
-                    .sorted(Comparator.reverseOrder())
+                    .map(outputDir::relativize)
+                    .map(Path::normalize)
+                    .filter(path -> !expectedFiles.contains(path))
                     .toList();
         }
     }
 
-    private static void deleteEmptyParentDirectories(Path directory, Path outputDir) {
-        var current = directory;
-        while (current != null && !current.equals(outputDir)) {
-            try {
-                Files.deleteIfExists(current);
-                LOG.fine(() -> "Deleted empty test output directory `%s`".formatted(current));
-            } catch (DirectoryNotEmptyException ignored) {
+    private static void deleteStalePath(Path outputDir, Path path, Path manifestFile, Set<Path> staleFiles) {
+        try {
+            if (Files.isRegularFile(path)) {
+                if (!path.equals(manifestFile) && staleFiles.contains(outputDir.relativize(path).normalize())) {
+                    Files.deleteIfExists(path);
+                    LOG.fine(() -> "Deleted stale test output `%s`".formatted(path));
+                }
                 return;
-            } catch (IOException e) {
-                throw new UncheckedIOException(e);
             }
-            current = current.getParent();
+            try {
+                Files.deleteIfExists(path);
+                LOG.fine(() -> "Deleted empty test output directory `%s`".formatted(path));
+            } catch (DirectoryNotEmptyException ignored) {
+            }
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
         }
     }
 

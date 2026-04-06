@@ -112,6 +112,25 @@ class TestRunnerTest {
         assertEquals("reports/TEST-keep.xml\n", Files.readString(tempDir.resolve(TestRunner.OUTPUT_MANIFEST_FILE)));
     }
 
+    @Test
+    void shouldPruneSharedStaleDirectoryTreesInSingleCleanupPass() throws Exception {
+        var keptFile = Files.createDirectories(tempDir.resolve("reports")).resolve("TEST-keep.xml");
+        Files.writeString(keptFile, "<keep/>");
+        var staleDir = Files.createDirectories(tempDir.resolve("stale").resolve("nested"));
+        var staleFileOne = staleDir.resolve("TEST-old-one.xml");
+        var staleFileTwo = staleDir.resolve("TEST-old-two.xml");
+        Files.writeString(staleFileOne, "<old-one/>");
+        Files.writeString(staleFileTwo, "<old-two/>");
+
+        TestRunner.deleteStaleOutputs(tempDir, Set.of(java.nio.file.Path.of("reports", "TEST-keep.xml")));
+
+        assertTrue(Files.exists(keptFile));
+        assertFalse(Files.exists(staleFileOne));
+        assertFalse(Files.exists(staleFileTwo));
+        assertFalse(Files.exists(staleDir));
+        assertFalse(Files.exists(tempDir.resolve("stale")));
+    }
+
     private static Path relativePath(String... segments) {
         return new Path(PathRoot.RELATIVE, Optional.empty(), List.of(segments));
     }

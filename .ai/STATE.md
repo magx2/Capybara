@@ -1149,3 +1149,32 @@
 - `git diff --check` passed.
 - I could not run Gradle task verification in this sandbox because the requested wrapper command still fails before project execution on both the default Gradle home lock path and the repository-local cache path.
 - Verification for this pass is limited to source inspection.
+
+## 2026-04-06 build optimization pass batched stale report directory pruning
+
+### Requested baseline
+- Re-ran the requested baseline command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- It still failed immediately in this sandbox because the wrapper tried to create `/home/martin/.gradle/.../gradle-9.1.0-bin.zip.lck` on a read-only filesystem.
+- Checked `build/reports/profile` again after the failed run; no fresh profile HTML was produced, so analysis still relies on the existing reports already present there.
+
+### Findings
+- `:lib:capybara-lib:testCapybara` remains part of the requested `check --rerun-tasks` path, so its stale JUnit XML cleanup cost is still paid on every rerun.
+- `TestRunner.deleteStaleOutputs(...)` already used the manifest to avoid a full stale-file tree scan in steady state, but it still walked back up the parent chain for each stale file individually.
+- When multiple stale reports share the same nested output directory tree, that repeated parent-by-parent delete attempt does duplicate filesystem work on the same directories during the hot rerun path.
+
+### Changes made
+- Reworked `lib/capybara-lib/src/main/java/dev/capylang/test/TestRunner.java` so stale report cleanup now:
+  - resolves the stale relative paths once;
+  - performs one reverse-order walk over the output tree;
+  - deletes stale files inline during that walk;
+  - prunes empty directories opportunistically during the same pass instead of climbing parent directories once per stale file.
+- Added `TestRunnerTest.shouldPruneSharedStaleDirectoryTreesInSingleCleanupPass()` to lock in cleanup of shared nested stale directories.
+
+### Expected impact
+- Repeated `:lib:capybara-lib:testCapybara` executions should do less duplicate directory-deletion work when stale reports share parent directories.
+- This trims another small but real source of filesystem churn on the requested `:lib:capybara-lib:check --rerun-tasks` path.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle task verification in this sandbox because the requested wrapper command still fails before project execution on the read-only `/home/martin/.gradle` lock path, and previous repository-local attempts also failed before execution with `Could not determine a usable wildcard IP for this machine`.
+- Verification for this pass is limited to source inspection and the added regression test.
