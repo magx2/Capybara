@@ -165,13 +165,19 @@ sourceSets {
 }
 
 tasks.named('compileJava') {
-    dependsOn tasks.named('prepareCapybaraForCheck')
-    dependsOn tasks.named('compileCapybara')
+    if (capybaraTestBuildRequested.get()) {
+        dependsOn tasks.named('prepareCapybaraForCheck')
+    } else {
+        dependsOn tasks.named('compileCapybara')
+    }
 }
 
 tasks.named('compileTestJava') {
-    dependsOn tasks.named('prepareCapybaraForCheck')
-    dependsOn tasks.named('compileTestCapybara')
+    if (capybaraTestBuildRequested.get()) {
+        dependsOn tasks.named('prepareCapybaraForCheck')
+    } else {
+        dependsOn tasks.named('compileTestCapybara')
+    }
 }
 
 tasks.matching { it.name == 'test' }.configureEach {

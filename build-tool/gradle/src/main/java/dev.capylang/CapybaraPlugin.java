@@ -51,7 +51,8 @@ public class CapybaraPlugin implements Plugin<Project> {
                 }
         );
 
-        project.getTasks().named("compileJava", task -> task.dependsOn(generateCapybaraJava));
+        project.getTasks().named("compileJava", task ->
+                task.dependsOn(capybaraTestBuildRequested.get() ? compileCapybara : generateCapybaraJava));
 
         var compileTestCapybara = project.getTasks().register(
                 "compileTestCapybara",
@@ -89,7 +90,8 @@ public class CapybaraPlugin implements Plugin<Project> {
                     sourceSet.getJava().srcDir(layout.getBuildDirectory().dir("generated/sources/capybara/java")));
             sourceSets.named("test", sourceSet ->
                     sourceSet.getJava().srcDir(layout.getBuildDirectory().dir("generated/sources/test-capybara/java")));
-            project.getTasks().named("compileTestJava", task -> task.dependsOn(generateTestCapybaraJava));
+            project.getTasks().named("compileTestJava", task ->
+                    task.dependsOn(capybaraTestBuildRequested.get() ? compileCapybara : generateTestCapybaraJava));
 
             var testCapybara = project.getTasks().register(
                     "testCapybara",

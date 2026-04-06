@@ -171,6 +171,21 @@ class CapybaraPluginTest {
         assertTrue(compileTestJavaDependencies.contains(project.getTasks().named("generateTestCapybaraJava").get()));
     }
 
+    @Test
+    void shouldWireCheckBuildJavaCompilationDirectlyToFusedCompileTask() {
+        var project = newProject(List.of("check"));
+        var compileJava = project.getTasks().named("compileJava").get();
+        var compileJavaDependencies = compileJava.getTaskDependencies().getDependencies(compileJava);
+        var compileTestJava = project.getTasks().named("compileTestJava").get();
+        var compileTestJavaDependencies = compileTestJava.getTaskDependencies().getDependencies(compileTestJava);
+        var compileCapybara = project.getTasks().named("compileCapybara").get();
+
+        assertTrue(compileJavaDependencies.contains(compileCapybara));
+        assertFalse(compileJavaDependencies.contains(project.getTasks().named("generateCapybaraJava").get()));
+        assertTrue(compileTestJavaDependencies.contains(compileCapybara));
+        assertFalse(compileTestJavaDependencies.contains(project.getTasks().named("generateTestCapybaraJava").get()));
+    }
+
     private Project newProject() {
         return newProject(List.of());
     }

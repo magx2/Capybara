@@ -492,6 +492,38 @@
 - `git diff --check` passed.
 - I could not run Gradle task verification in this sandbox because the requested wrapper command still fails before project execution due the read-only wrapper lock path, and the repository-local Gradle fallback previously still failed on wildcard IP detection.
 
+## 2026-04-06 build optimization pass direct check-path task wiring
+
+### Requested baseline
+- Re-ran the requested baseline command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- It still failed immediately in this sandbox because the wrapper tried to create `/home/martin/.gradle/.../gradle-9.1.0-bin.zip.lck` on a read-only filesystem.
+- Checked `build/reports/profile` after the run; no new profile HTML was produced, and the latest available report remains `build/reports/profile/profile-2026-04-04-19-07-42.html`.
+
+### Findings
+- `lib/capybara-lib` already has a fused `prepareCapybaraForCheck` task for `check`-style builds, and the reusable Gradle plugin already fuses the same work into `compileCapybara` when test-oriented tasks are requested.
+- Despite that, both code paths still wired Java compilation through compatibility task names on the test/check path:
+  - `lib/capybara-lib:compileJava` depended on both `prepareCapybaraForCheck` and `compileCapybara`;
+  - `lib/capybara-lib:compileTestJava` depended on both `prepareCapybaraForCheck` and `compileTestCapybara`;
+  - the reusable plugin still routed `compileJava` through `generateCapybaraJava` and `compileTestJava` through `generateTestCapybaraJava` even when `compileCapybara` already produced both main and test generated sources.
+- Those compatibility tasks no longer add outputs on the hot `check --rerun-tasks` path, so they were left as avoidable task-graph edges and extra dependency resolution/scheduling work.
+
+### Changes made
+- Updated `lib/capybara-lib/build.gradle` so:
+  - `compileJava` depends directly on `prepareCapybaraForCheck` for test/check-oriented builds, otherwise on `compileCapybara`;
+  - `compileTestJava` depends directly on `prepareCapybaraForCheck` for test/check-oriented builds, otherwise on `compileTestCapybara`.
+- Updated `build-tool/gradle`’s `CapybaraPlugin` so:
+  - `compileJava` depends directly on `compileCapybara` for test/check-oriented builds, otherwise on `generateCapybaraJava`;
+  - `compileTestJava` depends directly on `compileCapybara` for test/check-oriented builds, otherwise on `generateTestCapybaraJava`.
+- Added plugin coverage proving `check`-style requests now wire both Java compile tasks straight to the fused `compileCapybara` task instead of the legacy compatibility tasks.
+
+### Expected impact
+- `:lib:capybara-lib:check --rerun-tasks` should avoid scheduling compatibility-task hops that no longer contribute work on the fused test/check path.
+- Plugin consumers should get the same reduced task-graph overhead on `check`-style builds.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle task verification in this sandbox because the requested wrapper command still fails before project execution on the read-only wrapper lock path, so verification for this pass is limited to source inspection and the added plugin test coverage.
+
 ## 2026-04-06 build optimization pass manifest-based stale pruning
 
 ### Requested baseline
