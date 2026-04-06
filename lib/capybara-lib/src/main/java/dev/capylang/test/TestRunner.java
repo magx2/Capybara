@@ -8,8 +8,10 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.nio.file.DirectoryNotEmptyException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -216,18 +218,26 @@ public class TestRunner {
             if (Files.notExists(outputDir)) {
                 return;
             }
-            try (var files = Files.walk(outputDir)) {
-                files.filter(Files::isRegularFile)
-                        .forEach(path -> deleteIfStale(outputDir, path, expectedFiles));
+            try (var paths = Files.walk(outputDir)) {
+                for (var path : paths.filter(path -> !path.equals(outputDir))
+                        .sorted(Comparator.reverseOrder())
+                        .toList()) {
+                    if (Files.isRegularFile(path)) {
+                        deleteFileIfStale(outputDir, path, expectedFiles);
+                        continue;
+                    }
+                    if (Files.isDirectory(path)) {
+                        deleteDirectoryIfEmpty(path);
+                    }
+                }
             }
-            deleteEmptyDirectories(outputDir);
         } catch (IOException e) {
             LOG.log(Level.SEVERE, "Cannot prune stale test output files", e);
             throw new UncheckedIOException("Cannot prune stale test output files", e);
         }
     }
 
-    private static void deleteIfStale(Path outputDir, Path file, Set<Path> expectedFiles) {
+    private static void deleteFileIfStale(Path outputDir, Path file, Set<Path> expectedFiles) {
         var relativePath = outputDir.relativize(file.normalize());
         if (expectedFiles.contains(relativePath)) {
             return;
@@ -240,22 +250,12 @@ public class TestRunner {
         }
     }
 
-    private static void deleteEmptyDirectories(Path outputDir) throws IOException {
-        try (var directories = Files.walk(outputDir)) {
-            directories.sorted(java.util.Comparator.reverseOrder())
-                    .filter(Files::isDirectory)
-                    .filter(path -> !path.equals(outputDir))
-                    .forEach(TestRunner::deleteDirectoryIfEmpty);
-        }
-    }
-
     private static void deleteDirectoryIfEmpty(Path directory) {
-        try (var entries = Files.list(directory)) {
-            if (entries.findAny().isPresent()) {
-                return;
-            }
+        try {
             Files.deleteIfExists(directory);
             LOG.info(() -> "Deleted empty test output directory `%s`".formatted(directory));
+        } catch (DirectoryNotEmptyException ignored) {
+            // Directory still contains current outputs.
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }

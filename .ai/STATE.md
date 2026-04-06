@@ -377,3 +377,35 @@
 - `git diff --check` passed.
 - I could not run Gradle task verification in this sandbox because the wrapper still fails before task execution with a read-only lockfile path under `/home/martin/.gradle`, and repo-local Gradle startup still fails with `Could not determine a usable wildcard IP for this machine`.
 - Verification for this pass is limited to source inspection and the added CLI/test-runner unit-test coverage.
+
+## 2026-04-06 build optimization pass single-pass test report pruning
+
+### Requested baseline
+- Re-ran the requested baseline command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- In this sandbox the wrapper still cannot execute the build:
+  - with default Gradle home, it fails trying to create `/home/martin/.gradle/.../gradle-9.1.0-bin.zip.lck` on a read-only filesystem;
+  - with `GRADLE_USER_HOME=/tmp/gradle-user-home`, the wrapper then tries to download Gradle 9.1.0, but network access is blocked;
+  - using the already-installed `/mnt/d/gradle/gradle-9.1.0/bin/gradle` binary gets past wrapper download, but Gradle startup still fails before project execution with `Could not determine a usable wildcard IP for this machine`.
+- Checked `build/reports/profile` after these attempts; no new profile HTML was produced, and the latest available report is still `build/reports/profile/profile-2026-04-04-19-07-42.html`.
+
+### Findings
+- `lib:capybara-lib:testCapybara` is part of the requested `check --rerun-tasks` path, so its report cleanup work is paid on every profiled rerun.
+- `TestRunner.deleteStaleOutputs(...)` still used the older multi-pass cleanup pattern:
+  - one `Files.walk(...)` over the tree to find stale files;
+  - a second `Files.walk(...)` over the tree to find directories;
+  - plus `Files.list(...)` on each directory to check whether it had become empty.
+- That duplicates the same avoidable filesystem traversal pattern that was already removed earlier from Capy’s linked/generated output pruning.
+
+### Changes made
+- Reworked `TestRunner.deleteStaleOutputs(...)` to use a single reverse-order walk over the report output tree.
+- Renamed the stale-file helper to `deleteFileIfStale(...)` and kept stale-file deletion inline with the reverse-order walk.
+- Replaced per-directory `Files.list(...)` emptiness checks with `Files.deleteIfExists(...)` and ignored `DirectoryNotEmptyException` for directories that still contain current reports.
+
+### Expected impact
+- `:lib:capybara-lib:testCapybara` should spend less time traversing `build/test-results/capybara` on `--rerun-tasks` builds.
+- Repeated test-report cleanup should now do one tree walk instead of two tree walks plus one directory listing per directory.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle task verification in this sandbox because all available Gradle entry points still fail before project execution for the reasons listed above.
+- Verification for this pass is limited to source inspection against the existing `TestRunnerTest` coverage.
