@@ -1409,3 +1409,32 @@
 - `git diff --check` passed.
 - I could not run Gradle task verification or produce a fresh profile in this sandbox because the requested wrapper command still fails before project execution on the read-only `/home/martin/.gradle` lock path.
 - Verification for this pass is limited to source inspection and the added plugin regression test.
+
+## 2026-04-06 build optimization pass manifest-only Capybara report cleanup
+
+### Requested baseline
+- Re-ran the requested baseline command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- It still failed immediately in this sandbox because the wrapper tried to create `/home/martin/.gradle/.../gradle-9.1.0-bin.zip.lck` on a read-only filesystem.
+- Checked `build/reports/profile` after the failed run; no fresh profile HTML was produced, so this pass is based on source inspection of the current `testCapybara` rerun path.
+
+### Findings
+- `lib/capybara-lib` already writes `.capy-test-output-manifest`, but `TestRunner.deleteStaleOutputs(...)` still performed `Files.walk(outputDir).sorted(reverseOrder())` on every run.
+- That meant repeated `:lib:capybara-lib:testCapybara` executions were still traversing the entire `build/test-results/capybara` tree even when the manifest already identified the exact stale report files.
+- On the `--rerun-tasks` path, this left avoidable filesystem traversal in one of the remaining post-compilation phases of `:lib:capybara-lib:check`.
+
+### Changes made
+- Reworked `TestRunner.deleteStaleOutputs(...)` to mirror the manifest-driven pruning already used by `Capy` generated-output cleanup:
+  - resolve only stale report files from the manifest,
+  - delete those files directly,
+  - prune only the affected parent directories until a non-empty directory is reached.
+- Removed the unconditional full-tree walk from Capybara test report cleanup.
+- Added a regression test covering stale-report deletion from a shared directory that still contains expected outputs.
+
+### Expected impact
+- Repeated `:lib:capybara-lib:testCapybara` executions should stop walking the full report tree once the manifest exists.
+- `:lib:capybara-lib:check --rerun-tasks` should do less filesystem work in the Capybara test-report cleanup phase, especially as the report directory grows.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle task verification or produce a fresh profile in this sandbox because the requested wrapper command still fails before project execution on the read-only `/home/martin/.gradle` lock path.
+- Verification for this pass is limited to source inspection and the added `TestRunnerTest` regression coverage.

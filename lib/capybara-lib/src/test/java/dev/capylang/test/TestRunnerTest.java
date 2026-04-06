@@ -48,6 +48,21 @@ class TestRunnerTest {
     }
 
     @Test
+    void shouldKeepSharedParentDirectoryWhenItStillContainsExpectedOutputs() throws Exception {
+        var reportsDir = Files.createDirectories(tempDir.resolve("reports"));
+        var keptFile = reportsDir.resolve("TEST-keep.xml");
+        Files.writeString(keptFile, "<keep/>");
+        var staleFile = reportsDir.resolve("TEST-old.xml");
+        Files.writeString(staleFile, "<old/>");
+
+        TestRunner.deleteStaleOutputs(tempDir, Set.of(java.nio.file.Path.of("reports", "TEST-keep.xml")));
+
+        assertTrue(Files.exists(keptFile));
+        assertFalse(Files.exists(staleFile));
+        assertTrue(Files.exists(reportsDir));
+    }
+
+    @Test
     void shouldRemoveOldOutputsWhenCurrentRunWritesDifferentReports() throws Exception {
         var arguments = new TestRunner.Arguments(tempDir, TestRunner.ReportType.JUNIT, Level.INFO);
         var staleFile = tempDir.resolve("TEST-old.xml");

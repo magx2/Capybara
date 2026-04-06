@@ -12,7 +12,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.DirectoryNotEmptyException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -221,11 +220,10 @@ public class TestRunner {
                 return;
             }
             var manifestFile = outputDir.resolve(OUTPUT_MANIFEST_FILE);
-            var staleFiles = new HashSet<>(staleFiles(outputDir, manifestFile, expectedFiles));
-            try (var paths = Files.walk(outputDir).sorted(Comparator.reverseOrder())) {
-                paths
-                        .filter(path -> !path.equals(outputDir))
-                        .forEach(path -> deleteStalePath(outputDir, path, manifestFile, staleFiles));
+            for (var staleFile : staleFiles(outputDir, manifestFile, expectedFiles)) {
+                var resolvedStaleFile = outputDir.resolve(staleFile).normalize();
+                deleteStaleFile(resolvedStaleFile);
+                deleteEmptyParentDirectories(resolvedStaleFile.getParent(), outputDir);
             }
             writeOutputManifest(manifestFile, expectedFiles);
         } catch (IOException e) {
@@ -259,22 +257,27 @@ public class TestRunner {
         }
     }
 
-    private static void deleteStalePath(Path outputDir, Path path, Path manifestFile, Set<Path> staleFiles) {
+    private static void deleteStaleFile(Path path) {
         try {
-            if (Files.isRegularFile(path)) {
-                if (!path.equals(manifestFile) && staleFiles.contains(outputDir.relativize(path).normalize())) {
-                    Files.deleteIfExists(path);
-                    LOG.fine(() -> "Deleted stale test output `%s`".formatted(path));
-                }
-                return;
-            }
-            try {
-                Files.deleteIfExists(path);
-                LOG.fine(() -> "Deleted empty test output directory `%s`".formatted(path));
-            } catch (DirectoryNotEmptyException ignored) {
-            }
+            Files.deleteIfExists(path);
+            LOG.fine(() -> "Deleted stale test output `%s`".formatted(path));
         } catch (IOException e) {
             throw new UncheckedIOException(e);
+        }
+    }
+
+    private static void deleteEmptyParentDirectories(Path directory, Path outputDir) {
+        var current = directory;
+        while (current != null && !current.equals(outputDir)) {
+            try {
+                Files.deleteIfExists(current);
+                LOG.fine(() -> "Deleted empty test output directory `%s`".formatted(current));
+            } catch (DirectoryNotEmptyException ignored) {
+                return;
+            } catch (IOException e) {
+                throw new UncheckedIOException(e);
+            }
+            current = current.getParent();
         }
     }
 
