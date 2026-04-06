@@ -2404,6 +2404,34 @@
 - `git diff --check` passed.
 - I could not run Gradle task verification in this sandbox because the requested wrapper invocation still fails before project execution with `Could not determine a usable wildcard IP for this machine`.
 
+## 2026-04-06 build optimization pass lower-overhead configuration probes
+
+### Requested baseline
+- Re-ran the requested command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- It still failed before project execution in this sandbox with:
+  - `Could not determine a usable wildcard IP for this machine`.
+- Checked `build/reports/profile` after the failed run; no new profile HTML was produced, so this pass is based on source inspection of the configuration path exercised before any task execution.
+
+### Findings
+- `lib/capybara-lib/build.gradle` and the reusable `build-tool/gradle` plugin still used `Files.walk(...).anyMatch(...)` during configuration to answer simple presence checks:
+  - whether conventional JVM source roots contain any files;
+  - whether resource roots contain any files beyond `junit-platform.properties`.
+- Those probes already short-circuited logically, but they still paid `Stream`/walker setup costs on every invocation of the requested rerun-heavy workflow before Gradle could realize the task graph.
+- On Windows-backed worktrees, this kind of pre-task filesystem traversal overhead is disproportionately expensive relative to the tiny boolean answers the build needs.
+
+### Changes made
+- Replaced the remaining `Files.walk` configuration probes in `lib/capybara-lib/build.gradle` with manual directory traversal using `DirectoryStream` plus an explicit stack, returning as soon as a matching file is found.
+- Applied the same lower-overhead traversal strategy to `build-tool/gradle`'s `CapybaraPlugin`.
+- Kept the probing semantics unchanged, including the special handling of `src/test/resources/junit-platform.properties`.
+
+### Expected impact
+- The requested `:lib:capybara-lib:check --profile --rerun-tasks` workflow should spend less time in configuration before task execution because the build no longer allocates `Files.walk` stream pipelines for these presence checks.
+- Plugin consumers should see the same reduction in configuration-time filesystem overhead.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle task verification in this sandbox because the requested wrapper invocation still fails before project execution with `Could not determine a usable wildcard IP for this machine`.
+
 ## 2026-04-06 build optimization pass aggregated library input pruning
 
 ### Requested baseline

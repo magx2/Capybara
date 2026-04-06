@@ -25,6 +25,7 @@ import java.net.URL
 import java.net.URLClassLoader
 import java.nio.file.Path
 import java.nio.file.Files
+import java.nio.file.DirectoryStream
 import java.util.TreeSet
 import java.util.concurrent.ConcurrentHashMap
 
@@ -307,14 +308,27 @@ def directoryContainsFile = { directory, matcher = { true } ->
         return false
     }
 
-    def paths = Files.walk(root)
-    try {
-        return paths.anyMatch { path ->
-            Files.isRegularFile(path) && matcher(root.relativize(path).toString().replace(File.separatorChar, '/' as char))
+    Deque<Path> directories = new ArrayDeque<>()
+    directories.push(root)
+    while (!directories.isEmpty()) {
+        DirectoryStream<Path> entries = Files.newDirectoryStream(directories.pop())
+        try {
+            for (Path entry : entries) {
+                if (Files.isDirectory(entry)) {
+                    directories.push(entry)
+                    continue
+                }
+                if (Files.isRegularFile(entry) &&
+                        matcher(root.relativize(entry).toString().replace(File.separatorChar, '/' as char))) {
+                    return true
+                }
+            }
+        } finally {
+            entries.close()
         }
-    } finally {
-        paths.close()
     }
+
+    false
 }
 def inspectResourceDirectory = { directory ->
     Path root = directory.asFile.toPath()
@@ -323,24 +337,33 @@ def inspectResourceDirectory = { directory ->
         return state
     }
 
-    def paths = Files.walk(root)
-    try {
-        paths.anyMatch { path ->
-            if (!Files.isRegularFile(path)) {
-                return false
+    Deque<Path> directories = new ArrayDeque<>()
+    directories.push(root)
+    while (!directories.isEmpty()) {
+        DirectoryStream<Path> entries = Files.newDirectoryStream(directories.pop())
+        try {
+            for (Path entry : entries) {
+                if (Files.isDirectory(entry)) {
+                    directories.push(entry)
+                    continue
+                }
+                if (!Files.isRegularFile(entry)) {
+                    continue
+                }
+                state.hasAnyFiles = true
+                def relativePath = root.relativize(entry).toString().replace(File.separatorChar, '/' as char)
+                if (relativePath != 'junit-platform.properties') {
+                    state.hasNonJvmFiles = true
+                    return state
+                }
             }
-            state.hasAnyFiles = true
-            def relativePath = root.relativize(path).toString().replace(File.separatorChar, '/' as char)
-            if (relativePath != 'junit-platform.properties') {
-                state.hasNonJvmFiles = true
-                return true
-            }
-            false
         }
-        state
-    } finally {
-        paths.close()
+        finally {
+            entries.close()
+        }
     }
+
+    state
 }
 def conventionalJvmSourceDirs = ['java', 'kotlin', 'kts', 'groovy']
 def hasJvmSources = { sourceRoot ->

@@ -8,12 +8,13 @@ import org.gradle.api.tasks.testing.Test;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayDeque;
 import java.util.List;
 import java.util.Set;
 import java.util.function.Predicate;
-import java.util.stream.Stream;
 
 public class CapybaraPlugin implements Plugin<Project> {
     private static final List<String> JVM_SOURCE_DIRECTORIES = List.of("java", "kotlin", "kts", "groovy");
@@ -295,11 +296,24 @@ public class CapybaraPlugin implements Plugin<Project> {
             return false;
         }
 
-        try (Stream<Path> paths = Files.walk(root)) {
-            return paths
-                    .filter(Files::isRegularFile)
-                    .map(path -> normalizeRelativePath(root, path))
-                    .anyMatch(relativePathMatcher);
+        var directories = new ArrayDeque<Path>();
+        directories.push(root);
+        try {
+            while (!directories.isEmpty()) {
+                try (DirectoryStream<Path> entries = Files.newDirectoryStream(directories.pop())) {
+                    for (var entry : entries) {
+                        if (Files.isDirectory(entry)) {
+                            directories.push(entry);
+                            continue;
+                        }
+                        if (Files.isRegularFile(entry)
+                                && relativePathMatcher.test(normalizeRelativePath(root, entry))) {
+                            return true;
+                        }
+                    }
+                }
+            }
+            return false;
         } catch (IOException e) {
             throw new UncheckedIOException("Unable to inspect project sources under " + root, e);
         }
@@ -310,21 +324,30 @@ public class CapybaraPlugin implements Plugin<Project> {
             return new ResourceDirectoryState(false, false);
         }
 
-        var hasAnyFiles = new boolean[1];
-        var hasNonJvmFiles = new boolean[1];
-        try (Stream<Path> paths = Files.walk(root)) {
-            paths
-                    .filter(Files::isRegularFile)
-                    .map(path -> normalizeRelativePath(root, path))
-                    .anyMatch(relativePath -> {
-                        hasAnyFiles[0] = true;
-                        if (!relativePath.equals("junit-platform.properties")) {
-                            hasNonJvmFiles[0] = true;
-                            return true;
+        var hasAnyFiles = false;
+        var hasNonJvmFiles = false;
+        var directories = new ArrayDeque<Path>();
+        directories.push(root);
+        try {
+            while (!directories.isEmpty()) {
+                try (DirectoryStream<Path> entries = Files.newDirectoryStream(directories.pop())) {
+                    for (var entry : entries) {
+                        if (Files.isDirectory(entry)) {
+                            directories.push(entry);
+                            continue;
                         }
-                        return false;
-                    });
-            return new ResourceDirectoryState(hasAnyFiles[0], hasNonJvmFiles[0]);
+                        if (!Files.isRegularFile(entry)) {
+                            continue;
+                        }
+                        hasAnyFiles = true;
+                        if (!normalizeRelativePath(root, entry).equals("junit-platform.properties")) {
+                            hasNonJvmFiles = true;
+                            return new ResourceDirectoryState(true, true);
+                        }
+                    }
+                }
+            }
+            return new ResourceDirectoryState(hasAnyFiles, hasNonJvmFiles);
         } catch (IOException e) {
             throw new UncheckedIOException("Unable to inspect project resources under " + root, e);
         }
