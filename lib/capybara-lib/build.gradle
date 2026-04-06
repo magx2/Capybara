@@ -336,6 +336,7 @@ def hasJvmTestSources = containsMatchingFile(layout.projectDirectory.dir('src/te
                     relativePath.endsWith('.groovy')
     )
 }
+def hasAnyTestResources = containsMatchingFile(layout.projectDirectory.dir('src/test/resources')) { true }
 def hasNonJvmTestResources = containsMatchingFile(layout.projectDirectory.dir('src/test/resources')) { relativePath ->
     relativePath != 'junit-platform.properties'
 }
@@ -517,7 +518,7 @@ tasks.named('processResources') {
 }
 
 tasks.named('processTestResources') {
-    enabled = hasJvmTestSources || hasNonJvmTestResources
+    enabled = hasNonJvmTestResources || (hasJvmTestSources && hasAnyTestResources)
 }
 
 tasks.named('classes') {
@@ -538,6 +539,10 @@ tasks.matching { it.name == 'test' }.configureEach {
     dependsOn tasks.named('testCapybara')
     exclude 'capy/**'
     enabled = hasJvmTestSources
+    systemProperty 'junit.jupiter.execution.parallel.enabled', 'true'
+    systemProperty 'junit.jupiter.execution.parallel.mode.default', 'concurrent'
+    systemProperty 'junit.jupiter.execution.parallel.mode.classes.default', 'concurrent'
+    systemProperty 'junit.jupiter.execution.parallel.config.strategy', 'dynamic'
     if (!hasJvmTestSources) {
         setDependsOn([])
     }

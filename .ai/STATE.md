@@ -419,6 +419,35 @@
 ### Expected impact
 - `:lib:capybara-lib:testCapybara` should avoid a full pre-run tree walk/delete under `build/test-results/capybara` on every `--rerun-tasks` build.
 
+## 2026-04-06 build optimization pass JVM test resource task pruning
+
+### Requested baseline
+- Re-ran the requested baseline command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- In this sandbox it still failed before task execution with:
+  - default Gradle home blocked by the read-only wrapper lock path under `/home/martin/.gradle`;
+  - previous writable-home attempts still failing during Gradle startup with `Could not determine a usable wildcard IP for this machine`.
+- No new profile HTML was produced, so this pass is based on the existing profile data plus source inspection of the current `check` path.
+
+### Findings
+- `lib:capybara-lib` still carried `src/test/resources/junit-platform.properties` only to enable JUnit 5 parallel execution for its JVM tests.
+- That made `processTestResources` part of the `check` path even though the module has no other test resources to copy.
+- The reusable `CapybaraPlugin` also kept `processTestResources` enabled whenever JVM test sources existed, even for projects with no actual files under `src/test/resources`.
+
+### Changes made
+- Moved `lib:capybara-lib`’s JUnit parallel configuration from `src/test/resources/junit-platform.properties` into the `test` task configuration via JUnit system properties.
+- Removed `lib/capybara-lib/src/test/resources/junit-platform.properties`.
+- Tightened `processTestResources` enablement in `lib/capybara-lib/build.gradle` so it only stays enabled when there are real test resources to copy.
+- Applied the same `processTestResources` enablement rule in `build-tool/gradle`’s `CapybaraPlugin`.
+- Added plugin coverage for the JVM-tests-without-test-resources case to lock in the disabled `processTestResources` behavior.
+
+### Expected impact
+- `:lib:capybara-lib:check --rerun-tasks` should no longer pay the `processTestResources` task just to propagate JUnit parallel settings.
+- Plugin consumers with JVM tests but no test resources should avoid the same no-op test-resource copy task.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle task verification in this sandbox because the requested Gradle invocation still fails before project execution.
+
 ## 2026-04-06 build optimization pass main-only compile path
 
 ### Requested baseline

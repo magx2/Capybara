@@ -27,6 +27,7 @@ public class CapybaraPlugin implements Plugin<Project> {
         var hasJvmTestSources = containsMatchingFile(project.file("src/test").toPath(), relativePath ->
                 !relativePath.startsWith("capybara/") && hasJvmSourceExtension(relativePath)
         );
+        var hasAnyTestResources = containsMatchingFile(project.file("src/test/resources").toPath(), relativePath -> true);
         var hasNonJvmTestResources = containsMatchingFile(project.file("src/test/resources").toPath(), relativePath ->
                 !relativePath.equals("junit-platform.properties")
         );
@@ -140,7 +141,7 @@ public class CapybaraPlugin implements Plugin<Project> {
             });
             project.getTasks().named("processResources", task -> task.setEnabled(hasMainResources));
             project.getTasks().named("processTestResources", task ->
-                    task.setEnabled(hasJvmTestSources || hasNonJvmTestResources));
+                    task.setEnabled(hasNonJvmTestResources || (hasJvmTestSources && hasAnyTestResources)));
             project.getTasks().named("classes", task -> {
                 var enabled = hasJvmMainSources || hasMainResources;
                 task.setEnabled(enabled);
