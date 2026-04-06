@@ -1464,3 +1464,30 @@
 - `git diff --check` passed.
 - I could not run Gradle task verification or produce a fresh profile in this sandbox because the requested wrapper command still fails before project execution on the read-only `/home/martin/.gradle` lock path.
 - Verification for this pass is limited to source inspection and the added `CapyTest` regression coverage.
+
+## 2026-04-06 build optimization pass linked-only dependency for standalone test generation
+
+### Requested baseline
+- Re-ran the requested baseline command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- It still failed immediately in this sandbox because the wrapper tried to create `/home/martin/.gradle/.../gradle-9.1.0-bin.zip.lck` on a read-only filesystem.
+- Checked `build/reports/profile` after the failed run; no fresh profile HTML was produced, so this pass is based on source inspection of the current handwritten `lib/capybara-lib` task graph.
+
+### Findings
+- `lib/capybara-lib:compileTestCapybaraDirect` still depended on `linkCapybaraDirect`.
+- `linkCapybaraDirect` does two things:
+  - writes linked main output under `build/generated/sources/capybara/linked/main`;
+  - generates main Java sources under `build/generated/sources/capybara/java/main`.
+- The standalone `compileTestCapybaraDirect` path only consumes the linked main output via `additionalInputDirs.from(capybaraLinkedMainDir)`.
+- That means direct test-source generation outside the fused `check` path was still paying for unnecessary main Java generation before compiling test Capybara sources.
+
+### Changes made
+- Rewired `lib/capybara-lib:compileTestCapybaraDirect` to depend on `linkCapybaraLinkedOnly` instead of `linkCapybaraDirect`.
+- The standalone test-generation path now prepares only the linked main program it actually needs.
+
+### Expected impact
+- `:lib:capybara-lib:compileTestCapybara --rerun-tasks` should stop generating main Java sources just to satisfy test-source linking.
+- This reduces redundant Capy CLI work and generated-file churn on the non-`check` handwritten test-generation path.
+
+### Verification status
+- I could not run Gradle task verification or produce a fresh profile in this sandbox because the requested wrapper command still fails before project execution on the read-only `/home/martin/.gradle` lock path.
+- Verification for this pass is limited to source inspection and task-graph analysis.
