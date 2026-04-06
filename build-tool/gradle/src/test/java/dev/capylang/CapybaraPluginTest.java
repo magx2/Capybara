@@ -66,6 +66,37 @@ class CapybaraPluginTest {
     }
 
     @Test
+    void shouldReadPluginLibraryInputsFromAggregatedProgramFile() throws IOException {
+        var project = newProject();
+
+        var mainSourceDir = Files.createDirectories(tempDir.resolve("src/main/capybara/foo"));
+        Files.writeString(mainSourceDir.resolve("Lib.cfun"), "fun forty_two(): int = 42\n");
+        project.getTasks().named("compileCapybara", CompileCapybaraTask.class).get().compile();
+
+        Files.delete(project.file("build/classes/capybara/foo/Lib.json").toPath());
+
+        var testSourceDir = Files.createDirectories(tempDir.resolve("src/test/capybara/bar"));
+        Files.writeString(testSourceDir.resolve("TestModule.cfun"), """
+                from /capy/test/Assert import { * }
+                from /capy/test/CapyTest import { * }
+                from /foo/Lib import { forty_two }
+
+                fun works(): Assert =
+                    assert_that(forty_two()).is_equal_to(42)
+
+                fun tests(): TestFile =
+                    test_file("/bar/TestModule.cfun", [
+                        test("works", works())
+                    ])
+                """);
+
+        project.getTasks().named("compileTestCapybara", CompileCapybaraTask.class).get().compile();
+
+        assertTrue(project.file("build/classes/capybara/program.json").isFile());
+        assertTrue(project.file("build/generated/sources/test-capybara/java/bar/TestModule.java").isFile());
+    }
+
+    @Test
     void shouldPruneStaleFilesWhenReusingTaskOutputs() throws IOException {
         var project = newProject();
         var sourceDir = Files.createDirectories(tempDir.resolve("src/main/capybara/foo"));

@@ -409,3 +409,28 @@
 - `git diff --check` passed.
 - I could not run Gradle task verification in this sandbox because all available Gradle entry points still fail before project execution for the reasons listed above.
 - Verification for this pass is limited to source inspection against the existing `TestRunnerTest` coverage.
+
+## 2026-04-06 build optimization pass plugin library program cache reuse
+
+### Requested baseline
+- Re-ran the requested baseline command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- It still failed immediately in this sandbox because the wrapper tried to create `/home/martin/.gradle/.../gradle-9.1.0-bin.zip.lck` on a read-only filesystem.
+- Checked `build/reports/profile` after the run; no new profile HTML was produced, and the latest available report is still `build/reports/profile/profile-2026-04-04-19-07-42.html`.
+
+### Findings
+- Earlier work added aggregated linked-program output as `program.json`, and the CLI already prefers that file when loading linked libraries.
+- The reusable Gradle plugin’s `CompileCapybaraTask` had not been updated to match: it still recursively walked every `*.json` module file in each additional input directory and deserialized modules one by one.
+- That leaves plugin consumers paying unnecessary filesystem traversal and per-file JSON reads on every rerun build, especially on test compilation where main linked outputs are loaded as libraries.
+
+### Changes made
+- Updated `build-tool/gradle`’s `CompileCapybaraTask` to load library inputs through `Capy.readLinkedProgram(...)` instead of manually walking module files.
+- Added plugin coverage proving test compilation still succeeds when the main linked output keeps only aggregated `program.json` and an individual module JSON file has been removed.
+
+### Expected impact
+- Plugin-backed Capybara builds should reuse the aggregated linked-program cache instead of recursively reading every module file.
+- Test-oriented plugin task paths should do less filesystem and JSON parsing work when loading previously linked main outputs as libraries.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle task verification in this sandbox because the requested wrapper command still fails before project execution on the read-only `/home/martin/.gradle` lock path, and repo-local Gradle startup still fails with `Could not determine a usable wildcard IP for this machine`.
+- Verification for this pass is limited to source inspection and the added plugin test coverage.

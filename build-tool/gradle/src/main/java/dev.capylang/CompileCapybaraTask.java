@@ -101,15 +101,7 @@ public abstract class CompileCapybaraTask extends DefaultTask {
             if (Files.notExists(directory) || !Files.isDirectory(directory)) {
                 continue;
             }
-            try (var files = Files.walk(directory)) {
-                for (var file : files.filter(Files::isRegularFile)
-                        .filter(path -> path.getFileName().toString().endsWith(CompiledModule.EXTENSION))
-                        .toList()) {
-                    try (var input = Files.newInputStream(file)) {
-                        modules.add(Capy.objectMapper().readValue(input, CompiledModule.class));
-                    }
-                }
-            }
+            modules.addAll(Capy.readLinkedProgram(directory, false).modules());
         }
         return modules;
     }
