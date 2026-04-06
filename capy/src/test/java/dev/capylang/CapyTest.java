@@ -287,6 +287,36 @@ class CapyTest {
     }
 
     @Test
+    void shouldRewriteChangedLinkedOutputsWhenFileSizeChanges() throws Exception {
+        var sourceDir = Files.createDirectories(tempDir.resolve("changed-linked-source"));
+        Files.createDirectories(sourceDir.resolve("foo"));
+        var sourceFile = sourceDir.resolve("foo").resolve("Main.cfun");
+        Files.writeString(sourceFile, "fun main(): int = 1\n");
+        var linkedDir = Files.createDirectories(tempDir.resolve("changed-linked-output"));
+
+        assertEquals(0, Capy.execute(
+                new String[]{"compile", "-i", sourceDir.toString(), "-o", linkedDir.toString()},
+                new PrintStream(new ByteArrayOutputStream()),
+                new PrintStream(new ByteArrayOutputStream())
+        ));
+
+        var moduleFile = linkedDir.resolve("foo").resolve("Main.json");
+        var initialModifiedTime = Files.getLastModifiedTime(moduleFile);
+
+        Thread.sleep(1100);
+        Files.writeString(sourceFile, "fun main(): int = 1000\n");
+
+        assertEquals(0, Capy.execute(
+                new String[]{"compile", "-i", sourceDir.toString(), "-o", linkedDir.toString()},
+                new PrintStream(new ByteArrayOutputStream()),
+                new PrintStream(new ByteArrayOutputStream())
+        ));
+
+        assertTrue(Files.readString(moduleFile).contains("\"1000\""));
+        assertTrue(Files.getLastModifiedTime(moduleFile).compareTo(initialModifiedTime) > 0);
+    }
+
+    @Test
     void shouldAcceptJsAliasForGenerate() throws IOException {
         var sourceDir = Files.createDirectories(tempDir.resolve("source"));
         Files.writeString(sourceDir.resolve("Main.cfun"), "fun main(): int = 1\n");

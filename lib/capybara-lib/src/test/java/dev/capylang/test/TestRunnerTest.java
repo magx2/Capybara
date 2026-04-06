@@ -93,6 +93,24 @@ class TestRunnerTest {
     }
 
     @Test
+    void shouldRewriteChangedTestOutputWhenSizeChanges() throws Exception {
+        var arguments = new TestRunner.Arguments(tempDir, TestRunner.ReportType.JUNIT, Level.INFO);
+        var reportPath = relativePath("reports", "TEST-capy.lang.MathTest.xml");
+
+        TestRunner.writeTestOutputToFile(new TestOutput(reportPath, "<xml/>", false), arguments);
+
+        var report = tempDir.resolve(java.nio.file.Path.of("reports", "TEST-capy.lang.MathTest.xml"));
+        var initialModifiedTime = Files.getLastModifiedTime(report);
+
+        Thread.sleep(1100);
+
+        TestRunner.writeTestOutputToFile(new TestOutput(reportPath, "<xml>changed</xml>", false), arguments);
+
+        assertEquals("<xml>changed</xml>", Files.readString(report));
+        assertTrue(Files.getLastModifiedTime(report).compareTo(initialModifiedTime) > 0);
+    }
+
+    @Test
     void shouldNotRewriteIdenticalOutputManifest() throws Exception {
         var expectedFiles = Set.of(java.nio.file.Path.of("reports", "TEST-keep.xml"));
         Files.createDirectories(tempDir.resolve("reports"));

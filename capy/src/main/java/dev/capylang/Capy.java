@@ -1350,9 +1350,11 @@ public class Capy {
 
     private static void writeBytesIfChanged(Path outputFile, byte[] content) throws IOException {
         if (Files.isRegularFile(outputFile)) {
-            var existing = Files.readAllBytes(outputFile);
-            if (java.util.Arrays.equals(existing, content)) {
-                return;
+            if (Files.size(outputFile) == content.length) {
+                var existing = Files.readAllBytes(outputFile);
+                if (java.util.Arrays.equals(existing, content)) {
+                    return;
+                }
             }
         }
         Files.write(

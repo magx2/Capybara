@@ -1546,3 +1546,30 @@
 ### Verification status
 - `git diff --check` passed.
 - I could not run Gradle verification in this sandbox because the requested wrapper invocation still fails before Gradle startup on the read-only `/home/martin/.gradle` lock path.
+
+## 2026-04-06 build optimization pass lower-overhead changed-output rewrites
+
+### Requested baseline
+- Re-ran the requested baseline command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- It still failed immediately in this sandbox because the wrapper tried to create `/home/martin/.gradle/.../gradle-9.1.0-bin.zip.lck` on a read-only filesystem.
+- Checked `build/reports/profile` after the failed run; no fresh profile HTML was produced, so this pass is based on source inspection of the current rerun path.
+
+### Findings
+- The optimized `:lib:capybara-lib:check --rerun-tasks` path now stays mostly in-process, so a larger share of its remaining work is repeated generated-file and report-file rewrite plumbing.
+- `capy/src/main/java/dev/capylang/Capy.java` still read the full existing file contents before every generated-output write, even when the new content length already proved the file had changed.
+- `lib/capybara-lib/src/main/java/dev/capylang/test/TestRunner.java` had the same pattern for JUnit XML report writes, and it also performed a second pass over all `TestOutput`s just to determine whether any test failed.
+
+### Changes made
+- Changed `Capy.writeBytesIfChanged(...)` to check `Files.size(...)` first and only read the existing file when the byte lengths match.
+- Changed `TestRunner.writeStringIfChanged(...)` to use the same size-first check before reading existing report content.
+- Folded `TestRunner`'s failed-test detection into the existing report-writing loop, removing the extra post-write scan over all test outputs.
+- Added regression coverage for changed-output rewrites with different file sizes in both `CapyTest` and `TestRunnerTest`.
+
+### Expected impact
+- Forced reruns that rewrite changed generated sources, linked JSON, build-info JSON, or Capybara JUnit XML reports should perform fewer unnecessary file reads before overwriting outputs.
+- `testCapybara` also avoids one extra traversal of the in-memory `TestOutput` list after writing reports.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle task verification or produce a fresh profile in this sandbox because the requested wrapper command still fails before Gradle startup on the read-only `/home/martin/.gradle` lock path.
+- Verification for this pass is limited to source inspection and the added regression tests.

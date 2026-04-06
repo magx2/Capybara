@@ -50,13 +50,13 @@ public class TestRunner {
         var testOutputs = invokeRunTests(arguments.reportType(), testFiles);
         LOG.info(() -> "Generated `%d` test outputs".formatted(testOutputs.size()));
         var writtenFiles = new HashSet<Path>();
-        testOutputs.forEach(testOutput -> writtenFiles.add(writeTestOutputToFile(testOutput, arguments)));
+        var hasFailures = false;
+        for (var testOutput : testOutputs) {
+            writtenFiles.add(writeTestOutputToFile(testOutput, arguments));
+            hasFailures |= testOutput.failed();
+        }
         deleteStaleOutputs(arguments.outputDir(), writtenFiles);
-        return testOutputs.parallelStream()
-                .filter(TestOutput::failed)
-                .findAny()
-                .map(__ -> 1)
-                .orElse(0);
+        return hasFailures ? 1 : 0;
     }
 
     public static Arguments parseArguments(String[] args) {
@@ -299,9 +299,12 @@ public class TestRunner {
     }
 
     private static void writeStringIfChanged(Path outputFile, String content) throws IOException {
-        if (Files.isRegularFile(outputFile) && content.equals(Files.readString(outputFile))) {
-            return;
+        var contentBytes = content.getBytes(StandardCharsets.UTF_8);
+        if (Files.isRegularFile(outputFile) && Files.size(outputFile) == contentBytes.length) {
+            if (java.util.Arrays.equals(Files.readAllBytes(outputFile), contentBytes)) {
+                return;
+            }
         }
-        Files.writeString(outputFile, content);
+        Files.write(outputFile, contentBytes);
     }
 }
