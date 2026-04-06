@@ -8,6 +8,7 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.DirectoryNotEmptyException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -27,6 +28,7 @@ public class TestRunner {
     public static final String CAPY_TEST_CLASS = "capy.test.CapyTest";
     public static final String GATHER_TESTS_METHOD_NAME = "gatherTests";
     public static final String RUN_TESTS_METHOD_NAME = "runTests";
+    static final String OUTPUT_MANIFEST_FILE = ".capy-test-output-manifest";
     private static final Logger LOG = Logger.getLogger(TestRunner.class.getName());
 
     public static void main(String[] args) {
@@ -218,47 +220,70 @@ public class TestRunner {
             if (Files.notExists(outputDir)) {
                 return;
             }
-            try (var paths = Files.walk(outputDir)) {
-                for (var path : paths.filter(path -> !path.equals(outputDir))
-                        .sorted(Comparator.reverseOrder())
-                        .toList()) {
-                    if (Files.isRegularFile(path)) {
-                        deleteFileIfStale(outputDir, path, expectedFiles);
-                        continue;
-                    }
-                    if (Files.isDirectory(path)) {
-                        deleteDirectoryIfEmpty(path);
-                    }
-                }
+            var manifestFile = outputDir.resolve(OUTPUT_MANIFEST_FILE);
+            for (var staleFile : staleFiles(outputDir, manifestFile, expectedFiles)) {
+                Files.deleteIfExists(staleFile);
+                LOG.info(() -> "Deleted stale test output `%s`".formatted(staleFile));
+                deleteEmptyParentDirectories(staleFile.getParent(), outputDir);
             }
+            writeOutputManifest(manifestFile, expectedFiles);
         } catch (IOException e) {
             LOG.log(Level.SEVERE, "Cannot prune stale test output files", e);
             throw new UncheckedIOException("Cannot prune stale test output files", e);
         }
     }
 
-    private static void deleteFileIfStale(Path outputDir, Path file, Set<Path> expectedFiles) {
-        var relativePath = outputDir.relativize(file.normalize());
-        if (expectedFiles.contains(relativePath)) {
-            return;
+    private static List<Path> staleFiles(Path outputDir, Path manifestFile, Set<Path> expectedFiles) throws IOException {
+        if (Files.exists(manifestFile)) {
+            try (var lines = Files.lines(manifestFile, StandardCharsets.UTF_8)) {
+                return lines
+                        .map(String::trim)
+                        .filter(line -> !line.isEmpty())
+                        .map(Path::of)
+                        .map(Path::normalize)
+                        .filter(path -> !expectedFiles.contains(path))
+                        .map(outputDir::resolve)
+                        .toList();
+            }
         }
-        try {
-            Files.deleteIfExists(file);
-            LOG.info(() -> "Deleted stale test output `%s`".formatted(file));
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
+
+        try (var paths = Files.walk(outputDir)) {
+            return paths
+                    .filter(path -> !path.equals(outputDir))
+                    .filter(Files::isRegularFile)
+                    .filter(path -> !path.equals(manifestFile))
+                    .filter(path -> !expectedFiles.contains(outputDir.relativize(path).normalize()))
+                    .sorted(Comparator.reverseOrder())
+                    .toList();
         }
     }
 
-    private static void deleteDirectoryIfEmpty(Path directory) {
-        try {
-            Files.deleteIfExists(directory);
-            LOG.info(() -> "Deleted empty test output directory `%s`".formatted(directory));
-        } catch (DirectoryNotEmptyException ignored) {
-            // Directory still contains current outputs.
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
+    private static void deleteEmptyParentDirectories(Path directory, Path outputDir) {
+        var current = directory;
+        while (current != null && !current.equals(outputDir)) {
+            try {
+                Files.deleteIfExists(current);
+                LOG.info(() -> "Deleted empty test output directory `%s`".formatted(current));
+            } catch (DirectoryNotEmptyException ignored) {
+                return;
+            } catch (IOException e) {
+                throw new UncheckedIOException(e);
+            }
+            current = current.getParent();
         }
+    }
+
+    private static void writeOutputManifest(Path manifestFile, Set<Path> expectedFiles) throws IOException {
+        var manifestContents = expectedFiles.stream()
+                .map(Path::normalize)
+                .map(Path::toString)
+                .sorted()
+                .collect(java.util.stream.Collectors.joining(System.lineSeparator()));
+        Files.writeString(
+                manifestFile,
+                manifestContents.isEmpty() ? "" : manifestContents + System.lineSeparator(),
+                StandardCharsets.UTF_8
+        );
     }
 
     private static ClassLoader contextClassLoader() {

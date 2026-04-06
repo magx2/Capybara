@@ -44,6 +44,7 @@ class TestRunnerTest {
         assertTrue(Files.exists(keptFile));
         assertFalse(Files.exists(staleFile));
         assertFalse(Files.exists(staleFile.getParent()));
+        assertEquals("reports/TEST-keep.xml\n", Files.readString(tempDir.resolve(TestRunner.OUTPUT_MANIFEST_FILE)));
     }
 
     @Test
@@ -74,6 +75,24 @@ class TestRunnerTest {
         TestRunner.writeTestOutputToFile(output, arguments);
 
         assertEquals(initialModifiedTime, Files.getLastModifiedTime(report));
+    }
+
+    @Test
+    void shouldDeleteStaleOutputsFromManifestWithoutWalkingCurrentTree() throws Exception {
+        var keptFile = Files.createDirectories(tempDir.resolve("reports")).resolve("TEST-keep.xml");
+        Files.writeString(keptFile, "<keep/>");
+        var staleFile = tempDir.resolve("stale").resolve("TEST-old.xml");
+        Files.createDirectories(staleFile.getParent());
+        Files.writeString(staleFile, "<old/>");
+        Files.writeString(tempDir.resolve(TestRunner.OUTPUT_MANIFEST_FILE), "reports/TEST-keep.xml\nstale/TEST-old.xml\n");
+
+        Files.delete(staleFile);
+
+        TestRunner.deleteStaleOutputs(tempDir, Set.of(java.nio.file.Path.of("reports", "TEST-keep.xml")));
+
+        assertTrue(Files.exists(keptFile));
+        assertFalse(Files.exists(tempDir.resolve("stale")));
+        assertEquals("reports/TEST-keep.xml\n", Files.readString(tempDir.resolve(TestRunner.OUTPUT_MANIFEST_FILE)));
     }
 
     private static Path relativePath(String... segments) {

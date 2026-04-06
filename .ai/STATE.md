@@ -219,6 +219,35 @@
 - `git diff --check` passed.
 - I could not run Gradle task verification in this sandbox because Gradle still fails during startup with `Could not determine a usable wildcard IP for this machine`.
 
+## 2026-04-06 build optimization pass test report manifest pruning
+
+### Requested baseline
+- Re-ran the requested command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- It still failed immediately in this sandbox because the wrapper tried to create `/home/martin/.gradle/.../gradle-9.1.0-bin.zip.lck` on a read-only filesystem.
+- Existing profile reports are still the only timing artifacts available under `build/reports/profile`.
+
+### Findings
+- The handwritten `lib:capybara-lib` check path is now using the fused in-process `prepareCapybaraForCheck` task, so the next remaining repeated work on `--rerun-tasks` is smaller and mostly filesystem-bound.
+- `:lib:capybara-lib:testCapybara` still pruned stale JUnit XML by walking the entire `build/test-results/capybara` tree on every run.
+- Previous passes already introduced manifest-based stale pruning for linked and generated Capybara outputs, but the test-report writer had not adopted the same approach yet.
+- Even with a modest current report count, rerun builds still paid an avoidable recursive filesystem scan before or after every Capybara test execution.
+
+### Changes made
+- Added `.capy-test-output-manifest` support to `dev.capylang.test.TestRunner`.
+- Changed stale report pruning to prefer manifest entries when available and fall back to a full directory walk only for the first run or legacy output directories.
+- Kept empty-parent cleanup after stale deletions so report directories still collapse when suites disappear.
+- Added `TestRunnerTest` coverage to verify:
+  - manifest creation during stale-output pruning;
+  - manifest-driven stale cleanup without relying on the current tree contents.
+
+### Expected impact
+- Repeated `:lib:capybara-lib:testCapybara` executions should avoid a full recursive scan of `build/test-results/capybara` once a manifest has been written.
+- This trims another source of rerun filesystem churn on the `:lib:capybara-lib:check --rerun-tasks` path.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle task verification in this sandbox because the requested Gradle invocation still fails before project execution due to the wrapper lock path being on a read-only filesystem.
+
 ## 2026-04-06 build optimization pass check path linked-output pruning
 
 ### Requested baseline
