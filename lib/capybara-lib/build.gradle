@@ -55,14 +55,6 @@ tasks.register('linkCapybara', JavaExec) {
         setArgs(capybaraArgs)
     }
 
-    doLast {
-        def bundledJavaSupportDir = capybaraGeneratedMainDir.get().dir('dev/capylang').asFile.toPath()
-        if (java.nio.file.Files.exists(bundledJavaSupportDir)) {
-            java.nio.file.Files.walk(bundledJavaSupportDir)
-                    .sorted(java.util.Comparator.reverseOrder())
-                    .forEach { path -> java.nio.file.Files.deleteIfExists(path) }
-        }
-    }
 }
 
 tasks.register('compileCapybara', JavaExec) {
@@ -173,7 +165,6 @@ sourceSets {
         java.srcDir capybaraGeneratedMainDir
     }
     test {
-        java.srcDir capybaraGeneratedMainDir
         java.srcDir capybaraGeneratedTestDir
     }
 }
