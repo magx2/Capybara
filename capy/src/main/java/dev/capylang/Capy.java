@@ -581,19 +581,27 @@ public class Capy {
             writeCompilationOutput(linkedOutputDir, compilation, compilerVersion);
         }
         validateOutputDirectory(generatedOutputDir, "Generated output path");
-        generateProgram(outputType, generatedOutputDir, selectGenerationInput(compilation.program(), compilation.sourceModules(), includeJavaLibResources));
+        var mainGenerationInput = selectGenerationInput(compilation.program(), compilation.sourceModules(), includeJavaLibResources);
         if (testInput != null) {
             var testCompilation = compileSources(testInput, mergeLibraries(libraries, compilation), true, err);
             if (testCompilation == null) {
                 return EXIT_COMPILATION_ERROR;
             }
             validateOutputDirectory(testGeneratedOutputDir, "Generated test output path");
-            generateProgram(
-                    outputType,
-                    testGeneratedOutputDir,
-                    selectGenerationInput(testCompilation.program(), testCompilation.sourceModules(), includeJavaLibResources)
+            var testGenerationInput = selectGenerationInput(
+                    testCompilation.program(),
+                    testCompilation.sourceModules(),
+                    includeJavaLibResources
             );
+            if (generatedOutputDir.equals(testGeneratedOutputDir)) {
+                generatePrograms(outputType, generatedOutputDir, List.of(mainGenerationInput, testGenerationInput));
+            } else {
+                generateProgram(outputType, generatedOutputDir, mainGenerationInput);
+                generateProgram(outputType, testGeneratedOutputDir, testGenerationInput);
+            }
+            return EXIT_SUCCESS;
         }
+        generateProgram(outputType, generatedOutputDir, mainGenerationInput);
         return EXIT_SUCCESS;
     }
 
@@ -730,16 +738,25 @@ public class Capy {
     }
 
     private static void generateProgram(OutputType outputType, Path generatedOutputDir, GenerationInput generationInput) {
+        generatePrograms(outputType, generatedOutputDir, List.of(generationInput));
+    }
+
+    private static void generatePrograms(OutputType outputType, Path generatedOutputDir, List<GenerationInput> generationInputs) {
         log.info("Generating " + outputType + " sources");
         var generationStartedAt = System.nanoTime();
-        var compiledProgram = Generator.findGenerator(outputType).generate(generationInput.program());
+        var generatedPrograms = generationInputs.stream()
+                .map(generationInput -> Generator.findGenerator(outputType).generate(generationInput.program()))
+                .toList();
         log.info("Generated " + outputType + " sources in " + Duration.ofNanos(System.nanoTime() - generationStartedAt));
 
         log.info("Writing generated " + outputType + " sources to: " + generatedOutputDir);
         var writeStartedAt = System.nanoTime();
-        var writtenFiles = writeGeneratedProgram(generatedOutputDir, compiledProgram);
+        var writtenFiles = new HashSet<Path>();
+        for (var generatedProgram : generatedPrograms) {
+            writtenFiles.addAll(writeGeneratedProgram(generatedOutputDir, generatedProgram));
+        }
         log.info("Wrote generated " + outputType + " sources to: " + generatedOutputDir + " in " + Duration.ofNanos(System.nanoTime() - writeStartedAt));
-        if (outputType == OutputType.JAVA && generationInput.includeJavaLibResources()) {
+        if (outputType == OutputType.JAVA && generationInputs.stream().anyMatch(GenerationInput::includeJavaLibResources)) {
             writtenFiles.addAll(copyJavaLibResources(generatedOutputDir));
         }
         deleteStaleFiles(generatedOutputDir, writtenFiles);

@@ -296,6 +296,7 @@ def capybaraMainSourceDir = layout.projectDirectory.dir('src/main/capybara')
 def capybaraTestSourceDir = layout.projectDirectory.dir('src/test/capybara')
 def capybaraGeneratedMainDir = layout.buildDirectory.dir('generated/sources/capybara/java/main')
 def capybaraGeneratedTestDir = layout.buildDirectory.dir('generated/sources/capybara/java/test')
+def capybaraGeneratedCheckDir = layout.buildDirectory.dir('generated/sources/capybara/java/check')
 def capybaraLinkedMainDir = layout.buildDirectory.dir('generated/sources/capybara/linked/main')
 def capybaraTestResultsDir = layout.buildDirectory.dir('test-results/capybara')
 def capybaraTestRuntimeClasspath = files(sourceSets.main.runtimeClasspath, sourceSets.test.output.classesDirs)
@@ -387,9 +388,9 @@ tasks.register('prepareCapybaraForCheck', InProcessCapybaraCompileTask) {
 
     runtimeClasspath.from(capyRuntimeClasspath)
     inputDir.set(capybaraMainSourceDir)
-    generatedOutputDir.set(capybaraGeneratedMainDir)
+    generatedOutputDir.set(capybaraGeneratedCheckDir)
     testInputDir.set(capybaraTestSourceDir)
-    testGeneratedOutputDir.set(capybaraGeneratedTestDir)
+    testGeneratedOutputDir.set(capybaraGeneratedCheckDir)
     compileTests.set(false)
     includeJavaLibResources.set(false)
     compilerVersion.set(project.version.toString())
@@ -459,12 +460,13 @@ sourceSets {
         java.srcDir capybaraGeneratedMainDir
     }
     test {
-        java.srcDir capybaraGeneratedTestDir
         if (singleJavaVerificationBuild.get()) {
-            java.srcDir capybaraGeneratedMainDir
+            java.srcDir capybaraGeneratedCheckDir
             java.srcDir layout.projectDirectory.dir('src/main/java')
             compileClasspath -= sourceSets.main.output
             runtimeClasspath -= sourceSets.main.output
+        } else {
+            java.srcDir capybaraGeneratedTestDir
         }
     }
 }

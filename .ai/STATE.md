@@ -2068,3 +2068,41 @@
 - `git diff --check` passed.
 - I could not run the requested Gradle build or produce a fresh profile in this sandbox because Gradle still fails before project execution with `Could not determine a usable wildcard IP for this machine`.
 - Verification for this pass is limited to source inspection of the task graph and saved profile data.
+
+## 2026-04-06 build optimization pass shared check generation output
+
+### Requested baseline
+- Re-ran the requested command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- Gradle still failed during startup before task execution in this sandbox with:
+  - `Could not create service of type FileLockContentionHandler`
+  - `Could not determine a usable wildcard IP for this machine`
+- Checked `build/reports/profile` again after the failed run; no new profile HTML was produced, so this pass still relies on the saved reports plus current `lib/capybara-lib` task wiring.
+
+### Findings
+- The current `check` path already uses `prepareCapybaraForCheck` to compile main and test Capybara sources in one process.
+- Even after that fusion, it still wrote two generated Java trees for the same verification build:
+  - `build/generated/sources/capybara/java/main`
+  - `build/generated/sources/capybara/java/test`
+- `compileTestJava` consumes those outputs together during verification builds, so keeping them in separate directories still pays for:
+  - two generated-output pruning passes,
+  - two manifest updates,
+  - two source roots for the same javac invocation.
+- The existing `compile-generate` implementation also pruned each output directory independently, which meant it could not safely target one shared directory for both main and test generated Java.
+
+### Changes made
+- Extended `capy compile-generate` so main and test generation can intentionally share one output directory:
+  - when `--output` and `--test-output` point at the same path, generated files are now written into one tree and pruned once using the union of main and test outputs.
+- Added CLI test coverage proving that `compile-generate java --test-output <same-dir-as-output>` keeps both main and test generated sources.
+- Updated `lib/capybara-lib/build.gradle` so `prepareCapybaraForCheck` writes verification-build generated Java to a single directory:
+  - `build/generated/sources/capybara/java/check`
+- Updated the verification-only `test` source-set wiring to consume that shared check directory instead of separate main/test generated directories.
+
+### Expected impact
+- `:lib:capybara-lib:check --rerun-tasks` should avoid one generated-output tree, one stale-pruning pass, and one manifest rewrite on the fused Capybara generation path.
+- The verification javac path should also see one generated source root instead of two for Capybara-generated Java.
+- Non-verification flows keep the existing separate main/test generated output behavior.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run the requested Gradle build or produce a fresh profile in this sandbox because Gradle still fails before project execution with `Could not determine a usable wildcard IP for this machine`.
+- Verification for this pass is limited to source inspection and the added CLI regression test in `capy/src/test/java/dev/capylang/CapyTest.java`.

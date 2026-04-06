@@ -583,6 +583,52 @@ class CapyTest {
     }
 
     @Test
+    void shouldCompileGenerateMainAndTestsIntoSharedOutputDirectory() throws IOException {
+        var mainSourceDir = Files.createDirectories(tempDir.resolve("compile-generate-shared-main-source"));
+        Files.createDirectories(mainSourceDir.resolve("foo"));
+        Files.writeString(mainSourceDir.resolve("foo").resolve("Lib.cfun"), """
+                fun forty_two(): int = 42
+                """);
+
+        var testSourceDir = Files.createDirectories(tempDir.resolve("compile-generate-shared-test-source"));
+        Files.createDirectories(testSourceDir.resolve("bar"));
+        Files.writeString(testSourceDir.resolve("bar").resolve("TestModule.cfun"), """
+                from /capy/test/Assert import { * }
+                from /capy/test/CapyTest import { * }
+                from /foo/Lib import { forty_two }
+
+                fun works(): Assert =
+                    assert_that(forty_two()).is_equal_to(42)
+
+                fun tests(): TestFile =
+                    test_file("/bar/TestModule.cfun", [
+                        test("works", works())
+                    ])
+                """);
+
+        var generatedDir = tempDir.resolve("compile-generate-shared-output");
+
+        assertEquals(0, Capy.execute(
+                new String[]{
+                        "compile-generate",
+                        "java",
+                        "--skip-java-lib",
+                        "-i", mainSourceDir.toString(),
+                        "-o", generatedDir.toString(),
+                        "--test-input", testSourceDir.toString(),
+                        "--test-output", generatedDir.toString()
+                },
+                new PrintStream(new ByteArrayOutputStream()),
+                new PrintStream(new ByteArrayOutputStream())
+        ));
+
+        assertTrue(Files.exists(generatedDir.resolve("foo").resolve("Lib.java")));
+        assertTrue(Files.exists(generatedDir.resolve("bar").resolve("TestModule.java")));
+        assertTrue(Files.exists(generatedDir.resolve("capy").resolve("test").resolve("CapyTestRuntime.java")));
+        assertFalse(Files.exists(generatedDir.resolve("dev").resolve("capylang").resolve("CapybaraUtil.java")));
+    }
+
+    @Test
     void shouldCompileTestsAndWriteCapyTestRuntimeModule() throws IOException {
         var sourceDir = Files.createDirectories(tempDir.resolve("test-source"));
         Files.createDirectories(sourceDir.resolve("foo"));
