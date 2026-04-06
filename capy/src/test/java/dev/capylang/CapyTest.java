@@ -43,6 +43,7 @@ class CapyTest {
         var text = stdout.toString();
         assertTrue(text.startsWith("Capybara compiler version: " + Capy.readCompilerVersion()));
         assertTrue(text.contains("capy compile"));
+        assertTrue(text.contains("capy compile-generate"));
         assertTrue(text.contains("capy generate"));
         assertTrue(text.contains("--compile-tests"));
         assertTrue(text.contains("capy package"));
@@ -128,6 +129,102 @@ class CapyTest {
         );
 
         assertEquals(0, generateExit);
+    }
+
+    @Test
+    void shouldCopyBundledJavaLibSourcesByDefault() throws IOException {
+        var sourceDir = Files.createDirectories(tempDir.resolve("default-generate-source"));
+        Files.writeString(sourceDir.resolve("Main.cfun"), "fun main(): int = 1\n");
+        var linkedDir = Files.createDirectories(tempDir.resolve("default-generate-linked"));
+        var generatedDir = tempDir.resolve("default-generate-output");
+
+        assertEquals(0, Capy.execute(
+                new String[]{"compile", "-i", sourceDir.toString(), "-o", linkedDir.toString()},
+                new PrintStream(new ByteArrayOutputStream()),
+                new PrintStream(new ByteArrayOutputStream())
+        ));
+
+        assertEquals(0, Capy.execute(
+                new String[]{"generate", "java", "-i", linkedDir.toString(), "-o", generatedDir.toString()},
+                new PrintStream(new ByteArrayOutputStream()),
+                new PrintStream(new ByteArrayOutputStream())
+        ));
+
+        assertTrue(Files.exists(generatedDir.resolve("dev").resolve("capylang").resolve("CapybaraUtil.java")));
+    }
+
+    @Test
+    void shouldSkipBundledJavaLibSourcesWhenRequested() throws IOException {
+        var sourceDir = Files.createDirectories(tempDir.resolve("skip-java-lib-source"));
+        Files.writeString(sourceDir.resolve("Main.cfun"), "fun main(): int = 1\n");
+        var linkedDir = Files.createDirectories(tempDir.resolve("skip-java-lib-linked"));
+        var generatedDir = tempDir.resolve("skip-java-lib-output");
+
+        assertEquals(0, Capy.execute(
+                new String[]{"compile", "-i", sourceDir.toString(), "-o", linkedDir.toString()},
+                new PrintStream(new ByteArrayOutputStream()),
+                new PrintStream(new ByteArrayOutputStream())
+        ));
+
+        assertEquals(0, Capy.execute(
+                new String[]{"generate", "java", "--skip-java-lib", "-i", linkedDir.toString(), "-o", generatedDir.toString()},
+                new PrintStream(new ByteArrayOutputStream()),
+                new PrintStream(new ByteArrayOutputStream())
+        ));
+
+        assertFalse(Files.exists(generatedDir.resolve("dev").resolve("capylang").resolve("CapybaraUtil.java")));
+    }
+
+    @Test
+    void shouldCompileGenerateTestsUsingLibrariesWithoutLinkedIntermediates() throws IOException {
+        var libSourceDir = Files.createDirectories(tempDir.resolve("compile-generate-lib-source"));
+        Files.createDirectories(libSourceDir.resolve("foo"));
+        Files.writeString(libSourceDir.resolve("foo").resolve("Lib.cfun"), """
+                fun forty_two(): int = 42
+                """);
+        var libLinkedDir = Files.createDirectories(tempDir.resolve("compile-generate-lib-linked"));
+
+        assertEquals(0, Capy.execute(
+                new String[]{"compile", "-i", libSourceDir.toString(), "-o", libLinkedDir.toString()},
+                new PrintStream(new ByteArrayOutputStream()),
+                new PrintStream(new ByteArrayOutputStream())
+        ));
+
+        var testSourceDir = Files.createDirectories(tempDir.resolve("compile-generate-test-source"));
+        Files.createDirectories(testSourceDir.resolve("bar"));
+        Files.writeString(testSourceDir.resolve("bar").resolve("TestModule.cfun"), """
+                from /capy/test/Assert import { * }
+                from /capy/test/CapyTest import { * }
+                from /foo/Lib import { forty_two }
+
+                fun works(): Assert =
+                    assert_that(forty_two()).is_equal_to(42)
+
+                fun tests(): TestFile =
+                    test_file("/bar/TestModule.cfun", [
+                        test("works", works())
+                    ])
+                """);
+        var generatedDir = tempDir.resolve("compile-generate-test-output");
+
+        assertEquals(0, Capy.execute(
+                new String[]{
+                        "compile-generate",
+                        "java",
+                        "--skip-java-lib",
+                        "--compile-tests",
+                        "-i", testSourceDir.toString(),
+                        "-l", libLinkedDir.toString(),
+                        "-o", generatedDir.toString()
+                },
+                new PrintStream(new ByteArrayOutputStream()),
+                new PrintStream(new ByteArrayOutputStream())
+        ));
+
+        assertTrue(Files.exists(generatedDir.resolve("bar").resolve("TestModule.java")));
+        assertTrue(Files.exists(generatedDir.resolve("capy").resolve("test").resolve("CapyTestRuntime.java")));
+        assertFalse(Files.exists(generatedDir.resolve("foo").resolve("Lib.json")));
+        assertFalse(Files.exists(generatedDir.resolve("dev").resolve("capylang").resolve("CapybaraUtil.java")));
     }
 
     @Test

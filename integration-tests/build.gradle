@@ -80,7 +80,7 @@ tasks.register('generateJavaFromCapybara', JavaExec) {
 
     doFirst {
         prepareEmptyDir(generatedJavaDir.get().asFile)
-        def capybaraArgs = ['generate', 'java', '-i', linkedOutputDir.get().asFile.absolutePath, '-o', generatedJavaDir.get().asFile.absolutePath]
+        def capybaraArgs = ['generate', 'java', '--skip-java-lib', '-i', linkedOutputDir.get().asFile.absolutePath, '-o', generatedJavaDir.get().asFile.absolutePath]
         if (capybaraDebugEnabled) {
             capybaraArgs.addAll(['--log', 'DEBUG'])
         }

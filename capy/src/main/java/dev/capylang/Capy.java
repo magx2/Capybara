@@ -117,8 +117,40 @@ public class Capy {
     }
 
     public static int generate(OutputType outputType, Path linkedInputDir, Path generatedOutputDir, PrintStream err) {
+        return generate(outputType, linkedInputDir, generatedOutputDir, true, err);
+    }
+
+    public static int generate(
+            OutputType outputType,
+            Path linkedInputDir,
+            Path generatedOutputDir,
+            boolean includeJavaLibResources,
+            PrintStream err
+    ) {
         try {
-            return generateOrThrow(outputType, linkedInputDir, generatedOutputDir);
+            return generateOrThrow(outputType, linkedInputDir, generatedOutputDir, includeJavaLibResources);
+        } catch (CliException e) {
+            err.println(e.getMessage());
+            return EXIT_USAGE;
+        } catch (Exception e) {
+            var message = e.getMessage() == null || e.getMessage().isBlank() ? e.getClass().getSimpleName() : e.getMessage();
+            err.println(message);
+            log.log(Level.SEVERE, message, e);
+            return EXIT_FAILURE;
+        }
+    }
+
+    public static int compileGenerate(
+            OutputType outputType,
+            Path input,
+            Path generatedOutputDir,
+            TreeSet<CompiledModule> libraries,
+            boolean compileTests,
+            boolean includeJavaLibResources,
+            PrintStream err
+    ) {
+        try {
+            return compileGenerateOrThrow(outputType, input, generatedOutputDir, libraries, compileTests, includeJavaLibResources, err);
         } catch (CliException e) {
             err.println(e.getMessage());
             return EXIT_USAGE;
@@ -149,6 +181,7 @@ public class Capy {
         var command = args[0].toLowerCase(Locale.ROOT);
         return switch (command) {
             case "compile" -> executeCompile(Arrays.copyOfRange(args, 1, args.length), err);
+            case "compile-generate" -> executeCompileGenerate(Arrays.copyOfRange(args, 1, args.length), err);
             case "generate" -> executeGenerate(Arrays.copyOfRange(args, 1, args.length), err);
             case "package" -> executePackage(Arrays.copyOfRange(args, 1, args.length), err);
             default -> throw new CliException("Unknown command `" + args[0] + "`.\n\n" + helpText());
@@ -164,7 +197,7 @@ public class Capy {
     }
 
     private static int executeCompile(String[] args, PrintStream err) {
-        var options = parseNamedOptions(args, true);
+        var options = parseNamedOptions(args, true, false);
         configureLogging(options.logLevel());
 
         var input = requiredPath(options.values(), "input", "compile");
@@ -175,18 +208,37 @@ public class Capy {
         return compile(input, output, libraries, compileTests, err, readCompilerVersion());
     }
 
+    private static int executeCompileGenerate(String[] args, PrintStream err) {
+        if (args.length == 0) {
+            throw new CliException("Missing output type for `compile-generate`.\n\n" + helpText());
+        }
+
+        var outputType = parseOutputType(args[0]);
+        var options = parseNamedOptions(Arrays.copyOfRange(args, 1, args.length), true, true);
+        configureLogging(options.logLevel());
+
+        var input = requiredPath(options.values(), "input", "compile-generate");
+        var output = requiredPath(options.values(), "output", "compile-generate");
+        var libraries = readLibraryModules(options.values().get("libs"));
+        var compileTests = options.values().containsKey("compile-tests");
+        var includeJavaLibResources = !options.values().containsKey("skip-java-lib");
+
+        return compileGenerate(outputType, input, output, libraries, compileTests, includeJavaLibResources, err);
+    }
+
     private static int executeGenerate(String[] args, PrintStream err) {
         if (args.length == 0) {
             throw new CliException("Missing output type for `generate`.\n\n" + helpText());
         }
 
         var outputType = parseOutputType(args[0]);
-        var options = parseNamedOptions(Arrays.copyOfRange(args, 1, args.length), false);
+        var options = parseNamedOptions(Arrays.copyOfRange(args, 1, args.length), false, true);
         configureLogging(options.logLevel());
 
         var input = options.values().containsKey("input") ? Path.of(options.values().get("input")) : Path.of(".");
         var output = requiredPath(options.values(), "output", "generate");
-        return generate(outputType, input, output, err);
+        var includeJavaLibResources = !options.values().containsKey("skip-java-lib");
+        return generate(outputType, input, output, includeJavaLibResources, err);
     }
 
     private static int executePackage(String[] args, PrintStream err) {
@@ -195,7 +247,7 @@ public class Capy {
         return packageCode(options, err);
     }
 
-    private static NamedOptions parseNamedOptions(String[] args, boolean allowLibs) {
+    private static NamedOptions parseNamedOptions(String[] args, boolean allowLibs, boolean allowSkipJavaLib) {
         var values = new LinkedHashMap<String, String>();
         var logLevel = Level.INFO;
 
@@ -240,6 +292,12 @@ public class Capy {
                         throw new CliException("Option `" + arg + "` is supported only for `compile`.");
                     }
                     values.put("compile-tests", "true");
+                }
+                case "--skip-java-lib" -> {
+                    if (!allowSkipJavaLib) {
+                        throw new CliException("Option `" + arg + "` is supported only for `generate` and `compile-generate`.");
+                    }
+                    values.put("skip-java-lib", "true");
                 }
                 default -> throw new CliException("Unknown option `" + arg + "`.\n\n" + helpText());
             }
@@ -387,7 +445,12 @@ public class Capy {
         return EXIT_SUCCESS;
     }
 
-    private static int generateOrThrow(OutputType outputType, Path linkedInputDir, Path generatedOutputDir) throws IOException {
+    private static int generateOrThrow(
+            OutputType outputType,
+            Path linkedInputDir,
+            Path generatedOutputDir,
+            boolean includeJavaLibResources
+    ) throws IOException {
         validateInputDirectory(linkedInputDir);
         if (Files.notExists(generatedOutputDir)) {
             Files.createDirectories(generatedOutputDir);
@@ -395,8 +458,30 @@ public class Capy {
             throw new CliException("Generated output path is not a directory: " + generatedOutputDir);
         }
 
-        var generationInput = selectGenerationInput(linkedInputDir, readLinkedProgram(linkedInputDir, true));
+        var generationInput = selectGenerationInput(linkedInputDir, readLinkedProgram(linkedInputDir, true), includeJavaLibResources);
         generateProgram(outputType, generatedOutputDir, generationInput);
+        return EXIT_SUCCESS;
+    }
+
+    private static int compileGenerateOrThrow(
+            OutputType outputType,
+            Path input,
+            Path generatedOutputDir,
+            TreeSet<CompiledModule> libraries,
+            boolean compileTests,
+            boolean includeJavaLibResources,
+            PrintStream err
+    ) throws IOException {
+        var compilation = compileSources(input, libraries, compileTests, err);
+        if (compilation == null) {
+            return EXIT_COMPILATION_ERROR;
+        }
+        if (Files.notExists(generatedOutputDir)) {
+            Files.createDirectories(generatedOutputDir);
+        } else if (!Files.isDirectory(generatedOutputDir)) {
+            throw new CliException("Generated output path is not a directory: " + generatedOutputDir);
+        }
+        generateProgram(outputType, generatedOutputDir, selectGenerationInput(compilation.program(), compilation.sourceModules(), includeJavaLibResources));
         return EXIT_SUCCESS;
     }
 
@@ -446,7 +531,7 @@ public class Capy {
         } else if (!Files.isDirectory(generatedOutputDir)) {
             throw new CliException("Generated output path is not a directory: " + generatedOutputDir);
         }
-        generateProgram(outputType, generatedOutputDir, selectGenerationInput(compilation.program(), compilation.sourceModules()));
+        generateProgram(outputType, generatedOutputDir, selectGenerationInput(compilation.program(), compilation.sourceModules(), true));
     }
     private static Path findCompiledInput(PackageOptions options, PrintStream err) throws IOException {
         if (options.compiledInput() != null) {
@@ -1070,22 +1155,26 @@ public class Capy {
         }
     }
 
-    private static GenerationInput selectGenerationInput(Path linkedInputDir, CompiledProgram linkedProgram) {
+    private static GenerationInput selectGenerationInput(Path linkedInputDir, CompiledProgram linkedProgram, boolean includeJavaLibResources) {
         var buildInfo = readBuildInfo(linkedInputDir);
-        return selectGenerationInput(linkedProgram, buildInfo == null ? null : buildInfo.source_modules());
+        return selectGenerationInput(linkedProgram, buildInfo == null ? null : buildInfo.source_modules(), includeJavaLibResources);
     }
 
-    private static GenerationInput selectGenerationInput(CompiledProgram linkedProgram, List<ModuleRef> sourceModules) {
+    private static GenerationInput selectGenerationInput(
+            CompiledProgram linkedProgram,
+            List<ModuleRef> sourceModules,
+            boolean includeJavaLibResources
+    ) {
         if (sourceModules == null || sourceModules.isEmpty()) {
-            return new GenerationInput(linkedProgram, true);
+            return new GenerationInput(linkedProgram, includeJavaLibResources);
         }
 
         var sourceModuleRefs = new TreeSet<>(sourceModules);
         var filteredProgram = new CompiledProgram(linkedProgram.modules().stream()
                 .filter(module -> sourceModuleRefs.contains(new ModuleRef(module.name(), normalizeModulePath(module.path()))))
                 .toList());
-        var includeJavaLibResources = filteredProgram.modules().size() == linkedProgram.modules().size();
-        return new GenerationInput(filteredProgram, includeJavaLibResources);
+        var shouldCopyJavaLibResources = includeJavaLibResources && filteredProgram.modules().size() == linkedProgram.modules().size();
+        return new GenerationInput(filteredProgram, shouldCopyJavaLibResources);
     }
 
     static ObjectMapper objectMapper() {
@@ -1123,13 +1212,16 @@ public class Capy {
                 "  capy -v | --version",
                 "  capy -h | --help",
                 "  capy compile [-l|--libs <dir1,dir2,...>] [--compile-tests] -i|--input <dir> -o|--output <dir> [--log <DEBUG|INFO|WARN|ERROR>]",
-                "  capy generate <java|python|javascript|js> [-i|--input <dir>] -o|--output <dir> [--log <DEBUG|INFO|WARN|ERROR>]",
+                "  capy compile-generate <java|python|javascript|js> [-l|--libs <dir1,dir2,...>] [--compile-tests] -i|--input <dir> -o|--output <dir> [--skip-java-lib] [--log <DEBUG|INFO|WARN|ERROR>]",
+                "  capy generate <java|python|javascript|js> [-i|--input <dir>] -o|--output <dir> [--skip-java-lib] [--log <DEBUG|INFO|WARN|ERROR>]",
                 "  capy package (-ci|--compiled-input <dir> | -i|--input <dir>) -m|--module <capy.yml> [--capy.<field> <value>] [--log <DEBUG|INFO|WARN|ERROR>]",
                 "",
                 "Notes:",
                 "  compile output directory must already exist and be empty.",
+                "  compile-generate compiles Capybara sources directly to generated output without writing linked intermediates.",
                 "  compile --compile-tests writes bundled stdlib modules and injects discovered TestFile/list[TestFile] producers into capy/test/CapyTestRuntime.gather_tests.",
                 "  generate input directory defaults to the current directory.",
+                "  generate --skip-java-lib omits bundled Java runtime sources when the caller already has them on the compile classpath.",
                 "  package writes `capy.cbin` next to the provided `capy.yml`."
         );
     }
