@@ -79,6 +79,22 @@ class CapybaraPluginTest {
     }
 
     @Test
+    void shouldOnlyDeclareFusedTaskInputsAndOutputsForCapybaraOnlyCheckBuilds() {
+        var standardProject = newProject();
+        var standardTask = standardProject.getTasks().named("compileCapybara", CompileCapybaraTask.class).get();
+        var fusedProject = newProject(List.of("check"));
+        var fusedTask = fusedProject.getTasks().named("compileCapybara", CompileCapybaraTask.class).get();
+
+        assertTrue(standardTask.getOutputDir().isPresent());
+        assertFalse(standardTask.getTestInputDir().isPresent());
+        assertFalse(standardTask.getGeneratedTestOutputDir().isPresent());
+
+        assertFalse(fusedTask.getOutputDir().isPresent());
+        assertTrue(fusedTask.getTestInputDir().isPresent());
+        assertTrue(fusedTask.getGeneratedTestOutputDir().isPresent());
+    }
+
+    @Test
     void shouldCompileTestSourcesWithoutCopyingBundledJavaLibAgain() throws IOException {
         var project = newProject();
 
@@ -369,6 +385,31 @@ class CapybaraPluginTest {
 
         assertTrue(compileJava.getEnabled());
         assertFalse(testSrcDirs.contains(project.file("build/generated/sources/capybara/java")));
+    }
+
+    @Test
+    void shouldKeepSeparateMainOutputsForCheckBuildsWithMainResources() throws IOException {
+        var resourcesDir = Files.createDirectories(tempDir.resolve("src/main/resources"));
+        Files.writeString(resourcesDir.resolve("capybara.txt"), "resource");
+
+        var project = newProject(List.of("check"));
+        var compileCapybara = project.getTasks().named("compileCapybara", CompileCapybaraTask.class).get();
+        var compileJava = project.getTasks().named("compileJava").get();
+        var compileTestJava = project.getTasks().named("compileTestJava").get();
+        var compileTestJavaDependencies = compileTestJava.getTaskDependencies().getDependencies(compileTestJava);
+        var sourceSets = project.getExtensions().getByType(SourceSetContainer.class);
+        var testSrcDirs = sourceSets.getByName("test").getJava().getSrcDirs();
+        var testCapybara = project.getTasks().named("testCapybara", CapybaraTestTask.class).get();
+        var runtimeClasspathSources = ((ConfigurableFileCollection) testCapybara.getRuntimeClasspath()).getFrom();
+
+        assertTrue(compileCapybara.getOutputDir().isPresent());
+        assertFalse(compileCapybara.getTestInputDir().isPresent());
+        assertFalse(compileCapybara.getGeneratedTestOutputDir().isPresent());
+        assertTrue(compileJava.getEnabled());
+        assertFalse(testSrcDirs.contains(project.file("build/generated/sources/capybara/java")));
+        assertTrue(compileTestJavaDependencies.contains(project.getTasks().named("generateTestCapybaraJava").get()));
+        assertFalse(compileTestJavaDependencies.contains(project.getTasks().named("compileCapybara").get()));
+        assertTrue(runtimeClasspathSources.contains(sourceSets.getByName("main").getRuntimeClasspath()));
     }
 
     @ParameterizedTest

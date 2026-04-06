@@ -50,6 +50,9 @@ public class CapybaraPlugin implements Plugin<Project> {
                                 taskName.equals("generateTestCapybaraJava") || taskName.endsWith(":generateTestCapybaraJava") ||
                                 taskName.equals("testCapybara") || taskName.endsWith(":testCapybara")
                 ));
+        var singleJavaVerificationBuild = project.provider(() ->
+                capybaraTestBuildRequested.get() && !hasJvmMainSources.get() && !hasMainResources.get()
+        );
 
         var compileCapybara = project.getTasks().register(
                 "compileCapybara",
@@ -58,17 +61,21 @@ public class CapybaraPlugin implements Plugin<Project> {
                     task.setGroup("build");
                     task.setDescription("Compiles Capybara files from src/main/capybara.");
                     task.getInputDir().set(project.file("src/main/capybara"));
-                    task.getOutputDir().set(layout.getBuildDirectory().dir("classes/capybara"));
                     task.getGeneratedOutputDir().set(layout.getBuildDirectory().dir("generated/sources/capybara/java"));
-                    task.getTestInputDir().set(project.file("src/test/capybara"));
-                    task.getGeneratedTestOutputDir().set(layout.getBuildDirectory().dir("generated/sources/test-capybara/java"));
                     task.getAdditionalInputDirs().from();
                     task.getCompilerVersion().set(compilerVersion);
                     task.getCompileTests().set(false);
                     task.getIncludeJavaLibResources().set(true);
-                    task.getCompileTestSourcesWithMainCompilation().set(capybaraTestBuildRequested);
-                    task.getWriteLinkedOutput().set(capybaraTestBuildRequested.map(requested -> !requested));
+                    task.getCompileTestSourcesWithMainCompilation().set(singleJavaVerificationBuild);
+                    task.getWriteLinkedOutput().set(singleJavaVerificationBuild.map(requested -> !requested));
                     task.getIncludeJavaLibResourcesInTestOutput().set(false);
+                    if (!singleJavaVerificationBuild.get()) {
+                        task.getOutputDir().set(layout.getBuildDirectory().dir("classes/capybara"));
+                    }
+                    if (singleJavaVerificationBuild.get()) {
+                        task.getTestInputDir().set(project.file("src/test/capybara"));
+                        task.getGeneratedTestOutputDir().set(layout.getBuildDirectory().dir("generated/sources/test-capybara/java"));
+                    }
                 }
         );
 
@@ -123,14 +130,14 @@ public class CapybaraPlugin implements Plugin<Project> {
                     sourceSet.getJava().srcDir(layout.getBuildDirectory().dir("generated/sources/capybara/java")));
             sourceSets.named("test", sourceSet -> {
                 sourceSet.getJava().srcDir(layout.getBuildDirectory().dir("generated/sources/test-capybara/java"));
-                if (capybaraTestBuildRequested.get() && !hasJvmMainSources.get()) {
+                if (singleJavaVerificationBuild.get()) {
                     sourceSet.getJava().srcDir(layout.getBuildDirectory().dir("generated/sources/capybara/java"));
                     sourceSet.setCompileClasspath(sourceSet.getCompileClasspath().minus(mainSourceSet.getOutput()));
                     sourceSet.setRuntimeClasspath(sourceSet.getRuntimeClasspath().minus(mainSourceSet.getOutput()));
                 }
             });
             project.getTasks().named("compileJava", task -> {
-                var enabled = !capybaraTestBuildRequested.get() || hasJvmMainSources.get();
+                var enabled = !singleJavaVerificationBuild.get();
                 task.setEnabled(enabled);
                 if (!enabled) {
                     task.setDependsOn(java.util.List.of());
@@ -154,7 +161,7 @@ public class CapybaraPlugin implements Plugin<Project> {
                 }
             });
             project.getTasks().named("compileTestJava", task -> {
-                if (capybaraTestBuildRequested.get() && !hasJvmMainSources.get()) {
+                if (singleJavaVerificationBuild.get()) {
                     task.setDependsOn(task.getDependsOn().stream()
                             .filter(dependency -> {
                                 if (dependency instanceof org.gradle.api.tasks.TaskProvider<?> provider) {
@@ -173,7 +180,7 @@ public class CapybaraPlugin implements Plugin<Project> {
                             })
                             .toList());
                 }
-                task.dependsOn(capybaraTestBuildRequested.get() ? compileCapybara : generateTestCapybaraJava);
+                task.dependsOn(singleJavaVerificationBuild.get() ? compileCapybara : generateTestCapybaraJava);
             });
 
             var testCapybara = project.getTasks().register(
@@ -183,7 +190,7 @@ public class CapybaraPlugin implements Plugin<Project> {
                         task.setGroup("verification");
                         task.setDescription("Runs Capybara tests using generated Java classes without launching a separate JVM.");
                         task.dependsOn(project.getTasks().named("compileTestJava"));
-                        var mainRuntimeClasspath = capybaraTestBuildRequested.get() && !hasJvmMainSources.get()
+                        var mainRuntimeClasspath = singleJavaVerificationBuild.get()
                                 ? mainSourceSet.getRuntimeClasspath().minus(mainSourceSet.getOutput())
                                 : mainSourceSet.getRuntimeClasspath();
                         task.getRuntimeClasspath().from(mainRuntimeClasspath, testSourceSet.getOutput().getClassesDirs());

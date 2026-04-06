@@ -361,7 +361,8 @@
 
 ### Verification status
 - `git diff --check` passed.
-- I could not run Gradle task verification or generate a new profile in this sandbox because Gradle still fails before project execution for the reasons listed above.
+- I could not run Gradle task verification in this sandbox because the requested Gradle invocation still cannot start:
+  - `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain` fails before project execution with `Could not determine a usable wildcard IP for this machine`.
 
 ## 2026-04-06 build optimization pass combined check preparation
 
@@ -2106,3 +2107,41 @@
 - `git diff --check` passed.
 - I could not run the requested Gradle build or produce a fresh profile in this sandbox because Gradle still fails before project execution with `Could not determine a usable wildcard IP for this machine`.
 - Verification for this pass is limited to source inspection and the added CLI regression test in `capy/src/test/java/dev/capylang/CapyTest.java`.
+
+## 2026-04-06 build optimization pass plugin conditional fused inputs
+
+### Requested baseline
+- Re-ran the requested command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- It still failed before project execution in this sandbox with:
+  - `Could not determine a usable wildcard IP for this machine`
+- Checked `build/reports/profile` again; no fresh profile report was produced, so analysis for this pass still relies on source inspection and the existing profile history already recorded above.
+
+### Findings
+- The handwritten `lib:capybara-lib` build already uses a dedicated `prepareCapybaraForCheck` task that leaves linked-output directories unset on the `check` fast path.
+- The reusable Gradle plugin still modeled both modes through one `compileCapybara` task and always declared:
+  - linked output under `build/classes/capybara`, and
+  - test-source input/output directories
+  even when that invocation would not use one side of those properties.
+- The plugin also treated any verification-oriented task request as permission to collapse main/test Java compilation, even when main resources exist and the separate main output path should stay intact.
+- That means plugin consumers were still paying avoidable Gradle input/output snapshotting on unused directories, and the fused verification shortcut was broader than the safe conditions already used by `lib:capybara-lib`.
+
+### Changes made
+- Added a plugin-level `singleJavaVerificationBuild` condition that only enables the fused main+test Java path when:
+  - a verification-oriented task was requested,
+  - there are no JVM main sources, and
+  - there are no main resources.
+- Updated `CapybaraPlugin` so `compileCapybara` now declares only the properties it will actually use for the selected mode:
+  - separate-build mode declares linked output and omits test input/output directories;
+  - fused verification mode omits linked output and declares test input/output directories.
+- Switched the plugin’s test source-set wiring, `compileJava`, `compileTestJava`, and `testCapybara` runtime-classpath decisions to use that stricter fused-build condition.
+- Added plugin tests covering:
+  - conditional declaration of fused task inputs/outputs;
+  - preserving the separate main-output path for `check` builds when main resources exist.
+
+### Expected impact
+- Plugin consumers on Capybara-only verification builds should avoid Gradle bookkeeping for unused linked-output or test-generation directories.
+- Verification builds that do have main resources keep the separate main-output path instead of taking the fused shortcut, preserving correct classpath/resource behavior while still using the fast path only where it is safe.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle task verification in this sandbox because the requested Gradle invocation still fails before project execution with `Could not determine a usable wildcard IP for this machine`.
