@@ -23,20 +23,6 @@ def capybaraLinkedMainDir = layout.buildDirectory.dir('generated/sources/capybar
 def capybaraTestResultsDir = layout.buildDirectory.dir('test-results/capybara')
 def capybaraDebugEnabled = gradle.startParameter.logLevel == org.gradle.api.logging.LogLevel.DEBUG
 
-def prepareEmptyDir = { File dir ->
-    if (dir.exists()) {
-        java.nio.file.Files.walk(dir.toPath())
-                .sorted(java.util.Comparator.reverseOrder())
-                .forEach { path ->
-                    if (path != dir.toPath()) {
-                        java.nio.file.Files.deleteIfExists(path)
-                    }
-                }
-    } else {
-        dir.mkdirs()
-    }
-}
-
 tasks.register('linkCapybara', JavaExec) {
     group = 'build'
     description = 'Compiles Capybara files from src/main/capybara and generates Java in one pass.'
@@ -105,7 +91,7 @@ tasks.register('testCapybara', JavaExec) {
     mainClass = 'dev.capylang.test.TestRunner'
 
     doFirst {
-        prepareEmptyDir(capybaraTestResultsDir.get().asFile)
+        capybaraTestResultsDir.get().asFile.mkdirs()
         def capybaraArgs = [
                 '-o', capybaraTestResultsDir.get().asFile.absolutePath,
                 '-rt', 'JUNIT'

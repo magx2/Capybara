@@ -218,4 +218,33 @@
 ### Verification status
 - `git diff --check` passed.
 - I could not run Gradle task verification in this sandbox because Gradle still fails during startup with `Could not determine a usable wildcard IP for this machine`.
+
+## 2026-04-06 build optimization pass stale test report pruning
+
+### Requested baseline
+- Re-ran the requested baseline command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- It still failed immediately in this sandbox because the wrapper tried to create `/home/martin/.gradle/.../gradle-9.1.0-bin.zip.lck` on a read-only filesystem.
+- Checked `build/reports/profile` after the run; no new profile HTML was produced, and the latest available report is still `build/reports/profile/profile-2026-04-04-19-07-42.html`.
+
+### Findings
+- `lib:capybara-lib:testCapybara` still eagerly deleted the entire `build/test-results/capybara` tree before every run.
+- The requested command uses `--rerun-tasks`, so that recursive delete executes on every profiled run even when most report filenames are unchanged.
+- The `TestRunner` already rewrites current report files deterministically, so full directory cleanup is broader than necessary; only stale files from removed or renamed tests actually need to be deleted.
+
+### Changes made
+- Moved Capybara test-report cleanup into `TestRunner` as stale-file pruning after writing the current run's outputs.
+- Updated `lib/capybara-lib: testCapybara` to stop recursively emptying `build/test-results/capybara` and only ensure the directory exists.
+- Added focused `TestRunner` unit tests covering:
+  - returned relative report paths,
+  - stale file removal,
+  - empty-directory cleanup after stale report deletion.
+
+### Expected impact
+- `:lib:capybara-lib:testCapybara` should avoid a full pre-run tree walk/delete under `build/test-results/capybara` on every `--rerun-tasks` build.
+- Repeated local builds should do less filesystem churn while still removing obsolete JUnit XML files when tests disappear or report paths change.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle task verification in this sandbox because the wrapper still fails before task execution with a read-only lockfile path under `/home/martin/.gradle`.
+- Verification for this pass is limited to source inspection and the added unit-test coverage.
 - Verification for this pass is limited to source inspection and the added CLI/plugin test coverage.

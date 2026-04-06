@@ -10,8 +10,10 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.logging.ConsoleHandler;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -44,7 +46,9 @@ public class TestRunner {
         LOG.info(() -> "Collected `%d` test files".formatted(testFiles.size()));
         var testOutputs = invokeRunTests(arguments.reportType(), testFiles);
         LOG.info(() -> "Generated `%d` test outputs".formatted(testOutputs.size()));
-        testOutputs.forEach(testOutput -> writeTestOutputToFile(testOutput, arguments));
+        var writtenFiles = new HashSet<Path>();
+        testOutputs.forEach(testOutput -> writtenFiles.add(writeTestOutputToFile(testOutput, arguments)));
+        deleteStaleOutputs(arguments.outputDir(), writtenFiles);
         return testOutputs.parallelStream()
                 .filter(TestOutput::failed)
                 .findAny()
@@ -190,7 +194,7 @@ public class TestRunner {
         return CapyTest.runTests(capy.test.CapyTest.ReportType.valueOf(reportType.name()), (List) testFiles);
     }
 
-    private static void writeTestOutputToFile(TestOutput testOutput, Arguments arguments) {
+    static Path writeTestOutputToFile(TestOutput testOutput, Arguments arguments) {
         try {
             var javaPath = PathUtil.toJavaPath(testOutput.path());
             var finalPath = arguments.outputDir().resolve(javaPath);
@@ -200,9 +204,60 @@ public class TestRunner {
             }
             Files.writeString(finalPath, testOutput.content());
             LOG.info(() -> "Wrote test output to `%s`".formatted(finalPath));
+            return arguments.outputDir().relativize(finalPath.normalize());
         } catch (IOException e) {
             LOG.log(Level.SEVERE, "Cannot write test output file", e);
             throw new UncheckedIOException("Cannot write test output file", e);
+        }
+    }
+
+    static void deleteStaleOutputs(Path outputDir, Set<Path> expectedFiles) {
+        try {
+            if (Files.notExists(outputDir)) {
+                return;
+            }
+            try (var files = Files.walk(outputDir)) {
+                files.filter(Files::isRegularFile)
+                        .forEach(path -> deleteIfStale(outputDir, path, expectedFiles));
+            }
+            deleteEmptyDirectories(outputDir);
+        } catch (IOException e) {
+            LOG.log(Level.SEVERE, "Cannot prune stale test output files", e);
+            throw new UncheckedIOException("Cannot prune stale test output files", e);
+        }
+    }
+
+    private static void deleteIfStale(Path outputDir, Path file, Set<Path> expectedFiles) {
+        var relativePath = outputDir.relativize(file.normalize());
+        if (expectedFiles.contains(relativePath)) {
+            return;
+        }
+        try {
+            Files.deleteIfExists(file);
+            LOG.info(() -> "Deleted stale test output `%s`".formatted(file));
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
+    private static void deleteEmptyDirectories(Path outputDir) throws IOException {
+        try (var directories = Files.walk(outputDir)) {
+            directories.sorted(java.util.Comparator.reverseOrder())
+                    .filter(Files::isDirectory)
+                    .filter(path -> !path.equals(outputDir))
+                    .forEach(TestRunner::deleteDirectoryIfEmpty);
+        }
+    }
+
+    private static void deleteDirectoryIfEmpty(Path directory) {
+        try (var entries = Files.list(directory)) {
+            if (entries.findAny().isPresent()) {
+                return;
+            }
+            Files.deleteIfExists(directory);
+            LOG.info(() -> "Deleted empty test output directory `%s`".formatted(directory));
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
         }
     }
 
@@ -211,4 +266,3 @@ public class TestRunner {
         return classLoader == null ? TestRunner.class.getClassLoader() : classLoader;
     }
 }
-
