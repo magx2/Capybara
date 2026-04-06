@@ -336,6 +336,19 @@ class CapybaraPluginTest {
 
     @ParameterizedTest
     @MethodSource("fusedCapybaraLifecycleTasks")
+    void shouldRemoveMainClassesLifecycleDependenciesFromCompileTestJavaForCapybaraOnlyBuilds(String requestedTask) {
+        var project = newProject(List.of(requestedTask));
+        var compileTestJava = project.getTasks().named("compileTestJava").get();
+        var compileTestJavaDependencies = compileTestJava.getTaskDependencies().getDependencies(compileTestJava);
+
+        assertFalse(compileTestJavaDependencies.contains(project.getTasks().named("classes").get()));
+        assertFalse(compileTestJavaDependencies.contains(project.getTasks().named("compileJava").get()));
+        assertFalse(compileTestJavaDependencies.contains(project.getTasks().named("processResources").get()));
+        assertTrue(compileTestJavaDependencies.contains(project.getTasks().named("compileCapybara").get()));
+    }
+
+    @ParameterizedTest
+    @MethodSource("fusedCapybaraLifecycleTasks")
     void shouldSkipCompileJavaForLifecycleBuildsWithoutJvmMainSources(String requestedTask) {
         var project = newProject(List.of(requestedTask));
         var compileJava = project.getTasks().named("compileJava").get();

@@ -387,6 +387,15 @@ tasks.named('compileJava') {
 }
 
 tasks.named('compileTestJava') {
+    if (capybaraTestBuildRequested.get() && !hasJvmMainSources.get()) {
+        setDependsOn(dependsOn.findAll { dependency ->
+            !(dependency instanceof TaskProvider && (dependency.name == 'classes' || dependency.name == 'compileJava' || dependency.name == 'processResources')) &&
+                    !(dependency instanceof Task && (dependency.name == 'classes' || dependency.name == 'compileJava' || dependency.name == 'processResources')) &&
+                    dependency != 'classes' &&
+                    dependency != 'compileJava' &&
+                    dependency != 'processResources'
+        })
+    }
     if (capybaraTestBuildRequested.get()) {
         dependsOn tasks.named('prepareCapybaraForCheck')
     } else {

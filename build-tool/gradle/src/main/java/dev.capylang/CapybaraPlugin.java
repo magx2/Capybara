@@ -134,8 +134,28 @@ public class CapybaraPlugin implements Plugin<Project> {
             project.getTasks().named("processResources", task -> task.setEnabled(hasMainResources.get()));
             project.getTasks().named("processTestResources", task ->
                     task.setEnabled(hasJvmTestSources.get() || hasNonJvmTestResources.get()));
-            project.getTasks().named("compileTestJava", task ->
-                    task.dependsOn(capybaraTestBuildRequested.get() ? compileCapybara : generateTestCapybaraJava));
+            project.getTasks().named("compileTestJava", task -> {
+                if (capybaraTestBuildRequested.get() && !hasJvmMainSources.get()) {
+                    task.setDependsOn(task.getDependsOn().stream()
+                            .filter(dependency -> {
+                                if (dependency instanceof org.gradle.api.tasks.TaskProvider<?> provider) {
+                                    return !provider.getName().equals("classes")
+                                            && !provider.getName().equals("compileJava")
+                                            && !provider.getName().equals("processResources");
+                                }
+                                if (dependency instanceof org.gradle.api.Task dependencyTask) {
+                                    return !dependencyTask.getName().equals("classes")
+                                            && !dependencyTask.getName().equals("compileJava")
+                                            && !dependencyTask.getName().equals("processResources");
+                                }
+                                return !"classes".equals(dependency)
+                                        && !"compileJava".equals(dependency)
+                                        && !"processResources".equals(dependency);
+                            })
+                            .toList());
+                }
+                task.dependsOn(capybaraTestBuildRequested.get() ? compileCapybara : generateTestCapybaraJava);
+            });
 
             var testCapybara = project.getTasks().register(
                     "testCapybara",

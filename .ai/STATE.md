@@ -1758,6 +1758,35 @@
 - I could not run the requested Gradle build or produce a fresh profile in this sandbox because Gradle still fails before project execution with `Could not determine a usable wildcard IP for this machine`.
 - Verification for this pass is limited to source inspection.
 
+## 2026-04-06 build optimization pass compileTestJava main lifecycle pruning
+
+### Requested baseline
+- Re-ran the requested baseline command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- Gradle still failed during startup before any task execution in this sandbox:
+  - `Could not create service of type FileLockContentionHandler`
+  - `Could not determine a usable wildcard IP for this machine`
+- Checked `build/reports/profile` after the failed run; no fresh profile HTML was produced, so this pass still relies on the existing saved reports plus current task-graph inspection.
+
+### Findings
+- `lib:capybara-lib` now prepares main and test Capybara sources together in `prepareCapybaraForCheck` for `check`/`test`-oriented builds.
+- In the no-JVM-main-source case, `compileTestJava` compiles both generated main and generated test Java directly from the `test` source set, so it does not need the default main Java lifecycle tasks.
+- The default Java plugin wiring can still leave `compileTestJava` carrying main lifecycle dependencies such as `classes`, `compileJava`, and `processResources`, which are unnecessary on the Capybara-only `check --rerun-tasks` path once the fused Capybara preparation task is the real producer.
+- The reusable `CapybaraPlugin` had the same leftover dependency shape for plugin consumers with Capybara-only test builds.
+
+### Changes made
+- In `lib/capybara-lib/build.gradle`, pruned `compileTestJava` dependencies on `classes`, `compileJava`, and `processResources` when the build is a test-oriented request and the module has no JVM main sources.
+- Applied the same dependency pruning in `build-tool/gradle`’s `CapybaraPlugin`.
+- Added plugin tests covering the absence of those main lifecycle dependencies from `compileTestJava` for fused Capybara-only lifecycle builds.
+
+### Expected impact
+- `:lib:capybara-lib:check --rerun-tasks` should avoid scheduling unnecessary main Java lifecycle tasks once `prepareCapybaraForCheck` is already producing the generated sources needed by `compileTestJava`.
+- Plugin consumers with Capybara-only test builds should avoid the same leftover main-lifecycle overhead.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run the requested Gradle build or produce a fresh profile in this sandbox because Gradle still fails before project execution with `Could not determine a usable wildcard IP for this machine`.
+- Verification for this pass is limited to source inspection and the added plugin dependency-wiring tests.
+
 ## 2026-04-06 build optimization pass fused lifecycle task detection
 
 ### Requested baseline
