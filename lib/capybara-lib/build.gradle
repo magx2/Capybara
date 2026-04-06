@@ -359,6 +359,9 @@ def capybaraTestLifecycleTasks = [
         'testCapybara'
 ] as Set
 def singleJavaVerificationLifecycleTasks = [
+        'build',
+        'buildNeeded',
+        'buildDependents',
         'check',
         'test',
         'testClasses',

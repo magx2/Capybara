@@ -32,6 +32,9 @@ public class CapybaraPlugin implements Plugin<Project> {
             "testCapybara"
     );
     private static final Set<String> SINGLE_JAVA_VERIFICATION_TASKS = Set.of(
+            "build",
+            "buildNeeded",
+            "buildDependents",
             "check",
             "test",
             "testClasses",

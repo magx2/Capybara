@@ -2406,3 +2406,29 @@
 ### Verification status
 - `git diff --check` passed.
 - I could not run Gradle task verification in this sandbox because the requested wrapper invocation still fails before project execution with `Could not determine a usable wildcard IP for this machine`.
+
+## 2026-04-06 build optimization pass fused build lifecycle coverage
+
+### Requested baseline
+- Re-ran the requested command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- The run still failed before project execution in this sandbox with:
+  - `Could not determine a usable wildcard IP for this machine`.
+- Re-checked `build/reports/profile` after the failed run; no new profile HTML was produced, so timing guidance still comes from the existing reports already present there.
+
+### Findings
+- The handwritten `lib/capybara-lib` build and the reusable Gradle plugin both normalize requested task names and use those basenames to decide whether they can take the fused single-Java verification path.
+- That fused path was already enabled for `check`/`test`-style requests, but not for `build`, `buildNeeded`, or `buildDependents`.
+- For Capybara-only modules with no main resources, that meant lifecycle build requests still paid for the slower split main/test Java compilation path even though they eventually run the same verification work and the plugin test suite already expected those `build` forms to use the fused path.
+
+### Changes made
+- Added `build`, `buildNeeded`, and `buildDependents` to `singleJavaVerificationLifecycleTasks` in `lib/capybara-lib/build.gradle`.
+- Applied the same expansion to `SINGLE_JAVA_VERIFICATION_TASKS` in `build-tool/gradle`'s `CapybaraPlugin`.
+- Added plugin regression coverage proving a fully qualified request like `:lib:capybara-lib:build` now selects the fused verification path.
+
+### Expected impact
+- Lifecycle build invocations that include verification work should now reuse the same fused Java compilation path already used for `check`, avoiding an extra `compileJava` boundary when there are no main resources.
+- The improvement applies both to the handwritten library module and to downstream consumers of the reusable plugin.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle task verification in this sandbox because the requested wrapper invocation still fails before project execution with `Could not determine a usable wildcard IP for this machine`.

@@ -417,6 +417,20 @@ class CapybaraPluginTest {
     }
 
     @Test
+    void shouldUseFusedBuildPathForQualifiedTaskRequests() {
+        var project = newProject(List.of(":lib:capybara-lib:build"));
+        var compileJava = project.getTasks().named("compileJava").get();
+        var compileTestJava = project.getTasks().named("compileTestJava").get();
+        var compileTestJavaDependencies = compileTestJava.getTaskDependencies().getDependencies(compileTestJava);
+        var compileCapybara = project.getTasks().named("compileCapybara").get();
+
+        assertFalse(compileJava.getEnabled());
+        assertTrue(compileJava.getDependsOn().isEmpty());
+        assertTrue(compileTestJavaDependencies.contains(compileCapybara));
+        assertFalse(compileTestJavaDependencies.contains(project.getTasks().named("generateTestCapybaraJava").get()));
+    }
+
+    @Test
     void shouldFoldJvmMainSourcesIntoCompileTestJavaForCheckBuildsWithoutMainResources() throws IOException {
         var jvmMainSourceDir = Files.createDirectories(tempDir.resolve("src/main/java/dev/capylang"));
         Files.writeString(jvmMainSourceDir.resolve("PluginMain.java"), "class PluginMain {}");
