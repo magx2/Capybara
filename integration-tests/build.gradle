@@ -133,7 +133,7 @@ def linkedOutputDir = layout.buildDirectory.dir('generated/sources/capybara/link
 tasks.register('linkCapybaraSources', InProcessCapybaraCompileTask) {
     group = 'build'
     description = 'Compiles Capybara files from src/main/capybara and generates Java in one pass without launching a separate JVM.'
-    dependsOn project(':lib:capybara-lib').tasks.named('linkCapybaraLinkedOnly')
+    dependsOn project(':lib:capybara-lib').tasks.named('linkCapybaraLinked')
 
     runtimeClasspath.from(project(':capy').sourceSets.main.runtimeClasspath)
     inputDir.set(capybaraSourceDir)

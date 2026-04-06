@@ -2490,3 +2490,35 @@
 ### Verification status
 - `git diff --check` passed.
 - I could not run Gradle task verification in this sandbox because the requested wrapper invocation still fails before project execution with `Could not determine a usable wildcard IP for this machine`.
+
+## 2026-04-06 build optimization pass fused linked stdlib reuse for check builds
+
+### Requested baseline
+- Re-ran the requested command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- It still failed before project execution in this sandbox with:
+  - `Could not determine a usable wildcard IP for this machine`.
+- Re-checked `build/reports/profile` after the failed run; no new profile HTML was produced, so this pass is based on source inspection of the current task graph plus the existing reports already present there.
+
+### Findings
+- The fused `prepareCapybaraForCheck` path in `lib/capybara-lib` was generating main and test Java for `check`/`test` builds, but it was no longer writing `build/generated/sources/capybara/linked/main`.
+- At the same time, downstream projects still consumed that linked stdlib output through `:lib:capybara-lib:linkCapybaraLinkedOnly`:
+  - `compiler:processResources`
+  - `integration-tests:linkCapybaraSources`
+- That meant repository-wide `check`-style builds had an inconsistent graph:
+  - either downstream linked-output consumers would see no fresh stdlib linked output when the fused verification path was selected;
+  - or fixing it later would require paying for a second main-stdlib compile just to recreate linked output.
+
+### Changes made
+- Updated `prepareCapybaraForCheck` in `lib/capybara-lib/build.gradle` to write linked main output alongside the fused generated Java output.
+- Rewired the `linkCapybaraLinked` compatibility task to depend on `prepareCapybaraForCheck` during `check`/`test`-style builds and on `linkCapybaraLinkedOnly` otherwise.
+- Rewired `compiler/build.gradle` and `integration-tests/build.gradle` to depend on `:lib:capybara-lib:linkCapybaraLinked` instead of the implementation task `linkCapybaraLinkedOnly`.
+- Rewired the compatibility tasks `linkCapybara` and `compileCapybara` the same way so direct callers also reuse the fused check-build producer instead of falling through to a skipped task.
+
+### Expected impact
+- Repository-wide `check`/`build` flows can now reuse the fused `lib:capybara-lib` verification compile to satisfy downstream linked-stdlib consumers.
+- This avoids reintroducing a separate main-stdlib compile just to materialize linked output for `compiler` and `integration-tests`.
+- The change also restores a coherent task graph for qualified lifecycle requests that include `:lib:capybara-lib` verification plus downstream consumers.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle task verification in this sandbox because the requested wrapper invocation still fails before project execution with `Could not determine a usable wildcard IP for this machine`.
