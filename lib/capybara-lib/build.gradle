@@ -319,7 +319,11 @@ tasks.register('compileTestCapybaraDirect', InProcessCapybaraCompileTask) {
 tasks.register('compileTestCapybara') {
     group = 'verification'
     description = 'Compiles test Capybara files and generates Java without writing linked intermediates.'
-    dependsOn tasks.named('compileTestCapybaraDirect')
+    if (capybaraTestBuildRequested.get()) {
+        dependsOn tasks.named('prepareCapybaraForCheck')
+    } else {
+        dependsOn tasks.named('compileTestCapybaraDirect')
+    }
 }
 
 tasks.register('testCapybara', InProcessCapybaraTestTask) {

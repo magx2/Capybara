@@ -1491,3 +1491,31 @@
 ### Verification status
 - I could not run Gradle task verification or produce a fresh profile in this sandbox because the requested wrapper command still fails before project execution on the read-only `/home/martin/.gradle` lock path.
 - Verification for this pass is limited to source inspection and task-graph analysis.
+
+## 2026-04-06 build optimization pass direct compileTestCapybara wiring
+
+### Requested baseline
+- Re-ran the requested baseline command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- It still failed immediately in this sandbox because the wrapper tried to create `/home/martin/.gradle/.../gradle-9.1.0-bin.zip.lck` on a read-only filesystem.
+- Re-ran with `GRADLE_USER_HOME=$PWD/.gradle` and the repository-local Gradle 9.1.0 distribution; Gradle still failed before project execution with `Could not determine a usable wildcard IP for this machine`.
+- Checked `build/reports/profile` after the failed runs; no fresh profile HTML was produced, so this pass is based on source inspection of the current handwritten `lib/capybara-lib` task graph.
+
+### Findings
+- `capybaraTestBuildRequested` intentionally treats direct `compileTestCapybara` requests as part of the fused test-build path.
+- In `lib/capybara-lib`, the compatibility task `compileTestCapybara` still always depended on `compileTestCapybaraDirect`.
+- `compileTestCapybaraDirect` is guarded with `onlyIf { !capybaraTestBuildRequested.get() }`, so a direct `:lib:capybara-lib:compileTestCapybara` request currently skips the only worker task it depends on.
+- That means the handwritten standalone test-generation entrypoint can devolve into a no-op instead of taking the cheaper fused main+test in-process compile path already used by `check`, `test`, and `testCapybara`.
+
+### Changes made
+- Rewired `lib/capybara-lib:compileTestCapybara` so it:
+  - depends on `prepareCapybaraForCheck` when the fused test-build path is requested;
+  - otherwise keeps using `compileTestCapybaraDirect` for the standalone non-fused path.
+
+### Expected impact
+- Direct `:lib:capybara-lib:compileTestCapybara` requests should now perform real work again instead of skipping the only underlying compile task.
+- That direct path should also stay on the cheaper fused main+test compilation route when the broader test-build mode is active, avoiding the older linked-output detour.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle task verification or produce a fresh profile in this sandbox because the requested wrapper command still fails before project execution on both the default Gradle home lock path and the repository-local cache path.
+- Verification for this pass is limited to source inspection and task-graph analysis.
