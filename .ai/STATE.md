@@ -219,6 +219,35 @@
 - `git diff --check` passed.
 - I could not run Gradle task verification in this sandbox because Gradle still fails during startup with `Could not determine a usable wildcard IP for this machine`.
 
+## 2026-04-06 build optimization pass linked-only stdlib consumers
+
+### Requested baseline
+- Re-ran the requested baseline command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- It still failed immediately in this sandbox because the wrapper tried to create `/home/martin/.gradle/.../gradle-9.1.0-bin.zip.lck` on a read-only filesystem.
+- Checked `build/reports/profile` again; no fresh profile report was produced, so analysis still relies on the existing HTML reports already present there.
+
+### Findings
+- `compiler:processResources` and `integration-tests:linkCapybaraSources` only consume `lib:capybara-lib` linked stdlib output under `build/generated/sources/capybara/linked/main`.
+- Both consumers currently depend on `:lib:capybara-lib:linkCapybara`.
+- In the current handwritten `lib:capybara-lib` build, `linkCapybara` runs `linkCapybaraDirect`, which compiles the stdlib and generates Java in the same pass.
+- That means clean builds for `compiler` and `integration-tests` were paying to regenerate `lib:capybara-lib` Java sources even when they only needed linked JSON.
+
+### Changes made
+- Extended the local in-process Capybara compile task in `lib/capybara-lib/build.gradle` so it can run either:
+  - link-only via `Capy.compile(...)`, or
+  - link-and-generate via `Capy.compileGenerate(...)`.
+- Added a new `:lib:capybara-lib:linkCapybaraLinkedOnly` task that writes only linked stdlib output.
+- Rewired `compiler:processResources` to depend on `:lib:capybara-lib:linkCapybaraLinkedOnly`.
+- Rewired `integration-tests:linkCapybaraSources` to depend on `:lib:capybara-lib:linkCapybaraLinkedOnly`.
+
+### Expected impact
+- Clean repository builds should avoid unnecessary stdlib Java generation when `compiler` packages Capybara linked resources or when `integration-tests` compiles its own Capybara sources against the linked stdlib.
+- This removes one avoidable Capy generation pass from those cross-project build paths while preserving the existing `linkCapybara`/`compileCapybara` behavior for callers that still need generated Java.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle verification in this sandbox because the exact requested wrapper command still fails before Gradle startup due to the read-only wrapper lock path.
+
 ## 2026-04-06 build optimization pass in-process Capybara test execution
 
 ### Requested baseline
@@ -606,6 +635,35 @@
 - `git diff --check` passed.
 - I could not run Gradle task verification in this sandbox because the requested wrapper command still fails before project execution on the read-only `/home/martin/.gradle` lock path.
 - Verification for this pass is limited to source inspection and the updated regression tests.
+
+## 2026-04-06 build optimization pass linked-only stdlib consumers
+
+### Requested baseline
+- Re-ran the requested baseline command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- It still failed immediately in this sandbox because the wrapper tried to create `/home/martin/.gradle/.../gradle-9.1.0-bin.zip.lck` on a read-only filesystem.
+- Checked `build/reports/profile` again; no fresh profile report was produced, so analysis still relies on the existing HTML reports already present there.
+
+### Findings
+- `compiler:processResources` and `integration-tests:linkCapybaraSources` only consume `lib:capybara-lib` linked stdlib output under `build/generated/sources/capybara/linked/main`.
+- Both consumers currently depend on `:lib:capybara-lib:linkCapybara`.
+- In the current handwritten `lib:capybara-lib` build, `linkCapybara` runs `linkCapybaraDirect`, which compiles the stdlib and generates Java in the same pass.
+- That means clean builds for `compiler` and `integration-tests` were paying to regenerate `lib:capybara-lib` Java sources even when they only needed linked JSON.
+
+### Changes made
+- Extended the local in-process Capybara compile task in `lib/capybara-lib/build.gradle` so it can run either:
+  - link-only via `Capy.compile(...)`, or
+  - link-and-generate via `Capy.compileGenerate(...)`.
+- Added a new `:lib:capybara-lib:linkCapybaraLinkedOnly` task that writes only linked stdlib output.
+- Rewired `compiler:processResources` to depend on `:lib:capybara-lib:linkCapybaraLinkedOnly`.
+- Rewired `integration-tests:linkCapybaraSources` to depend on `:lib:capybara-lib:linkCapybaraLinkedOnly`.
+
+### Expected impact
+- Clean repository builds should avoid unnecessary stdlib Java generation when `compiler` packages Capybara linked resources or when `integration-tests` compiles its own Capybara sources against the linked stdlib.
+- This removes one avoidable Capy generation pass from those cross-project build paths while preserving the existing `linkCapybara`/`compileCapybara` behavior for callers that still need generated Java.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle verification in this sandbox because the exact requested wrapper command still fails before Gradle startup due to the read-only wrapper lock path.
 
 ## 2026-04-06 build optimization pass plugin test-linked-output removal
 

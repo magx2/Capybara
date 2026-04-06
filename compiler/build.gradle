@@ -51,7 +51,7 @@ check {
 }
 
 tasks.named('processResources') {
-    dependsOn ':lib:capybara-lib:linkCapybara'
+    dependsOn ':lib:capybara-lib:linkCapybaraLinkedOnly'
     from(capybaraStdlibLinkedDir) {
         into 'capy'
     }

@@ -41,6 +41,7 @@ abstract class InProcessCapybaraCompileTask extends DefaultTask {
     @OutputDirectory
     abstract DirectoryProperty getLinkedOutputDir()
 
+    @Optional
     @OutputDirectory
     abstract DirectoryProperty getGeneratedOutputDir()
 
@@ -66,23 +67,11 @@ abstract class InProcessCapybaraCompileTask extends DefaultTask {
         URLClassLoader classLoader = new URLClassLoader(runtimeUrls, ClassLoader.getPlatformClassLoader())
         try {
             def capyClass = Class.forName('dev.capylang.Capy', true, classLoader)
-            def outputTypeClass = Class.forName('dev.capylang.compiler.OutputType', true, classLoader)
-            def outputType = outputTypeClass.enumConstants.find { it.name() == 'JAVA' }
             def readLinkedProgram = capyClass.getDeclaredMethod('readLinkedProgram', Path, Boolean.TYPE)
             readLinkedProgram.accessible = true
-            def compileGenerate = capyClass.getMethod(
-                    'compileGenerate',
-                    outputTypeClass,
-                    Path,
-                    Path,
-                    Path,
-                    Path,
-                    Path,
-                    TreeSet,
-                    Boolean.TYPE,
-                    Boolean.TYPE,
-                    PrintStream
-            )
+            def generatedOutputPath = generatedOutputDir.present ? generatedOutputDir.get().asFile.toPath() : null
+            def testInputPath = testInputDir.present ? testInputDir.get().asFile.toPath() : null
+            def testGeneratedOutputPath = testGeneratedOutputDir.present ? testGeneratedOutputDir.get().asFile.toPath() : null
 
             def libraries = new TreeSet()
             additionalInputDirs.files.each { libraryDir ->
@@ -94,19 +83,58 @@ abstract class InProcessCapybaraCompileTask extends DefaultTask {
                 libraries.addAll(program.modules())
             }
 
-            def exitCode = compileGenerate.invoke(
-                    null,
-                    outputType,
-                    inputDir.get().asFile.toPath(),
-                    generatedOutputDir.get().asFile.toPath(),
-                    linkedOutputDir.present ? linkedOutputDir.get().asFile.toPath() : null,
-                    testInputDir.present ? testInputDir.get().asFile.toPath() : null,
-                    testGeneratedOutputDir.present ? testGeneratedOutputDir.get().asFile.toPath() : null,
-                    libraries,
-                    compileTests.getOrElse(false),
-                    includeJavaLibResources.getOrElse(true),
-                    new PrintStream(errors)
-            ) as Integer
+            def exitCode
+            if (generatedOutputPath == null && testInputPath == null && testGeneratedOutputPath == null) {
+                def compile = capyClass.getMethod(
+                        'compile',
+                        Path,
+                        Path,
+                        TreeSet,
+                        Boolean.TYPE,
+                        PrintStream,
+                        String
+                )
+                def readCompilerVersion = capyClass.getDeclaredMethod('readCompilerVersion')
+                readCompilerVersion.accessible = true
+                exitCode = compile.invoke(
+                        null,
+                        inputDir.get().asFile.toPath(),
+                        linkedOutputDir.get().asFile.toPath(),
+                        libraries,
+                        compileTests.getOrElse(false),
+                        new PrintStream(errors),
+                        readCompilerVersion.invoke(null)
+                ) as Integer
+            } else {
+                def outputTypeClass = Class.forName('dev.capylang.compiler.OutputType', true, classLoader)
+                def outputType = outputTypeClass.enumConstants.find { it.name() == 'JAVA' }
+                def compileGenerate = capyClass.getMethod(
+                        'compileGenerate',
+                        outputTypeClass,
+                        Path,
+                        Path,
+                        Path,
+                        Path,
+                        Path,
+                        TreeSet,
+                        Boolean.TYPE,
+                        Boolean.TYPE,
+                        PrintStream
+                )
+                exitCode = compileGenerate.invoke(
+                        null,
+                        outputType,
+                        inputDir.get().asFile.toPath(),
+                        generatedOutputPath,
+                        linkedOutputDir.present ? linkedOutputDir.get().asFile.toPath() : null,
+                        testInputPath,
+                        testGeneratedOutputPath,
+                        libraries,
+                        compileTests.getOrElse(false),
+                        includeJavaLibResources.getOrElse(true),
+                        new PrintStream(errors)
+                ) as Integer
+            }
 
             if (exitCode != 0) {
                 def message = errors.toString().trim()
@@ -198,6 +226,17 @@ tasks.register('linkCapybaraDirect', InProcessCapybaraCompileTask) {
     compileTests.set(false)
     includeJavaLibResources.set(false)
     onlyIf { !capybaraTestBuildRequested.get() }
+}
+
+tasks.register('linkCapybaraLinkedOnly', InProcessCapybaraCompileTask) {
+    group = 'build'
+    description = 'Compiles Capybara files from src/main/capybara to linked JSON without generating Java.'
+
+    runtimeClasspath.from(capyRuntimeClasspath)
+    inputDir.set(capybaraMainSourceDir)
+    linkedOutputDir.set(capybaraLinkedMainDir)
+    compileTests.set(false)
+    includeJavaLibResources.set(false)
 }
 
 tasks.register('prepareCapybaraForCheck', InProcessCapybaraCompileTask) {
