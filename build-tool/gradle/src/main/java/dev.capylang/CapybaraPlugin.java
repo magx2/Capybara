@@ -164,7 +164,22 @@ public class CapybaraPlugin implements Plugin<Project> {
                     task.setDependsOn(java.util.List.of());
                 }
             });
-            project.getTasks().matching(task -> task.getName().equals("check")).configureEach(task -> task.dependsOn(testCapybara));
+            project.getTasks().matching(task -> task.getName().equals("check")).configureEach(task -> {
+                if (!hasJvmTestSources.get()) {
+                    task.setDependsOn(task.getDependsOn().stream()
+                            .filter(dependency -> {
+                                if (dependency instanceof org.gradle.api.tasks.TaskProvider<?> provider) {
+                                    return !provider.getName().equals("test");
+                                }
+                                if (dependency instanceof org.gradle.api.Task dependencyTask) {
+                                    return !dependencyTask.getName().equals("test");
+                                }
+                                return !"test".equals(dependency);
+                            })
+                            .toList());
+                }
+                task.dependsOn(testCapybara);
+            });
         }
     }
 

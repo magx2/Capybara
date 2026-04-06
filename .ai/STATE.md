@@ -1827,3 +1827,33 @@
 - `git diff --check` passed.
 - I could not run Gradle task verification or produce a fresh profile in this sandbox because the requested wrapper command still fails before project execution with `Could not determine a usable wildcard IP for this machine`.
 - Verification for this pass is limited to source inspection and the added plugin test coverage.
+
+## 2026-04-06 build optimization pass remove dead check-to-test edge for Capybara-only modules
+
+### Requested baseline
+- Re-ran the requested baseline command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- The wrapper now gets past the earlier read-only Gradle home failure, but Gradle still cannot start in this sandbox:
+  - `Could not create service of type FileLockContentionHandler`
+  - `Could not determine a usable wildcard IP for this machine`
+- Checked `build/reports/profile` after the failed run; no fresh profile HTML was produced, so this pass still relies on the latest existing reports already present there.
+
+### Findings
+- Earlier passes disabled the standard JVM `test` task and cleared its dependencies for Capybara-only modules, but the Java plugin’s `check` task still retained its default dependency on `test`.
+- That left a dead lifecycle edge in the `:lib:capybara-lib:check` graph: `check` could still schedule the disabled JVM `test` task even though real verification already runs through `testCapybara`.
+- The reusable `CapybaraPlugin` had the same default `check -> test` edge, so plugin consumers with Capybara-only test suites could keep carrying the same unnecessary task-graph node.
+
+### Changes made
+- In `lib/capybara-lib/build.gradle`, removed the inherited `check -> test` dependency when the module has no JVM test sources, while still wiring `check` to `testCapybara`.
+- Applied the same rule in `build-tool/gradle`’s `CapybaraPlugin`.
+- Added plugin tests covering both cases:
+  - projects without JVM tests no longer expose `check -> test`;
+  - projects with JVM tests keep both `check -> test` and `check -> testCapybara`.
+
+### Expected impact
+- `:lib:capybara-lib:check --rerun-tasks` should avoid scheduling the disabled JVM `test` lifecycle task for Capybara-only modules.
+- This slightly reduces task-graph overhead on the requested check path and keeps the reusable plugin aligned with the handwritten build behavior.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle task verification or produce a fresh profile in this sandbox because the requested wrapper command still fails before project execution with `Could not determine a usable wildcard IP for this machine`.
+- Verification for this pass is limited to source inspection and the added plugin test coverage.

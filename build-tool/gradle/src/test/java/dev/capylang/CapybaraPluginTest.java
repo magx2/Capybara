@@ -204,6 +204,16 @@ class CapybaraPluginTest {
     }
 
     @Test
+    void shouldRemoveCheckDependencyOnJvmTestTaskWhenProjectHasNoJvmTestSources() {
+        var project = newProject();
+        var checkTask = project.getTasks().named("check").get();
+        var checkDependencies = checkTask.getTaskDependencies().getDependencies(checkTask);
+
+        assertFalse(checkDependencies.contains(project.getTasks().named("test").get()));
+        assertTrue(checkDependencies.contains(project.getTasks().named("testCapybara").get()));
+    }
+
+    @Test
     void shouldKeepJvmTestTaskEnabledWhenProjectHasJvmTestSources() throws IOException {
         var jvmTestSourceDir = Files.createDirectories(tempDir.resolve("src/test/java/dev/capylang"));
         Files.writeString(jvmTestSourceDir.resolve("PluginJvmTest.java"), "class PluginJvmTest {}");
@@ -212,6 +222,19 @@ class CapybaraPluginTest {
         var testTask = project.getTasks().named("test").get();
 
         assertTrue(testTask.getEnabled());
+    }
+
+    @Test
+    void shouldKeepCheckDependencyOnJvmTestTaskWhenProjectHasJvmTestSources() throws IOException {
+        var jvmTestSourceDir = Files.createDirectories(tempDir.resolve("src/test/java/dev/capylang"));
+        Files.writeString(jvmTestSourceDir.resolve("PluginJvmTest.java"), "class PluginJvmTest {}");
+
+        var project = newProject();
+        var checkTask = project.getTasks().named("check").get();
+        var checkDependencies = checkTask.getTaskDependencies().getDependencies(checkTask);
+
+        assertTrue(checkDependencies.contains(project.getTasks().named("test").get()));
+        assertTrue(checkDependencies.contains(project.getTasks().named("testCapybara").get()));
     }
 
     @Test
