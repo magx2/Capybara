@@ -217,9 +217,11 @@ class CapyTest {
         var programFile = linkedDir.resolve("program.json");
         var moduleFile = linkedDir.resolve("foo").resolve("Main.json");
         var buildInfoFile = linkedDir.resolve("build-info.json");
+        var manifestFile = linkedDir.resolve(".capy-output-manifest");
         var initialProgramTime = Files.getLastModifiedTime(programFile);
         var initialModuleTime = Files.getLastModifiedTime(moduleFile);
         var initialBuildInfoTime = Files.getLastModifiedTime(buildInfoFile);
+        var initialManifestTime = Files.getLastModifiedTime(manifestFile);
 
         Thread.sleep(1100);
 
@@ -232,6 +234,7 @@ class CapyTest {
         assertEquals(initialProgramTime, Files.getLastModifiedTime(programFile));
         assertEquals(initialModuleTime, Files.getLastModifiedTime(moduleFile));
         assertEquals(initialBuildInfoTime, Files.getLastModifiedTime(buildInfoFile));
+        assertEquals(initialManifestTime, Files.getLastModifiedTime(manifestFile));
     }
 
     @Test
@@ -349,8 +352,10 @@ class CapyTest {
 
         var mainFile = generatedDir.resolve("Main.java");
         var runtimeFile = generatedDir.resolve("dev").resolve("capylang").resolve("CapybaraUtil.java");
+        var manifestFile = generatedDir.resolve(".capy-output-manifest");
         var initialMainTime = Files.getLastModifiedTime(mainFile);
         var initialRuntimeTime = Files.getLastModifiedTime(runtimeFile);
+        var initialManifestTime = Files.getLastModifiedTime(manifestFile);
 
         Thread.sleep(1100);
 
@@ -362,6 +367,7 @@ class CapyTest {
 
         assertEquals(initialMainTime, Files.getLastModifiedTime(mainFile));
         assertEquals(initialRuntimeTime, Files.getLastModifiedTime(runtimeFile));
+        assertEquals(initialManifestTime, Files.getLastModifiedTime(manifestFile));
     }
 
     @Test

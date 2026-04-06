@@ -78,6 +78,23 @@ class TestRunnerTest {
     }
 
     @Test
+    void shouldNotRewriteIdenticalOutputManifest() throws Exception {
+        var expectedFiles = Set.of(java.nio.file.Path.of("reports", "TEST-keep.xml"));
+        Files.createDirectories(tempDir.resolve("reports"));
+
+        TestRunner.deleteStaleOutputs(tempDir, expectedFiles);
+
+        var manifestFile = tempDir.resolve(TestRunner.OUTPUT_MANIFEST_FILE);
+        var initialModifiedTime = Files.getLastModifiedTime(manifestFile);
+
+        Thread.sleep(1100);
+
+        TestRunner.deleteStaleOutputs(tempDir, expectedFiles);
+
+        assertEquals(initialModifiedTime, Files.getLastModifiedTime(manifestFile));
+    }
+
+    @Test
     void shouldDeleteStaleOutputsFromManifestWithoutWalkingCurrentTree() throws Exception {
         var keptFile = Files.createDirectories(tempDir.resolve("reports")).resolve("TEST-keep.xml");
         Files.writeString(keptFile, "<keep/>");

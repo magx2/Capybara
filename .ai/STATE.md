@@ -547,6 +547,68 @@
 - I could not run Gradle task verification in this sandbox because the requested wrapper command still fails before project execution on the read-only `/home/martin/.gradle` lock path.
 - Verification for this pass is limited to source inspection and the updated plugin test coverage.
 
+## 2026-04-06 build optimization pass manifest rewrite suppression
+
+### Requested baseline
+- Re-ran the requested baseline command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- It still failed immediately in this sandbox because the wrapper tried to create `/home/martin/.gradle/.../gradle-9.1.0-bin.zip.lck` on a read-only filesystem.
+- Checked `build/reports/profile` after the run; no new profile HTML was produced, so the latest available reports remain the existing files ending at `build/reports/profile/profile-2026-04-04-19-07-42.html`.
+
+### Findings
+- Earlier passes made linked JSON, generated Java, build info, and JUnit XML writes content-aware, but the manifest files used for stale-output pruning were still always rewritten.
+- That affected both:
+  - Capy compile/generate output manifests (`.capy-output-manifest`);
+  - Capybara test report manifests (`.capy-test-output-manifest`).
+- On the requested `--rerun-tasks` path, those manifest rewrites are guaranteed filesystem churn even when the output set is unchanged.
+
+### Changes made
+- Changed `capy/src/main/java/dev/capylang/Capy.java` to write `.capy-output-manifest` via the existing content-aware `writeStringIfChanged(...)` helper instead of unconditional `Files.writeString(...)`.
+- Changed `lib/capybara-lib/src/main/java/dev/capylang/test/TestRunner.java` to do the same for `.capy-test-output-manifest`.
+- Extended regression coverage so identical reruns now verify stable modification times for:
+  - linked output manifests;
+  - generated output manifests;
+  - Capybara test-output manifests.
+
+### Expected impact
+- Repeated identical Capy compile/generate/test runs should stop rewriting manifest files solely because the task reran.
+- This removes another guaranteed write from the hot `:lib:capybara-lib:check --rerun-tasks` path and further reduces steady-state filesystem churn.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle task verification in this sandbox because the requested wrapper command still fails before project execution on the read-only `/home/martin/.gradle` lock path.
+- Verification for this pass is limited to source inspection and the updated regression tests.
+
+## 2026-04-06 build optimization pass manifest rewrite suppression
+
+### Requested baseline
+- Re-ran the requested baseline command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- It still failed immediately in this sandbox because the wrapper tried to create `/home/martin/.gradle/.../gradle-9.1.0-bin.zip.lck` on a read-only filesystem.
+- Checked `build/reports/profile` after the run; no new profile HTML was produced, so the latest available reports remain the existing files ending at `build/reports/profile/profile-2026-04-04-19-07-42.html`.
+
+### Findings
+- Earlier passes made linked JSON, generated Java, build info, and JUnit XML writes content-aware, but the manifest files used for stale-output pruning were still always rewritten.
+- That affected both:
+  - Capy compile/generate output manifests (`.capy-output-manifest`);
+  - Capybara test report manifests (`.capy-test-output-manifest`).
+- On the requested `--rerun-tasks` path, those manifest rewrites are guaranteed filesystem churn even when the output set is unchanged.
+
+### Changes made
+- Changed `capy/src/main/java/dev/capylang/Capy.java` to write `.capy-output-manifest` via the existing content-aware `writeStringIfChanged(...)` helper instead of unconditional `Files.writeString(...)`.
+- Changed `lib/capybara-lib/src/main/java/dev/capylang/test/TestRunner.java` to do the same for `.capy-test-output-manifest`.
+- Extended regression coverage so identical reruns now verify stable modification times for:
+  - linked output manifests;
+  - generated output manifests;
+  - Capybara test-output manifests.
+
+### Expected impact
+- Repeated identical Capy compile/generate/test runs should stop rewriting manifest files solely because the task reran.
+- This removes another guaranteed write from the hot `:lib:capybara-lib:check --rerun-tasks` path and further reduces steady-state filesystem churn.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle task verification in this sandbox because the requested wrapper command still fails before project execution on the read-only `/home/martin/.gradle` lock path.
+- Verification for this pass is limited to source inspection and the updated regression tests.
+
 ## 2026-04-06 build optimization pass in-process capybara-lib generation
 
 ### Requested baseline
@@ -877,3 +939,34 @@
 - `git diff --check` passed.
 - I could not run Gradle task verification in this sandbox because the requested wrapper command still fails before project execution on the read-only `/home/martin/.gradle` lock path.
 - Verification for this pass is limited to source inspection and the updated plugin test coverage.
+
+## 2026-04-06 build optimization pass manifest rewrite suppression
+
+### Requested baseline
+- Re-ran the requested baseline command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- It still failed immediately in this sandbox because the wrapper tried to create `/home/martin/.gradle/.../gradle-9.1.0-bin.zip.lck` on a read-only filesystem.
+- Checked `build/reports/profile` after the run; no new profile HTML was produced, so the latest available reports remain the existing files ending at `build/reports/profile/profile-2026-04-04-19-07-42.html`.
+
+### Findings
+- Earlier passes made linked JSON, generated Java, build info, and JUnit XML writes content-aware, but the manifest files used for stale-output pruning were still always rewritten.
+- That affected both:
+  - Capy compile/generate output manifests (`.capy-output-manifest`);
+  - Capybara test report manifests (`.capy-test-output-manifest`).
+- On the requested `--rerun-tasks` path, those manifest rewrites are guaranteed filesystem churn even when the output set is unchanged.
+
+### Changes made
+- Changed `capy/src/main/java/dev/capylang/Capy.java` to write `.capy-output-manifest` via the existing content-aware `writeStringIfChanged(...)` helper instead of unconditional `Files.writeString(...)`.
+- Changed `lib/capybara-lib/src/main/java/dev/capylang/test/TestRunner.java` to do the same for `.capy-test-output-manifest`.
+- Extended regression coverage so identical reruns now verify stable modification times for:
+  - linked output manifests;
+  - generated output manifests;
+  - Capybara test-output manifests.
+
+### Expected impact
+- Repeated identical Capy compile/generate/test runs should stop rewriting manifest files solely because the task reran.
+- This removes another guaranteed write from the hot `:lib:capybara-lib:check --rerun-tasks` path and further reduces steady-state filesystem churn.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle task verification in this sandbox because the requested wrapper command still fails before project execution on the read-only `/home/martin/.gradle` lock path.
+- Verification for this pass is limited to source inspection and the updated regression tests.

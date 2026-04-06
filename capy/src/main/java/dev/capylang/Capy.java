@@ -1169,13 +1169,9 @@ public class Capy {
                 .map(Path::toString)
                 .sorted()
                 .collect(java.util.stream.Collectors.joining(System.lineSeparator()));
-        Files.writeString(
+        writeStringIfChanged(
                 manifestFile,
-                manifestContents.isEmpty() ? "" : manifestContents + System.lineSeparator(),
-                StandardCharsets.UTF_8,
-                StandardOpenOption.CREATE,
-                StandardOpenOption.TRUNCATE_EXISTING,
-                StandardOpenOption.WRITE
+                manifestContents.isEmpty() ? "" : manifestContents + System.lineSeparator()
         );
     }
 
