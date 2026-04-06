@@ -1121,3 +1121,31 @@
 - `git diff --check` passed.
 - I could not run Gradle task verification in this sandbox because the requested wrapper command still fails before project execution on the read-only `/home/martin/.gradle` lock path.
 - Verification for this pass is limited to source inspection and the updated regression tests.
+
+## 2026-04-06 build optimization pass JUnit discovery filtering
+
+### Requested baseline
+- Re-ran the requested baseline command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- It still failed immediately in this sandbox because the wrapper tried to create `/home/martin/.gradle/.../gradle-9.1.0-bin.zip.lck` on a read-only filesystem.
+- Re-ran with `GRADLE_USER_HOME=$PWD/.gradle` to use the repository-local wrapper cache.
+- Gradle startup still failed before project execution with `Could not determine a usable wildcard IP for this machine`.
+- Checked `build/reports/profile` after the failed runs; no new profile HTML was produced, so analysis still relies on the existing reports already present in `build/reports/profile`.
+
+### Findings
+- `lib/capybara-lib` still mixes generated Capybara test classes into the standard Gradle `test` task's test-class scan because those generated classes are compiled into the normal test source set.
+- That is redundant for this module:
+  - generated Capybara tests under the `capy/**` packages are already executed by the dedicated `testCapybara` task;
+  - the handwritten JUnit tests live under `dev/capylang/**`.
+- On the requested `:lib:capybara-lib:check --rerun-tasks` path, the standard `test` task was therefore still doing avoidable JUnit discovery work over generated Capybara test classes that it does not need to execute.
+
+### Changes made
+- Updated `lib/capybara-lib/build.gradle` so the standard Gradle `test` task excludes `capy/**` from its candidate test-class scan while still depending on `testCapybara`.
+
+### Expected impact
+- `:lib:capybara-lib:test` should spend less time on JUnit discovery because it no longer scans generated Capybara test classes that are already covered by `testCapybara`.
+- The exact `:lib:capybara-lib:check --rerun-tasks` path should retain both Java-unit-test coverage and Capybara-test coverage without duplicating test-class discovery effort.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle task verification in this sandbox because the requested wrapper command still fails before project execution on both the default Gradle home lock path and the repository-local cache path.
+- Verification for this pass is limited to source inspection.
