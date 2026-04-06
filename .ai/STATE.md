@@ -281,3 +281,36 @@
 - `git diff --check` passed.
 - I could not run Gradle task verification in this sandbox because the wrapper still fails before task execution with a read-only lockfile path under `/home/martin/.gradle`, and repo-local Gradle startup still fails with `Could not determine a usable wildcard IP for this machine`.
 - Verification for this pass is limited to source inspection and the updated CLI unit-test coverage.
+
+## 2026-04-06 build optimization pass aggregated linked program cache
+
+### Requested baseline
+- Re-ran the requested baseline command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- It still failed immediately in this sandbox because the wrapper tried to create `/home/martin/.gradle/.../gradle-9.1.0-bin.zip.lck` on a read-only filesystem.
+- Checked `build/reports/profile` after the run; no new profile HTML was produced, and the latest available report is still `build/reports/profile/profile-2026-04-04-19-07-42.html`.
+
+### Findings
+- Even after earlier task-graph reductions, downstream Capy steps still reload linked outputs by recursively walking every module JSON file under the linked output directory.
+- That affects the `:lib:capybara-lib:check --rerun-tasks` path because `compileTestCapybara` reloads the main linked library output, and other `generate` or compile steps can do the same.
+- The linked-output directory already persists the full compiled program content in aggregate at task execution time, but the on-disk format only exposed per-module JSON files plus metadata, so each downstream read paid for:
+  - a full directory walk,
+  - per-file open/read/deserialize work,
+  - repeated filtering of non-module metadata files.
+
+### Changes made
+- Added an aggregated `program.json` artifact to linked-output directories alongside the existing per-module JSON files and `build-info.json`.
+- Updated `Capy.readLinkedProgram(...)` to prefer `program.json` when present and fall back to the legacy per-module walk when reading older outputs.
+- Added CLI coverage that verifies:
+  - linked outputs now contain `program.json`,
+  - package archives include `program.json`,
+  - library compilation can succeed using only the aggregated program file after removing individual module JSON files.
+- Added plugin coverage asserting that plugin-produced linked outputs also write `program.json`.
+
+### Expected impact
+- Downstream library reads on reused linked outputs should avoid recursive file walking and repeated per-module JSON deserialization when `program.json` is available.
+- `:lib:capybara-lib:compileTestCapybara` and other consumers of linked outputs should do less filesystem and JSON parsing work on `--rerun-tasks` builds.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle task verification in this sandbox because the wrapper still fails before task execution with a read-only lockfile path under `/home/martin/.gradle`, and repo-local Gradle startup still fails with `Could not determine a usable wildcard IP for this machine`.
+- Verification for this pass is limited to source inspection and the added CLI/plugin test coverage.

@@ -67,6 +67,7 @@ public class Capy {
 
     private static final String BUILD_INFO_FILE = "build-info.json";
     private static final String PACKAGE_FILE = "capy.cbin";
+    private static final String PROGRAM_FILE = "program.json";
     private static final String MODULE_FILE = "capy.yml";
     private static final String VERSION_RESOURCE = "/capybara-version.txt";
     private static final String JAVA_LIB_RESOURCE_DIR = "/java-lib-src";
@@ -1034,6 +1035,12 @@ public class Capy {
         try {
             Files.createDirectories(outputDir);
             var writtenFiles = new HashSet<Path>();
+            var programFile = outputDir.resolve(PROGRAM_FILE);
+            log.info("Writing linked program to file: " + programFile);
+            var programStartedAt = System.nanoTime();
+            mapper.writerWithDefaultPrettyPrinter().writeValue(programFile.toFile(), program);
+            log.info("Wrote linked program to file: " + programFile + " in " + Duration.ofNanos(System.nanoTime() - programStartedAt));
+            writtenFiles.add(Path.of(PROGRAM_FILE));
             for (var module : program.modules()) {
                 var modulePath = module.path().replace('\\', '/');
                 var moduleJson = modulePath.isBlank()
@@ -1298,6 +1305,14 @@ public class Capy {
     }
 
     static CompiledProgram readLinkedProgram(Path linkedInputDir, boolean requireModules) {
+        var programFile = linkedInputDir.resolve(PROGRAM_FILE);
+        if (Files.isRegularFile(programFile)) {
+            var program = readLinkedProgramFile(programFile);
+            if (requireModules && program.modules().isEmpty()) {
+                throw new CliException("Missing linked module files in directory: " + linkedInputDir);
+            }
+            return program;
+        }
         try (var files = Files.walk(linkedInputDir)) {
             var modules = files
                     .filter(Files::isRegularFile)
@@ -1311,6 +1326,14 @@ public class Capy {
             return new CompiledProgram(modules);
         } catch (IOException e) {
             throw new UncheckedIOException("Unable to read linked module JSONs from: " + linkedInputDir, e);
+        }
+    }
+
+    private static CompiledProgram readLinkedProgramFile(Path linkedProgramFile) {
+        try (var input = Files.newInputStream(linkedProgramFile)) {
+            return objectMapper().readValue(input, CompiledProgram.class);
+        } catch (IOException e) {
+            throw new UncheckedIOException("Unable to read linked program JSON: " + linkedProgramFile, e);
         }
     }
 

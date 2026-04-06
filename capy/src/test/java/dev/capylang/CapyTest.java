@@ -85,6 +85,7 @@ class CapyTest {
         assertEquals(0, compileApp);
         assertTrue(Files.exists(appOutputDir.resolve("app").resolve("Main.json")));
         assertTrue(Files.exists(appOutputDir.resolve("build-info.json")));
+        assertTrue(Files.exists(appOutputDir.resolve("program.json")));
         assertFalse(Files.exists(appOutputDir.resolve("lib").resolve("Lib.json")));
     }
 
@@ -124,7 +125,47 @@ class CapyTest {
         ));
 
         assertTrue(Files.exists(linkedDir.resolve("foo").resolve("Main.json")));
+        assertTrue(Files.exists(linkedDir.resolve("program.json")));
         assertFalse(Files.exists(staleFile));
+    }
+
+    @Test
+    void shouldReadLibrariesFromAggregatedProgramFile() throws IOException {
+        var libSourceDir = Files.createDirectories(tempDir.resolve("aggregated-lib-src"));
+        Files.createDirectories(libSourceDir.resolve("lib"));
+        Files.writeString(libSourceDir.resolve("lib").resolve("Lib.cfun"), "fun value(): int = 41\n");
+        var libOutputDir = Files.createDirectories(tempDir.resolve("aggregated-lib-linked"));
+
+        assertEquals(0, Capy.execute(
+                new String[]{"compile", "-i", libSourceDir.toString(), "-o", libOutputDir.toString()},
+                new PrintStream(new ByteArrayOutputStream()),
+                new PrintStream(new ByteArrayOutputStream())
+        ));
+
+        assertTrue(Files.exists(libOutputDir.resolve("program.json")));
+        Files.delete(libOutputDir.resolve("lib").resolve("Lib.json"));
+
+        var appSourceDir = Files.createDirectories(tempDir.resolve("aggregated-app-src"));
+        Files.createDirectories(appSourceDir.resolve("app"));
+        Files.writeString(
+                appSourceDir.resolve("app").resolve("Main.cfun"),
+                "from /lib/Lib import { value }\nfun main(): int = value()\n"
+        );
+        var appOutputDir = Files.createDirectories(tempDir.resolve("aggregated-app-linked"));
+
+        var compileApp = Capy.execute(
+                new String[]{
+                        "compile",
+                        "-i", appSourceDir.toString(),
+                        "-l", libOutputDir.toString(),
+                        "-o", appOutputDir.toString()
+                },
+                new PrintStream(new ByteArrayOutputStream()),
+                new PrintStream(new ByteArrayOutputStream())
+        );
+
+        assertEquals(0, compileApp);
+        assertTrue(Files.exists(appOutputDir.resolve("app").resolve("Main.json")));
     }
 
     @Test
@@ -298,6 +339,7 @@ class CapyTest {
         assertTrue(Files.exists(generatedDir.resolve("foo").resolve("Main.java")));
         assertTrue(Files.exists(linkedDir.resolve("foo").resolve("Main.json")));
         assertTrue(Files.exists(linkedDir.resolve("build-info.json")));
+        assertTrue(Files.exists(linkedDir.resolve("program.json")));
         assertFalse(Files.exists(generatedDir.resolve("dev").resolve("capylang").resolve("CapybaraUtil.java")));
     }
 
@@ -327,6 +369,7 @@ class CapyTest {
 
         assertTrue(Files.exists(linkedDir.resolve("capy").resolve("test").resolve("CapyTestRuntime.json")));
         assertTrue(Files.exists(linkedDir.resolve("foo").resolve("TestModule.json")));
+        assertTrue(Files.exists(linkedDir.resolve("program.json")));
     }
 
     @Test
@@ -384,6 +427,7 @@ class CapyTest {
         try (var zip = new ZipFile(archive.toFile())) {
             assertTrue(zip.getEntry("Main.json") != null);
             assertTrue(zip.getEntry("build-info.json") != null);
+            assertTrue(zip.getEntry("program.json") != null);
             var moduleYaml = new String(zip.getInputStream(zip.getEntry("capy.yml")).readAllBytes());
             assertTrue(moduleYaml.contains("version: 1.2.3"));
             assertTrue(moduleYaml.contains("license: GPLv2"));
