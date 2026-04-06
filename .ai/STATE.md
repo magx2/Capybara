@@ -1292,3 +1292,31 @@
 - `git diff --check` passed.
 - I could not run Gradle task verification in this sandbox because the requested wrapper command still fails before project execution on the read-only `/home/martin/.gradle` lock path.
 - Verification for this pass is limited to source inspection.
+
+## 2026-04-06 build optimization pass remove duplicate stdlib main compile on local check
+
+### Requested baseline
+- Re-ran the requested baseline command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- It still failed immediately in this sandbox because the wrapper tried to create `/home/martin/.gradle/.../gradle-9.1.0-bin.zip.lck` on a read-only filesystem.
+- Checked `build/reports/profile` after the failed run; no fresh profile HTML was produced, so analysis still relies on the latest existing report at `build/reports/profile/profile-2026-04-04-19-07-42.html`.
+
+### Findings
+- The current handwritten `lib/capybara-lib` check path uses `prepareCapybaraForCheck` to compile main and test Capybara sources in one in-process pass.
+- That task loads `dev.capylang.Capy` from `:capy` runtimeClasspath, which pulls in `:compiler:processResources`.
+- `:compiler:processResources` still depends on `:lib:capybara-lib:linkCapybaraLinked` to package bundled stdlib resources under `capy/`.
+- After the previous "restore narrow local check path" change, `prepareCapybaraForCheck` stopped writing `build/generated/sources/capybara/linked/main`, and `linkCapybaraLinked` was forced back to `linkCapybaraLinkedOnly`.
+- On `:lib:capybara-lib:check`, that means the build can compile main stdlib sources once for generated Java and then compile the same main stdlib sources a second time just to satisfy the transitive compiler resource dependency.
+
+### Changes made
+- Restored linked main output on `prepareCapybaraForCheck`.
+- Rewired `linkCapybaraLinked` to reuse `prepareCapybaraForCheck` during check/test-oriented builds and fall back to `linkCapybaraLinkedOnly` otherwise.
+- Updated the task description to reflect that the check/test path now reuses linked main output instead of forcing a second handwritten stdlib compile.
+
+### Expected impact
+- `:lib:capybara-lib:check --rerun-tasks` should avoid recompiling `lib/capybara-lib` main Capybara sources solely to satisfy `:compiler:processResources` on the `:capy` runtime classpath.
+- The local check path still keeps main/test Java generation fused, but now also satisfies the transitive bundled-stdlib resource requirement from that same main compile.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle task verification in this sandbox because the requested wrapper command still fails before project execution on the read-only `/home/martin/.gradle` lock path.
+- Verification for this pass is limited to source inspection and task-graph analysis.
