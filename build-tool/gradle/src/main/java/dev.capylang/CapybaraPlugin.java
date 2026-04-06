@@ -102,7 +102,7 @@ public class CapybaraPlugin implements Plugin<Project> {
         );
 
         project.getTasks().named("compileJava", task ->
-                task.dependsOn(capybaraTestBuildRequested ? compileCapybara : generateCapybaraJava));
+                task.dependsOn(compileCapybara));
 
         var compileTestCapybara = project.getTasks().register(
                 "compileTestCapybara",
@@ -197,7 +197,7 @@ public class CapybaraPlugin implements Plugin<Project> {
                             })
                             .toList());
                 }
-                task.dependsOn(singleJavaVerificationBuild ? compileCapybara : generateTestCapybaraJava);
+                task.dependsOn(singleJavaVerificationBuild ? compileCapybara : compileTestCapybara);
             });
 
             var testCapybara = project.getTasks().register(

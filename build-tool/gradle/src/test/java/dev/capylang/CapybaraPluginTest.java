@@ -213,7 +213,18 @@ class CapybaraPluginTest {
 
         assertFalse(project.getTasks().getNames().contains("compileCapybaraTestJava"));
         assertTrue(resolvedDependencies.contains(compileTestJava));
-        assertTrue(compileTestJavaDependencies.contains(project.getTasks().named("generateTestCapybaraJava").get()));
+        assertTrue(compileTestJavaDependencies.contains(project.getTasks().named("compileTestCapybara").get()));
+        assertFalse(compileTestJavaDependencies.contains(project.getTasks().named("generateTestCapybaraJava").get()));
+    }
+
+    @Test
+    void shouldWireStandardJavaCompilationDirectlyToCompileCapybara() {
+        var project = newProject();
+        var compileJava = project.getTasks().named("compileJava").get();
+        var compileJavaDependencies = compileJava.getTaskDependencies().getDependencies(compileJava);
+
+        assertTrue(compileJavaDependencies.contains(project.getTasks().named("compileCapybara").get()));
+        assertFalse(compileJavaDependencies.contains(project.getTasks().named("generateCapybaraJava").get()));
     }
 
     @Test
@@ -472,7 +483,8 @@ class CapybaraPluginTest {
         assertFalse(compileCapybara.getGeneratedTestOutputDir().isPresent());
         assertTrue(compileJava.getEnabled());
         assertFalse(testSrcDirs.contains(project.file("build/generated/sources/capybara/java")));
-        assertTrue(compileTestJavaDependencies.contains(project.getTasks().named("generateTestCapybaraJava").get()));
+        assertTrue(compileTestJavaDependencies.contains(project.getTasks().named("compileTestCapybara").get()));
+        assertFalse(compileTestJavaDependencies.contains(project.getTasks().named("generateTestCapybaraJava").get()));
         assertFalse(compileTestJavaDependencies.contains(project.getTasks().named("compileCapybara").get()));
         assertTrue(runtimeClasspathSources.contains(sourceSets.getByName("main").getRuntimeClasspath()));
     }

@@ -436,7 +436,7 @@ tasks.register('compileCapybara') {
 tasks.register('compileTestCapybaraDirect', InProcessCapybaraCompileTask) {
     group = 'verification'
     description = 'Compiles test Capybara files and generates Java without writing linked intermediates.'
-    dependsOn tasks.named('compileCapybara')
+    dependsOn tasks.named('linkCapybaraDirect')
 
     runtimeClasspath.from(capyRuntimeClasspath)
     inputDir.set(capybaraTestSourceDir)
@@ -496,7 +496,7 @@ tasks.named('compileJava') {
     if (capybaraTestBuildRequested) {
         dependsOn tasks.named('prepareCapybaraForCheck')
     } else {
-        dependsOn tasks.named('compileCapybara')
+        dependsOn tasks.named('linkCapybaraDirect')
     }
     if (!enabled) {
         setDependsOn([])
@@ -516,7 +516,7 @@ tasks.named('compileTestJava') {
     if (capybaraTestBuildRequested) {
         dependsOn tasks.named('prepareCapybaraForCheck')
     } else {
-        dependsOn tasks.named('compileTestCapybara')
+        dependsOn tasks.named('compileTestCapybaraDirect')
     }
 }
 

@@ -2244,6 +2244,40 @@
 - `git diff --check` passed.
 - I could not run Gradle task verification in this sandbox because the requested wrapper invocation still fails before project execution with `Could not determine a usable wildcard IP for this machine`.
 
+## 2026-04-06 build optimization pass wrapper task pruning
+
+### Requested baseline
+- Re-ran the requested command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- The run still failed before project execution in this sandbox with:
+  - `Could not determine a usable wildcard IP for this machine`.
+- Checked `build/reports/profile` after the failed run; no new profile HTML was produced, so this pass is based on the existing reports plus source inspection of the current task graph.
+
+### Findings
+- Earlier passes fused the expensive Capybara compile/generate work, but the handwritten `lib/capybara-lib` build and the reusable Gradle plugin still routed some Java lifecycle tasks through compatibility wrappers:
+  - `compileJava -> compileCapybara -> linkCapybaraDirect`
+  - `compileTestJava -> compileTestCapybara -> compileTestCapybaraDirect`
+  - plugin consumers similarly used `generateCapybaraJava` and `generateTestCapybaraJava` as pass-through lifecycle dependencies.
+- Those wrapper tasks preserve public task names, but when they sit on the real dependency edges they still add task scheduling and execution overhead without doing additional work.
+
+### Changes made
+- In `lib/capybara-lib/build.gradle`:
+  - rewired `compileJava` to depend directly on `linkCapybaraDirect` for the non-fused path;
+  - rewired `compileTestCapybaraDirect` to depend directly on `linkCapybaraDirect`;
+  - rewired `compileTestJava` to depend directly on `compileTestCapybaraDirect` for the non-fused path.
+- In `build-tool/gradle`'s `CapybaraPlugin`:
+  - rewired `compileJava` to depend directly on `compileCapybara`;
+  - rewired `compileTestJava` to depend directly on `compileTestCapybara` on the non-fused path.
+- Kept `compileCapybara`, `compileTestCapybara`, `generateCapybaraJava`, and `generateTestCapybaraJava` as compatibility task names for direct callers.
+- Updated plugin tests to assert that standard Java lifecycle tasks now depend on the real compile tasks rather than the compatibility wrappers.
+
+### Expected impact
+- Standard Java lifecycle requests should execute fewer no-op compatibility tasks while preserving the same externally visible task names.
+- This trims a bit more task-graph overhead from both the handwritten library build and plugin consumers, especially on repeated local compile/test workflows.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle task verification in this sandbox because the requested wrapper invocation still fails before project execution with `Could not determine a usable wildcard IP for this machine`.
+
 ## 2026-04-06 build optimization pass JVM test discovery narrowing
 
 ### Requested baseline
