@@ -129,11 +129,30 @@ public class CapybaraPlugin implements Plugin<Project> {
                     sourceSet.setRuntimeClasspath(sourceSet.getRuntimeClasspath().minus(mainSourceSet.getOutput()));
                 }
             });
-            project.getTasks().named("compileJava", task ->
-                    task.onlyIf(ignored -> !(capybaraTestBuildRequested.get() && !hasJvmMainSources.get())));
+            project.getTasks().named("compileJava", task -> {
+                var enabled = !capybaraTestBuildRequested.get() || hasJvmMainSources.get();
+                task.setEnabled(enabled);
+                if (!enabled) {
+                    task.setDependsOn(java.util.List.of());
+                }
+            });
             project.getTasks().named("processResources", task -> task.setEnabled(hasMainResources.get()));
             project.getTasks().named("processTestResources", task ->
                     task.setEnabled(hasJvmTestSources.get() || hasNonJvmTestResources.get()));
+            project.getTasks().named("classes", task -> {
+                var enabled = hasJvmMainSources.get() || hasMainResources.get();
+                task.setEnabled(enabled);
+                if (!enabled) {
+                    task.setDependsOn(java.util.List.of());
+                }
+            });
+            project.getTasks().named("testClasses", task -> {
+                var enabled = hasJvmTestSources.get() || hasNonJvmTestResources.get();
+                task.setEnabled(enabled);
+                if (!enabled) {
+                    task.setDependsOn(java.util.List.of());
+                }
+            });
             project.getTasks().named("compileTestJava", task -> {
                 if (capybaraTestBuildRequested.get() && !hasJvmMainSources.get()) {
                     task.setDependsOn(task.getDependsOn().stream()

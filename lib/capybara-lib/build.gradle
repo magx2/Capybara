@@ -459,11 +459,14 @@ sourceSets {
 }
 
 tasks.named('compileJava') {
-    onlyIf { !(capybaraTestBuildRequested.get() && !hasJvmMainSources.get()) }
+    enabled = !capybaraTestBuildRequested.get() || hasJvmMainSources.get()
     if (capybaraTestBuildRequested.get()) {
         dependsOn tasks.named('prepareCapybaraForCheck')
     } else {
         dependsOn tasks.named('compileCapybara')
+    }
+    if (!enabled) {
+        setDependsOn([])
     }
 }
 
@@ -490,6 +493,20 @@ tasks.named('processResources') {
 
 tasks.named('processTestResources') {
     enabled = hasJvmTestSources.get() || hasNonJvmTestResources.get()
+}
+
+tasks.named('classes') {
+    enabled = hasJvmMainSources.get() || hasMainResources.get()
+    if (!enabled) {
+        setDependsOn([])
+    }
+}
+
+tasks.named('testClasses') {
+    enabled = hasJvmTestSources.get() || hasNonJvmTestResources.get()
+    if (!enabled) {
+        setDependsOn([])
+    }
 }
 
 tasks.matching { it.name == 'test' }.configureEach {

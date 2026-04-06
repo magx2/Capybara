@@ -353,7 +353,8 @@ class CapybaraPluginTest {
         var project = newProject(List.of(requestedTask));
         var compileJava = project.getTasks().named("compileJava").get();
 
-        assertFalse(compileJava.getOnlyIf().isSatisfiedBy(compileJava));
+        assertFalse(compileJava.getEnabled());
+        assertTrue(compileJava.getDependsOn().isEmpty());
     }
 
     @Test
@@ -366,8 +367,50 @@ class CapybaraPluginTest {
         var sourceSets = project.getExtensions().getByType(SourceSetContainer.class);
         var testSrcDirs = sourceSets.getByName("test").getJava().getSrcDirs();
 
-        assertTrue(compileJava.getOnlyIf().isSatisfiedBy(compileJava));
+        assertTrue(compileJava.getEnabled());
         assertFalse(testSrcDirs.contains(project.file("build/generated/sources/capybara/java")));
+    }
+
+    @ParameterizedTest
+    @MethodSource("fusedCapybaraLifecycleTasks")
+    void shouldDisableClassesLifecycleTaskForCapybaraOnlyBuilds(String requestedTask) {
+        var project = newProject(List.of(requestedTask));
+        var classes = project.getTasks().named("classes").get();
+
+        assertFalse(classes.getEnabled());
+        assertTrue(classes.getDependsOn().isEmpty());
+    }
+
+    @Test
+    void shouldKeepClassesLifecycleTaskEnabledWhenMainOutputsExist() throws IOException {
+        var resourcesDir = Files.createDirectories(tempDir.resolve("src/main/resources"));
+        Files.writeString(resourcesDir.resolve("capybara.txt"), "resource");
+
+        var project = newProject(List.of("check"));
+        var classes = project.getTasks().named("classes").get();
+
+        assertTrue(classes.getEnabled());
+    }
+
+    @ParameterizedTest
+    @MethodSource("fusedCapybaraLifecycleTasks")
+    void shouldDisableTestClassesLifecycleTaskWhenOnlyCapybaraTestsExist(String requestedTask) {
+        var project = newProject(List.of(requestedTask));
+        var testClasses = project.getTasks().named("testClasses").get();
+
+        assertFalse(testClasses.getEnabled());
+        assertTrue(testClasses.getDependsOn().isEmpty());
+    }
+
+    @Test
+    void shouldKeepTestClassesLifecycleTaskEnabledWhenTestResourcesExist() throws IOException {
+        var resourcesDir = Files.createDirectories(tempDir.resolve("src/test/resources"));
+        Files.writeString(resourcesDir.resolve("capybara-data.txt"), "resource");
+
+        var project = newProject(List.of("check"));
+        var testClasses = project.getTasks().named("testClasses").get();
+
+        assertTrue(testClasses.getEnabled());
     }
 
     @Test

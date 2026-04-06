@@ -1758,6 +1758,49 @@
 - I could not run the requested Gradle build or produce a fresh profile in this sandbox because Gradle still fails before project execution with `Could not determine a usable wildcard IP for this machine`.
 - Verification for this pass is limited to source inspection.
 
+## 2026-04-06 build optimization pass disable empty Java lifecycle tasks for Capybara-only checks
+
+### Requested baseline
+- Re-ran the requested baseline command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- Gradle still failed during startup before any task execution in this sandbox:
+  - `Could not create service of type FileLockContentionHandler`
+  - `Could not determine a usable wildcard IP for this machine`
+- Checked `build/reports/profile` again after the failed run; no fresh profile HTML was produced, so this pass still relies on the saved reports plus current task wiring inspection.
+
+### Findings
+- `lib/capybara-lib` is now effectively a Capybara-only module for the requested `check` path:
+  - no JVM sources under `src/main` or `src/test`,
+  - no main resources,
+  - only `src/test/resources/junit-platform.properties`, which `processTestResources` already excludes from real work.
+- Earlier passes removed the heavy work from `compileJava`, `test`, and the Capybara generation pipeline, but the handwritten build still handled `compileJava` with `onlyIf` rather than fully disabling it for Capybara-only `check` builds.
+- The empty `classes` and `testClasses` lifecycle tasks were also left with their default Java-plugin wiring even when the module had no JVM or non-Capybara resource outputs for them to assemble.
+- That means Capybara-only verification could still pay avoidable lifecycle/task-graph overhead from empty Java tasks even though the real work now lives in `prepareCapybaraForCheck`, `compileTestJava`, and `testCapybara`.
+
+### Changes made
+- In `lib/capybara-lib/build.gradle`:
+  - changed `compileJava` from a skipped task to a disabled task for Capybara-only test/check builds,
+  - cleared `compileJava` dependencies when disabled so it no longer drags empty lifecycle wiring into the graph,
+  - disabled `classes` when there are no JVM main sources or main resources,
+  - disabled `testClasses` when there are no JVM test sources or non-JVM test resources.
+- Applied the same lifecycle pruning in `build-tool/gradle`’s `CapybaraPlugin` so plugin consumers get the same behavior.
+- Added plugin tests covering:
+  - disabled `compileJava` for Capybara-only lifecycle builds,
+  - preserved `compileJava` when JVM main sources exist,
+  - disabled `classes` for projects without JVM main outputs,
+  - preserved `classes` when main resources exist,
+  - disabled `testClasses` for Capybara-only test builds,
+  - preserved `testClasses` when non-JVM test resources exist.
+
+### Expected impact
+- `:lib:capybara-lib:check --rerun-tasks` should avoid more of the empty standard Java lifecycle around `compileJava`, `classes`, and `testClasses`.
+- The remaining check-path work should stay concentrated on the fused Capybara preparation, one Java compilation step, and the in-process Capybara test runner.
+- Plugin consumers with the same Capybara-only project shape should get the same reduced lifecycle overhead.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle task verification or produce a fresh profile in this sandbox because the requested wrapper command still fails before project execution with `Could not determine a usable wildcard IP for this machine`.
+- Verification for this pass is limited to source inspection and the added plugin test coverage.
+
 ## 2026-04-06 build optimization pass reuse Capy runtime bridge inside lib capybara tasks
 
 ### Requested baseline
