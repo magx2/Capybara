@@ -2244,6 +2244,43 @@
 - `git diff --check` passed.
 - I could not run Gradle task verification in this sandbox because the requested wrapper invocation still fails before project execution with `Could not determine a usable wildcard IP for this machine`.
 
+## 2026-04-06 build optimization pass skip empty plugin Capybara test pipeline
+
+### Requested baseline
+- Re-ran the requested command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- It still failed before project execution in this sandbox with:
+  - `Could not determine a usable wildcard IP for this machine`.
+- Tried a narrower startup workaround with repository-local Gradle cache plus `--no-daemon` and conservative JVM flags:
+  - `GRADLE_USER_HOME=$PWD/.gradle ./gradlew help --console=plain --no-daemon -Djava.net.preferIPv4Stack=true -Djava.net.preferIPv6Addresses=false -Dorg.gradle.cache.internal.locklistener=false`
+  - Gradle still failed with the same wildcard-IP startup error.
+- Checked `build/reports/profile` after the failed run; no new profile HTML was produced, so this pass is based on source inspection of the current build logic plus the existing reports already present there.
+
+### Findings
+- The reusable `build-tool/gradle` `CapybaraPlugin` always wired the Capybara test pipeline into verification builds even when a consumer project had no files under `src/test/capybara`.
+- In that empty-test case, plugin consumers still carried avoidable work on verification paths:
+  - `compileTestJava` still depended on `compileTestCapybara`;
+  - the `testCapybara` task stayed enabled;
+  - `test` and `check` still depended on `testCapybara`.
+- The fused single-Java verification path also always declared test Capybara inputs/outputs for `check`-style builds, even when there were no Capybara test sources to compile.
+
+### Changes made
+- Added `hasCapybaraTestSources` detection in `build-tool/gradle`’s `CapybaraPlugin`.
+- Restricted fused `compileCapybara` test-input/test-output wiring to projects that actually have `src/test/capybara` sources.
+- Changed `compileTestCapybara` to skip execution when no Capybara test sources exist.
+- Stopped `compileTestJava` from depending on `compileTestCapybara` when there are no Capybara test sources.
+- Disabled `testCapybara` and removed `test`/`check` dependencies on it when the project has no Capybara test sources.
+- Updated plugin regression tests to cover both cases:
+  - projects without Capybara test sources skip the empty Capybara test pipeline;
+  - projects with Capybara test sources keep the existing fused and verification wiring.
+
+### Expected impact
+- Plugin consumers with only JVM tests, only main Capybara sources, or no tests at all should avoid empty Capybara test compilation and execution work during `check`/`build` lifecycles.
+- This trims unnecessary task-graph work from the reusable plugin without changing behavior for projects that do define Capybara tests.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle task verification in this sandbox because the requested wrapper invocation still fails before project execution with `Could not determine a usable wildcard IP for this machine`.
+
 ## 2026-04-06 build optimization pass configuration-cache-safe publishing credentials
 
 ### Requested baseline

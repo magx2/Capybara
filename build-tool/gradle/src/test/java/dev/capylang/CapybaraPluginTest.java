@@ -80,7 +80,7 @@ class CapybaraPluginTest {
     }
 
     @Test
-    void shouldOnlyDeclareFusedTaskInputsAndOutputsForCapybaraOnlyCheckBuilds() {
+    void shouldOnlyDeclareFusedTaskInputsAndOutputsForCapybaraOnlyCheckBuildsWithoutCapybaraTests() {
         var standardProject = newProject();
         var standardTask = standardProject.getTasks().named("compileCapybara", CompileCapybaraTask.class).get();
         var fusedProject = newProject(List.of("check"));
@@ -89,6 +89,30 @@ class CapybaraPluginTest {
         assertTrue(standardTask.getOutputDir().isPresent());
         assertFalse(standardTask.getTestInputDir().isPresent());
         assertFalse(standardTask.getGeneratedTestOutputDir().isPresent());
+
+        assertFalse(fusedTask.getOutputDir().isPresent());
+        assertFalse(fusedTask.getTestInputDir().isPresent());
+        assertFalse(fusedTask.getGeneratedTestOutputDir().isPresent());
+    }
+
+    @Test
+    void shouldDeclareFusedTaskInputsAndOutputsForCheckBuildsWithCapybaraTests() throws IOException {
+        var testSourceDir = Files.createDirectories(tempDir.resolve("src/test/capybara/bar"));
+        Files.writeString(testSourceDir.resolve("TestModule.cfun"), """
+                from /capy/test/Assert import { * }
+                from /capy/test/CapyTest import { * }
+
+                fun works(): Assert =
+                    assert_that(42).is_equal_to(42)
+
+                fun tests(): TestFile =
+                    test_file("/bar/TestModule.cfun", [
+                        test("works", works())
+                    ])
+                """);
+
+        var project = newProject(List.of("check"));
+        var fusedTask = project.getTasks().named("compileCapybara", CompileCapybaraTask.class).get();
 
         assertFalse(fusedTask.getOutputDir().isPresent());
         assertTrue(fusedTask.getTestInputDir().isPresent());
@@ -204,7 +228,21 @@ class CapybaraPluginTest {
     }
 
     @Test
-    void shouldCompileGeneratedCapybaraTestsThroughCompileTestJava() {
+    void shouldCompileGeneratedCapybaraTestsThroughCompileTestJava() throws IOException {
+        var testSourceDir = tempDir.resolve("src/test/capybara/bar");
+        Files.createDirectories(testSourceDir);
+        Files.writeString(testSourceDir.resolve("TestModule.cfun"), """
+                from /capy/test/Assert import { * }
+                from /capy/test/CapyTest import { * }
+
+                fun works(): Assert =
+                    assert_that(42).is_equal_to(42)
+
+                fun tests(): TestFile =
+                    test_file("/bar/TestModule.cfun", [
+                        test("works", works())
+                    ])
+                """);
         var project = newProject();
         var testCapybara = project.getTasks().named("testCapybara").get();
         var resolvedDependencies = testCapybara.getTaskDependencies().getDependencies(testCapybara);
@@ -243,7 +281,16 @@ class CapybaraPluginTest {
         var checkDependencies = checkTask.getTaskDependencies().getDependencies(checkTask);
 
         assertFalse(checkDependencies.contains(project.getTasks().named("test").get()));
-        assertTrue(checkDependencies.contains(project.getTasks().named("testCapybara").get()));
+        assertFalse(checkDependencies.contains(project.getTasks().named("testCapybara").get()));
+    }
+
+    @Test
+    void shouldDisableCapybaraTestTaskWhenProjectHasNoCapybaraTestSources() {
+        var project = newProject();
+        var testCapybara = project.getTasks().named("testCapybara").get();
+
+        assertFalse(testCapybara.getEnabled());
+        assertTrue(testCapybara.getDependsOn().isEmpty());
     }
 
     @Test
@@ -261,6 +308,19 @@ class CapybaraPluginTest {
     void shouldKeepCheckDependencyOnJvmTestTaskWhenProjectHasJvmTestSources() throws IOException {
         var jvmTestSourceDir = Files.createDirectories(tempDir.resolve("src/test/java/dev/capylang"));
         Files.writeString(jvmTestSourceDir.resolve("PluginJvmTest.java"), "class PluginJvmTest {}");
+        var capybaraTestSourceDir = Files.createDirectories(tempDir.resolve("src/test/capybara/bar"));
+        Files.writeString(capybaraTestSourceDir.resolve("TestModule.cfun"), """
+                from /capy/test/Assert import { * }
+                from /capy/test/CapyTest import { * }
+
+                fun works(): Assert =
+                    assert_that(42).is_equal_to(42)
+
+                fun tests(): TestFile =
+                    test_file("/bar/TestModule.cfun", [
+                        test("works", works())
+                    ])
+                """);
 
         var project = newProject();
         var checkTask = project.getTasks().named("check").get();
@@ -268,6 +328,15 @@ class CapybaraPluginTest {
 
         assertTrue(checkDependencies.contains(project.getTasks().named("test").get()));
         assertTrue(checkDependencies.contains(project.getTasks().named("testCapybara").get()));
+    }
+
+    @Test
+    void shouldNotWireCompileTestJavaToCapybaraTestCompilationWhenNoCapybaraTestSourcesExist() {
+        var project = newProject();
+        var compileTestJava = project.getTasks().named("compileTestJava").get();
+        var compileTestJavaDependencies = compileTestJava.getTaskDependencies().getDependencies(compileTestJava);
+
+        assertFalse(compileTestJavaDependencies.contains(project.getTasks().named("compileTestCapybara").get()));
     }
 
     @Test
@@ -488,6 +557,19 @@ class CapybaraPluginTest {
     void shouldKeepSeparateMainOutputsForCheckBuildsWithMainResources() throws IOException {
         var resourcesDir = Files.createDirectories(tempDir.resolve("src/main/resources"));
         Files.writeString(resourcesDir.resolve("capybara.txt"), "resource");
+        var capybaraTestSourceDir = Files.createDirectories(tempDir.resolve("src/test/capybara/bar"));
+        Files.writeString(capybaraTestSourceDir.resolve("TestModule.cfun"), """
+                from /capy/test/Assert import { * }
+                from /capy/test/CapyTest import { * }
+
+                fun works(): Assert =
+                    assert_that(42).is_equal_to(42)
+
+                fun tests(): TestFile =
+                    test_file("/bar/TestModule.cfun", [
+                        test("works", works())
+                    ])
+                """);
 
         var project = newProject(List.of("check"));
         var compileCapybara = project.getTasks().named("compileCapybara", CompileCapybaraTask.class).get();

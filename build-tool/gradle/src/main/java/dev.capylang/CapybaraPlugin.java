@@ -52,6 +52,7 @@ public class CapybaraPlugin implements Plugin<Project> {
         var generatedMainJavaDir = layout.getBuildDirectory().dir("generated/sources/capybara/java");
         var generatedTestJavaDir = layout.getBuildDirectory().dir("generated/sources/test-capybara/java");
         var generatedCheckJavaDir = layout.getBuildDirectory().dir("generated/sources/capybara/java/check");
+        var hasCapybaraTestSources = hasMatchingFile(project.file("src/test/capybara").toPath(), relativePath -> true);
         var hasJvmMainSources = hasJvmSources(project.file("src/main").toPath());
         var hasMainResources = hasMatchingFile(project.file("src/main/resources").toPath(), relativePath -> true);
         var hasJvmTestSources = hasJvmSources(project.file("src/test").toPath());
@@ -85,7 +86,7 @@ public class CapybaraPlugin implements Plugin<Project> {
                     if (!singleJavaVerificationBuild) {
                         task.getOutputDir().set(layout.getBuildDirectory().dir("classes/capybara"));
                     }
-                    if (singleJavaVerificationBuild) {
+                    if (singleJavaVerificationBuild && hasCapybaraTestSources) {
                         task.getTestInputDir().set(project.file("src/test/capybara"));
                         task.getGeneratedTestOutputDir().set(generatedCheckJavaDir);
                     }
@@ -120,7 +121,7 @@ public class CapybaraPlugin implements Plugin<Project> {
                     task.getCompileTestSourcesWithMainCompilation().set(false);
                     task.getWriteLinkedOutput().set(false);
                     task.getIncludeJavaLibResourcesInTestOutput().set(false);
-                    task.onlyIf(ignored -> !capybaraTestBuildRequested);
+                    task.onlyIf(ignored -> hasCapybaraTestSources && !capybaraTestBuildRequested);
                 }
         );
 
@@ -197,7 +198,11 @@ public class CapybaraPlugin implements Plugin<Project> {
                             })
                             .toList());
                 }
-                task.dependsOn(singleJavaVerificationBuild ? compileCapybara : compileTestCapybara);
+                if (singleJavaVerificationBuild) {
+                    task.dependsOn(compileCapybara);
+                } else if (hasCapybaraTestSources) {
+                    task.dependsOn(compileTestCapybara);
+                }
             });
 
             var testCapybara = project.getTasks().register(
@@ -214,11 +219,17 @@ public class CapybaraPlugin implements Plugin<Project> {
                         task.getOutputDir().set(capybaraTestResultsDir);
                         task.getReportType().set("JUNIT");
                         task.getLogLevel().set(capybaraTestLogLevel(project.getGradle().getStartParameter().getLogLevel()));
+                        task.setEnabled(hasCapybaraTestSources);
+                        if (!hasCapybaraTestSources) {
+                            task.setDependsOn(java.util.List.of());
+                        }
                     }
             );
 
             project.getTasks().named("test", Test.class, task -> {
-                task.dependsOn(testCapybara);
+                if (hasCapybaraTestSources) {
+                    task.dependsOn(testCapybara);
+                }
                 task.setScanForTestClasses(false);
                 task.include("**/*Test.class", "**/*Tests.class", "**/*IT.class", "**/*IntegrationTest.class");
                 task.exclude("capy/**");
@@ -250,7 +261,9 @@ public class CapybaraPlugin implements Plugin<Project> {
                             })
                             .toList());
                 }
-                task.dependsOn(testCapybara);
+                if (hasCapybaraTestSources) {
+                    task.dependsOn(testCapybara);
+                }
             });
         }
     }
