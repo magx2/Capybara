@@ -2244,6 +2244,37 @@
 - `git diff --check` passed.
 - I could not run Gradle task verification in this sandbox because the requested wrapper invocation still fails before project execution with `Could not determine a usable wildcard IP for this machine`.
 
+## 2026-04-06 build optimization pass single-pass test resource probing
+
+### Requested baseline
+- Re-ran the requested command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- The run still failed before project execution in this sandbox with:
+  - `Could not determine a usable wildcard IP for this machine`.
+- Retried with a repository-local Gradle home and IPv4/IPv6 JVM flags:
+  - `GRADLE_USER_HOME=$PWD/.gradle ./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain --no-daemon -Djava.net.preferIPv4Stack=true -Djava.net.preferIPv6Addresses=false`
+  - `GRADLE_USER_HOME=$PWD/.gradle ./gradlew help --console=plain --no-daemon -Djava.net.preferIPv4Stack=true -Djava.net.preferIPv6Addresses=false`
+- Those startup attempts failed with the same wildcard-IP error, and `build/reports/profile` still has no new HTML report from this environment.
+
+### Findings
+- The current handwritten `lib/capybara-lib` build and the reusable `CapybaraPlugin` both still probed `src/test/resources` twice during configuration:
+  - once to decide whether any test resources exist;
+  - once to decide whether any non-`junit-platform.properties` resources exist.
+- That duplicated filesystem walk is paid on every invocation of the requested profiling command before task execution starts, even when Gradle aborts during startup.
+- The rest of the existing source-layout behavior could be preserved by turning those two booleans into a single resource-directory probe.
+
+### Changes made
+- Updated `lib/capybara-lib/build.gradle` to inspect `src/test/resources` once and reuse the resulting `hasAnyFiles` / `hasNonJvmFiles` booleans.
+- Applied the same single-pass test-resource probing to `build-tool/gradle`'s `CapybaraPlugin`.
+- Kept the existing `junit-platform.properties` special case intact so that file alone still does not enable `processTestResources`.
+
+### Expected impact
+- Every Capybara build invocation should do less configuration-time filesystem work before the task graph is realized.
+- The exact requested `:lib:capybara-lib:check --profile --rerun-tasks` workflow should avoid one redundant recursive walk of `src/test/resources`, and plugin consumers now get the same reduction.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle task verification in this sandbox because the requested wrapper invocation still fails before project execution with `Could not determine a usable wildcard IP for this machine`.
+
 ## 2026-04-06 build optimization pass preserve linked stdlib producers during mixed verification builds
 
 ### Requested baseline

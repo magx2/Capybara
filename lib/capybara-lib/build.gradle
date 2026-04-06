@@ -21,13 +21,10 @@ import org.gradle.api.tasks.TaskAction
 
 import java.io.ByteArrayOutputStream
 import java.io.PrintStream
-import java.nio.file.FileVisitResult
 import java.net.URL
 import java.net.URLClassLoader
 import java.nio.file.Path
 import java.nio.file.Files
-import java.nio.file.SimpleFileVisitor
-import java.nio.file.attribute.BasicFileAttributes
 import java.util.TreeSet
 import java.util.concurrent.ConcurrentHashMap
 
@@ -310,22 +307,40 @@ def directoryContainsFile = { directory, matcher = { true } ->
         return false
     }
 
-    def found = false
-    Files.walkFileTree(root, new SimpleFileVisitor<Path>() {
-        @Override
-        FileVisitResult visitFile(Path file, BasicFileAttributes attributes) throws IOException {
-            if (!attributes.isRegularFile()) {
-                return FileVisitResult.CONTINUE
-            }
-            def relativePath = root.relativize(file).toString().replace(File.separatorChar, '/' as char)
-            if (!matcher(relativePath)) {
-                return FileVisitResult.CONTINUE
-            }
-            found = true
-            return FileVisitResult.TERMINATE
+    def paths = Files.walk(root)
+    try {
+        return paths.anyMatch { path ->
+            Files.isRegularFile(path) && matcher(root.relativize(path).toString().replace(File.separatorChar, '/' as char))
         }
-    })
-    found
+    } finally {
+        paths.close()
+    }
+}
+def inspectResourceDirectory = { directory ->
+    Path root = directory.asFile.toPath()
+    def state = [hasAnyFiles: false, hasNonJvmFiles: false]
+    if (Files.notExists(root) || !Files.isDirectory(root)) {
+        return state
+    }
+
+    def paths = Files.walk(root)
+    try {
+        paths.anyMatch { path ->
+            if (!Files.isRegularFile(path)) {
+                return false
+            }
+            state.hasAnyFiles = true
+            def relativePath = root.relativize(path).toString().replace(File.separatorChar, '/' as char)
+            if (relativePath != 'junit-platform.properties') {
+                state.hasNonJvmFiles = true
+                return true
+            }
+            false
+        }
+        state
+    } finally {
+        paths.close()
+    }
 }
 def conventionalJvmSourceDirs = ['java', 'kotlin', 'kts', 'groovy']
 def hasJvmSources = { sourceRoot ->
@@ -334,10 +349,9 @@ def hasJvmSources = { sourceRoot ->
 def hasJvmMainSources = hasJvmSources(layout.projectDirectory.dir('src/main'))
 def hasMainResources = directoryContainsFile(layout.projectDirectory.dir('src/main/resources'))
 def hasJvmTestSources = hasJvmSources(layout.projectDirectory.dir('src/test'))
-def hasAnyTestResources = directoryContainsFile(layout.projectDirectory.dir('src/test/resources'))
-def hasNonJvmTestResources = directoryContainsFile(layout.projectDirectory.dir('src/test/resources')) {
-    it != 'junit-platform.properties'
-}
+def testResources = inspectResourceDirectory(layout.projectDirectory.dir('src/test/resources'))
+def hasAnyTestResources = testResources.hasAnyFiles
+def hasNonJvmTestResources = testResources.hasNonJvmFiles
 def capybaraTestLogLevel = switch (gradle.startParameter.logLevel) {
     case org.gradle.api.logging.LogLevel.DEBUG -> 'DEBUG'
     case org.gradle.api.logging.LogLevel.INFO -> 'INFO'

@@ -8,14 +8,12 @@ import org.gradle.api.tasks.testing.Test;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
-import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.SimpleFileVisitor;
-import java.nio.file.attribute.BasicFileAttributes;
 import java.util.List;
 import java.util.Set;
 import java.util.function.Predicate;
+import java.util.stream.Stream;
 
 public class CapybaraPlugin implements Plugin<Project> {
     private static final List<String> JVM_SOURCE_DIRECTORIES = List.of("java", "kotlin", "kts", "groovy");
@@ -56,11 +54,9 @@ public class CapybaraPlugin implements Plugin<Project> {
         var hasJvmMainSources = hasJvmSources(project.file("src/main").toPath());
         var hasMainResources = hasMatchingFile(project.file("src/main/resources").toPath(), relativePath -> true);
         var hasJvmTestSources = hasJvmSources(project.file("src/test").toPath());
-        var hasAnyTestResources = hasMatchingFile(project.file("src/test/resources").toPath(), relativePath -> true);
-        var hasNonJvmTestResources = hasMatchingFile(
-                project.file("src/test/resources").toPath(),
-                relativePath -> !relativePath.equals("junit-platform.properties")
-        );
+        var testResources = inspectResourceDirectory(project.file("src/test/resources").toPath());
+        var hasAnyTestResources = testResources.hasAnyFiles();
+        var hasNonJvmTestResources = testResources.hasNonJvmFiles();
         var requestedTaskBasenames = project.getGradle().getStartParameter().getTaskNames().stream()
                 .map(CapybaraPlugin::taskBasename)
                 .collect(java.util.stream.Collectors.toSet());
@@ -286,25 +282,39 @@ public class CapybaraPlugin implements Plugin<Project> {
             return false;
         }
 
-        var found = new boolean[1];
-        try {
-            Files.walkFileTree(root, new SimpleFileVisitor<>() {
-                @Override
-                public FileVisitResult visitFile(Path path, BasicFileAttributes attributes) {
-                    if (attributes.isRegularFile()) {
-                        var relativePath = normalizeRelativePath(root, path);
-                        if (relativePathMatcher.test(relativePath)) {
-                            found[0] = true;
-                            return FileVisitResult.TERMINATE;
-                        }
-                    }
-                    return FileVisitResult.CONTINUE;
-                }
-            });
+        try (Stream<Path> paths = Files.walk(root)) {
+            return paths
+                    .filter(Files::isRegularFile)
+                    .map(path -> normalizeRelativePath(root, path))
+                    .anyMatch(relativePathMatcher);
         } catch (IOException e) {
             throw new UncheckedIOException("Unable to inspect project sources under " + root, e);
         }
-        return found[0];
+    }
+
+    private static ResourceDirectoryState inspectResourceDirectory(Path root) {
+        if (Files.notExists(root) || !Files.isDirectory(root)) {
+            return new ResourceDirectoryState(false, false);
+        }
+
+        var hasAnyFiles = new boolean[1];
+        var hasNonJvmFiles = new boolean[1];
+        try (Stream<Path> paths = Files.walk(root)) {
+            paths
+                    .filter(Files::isRegularFile)
+                    .map(path -> normalizeRelativePath(root, path))
+                    .anyMatch(relativePath -> {
+                        hasAnyFiles[0] = true;
+                        if (!relativePath.equals("junit-platform.properties")) {
+                            hasNonJvmFiles[0] = true;
+                            return true;
+                        }
+                        return false;
+                    });
+            return new ResourceDirectoryState(hasAnyFiles[0], hasNonJvmFiles[0]);
+        } catch (IOException e) {
+            throw new UncheckedIOException("Unable to inspect project resources under " + root, e);
+        }
     }
 
     private static String normalizeRelativePath(Path root, Path path) {
@@ -314,5 +324,8 @@ public class CapybaraPlugin implements Plugin<Project> {
     private static String taskBasename(String taskName) {
         var separator = taskName.lastIndexOf(':');
         return separator >= 0 ? taskName.substring(separator + 1) : taskName;
+    }
+
+    private record ResourceDirectoryState(boolean hasAnyFiles, boolean hasNonJvmFiles) {
     }
 }
