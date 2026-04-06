@@ -349,7 +349,10 @@ tasks.named('compileTestJava') {
 tasks.matching { it.name == 'test' }.configureEach {
     dependsOn tasks.named('testCapybara')
     exclude 'capy/**'
-    onlyIf { hasJvmTestSources.get() }
+    enabled = hasJvmTestSources.get()
+    if (!hasJvmTestSources.get()) {
+        setDependsOn([])
+    }
     if (it.hasProperty('failOnNoDiscoveredTests')) {
         failOnNoDiscoveredTests = false
     }

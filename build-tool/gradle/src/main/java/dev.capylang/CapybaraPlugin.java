@@ -11,6 +11,15 @@ public class CapybaraPlugin implements Plugin<Project> {
         var layout = project.getLayout();
         var compilerVersion = project.getVersion().toString();
         var capybaraTestResultsDir = layout.getBuildDirectory().dir("test-results/capybara");
+        var hasJvmTestSources = project.provider(() ->
+                project.fileTree(project.file("src/test"), spec -> {
+                    spec.include("**/*.java");
+                    spec.include("**/*.kt");
+                    spec.include("**/*.kts");
+                    spec.include("**/*.groovy");
+                    spec.exclude("capybara/**");
+                }).getFiles().stream().findAny().isPresent()
+        );
         var capybaraTestBuildRequested = project.provider(() ->
                 project.getGradle().getStartParameter().getTaskNames().stream().anyMatch(taskName ->
                         taskName.equals("check") || taskName.endsWith(":check") ||
@@ -108,7 +117,16 @@ public class CapybaraPlugin implements Plugin<Project> {
                     }
             );
 
-            project.getTasks().matching(task -> task.getName().equals("test")).configureEach(task -> task.dependsOn(testCapybara));
+            project.getTasks().matching(task -> task.getName().equals("test")).configureEach(task -> {
+                task.dependsOn(testCapybara);
+                if (task.hasProperty("failOnNoDiscoveredTests")) {
+                    task.setProperty("failOnNoDiscoveredTests", false);
+                }
+                task.setEnabled(hasJvmTestSources.get());
+                if (!hasJvmTestSources.get()) {
+                    task.setDependsOn(java.util.List.of());
+                }
+            });
             project.getTasks().matching(task -> task.getName().equals("check")).configureEach(task -> task.dependsOn(testCapybara));
         }
     }

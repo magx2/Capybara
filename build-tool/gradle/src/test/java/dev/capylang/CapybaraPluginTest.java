@@ -184,6 +184,26 @@ class CapybaraPluginTest {
     }
 
     @Test
+    void shouldDisableJvmTestTaskWhenProjectHasNoJvmTestSources() {
+        var project = newProject();
+        var testTask = project.getTasks().named("test").get();
+
+        assertFalse(testTask.getEnabled());
+        assertTrue(testTask.getDependsOn().isEmpty());
+    }
+
+    @Test
+    void shouldKeepJvmTestTaskEnabledWhenProjectHasJvmTestSources() throws IOException {
+        var jvmTestSourceDir = Files.createDirectories(tempDir.resolve("src/test/java/dev/capylang"));
+        Files.writeString(jvmTestSourceDir.resolve("PluginJvmTest.java"), "class PluginJvmTest {}");
+
+        var project = newProject();
+        var testTask = project.getTasks().named("test").get();
+
+        assertTrue(testTask.getEnabled());
+    }
+
+    @Test
     void shouldUseInProcessTaskForCapybaraTests() {
         var project = newProject();
 

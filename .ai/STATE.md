@@ -180,6 +180,36 @@
 ### Verification status
 - `git diff --check` passed.
 - I could not run Gradle task verification in this sandbox because Gradle still fails during startup with `Could not determine a usable wildcard IP for this machine`.
+
+## 2026-04-06 build optimization pass skip empty JVM test lifecycle
+
+### Requested baseline
+- Re-ran the requested baseline command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- It still failed immediately in this sandbox because the wrapper tried to create `/home/martin/.gradle/.../gradle-9.1.0-bin.zip.lck` on a read-only filesystem.
+- Re-ran with `GRADLE_USER_HOME=$PWD/.gradle` and Gradle startup still failed before project execution with `Could not determine a usable wildcard IP for this machine`.
+- No fresh profile HTML was produced, so analysis for this pass still relies on the existing reports under `build/reports/profile`.
+
+### Findings
+- `lib/capybara-lib` has no JVM test source files under `src/test/java`, `src/test/kotlin`, `src/test/kts`, or `src/test/groovy`; it only has Capybara tests plus `src/test/resources/junit-platform.properties`.
+- Despite that, the standard Gradle `test` task was still part of the `check` lifecycle and configured to depend on `testCapybara`.
+- For this module, that means `check` was still paying JUnit-side task overhead that adds no coverage because the actual verification path is `testCapybara`.
+- The reusable `CapybaraPlugin` had the same behavior for plugin consumers with Capybara-only test suites.
+
+### Changes made
+- In `lib/capybara-lib/build.gradle`, switched the standard `test` task from `onlyIf` to `enabled = hasJvmTestSources.get()`.
+- When no JVM test sources exist, the `test` task now clears its dependency list so the empty JUnit lifecycle does not pull extra work into `check`.
+- Applied the same no-JVM-tests behavior in `build-tool/gradle`’s `CapybaraPlugin`.
+- Added plugin tests covering both cases:
+  - projects without JVM tests disable the standard `test` task and clear its dependencies;
+  - projects with JVM tests keep the standard `test` task enabled.
+
+### Expected impact
+- `:lib:capybara-lib:check --rerun-tasks` should avoid the standard Gradle/JUnit `test` task path when the project has only Capybara tests.
+- This should remove the empty JVM test execution overhead and associated resource-processing/lifecycle work from Capybara-only modules while preserving behavior for modules that do have JVM tests.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle task verification in this sandbox because Gradle still fails during startup with `Could not determine a usable wildcard IP for this machine`.
 - Verification for this pass is limited to source inspection and the added plugin test coverage.
 
 ## 2026-04-06 build optimization pass reusable output directories
