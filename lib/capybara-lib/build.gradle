@@ -203,6 +203,15 @@ def capybaraGeneratedMainDir = layout.buildDirectory.dir('generated/sources/capy
 def capybaraGeneratedTestDir = layout.buildDirectory.dir('generated/sources/capybara/java/test')
 def capybaraLinkedMainDir = layout.buildDirectory.dir('generated/sources/capybara/linked/main')
 def capybaraTestResultsDir = layout.buildDirectory.dir('test-results/capybara')
+def hasJvmTestSources = providers.provider {
+    fileTree(layout.projectDirectory.dir('src/test').asFile) {
+        include '**/*.java'
+        include '**/*.kt'
+        include '**/*.kts'
+        include '**/*.groovy'
+        exclude 'capybara/**'
+    }.files.any()
+}
 def capybaraTestLogLevel = switch (gradle.startParameter.logLevel) {
     case org.gradle.api.logging.LogLevel.DEBUG -> 'DEBUG'
     case org.gradle.api.logging.LogLevel.INFO -> 'INFO'
@@ -328,6 +337,7 @@ tasks.named('compileTestJava') {
 tasks.matching { it.name == 'test' }.configureEach {
     dependsOn tasks.named('testCapybara')
     exclude 'capy/**'
+    onlyIf { hasJvmTestSources.get() }
     if (it.hasProperty('failOnNoDiscoveredTests')) {
         failOnNoDiscoveredTests = false
     }

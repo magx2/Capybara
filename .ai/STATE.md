@@ -1178,3 +1178,28 @@
 - `git diff --check` passed.
 - I could not run Gradle task verification in this sandbox because the requested wrapper command still fails before project execution on the read-only `/home/martin/.gradle` lock path, and previous repository-local attempts also failed before execution with `Could not determine a usable wildcard IP for this machine`.
 - Verification for this pass is limited to source inspection and the added regression test.
+
+## 2026-04-06 build optimization pass skip empty JUnit task
+
+### Requested baseline
+- Re-ran the requested baseline command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- It still failed immediately in this sandbox because the wrapper tried to create `/home/martin/.gradle/.../gradle-9.1.0-bin.zip.lck` on a read-only filesystem.
+- Checked `build/reports/profile` after the failed run; no new profile HTML was produced, so analysis still relies on the existing reports already present there.
+
+### Findings
+- The latest available profile still shows `:lib:capybara-lib:test` taking about `1.009s` on `clean check`.
+- This module currently has no conventional JVM test sources under `lib/capybara-lib/src/test` outside the Capybara sources handled by `testCapybara`; only `src/test/resources/junit-platform.properties` is present.
+- Even after excluding `capy/**`, the standard Gradle `test` task was still being launched during `check`, paying JVM startup and empty JUnit discovery cost for a module whose verification is already covered by `testCapybara`.
+
+### Changes made
+- Updated `lib/capybara-lib/build.gradle` to detect whether `src/test` contains non-Capybara JVM test sources (`*.java`, `*.kt`, `*.kts`, `*.groovy`).
+- Configured the standard Gradle `test` task with `onlyIf { hasJvmTestSources.get() }` while keeping its dependency on `testCapybara`.
+
+### Expected impact
+- `:lib:capybara-lib:check --rerun-tasks` should skip the empty Gradle `test` task entirely for this module while still running Capybara tests through `testCapybara`.
+- This removes one more guaranteed JVM launch from the hot verification path without changing behavior for future handwritten JVM tests: if such sources are added, the standard `test` task will run again.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle task verification in this sandbox because the requested wrapper command still fails before project execution on the read-only `/home/martin/.gradle` lock path.
+- Verification for this pass is limited to source inspection.
