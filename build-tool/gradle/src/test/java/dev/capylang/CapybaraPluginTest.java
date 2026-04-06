@@ -5,6 +5,7 @@ import org.gradle.api.file.ConfigurableFileCollection;
 import org.gradle.api.logging.LogLevel;
 import org.gradle.api.plugins.JavaPlugin;
 import org.gradle.api.tasks.SourceSetContainer;
+import org.gradle.api.tasks.testing.Test;
 import org.gradle.testfixtures.ProjectBuilder;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -328,6 +329,18 @@ class CapybaraPluginTest {
         var project = newProject();
 
         assertInstanceOf(CapybaraTestTask.class, project.getTasks().named("testCapybara").get());
+    }
+
+    @Test
+    void shouldDisableJvmTestClassScanningAndUseConventionalIncludes() {
+        var project = newProject();
+        var testTask = project.getTasks().named("test", Test.class).get();
+
+        assertFalse(testTask.isScanForTestClasses());
+        assertTrue(testTask.getIncludes().contains("**/*Test.class"));
+        assertTrue(testTask.getIncludes().contains("**/*Tests.class"));
+        assertTrue(testTask.getIncludes().contains("**/*IT.class"));
+        assertTrue(testTask.getIncludes().contains("**/*IntegrationTest.class"));
     }
 
     @Test

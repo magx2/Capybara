@@ -557,6 +557,8 @@ tasks.named('testClasses') {
 
 tasks.matching { it.name == 'test' }.configureEach {
     dependsOn tasks.named('testCapybara')
+    scanForTestClasses = false
+    include '**/*Test.class', '**/*Tests.class', '**/*IT.class', '**/*IntegrationTest.class'
     exclude 'capy/**'
     enabled = hasJvmTestSources
     systemProperty 'junit.jupiter.execution.parallel.enabled', 'true'

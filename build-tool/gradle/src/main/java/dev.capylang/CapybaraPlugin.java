@@ -4,6 +4,7 @@ import org.gradle.api.Plugin;
 import org.gradle.api.Project;
 import org.gradle.api.logging.LogLevel;
 import org.gradle.api.tasks.SourceSetContainer;
+import org.gradle.api.tasks.testing.Test;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -195,8 +196,10 @@ public class CapybaraPlugin implements Plugin<Project> {
                     }
             );
 
-            project.getTasks().matching(task -> task.getName().equals("test")).configureEach(task -> {
+            project.getTasks().named("test", Test.class, task -> {
                 task.dependsOn(testCapybara);
+                task.setScanForTestClasses(false);
+                task.include("**/*Test.class", "**/*Tests.class", "**/*IT.class", "**/*IntegrationTest.class");
                 if (task.hasProperty("failOnNoDiscoveredTests")) {
                     task.setProperty("failOnNoDiscoveredTests", false);
                 }

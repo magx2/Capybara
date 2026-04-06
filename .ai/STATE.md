@@ -2244,6 +2244,49 @@
 - `git diff --check` passed.
 - I could not run Gradle task verification in this sandbox because the requested wrapper invocation still fails before project execution with `Could not determine a usable wildcard IP for this machine`.
 
+## 2026-04-06 build optimization pass JVM test discovery narrowing
+
+### Requested baseline
+- Re-ran the requested command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- It still failed before project execution in this sandbox with:
+  - `Could not determine a usable wildcard IP for this machine`.
+- I also tried narrower startup checks with:
+  - `./gradlew :lib:capybara-lib:help --no-daemon --console=plain`
+  - `./gradlew :lib:capybara-lib:help --console=plain -Djava.net.preferIPv4Stack=true`
+- Both alternate invocations failed with the same wildcard-IP startup error, so no fresh profile HTML was produced and this pass is based on current source inspection plus the existing reports under `build/reports/profile`.
+
+### Findings
+- `lib/capybara-lib` now has JVM test sources again:
+  - `src/test/java/dev/capylang/CapybaraUtilTest.java`
+  - `src/test/java/dev/capylang/test/TestRunnerTest.java`
+- That means the current `:lib:capybara-lib:check` path once again includes the standard Gradle `test` task in addition to `testCapybara`.
+- In the optimized fused verification path, `compileTestJava` compiles:
+  - regular JVM tests,
+  - main Java sources folded into test compilation when `compileJava` is disabled,
+  - generated Capybara Java classes under `build/generated/sources/capybara/java/check`.
+- The standard Gradle `test` task was still using classpath scanning for test discovery, so it had to inspect a large compiled output tree that contains many generated non-JUnit Capybara classes even though the JVM test suite follows conventional class naming.
+
+### Changes made
+- Narrowed JVM test discovery in `lib/capybara-lib/build.gradle` by configuring the standard `test` task to:
+  - disable bytecode-based classpath scanning with `scanForTestClasses = false`;
+  - include only conventional JVM test class name patterns:
+    - `**/*Test.class`
+    - `**/*Tests.class`
+    - `**/*IT.class`
+    - `**/*IntegrationTest.class`
+- Kept the existing `exclude 'capy/**'` rule so generated Capybara packages remain outside Gradle’s JVM test execution path.
+- Applied the same test-discovery narrowing in `build-tool/gradle`’s reusable `CapybaraPlugin`.
+- Added plugin coverage asserting that the plugin-configured `test` task now disables scan-based discovery and uses the expected include patterns.
+
+### Expected impact
+- `:lib:capybara-lib:check --rerun-tasks` should spend less time in the standard Gradle `test` task because Gradle no longer needs to scan the full compiled output tree looking for JUnit tests.
+- The win is specifically aligned with the current fused verification layout, where many generated Capybara classes share the test output with a small JVM test suite.
+- Plugin consumers that combine Capybara-generated classes with conventional JVM tests should get the same reduction in JUnit discovery overhead.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle task verification in this sandbox because every attempted wrapper invocation still fails before project execution with `Could not determine a usable wildcard IP for this machine`.
+
 ## 2026-04-06 build optimization pass consolidated source-tree scanning
 
 ### Requested baseline
