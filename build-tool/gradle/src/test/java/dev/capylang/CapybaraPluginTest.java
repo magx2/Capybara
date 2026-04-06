@@ -337,6 +337,30 @@ class CapybaraPluginTest {
         var checkDependencies = checkTask.getTaskDependencies().getDependencies(checkTask);
 
         assertTrue(checkDependencies.contains(project.getTasks().named("test").get()));
+        assertFalse(checkDependencies.contains(project.getTasks().named("testCapybara").get()));
+    }
+
+    @Test
+    void shouldKeepDirectCheckDependencyOnCapybaraTestsWhenNoJvmTestSourcesExist() throws IOException {
+        var capybaraTestSourceDir = Files.createDirectories(tempDir.resolve("src/test/capybara/bar"));
+        Files.writeString(capybaraTestSourceDir.resolve("TestModule.cfun"), """
+                from /capy/test/Assert import { * }
+                from /capy/test/CapyTest import { * }
+
+                fun works(): Assert =
+                    assert_that(42).is_equal_to(42)
+
+                fun tests(): TestFile =
+                    test_file("/bar/TestModule.cfun", [
+                        test("works", works())
+                    ])
+                """);
+
+        var project = newProject();
+        var checkTask = project.getTasks().named("check").get();
+        var checkDependencies = checkTask.getTaskDependencies().getDependencies(checkTask);
+
+        assertFalse(checkDependencies.contains(project.getTasks().named("test").get()));
         assertTrue(checkDependencies.contains(project.getTasks().named("testCapybara").get()));
     }
 

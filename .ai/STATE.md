@@ -2280,6 +2280,44 @@
 - `git diff --check` passed.
 - I could not run Gradle task verification in this sandbox because the requested wrapper invocation still fails before project execution with `Could not determine a usable wildcard IP for this machine`.
 
+## 2026-04-06 build optimization pass redundant check task-edge pruning
+
+### Requested baseline
+- Re-ran the requested command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- It still failed before project execution in this sandbox with:
+  - `Could not determine a usable wildcard IP for this machine`.
+- Checked `build/reports/profile` after the failed run; no new profile HTML was produced, so this pass is based on the existing reports plus source inspection of the current `:lib:capybara-lib:check` task graph.
+
+### Findings
+- `lib/capybara-lib` now has both JVM tests and Capybara tests again:
+  - JVM tests under `src/test/java/dev/capylang/**`
+  - Capybara tests under `src/test/capybara/**`
+- In that layout, the standard Gradle `test` task already depends on `testCapybara`.
+- The handwritten module and the reusable `CapybaraPlugin` were still also adding a direct `check -> testCapybara` dependency whenever Capybara test sources existed.
+- For the exact requested `:lib:capybara-lib:check` path, that direct edge is redundant because `check -> test -> testCapybara` already guarantees the Capybara test runner executes.
+- The handwritten module also still assumed Capybara test sources always exist, so it kept wiring `prepareCapybaraForCheck`, `compileTestCapybaraDirect`, and `testCapybara` as if test Capybara inputs were present even in layouts that only have JVM tests.
+
+### Changes made
+- In `lib/capybara-lib/build.gradle`:
+  - added `hasCapybaraTestSources`;
+  - only configured fused check-build test-source inputs when Capybara test files exist;
+  - only wired non-fused `compileTestJava` to `compileTestCapybaraDirect` when Capybara test files exist;
+  - disabled `testCapybara` and cleared its dependencies when no Capybara test sources exist;
+  - removed the redundant direct `check -> testCapybara` edge when JVM tests are already present.
+- In `build-tool/gradle`’s `CapybaraPlugin`:
+  - applied the same `check`-edge pruning so plugin consumers with both JVM and Capybara tests keep `check -> test` only, while Capybara-only projects still keep a direct `check -> testCapybara` dependency.
+- Added plugin regression coverage for both cases:
+  - projects with JVM tests no longer get a direct `check -> testCapybara` edge;
+  - Capybara-only projects still do.
+
+### Expected impact
+- The exact requested `:lib:capybara-lib:check --rerun-tasks` path should carry a slightly smaller verification task graph by removing one redundant direct dependency edge.
+- Projects or plugin consumers without Capybara test sources should also avoid unnecessary Capybara test task wiring in their verification path.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle task verification in this sandbox because the requested wrapper invocation still fails before project execution with `Could not determine a usable wildcard IP for this machine`.
+
 ## 2026-04-06 build optimization pass single-pass test resource probing
 
 ### Requested baseline

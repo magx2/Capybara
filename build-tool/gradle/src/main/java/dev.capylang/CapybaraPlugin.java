@@ -270,7 +270,7 @@ public class CapybaraPlugin implements Plugin<Project> {
                             })
                             .toList());
                 }
-                if (hasCapybaraTestSources) {
+                if (hasCapybaraTestSources && !hasJvmTestSources) {
                     task.dependsOn(testCapybara);
                 }
             });

@@ -349,6 +349,7 @@ def hasJvmSources = { sourceRoot ->
 def hasJvmMainSources = hasJvmSources(layout.projectDirectory.dir('src/main'))
 def hasMainResources = directoryContainsFile(layout.projectDirectory.dir('src/main/resources'))
 def hasJvmTestSources = hasJvmSources(layout.projectDirectory.dir('src/test'))
+def hasCapybaraTestSources = directoryContainsFile(capybaraTestSourceDir)
 def testResources = inspectResourceDirectory(layout.projectDirectory.dir('src/test/resources'))
 def hasAnyTestResources = testResources.hasAnyFiles
 def hasNonJvmTestResources = testResources.hasNonJvmFiles
@@ -420,8 +421,10 @@ tasks.register('prepareCapybaraForCheck', InProcessCapybaraCompileTask) {
     runtimeClasspath.from(capyRuntimeClasspath)
     inputDir.set(capybaraMainSourceDir)
     generatedOutputDir.set(capybaraGeneratedCheckDir)
-    testInputDir.set(capybaraTestSourceDir)
-    testGeneratedOutputDir.set(capybaraGeneratedCheckDir)
+    if (hasCapybaraTestSources) {
+        testInputDir.set(capybaraTestSourceDir)
+        testGeneratedOutputDir.set(capybaraGeneratedCheckDir)
+    }
     compileTests.set(false)
     includeJavaLibResources.set(false)
     compilerVersion.set(project.version.toString())
@@ -458,7 +461,7 @@ tasks.register('compileTestCapybaraDirect', InProcessCapybaraCompileTask) {
     compileTests.set(true)
     includeJavaLibResources.set(false)
     compilerVersion.set(project.version.toString())
-    onlyIf { !capybaraTestBuildRequested }
+    onlyIf { hasCapybaraTestSources && !capybaraTestBuildRequested }
 }
 
 tasks.register('compileTestCapybara') {
@@ -524,7 +527,7 @@ tasks.named('compileTestJava') {
     }
     if (capybaraTestBuildRequested) {
         dependsOn tasks.named('prepareCapybaraForCheck')
-    } else {
+    } else if (hasCapybaraTestSources) {
         dependsOn tasks.named('compileTestCapybaraDirect')
     }
 }
@@ -559,7 +562,9 @@ tasks.named('testClasses') {
 }
 
 tasks.matching { it.name == 'test' }.configureEach {
-    dependsOn tasks.named('testCapybara')
+    if (hasCapybaraTestSources) {
+        dependsOn tasks.named('testCapybara')
+    }
     scanForTestClasses = false
     include '**/*Test.class', '**/*Tests.class', '**/*IT.class', '**/*IntegrationTest.class'
     exclude 'capy/**'
@@ -586,5 +591,14 @@ tasks.matching { it.name == 'check' }.configureEach {
                     dependency != 'test'
         })
     }
-    dependsOn tasks.named('testCapybara')
+    if (hasCapybaraTestSources && !hasJvmTestSources) {
+        dependsOn tasks.named('testCapybara')
+    }
+}
+
+tasks.named('testCapybara') {
+    enabled = hasCapybaraTestSources
+    if (!hasCapybaraTestSources) {
+        setDependsOn([])
+    }
 }
