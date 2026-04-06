@@ -93,6 +93,26 @@ class CapyTest {
     }
 
     @Test
+    void shouldIgnoreNonCapybaraFilesDuringCompilation() throws IOException {
+        var sourceDir = Files.createDirectories(tempDir.resolve("mixed-source-input"));
+        Files.createDirectories(sourceDir.resolve("foo"));
+        Files.writeString(sourceDir.resolve("foo").resolve("Main.cfun"), "fun main(): int = 1\n");
+        Files.writeString(sourceDir.resolve("foo").resolve("README.md"), "# ignored\n");
+        Files.writeString(sourceDir.resolve("foo").resolve("notes.txt"), "ignored\n");
+        var outputDir = Files.createDirectories(tempDir.resolve("mixed-source-output"));
+
+        assertEquals(0, Capy.execute(
+                new String[]{"compile", "-i", sourceDir.toString(), "-o", outputDir.toString()},
+                new PrintStream(new ByteArrayOutputStream()),
+                new PrintStream(new ByteArrayOutputStream())
+        ));
+
+        assertTrue(Files.exists(outputDir.resolve("foo").resolve("Main.json")));
+        assertFalse(Files.exists(outputDir.resolve("foo").resolve("README.json")));
+        assertFalse(Files.exists(outputDir.resolve("foo").resolve("notes.json")));
+    }
+
+    @Test
     void shouldCompileGenerateWithProvidedCompilerVersion() throws IOException {
         var sourceDir = Files.createDirectories(tempDir.resolve("compile-generate-direct-source"));
         Files.createDirectories(sourceDir.resolve("foo"));

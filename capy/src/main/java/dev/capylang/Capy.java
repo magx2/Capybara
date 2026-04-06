@@ -2,6 +2,7 @@ package dev.capylang;
 
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.ObjectWriter;
 import com.fasterxml.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
 import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
 import org.yaml.snakeyaml.DumperOptions;
@@ -72,11 +73,14 @@ public class Capy {
     private static final String MODULE_FILE = "capy.yml";
     private static final String VERSION_RESOURCE = "/capybara-version.txt";
     private static final String JAVA_LIB_RESOURCE_DIR = "/java-lib-src";
+    private static final String CAPYBARA_SOURCE_EXTENSION = ".cfun";
     private static final ModuleRef CAP_TEST_RUNTIME_MODULE = new ModuleRef("CapyTestRuntime", "capy/test");
     private static final int EXIT_SUCCESS = 0;
     private static final int EXIT_USAGE = 1;
     private static final int EXIT_FAILURE = 2;
     private static final int EXIT_COMPILATION_ERROR = 100;
+    private static final ObjectMapper OBJECT_MAPPER = createObjectMapper();
+    private static final ObjectWriter PRETTY_JSON_WRITER = OBJECT_MAPPER.writerWithDefaultPrettyPrinter();
 
     public static void main(String[] args) {
         System.exit(execute(args, System.out, System.err));
@@ -605,7 +609,6 @@ public class Capy {
         log.info("Compiling files from: " + input);
         var rawModuleBuildStartedAt = System.nanoTime();
         var rawModules = listSourceFiles(input).stream()
-                .filter(sourceFile -> sourceFile.path().getFileName().toString().endsWith(".cfun"))
                 .map(Capy::buildModule)
                 .toList();
         log.info("Built " + rawModules.size() + " raw modules from " + input + " in " + Duration.ofNanos(System.nanoTime() - rawModuleBuildStartedAt));
@@ -1118,7 +1121,6 @@ public class Capy {
     }
 
     private static void writeLinkedModules(Path outputDir, CompiledProgram program) {
-        var mapper = objectMapper();
         log.info("Writing " + program.modules().size() + " linked modules to: " + outputDir);
         var totalStartedAt = System.nanoTime();
         try {
@@ -1127,7 +1129,7 @@ public class Capy {
             var programFile = outputDir.resolve(PROGRAM_FILE);
             log.info("Writing linked program to file: " + programFile);
             var programStartedAt = System.nanoTime();
-            writeJsonIfChanged(programFile, mapper.writerWithDefaultPrettyPrinter().writeValueAsBytes(program));
+            writeJsonIfChanged(programFile, PRETTY_JSON_WRITER.writeValueAsBytes(program));
             log.info("Wrote linked program to file: " + programFile + " in " + Duration.ofNanos(System.nanoTime() - programStartedAt));
             writtenFiles.add(Path.of(PROGRAM_FILE));
             for (var module : program.modules()) {
@@ -1138,7 +1140,7 @@ public class Capy {
                 Files.createDirectories(moduleJson.getParent());
                 log.info("Writing linked module to file: " + moduleJson);
                 var startedAt = System.nanoTime();
-                writeJsonIfChanged(moduleJson, mapper.writerWithDefaultPrettyPrinter().writeValueAsBytes(module));
+                writeJsonIfChanged(moduleJson, PRETTY_JSON_WRITER.writeValueAsBytes(module));
                 var duration = Duration.ofNanos(System.nanoTime() - startedAt);
                 log.info("Wrote linked module to file: " + moduleJson + " in " + duration);
                 writtenFiles.add(outputDir.relativize(moduleJson).normalize());
@@ -1331,7 +1333,7 @@ public class Capy {
         try {
             Files.createDirectories(outputDir);
             var buildInfoFile = outputDir.resolve(BUILD_INFO_FILE);
-            writeJsonIfChanged(buildInfoFile, objectMapper().writerWithDefaultPrettyPrinter().writeValueAsBytes(buildInfo));
+            writeJsonIfChanged(buildInfoFile, PRETTY_JSON_WRITER.writeValueAsBytes(buildInfo));
             log.info("Writing build info to file: " + buildInfoFile);
         } catch (IOException e) {
             throw new UncheckedIOException("Unable to write build info JSON to " + outputDir, e);
@@ -1401,10 +1403,14 @@ public class Capy {
                 .filter(module -> sourceModuleRefs.contains(new ModuleRef(module.name(), normalizeModulePath(module.path()))))
                 .toList());
         var shouldCopyJavaLibResources = includeJavaLibResources && filteredProgram.modules().size() == linkedProgram.modules().size();
-        return new GenerationInput(filteredProgram, shouldCopyJavaLibResources);
+            return new GenerationInput(filteredProgram, shouldCopyJavaLibResources);
     }
 
     static ObjectMapper objectMapper() {
+        return OBJECT_MAPPER;
+    }
+
+    private static ObjectMapper createObjectMapper() {
         var mapper = new ObjectMapper();
         mapper.registerModule(new Jdk8Module());
         mapper.activateDefaultTyping(
@@ -1558,11 +1564,16 @@ public class Capy {
         try (var stream = Files.walk(directory)) {
             return stream
                     .filter(Files::isRegularFile)
+                    .filter(Capy::isCapybaraSourceFile)
                     .map(path -> new SourceFile(directory, path))
                     .toList();
         } catch (IOException e) {
             throw new UncheckedIOException("Unable to list files for directory: " + directory, e);
         }
+    }
+
+    private static boolean isCapybaraSourceFile(Path path) {
+        return path.getFileName().toString().endsWith(CAPYBARA_SOURCE_EXTENSION);
     }
 
     private static String findModulePath(SourceFile sourceFile) {

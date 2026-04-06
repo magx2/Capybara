@@ -1438,3 +1438,29 @@
 - `git diff --check` passed.
 - I could not run Gradle task verification or produce a fresh profile in this sandbox because the requested wrapper command still fails before project execution on the read-only `/home/martin/.gradle` lock path.
 - Verification for this pass is limited to source inspection and the added `TestRunnerTest` regression coverage.
+
+## 2026-04-06 build optimization pass lower-overhead Capy source and JSON plumbing
+
+### Requested baseline
+- Re-ran the requested baseline command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- It still failed immediately in this sandbox because the wrapper tried to create `/home/martin/.gradle/.../gradle-9.1.0-bin.zip.lck` on a read-only filesystem.
+- Checked `build/reports/profile` after the failed run; no fresh profile HTML was produced, so timing context still comes from the latest existing report in that directory.
+
+### Findings
+- `Capy.compileSources(...)` was still walking every regular file under the input tree and only then filtering to `.cfun`, so each handwritten/plugin compile pass paid avoidable object allocation and filename checks for non-source files.
+- `Capy` also rebuilt a new Jackson `ObjectMapper` and pretty-print writer every time it read or wrote linked/build-info JSON, even though the mapper configuration is static and reused across the whole process.
+- Those costs sit directly on the remaining in-process compile/generate path used by the optimized `lib:capybara-lib` and plugin builds.
+
+### Changes made
+- Changed `Capy.listSourceFiles(...)` to keep only `.cfun` files during directory traversal instead of building `SourceFile` wrappers for all regular files first.
+- Promoted the configured Jackson mapper and pretty JSON writer in `Capy` to shared static instances and reused them for linked-program/module/build-info reads and writes.
+- Added `CapyTest.shouldIgnoreNonCapybaraFilesDuringCompilation()` to pin the filtered-source behavior.
+
+### Expected impact
+- Every Capy compile pass should do less work when source trees contain non-`.cfun` files alongside Capybara modules.
+- Repeated linked-output and build-info JSON reads/writes should avoid rebuilding serializer configuration on each call, trimming some of the remaining in-process overhead on the local `check` path.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle task verification or produce a fresh profile in this sandbox because the requested wrapper command still fails before project execution on the read-only `/home/martin/.gradle` lock path.
+- Verification for this pass is limited to source inspection and the added `CapyTest` regression coverage.
