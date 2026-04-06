@@ -18,6 +18,7 @@ import org.gradle.api.tasks.OutputDirectory
 import org.gradle.api.tasks.PathSensitive
 import org.gradle.api.tasks.PathSensitivity
 import org.gradle.api.tasks.TaskAction
+import org.gradle.api.tasks.compile.JavaCompile
 
 import java.io.ByteArrayOutputStream
 import java.io.PrintStream
@@ -551,6 +552,10 @@ tasks.named('compileTestJava') {
     } else if (hasCapybaraTestSources) {
         dependsOn tasks.named('compileTestCapybaraDirect')
     }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.compilerArgs.add('-proc:none')
 }
 
 tasks.named('processResources') {

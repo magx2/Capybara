@@ -2280,6 +2280,30 @@
 - `git diff --check` passed.
 - I could not run Gradle task verification in this sandbox because the requested wrapper invocation still fails before project execution with `Could not determine a usable wildcard IP for this machine`.
 
+## 2026-04-06 build optimization pass JVM annotation processor discovery pruning
+
+### Requested baseline
+- Re-ran the requested command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- It still failed before project execution in this sandbox with:
+  - `Could not determine a usable wildcard IP for this machine`.
+- Checked `build/reports/profile` after the failed run; no new profile HTML was produced, so the saved report data remains stale relative to the current optimized task graph.
+
+### Findings
+- The current `:lib:capybara-lib:check` path still includes standard Java compilation work through `compileTestJava`, and non-check paths still use `compileJava`.
+- A repository search found no configured annotation processors (`annotationProcessor`, `kapt`, processor service registrations, or processor implementations) for this module.
+- That means javac can skip annotation processor discovery on these tasks, avoiding extra classpath scanning and processor initialization work during the requested build.
+
+### Changes made
+- Added `-proc:none` to all `JavaCompile` tasks in `lib/capybara-lib/build.gradle`.
+
+### Expected impact
+- The exact `:lib:capybara-lib:check --rerun-tasks` workflow should spend less time in `compileTestJava`.
+- Non-fused `lib:capybara-lib` Java compilation paths should also avoid unnecessary annotation processor discovery in `compileJava`.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle task verification in this sandbox because the requested wrapper invocation still fails before project execution with `Could not determine a usable wildcard IP for this machine`.
+
 ## 2026-04-06 build optimization pass direct test-generation compatibility tasks
 
 ### Requested baseline
