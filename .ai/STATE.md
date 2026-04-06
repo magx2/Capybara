@@ -1602,3 +1602,33 @@
 - `git diff --check` passed.
 - I could not run Gradle task verification or produce a fresh profile in this sandbox because the requested wrapper command still fails before project execution on both the default Gradle home lock path and the repository-local cache path.
 - Verification for this pass is limited to source inspection and the updated plugin test coverage.
+
+## 2026-04-06 build optimization pass wrapper local Gradle home
+
+### Requested baseline
+- Re-ran the requested command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- Before this pass, the command failed immediately in this sandbox because the wrapper tried to create `/home/martin/.gradle/.../gradle-9.1.0-bin.zip.lck` on a read-only filesystem.
+- After this pass, the same exact command now gets past wrapper distribution locking and fails later during Gradle startup with:
+  - `Could not create service of type FileLockContentionHandler`
+  - `Could not determine a usable wildcard IP for this machine`
+- Checked `build/reports/profile` again after the rerun; no fresh profile HTML was produced, and the latest available report is still `build/reports/profile/profile-2026-04-04-19-07-42.html`.
+
+### Findings
+- The repository already carries a usable Gradle 9.1.0 distribution under the repo-local `.gradle/wrapper/dists` cache, but the stock wrapper scripts defaulted `GRADLE_USER_HOME` to `/home/martin/.gradle` when the environment variable was unset.
+- In this sandbox, that default causes the exact requested `./gradlew ...` command to fail before Gradle startup because the wrapper cannot create its `.lck` file on the read-only home filesystem.
+- Pointing `GRADLE_USER_HOME` at the repository-local `.gradle` directory removes that first hard stop and reuses the already-available wrapper distribution without requiring the caller to set environment variables manually.
+
+### Changes made
+- Updated `gradlew` to default `GRADLE_USER_HOME` to `$APP_HOME/.gradle` only when the caller has not already set it.
+- Updated `gradlew.bat` with the same repo-local default so POSIX and Windows wrappers behave consistently.
+
+### Expected impact
+- The exact requested wrapper command now starts from a writable, repository-local Gradle user home by default.
+- Restricted environments that cannot write to the user home directory should avoid the previous immediate wrapper-lock failure.
+- Existing user or CI overrides still win because the scripts only set `GRADLE_USER_HOME` when it is unset.
+
+### Verification status
+- Re-ran `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain` after the wrapper change.
+- The previous `/home/martin/.gradle/...zip.lck` failure is gone.
+- Gradle still cannot complete in this sandbox because startup now stops later with `Could not determine a usable wildcard IP for this machine`.
+- `git diff --check` passed apart from the expected Git warning that `gradlew.bat` will be normalized to CRLF on a future checkout.
