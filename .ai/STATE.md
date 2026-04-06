@@ -1320,3 +1320,35 @@
 - `git diff --check` passed.
 - I could not run Gradle task verification in this sandbox because the requested wrapper command still fails before project execution on the read-only `/home/martin/.gradle` lock path.
 - Verification for this pass is limited to source inspection and task-graph analysis.
+
+## 2026-04-06 build optimization pass narrow in-process handwritten Capy classpath
+
+### Requested baseline
+- Re-ran the requested baseline command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- It still failed immediately in this sandbox because the wrapper tried to create `/home/martin/.gradle/.../gradle-9.1.0-bin.zip.lck` on a read-only filesystem.
+- Checked `build/reports/profile` after the failed run; no fresh profile HTML was produced, so analysis still relies on the latest existing report at `build/reports/profile/profile-2026-04-04-19-07-42.html`.
+
+### Findings
+- The handwritten `lib/capybara-lib` build still executed its in-process Capybara compile tasks through `project(':capy').sourceSets.main.runtimeClasspath`.
+- That classpath pulls in both `:capy` classes and its resource output, even though the handwritten task path sets `includeJavaLibResources = false` and only needs `dev.capylang.Capy` bytecode plus runtime dependencies.
+- The local in-process task also reflectively called `Capy.readCompilerVersion()` just to stamp linked-output metadata, which forced the task to retain `capybara-version.txt` on the classpath.
+- On the requested local `:lib:capybara-lib:check` path, those extra resource dependencies widen the task graph unnecessarily and keep the handwritten build more tightly coupled to `:capy` resource production than the actual compilation work requires.
+
+### Changes made
+- Added a new `Capy.compileGenerate(...)` overload that accepts an explicit `compilerVersion` string and uses it when writing linked-output build metadata.
+- Added a matching handwritten-task `compilerVersion` input in `lib/capybara-lib/build.gradle` and switched the reflective compile/compile-generate calls to pass `project.version` instead of calling `Capy.readCompilerVersion()`.
+- Narrowed the handwritten `lib/capybara-lib` in-process compile classpath to:
+  - `:capy` main classes,
+  - `:compiler` main classes,
+  - external runtime artifacts only.
+- This removes the handwritten task’s dependency on `:capy` resource output while preserving the classes and external libraries needed to run `dev.capylang.Capy`.
+- Added `CapyTest.shouldCompileGenerateWithProvidedCompilerVersion()` to cover the new overload and assert that linked-output metadata uses the provided version.
+
+### Expected impact
+- `:lib:capybara-lib:check --rerun-tasks` should avoid extra `:capy` resource work on the handwritten in-process compile path.
+- The local library build keeps the same generated outputs, but the Capy invocation path is narrower and less coupled to unrelated resource packaging.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle task verification or produce a fresh profile in this sandbox because the requested wrapper command still fails before project execution on the read-only `/home/martin/.gradle` lock path.
+- Verification for this pass is limited to source inspection and the added regression test.

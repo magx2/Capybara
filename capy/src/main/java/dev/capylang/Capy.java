@@ -157,6 +157,34 @@ public class Capy {
             boolean includeJavaLibResources,
             PrintStream err
     ) {
+        return compileGenerate(
+                outputType,
+                input,
+                generatedOutputDir,
+                linkedOutputDir,
+                testInput,
+                testGeneratedOutputDir,
+                libraries,
+                compileTests,
+                includeJavaLibResources,
+                readCompilerVersion(),
+                err
+        );
+    }
+
+    public static int compileGenerate(
+            OutputType outputType,
+            Path input,
+            Path generatedOutputDir,
+            Path linkedOutputDir,
+            Path testInput,
+            Path testGeneratedOutputDir,
+            TreeSet<CompiledModule> libraries,
+            boolean compileTests,
+            boolean includeJavaLibResources,
+            String compilerVersion,
+            PrintStream err
+    ) {
         try {
             return compileGenerateOrThrow(
                     outputType,
@@ -168,6 +196,7 @@ public class Capy {
                     libraries,
                     compileTests,
                     includeJavaLibResources,
+                    compilerVersion,
                     err
             );
         } catch (CliException e) {
@@ -255,6 +284,7 @@ public class Capy {
                 libraries,
                 compileTests,
                 includeJavaLibResources,
+                readCompilerVersion(),
                 err
         );
     }
@@ -532,6 +562,7 @@ public class Capy {
             TreeSet<CompiledModule> libraries,
             boolean compileTests,
             boolean includeJavaLibResources,
+            String compilerVersion,
             PrintStream err
     ) throws IOException {
         if ((testInput == null) != (testGeneratedOutputDir == null)) {
@@ -543,7 +574,7 @@ public class Capy {
         }
         if (linkedOutputDir != null) {
             validateOutputDirectory(linkedOutputDir, "Compile output path");
-            writeCompilationOutput(linkedOutputDir, compilation, readCompilerVersion());
+            writeCompilationOutput(linkedOutputDir, compilation, compilerVersion);
         }
         validateOutputDirectory(generatedOutputDir, "Generated output path");
         generateProgram(outputType, generatedOutputDir, selectGenerationInput(compilation.program(), compilation.sourceModules(), includeJavaLibResources));

@@ -1,5 +1,6 @@
 package dev.capylang;
 
+import dev.capylang.compiler.OutputType;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -8,6 +9,7 @@ import java.io.IOException;
 import java.io.PrintStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.TreeSet;
 import java.util.zip.ZipFile;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -88,6 +90,33 @@ class CapyTest {
         assertTrue(Files.exists(appOutputDir.resolve("build-info.json")));
         assertTrue(Files.exists(appOutputDir.resolve("program.json")));
         assertFalse(Files.exists(appOutputDir.resolve("lib").resolve("Lib.json")));
+    }
+
+    @Test
+    void shouldCompileGenerateWithProvidedCompilerVersion() throws IOException {
+        var sourceDir = Files.createDirectories(tempDir.resolve("compile-generate-direct-source"));
+        Files.createDirectories(sourceDir.resolve("foo"));
+        Files.writeString(sourceDir.resolve("foo").resolve("Main.cfun"), "fun main(): int = 1\n");
+        var generatedDir = tempDir.resolve("compile-generate-direct-output");
+        var linkedDir = tempDir.resolve("compile-generate-direct-linked");
+
+        var exitCode = Capy.compileGenerate(
+                OutputType.JAVA,
+                sourceDir,
+                generatedDir,
+                linkedDir,
+                null,
+                null,
+                new TreeSet<>(),
+                false,
+                false,
+                "test-version",
+                new PrintStream(new ByteArrayOutputStream())
+        );
+
+        assertEquals(0, exitCode);
+        assertTrue(Files.exists(generatedDir.resolve("foo").resolve("Main.java")));
+        assertTrue(Files.readString(linkedDir.resolve("build-info.json")).contains("test-version"));
     }
 
     @Test

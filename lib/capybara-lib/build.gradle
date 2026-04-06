@@ -1,5 +1,6 @@
 import org.gradle.api.DefaultTask
 import org.gradle.api.GradleException
+import org.gradle.api.artifacts.component.ProjectComponentIdentifier
 import org.gradle.api.file.ConfigurableFileCollection
 import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.provider.Property
@@ -60,6 +61,9 @@ abstract class InProcessCapybaraCompileTask extends DefaultTask {
     @Input
     abstract Property<Boolean> getIncludeJavaLibResources()
 
+    @Input
+    abstract Property<String> getCompilerVersion()
+
     @TaskAction
     void compileCapybara() {
         def errors = new ByteArrayOutputStream()
@@ -94,8 +98,6 @@ abstract class InProcessCapybaraCompileTask extends DefaultTask {
                         PrintStream,
                         String
                 )
-                def readCompilerVersion = capyClass.getDeclaredMethod('readCompilerVersion')
-                readCompilerVersion.accessible = true
                 exitCode = compile.invoke(
                         null,
                         inputDir.get().asFile.toPath(),
@@ -103,7 +105,7 @@ abstract class InProcessCapybaraCompileTask extends DefaultTask {
                         libraries,
                         compileTests.getOrElse(false),
                         new PrintStream(errors),
-                        readCompilerVersion.invoke(null)
+                        compilerVersion.get()
                 ) as Integer
             } else {
                 def outputTypeClass = Class.forName('dev.capylang.compiler.OutputType', true, classLoader)
@@ -119,6 +121,7 @@ abstract class InProcessCapybaraCompileTask extends DefaultTask {
                         TreeSet,
                         Boolean.TYPE,
                         Boolean.TYPE,
+                        String,
                         PrintStream
                 )
                 exitCode = compileGenerate.invoke(
@@ -132,6 +135,7 @@ abstract class InProcessCapybaraCompileTask extends DefaultTask {
                         libraries,
                         compileTests.getOrElse(false),
                         includeJavaLibResources.getOrElse(true),
+                        compilerVersion.get(),
                         new PrintStream(errors)
                 ) as Integer
             }
@@ -195,7 +199,15 @@ abstract class InProcessCapybaraTestTask extends DefaultTask {
 }
 
 def capyProject = project(':capy')
-def capyRuntimeClasspath = capyProject.sourceSets.main.runtimeClasspath
+def compilerProject = project(':compiler')
+def capyRuntimeDependencies = capyProject.configurations.runtimeClasspath.incoming.artifactView {
+    componentFilter { componentIdentifier -> !(componentIdentifier instanceof ProjectComponentIdentifier) }
+}.files
+def capyRuntimeClasspath = files(
+        capyProject.sourceSets.main.output.classesDirs,
+        compilerProject.sourceSets.main.output.classesDirs,
+        capyRuntimeDependencies
+)
 
 def capybaraMainSourceDir = layout.projectDirectory.dir('src/main/capybara')
 def capybaraTestSourceDir = layout.projectDirectory.dir('src/test/capybara')
@@ -238,6 +250,7 @@ tasks.register('linkCapybaraDirect', InProcessCapybaraCompileTask) {
     linkedOutputDir.set(capybaraLinkedMainDir)
     compileTests.set(false)
     includeJavaLibResources.set(false)
+    compilerVersion.set(project.version.toString())
     onlyIf { !capybaraTestBuildRequested.get() }
 }
 
@@ -250,6 +263,7 @@ tasks.register('linkCapybaraLinkedOnly', InProcessCapybaraCompileTask) {
     linkedOutputDir.set(capybaraLinkedMainDir)
     compileTests.set(false)
     includeJavaLibResources.set(false)
+    compilerVersion.set(project.version.toString())
     onlyIf { !capybaraTestBuildRequested.get() }
 }
 
@@ -265,6 +279,7 @@ tasks.register('prepareCapybaraForCheck', InProcessCapybaraCompileTask) {
     testGeneratedOutputDir.set(capybaraGeneratedTestDir)
     compileTests.set(false)
     includeJavaLibResources.set(false)
+    compilerVersion.set(project.version.toString())
     onlyIf { capybaraTestBuildRequested.get() }
 }
 
@@ -297,6 +312,7 @@ tasks.register('compileTestCapybaraDirect', InProcessCapybaraCompileTask) {
     generatedOutputDir.set(capybaraGeneratedTestDir)
     compileTests.set(true)
     includeJavaLibResources.set(false)
+    compilerVersion.set(project.version.toString())
     onlyIf { !capybaraTestBuildRequested.get() }
 }
 
