@@ -118,6 +118,54 @@ abstract class InProcessCapybaraCompileTask extends DefaultTask {
     }
 }
 
+abstract class InProcessCapybaraTestTask extends DefaultTask {
+    @Classpath
+    abstract ConfigurableFileCollection getRuntimeClasspath()
+
+    @OutputDirectory
+    abstract DirectoryProperty getOutputDir()
+
+    @Input
+    abstract Property<String> getReportType()
+
+    @Input
+    abstract Property<String> getLogLevel()
+
+    @TaskAction
+    void runCapybaraTests() {
+        outputDir.get().asFile.mkdirs()
+
+        def runtimeUrls = runtimeClasspath.files.collect { it.toURI().toURL() } as URL[]
+        URLClassLoader classLoader = new URLClassLoader(runtimeUrls, ClassLoader.getPlatformClassLoader())
+        def originalContextClassLoader = Thread.currentThread().contextClassLoader
+        try {
+            Thread.currentThread().contextClassLoader = classLoader
+            def testRunnerClass = Class.forName('dev.capylang.test.TestRunner', true, classLoader)
+            def argumentsClass = Class.forName('dev.capylang.test.TestRunner$Arguments', true, classLoader)
+            def parseArguments = testRunnerClass.getMethod('parseArguments', String[].class)
+            def runTests = testRunnerClass.getMethod('runTests', argumentsClass)
+
+            def args = [
+                    '-o', outputDir.get().asFile.absolutePath,
+                    '-rt', reportType.get()
+            ]
+            def configuredLogLevel = logLevel.orNull
+            if (configuredLogLevel != null && !configuredLogLevel.isBlank()) {
+                args.addAll(['-ll', configuredLogLevel])
+            }
+
+            def parsedArguments = parseArguments.invoke(null, (Object) args.toArray(new String[0]))
+            def exitCode = runTests.invoke(null, parsedArguments) as Integer
+            if (exitCode != 0) {
+                throw new GradleException("Capybara tests failed with exit code ${exitCode}")
+            }
+        } finally {
+            Thread.currentThread().contextClassLoader = originalContextClassLoader
+            classLoader.close()
+        }
+    }
+}
+
 def capyProject = project(':capy')
 def capyRuntimeClasspath = capyProject.sourceSets.main.runtimeClasspath
 
@@ -198,25 +246,15 @@ tasks.register('compileTestCapybara') {
     dependsOn tasks.named('compileTestCapybaraDirect')
 }
 
-tasks.register('testCapybara', JavaExec) {
+tasks.register('testCapybara', InProcessCapybaraTestTask) {
     group = 'verification'
-    description = 'Runs Capybara tests from compiled test classes.'
+    description = 'Runs Capybara tests from compiled test classes without launching a separate JVM.'
     dependsOn tasks.named('compileTestJava')
 
-    classpath = sourceSets.test.runtimeClasspath
-    mainClass = 'dev.capylang.test.TestRunner'
-
-    doFirst {
-        capybaraTestResultsDir.get().asFile.mkdirs()
-        def capybaraArgs = [
-                '-o', capybaraTestResultsDir.get().asFile.absolutePath,
-                '-rt', 'JUNIT'
-        ]
-        if (capybaraDebugEnabled) {
-            capybaraArgs.addAll(['-ll', 'DEBUG'])
-        }
-        setArgs(capybaraArgs)
-    }
+    runtimeClasspath.from(sourceSets.test.runtimeClasspath)
+    outputDir.set(capybaraTestResultsDir)
+    reportType.set('JUNIT')
+    logLevel.set(capybaraDebugEnabled ? 'DEBUG' : 'INFO')
 }
 
 sourceSets {

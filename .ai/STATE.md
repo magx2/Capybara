@@ -219,6 +219,35 @@
 - `git diff --check` passed.
 - I could not run Gradle task verification in this sandbox because Gradle still fails during startup with `Could not determine a usable wildcard IP for this machine`.
 
+## 2026-04-06 build optimization pass in-process Capybara test execution
+
+### Requested baseline
+- Re-ran the requested baseline command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- It still failed immediately in this sandbox because the wrapper tried to create `/home/martin/.gradle/.../gradle-9.1.0-bin.zip.lck` on a read-only filesystem.
+- As in earlier passes, no fresh profile HTML was produced here, so this pass is based on the existing `build/reports/profile` data plus source inspection of the current `check` path.
+
+### Findings
+- After earlier work fused Capybara compilation/generation, the `:lib:capybara-lib:testCapybara` task still launched a separate JVM through `JavaExec`.
+- That extra process startup is paid on every `:lib:capybara-lib:check --rerun-tasks` run even though the task only needs classes already present on `sourceSets.test.runtimeClasspath`.
+- The reusable Gradle plugin still used the same `JavaExec` pattern, so plugin consumers were paying the same avoidable fork/boot overhead.
+
+### Changes made
+- Replaced `lib/capybara-lib`’s `testCapybara` `JavaExec` task with an in-process task that:
+  - loads `dev.capylang.test.TestRunner` from the test runtime classpath,
+  - switches the thread context classloader so generated Capybara test classes remain discoverable,
+  - invokes `TestRunner.parseArguments(...)` and `TestRunner.runTests(...)` directly.
+- Added a reusable `CapybaraTestTask` to `build-tool/gradle` and switched the plugin’s `testCapybara` task to use it instead of `JavaExec`.
+- Added plugin test coverage to lock in the new in-process task type.
+
+### Expected impact
+- `:lib:capybara-lib:check --rerun-tasks` should avoid one extra JVM launch during `testCapybara`.
+- Plugin consumers should get the same reduction in verification-task startup overhead.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle task verification in this sandbox because the requested Gradle baseline command still fails before project execution.
+- Verification for this pass is limited to source inspection and the added plugin test coverage.
+
 ## 2026-04-06 build optimization pass test report manifest pruning
 
 ### Requested baseline

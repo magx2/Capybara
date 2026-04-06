@@ -13,6 +13,7 @@ import java.nio.file.Path;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class CapybaraPluginTest {
@@ -173,6 +174,13 @@ class CapybaraPluginTest {
         assertFalse(project.getTasks().getNames().contains("compileCapybaraTestJava"));
         assertTrue(resolvedDependencies.contains(compileTestJava));
         assertTrue(compileTestJavaDependencies.contains(project.getTasks().named("generateTestCapybaraJava").get()));
+    }
+
+    @Test
+    void shouldUseInProcessTaskForCapybaraTests() {
+        var project = newProject();
+
+        assertInstanceOf(CapybaraTestTask.class, project.getTasks().named("testCapybara").get());
     }
 
     @Test

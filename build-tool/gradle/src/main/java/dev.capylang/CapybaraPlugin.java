@@ -3,7 +3,6 @@ package dev.capylang;
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
 import org.gradle.api.tasks.SourceSetContainer;
-import org.gradle.api.tasks.JavaExec;
 
 public class CapybaraPlugin implements Plugin<Project> {
     @Override
@@ -96,21 +95,15 @@ public class CapybaraPlugin implements Plugin<Project> {
 
             var testCapybara = project.getTasks().register(
                     "testCapybara",
-                    JavaExec.class,
+                    CapybaraTestTask.class,
                     task -> {
                         task.setGroup("verification");
-                        task.setDescription("Runs Capybara tests using generated Java classes.");
+                        task.setDescription("Runs Capybara tests using generated Java classes without launching a separate JVM.");
                         task.dependsOn(project.getTasks().named("compileTestJava"));
-                        task.classpath(sourceSets.getByName("test").getRuntimeClasspath());
-                        task.getMainClass().set("dev.capylang.test.TestRunner");
-                        task.doFirst(ignored -> {
-                            var outputDir = capybaraTestResultsDir.get().getAsFile();
-                            outputDir.mkdirs();
-                            task.setArgs(java.util.List.of(
-                                    "-o", outputDir.getAbsolutePath(),
-                                    "-rt", "JUNIT"
-                            ));
-                        });
+                        task.getRuntimeClasspath().from(sourceSets.getByName("test").getRuntimeClasspath());
+                        task.getOutputDir().set(capybaraTestResultsDir);
+                        task.getReportType().set("JUNIT");
+                        task.getLogLevel().set("INFO");
                     }
             );
 
