@@ -60,6 +60,22 @@ class TestRunnerTest {
         assertFalse(Files.exists(staleFile));
     }
 
+    @Test
+    void shouldNotRewriteIdenticalTestOutput() throws Exception {
+        var arguments = new TestRunner.Arguments(tempDir, TestRunner.ReportType.JUNIT, Level.INFO);
+        var output = new TestOutput(relativePath("reports", "TEST-capy.lang.MathTest.xml"), "<xml/>", false);
+
+        var writtenPath = TestRunner.writeTestOutputToFile(output, arguments);
+        var report = tempDir.resolve(writtenPath);
+        var initialModifiedTime = Files.getLastModifiedTime(report);
+
+        Thread.sleep(1100);
+
+        TestRunner.writeTestOutputToFile(output, arguments);
+
+        assertEquals(initialModifiedTime, Files.getLastModifiedTime(report));
+    }
+
     private static Path relativePath(String... segments) {
         return new Path(PathRoot.RELATIVE, Optional.empty(), List.of(segments));
     }

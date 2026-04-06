@@ -608,7 +608,7 @@ public class Capy {
                             if (parent != null) {
                                 Files.createDirectories(parent);
                             }
-                            Files.copy(source, target, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                            copyFileIfChanged(source, target);
                             copiedFiles.add(relative.normalize());
                         }
                     } catch (IOException e) {
@@ -1014,13 +1014,7 @@ public class Capy {
             }
             log.info("Writing module to file: " + absolutePath);
             var startedAt = System.nanoTime();
-            Files.writeString(
-                    absolutePath,
-                    code,
-                    StandardOpenOption.CREATE,
-                    StandardOpenOption.TRUNCATE_EXISTING,
-                    StandardOpenOption.WRITE
-            );
+            writeStringIfChanged(absolutePath, code);
             var duration = Duration.ofNanos(System.nanoTime() - startedAt);
             log.info("Wrote module to file: " + absolutePath + " in " + duration);
         } catch (IOException e) {
@@ -1038,7 +1032,7 @@ public class Capy {
             var programFile = outputDir.resolve(PROGRAM_FILE);
             log.info("Writing linked program to file: " + programFile);
             var programStartedAt = System.nanoTime();
-            mapper.writerWithDefaultPrettyPrinter().writeValue(programFile.toFile(), program);
+            writeJsonIfChanged(programFile, mapper.writerWithDefaultPrettyPrinter().writeValueAsBytes(program));
             log.info("Wrote linked program to file: " + programFile + " in " + Duration.ofNanos(System.nanoTime() - programStartedAt));
             writtenFiles.add(Path.of(PROGRAM_FILE));
             for (var module : program.modules()) {
@@ -1049,7 +1043,7 @@ public class Capy {
                 Files.createDirectories(moduleJson.getParent());
                 log.info("Writing linked module to file: " + moduleJson);
                 var startedAt = System.nanoTime();
-                mapper.writerWithDefaultPrettyPrinter().writeValue(moduleJson.toFile(), module);
+                writeJsonIfChanged(moduleJson, mapper.writerWithDefaultPrettyPrinter().writeValueAsBytes(module));
                 var duration = Duration.ofNanos(System.nanoTime() - startedAt);
                 log.info("Wrote linked module to file: " + moduleJson + " in " + duration);
                 writtenFiles.add(outputDir.relativize(moduleJson).normalize());
@@ -1205,11 +1199,42 @@ public class Capy {
         try {
             Files.createDirectories(outputDir);
             var buildInfoFile = outputDir.resolve(BUILD_INFO_FILE);
-            objectMapper().writerWithDefaultPrettyPrinter().writeValue(buildInfoFile.toFile(), buildInfo);
+            writeJsonIfChanged(buildInfoFile, objectMapper().writerWithDefaultPrettyPrinter().writeValueAsBytes(buildInfo));
             log.info("Writing build info to file: " + buildInfoFile);
         } catch (IOException e) {
             throw new UncheckedIOException("Unable to write build info JSON to " + outputDir, e);
         }
+    }
+
+    private static void writeJsonIfChanged(Path outputFile, byte[] content) throws IOException {
+        writeBytesIfChanged(outputFile, content);
+    }
+
+    private static void writeStringIfChanged(Path outputFile, String content) throws IOException {
+        writeBytesIfChanged(outputFile, content.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private static void writeBytesIfChanged(Path outputFile, byte[] content) throws IOException {
+        if (Files.isRegularFile(outputFile)) {
+            var existing = Files.readAllBytes(outputFile);
+            if (java.util.Arrays.equals(existing, content)) {
+                return;
+            }
+        }
+        Files.write(
+                outputFile,
+                content,
+                StandardOpenOption.CREATE,
+                StandardOpenOption.TRUNCATE_EXISTING,
+                StandardOpenOption.WRITE
+        );
+    }
+
+    private static void copyFileIfChanged(Path source, Path target) throws IOException {
+        if (Files.isRegularFile(target) && Files.size(source) == Files.size(target) && Files.mismatch(source, target) == -1) {
+            return;
+        }
+        Files.copy(source, target, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
     }
 
     private static BuildInfo readBuildInfo(Path linkedInputDir) {

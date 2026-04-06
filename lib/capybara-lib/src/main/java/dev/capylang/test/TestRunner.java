@@ -202,7 +202,7 @@ public class TestRunner {
             if (parent != null) {
                 Files.createDirectories(parent);
             }
-            Files.writeString(finalPath, testOutput.content());
+            writeStringIfChanged(finalPath, testOutput.content());
             LOG.info(() -> "Wrote test output to `%s`".formatted(finalPath));
             return arguments.outputDir().relativize(finalPath.normalize());
         } catch (IOException e) {
@@ -264,5 +264,12 @@ public class TestRunner {
     private static ClassLoader contextClassLoader() {
         var classLoader = Thread.currentThread().getContextClassLoader();
         return classLoader == null ? TestRunner.class.getClassLoader() : classLoader;
+    }
+
+    private static void writeStringIfChanged(Path outputFile, String content) throws IOException {
+        if (Files.isRegularFile(outputFile) && content.equals(Files.readString(outputFile))) {
+            return;
+        }
+        Files.writeString(outputFile, content);
     }
 }

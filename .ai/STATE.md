@@ -314,3 +314,34 @@
 - `git diff --check` passed.
 - I could not run Gradle task verification in this sandbox because the wrapper still fails before task execution with a read-only lockfile path under `/home/martin/.gradle`, and repo-local Gradle startup still fails with `Could not determine a usable wildcard IP for this machine`.
 - Verification for this pass is limited to source inspection and the added CLI/plugin test coverage.
+
+## 2026-04-06 build optimization pass content-aware output writes
+
+### Requested baseline
+- Re-ran the requested baseline command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- It still failed immediately in this sandbox because the wrapper tried to create `/home/martin/.gradle/.../gradle-9.1.0-bin.zip.lck` on a read-only filesystem.
+- Checked `build/reports/profile` after the run; no new profile HTML was produced, and the latest available report is still `build/reports/profile/profile-2026-04-04-19-07-42.html`.
+
+### Findings
+- The requested command uses `--rerun-tasks`, so Capy compile/generate steps execute even when their outputs are already populated and logically unchanged.
+- After earlier work removed duplicate task launches and broad directory deletion, the remaining Capy output path still rewrote most files unconditionally on every rerun build:
+  - linked `program.json` and per-module `.json` files,
+  - generated Java source files,
+  - copied bundled Java runtime sources,
+  - Capybara JUnit XML test reports.
+- That means the hottest remaining rerun tasks still paid avoidable truncate/write/copy work across large output trees even when file contents were identical to the previous run.
+
+### Changes made
+- Added content-aware write helpers in `capy` so linked JSON and generated source files are only rewritten when bytes actually change.
+- Updated bundled Java runtime source copying to skip `REPLACE_EXISTING` copies when the target file already matches the source content.
+- Updated `TestRunner` to avoid rewriting identical JUnit XML reports.
+- Added focused tests asserting that repeated identical compile/generate/test-report writes preserve file modification times.
+
+### Expected impact
+- `:lib:capybara-lib:linkCapybara`, `:lib:capybara-lib:compileTestCapybara`, and `:lib:capybara-lib:testCapybara` should do less filesystem work on `--rerun-tasks` builds when outputs are unchanged.
+- This should reduce rerun-path write churn without changing stale-file pruning or correctness when sources actually change.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle task verification in this sandbox because the wrapper still fails before task execution with a read-only lockfile path under `/home/martin/.gradle`, and repo-local Gradle startup still fails with `Could not determine a usable wildcard IP for this machine`.
+- Verification for this pass is limited to source inspection and the added CLI/test-runner unit-test coverage.

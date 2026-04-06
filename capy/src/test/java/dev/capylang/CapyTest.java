@@ -169,6 +169,36 @@ class CapyTest {
     }
 
     @Test
+    void shouldNotRewriteIdenticalLinkedOutputs() throws Exception {
+        var sourceDir = Files.createDirectories(tempDir.resolve("stable-linked-source"));
+        Files.createDirectories(sourceDir.resolve("foo"));
+        Files.writeString(sourceDir.resolve("foo").resolve("Main.cfun"), "fun main(): int = 1\n");
+        var linkedDir = Files.createDirectories(tempDir.resolve("stable-linked-output"));
+
+        assertEquals(0, Capy.execute(
+                new String[]{"compile", "-i", sourceDir.toString(), "-o", linkedDir.toString()},
+                new PrintStream(new ByteArrayOutputStream()),
+                new PrintStream(new ByteArrayOutputStream())
+        ));
+
+        var programFile = linkedDir.resolve("program.json");
+        var moduleFile = linkedDir.resolve("foo").resolve("Main.json");
+        var initialProgramTime = Files.getLastModifiedTime(programFile);
+        var initialModuleTime = Files.getLastModifiedTime(moduleFile);
+
+        Thread.sleep(1100);
+
+        assertEquals(0, Capy.execute(
+                new String[]{"compile", "-i", sourceDir.toString(), "-o", linkedDir.toString()},
+                new PrintStream(new ByteArrayOutputStream()),
+                new PrintStream(new ByteArrayOutputStream())
+        ));
+
+        assertEquals(initialProgramTime, Files.getLastModifiedTime(programFile));
+        assertEquals(initialModuleTime, Files.getLastModifiedTime(moduleFile));
+    }
+
+    @Test
     void shouldAcceptJsAliasForGenerate() throws IOException {
         var sourceDir = Files.createDirectories(tempDir.resolve("source"));
         Files.writeString(sourceDir.resolve("Main.cfun"), "fun main(): int = 1\n");
@@ -259,6 +289,42 @@ class CapyTest {
         assertTrue(Files.exists(generatedDir.resolve("Main.java")));
         assertFalse(Files.exists(staleFile));
         assertFalse(Files.exists(generatedDir.resolve("stale")));
+    }
+
+    @Test
+    void shouldNotRewriteIdenticalGeneratedOutputs() throws Exception {
+        var sourceDir = Files.createDirectories(tempDir.resolve("stable-generate-source"));
+        Files.writeString(sourceDir.resolve("Main.cfun"), "fun main(): int = 1\n");
+        var linkedDir = Files.createDirectories(tempDir.resolve("stable-generate-linked"));
+        var generatedDir = Files.createDirectories(tempDir.resolve("stable-generate-output"));
+
+        assertEquals(0, Capy.execute(
+                new String[]{"compile", "-i", sourceDir.toString(), "-o", linkedDir.toString()},
+                new PrintStream(new ByteArrayOutputStream()),
+                new PrintStream(new ByteArrayOutputStream())
+        ));
+
+        assertEquals(0, Capy.execute(
+                new String[]{"generate", "java", "-i", linkedDir.toString(), "-o", generatedDir.toString()},
+                new PrintStream(new ByteArrayOutputStream()),
+                new PrintStream(new ByteArrayOutputStream())
+        ));
+
+        var mainFile = generatedDir.resolve("Main.java");
+        var runtimeFile = generatedDir.resolve("dev").resolve("capylang").resolve("CapybaraUtil.java");
+        var initialMainTime = Files.getLastModifiedTime(mainFile);
+        var initialRuntimeTime = Files.getLastModifiedTime(runtimeFile);
+
+        Thread.sleep(1100);
+
+        assertEquals(0, Capy.execute(
+                new String[]{"generate", "java", "-i", linkedDir.toString(), "-o", generatedDir.toString()},
+                new PrintStream(new ByteArrayOutputStream()),
+                new PrintStream(new ByteArrayOutputStream())
+        ));
+
+        assertEquals(initialMainTime, Files.getLastModifiedTime(mainFile));
+        assertEquals(initialRuntimeTime, Files.getLastModifiedTime(runtimeFile));
     }
 
     @Test
