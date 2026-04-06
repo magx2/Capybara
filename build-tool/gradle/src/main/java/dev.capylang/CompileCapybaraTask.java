@@ -35,6 +35,14 @@ public abstract class CompileCapybaraTask extends DefaultTask {
     @OutputDirectory
     public abstract DirectoryProperty getGeneratedOutputDir();
 
+    @Optional
+    @InputDirectory
+    public abstract DirectoryProperty getTestInputDir();
+
+    @Optional
+    @OutputDirectory
+    public abstract DirectoryProperty getGeneratedTestOutputDir();
+
     @Input
     public abstract Property<String> getCompilerVersion();
 
@@ -44,11 +52,24 @@ public abstract class CompileCapybaraTask extends DefaultTask {
     @Input
     public abstract Property<Boolean> getIncludeJavaLibResources();
 
+    @Input
+    public abstract Property<Boolean> getCompileTestSourcesWithMainCompilation();
+
+    @Input
+    public abstract Property<Boolean> getIncludeJavaLibResourcesInTestOutput();
+
     @TaskAction
     public void compile() throws IOException {
         var input = getInputDir().get().getAsFile().toPath();
         var output = getOutputDir().get().getAsFile().toPath();
         var generatedOutput = getGeneratedOutputDir().isPresent() ? getGeneratedOutputDir().get().getAsFile().toPath() : null;
+        var compileTestSourcesWithMainCompilation = getCompileTestSourcesWithMainCompilation().getOrElse(false);
+        var testInput = compileTestSourcesWithMainCompilation && getTestInputDir().isPresent()
+                ? getTestInputDir().get().getAsFile().toPath()
+                : null;
+        var generatedTestOutput = compileTestSourcesWithMainCompilation && getGeneratedTestOutputDir().isPresent()
+                ? getGeneratedTestOutputDir().get().getAsFile().toPath()
+                : null;
         var libraries = readLibraryModules(getAdditionalInputDirs().getFiles().stream()
                 .map(java.io.File::toPath)
                 .toList());
@@ -57,11 +78,16 @@ public abstract class CompileCapybaraTask extends DefaultTask {
         if (generatedOutput != null) {
             Files.createDirectories(generatedOutput);
         }
+        if (generatedTestOutput != null) {
+            Files.createDirectories(generatedTestOutput);
+        }
         var errors = new ByteArrayOutputStream();
         var exitCode = compileAndGenerate(
                 input,
                 output,
                 generatedOutput,
+                testInput,
+                generatedTestOutput,
                 libraries,
                 new PrintStream(errors)
         );
@@ -75,6 +101,8 @@ public abstract class CompileCapybaraTask extends DefaultTask {
             java.nio.file.Path input,
             java.nio.file.Path output,
             java.nio.file.Path generatedOutput,
+            java.nio.file.Path testInput,
+            java.nio.file.Path generatedTestOutput,
             TreeSet<CompiledModule> libraries,
             PrintStream errors
     ) throws IOException {
@@ -92,7 +120,25 @@ public abstract class CompileCapybaraTask extends DefaultTask {
                     getIncludeJavaLibResources().getOrElse(true)
             );
         }
+        if (testInput != null && generatedTestOutput != null) {
+            var testCompilation = Capy.compileSources(testInput, mergeLibraries(libraries, compilation), true, errors);
+            if (testCompilation == null) {
+                return 100;
+            }
+            Capy.generateCompiledProgram(
+                    OutputType.JAVA,
+                    generatedTestOutput,
+                    testCompilation,
+                    getIncludeJavaLibResourcesInTestOutput().getOrElse(false)
+            );
+        }
         return 0;
+    }
+
+    private TreeSet<CompiledModule> mergeLibraries(TreeSet<CompiledModule> libraries, Capy.CompilationArtifacts compilation) {
+        var mergedLibraries = new TreeSet<>(libraries);
+        mergedLibraries.addAll(compilation.program().modules());
+        return mergedLibraries;
     }
 
     private TreeSet<CompiledModule> readLibraryModules(Collection<java.nio.file.Path> directories) throws IOException {

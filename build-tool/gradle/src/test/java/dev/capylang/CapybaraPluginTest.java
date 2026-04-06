@@ -10,6 +10,7 @@ import org.junit.jupiter.api.io.TempDir;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -32,6 +33,38 @@ class CapybaraPluginTest {
         assertTrue(project.file("build/classes/capybara/program.json").isFile());
         assertTrue(project.file("build/generated/sources/capybara/java/foo/Main.java").isFile());
         assertTrue(project.file("build/generated/sources/capybara/java/dev/capylang/CapybaraUtil.java").isFile());
+    }
+
+    @Test
+    void shouldCompileMainAndTestSourcesInSingleTaskForCheckBuilds() throws IOException {
+        var project = newProject(List.of("check"));
+
+        var mainSourceDir = Files.createDirectories(tempDir.resolve("src/main/capybara/foo"));
+        Files.writeString(mainSourceDir.resolve("Lib.cfun"), "fun forty_two(): int = 42\n");
+        var testSourceDir = Files.createDirectories(tempDir.resolve("src/test/capybara/bar"));
+        Files.writeString(testSourceDir.resolve("TestModule.cfun"), """
+                from /capy/test/Assert import { * }
+                from /capy/test/CapyTest import { * }
+                from /foo/Lib import { forty_two }
+
+                fun works(): Assert =
+                    assert_that(forty_two()).is_equal_to(42)
+
+                fun tests(): TestFile =
+                    test_file("/bar/TestModule.cfun", [
+                        test("works", works())
+                    ])
+                """);
+
+        project.getTasks().named("compileCapybara", CompileCapybaraTask.class).get().compile();
+
+        assertTrue(project.file("build/classes/capybara/foo/Lib.json").isFile());
+        assertTrue(project.file("build/generated/sources/capybara/java/foo/Lib.java").isFile());
+        assertTrue(project.file("build/generated/sources/test-capybara/java/bar/TestModule.java").isFile());
+        assertFalse(project.file("build/generated/sources/test-capybara/java/dev/capylang/CapybaraUtil.java").exists());
+        assertFalse(project.getTasks().named("compileTestCapybara", CompileCapybaraTask.class).get().getOnlyIf().isSatisfiedBy(
+                project.getTasks().named("compileTestCapybara", CompileCapybaraTask.class).get()
+        ));
     }
 
     @Test
@@ -136,9 +169,14 @@ class CapybaraPluginTest {
     }
 
     private Project newProject() {
+        return newProject(List.of());
+    }
+
+    private Project newProject(List<String> requestedTasks) {
         var project = ProjectBuilder.builder()
                 .withProjectDir(tempDir.toFile())
                 .build();
+        project.getGradle().getStartParameter().setTaskNames(requestedTasks);
         project.setVersion("0.0.0-test");
         project.getPluginManager().apply(JavaPlugin.class);
         project.getPluginManager().apply(CapybaraPlugin.class);

@@ -496,3 +496,38 @@
 - `git diff --check` passed.
 - I could not run Gradle task verification in this sandbox because the requested wrapper command still fails before project execution on the read-only `/home/martin/.gradle` lock path, and repo-local Gradle startup still fails with `Could not determine a usable wildcard IP for this machine`.
 - Verification for this pass is limited to source inspection and the updated plugin test coverage.
+
+## 2026-04-06 build optimization pass plugin combined check generation
+
+### Requested baseline
+- Re-ran the requested baseline command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- It still failed immediately in this sandbox because the wrapper tried to create `/home/martin/.gradle/.../gradle-9.1.0-bin.zip.lck` on a read-only filesystem.
+- Checked `build/reports/profile` after the run; no new profile HTML was produced, and the latest available report is still `build/reports/profile/profile-2026-04-04-19-07-42.html`.
+
+### Findings
+- The handwritten `lib/capybara-lib` build already uses a combined main+test Capybara generation path for `check`-style builds, but the reusable Gradle plugin still performed two separate task actions:
+  - `compileCapybara` for main linked/generated output;
+  - `compileTestCapybara` for test generated output.
+- That means plugin consumers still pay an avoidable second Capybara compilation pass on test-oriented builds even after the repository’s handwritten modules were optimized.
+- The plugin also needs to keep its existing behavior of skipping bundled Java runtime source copying for generated test Java, even when the main and test generations are fused.
+
+### Changes made
+- Extended `build-tool/gradle`’s `CompileCapybaraTask` with optional test-input and generated-test-output properties so one task action can:
+  - compile main sources,
+  - write linked main output,
+  - generate main Java,
+  - compile test sources against the in-memory main compilation result, and
+  - generate test Java in the same pass.
+- Updated `CapybaraPlugin` so `compileCapybara` now performs that fused main+test generation when a test-oriented task is requested (`check`, `test`, `testClasses`, `compileTestJava`, `compileTestCapybara`, `generateTestCapybaraJava`, `compileCapybaraTestJava`, `testCapybara`).
+- Kept `compileTestCapybara` as the standalone compatibility task for non-test-oriented requests, but made it skip execution when the fused `compileCapybara` path is active.
+- Made `generateTestCapybaraJava` depend on `compileCapybara` as well so direct compatibility-task execution still has generated test sources available in the fused path.
+- Added plugin coverage proving `check`-style task requests now generate both main and test Capybara Java from a single `compileCapybara` task action without re-copying bundled Java runtime sources into test output.
+
+### Expected impact
+- Plugin consumers using `check --rerun-tasks`-style builds should avoid one extra Capybara compilation pass for test sources.
+- This aligns the reusable plugin with the same combined check-preparation optimization already applied to `lib/capybara-lib`.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle task verification in this sandbox because the requested wrapper command still fails before project execution on the read-only `/home/martin/.gradle` lock path, and repo-local Gradle startup still fails with `Could not determine a usable wildcard IP for this machine`.
+- Verification for this pass is limited to source inspection and the added plugin test coverage.

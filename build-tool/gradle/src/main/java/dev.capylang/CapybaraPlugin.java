@@ -13,6 +13,17 @@ public class CapybaraPlugin implements Plugin<Project> {
         var compilerVersion = project.getVersion().toString();
         var capybaraTestResultsDir = layout.getBuildDirectory().dir("test-results/capybara");
         var capybaraTestClassesDir = layout.getBuildDirectory().dir("classes/java/capybaraTest");
+        var capybaraTestBuildRequested = project.provider(() ->
+                project.getGradle().getStartParameter().getTaskNames().stream().anyMatch(taskName ->
+                        taskName.equals("check") || taskName.endsWith(":check") ||
+                                taskName.equals("test") || taskName.endsWith(":test") ||
+                                taskName.equals("testClasses") || taskName.endsWith(":testClasses") ||
+                                taskName.equals("compileTestJava") || taskName.endsWith(":compileTestJava") ||
+                                taskName.equals("compileTestCapybara") || taskName.endsWith(":compileTestCapybara") ||
+                                taskName.equals("generateTestCapybaraJava") || taskName.endsWith(":generateTestCapybaraJava") ||
+                                taskName.equals("compileCapybaraTestJava") || taskName.endsWith(":compileCapybaraTestJava") ||
+                                taskName.equals("testCapybara") || taskName.endsWith(":testCapybara")
+                ));
 
         var compileCapybara = project.getTasks().register(
                 "compileCapybara",
@@ -23,10 +34,14 @@ public class CapybaraPlugin implements Plugin<Project> {
                     task.getInputDir().set(project.file("src/main/capybara"));
                     task.getOutputDir().set(layout.getBuildDirectory().dir("classes/capybara"));
                     task.getGeneratedOutputDir().set(layout.getBuildDirectory().dir("generated/sources/capybara/java"));
+                    task.getTestInputDir().set(project.file("src/test/capybara"));
+                    task.getGeneratedTestOutputDir().set(layout.getBuildDirectory().dir("generated/sources/test-capybara/java"));
                     task.getAdditionalInputDirs().from();
                     task.getCompilerVersion().set(compilerVersion);
                     task.getCompileTests().set(false);
                     task.getIncludeJavaLibResources().set(true);
+                    task.getCompileTestSourcesWithMainCompilation().set(capybaraTestBuildRequested);
+                    task.getIncludeJavaLibResourcesInTestOutput().set(false);
                 }
         );
 
@@ -55,6 +70,9 @@ public class CapybaraPlugin implements Plugin<Project> {
                     task.getCompilerVersion().set(compilerVersion);
                     task.getCompileTests().set(true);
                     task.getIncludeJavaLibResources().set(false);
+                    task.getCompileTestSourcesWithMainCompilation().set(false);
+                    task.getIncludeJavaLibResourcesInTestOutput().set(false);
+                    task.onlyIf(ignored -> !capybaraTestBuildRequested.get());
                 }
         );
 
@@ -63,6 +81,7 @@ public class CapybaraPlugin implements Plugin<Project> {
                 task -> {
                     task.setGroup("verification");
                     task.setDescription("Compatibility task for generated test Java classes.");
+                    task.dependsOn(compileCapybara);
                     task.dependsOn(compileTestCapybara);
                 }
         );
