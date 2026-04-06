@@ -394,7 +394,6 @@ def capybaraTestLifecycleTasks = [
         'test',
         'testClasses',
         'compileTestJava',
-        'compileTestCapybara',
         'testCapybara'
 ] as Set
 def singleJavaVerificationLifecycleTasks = [
@@ -405,7 +404,6 @@ def singleJavaVerificationLifecycleTasks = [
         'test',
         'testClasses',
         'compileTestJava',
-        'compileTestCapybara',
         'testCapybara'
 ] as Set
 def capybaraTestBuildRequested = requestedTaskBasenames.any { capybaraTestLifecycleTasks.contains(it) }

@@ -157,6 +157,60 @@ class CapybaraPluginTest {
     }
 
     @Test
+    void shouldKeepStandaloneTestGenerationPathWhenCompileTestCapybaraIsRequestedDirectly() throws IOException {
+        var testSourceDir = Files.createDirectories(tempDir.resolve("src/test/capybara/bar"));
+        Files.writeString(testSourceDir.resolve("TestModule.cfun"), """
+                from /capy/test/Assert import { * }
+                from /capy/test/CapyTest import { * }
+
+                fun works(): Assert =
+                    assert_that(42).is_equal_to(42)
+
+                fun tests(): TestFile =
+                    test_file("/bar/TestModule.cfun", [
+                        test("works", works())
+                    ])
+                """);
+
+        var project = newProject(List.of("compileTestCapybara"));
+        var compileCapybara = project.getTasks().named("compileCapybara", CompileCapybaraTask.class).get();
+        var compileTestCapybara = project.getTasks().named("compileTestCapybara", CompileCapybaraTask.class).get();
+
+        assertTrue(compileCapybara.getOutputDir().isPresent());
+        assertFalse(compileCapybara.getTestInputDir().isPresent());
+        assertFalse(compileCapybara.getGeneratedTestOutputDir().isPresent());
+        assertTrue(compileTestCapybara.getOnlyIf().isSatisfiedBy(compileTestCapybara));
+        assertEquals(project.file("build/generated/sources/test-capybara/java"), compileTestCapybara.getGeneratedOutputDir().get().getAsFile());
+    }
+
+    @Test
+    void shouldKeepStandaloneTestGenerationPathWhenGenerateTestCapybaraJavaIsRequestedDirectly() throws IOException {
+        var testSourceDir = Files.createDirectories(tempDir.resolve("src/test/capybara/bar"));
+        Files.writeString(testSourceDir.resolve("TestModule.cfun"), """
+                from /capy/test/Assert import { * }
+                from /capy/test/CapyTest import { * }
+
+                fun works(): Assert =
+                    assert_that(42).is_equal_to(42)
+
+                fun tests(): TestFile =
+                    test_file("/bar/TestModule.cfun", [
+                        test("works", works())
+                    ])
+                """);
+
+        var project = newProject(List.of("generateTestCapybaraJava"));
+        var compileCapybara = project.getTasks().named("compileCapybara", CompileCapybaraTask.class).get();
+        var compileTestCapybara = project.getTasks().named("compileTestCapybara", CompileCapybaraTask.class).get();
+
+        assertTrue(compileCapybara.getOutputDir().isPresent());
+        assertFalse(compileCapybara.getTestInputDir().isPresent());
+        assertFalse(compileCapybara.getGeneratedTestOutputDir().isPresent());
+        assertTrue(compileTestCapybara.getOnlyIf().isSatisfiedBy(compileTestCapybara));
+        assertEquals(project.file("build/generated/sources/test-capybara/java"), compileTestCapybara.getGeneratedOutputDir().get().getAsFile());
+    }
+
+    @Test
     void shouldReadPluginLibraryInputsFromAggregatedProgramFile() throws IOException {
         var project = newProject();
 

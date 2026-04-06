@@ -2280,6 +2280,40 @@
 - `git diff --check` passed.
 - I could not run Gradle task verification in this sandbox because the requested wrapper invocation still fails before project execution with `Could not determine a usable wildcard IP for this machine`.
 
+## 2026-04-06 build optimization pass direct test-generation compatibility tasks
+
+### Requested baseline
+- Re-ran the requested command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- It still failed before project execution in this sandbox with:
+  - `Could not determine a usable wildcard IP for this machine`.
+- Checked `build/reports/profile` again after the failed run; no new profile HTML was produced, so this pass is based on the existing reports plus source inspection of the current task graph.
+
+### Findings
+- The optimized fused path in `lib:capybara-lib` is meant for verification-oriented lifecycle requests such as `check`, `test`, and `compileTestJava`.
+- That lifecycle detection had become too broad:
+  - the handwritten `lib/capybara-lib` build also treated direct `compileTestCapybara` requests as fused verification builds;
+  - the reusable Gradle plugin also treated direct `compileTestCapybara` and `generateTestCapybaraJava` requests as fused verification builds.
+- That widened direct compatibility-task requests into the heavier fused path unnecessarily.
+- It also risked incorrect behavior:
+  - direct `compileTestCapybara` could skip its own standalone task because its `onlyIf` saw the request as a fused verification build;
+  - direct `generateTestCapybaraJava` could route generation through the fused `check` output path instead of the normal test-generated output directory.
+
+### Changes made
+- Removed `compileTestCapybara` from the handwritten `lib/capybara-lib` task sets that activate the fused verification path.
+- Removed `compileTestCapybara` and `generateTestCapybaraJava` from the reusable plugin’s fused-verification task sets.
+- Added plugin regression tests that verify direct requests for:
+  - `compileTestCapybara`
+  - `generateTestCapybaraJava`
+  both keep the standalone test-generation path.
+
+### Expected impact
+- Direct test-generation compatibility tasks now stay on the narrow standalone path instead of pulling in the broader fused verification wiring.
+- The hot `check`/`test`/`compileTestJava` path remains optimized, while direct generation tasks avoid unnecessary extra configuration and keep their expected output layout.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle task verification in this sandbox because the requested wrapper invocation still fails before project execution with `Could not determine a usable wildcard IP for this machine`.
+
 ## 2026-04-06 build optimization pass redundant check task-edge pruning
 
 ### Requested baseline
