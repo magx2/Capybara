@@ -1,6 +1,7 @@
 package dev.capylang;
 
 import org.gradle.api.Project;
+import org.gradle.api.file.ConfigurableFileCollection;
 import org.gradle.api.logging.LogLevel;
 import org.gradle.api.plugins.JavaPlugin;
 import org.gradle.api.tasks.SourceSetContainer;
@@ -208,6 +209,18 @@ class CapybaraPluginTest {
         var project = newProject();
 
         assertInstanceOf(CapybaraTestTask.class, project.getTasks().named("testCapybara").get());
+    }
+
+    @Test
+    void shouldUseMainRuntimeClasspathAndTestOutputsForCapybaraTests() {
+        var project = newProject();
+        var sourceSets = project.getExtensions().getByType(SourceSetContainer.class);
+        var testCapybara = project.getTasks().named("testCapybara", CapybaraTestTask.class).get();
+        var runtimeClasspathSources = ((ConfigurableFileCollection) testCapybara.getRuntimeClasspath()).getFrom();
+
+        assertTrue(runtimeClasspathSources.contains(sourceSets.getByName("main").getRuntimeClasspath()));
+        assertTrue(runtimeClasspathSources.contains(sourceSets.getByName("test").getOutput()));
+        assertFalse(runtimeClasspathSources.contains(sourceSets.getByName("test").getRuntimeClasspath()));
     }
 
     @ParameterizedTest

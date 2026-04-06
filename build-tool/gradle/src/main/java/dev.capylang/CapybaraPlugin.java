@@ -96,6 +96,9 @@ public class CapybaraPlugin implements Plugin<Project> {
 
         var sourceSets = project.getExtensions().findByType(SourceSetContainer.class);
         if (sourceSets != null) {
+            var mainSourceSet = sourceSets.getByName("main");
+            var testSourceSet = sourceSets.getByName("test");
+
             sourceSets.named("main", sourceSet ->
                     sourceSet.getJava().srcDir(layout.getBuildDirectory().dir("generated/sources/capybara/java")));
             sourceSets.named("test", sourceSet ->
@@ -110,7 +113,7 @@ public class CapybaraPlugin implements Plugin<Project> {
                         task.setGroup("verification");
                         task.setDescription("Runs Capybara tests using generated Java classes without launching a separate JVM.");
                         task.dependsOn(project.getTasks().named("compileTestJava"));
-                        task.getRuntimeClasspath().from(sourceSets.getByName("test").getRuntimeClasspath());
+                        task.getRuntimeClasspath().from(mainSourceSet.getRuntimeClasspath(), testSourceSet.getOutput());
                         task.getOutputDir().set(capybaraTestResultsDir);
                         task.getReportType().set("JUNIT");
                         task.getLogLevel().set(capybaraTestLogLevel(project.getGradle().getStartParameter().getLogLevel()));
