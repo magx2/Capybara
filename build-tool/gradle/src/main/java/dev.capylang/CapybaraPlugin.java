@@ -2,6 +2,7 @@ package dev.capylang;
 
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
+import org.gradle.api.logging.LogLevel;
 import org.gradle.api.tasks.SourceSetContainer;
 
 public class CapybaraPlugin implements Plugin<Project> {
@@ -103,12 +104,20 @@ public class CapybaraPlugin implements Plugin<Project> {
                         task.getRuntimeClasspath().from(sourceSets.getByName("test").getRuntimeClasspath());
                         task.getOutputDir().set(capybaraTestResultsDir);
                         task.getReportType().set("JUNIT");
-                        task.getLogLevel().set("INFO");
+                        task.getLogLevel().set(capybaraTestLogLevel(project.getGradle().getStartParameter().getLogLevel()));
                     }
             );
 
             project.getTasks().matching(task -> task.getName().equals("test")).configureEach(task -> task.dependsOn(testCapybara));
             project.getTasks().matching(task -> task.getName().equals("check")).configureEach(task -> task.dependsOn(testCapybara));
         }
+    }
+
+    static String capybaraTestLogLevel(LogLevel gradleLogLevel) {
+        return switch (gradleLogLevel) {
+            case DEBUG -> "DEBUG";
+            case INFO -> "INFO";
+            default -> "WARN";
+        };
     }
 }

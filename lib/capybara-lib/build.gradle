@@ -203,7 +203,11 @@ def capybaraGeneratedMainDir = layout.buildDirectory.dir('generated/sources/capy
 def capybaraGeneratedTestDir = layout.buildDirectory.dir('generated/sources/capybara/java/test')
 def capybaraLinkedMainDir = layout.buildDirectory.dir('generated/sources/capybara/linked/main')
 def capybaraTestResultsDir = layout.buildDirectory.dir('test-results/capybara')
-def capybaraDebugEnabled = gradle.startParameter.logLevel == org.gradle.api.logging.LogLevel.DEBUG
+def capybaraTestLogLevel = switch (gradle.startParameter.logLevel) {
+    case org.gradle.api.logging.LogLevel.DEBUG -> 'DEBUG'
+    case org.gradle.api.logging.LogLevel.INFO -> 'INFO'
+    default -> 'WARN'
+}
 def capybaraTestBuildRequested = providers.provider {
     gradle.startParameter.taskNames.any { taskName ->
         taskName == 'check' || taskName.endsWith(':check') ||
@@ -293,7 +297,7 @@ tasks.register('testCapybara', InProcessCapybaraTestTask) {
     runtimeClasspath.from(sourceSets.test.runtimeClasspath)
     outputDir.set(capybaraTestResultsDir)
     reportType.set('JUNIT')
-    logLevel.set(capybaraDebugEnabled ? 'DEBUG' : 'INFO')
+    logLevel.set(capybaraTestLogLevel)
 }
 
 sourceSets {

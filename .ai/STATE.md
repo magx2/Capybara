@@ -636,6 +636,41 @@
 - I could not run Gradle task verification in this sandbox because the requested wrapper command still fails before project execution on the read-only `/home/martin/.gradle` lock path.
 - Verification for this pass is limited to source inspection and the updated regression tests.
 
+## 2026-04-06 build optimization pass quieter Capybara test runs
+
+### Requested baseline
+- Re-ran the requested baseline command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- It still failed immediately in this sandbox because the wrapper tried to create `/home/martin/.gradle/.../gradle-9.1.0-bin.zip.lck` on a read-only filesystem.
+- Re-ran with `GRADLE_USER_HOME=/tmp/gradle-home` to bypass the read-only wrapper path.
+- Gradle startup still failed before task execution with `Could not determine a usable wildcard IP for this machine`.
+- Checked `build/reports/profile` again; no fresh profile HTML was produced, so the latest available report remains `build/reports/profile/profile-2026-04-04-19-07-42.html`.
+
+### Findings
+- The latest available profile shows `:lib:capybara-lib:testCapybara` at about `0.340s` on the hot `check` path after the larger compile/generate optimizations.
+- `lib/capybara-lib` and the reusable `build-tool/gradle` plugin were both still running Capybara tests at INFO log level on normal builds.
+- `TestRunner` logged every report write, stale-report deletion, and empty-directory deletion at INFO, which adds avoidable log formatting and console I/O on `--rerun-tasks` runs even when nothing is wrong.
+
+### Changes made
+- Changed `lib/capybara-lib`’s `testCapybara` task to map Gradle log levels to Capybara test logging as:
+  - `DEBUG -> DEBUG`
+  - `INFO -> INFO`
+  - everything else (`LIFECYCLE`, `WARN`, `QUIET`, `ERROR`) -> `WARN`
+- Applied the same log-level mapping in the reusable `build-tool/gradle` plugin so plugin consumers keep the same quieter default behavior.
+- Demoted `TestRunner`’s per-file report-write and stale-output cleanup messages from INFO to FINE, while keeping higher-level run summaries at INFO and failures at SEVERE.
+- Added plugin coverage for the Gradle-log-level to Capybara-log-level mapping.
+
+### Expected impact
+- Normal `check --rerun-tasks --console=plain` builds should spend less time doing Capybara test logging and console output on successful runs.
+- Debug builds still retain detailed per-file Capybara test logging when explicitly requested.
+- Plugin consumers should see the same lower logging overhead on their Capybara test path.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle task verification in this sandbox because the requested wrapper command still fails before project execution:
+  - first on the read-only `/home/martin/.gradle` wrapper lock path;
+  - then, with writable `GRADLE_USER_HOME`, on `Could not determine a usable wildcard IP for this machine`.
+- Verification for this pass is limited to source inspection and the added plugin test coverage.
+
 ## 2026-04-06 build optimization pass linked-only stdlib consumers
 
 ### Requested baseline

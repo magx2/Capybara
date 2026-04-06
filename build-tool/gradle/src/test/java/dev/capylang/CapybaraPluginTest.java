@@ -1,6 +1,7 @@
 package dev.capylang;
 
 import org.gradle.api.Project;
+import org.gradle.api.logging.LogLevel;
 import org.gradle.api.plugins.JavaPlugin;
 import org.gradle.api.tasks.SourceSetContainer;
 import org.gradle.testfixtures.ProjectBuilder;
@@ -11,10 +12,16 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.stream.Stream;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.params.provider.Arguments.arguments;
+
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 
 class CapybaraPluginTest {
     @TempDir
@@ -183,6 +190,12 @@ class CapybaraPluginTest {
         assertInstanceOf(CapybaraTestTask.class, project.getTasks().named("testCapybara").get());
     }
 
+    @ParameterizedTest
+    @MethodSource("gradleLogLevels")
+    void shouldMapGradleLogLevelToCapybaraTestLogLevel(LogLevel gradleLogLevel, String expectedLogLevel) {
+        assertEquals(expectedLogLevel, CapybaraPlugin.capybaraTestLogLevel(gradleLogLevel));
+    }
+
     @Test
     void shouldWireCheckBuildJavaCompilationDirectlyToFusedCompileTask() {
         var project = newProject(List.of("check"));
@@ -200,6 +213,17 @@ class CapybaraPluginTest {
 
     private Project newProject() {
         return newProject(List.of());
+    }
+
+    private static Stream<org.junit.jupiter.params.provider.Arguments> gradleLogLevels() {
+        return Stream.of(
+                arguments(LogLevel.DEBUG, "DEBUG"),
+                arguments(LogLevel.INFO, "INFO"),
+                arguments(LogLevel.LIFECYCLE, "WARN"),
+                arguments(LogLevel.WARN, "WARN"),
+                arguments(LogLevel.QUIET, "WARN"),
+                arguments(LogLevel.ERROR, "WARN")
+        );
     }
 
     private Project newProject(List<String> requestedTasks) {

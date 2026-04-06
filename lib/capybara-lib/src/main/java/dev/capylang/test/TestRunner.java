@@ -207,7 +207,7 @@ public class TestRunner {
                 Files.createDirectories(parent);
             }
             writeStringIfChanged(finalPath, testOutput.content());
-            LOG.info(() -> "Wrote test output to `%s`".formatted(finalPath));
+            LOG.fine(() -> "Wrote test output to `%s`".formatted(finalPath));
             return arguments.outputDir().relativize(finalPath.normalize());
         } catch (IOException e) {
             LOG.log(Level.SEVERE, "Cannot write test output file", e);
@@ -223,7 +223,7 @@ public class TestRunner {
             var manifestFile = outputDir.resolve(OUTPUT_MANIFEST_FILE);
             for (var staleFile : staleFiles(outputDir, manifestFile, expectedFiles)) {
                 Files.deleteIfExists(staleFile);
-                LOG.info(() -> "Deleted stale test output `%s`".formatted(staleFile));
+                LOG.fine(() -> "Deleted stale test output `%s`".formatted(staleFile));
                 deleteEmptyParentDirectories(staleFile.getParent(), outputDir);
             }
             writeOutputManifest(manifestFile, expectedFiles);
@@ -263,7 +263,7 @@ public class TestRunner {
         while (current != null && !current.equals(outputDir)) {
             try {
                 Files.deleteIfExists(current);
-                LOG.info(() -> "Deleted empty test output directory `%s`".formatted(current));
+                LOG.fine(() -> "Deleted empty test output directory `%s`".formatted(current));
             } catch (DirectoryNotEmptyException ignored) {
                 return;
             } catch (IOException e) {
