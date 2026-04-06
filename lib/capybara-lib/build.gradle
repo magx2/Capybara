@@ -39,9 +39,10 @@ def prepareEmptyDir = { File dir ->
 
 tasks.register('linkCapybara', JavaExec) {
     group = 'build'
-    description = 'Compiles Capybara files from src/main/capybara into linked JSON artifacts.'
+    description = 'Compiles Capybara files from src/main/capybara and generates Java in one pass.'
 
     inputs.dir(capybaraMainSourceDir)
+    outputs.dir(capybaraGeneratedMainDir)
     outputs.dir(capybaraLinkedMainDir)
 
     classpath = capyExecutionClasspath
@@ -49,30 +50,25 @@ tasks.register('linkCapybara', JavaExec) {
 
     doFirst {
         prepareEmptyDir(capybaraLinkedMainDir.get().asFile)
-        def capybaraArgs = ['compile', '-i', capybaraMainSourceDir.asFile.absolutePath, '-o', capybaraLinkedMainDir.get().asFile.absolutePath]
+        prepareEmptyDir(capybaraGeneratedMainDir.get().asFile)
+        def capybaraArgs = [
+                'compile-generate',
+                'java',
+                '--skip-java-lib',
+                '-i', capybaraMainSourceDir.asFile.absolutePath,
+                '-o', capybaraGeneratedMainDir.get().asFile.absolutePath,
+                '--linked-output', capybaraLinkedMainDir.get().asFile.absolutePath
+        ]
         capybaraArgs.addAll(capybaraDebugEnabled ? ['--log', 'DEBUG'] : ['--log', 'WARN'])
         setArgs(capybaraArgs)
     }
 
 }
 
-tasks.register('compileCapybara', JavaExec) {
+tasks.register('compileCapybara') {
     group = 'build'
-    description = 'Generates Java from linked main Capybara sources.'
+    description = 'Generates Java from main Capybara sources.'
     dependsOn tasks.named('linkCapybara')
-
-    inputs.dir(capybaraLinkedMainDir)
-    outputs.dir(capybaraGeneratedMainDir)
-
-    classpath = capyExecutionClasspath
-    mainClass = 'dev.capylang.Capy'
-
-    doFirst {
-        prepareEmptyDir(capybaraGeneratedMainDir.get().asFile)
-        def capybaraArgs = ['generate', 'java', '--skip-java-lib', '-i', capybaraLinkedMainDir.get().asFile.absolutePath, '-o', capybaraGeneratedMainDir.get().asFile.absolutePath]
-        capybaraArgs.addAll(capybaraDebugEnabled ? ['--log', 'DEBUG'] : ['--log', 'WARN'])
-        setArgs(capybaraArgs)
-    }
 }
 
 tasks.register('compileTestCapybara', JavaExec) {

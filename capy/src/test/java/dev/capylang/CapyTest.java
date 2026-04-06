@@ -228,6 +228,35 @@ class CapyTest {
     }
 
     @Test
+    void shouldCompileGenerateAndWriteLinkedOutputWhenRequested() throws IOException {
+        var sourceDir = Files.createDirectories(tempDir.resolve("compile-generate-source"));
+        Files.createDirectories(sourceDir.resolve("foo"));
+        Files.writeString(sourceDir.resolve("foo").resolve("Main.cfun"), """
+                fun main(): int = 42
+                """);
+        var generatedDir = tempDir.resolve("compile-generate-output");
+        var linkedDir = Files.createDirectories(tempDir.resolve("compile-generate-linked"));
+
+        assertEquals(0, Capy.execute(
+                new String[]{
+                        "compile-generate",
+                        "java",
+                        "--skip-java-lib",
+                        "-i", sourceDir.toString(),
+                        "-o", generatedDir.toString(),
+                        "--linked-output", linkedDir.toString()
+                },
+                new PrintStream(new ByteArrayOutputStream()),
+                new PrintStream(new ByteArrayOutputStream())
+        ));
+
+        assertTrue(Files.exists(generatedDir.resolve("foo").resolve("Main.java")));
+        assertTrue(Files.exists(linkedDir.resolve("foo").resolve("Main.json")));
+        assertTrue(Files.exists(linkedDir.resolve("build-info.json")));
+        assertFalse(Files.exists(generatedDir.resolve("dev").resolve("capylang").resolve("CapybaraUtil.java")));
+    }
+
+    @Test
     void shouldCompileTestsAndWriteCapyTestRuntimeModule() throws IOException {
         var sourceDir = Files.createDirectories(tempDir.resolve("test-source"));
         Files.createDirectories(sourceDir.resolve("foo"));

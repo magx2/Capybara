@@ -80,3 +80,35 @@
 ### Verification status
 - I still could not execute Gradle tasks in this sandbox because Gradle startup fails before project evaluation.
 - Verification for this pass is limited to source inspection and added CLI tests.
+
+## 2026-04-06 build optimization pass fused main generation
+
+### Requested baseline
+- Re-ran the requested baseline command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- It still failed immediately in this sandbox because the wrapper tried to create `/home/martin/.gradle/.../gradle-9.1.0-bin.zip.lck` on a read-only filesystem.
+- Re-ran a targeted verification as `GRADLE_USER_HOME=$PWD/.gradle ./gradlew :capy:test --console=plain -Djava.net.preferIPv4Stack=true`.
+- Gradle startup still failed before project execution with `Could not determine a usable wildcard IP for this machine`.
+- No new profile HTML was produced, so timing comparisons still rely on the latest existing report in `build/reports/profile/profile-2026-04-04-19-07-42.html`.
+
+### Findings
+- After the earlier test-path optimization, `lib/capybara-lib` main sources were still paying for two Capy CLI invocations on every clean run:
+  - `linkCapybara` compiled sources and wrote linked JSON for downstream consumers;
+  - `compileCapybara` then launched a second JVM to reread that linked output and generate Java.
+- The linked main output still needs to exist for `compileTestCapybara`, `compiler:processResources`, and `integration-tests`, but the separate main `generate` invocation is avoidable because both outputs come from the same in-memory compilation result.
+
+### Changes made
+- Extended `capy compile-generate` with an optional `--linked-output <dir>` flag so a single invocation can both:
+  - write linked JSON plus `build-info.json`, and
+  - generate Java output in the same process.
+- Restricted `--linked-output` parsing to `compile-generate` only and updated CLI help text.
+- Switched `lib/capybara-lib:linkCapybara` to run `compile-generate java --skip-java-lib --linked-output ...`, so it now produces both linked main artifacts and generated Java in one pass.
+- Converted `lib/capybara-lib:compileCapybara` into a lightweight compatibility task that depends on `linkCapybara`, preserving the existing task name used by repository docs and dependent tasks while removing the extra JVM launch.
+- Added CLI test coverage for `compile-generate --linked-output` to verify that one command writes both generated Java and linked JSON outputs.
+
+### Expected impact
+- `:lib:capybara-lib:check --rerun-tasks` should no longer pay for a separate `:lib:capybara-lib:compileCapybara` Capy CLI execution after linking main sources.
+- This should remove one JVM startup plus one full reread of the linked main program on each clean `lib/capybara-lib` build.
+
+### Verification status
+- I could not run Gradle task verification in this sandbox because Gradle still fails during startup with `Could not determine a usable wildcard IP for this machine`.
+- Verification for this pass is limited to source inspection and the added CLI test coverage in `capy/src/test/java/dev/capylang/CapyTest.java`.

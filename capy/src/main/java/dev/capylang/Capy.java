@@ -144,13 +144,14 @@ public class Capy {
             OutputType outputType,
             Path input,
             Path generatedOutputDir,
+            Path linkedOutputDir,
             TreeSet<CompiledModule> libraries,
             boolean compileTests,
             boolean includeJavaLibResources,
             PrintStream err
     ) {
         try {
-            return compileGenerateOrThrow(outputType, input, generatedOutputDir, libraries, compileTests, includeJavaLibResources, err);
+            return compileGenerateOrThrow(outputType, input, generatedOutputDir, linkedOutputDir, libraries, compileTests, includeJavaLibResources, err);
         } catch (CliException e) {
             err.println(e.getMessage());
             return EXIT_USAGE;
@@ -197,7 +198,7 @@ public class Capy {
     }
 
     private static int executeCompile(String[] args, PrintStream err) {
-        var options = parseNamedOptions(args, true, false);
+        var options = parseNamedOptions(args, true, false, false);
         configureLogging(options.logLevel());
 
         var input = requiredPath(options.values(), "input", "compile");
@@ -214,16 +215,17 @@ public class Capy {
         }
 
         var outputType = parseOutputType(args[0]);
-        var options = parseNamedOptions(Arrays.copyOfRange(args, 1, args.length), true, true);
+        var options = parseNamedOptions(Arrays.copyOfRange(args, 1, args.length), true, true, true);
         configureLogging(options.logLevel());
 
         var input = requiredPath(options.values(), "input", "compile-generate");
         var output = requiredPath(options.values(), "output", "compile-generate");
+        var linkedOutput = optionalPath(options.values(), "linked-output");
         var libraries = readLibraryModules(options.values().get("libs"));
         var compileTests = options.values().containsKey("compile-tests");
         var includeJavaLibResources = !options.values().containsKey("skip-java-lib");
 
-        return compileGenerate(outputType, input, output, libraries, compileTests, includeJavaLibResources, err);
+        return compileGenerate(outputType, input, output, linkedOutput, libraries, compileTests, includeJavaLibResources, err);
     }
 
     private static int executeGenerate(String[] args, PrintStream err) {
@@ -232,7 +234,7 @@ public class Capy {
         }
 
         var outputType = parseOutputType(args[0]);
-        var options = parseNamedOptions(Arrays.copyOfRange(args, 1, args.length), false, true);
+        var options = parseNamedOptions(Arrays.copyOfRange(args, 1, args.length), false, true, false);
         configureLogging(options.logLevel());
 
         var input = options.values().containsKey("input") ? Path.of(options.values().get("input")) : Path.of(".");
@@ -247,7 +249,7 @@ public class Capy {
         return packageCode(options, err);
     }
 
-    private static NamedOptions parseNamedOptions(String[] args, boolean allowLibs, boolean allowSkipJavaLib) {
+    private static NamedOptions parseNamedOptions(String[] args, boolean allowLibs, boolean allowSkipJavaLib, boolean allowLinkedOutput) {
         var values = new LinkedHashMap<String, String>();
         var logLevel = Level.INFO;
 
@@ -267,6 +269,14 @@ public class Capy {
                 case "-o", "--output" -> {
                     var value = nextValue(args, i, arg);
                     values.put("output", value);
+                    i++;
+                }
+                case "--linked-output" -> {
+                    if (!allowLinkedOutput) {
+                        throw new CliException("Option `" + arg + "` is supported only for `compile-generate`.");
+                    }
+                    var value = nextValue(args, i, arg);
+                    values.put("linked-output", value);
                     i++;
                 }
                 case "--type" -> {
@@ -380,6 +390,14 @@ public class Capy {
         return value;
     }
 
+    private static Path optionalPath(Map<String, String> values, String key) {
+        var value = values.get(key);
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return Path.of(value);
+    }
+
     private static Level parseLogLevel(String value) {
         return switch (value.toUpperCase(Locale.ROOT)) {
             case "DEBUG" -> Level.FINE;
@@ -467,6 +485,7 @@ public class Capy {
             OutputType outputType,
             Path input,
             Path generatedOutputDir,
+            Path linkedOutputDir,
             TreeSet<CompiledModule> libraries,
             boolean compileTests,
             boolean includeJavaLibResources,
@@ -475,6 +494,10 @@ public class Capy {
         var compilation = compileSources(input, libraries, compileTests, err);
         if (compilation == null) {
             return EXIT_COMPILATION_ERROR;
+        }
+        if (linkedOutputDir != null) {
+            validateEmptyExistingDirectory(linkedOutputDir, "Compile output path");
+            writeCompilationOutput(linkedOutputDir, compilation, readCompilerVersion());
         }
         if (Files.notExists(generatedOutputDir)) {
             Files.createDirectories(generatedOutputDir);
@@ -1212,13 +1235,13 @@ public class Capy {
                 "  capy -v | --version",
                 "  capy -h | --help",
                 "  capy compile [-l|--libs <dir1,dir2,...>] [--compile-tests] -i|--input <dir> -o|--output <dir> [--log <DEBUG|INFO|WARN|ERROR>]",
-                "  capy compile-generate <java|python|javascript|js> [-l|--libs <dir1,dir2,...>] [--compile-tests] -i|--input <dir> -o|--output <dir> [--skip-java-lib] [--log <DEBUG|INFO|WARN|ERROR>]",
+                "  capy compile-generate <java|python|javascript|js> [-l|--libs <dir1,dir2,...>] [--compile-tests] -i|--input <dir> -o|--output <dir> [--linked-output <dir>] [--skip-java-lib] [--log <DEBUG|INFO|WARN|ERROR>]",
                 "  capy generate <java|python|javascript|js> [-i|--input <dir>] -o|--output <dir> [--skip-java-lib] [--log <DEBUG|INFO|WARN|ERROR>]",
                 "  capy package (-ci|--compiled-input <dir> | -i|--input <dir>) -m|--module <capy.yml> [--capy.<field> <value>] [--log <DEBUG|INFO|WARN|ERROR>]",
                 "",
                 "Notes:",
                 "  compile output directory must already exist and be empty.",
-                "  compile-generate compiles Capybara sources directly to generated output without writing linked intermediates.",
+                "  compile-generate compiles Capybara sources directly to generated output without writing linked intermediates unless --linked-output is provided.",
                 "  compile --compile-tests writes bundled stdlib modules and injects discovered TestFile/list[TestFile] producers into capy/test/CapyTestRuntime.gather_tests.",
                 "  generate input directory defaults to the current directory.",
                 "  generate --skip-java-lib omits bundled Java runtime sources when the caller already has them on the compile classpath.",
