@@ -384,7 +384,6 @@ tasks.register('linkCapybaraDirect', InProcessCapybaraCompileTask) {
     compileTests.set(false)
     includeJavaLibResources.set(false)
     compilerVersion.set(project.version.toString())
-    onlyIf { !capybaraTestBuildRequested }
 }
 
 tasks.register('linkCapybaraLinkedOnly', InProcessCapybaraCompileTask) {
@@ -397,7 +396,6 @@ tasks.register('linkCapybaraLinkedOnly', InProcessCapybaraCompileTask) {
     compileTests.set(false)
     includeJavaLibResources.set(false)
     compilerVersion.set(project.version.toString())
-    onlyIf { !capybaraTestBuildRequested }
 }
 
 tasks.register('prepareCapybaraForCheck', InProcessCapybaraCompileTask) {
@@ -406,7 +404,6 @@ tasks.register('prepareCapybaraForCheck', InProcessCapybaraCompileTask) {
 
     runtimeClasspath.from(capyRuntimeClasspath)
     inputDir.set(capybaraMainSourceDir)
-    linkedOutputDir.set(capybaraLinkedMainDir)
     generatedOutputDir.set(capybaraGeneratedCheckDir)
     testInputDir.set(capybaraTestSourceDir)
     testGeneratedOutputDir.set(capybaraGeneratedCheckDir)
@@ -419,25 +416,19 @@ tasks.register('prepareCapybaraForCheck', InProcessCapybaraCompileTask) {
 tasks.register('linkCapybara') {
     group = 'build'
     description = 'Compiles Capybara files from src/main/capybara and generates Java in one pass.'
-    dependsOn capybaraTestBuildRequested
-            ? tasks.named('prepareCapybaraForCheck')
-            : tasks.named('linkCapybaraDirect')
+    dependsOn tasks.named('linkCapybaraDirect')
 }
 
 tasks.register('linkCapybaraLinked') {
     group = 'build'
     description = 'Compatibility task that provides linked main Capybara output.'
-    dependsOn capybaraTestBuildRequested
-            ? tasks.named('prepareCapybaraForCheck')
-            : tasks.named('linkCapybaraLinkedOnly')
+    dependsOn tasks.named('linkCapybaraLinkedOnly')
 }
 
 tasks.register('compileCapybara') {
     group = 'build'
     description = 'Generates Java from main Capybara sources.'
-    dependsOn capybaraTestBuildRequested
-            ? tasks.named('prepareCapybaraForCheck')
-            : tasks.named('linkCapybaraDirect')
+    dependsOn tasks.named('linkCapybaraDirect')
 }
 
 tasks.register('compileTestCapybaraDirect', InProcessCapybaraCompileTask) {

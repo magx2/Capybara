@@ -2244,6 +2244,88 @@
 - `git diff --check` passed.
 - I could not run Gradle task verification in this sandbox because the requested wrapper invocation still fails before project execution with `Could not determine a usable wildcard IP for this machine`.
 
+## 2026-04-06 build optimization pass preserve linked stdlib producers during mixed verification builds
+
+### Requested baseline
+- Re-ran the requested command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- It still failed before project execution in this sandbox with:
+  - `Could not determine a usable wildcard IP for this machine`.
+- Checked `build/reports/profile` after the failed run; no new profile HTML was produced, so this pass is based on source inspection plus the existing reports already present there.
+
+### Findings
+- The previous `module-local check linked-output pruning` change correctly removed linked main output from the exact module-local `:lib:capybara-lib:check` path.
+- However, `linkCapybaraDirect` and `linkCapybaraLinkedOnly` were still guarded by `onlyIf { !capybaraTestBuildRequested }`.
+- That global guard disables those producers whenever any verification-style task name is requested, including mixed invocations where downstream consumers still need fresh linked stdlib output, such as `compiler` resource generation or integration-test linking in the same build.
+- Keeping the dedicated compatibility tasks wired back to the main-source producers is only safe if those producers remain runnable when explicitly requested or needed transitively by other projects.
+
+### Changes made
+- Removed the `onlyIf { !capybaraTestBuildRequested }` guard from `linkCapybaraDirect`.
+- Removed the same guard from `linkCapybaraLinkedOnly`.
+- Kept `prepareCapybaraForCheck` free of linked main output so the exact requested module-local `check` path stays lean.
+- Kept `compileTestCapybaraDirect` guarded off during verification-style builds, because the fused check path already covers that work.
+
+### Expected impact
+- The exact requested `:lib:capybara-lib:check --rerun-tasks` path should stay on the lean fused path without writing unused linked main output.
+- Mixed verification builds can still execute the dedicated main-source producers when downstream linked-output consumers require them, avoiding a correctness regression from globally disabling those tasks.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle task verification in this sandbox because the requested wrapper invocation still fails before project execution with `Could not determine a usable wildcard IP for this machine`.
+
+## 2026-04-06 build optimization pass module-local check linked-output pruning follow-up
+
+### Requested baseline
+- Re-ran the requested command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- It still failed before project execution in this sandbox with:
+  - `Could not determine a usable wildcard IP for this machine`.
+- Checked `build/reports/profile` again after the failed run; no new profile HTML was produced, so this follow-up is based on source inspection of the exact `:lib:capybara-lib:check` task path and the existing reports already present there.
+
+### Findings
+- The current handwritten `lib:capybara-lib` check path still wrote linked main output via `prepareCapybaraForCheck`, even though that module-local verification path compiles test Capybara sources against the in-memory main compilation result and does not consume `build/generated/sources/capybara/linked/main`.
+- The compatibility tasks `linkCapybara`, `linkCapybaraLinked`, and `compileCapybara` were also switching to `prepareCapybaraForCheck` whenever verification-style task names were requested, which made those task names depend on unrelated lifecycle selection instead of their dedicated main-source producers.
+- For the exact requested target `:lib:capybara-lib:check`, that meant the hot path still carried linked-program serialization work that no task in the module-local graph consumes.
+
+### Changes made
+- Removed `linkedOutputDir` from `prepareCapybaraForCheck` in `lib/capybara-lib/build.gradle`.
+- Rewired `linkCapybara` to always depend on `linkCapybaraDirect`.
+- Rewired `linkCapybaraLinked` to always depend on `linkCapybaraLinkedOnly`.
+- Rewired `compileCapybara` to always depend on `linkCapybaraDirect`.
+
+### Expected impact
+- The exact requested `:lib:capybara-lib:check --rerun-tasks` path should stop serializing linked main Capybara output that it does not consume.
+- The compatibility task names regain stable semantics by always using their dedicated main-source producers instead of switching to the verification-only fused path based on unrelated requested task names.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle task verification in this sandbox because the requested wrapper invocation still fails before project execution with `Could not determine a usable wildcard IP for this machine`.
+
+## 2026-04-06 build optimization pass module-local check linked-output pruning
+
+### Requested baseline
+- Re-ran the requested command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- It still failed before project execution in this sandbox with:
+  - `Could not determine a usable wildcard IP for this machine`.
+- Checked `build/reports/profile` again after the failed run; no new profile HTML was produced, so this pass is based on source inspection of the exact `:lib:capybara-lib:check` task path and the existing reports already present there.
+
+### Findings
+- The current handwritten `lib:capybara-lib` build still routed `prepareCapybaraForCheck` through `linkedOutputDir`, so the module-local `check --rerun-tasks` path kept writing `build/generated/sources/capybara/linked/main` even though that task already compiles test Capybara sources against the in-memory main compilation result.
+- The same build logic also made the compatibility tasks `linkCapybara`, `linkCapybaraLinked`, and `compileCapybara` depend on `prepareCapybaraForCheck` whenever any verification-style task name was requested.
+- For the exact requested target `:lib:capybara-lib:check`, that meant the hot path still carried linked-program serialization work that no task in the module-local graph consumes.
+
+### Changes made
+- Removed `linkedOutputDir` from `prepareCapybaraForCheck` in `lib/capybara-lib/build.gradle`.
+- Rewired `linkCapybara` to always depend on `linkCapybaraDirect`.
+- Rewired `linkCapybaraLinked` to always depend on `linkCapybaraLinkedOnly`.
+- Rewired `compileCapybara` to always depend on `linkCapybaraDirect`.
+
+### Expected impact
+- The exact requested `:lib:capybara-lib:check --rerun-tasks` path should stop serializing linked main Capybara output that it does not consume.
+- The compatibility task names regain stable semantics by always using their dedicated main-source producers instead of switching to the verification-only fused path based on unrelated requested task names.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle task verification in this sandbox because the requested wrapper invocation still fails before project execution with `Could not determine a usable wildcard IP for this machine`.
+
 ## 2026-04-06 build optimization pass restored fused linked stdlib producer wiring
 
 ### Requested baseline
@@ -2646,6 +2728,33 @@
 ### Expected impact
 - `:lib:capybara-lib:check --rerun-tasks` should spend less time in the standard Gradle JVM `test` task by avoiding HTML report generation while preserving XML outputs for tooling and CI.
 - Plugin consumers should also avoid unnecessary JVM test discovery/report work and now match the optimized test-task behavior already used by `lib:capybara-lib`.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle task verification in this sandbox because the requested wrapper invocation still fails before project execution with `Could not determine a usable wildcard IP for this machine`.
+
+## 2026-04-06 build optimization pass module-local check linked-output pruning follow-up
+
+### Requested baseline
+- Re-ran the requested command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- It still failed before project execution in this sandbox with:
+  - `Could not determine a usable wildcard IP for this machine`.
+- Checked `build/reports/profile` again after the failed run; no new profile HTML was produced, so this follow-up is based on source inspection of the exact `:lib:capybara-lib:check` task path and the existing reports already present there.
+
+### Findings
+- The current handwritten `lib:capybara-lib` check path still wrote linked main output via `prepareCapybaraForCheck`, even though that module-local verification path compiles test Capybara sources against the in-memory main compilation result and does not consume `build/generated/sources/capybara/linked/main`.
+- The compatibility tasks `linkCapybara`, `linkCapybaraLinked`, and `compileCapybara` were also switching to `prepareCapybaraForCheck` whenever verification-style task names were requested, which made those task names depend on unrelated lifecycle selection instead of their dedicated main-source producers.
+- For the exact requested target `:lib:capybara-lib:check`, that meant the hot path still carried linked-program serialization work that no task in the module-local graph consumes.
+
+### Changes made
+- Removed `linkedOutputDir` from `prepareCapybaraForCheck` in `lib/capybara-lib/build.gradle`.
+- Rewired `linkCapybara` to always depend on `linkCapybaraDirect`.
+- Rewired `linkCapybaraLinked` to always depend on `linkCapybaraLinkedOnly`.
+- Rewired `compileCapybara` to always depend on `linkCapybaraDirect`.
+
+### Expected impact
+- The exact requested `:lib:capybara-lib:check --rerun-tasks` path should stop serializing linked main Capybara output that it does not consume.
+- The compatibility task names regain stable semantics by always using their dedicated main-source producers instead of switching to the verification-only fused path based on unrelated requested task names.
 
 ### Verification status
 - `git diff --check` passed.
