@@ -21,10 +21,13 @@ import org.gradle.api.tasks.TaskAction
 
 import java.io.ByteArrayOutputStream
 import java.io.PrintStream
+import java.nio.file.FileVisitResult
 import java.net.URL
 import java.net.URLClassLoader
 import java.nio.file.Path
 import java.nio.file.Files
+import java.nio.file.SimpleFileVisitor
+import java.nio.file.attribute.BasicFileAttributes
 import java.util.TreeSet
 import java.util.concurrent.ConcurrentHashMap
 
@@ -300,46 +303,63 @@ def capybaraGeneratedCheckDir = layout.buildDirectory.dir('generated/sources/cap
 def capybaraLinkedMainDir = layout.buildDirectory.dir('generated/sources/capybara/linked/main')
 def capybaraTestResultsDir = layout.buildDirectory.dir('test-results/capybara')
 def capybaraTestRuntimeClasspath = files(sourceSets.main.runtimeClasspath, sourceSets.test.output.classesDirs)
-def containsMatchingFile = { directory, matcher ->
+def scanSourceTree = { directory, visitor ->
     Path root = directory.asFile.toPath()
     if (Files.notExists(root) || !Files.isDirectory(root)) {
-        return false
+        return
     }
 
-    def matchingFiles = Files.find(root, Integer.MAX_VALUE) { path, attributes ->
-        if (!attributes.isRegularFile()) {
-            return false
+    Files.walkFileTree(root, new SimpleFileVisitor<Path>() {
+        @Override
+        FileVisitResult visitFile(Path file, BasicFileAttributes attributes) throws IOException {
+            if (!attributes.isRegularFile()) {
+                return FileVisitResult.CONTINUE
+            }
+            def relativePath = root.relativize(file).toString().replace(File.separatorChar, '/' as char)
+            visitor(relativePath)
+            return FileVisitResult.CONTINUE
         }
-        def relativePath = root.relativize(path).toString().replace(File.separatorChar, '/' as char)
-        matcher(relativePath)
+    })
+}
+def hasJvmSourceExtension = { relativePath ->
+    relativePath.endsWith('.java') ||
+            relativePath.endsWith('.kt') ||
+            relativePath.endsWith('.kts') ||
+            relativePath.endsWith('.groovy')
+}
+def mainSourceLayout = [
+        hasJvmSources: false,
+        hasResources : false
+]
+scanSourceTree(layout.projectDirectory.dir('src/main')) { relativePath ->
+    if (!mainSourceLayout.hasJvmSources && !relativePath.startsWith('capybara/') && hasJvmSourceExtension(relativePath)) {
+        mainSourceLayout.hasJvmSources = true
     }
-    try {
-        matchingFiles.findAny().present
-    } finally {
-        matchingFiles.close()
+    if (!mainSourceLayout.hasResources && relativePath.startsWith('resources/')) {
+        mainSourceLayout.hasResources = true
     }
 }
-def hasJvmMainSources = containsMatchingFile(layout.projectDirectory.dir('src/main')) { relativePath ->
-    !relativePath.startsWith('capybara/') && (
-            relativePath.endsWith('.java') ||
-                    relativePath.endsWith('.kt') ||
-                    relativePath.endsWith('.kts') ||
-                    relativePath.endsWith('.groovy')
-    )
+def testSourceLayout = [
+        hasJvmSources        : false,
+        hasAnyResources      : false,
+        hasNonJvmResources   : false
+]
+scanSourceTree(layout.projectDirectory.dir('src/test')) { relativePath ->
+    if (!testSourceLayout.hasJvmSources && !relativePath.startsWith('capybara/') && hasJvmSourceExtension(relativePath)) {
+        testSourceLayout.hasJvmSources = true
+    }
+    if (relativePath.startsWith('resources/')) {
+        testSourceLayout.hasAnyResources = true
+        if (!testSourceLayout.hasNonJvmResources && relativePath != 'resources/junit-platform.properties') {
+            testSourceLayout.hasNonJvmResources = true
+        }
+    }
 }
-def hasMainResources = containsMatchingFile(layout.projectDirectory.dir('src/main/resources')) { true }
-def hasJvmTestSources = containsMatchingFile(layout.projectDirectory.dir('src/test')) { relativePath ->
-    !relativePath.startsWith('capybara/') && (
-            relativePath.endsWith('.java') ||
-                    relativePath.endsWith('.kt') ||
-                    relativePath.endsWith('.kts') ||
-                    relativePath.endsWith('.groovy')
-    )
-}
-def hasAnyTestResources = containsMatchingFile(layout.projectDirectory.dir('src/test/resources')) { true }
-def hasNonJvmTestResources = containsMatchingFile(layout.projectDirectory.dir('src/test/resources')) { relativePath ->
-    relativePath != 'junit-platform.properties'
-}
+def hasJvmMainSources = mainSourceLayout.hasJvmSources
+def hasMainResources = mainSourceLayout.hasResources
+def hasJvmTestSources = testSourceLayout.hasJvmSources
+def hasAnyTestResources = testSourceLayout.hasAnyResources
+def hasNonJvmTestResources = testSourceLayout.hasNonJvmResources
 def capybaraTestLogLevel = switch (gradle.startParameter.logLevel) {
     case org.gradle.api.logging.LogLevel.DEBUG -> 'DEBUG'
     case org.gradle.api.logging.LogLevel.INFO -> 'INFO'
