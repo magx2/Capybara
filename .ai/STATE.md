@@ -434,3 +434,31 @@
 - `git diff --check` passed.
 - I could not run Gradle task verification in this sandbox because the requested wrapper command still fails before project execution on the read-only `/home/martin/.gradle` lock path, and repo-local Gradle startup still fails with `Could not determine a usable wildcard IP for this machine`.
 - Verification for this pass is limited to source inspection and the added plugin test coverage.
+
+## 2026-04-06 build optimization pass deterministic linked build info
+
+### Requested baseline
+- Re-ran the requested baseline command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- It still failed immediately in this sandbox because the wrapper tried to create `/home/martin/.gradle/.../gradle-9.1.0-bin.zip.lck` on a read-only filesystem.
+- Checked `build/reports/profile` after the run; no new profile HTML was produced, and the latest available report is still `build/reports/profile/profile-2026-04-04-19-07-42.html`.
+
+### Findings
+- Earlier content-aware output work made linked module JSON and generated source writes stable when bytes do not change, but linked `build-info.json` still embedded `OffsetDateTime.now()`.
+- That meant every `compile` or `compile-generate` rerun rewrote `build-info.json` even when:
+  - the compiled program was unchanged,
+  - the compiler version was unchanged,
+  - the source-module list was unchanged.
+- `build-info.json` is used to recover source-module membership for downstream generation, but no current reader uses its timestamp field, so that per-run timestamp churn was pure write noise on the rerun path.
+
+### Changes made
+- Changed linked build-info generation to write a deterministic `null` `build_date_time` instead of the current timestamp.
+- Extended the existing CLI regression test for repeated identical compile output so it also verifies `build-info.json` keeps the same modification time across identical reruns.
+
+### Expected impact
+- `:lib:capybara-lib:check --rerun-tasks` should stop rewriting linked `build-info.json` solely because wall-clock time advanced.
+- This removes one remaining guaranteed write from every identical Capy linked-output rerun and makes the linked-output tree fully compatible with the earlier content-aware write optimizations.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle task verification in this sandbox because the requested wrapper command still fails before project execution on the read-only `/home/martin/.gradle` lock path, and repo-local Gradle startup still fails with `Could not determine a usable wildcard IP for this machine`.
+- Verification for this pass is limited to source inspection and the updated CLI regression test coverage.

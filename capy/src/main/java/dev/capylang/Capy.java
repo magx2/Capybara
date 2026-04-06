@@ -1255,7 +1255,7 @@ public class Capy {
 
     private static void writeBuildInfo(Path outputDir, String compilerVersion, List<ModuleRef> sourceModules) {
         var buildInfo = new BuildInfo(
-                OffsetDateTime.now().toString(),
+                null,
                 compilerVersion,
                 sourceModules
         );

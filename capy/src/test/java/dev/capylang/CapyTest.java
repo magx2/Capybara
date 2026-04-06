@@ -184,8 +184,10 @@ class CapyTest {
 
         var programFile = linkedDir.resolve("program.json");
         var moduleFile = linkedDir.resolve("foo").resolve("Main.json");
+        var buildInfoFile = linkedDir.resolve("build-info.json");
         var initialProgramTime = Files.getLastModifiedTime(programFile);
         var initialModuleTime = Files.getLastModifiedTime(moduleFile);
+        var initialBuildInfoTime = Files.getLastModifiedTime(buildInfoFile);
 
         Thread.sleep(1100);
 
@@ -197,6 +199,7 @@ class CapyTest {
 
         assertEquals(initialProgramTime, Files.getLastModifiedTime(programFile));
         assertEquals(initialModuleTime, Files.getLastModifiedTime(moduleFile));
+        assertEquals(initialBuildInfoTime, Files.getLastModifiedTime(buildInfoFile));
     }
 
     @Test
