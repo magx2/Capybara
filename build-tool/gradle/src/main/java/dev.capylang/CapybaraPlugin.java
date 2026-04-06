@@ -113,7 +113,7 @@ public class CapybaraPlugin implements Plugin<Project> {
                         task.setGroup("verification");
                         task.setDescription("Runs Capybara tests using generated Java classes without launching a separate JVM.");
                         task.dependsOn(project.getTasks().named("compileTestJava"));
-                        task.getRuntimeClasspath().from(mainSourceSet.getRuntimeClasspath(), testSourceSet.getOutput());
+                        task.getRuntimeClasspath().from(mainSourceSet.getRuntimeClasspath(), testSourceSet.getOutput().getClassesDirs());
                         task.getOutputDir().set(capybaraTestResultsDir);
                         task.getReportType().set("JUNIT");
                         task.getLogLevel().set(capybaraTestLogLevel(project.getGradle().getStartParameter().getLogLevel()));

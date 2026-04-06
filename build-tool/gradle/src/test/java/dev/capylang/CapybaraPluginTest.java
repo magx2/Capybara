@@ -212,14 +212,15 @@ class CapybaraPluginTest {
     }
 
     @Test
-    void shouldUseMainRuntimeClasspathAndTestOutputsForCapybaraTests() {
+    void shouldUseMainRuntimeClasspathAndTestClassesForCapybaraTests() {
         var project = newProject();
         var sourceSets = project.getExtensions().getByType(SourceSetContainer.class);
         var testCapybara = project.getTasks().named("testCapybara", CapybaraTestTask.class).get();
         var runtimeClasspathSources = ((ConfigurableFileCollection) testCapybara.getRuntimeClasspath()).getFrom();
 
         assertTrue(runtimeClasspathSources.contains(sourceSets.getByName("main").getRuntimeClasspath()));
-        assertTrue(runtimeClasspathSources.contains(sourceSets.getByName("test").getOutput()));
+        assertTrue(runtimeClasspathSources.contains(sourceSets.getByName("test").getOutput().getClassesDirs()));
+        assertFalse(runtimeClasspathSources.contains(sourceSets.getByName("test").getOutput()));
         assertFalse(runtimeClasspathSources.contains(sourceSets.getByName("test").getRuntimeClasspath()));
     }
 

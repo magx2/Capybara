@@ -1573,3 +1573,32 @@
 - `git diff --check` passed.
 - I could not run Gradle task verification or produce a fresh profile in this sandbox because the requested wrapper command still fails before Gradle startup on the read-only `/home/martin/.gradle` lock path.
 - Verification for this pass is limited to source inspection and the added regression tests.
+
+## 2026-04-06 build optimization pass test-classpath-only Capybara runtime
+
+### Requested baseline
+- Re-ran the requested baseline command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- It still failed immediately in this sandbox because the wrapper tried to create `/home/martin/.gradle/.../gradle-9.1.0-bin.zip.lck` on a read-only filesystem.
+- Re-ran with `GRADLE_USER_HOME=$PWD/.gradle` to use the repository-local wrapper cache.
+- Gradle startup still failed before project execution with `Could not determine a usable wildcard IP for this machine`.
+- Checked `build/reports/profile` after the failed runs; no fresh profile HTML was produced, so this pass is based on source inspection of the current Capybara test runtime wiring plus the existing profile history.
+
+### Findings
+- `lib:capybara-lib:testCapybara` still built its runtime classpath from `sourceSets.test.output`.
+- `sourceSets.test.output` includes both compiled test classes and processed test resources, so Capybara-only modules can still pull `processTestResources` into `check` even when `TestRunner` only reflects over compiled test classes.
+- In `lib/capybara-lib`, the only file under `src/test` outside `src/test/capybara` is `src/test/resources/junit-platform.properties`, which is relevant to the standard Gradle `test` task but not to the custom `testCapybara` runner.
+- The reusable `CapybaraPlugin` had the same wider-than-needed runtime classpath shape for plugin consumers.
+
+### Changes made
+- Narrowed `lib/capybara-lib`'s `capybaraTestRuntimeClasspath` from `sourceSets.test.output` to `sourceSets.test.output.classesDirs`.
+- Narrowed `build-tool/gradle`'s `CapybaraPlugin` to give `testCapybara` only main runtime classpath plus test classes directories.
+- Updated `CapybaraPluginTest` to assert that `testCapybara` uses test classes directories and does not include the full test output collection.
+
+### Expected impact
+- `:lib:capybara-lib:check --rerun-tasks` should stop resolving or executing `processTestResources` just to run `testCapybara`.
+- Plugin consumers with Capybara-only tests should avoid the same unnecessary test-resources lifecycle work.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle task verification or produce a fresh profile in this sandbox because the requested wrapper command still fails before project execution on both the default Gradle home lock path and the repository-local cache path.
+- Verification for this pass is limited to source inspection and the updated plugin test coverage.

@@ -215,7 +215,7 @@ def capybaraGeneratedMainDir = layout.buildDirectory.dir('generated/sources/capy
 def capybaraGeneratedTestDir = layout.buildDirectory.dir('generated/sources/capybara/java/test')
 def capybaraLinkedMainDir = layout.buildDirectory.dir('generated/sources/capybara/linked/main')
 def capybaraTestResultsDir = layout.buildDirectory.dir('test-results/capybara')
-def capybaraTestRuntimeClasspath = files(sourceSets.main.runtimeClasspath, sourceSets.test.output)
+def capybaraTestRuntimeClasspath = files(sourceSets.main.runtimeClasspath, sourceSets.test.output.classesDirs)
 def hasJvmTestSources = providers.provider {
     fileTree(layout.projectDirectory.dir('src/test').asFile) {
         include '**/*.java'
