@@ -89,11 +89,11 @@ class CapyTest {
     }
 
     @Test
-    void shouldReturnNonZeroAndLogMessageForInvalidCompileOutputDirectory() throws IOException {
+    void shouldReturnNonZeroAndLogMessageForCompileOutputPathThatIsNotDirectory() throws IOException {
         var sourceDir = Files.createDirectories(tempDir.resolve("source"));
         Files.writeString(sourceDir.resolve("Main.cfun"), "fun main(): int = 1\n");
-        var outputDir = Files.createDirectories(tempDir.resolve("linked"));
-        Files.writeString(outputDir.resolve("existing.txt"), "occupied");
+        var outputDir = tempDir.resolve("linked.txt");
+        Files.writeString(outputDir, "occupied");
         var stdout = new ByteArrayOutputStream();
         var stderr = new ByteArrayOutputStream();
 
@@ -106,6 +106,25 @@ class CapyTest {
         assertNotEquals(0, exitCode);
         assertEquals("", stdout.toString().trim());
         assertFalse(stderr.toString().trim().isEmpty());
+    }
+
+    @Test
+    void shouldPruneStaleFilesFromReusedLinkedOutputDirectory() throws IOException {
+        var sourceDir = Files.createDirectories(tempDir.resolve("reused-linked-source"));
+        Files.createDirectories(sourceDir.resolve("foo"));
+        Files.writeString(sourceDir.resolve("foo").resolve("Main.cfun"), "fun main(): int = 1\n");
+        var linkedDir = Files.createDirectories(tempDir.resolve("reused-linked-output"));
+        var staleFile = Files.createDirectories(linkedDir.resolve("stale")).resolve("Old.json");
+        Files.writeString(staleFile, "{}");
+
+        assertEquals(0, Capy.execute(
+                new String[]{"compile", "-i", sourceDir.toString(), "-o", linkedDir.toString()},
+                new PrintStream(new ByteArrayOutputStream()),
+                new PrintStream(new ByteArrayOutputStream())
+        ));
+
+        assertTrue(Files.exists(linkedDir.resolve("foo").resolve("Main.json")));
+        assertFalse(Files.exists(staleFile));
     }
 
     @Test
@@ -173,6 +192,31 @@ class CapyTest {
         ));
 
         assertFalse(Files.exists(generatedDir.resolve("dev").resolve("capylang").resolve("CapybaraUtil.java")));
+    }
+
+    @Test
+    void shouldPruneStaleFilesFromReusedGeneratedOutputDirectory() throws IOException {
+        var sourceDir = Files.createDirectories(tempDir.resolve("reused-generate-source"));
+        Files.writeString(sourceDir.resolve("Main.cfun"), "fun main(): int = 1\n");
+        var linkedDir = Files.createDirectories(tempDir.resolve("reused-generate-linked"));
+        var generatedDir = Files.createDirectories(tempDir.resolve("reused-generate-output"));
+        var staleFile = Files.createDirectories(generatedDir.resolve("stale")).resolve("Old.java");
+        Files.writeString(staleFile, "class Old {}");
+
+        assertEquals(0, Capy.execute(
+                new String[]{"compile", "-i", sourceDir.toString(), "-o", linkedDir.toString()},
+                new PrintStream(new ByteArrayOutputStream()),
+                new PrintStream(new ByteArrayOutputStream())
+        ));
+
+        assertEquals(0, Capy.execute(
+                new String[]{"generate", "java", "--skip-java-lib", "-i", linkedDir.toString(), "-o", generatedDir.toString()},
+                new PrintStream(new ByteArrayOutputStream()),
+                new PrintStream(new ByteArrayOutputStream())
+        ));
+
+        assertTrue(Files.exists(generatedDir.resolve("Main.java")));
+        assertFalse(Files.exists(staleFile));
     }
 
     @Test

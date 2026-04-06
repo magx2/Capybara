@@ -65,6 +65,25 @@ class CapybaraPluginTest {
     }
 
     @Test
+    void shouldPruneStaleFilesWhenReusingTaskOutputs() throws IOException {
+        var project = newProject();
+        var sourceDir = Files.createDirectories(tempDir.resolve("src/main/capybara/foo"));
+        Files.writeString(sourceDir.resolve("Main.cfun"), "fun main(): int = 42\n");
+
+        var staleLinkedFile = Files.createDirectories(tempDir.resolve("build/classes/capybara/stale")).resolve("Old.json");
+        Files.writeString(staleLinkedFile, "{}");
+        var staleGeneratedFile = Files.createDirectories(tempDir.resolve("build/generated/sources/capybara/java/stale")).resolve("Old.java");
+        Files.writeString(staleGeneratedFile, "class Old {}");
+
+        project.getTasks().named("compileCapybara", CompileCapybaraTask.class).get().compile();
+
+        assertFalse(Files.exists(staleLinkedFile));
+        assertFalse(Files.exists(staleGeneratedFile));
+        assertTrue(project.file("build/classes/capybara/foo/Main.json").isFile());
+        assertTrue(project.file("build/generated/sources/capybara/java/foo/Main.java").isFile());
+    }
+
+    @Test
     void shouldNotAddMainGeneratedJavaToTestSourceSet() {
         var project = newProject();
         var sourceSets = project.getExtensions().getByType(SourceSetContainer.class);

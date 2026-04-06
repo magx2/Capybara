@@ -181,3 +181,41 @@
 - `git diff --check` passed.
 - I could not run Gradle task verification in this sandbox because Gradle still fails during startup with `Could not determine a usable wildcard IP for this machine`.
 - Verification for this pass is limited to source inspection and the added plugin test coverage.
+
+## 2026-04-06 build optimization pass reusable output directories
+
+### Requested baseline
+- Re-ran the requested baseline command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- It still failed immediately in this sandbox because the wrapper tried to create `/home/martin/.gradle/.../gradle-9.1.0-bin.zip.lck` on a read-only filesystem.
+- Re-ran with `GRADLE_USER_HOME=$PWD/.gradle` to use the repository-local wrapper cache.
+- Gradle startup still failed before project execution with `Could not determine a usable wildcard IP for this machine`.
+- No fresh profile HTML was produced, so optimization for this pass is based on the existing profile data plus source inspection of the current rerun path.
+
+### Findings
+- The requested command explicitly uses `--rerun-tasks`, so up-to-date checks are bypassed and task execution cost is dominated by the work each task repeats on an already-populated `build/` tree.
+- Even after earlier fusion work removed redundant Capy CLI launches, handwritten build scripts and the reusable plugin still recursively deleted entire linked/generated output trees before every Capybara compile or generate step.
+- The CLI also still enforced an “output directory must be empty” contract, which forced callers to do that delete-first work up front.
+- For `lib:capybara-lib`, those recursive deletions hit the same directories that dominate the recorded profile (`build/generated/sources/capybara/...`), so rerun builds were paying avoidable filesystem traversal and delete churn before rewriting nearly the same files.
+
+### Changes made
+- Changed the Capy CLI and in-process compiler helpers to accept reusable output directories instead of requiring empty ones.
+- Added stale-file pruning inside Capy’s linked-output and generated-output writers so each run now:
+  - rewrites the expected current files,
+  - removes only files no longer produced,
+  - removes newly empty directories afterward.
+- Updated bundled Java runtime source copying to participate in the same expected-file tracking so `--skip-java-lib` also removes stale copied runtime sources from previous runs.
+- Removed the recursive pre-run directory cleanup from:
+  - `lib/capybara-lib/build.gradle`
+  - `integration-tests/build.gradle`
+  - `build-tool/gradle`’s `CompileCapybaraTask`
+- Added CLI tests covering stale-file pruning for reused linked and generated output directories.
+- Added a plugin test covering stale-file pruning when reusing plugin task outputs.
+
+### Expected impact
+- `:lib:capybara-lib:check --rerun-tasks` should avoid full tree deletion under Capybara linked/generated output directories before each compile/generate pass.
+- Repeated local builds should do less filesystem work when outputs already exist, while still removing stale artifacts after source removals or option changes like `--skip-java-lib`.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle task verification in this sandbox because Gradle still fails during startup with `Could not determine a usable wildcard IP for this machine`.
+- Verification for this pass is limited to source inspection and the added CLI/plugin test coverage.

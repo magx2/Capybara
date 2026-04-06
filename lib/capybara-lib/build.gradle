@@ -49,8 +49,6 @@ tasks.register('linkCapybara', JavaExec) {
     mainClass = 'dev.capylang.Capy'
 
     doFirst {
-        prepareEmptyDir(capybaraLinkedMainDir.get().asFile)
-        prepareEmptyDir(capybaraGeneratedMainDir.get().asFile)
         def capybaraArgs = [
                 'compile-generate',
                 'java',
@@ -84,7 +82,6 @@ tasks.register('compileTestCapybara', JavaExec) {
     mainClass = 'dev.capylang.Capy'
 
     doFirst {
-        prepareEmptyDir(capybaraGeneratedTestDir.get().asFile)
         def capybaraArgs = [
                 'compile-generate',
                 'java',

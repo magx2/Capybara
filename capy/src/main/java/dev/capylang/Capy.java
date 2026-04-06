@@ -43,12 +43,14 @@ import java.nio.file.StandardOpenOption;
 import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.TreeSet;
 import java.util.logging.Handler;
 import java.util.logging.Level;
@@ -439,7 +441,7 @@ public class Capy {
             PrintStream err,
             String compilerVersion
     ) throws IOException {
-        validateEmptyExistingDirectory(linkedOutputDir, "Compile output path");
+        validateOutputDirectory(linkedOutputDir, "Compile output path");
         var compilation = compileSources(input, libraries, compileTests, err);
         if (compilation == null) {
             return EXIT_COMPILATION_ERROR;
@@ -470,11 +472,7 @@ public class Capy {
             boolean includeJavaLibResources
     ) throws IOException {
         validateInputDirectory(linkedInputDir);
-        if (Files.notExists(generatedOutputDir)) {
-            Files.createDirectories(generatedOutputDir);
-        } else if (!Files.isDirectory(generatedOutputDir)) {
-            throw new CliException("Generated output path is not a directory: " + generatedOutputDir);
-        }
+        validateOutputDirectory(generatedOutputDir, "Generated output path");
 
         var generationInput = selectGenerationInput(linkedInputDir, readLinkedProgram(linkedInputDir, true), includeJavaLibResources);
         generateProgram(outputType, generatedOutputDir, generationInput);
@@ -496,14 +494,10 @@ public class Capy {
             return EXIT_COMPILATION_ERROR;
         }
         if (linkedOutputDir != null) {
-            validateEmptyExistingDirectory(linkedOutputDir, "Compile output path");
+            validateOutputDirectory(linkedOutputDir, "Compile output path");
             writeCompilationOutput(linkedOutputDir, compilation, readCompilerVersion());
         }
-        if (Files.notExists(generatedOutputDir)) {
-            Files.createDirectories(generatedOutputDir);
-        } else if (!Files.isDirectory(generatedOutputDir)) {
-            throw new CliException("Generated output path is not a directory: " + generatedOutputDir);
-        }
+        validateOutputDirectory(generatedOutputDir, "Generated output path");
         generateProgram(outputType, generatedOutputDir, selectGenerationInput(compilation.program(), compilation.sourceModules(), includeJavaLibResources));
         return EXIT_SUCCESS;
     }
@@ -558,11 +552,7 @@ public class Capy {
             CompilationArtifacts compilation,
             boolean includeJavaLibResources
     ) throws IOException {
-        if (Files.notExists(generatedOutputDir)) {
-            Files.createDirectories(generatedOutputDir);
-        } else if (!Files.isDirectory(generatedOutputDir)) {
-            throw new CliException("Generated output path is not a directory: " + generatedOutputDir);
-        }
+        validateOutputDirectory(generatedOutputDir, "Generated output path");
         generateProgram(outputType, generatedOutputDir, selectGenerationInput(compilation.program(), compilation.sourceModules(), includeJavaLibResources));
     }
     private static Path findCompiledInput(PackageOptions options, PrintStream err) throws IOException {
@@ -578,26 +568,31 @@ public class Capy {
         return tempDir;
     }
 
-    private static void copyJavaLibResources(Path generatedOutputDir) {
+    private static Set<Path> copyJavaLibResources(Path generatedOutputDir) {
         log.info("Copying bundled java-lib sources to: " + generatedOutputDir);
         var startedAt = System.nanoTime();
         try {
             var resourceUri = Capy.class.getResource(JAVA_LIB_RESOURCE_DIR).toURI();
             if ("jar".equals(resourceUri.getScheme())) {
                 try (var fileSystem = FileSystems.newFileSystem(resourceUri, Map.of())) {
-                    copyDirectoryContents(fileSystem.getPath(JAVA_LIB_RESOURCE_DIR), generatedOutputDir);
+                    var copiedFiles = copyDirectoryContents(fileSystem.getPath(JAVA_LIB_RESOURCE_DIR), generatedOutputDir);
+                    var duration = Duration.ofNanos(System.nanoTime() - startedAt);
+                    log.info("Copied bundled java-lib sources to: " + generatedOutputDir + " in " + duration);
+                    return copiedFiles;
                 }
             } else {
-                copyDirectoryContents(Path.of(resourceUri), generatedOutputDir);
+                var copiedFiles = copyDirectoryContents(Path.of(resourceUri), generatedOutputDir);
+                var duration = Duration.ofNanos(System.nanoTime() - startedAt);
+                log.info("Copied bundled java-lib sources to: " + generatedOutputDir + " in " + duration);
+                return copiedFiles;
             }
         } catch (URISyntaxException | IOException e) {
             throw new UncheckedIOException("Unable to copy bundled java-lib sources", e instanceof IOException io ? io : new IOException(e));
         }
-        var duration = Duration.ofNanos(System.nanoTime() - startedAt);
-        log.info("Copied bundled java-lib sources to: " + generatedOutputDir + " in " + duration);
     }
 
-    private static void copyDirectoryContents(Path sourceDir, Path targetDir) throws IOException {
+    private static Set<Path> copyDirectoryContents(Path sourceDir, Path targetDir) throws IOException {
+        var copiedFiles = new HashSet<Path>();
         try (var files = Files.walk(sourceDir)) {
             try {
                 files.forEach(source -> {
@@ -612,6 +607,7 @@ public class Capy {
                                 Files.createDirectories(parent);
                             }
                             Files.copy(source, target, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                            copiedFiles.add(relative.normalize());
                         }
                     } catch (IOException e) {
                         throw new UncheckedIOException(e);
@@ -621,10 +617,16 @@ public class Capy {
                 throw e.getCause();
             }
         }
+        return copiedFiles;
     }
 
-    private static void writeGeneratedProgram(Path outputDir, GeneratedProgram program) {
-        program.modules().forEach(module -> writeCompiledModule(outputDir, module.relativePath(), module.code()));
+    private static Set<Path> writeGeneratedProgram(Path outputDir, GeneratedProgram program) {
+        var writtenFiles = new HashSet<Path>();
+        program.modules().forEach(module -> {
+            writeCompiledModule(outputDir, module.relativePath(), module.code());
+            writtenFiles.add(module.relativePath().normalize());
+        });
+        return writtenFiles;
     }
 
     private static void generateProgram(OutputType outputType, Path generatedOutputDir, GenerationInput generationInput) {
@@ -635,11 +637,12 @@ public class Capy {
 
         log.info("Writing generated " + outputType + " sources to: " + generatedOutputDir);
         var writeStartedAt = System.nanoTime();
-        writeGeneratedProgram(generatedOutputDir, compiledProgram);
+        var writtenFiles = writeGeneratedProgram(generatedOutputDir, compiledProgram);
         log.info("Wrote generated " + outputType + " sources to: " + generatedOutputDir + " in " + Duration.ofNanos(System.nanoTime() - writeStartedAt));
         if (outputType == OutputType.JAVA && generationInput.includeJavaLibResources()) {
-            copyJavaLibResources(generatedOutputDir);
+            writtenFiles.addAll(copyJavaLibResources(generatedOutputDir));
         }
+        deleteStaleFiles(generatedOutputDir, writtenFiles);
     }
 
     private static void compileGeneratedProgram(Path sourceDir, Path classesDir) throws IOException {
@@ -990,31 +993,14 @@ public class Capy {
         }
     }
 
-    private static void validateEmptyExistingDirectory(Path directory, String label) throws IOException {
+    private static void validateOutputDirectory(Path directory, String label) throws IOException {
         if (Files.notExists(directory)) {
-            throw new CliException(label + " does not exist: " + directory);
+            Files.createDirectories(directory);
+            return;
         }
         if (!Files.isDirectory(directory)) {
             throw new CliException(label + " is not a directory: " + directory);
         }
-        try (var files = Files.list(directory)) {
-            if (files.findAny().isPresent()) {
-                throw new CliException(label + " must be empty: " + directory);
-            }
-        }
-    }
-
-    private static void recreateDirectory(Path directory) throws IOException {
-        if (Files.exists(directory)) {
-            try (var files = Files.walk(directory)) {
-                files.sorted(Comparator.reverseOrder()).forEach(path -> {
-                    if (!path.equals(directory)) {
-                        path.toFile().delete();
-                    }
-                });
-            }
-        }
-        Files.createDirectories(directory);
     }
 
     private static void writeCompiledModule(Path outputDir, Path relativePath, String code) {
@@ -1046,6 +1032,7 @@ public class Capy {
         var totalStartedAt = System.nanoTime();
         try {
             Files.createDirectories(outputDir);
+            var writtenFiles = new HashSet<Path>();
             for (var module : program.modules()) {
                 var modulePath = module.path().replace('\\', '/');
                 var moduleJson = modulePath.isBlank()
@@ -1057,10 +1044,49 @@ public class Capy {
                 mapper.writerWithDefaultPrettyPrinter().writeValue(moduleJson.toFile(), module);
                 var duration = Duration.ofNanos(System.nanoTime() - startedAt);
                 log.info("Wrote linked module to file: " + moduleJson + " in " + duration);
+                writtenFiles.add(outputDir.relativize(moduleJson).normalize());
             }
+            writtenFiles.add(Path.of(BUILD_INFO_FILE));
+            deleteStaleFiles(outputDir, writtenFiles);
             log.info("Wrote " + program.modules().size() + " linked modules to: " + outputDir + " in " + Duration.ofNanos(System.nanoTime() - totalStartedAt));
         } catch (IOException e) {
             throw new UncheckedIOException("Unable to write linked JSON output to " + outputDir, e);
+        }
+    }
+
+    private static void deleteStaleFiles(Path outputDir, Set<Path> expectedFiles) {
+        try (var files = Files.walk(outputDir)) {
+            files.filter(Files::isRegularFile)
+                    .forEach(path -> {
+                        var relativePath = outputDir.relativize(path).normalize();
+                        if (expectedFiles.contains(relativePath)) {
+                            return;
+                        }
+                        try {
+                            Files.deleteIfExists(path);
+                        } catch (IOException e) {
+                            throw new UncheckedIOException("Unable to delete stale output file: " + path, e);
+                        }
+                    });
+        } catch (IOException e) {
+            throw new UncheckedIOException("Unable to inspect output directory: " + outputDir, e);
+        }
+
+        try (var directories = Files.walk(outputDir)) {
+            directories.sorted(Comparator.reverseOrder())
+                    .filter(Files::isDirectory)
+                    .filter(path -> !path.equals(outputDir))
+                    .forEach(path -> {
+                        try (var children = Files.list(path)) {
+                            if (children.findAny().isEmpty()) {
+                                Files.deleteIfExists(path);
+                            }
+                        } catch (IOException e) {
+                            throw new UncheckedIOException("Unable to delete stale output directory: " + path, e);
+                        }
+                    });
+        } catch (IOException e) {
+            throw new UncheckedIOException("Unable to prune empty output directories: " + outputDir, e);
         }
     }
 
@@ -1249,7 +1275,7 @@ public class Capy {
                 "  capy package (-ci|--compiled-input <dir> | -i|--input <dir>) -m|--module <capy.yml> [--capy.<field> <value>] [--log <DEBUG|INFO|WARN|ERROR>]",
                 "",
                 "Notes:",
-                "  compile output directory must already exist and be empty.",
+                "  compile output directory may be reused; stale generated files are pruned automatically.",
                 "  compile-generate compiles Capybara sources directly to generated output without writing linked intermediates unless --linked-output is provided.",
                 "  compile --compile-tests writes bundled stdlib modules and injects discovered TestFile/list[TestFile] producers into capy/test/CapyTestRuntime.gather_tests.",
                 "  generate input directory defaults to the current directory.",

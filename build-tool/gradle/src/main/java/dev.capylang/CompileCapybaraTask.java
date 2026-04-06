@@ -53,9 +53,9 @@ public abstract class CompileCapybaraTask extends DefaultTask {
                 .map(java.io.File::toPath)
                 .toList());
 
-        recreateDirectory(output);
+        Files.createDirectories(output);
         if (generatedOutput != null) {
-            recreateDirectory(generatedOutput);
+            Files.createDirectories(generatedOutput);
         }
         var errors = new ByteArrayOutputStream();
         var exitCode = compileAndGenerate(
@@ -93,16 +93,6 @@ public abstract class CompileCapybaraTask extends DefaultTask {
             );
         }
         return 0;
-    }
-
-    private void recreateDirectory(java.nio.file.Path directory) throws IOException {
-        if (Files.exists(directory)) {
-            try (var files = Files.walk(directory)) {
-                files.sorted(java.util.Comparator.reverseOrder())
-                        .forEach(path -> path.toFile().delete());
-            }
-        }
-        Files.createDirectories(directory);
     }
 
     private TreeSet<CompiledModule> readLibraryModules(Collection<java.nio.file.Path> directories) throws IOException {
