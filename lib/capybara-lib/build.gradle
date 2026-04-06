@@ -538,7 +538,7 @@ tasks.named('processTestResources') {
 }
 
 tasks.named('classes') {
-    enabled = hasJvmMainSources || hasMainResources
+    enabled = !singleJavaVerificationBuild && (hasJvmMainSources || hasMainResources)
     if (!enabled) {
         setDependsOn([])
     }
@@ -546,6 +546,13 @@ tasks.named('classes') {
 
 tasks.named('testClasses') {
     enabled = hasJvmTestSources || hasNonJvmTestResources
+    if (singleJavaVerificationBuild) {
+        setDependsOn(dependsOn.findAll { dependency ->
+            !(dependency instanceof TaskProvider && dependency.name == 'classes') &&
+                    !(dependency instanceof Task && dependency.name == 'classes') &&
+                    dependency != 'classes'
+        })
+    }
     if (!enabled) {
         setDependsOn([])
     }

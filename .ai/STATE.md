@@ -419,6 +419,42 @@
 ### Expected impact
 - `:lib:capybara-lib:testCapybara` should avoid a full pre-run tree walk/delete under `build/test-results/capybara` on every `--rerun-tasks` build.
 
+## 2026-04-06 build optimization pass fused check lifecycle pruning
+
+### Requested baseline
+- Re-ran the requested baseline command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- In this sandbox, the command still failed before task execution with:
+  - `Could not determine a usable wildcard IP for this machine`.
+- Checked `build/reports/profile` again; no fresh profile HTML was produced, so this pass is based on source inspection of the current `check` task graph plus the existing reports already under `build/reports/profile`.
+
+### Findings
+- `lib:capybara-lib` and the reusable `CapybaraPlugin` both have a fused verification mode for `check`/`build` paths without main resources:
+  - `compileJava` is disabled;
+  - main Java sources are folded into `compileTestJava`;
+  - generated main and test Capybara Java are compiled together through the test source set.
+- Despite that, the `classes` lifecycle task still remained enabled whenever JVM main sources existed.
+- On the fused verification path, `classes` has no useful work left:
+  - `compileJava` is already disabled;
+  - there are no main resources in this mode;
+  - `testClasses` and downstream verification only need the test compilation path.
+- That left `check --rerun-tasks` carrying an unnecessary main-classes lifecycle node, and `testClasses` could still retain a redundant dependency edge back to `classes`.
+
+### Changes made
+- Disabled the handwritten `lib/capybara-lib` `classes` task whenever the fused single-Java verification path is active.
+- Removed `classes` from `testClasses` dependencies on that fused path in `lib/capybara-lib/build.gradle`.
+- Applied the same lifecycle pruning in `build-tool/gradle`’s `CapybaraPlugin` so plugin consumers get the same reduced verification graph.
+- Added plugin tests covering:
+  - fused `check` builds with JVM main sources now disable `classes`;
+  - fused `check` builds with JVM main sources no longer retain `testClasses -> classes`.
+
+### Expected impact
+- `:lib:capybara-lib:check --rerun-tasks` should avoid an otherwise-dead `classes` lifecycle step on the fused verification path.
+- Fused verification builds should carry a smaller task graph with one less main-lifecycle edge between `testClasses` and `classes`.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle task verification in this sandbox because the requested baseline invocation still fails before project execution with `Could not determine a usable wildcard IP for this machine`.
+
 ## 2026-04-06 build optimization pass JVM test resource task pruning
 
 ### Requested baseline

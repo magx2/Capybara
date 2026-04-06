@@ -161,7 +161,7 @@ public class CapybaraPlugin implements Plugin<Project> {
             project.getTasks().named("processTestResources", task ->
                     task.setEnabled(hasNonJvmTestResources || (hasJvmTestSources && hasAnyTestResources)));
             project.getTasks().named("classes", task -> {
-                var enabled = hasJvmMainSources || hasMainResources;
+                var enabled = !singleJavaVerificationBuild && (hasJvmMainSources || hasMainResources);
                 task.setEnabled(enabled);
                 if (!enabled) {
                     task.setDependsOn(java.util.List.of());
@@ -169,6 +169,19 @@ public class CapybaraPlugin implements Plugin<Project> {
             });
             project.getTasks().named("testClasses", task -> {
                 var enabled = hasJvmTestSources || hasNonJvmTestResources;
+                if (singleJavaVerificationBuild) {
+                    task.setDependsOn(task.getDependsOn().stream()
+                            .filter(dependency -> {
+                                if (dependency instanceof org.gradle.api.tasks.TaskProvider<?> provider) {
+                                    return !provider.getName().equals("classes");
+                                }
+                                if (dependency instanceof org.gradle.api.Task dependencyTask) {
+                                    return !dependencyTask.getName().equals("classes");
+                                }
+                                return !"classes".equals(dependency);
+                            })
+                            .toList());
+                }
                 task.setEnabled(enabled);
                 if (!enabled) {
                     task.setDependsOn(java.util.List.of());

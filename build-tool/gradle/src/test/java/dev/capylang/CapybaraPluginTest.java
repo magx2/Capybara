@@ -550,11 +550,14 @@ class CapybaraPluginTest {
         var compileJava = project.getTasks().named("compileJava").get();
         var compileTestJava = project.getTasks().named("compileTestJava").get();
         var compileTestJavaDependencies = compileTestJava.getTaskDependencies().getDependencies(compileTestJava);
+        var classes = project.getTasks().named("classes").get();
         var sourceSets = project.getExtensions().getByType(SourceSetContainer.class);
         var testSrcDirs = sourceSets.getByName("test").getJava().getSrcDirs();
 
         assertFalse(compileJava.getEnabled());
         assertTrue(compileJava.getDependsOn().isEmpty());
+        assertFalse(classes.getEnabled());
+        assertTrue(classes.getDependsOn().isEmpty());
         assertTrue(compileTestJavaDependencies.contains(project.getTasks().named("compileCapybara").get()));
         assertFalse(compileTestJavaDependencies.contains(project.getTasks().named("generateTestCapybaraJava").get()));
         assertFalse(compileTestJavaDependencies.contains(compileJava));
@@ -609,9 +612,12 @@ class CapybaraPluginTest {
 
         var project = newProject(List.of("check"));
         var sourceSets = project.getExtensions().getByType(SourceSetContainer.class);
+        var testClasses = project.getTasks().named("testClasses").get();
+        var testClassesDependencies = testClasses.getTaskDependencies().getDependencies(testClasses);
         var testCapybara = project.getTasks().named("testCapybara", CapybaraTestTask.class).get();
         var runtimeClasspathSources = ((ConfigurableFileCollection) testCapybara.getRuntimeClasspath()).getFrom();
 
+        assertFalse(testClassesDependencies.contains(project.getTasks().named("classes").get()));
         assertFalse(runtimeClasspathSources.contains(sourceSets.getByName("main").getRuntimeClasspath()));
         assertTrue(runtimeClasspathSources.contains(sourceSets.getByName("test").getOutput().getClassesDirs()));
     }
