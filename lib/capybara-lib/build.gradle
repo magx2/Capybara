@@ -19,7 +19,6 @@ def capybaraMainSourceDir = layout.projectDirectory.dir('src/main/capybara')
 def capybaraTestSourceDir = layout.projectDirectory.dir('src/test/capybara')
 def capybaraGeneratedMainDir = layout.buildDirectory.dir('generated/sources/capybara/java/main')
 def capybaraGeneratedTestDir = layout.buildDirectory.dir('generated/sources/capybara/java/test')
-def capybaraGeneratedTestClassesDir = layout.buildDirectory.dir('classes/java/capybaraTest')
 def capybaraLinkedMainDir = layout.buildDirectory.dir('generated/sources/capybara/linked/main')
 def capybaraTestResultsDir = layout.buildDirectory.dir('test-results/capybara')
 def capybaraDebugEnabled = gradle.startParameter.logLevel == org.gradle.api.logging.LogLevel.DEBUG
@@ -144,9 +143,8 @@ tasks.register('testCapybara', JavaExec) {
     group = 'verification'
     description = 'Runs Capybara tests from compiled test classes.'
     dependsOn tasks.named('compileTestJava')
-    dependsOn tasks.named('compileCapybaraTestJava')
 
-    classpath = files(capybaraGeneratedTestClassesDir, sourceSets.test.runtimeClasspath)
+    classpath = sourceSets.test.runtimeClasspath
     mainClass = 'dev.capylang.test.TestRunner'
 
     doFirst {
@@ -166,21 +164,17 @@ sourceSets {
     main {
         java.srcDir capybaraGeneratedMainDir
     }
-}
-
-tasks.register('compileCapybaraTestJava', JavaCompile) {
-    group = 'verification'
-    description = 'Compiles generated Java from test Capybara sources.'
-    dependsOn tasks.named('compileTestJava')
-    dependsOn tasks.named('compileTestCapybara')
-
-    source = fileTree(capybaraGeneratedTestDir)
-    classpath = files(sourceSets.test.output, sourceSets.test.compileClasspath)
-    destinationDirectory.set(capybaraGeneratedTestClassesDir)
+    test {
+        java.srcDir capybaraGeneratedTestDir
+    }
 }
 
 tasks.named('compileJava') {
     dependsOn tasks.named('compileCapybara')
+}
+
+tasks.named('compileTestJava') {
+    dependsOn tasks.named('compileTestCapybara')
 }
 
 tasks.matching { it.name == 'test' }.configureEach {

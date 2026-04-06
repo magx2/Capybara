@@ -154,18 +154,21 @@ class CapybaraPluginTest {
         var sourceSets = project.getExtensions().getByType(SourceSetContainer.class);
         var testSrcDirs = sourceSets.getByName("test").getJava().getSrcDirs();
 
-        assertFalse(testSrcDirs.contains(project.file("build/generated/sources/test-capybara/java")));
+        assertTrue(testSrcDirs.contains(project.file("build/generated/sources/test-capybara/java")));
         assertFalse(testSrcDirs.contains(project.file("build/generated/sources/capybara/java")));
     }
 
     @Test
-    void shouldCompileGeneratedCapybaraTestsOutsideGradleTestSourceSet() {
+    void shouldCompileGeneratedCapybaraTestsThroughCompileTestJava() {
         var project = newProject();
         var testCapybara = project.getTasks().named("testCapybara").get();
         var resolvedDependencies = testCapybara.getTaskDependencies().getDependencies(testCapybara);
+        var compileTestJava = project.getTasks().named("compileTestJava").get();
+        var compileTestJavaDependencies = compileTestJava.getTaskDependencies().getDependencies(compileTestJava);
 
-        assertTrue(project.getTasks().findByName("compileCapybaraTestJava") instanceof org.gradle.api.tasks.compile.JavaCompile);
-        assertTrue(resolvedDependencies.contains(project.getTasks().named("compileCapybaraTestJava").get()));
+        assertFalse(project.getTasks().getNames().contains("compileCapybaraTestJava"));
+        assertTrue(resolvedDependencies.contains(compileTestJava));
+        assertTrue(compileTestJavaDependencies.contains(project.getTasks().named("generateTestCapybaraJava").get()));
     }
 
     private Project newProject() {

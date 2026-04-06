@@ -435,6 +435,36 @@
 - I could not run Gradle task verification in this sandbox because the requested wrapper command still fails before project execution on the read-only `/home/martin/.gradle` lock path, and repo-local Gradle startup still fails with `Could not determine a usable wildcard IP for this machine`.
 - Verification for this pass is limited to source inspection and the added plugin test coverage.
 
+## 2026-04-06 build optimization pass merged test Java compilation
+
+### Requested baseline
+- Re-ran the requested baseline command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- It still failed immediately in this sandbox because the wrapper tried to create `/home/martin/.gradle/.../gradle-9.1.0-bin.zip.lck` on a read-only filesystem.
+- Existing timing data in `build/reports/profile/profile-2026-04-04-19-07-42.html` remains the latest available profile for this task path.
+
+### Findings
+- `lib:capybara-lib` was still compiling generated Capybara test Java in a dedicated `compileCapybaraTestJava` task after `compileTestJava`.
+- That split meant `:lib:capybara-lib:check --rerun-tasks` still paid for an extra JavaCompile task and an extra test-runtime classpath assembly step just to make generated Capybara test classes visible to `testCapybara`.
+- The reusable `build-tool/gradle` plugin kept the same pattern, so plugin consumers were carrying the same redundant second Java compilation on their test path.
+- The generated Capybara test Java does not need an isolated destination directory; it can be part of the normal Gradle `test` source set as long as `compileTestJava` depends on Capybara test-source generation.
+
+### Changes made
+- Added generated Capybara test Java directories to the Gradle `test` source set in:
+  - `lib/capybara-lib/build.gradle`
+  - `build-tool/gradle`’s `CapybaraPlugin`
+- Removed the separate `compileCapybaraTestJava` task from both code paths.
+- Rewired `compileTestJava` to depend on Capybara test-source generation compatibility tasks instead.
+- Simplified `testCapybara` to use the standard `sourceSets.test.runtimeClasspath` without injecting a second compiled-test-classes directory.
+- Updated plugin tests to cover the new source-set wiring and dependency chain.
+
+### Expected impact
+- `:lib:capybara-lib:check --rerun-tasks` should avoid one extra Java compiler invocation for generated Capybara tests.
+- Plugin consumers should see the same improvement on their test path, with fewer custom tasks and less duplicated classpath setup.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle task verification in this sandbox because the requested wrapper command still fails before project execution due the read-only wrapper lock path, and the repository-local Gradle fallback previously still failed on wildcard IP detection.
+
 ## 2026-04-06 build optimization pass deterministic linked build info
 
 ### Requested baseline
@@ -531,3 +561,33 @@
 - `git diff --check` passed.
 - I could not run Gradle task verification in this sandbox because the requested wrapper command still fails before project execution on the read-only `/home/martin/.gradle` lock path, and repo-local Gradle startup still fails with `Could not determine a usable wildcard IP for this machine`.
 - Verification for this pass is limited to source inspection and the added plugin test coverage.
+
+## 2026-04-06 build optimization pass merged test Java compilation
+
+### Requested baseline
+- Re-ran the requested baseline command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- It still failed immediately in this sandbox because the wrapper tried to create `/home/martin/.gradle/.../gradle-9.1.0-bin.zip.lck` on a read-only filesystem.
+- Existing timing data in `build/reports/profile/profile-2026-04-04-19-07-42.html` remains the latest available profile for this task path.
+
+### Findings
+- `lib:capybara-lib` was still compiling generated Capybara test Java in a dedicated `compileCapybaraTestJava` task after `compileTestJava`.
+- That split meant `:lib:capybara-lib:check --rerun-tasks` still paid for an extra JavaCompile task and an extra test-runtime classpath assembly step just to make generated Capybara test classes visible to `testCapybara`.
+- The reusable `build-tool/gradle` plugin kept the same pattern, so plugin consumers were carrying the same redundant second Java compilation on their test path.
+- The generated Capybara test Java does not need an isolated destination directory; it can be part of the normal Gradle `test` source set as long as `compileTestJava` depends on Capybara test-source generation.
+
+### Changes made
+- Added generated Capybara test Java directories to the Gradle `test` source set in:
+  - `lib/capybara-lib/build.gradle`
+  - `build-tool/gradle`’s `CapybaraPlugin`
+- Removed the separate `compileCapybaraTestJava` task from both code paths.
+- Rewired `compileTestJava` to depend on Capybara test-source generation compatibility tasks instead.
+- Simplified `testCapybara` to use the standard `sourceSets.test.runtimeClasspath` without injecting a second compiled-test-classes directory.
+- Updated plugin tests to cover the new source-set wiring and dependency chain.
+
+### Expected impact
+- `:lib:capybara-lib:check --rerun-tasks` should avoid one extra Java compiler invocation for generated Capybara tests.
+- Plugin consumers should see the same improvement on their test path, with fewer custom tasks and less duplicated classpath setup.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle task verification in this sandbox because the requested wrapper command still fails before project execution due the read-only wrapper lock path, and the repository-local Gradle fallback previously still failed on wildcard IP detection.
