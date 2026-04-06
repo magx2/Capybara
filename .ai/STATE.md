@@ -1632,3 +1632,40 @@
 - The previous `/home/martin/.gradle/...zip.lck` failure is gone.
 - Gradle still cannot complete in this sandbox because startup now stops later with `Could not determine a usable wildcard IP for this machine`.
 - `git diff --check` passed apart from the expected Git warning that `gradlew.bat` will be normalized to CRLF on a future checkout.
+
+## 2026-04-06 build optimization pass single Java compile for Capybara-only check builds
+
+### Requested baseline
+- Re-ran the requested baseline command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- The wrapper now gets past the earlier read-only Gradle home failure, but Gradle still cannot start in this sandbox:
+  - `Could not create service of type FileLockContentionHandler`
+  - `Could not determine a usable wildcard IP for this machine`
+- Checked `build/reports/profile` after the failed run; no fresh profile HTML was produced, so this pass is based on the existing profile history plus current task-graph inspection of `lib:capybara-lib`.
+
+### Findings
+- `lib/capybara-lib` has no hand-written JVM main sources under `src/main/java`, `src/main/kotlin`, `src/main/kts`, or `src/main/groovy`; its main Java inputs come entirely from generated Capybara sources.
+- For test-oriented builds like `:lib:capybara-lib:check`, `prepareCapybaraForCheck` already generates both main and test Java sources in one Capybara pass.
+- Even with that fused generation, the check path still left Gradle to run a separate `compileJava` task before `compileTestJava`, so Capybara-only modules were still paying two javac passes:
+  - one for generated main Java;
+  - one for generated test Java.
+- On this module’s `check` path, the main generated classes are only needed so the generated test classes can compile and run, so compiling those main generated sources again in a standalone `compileJava` step is avoidable when there are no hand-written JVM main sources.
+
+### Changes made
+- Added `hasJvmMainSources` detection in `lib/capybara-lib/build.gradle`.
+- For test-oriented builds with no hand-written JVM main sources, added the generated main Java directory to the `test` source set so `compileTestJava` can compile both generated main and generated test Java in one pass.
+- Marked `compileJava` as skipped for that same narrow case, while keeping the existing main-only path for non-test builds and for projects that do have hand-written JVM main sources.
+- Applied the same optimization in `build-tool/gradle`’s `CapybaraPlugin` so plugin consumers with Capybara-only main sources can avoid the redundant main javac pass on check builds too.
+- Added plugin tests covering:
+  - adding generated main Java to the `test` source set only for Capybara-only check builds;
+  - skipping `compileJava` only in that case;
+  - keeping `compileJava` enabled when JVM main sources exist.
+
+### Expected impact
+- `:lib:capybara-lib:check --rerun-tasks` should avoid the standalone `compileJava` javac pass for this module.
+- The Capybara-only check path should compile generated main and test Java sources once through `compileTestJava` instead of compiling generated main Java separately first.
+- Mixed Java/Capybara projects should keep the existing behavior because the optimization is gated on the absence of hand-written JVM main sources.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle task verification or produce a fresh profile in this sandbox because the requested wrapper command still fails before project execution with `Could not determine a usable wildcard IP for this machine`.
+- Verification for this pass is limited to source inspection and the added plugin test coverage.

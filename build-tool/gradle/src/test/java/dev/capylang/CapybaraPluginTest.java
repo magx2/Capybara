@@ -172,6 +172,16 @@ class CapybaraPluginTest {
     }
 
     @Test
+    void shouldAddMainGeneratedJavaToTestSourceSetForCheckBuildsWithoutJvmMainSources() {
+        var project = newProject(List.of("check"));
+        var sourceSets = project.getExtensions().getByType(SourceSetContainer.class);
+        var testSrcDirs = sourceSets.getByName("test").getJava().getSrcDirs();
+
+        assertTrue(testSrcDirs.contains(project.file("build/generated/sources/test-capybara/java")));
+        assertTrue(testSrcDirs.contains(project.file("build/generated/sources/capybara/java")));
+    }
+
+    @Test
     void shouldCompileGeneratedCapybaraTestsThroughCompileTestJava() {
         var project = newProject();
         var testCapybara = project.getTasks().named("testCapybara").get();
@@ -243,6 +253,28 @@ class CapybaraPluginTest {
         assertFalse(compileJavaDependencies.contains(project.getTasks().named("generateCapybaraJava").get()));
         assertTrue(compileTestJavaDependencies.contains(compileCapybara));
         assertFalse(compileTestJavaDependencies.contains(project.getTasks().named("generateTestCapybaraJava").get()));
+    }
+
+    @Test
+    void shouldSkipCompileJavaForCheckBuildsWithoutJvmMainSources() {
+        var project = newProject(List.of("check"));
+        var compileJava = project.getTasks().named("compileJava").get();
+
+        assertFalse(compileJava.getOnlyIf().isSatisfiedBy(compileJava));
+    }
+
+    @Test
+    void shouldKeepCompileJavaForCheckBuildsWithJvmMainSources() throws IOException {
+        var jvmMainSourceDir = Files.createDirectories(tempDir.resolve("src/main/java/dev/capylang"));
+        Files.writeString(jvmMainSourceDir.resolve("PluginMain.java"), "class PluginMain {}");
+
+        var project = newProject(List.of("check"));
+        var compileJava = project.getTasks().named("compileJava").get();
+        var sourceSets = project.getExtensions().getByType(SourceSetContainer.class);
+        var testSrcDirs = sourceSets.getByName("test").getJava().getSrcDirs();
+
+        assertTrue(compileJava.getOnlyIf().isSatisfiedBy(compileJava));
+        assertFalse(testSrcDirs.contains(project.file("build/generated/sources/capybara/java")));
     }
 
     private Project newProject() {

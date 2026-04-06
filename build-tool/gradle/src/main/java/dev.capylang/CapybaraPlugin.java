@@ -11,6 +11,15 @@ public class CapybaraPlugin implements Plugin<Project> {
         var layout = project.getLayout();
         var compilerVersion = project.getVersion().toString();
         var capybaraTestResultsDir = layout.getBuildDirectory().dir("test-results/capybara");
+        var hasJvmMainSources = project.provider(() ->
+                project.fileTree(project.file("src/main"), spec -> {
+                    spec.include("**/*.java");
+                    spec.include("**/*.kt");
+                    spec.include("**/*.kts");
+                    spec.include("**/*.groovy");
+                    spec.exclude("capybara/**");
+                }).getFiles().stream().findAny().isPresent()
+        );
         var hasJvmTestSources = project.provider(() ->
                 project.fileTree(project.file("src/test"), spec -> {
                     spec.include("**/*.java");
@@ -101,8 +110,14 @@ public class CapybaraPlugin implements Plugin<Project> {
 
             sourceSets.named("main", sourceSet ->
                     sourceSet.getJava().srcDir(layout.getBuildDirectory().dir("generated/sources/capybara/java")));
-            sourceSets.named("test", sourceSet ->
-                    sourceSet.getJava().srcDir(layout.getBuildDirectory().dir("generated/sources/test-capybara/java")));
+            sourceSets.named("test", sourceSet -> {
+                sourceSet.getJava().srcDir(layout.getBuildDirectory().dir("generated/sources/test-capybara/java"));
+                if (capybaraTestBuildRequested.get() && !hasJvmMainSources.get()) {
+                    sourceSet.getJava().srcDir(layout.getBuildDirectory().dir("generated/sources/capybara/java"));
+                }
+            });
+            project.getTasks().named("compileJava", task ->
+                    task.onlyIf(ignored -> !(capybaraTestBuildRequested.get() && !hasJvmMainSources.get())));
             project.getTasks().named("compileTestJava", task ->
                     task.dependsOn(capybaraTestBuildRequested.get() ? compileCapybara : generateTestCapybaraJava));
 
