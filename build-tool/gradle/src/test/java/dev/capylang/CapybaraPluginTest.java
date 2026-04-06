@@ -67,12 +67,12 @@ class CapybaraPluginTest {
 
         project.getTasks().named("compileCapybara", CompileCapybaraTask.class).get().compile();
 
-        assertTrue(project.file("build/generated/sources/capybara/java/foo/Lib.java").isFile());
-        assertTrue(project.file("build/generated/sources/test-capybara/java/bar/TestModule.java").isFile());
+        assertTrue(project.file("build/generated/sources/capybara/java/check/foo/Lib.java").isFile());
+        assertTrue(project.file("build/generated/sources/capybara/java/check/bar/TestModule.java").isFile());
         assertFalse(project.file("build/classes/capybara/foo/Lib.json").exists());
         assertFalse(project.file("build/classes/capybara/program.json").exists());
         assertFalse(project.file("build/classes/capybara/build-info.json").exists());
-        assertFalse(project.file("build/generated/sources/test-capybara/java/dev/capylang/CapybaraUtil.java").exists());
+        assertFalse(project.file("build/generated/sources/capybara/java/check/dev/capylang/CapybaraUtil.java").exists());
         assertFalse(project.getTasks().named("compileTestCapybara", CompileCapybaraTask.class).get().getOnlyIf().isSatisfiedBy(
                 project.getTasks().named("compileTestCapybara", CompileCapybaraTask.class).get()
         ));
@@ -92,6 +92,10 @@ class CapybaraPluginTest {
         assertFalse(fusedTask.getOutputDir().isPresent());
         assertTrue(fusedTask.getTestInputDir().isPresent());
         assertTrue(fusedTask.getGeneratedTestOutputDir().isPresent());
+        assertEquals(
+                fusedTask.getGeneratedOutputDir().get().getAsFile(),
+                fusedTask.getGeneratedTestOutputDir().get().getAsFile()
+        );
     }
 
     @Test
@@ -193,8 +197,9 @@ class CapybaraPluginTest {
         var sourceSets = project.getExtensions().getByType(SourceSetContainer.class);
         var testSrcDirs = sourceSets.getByName("test").getJava().getSrcDirs();
 
-        assertTrue(testSrcDirs.contains(project.file("build/generated/sources/test-capybara/java")));
-        assertTrue(testSrcDirs.contains(project.file("build/generated/sources/capybara/java")));
+        assertTrue(testSrcDirs.contains(project.file("build/generated/sources/capybara/java/check")));
+        assertFalse(testSrcDirs.contains(project.file("build/generated/sources/test-capybara/java")));
+        assertFalse(testSrcDirs.contains(project.file("src/main/java")));
     }
 
     @Test
@@ -391,7 +396,8 @@ class CapybaraPluginTest {
         assertFalse(compileTestJavaDependencies.contains(project.getTasks().named("generateTestCapybaraJava").get()));
         assertFalse(compileTestJavaDependencies.contains(compileJava));
         assertTrue(testSrcDirs.contains(project.file("src/main/java")));
-        assertTrue(testSrcDirs.contains(project.file("build/generated/sources/capybara/java")));
+        assertTrue(testSrcDirs.contains(project.file("build/generated/sources/capybara/java/check")));
+        assertFalse(testSrcDirs.contains(project.file("build/generated/sources/test-capybara/java")));
     }
 
     @Test

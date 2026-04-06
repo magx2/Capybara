@@ -758,6 +758,42 @@
   - then, with writable `GRADLE_USER_HOME`, on `Could not determine a usable wildcard IP for this machine`.
 - Verification for this pass is limited to source inspection and the added plugin test coverage.
 
+## 2026-04-06 build optimization pass shared fused generated sources
+
+### Requested baseline
+- Re-ran the requested baseline command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- In this sandbox the wrapper still fails before task execution with:
+  - `Could not create service of type FileLockContentionHandler`
+  - `Could not determine a usable wildcard IP for this machine`
+- Checked `build/reports/profile` again afterward; no fresh profile HTML was produced, so the latest available timing artifact remains `build/reports/profile/profile-2026-04-04-19-07-42.html`.
+
+### Findings
+- The handwritten `lib:capybara-lib` fused `check` path already writes main and test generated Capybara Java into a single shared `build/generated/sources/capybara/java/check` tree.
+- The reusable Gradle plugin still used two generated source trees on the same fused check/test path:
+  - `build/generated/sources/capybara/java`
+  - `build/generated/sources/test-capybara/java`
+- That meant plugin consumers still paid extra output-tree management and extra test-source-set wiring on fused `check --rerun-tasks` builds, even though both generations happen inside one `compileCapybara` task action.
+- In both the plugin and handwritten library build, fused check builds without JVM main sources were also still adding `src/main/java` as a test source root even when that directory contributes no files.
+
+### Changes made
+- Updated `build-tool/gradle`’s `CapybaraPlugin` so fused check/test builds now write both main and test generated Capybara Java into one shared `build/generated/sources/capybara/java/check` directory.
+- Updated the plugin’s test source-set wiring so fused builds use that shared generated directory instead of separate main/test generated directories.
+- Stopped adding `src/main/java` to the fused test source set when the project has no JVM main sources.
+- Applied the same no-empty-`src/main/java` source-root optimization in `lib/capybara-lib/build.gradle`.
+- Added plugin test coverage for:
+  - shared fused generated-output directories;
+  - the updated fused test source-set wiring;
+  - avoiding the empty `src/main/java` source root when no JVM main sources exist.
+
+### Expected impact
+- Plugin-backed Capybara `check`/`test` builds should manage one generated source tree instead of two on the fused path.
+- Fused Capybara-only verification builds should carry fewer Java source roots into `compileTestJava`, reducing small but repeated source-discovery and output-management overhead on `--rerun-tasks` builds.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle task verification in this sandbox because the requested wrapper command still fails before project execution with `Could not determine a usable wildcard IP for this machine`.
+- Verification for this pass is limited to source inspection and the updated plugin unit tests.
+
 ## 2026-04-06 build optimization pass linked-only stdlib consumers
 
 ### Requested baseline

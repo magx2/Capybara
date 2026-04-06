@@ -17,6 +17,9 @@ public class CapybaraPlugin implements Plugin<Project> {
         var layout = project.getLayout();
         var compilerVersion = project.getVersion().toString();
         var capybaraTestResultsDir = layout.getBuildDirectory().dir("test-results/capybara");
+        var generatedMainJavaDir = layout.getBuildDirectory().dir("generated/sources/capybara/java");
+        var generatedTestJavaDir = layout.getBuildDirectory().dir("generated/sources/test-capybara/java");
+        var generatedCheckJavaDir = layout.getBuildDirectory().dir("generated/sources/capybara/java/check");
         var hasJvmMainSources = containsMatchingFile(project.file("src/main").toPath(), relativePath ->
                 !relativePath.startsWith("capybara/") && hasJvmSourceExtension(relativePath)
         );
@@ -49,7 +52,7 @@ public class CapybaraPlugin implements Plugin<Project> {
                     task.setGroup("build");
                     task.setDescription("Compiles Capybara files from src/main/capybara.");
                     task.getInputDir().set(project.file("src/main/capybara"));
-                    task.getGeneratedOutputDir().set(layout.getBuildDirectory().dir("generated/sources/capybara/java"));
+                    task.getGeneratedOutputDir().set(singleJavaVerificationBuild ? generatedCheckJavaDir : generatedMainJavaDir);
                     task.getAdditionalInputDirs().from();
                     task.getCompilerVersion().set(compilerVersion);
                     task.getCompileTests().set(false);
@@ -62,7 +65,7 @@ public class CapybaraPlugin implements Plugin<Project> {
                     }
                     if (singleJavaVerificationBuild) {
                         task.getTestInputDir().set(project.file("src/test/capybara"));
-                        task.getGeneratedTestOutputDir().set(layout.getBuildDirectory().dir("generated/sources/test-capybara/java"));
+                        task.getGeneratedTestOutputDir().set(generatedCheckJavaDir);
                     }
                 }
         );
@@ -87,7 +90,7 @@ public class CapybaraPlugin implements Plugin<Project> {
                     task.setDescription("Compiles Capybara files from src/test/capybara.");
                     task.dependsOn(compileCapybara);
                     task.getInputDir().set(project.file("src/test/capybara"));
-                    task.getGeneratedOutputDir().set(layout.getBuildDirectory().dir("generated/sources/test-capybara/java"));
+                    task.getGeneratedOutputDir().set(generatedTestJavaDir);
                     task.getAdditionalInputDirs().from(layout.getBuildDirectory().dir("classes/capybara"));
                     task.getCompilerVersion().set(compilerVersion);
                     task.getCompileTests().set(true);
@@ -115,14 +118,17 @@ public class CapybaraPlugin implements Plugin<Project> {
             var testSourceSet = sourceSets.getByName("test");
 
             sourceSets.named("main", sourceSet ->
-                    sourceSet.getJava().srcDir(layout.getBuildDirectory().dir("generated/sources/capybara/java")));
+                    sourceSet.getJava().srcDir(generatedMainJavaDir));
             sourceSets.named("test", sourceSet -> {
-                sourceSet.getJava().srcDir(layout.getBuildDirectory().dir("generated/sources/test-capybara/java"));
                 if (singleJavaVerificationBuild) {
-                    sourceSet.getJava().srcDir(layout.getBuildDirectory().dir("generated/sources/capybara/java"));
-                    sourceSet.getJava().srcDir(project.file("src/main/java"));
+                    sourceSet.getJava().srcDir(generatedCheckJavaDir);
+                    if (hasJvmMainSources) {
+                        sourceSet.getJava().srcDir(project.file("src/main/java"));
+                    }
                     sourceSet.setCompileClasspath(sourceSet.getCompileClasspath().minus(mainSourceSet.getOutput()));
                     sourceSet.setRuntimeClasspath(sourceSet.getRuntimeClasspath().minus(mainSourceSet.getOutput()));
+                } else {
+                    sourceSet.getJava().srcDir(generatedTestJavaDir);
                 }
             });
             project.getTasks().named("compileJava", task -> {

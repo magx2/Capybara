@@ -472,7 +472,9 @@ sourceSets {
     test {
         if (singleJavaVerificationBuild) {
             java.srcDir capybaraGeneratedCheckDir
-            java.srcDir layout.projectDirectory.dir('src/main/java')
+            if (hasJvmMainSources) {
+                java.srcDir layout.projectDirectory.dir('src/main/java')
+            }
             compileClasspath -= sourceSets.main.output
             runtimeClasspath -= sourceSets.main.output
         } else {
