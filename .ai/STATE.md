@@ -2522,3 +2522,34 @@
 ### Verification status
 - `git diff --check` passed.
 - I could not run Gradle task verification in this sandbox because the requested wrapper invocation still fails before project execution with `Could not determine a usable wildcard IP for this machine`.
+
+## 2026-04-06 build optimization pass JVM test report pruning
+
+### Requested baseline
+- Re-ran the requested command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- It still failed before project execution in this sandbox with:
+  - `Could not determine a usable wildcard IP for this machine`.
+- Checked `build/reports/profile` after the failed run; no new profile HTML was produced, so this pass is based on the existing profile reports plus source inspection of the current `check` task path.
+
+### Findings
+- The last available profile still showed the standard Gradle JVM `test` task as a non-trivial remaining cost for `:lib:capybara-lib` after the larger Capybara compile/link optimizations.
+- The module already configures the JVM `test` task with explicit JUnit parallel-execution system properties in `build.gradle`, so it does not need `junit-platform.properties` to enable that behavior.
+- Gradle’s default JVM `test` task still generates both JUnit XML and an HTML report unless configured otherwise.
+- For the requested `check --rerun-tasks` workflow, HTML report generation is extra filesystem work that does not add coverage and is redundant when CI-oriented JUnit XML output is kept.
+- The reusable `CapybaraPlugin` had not yet mirrored the handwritten module’s narrowed test discovery, `capy/**` exclusion, or explicit parallel JUnit settings, so plugin consumers could still pay avoidable JVM test overhead.
+
+### Changes made
+- Disabled Gradle HTML report generation for `lib/capybara-lib`’s standard JVM `test` task while keeping JUnit XML enabled.
+- Mirrored the same JVM test-task tuning in `build-tool/gradle`’s `CapybaraPlugin`:
+  - exclude generated `capy/**` classes from JVM test execution;
+  - disable HTML reports and keep JUnit XML enabled;
+  - set the same JUnit parallel-execution system properties as the handwritten module.
+- Added plugin regression tests covering the new report settings, the `capy/**` exclusion, and the injected JUnit parallel properties.
+
+### Expected impact
+- `:lib:capybara-lib:check --rerun-tasks` should spend less time in the standard Gradle JVM `test` task by avoiding HTML report generation while preserving XML outputs for tooling and CI.
+- Plugin consumers should also avoid unnecessary JVM test discovery/report work and now match the optimized test-task behavior already used by `lib:capybara-lib`.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle task verification in this sandbox because the requested wrapper invocation still fails before project execution with `Could not determine a usable wildcard IP for this machine`.

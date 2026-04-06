@@ -221,6 +221,13 @@ public class CapybaraPlugin implements Plugin<Project> {
                 task.dependsOn(testCapybara);
                 task.setScanForTestClasses(false);
                 task.include("**/*Test.class", "**/*Tests.class", "**/*IT.class", "**/*IntegrationTest.class");
+                task.exclude("capy/**");
+                task.getReports().getHtml().getRequired().set(false);
+                task.getReports().getJunitXml().getRequired().set(true);
+                task.systemProperty("junit.jupiter.execution.parallel.enabled", "true");
+                task.systemProperty("junit.jupiter.execution.parallel.mode.default", "concurrent");
+                task.systemProperty("junit.jupiter.execution.parallel.mode.classes.default", "concurrent");
+                task.systemProperty("junit.jupiter.execution.parallel.config.strategy", "dynamic");
                 if (task.hasProperty("failOnNoDiscoveredTests")) {
                     task.setProperty("failOnNoDiscoveredTests", false);
                 }

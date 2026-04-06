@@ -554,6 +554,8 @@ tasks.matching { it.name == 'test' }.configureEach {
     scanForTestClasses = false
     include '**/*Test.class', '**/*Tests.class', '**/*IT.class', '**/*IntegrationTest.class'
     exclude 'capy/**'
+    reports.html.required = false
+    reports.junitXml.required = true
     enabled = hasJvmTestSources
     systemProperty 'junit.jupiter.execution.parallel.enabled', 'true'
     systemProperty 'junit.jupiter.execution.parallel.mode.default', 'concurrent'

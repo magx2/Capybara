@@ -352,6 +352,27 @@ class CapybaraPluginTest {
         assertTrue(testTask.getIncludes().contains("**/*Tests.class"));
         assertTrue(testTask.getIncludes().contains("**/*IT.class"));
         assertTrue(testTask.getIncludes().contains("**/*IntegrationTest.class"));
+        assertTrue(testTask.getExcludes().contains("capy/**"));
+    }
+
+    @Test
+    void shouldDisableHtmlJvmTestReportsAndKeepJUnitXml() {
+        var project = newProject();
+        var testTask = project.getTasks().named("test", Test.class).get();
+
+        assertFalse(testTask.getReports().getHtml().getRequired().get());
+        assertTrue(testTask.getReports().getJunitXml().getRequired().get());
+    }
+
+    @Test
+    void shouldSetParallelJvmTestExecutionProperties() {
+        var project = newProject();
+        var testTask = project.getTasks().named("test", Test.class).get();
+
+        assertEquals("true", testTask.getSystemProperties().get("junit.jupiter.execution.parallel.enabled"));
+        assertEquals("concurrent", testTask.getSystemProperties().get("junit.jupiter.execution.parallel.mode.default"));
+        assertEquals("concurrent", testTask.getSystemProperties().get("junit.jupiter.execution.parallel.mode.classes.default"));
+        assertEquals("dynamic", testTask.getSystemProperties().get("junit.jupiter.execution.parallel.config.strategy"));
     }
 
     @Test
