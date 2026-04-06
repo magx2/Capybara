@@ -517,7 +517,39 @@
 - `git diff --check` passed.
 - I could not run Gradle task verification in this sandbox because the requested wrapper command still fails before project execution on the read-only `/home/martin/.gradle` lock path.
 - Verification for this pass is limited to source inspection and the updated plugin test coverage.
-- Verification for this pass is limited to source inspection and the updated plugin test coverage.
+
+## 2026-04-06 build optimization pass in-process capybara-lib generation
+
+### Requested baseline
+- Re-ran the requested baseline command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- It still failed immediately in this sandbox because the wrapper tried to create `/home/martin/.gradle/.../gradle-9.1.0-bin.zip.lck` on a read-only filesystem.
+- Checked `build/reports/profile` after the run; no new profile HTML was produced, and the latest available report is still `build/reports/profile/profile-2026-04-04-19-07-42.html`.
+
+### Findings
+- `lib/capybara-lib` had already fused most redundant Capybara compile/generate work out of the `check` path, but the remaining hot-path tasks were still implemented as `JavaExec`:
+  - `prepareCapybaraForCheck` for `check`/`test` builds,
+  - `linkCapybaraDirect` for standalone main-source generation,
+  - `compileTestCapybaraDirect` for standalone test-source generation.
+- That means each of those tasks still paid a separate JVM launch and classpath bootstrap cost even though the repository already has an in-process `CompileCapybaraTask` pattern in `build-tool/gradle`.
+- For the requested `:lib:capybara-lib:check --rerun-tasks` path, the relevant remaining overhead is the extra JVM startup for `prepareCapybaraForCheck` before any Java compilation begins.
+
+### Changes made
+- Replaced the `JavaExec`-based Capybara generation tasks in `lib/capybara-lib/build.gradle` with a dedicated in-process task type, `InProcessCapybaraCompileTask`.
+- The new task loads `dev.capylang.Capy` from `:capy`'s runtime classpath in-process and invokes `Capy.compileGenerate(...)` directly instead of spawning a separate JVM.
+- Preserved existing behavior for:
+  - fused main+test generation on `check`-style builds,
+  - linked main-output generation for standalone compatibility tasks,
+  - standalone test-source generation against linked main libraries,
+  - `--skip-java-lib`-equivalent behavior by disabling bundled Java runtime source copying.
+
+### Expected impact
+- `:lib:capybara-lib:check --rerun-tasks` should avoid one extra JVM startup on the `prepareCapybaraForCheck` path.
+- Standalone `linkCapybara` and `compileTestCapybara` should also avoid separate Java process launches while keeping their current outputs and task names.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle task verification in this sandbox because the requested wrapper command still fails before project execution on the read-only `/home/martin/.gradle` lock path, and previous repo-local Gradle fallback attempts still failed on wildcard IP detection.
+- Verification for this pass is limited to source inspection.
 
 ## 2026-04-06 build optimization pass plugin check-path linked-output pruning
 

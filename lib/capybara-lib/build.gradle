@@ -1,19 +1,125 @@
+import org.gradle.api.DefaultTask
+import org.gradle.api.GradleException
+import org.gradle.api.file.ConfigurableFileCollection
+import org.gradle.api.file.DirectoryProperty
+import org.gradle.api.provider.Property
+import org.gradle.api.tasks.Classpath
+import org.gradle.api.tasks.Input
+import org.gradle.api.tasks.InputDirectory
+import org.gradle.api.tasks.InputFiles
+import org.gradle.api.tasks.Optional
+import org.gradle.api.tasks.OutputDirectory
+import org.gradle.api.tasks.PathSensitive
+import org.gradle.api.tasks.PathSensitivity
+import org.gradle.api.tasks.TaskAction
+
+import java.io.ByteArrayOutputStream
+import java.io.PrintStream
+import java.net.URL
+import java.net.URLClassLoader
+import java.nio.file.Files
+import java.nio.file.Path
+import java.util.TreeSet
+
 plugins {
     id 'buildlogic.java-library-conventions'
 }
 
-def capyProject = project(':capy')
-def compilerProject = project(':compiler')
-def capyExternalRuntimeClasspath = capyProject.configurations.runtimeClasspath.incoming.artifactView {
-    componentFilter { componentIdentifier ->
-        !(componentIdentifier instanceof org.gradle.api.artifacts.component.ProjectComponentIdentifier)
+abstract class InProcessCapybaraCompileTask extends DefaultTask {
+    @Classpath
+    abstract ConfigurableFileCollection getRuntimeClasspath()
+
+    @InputDirectory
+    @PathSensitive(PathSensitivity.RELATIVE)
+    abstract DirectoryProperty getInputDir()
+
+    @InputFiles
+    @PathSensitive(PathSensitivity.RELATIVE)
+    abstract ConfigurableFileCollection getAdditionalInputDirs()
+
+    @Optional
+    @OutputDirectory
+    abstract DirectoryProperty getLinkedOutputDir()
+
+    @OutputDirectory
+    abstract DirectoryProperty getGeneratedOutputDir()
+
+    @Optional
+    @InputDirectory
+    @PathSensitive(PathSensitivity.RELATIVE)
+    abstract DirectoryProperty getTestInputDir()
+
+    @Optional
+    @OutputDirectory
+    abstract DirectoryProperty getTestGeneratedOutputDir()
+
+    @Input
+    abstract Property<Boolean> getCompileTests()
+
+    @Input
+    abstract Property<Boolean> getIncludeJavaLibResources()
+
+    @TaskAction
+    void compileCapybara() {
+        def errors = new ByteArrayOutputStream()
+        def runtimeUrls = runtimeClasspath.files.collect { it.toURI().toURL() } as URL[]
+        URLClassLoader classLoader = new URLClassLoader(runtimeUrls, ClassLoader.getPlatformClassLoader())
+        try {
+            def capyClass = Class.forName('dev.capylang.Capy', true, classLoader)
+            def outputTypeClass = Class.forName('dev.capylang.compiler.OutputType', true, classLoader)
+            def outputType = outputTypeClass.enumConstants.find { it.name() == 'JAVA' }
+            def readLinkedProgram = capyClass.getDeclaredMethod('readLinkedProgram', Path, Boolean.TYPE)
+            readLinkedProgram.accessible = true
+            def compileGenerate = capyClass.getMethod(
+                    'compileGenerate',
+                    outputTypeClass,
+                    Path,
+                    Path,
+                    Path,
+                    Path,
+                    Path,
+                    TreeSet,
+                    Boolean.TYPE,
+                    Boolean.TYPE,
+                    PrintStream
+            )
+
+            def libraries = new TreeSet()
+            additionalInputDirs.files.each { libraryDir ->
+                Path libraryPath = libraryDir.toPath()
+                if (Files.notExists(libraryPath) || !Files.isDirectory(libraryPath)) {
+                    return
+                }
+                def program = readLinkedProgram.invoke(null, libraryPath, false)
+                libraries.addAll(program.modules())
+            }
+
+            def exitCode = compileGenerate.invoke(
+                    null,
+                    outputType,
+                    inputDir.get().asFile.toPath(),
+                    generatedOutputDir.get().asFile.toPath(),
+                    linkedOutputDir.present ? linkedOutputDir.get().asFile.toPath() : null,
+                    testInputDir.present ? testInputDir.get().asFile.toPath() : null,
+                    testGeneratedOutputDir.present ? testGeneratedOutputDir.get().asFile.toPath() : null,
+                    libraries,
+                    compileTests.getOrElse(false),
+                    includeJavaLibResources.getOrElse(true),
+                    new PrintStream(errors)
+            ) as Integer
+
+            if (exitCode != 0) {
+                def message = errors.toString().trim()
+                throw new GradleException(message ?: "Capybara compile failed with exit code ${exitCode}")
+            }
+        } finally {
+            classLoader.close()
+        }
     }
-}.files
-def capyExecutionClasspath = files(
-        capyProject.sourceSets.main.output,
-        compilerProject.sourceSets.main.output.classesDirs,
-        capyExternalRuntimeClasspath
-)
+}
+
+def capyProject = project(':capy')
+def capyRuntimeClasspath = capyProject.sourceSets.main.runtimeClasspath
 
 def capybaraMainSourceDir = layout.projectDirectory.dir('src/main/capybara')
 def capybaraTestSourceDir = layout.projectDirectory.dir('src/test/capybara')
@@ -33,58 +139,30 @@ def capybaraTestBuildRequested = providers.provider {
     }
 }
 
-tasks.register('linkCapybaraDirect', JavaExec) {
+tasks.register('linkCapybaraDirect', InProcessCapybaraCompileTask) {
     group = 'build'
     description = 'Compiles Capybara files from src/main/capybara and generates Java in one pass.'
 
-    inputs.dir(capybaraMainSourceDir)
-    outputs.dir(capybaraGeneratedMainDir)
-    outputs.dir(capybaraLinkedMainDir)
-
-    classpath = capyExecutionClasspath
-    mainClass = 'dev.capylang.Capy'
-
-    doFirst {
-        def capybaraArgs = [
-                'compile-generate',
-                'java',
-                '--skip-java-lib',
-                '-i', capybaraMainSourceDir.asFile.absolutePath,
-                '-o', capybaraGeneratedMainDir.get().asFile.absolutePath,
-                '--linked-output', capybaraLinkedMainDir.get().asFile.absolutePath
-        ]
-        capybaraArgs.addAll(capybaraDebugEnabled ? ['--log', 'DEBUG'] : ['--log', 'WARN'])
-        setArgs(capybaraArgs)
-    }
+    runtimeClasspath.from(capyRuntimeClasspath)
+    inputDir.set(capybaraMainSourceDir)
+    generatedOutputDir.set(capybaraGeneratedMainDir)
+    linkedOutputDir.set(capybaraLinkedMainDir)
+    compileTests.set(false)
+    includeJavaLibResources.set(false)
     onlyIf { !capybaraTestBuildRequested.get() }
 }
 
-tasks.register('prepareCapybaraForCheck', JavaExec) {
+tasks.register('prepareCapybaraForCheck', InProcessCapybaraCompileTask) {
     group = 'verification'
     description = 'Compiles main and test Capybara files for check/test builds in one pass.'
 
-    inputs.dir(capybaraMainSourceDir)
-    inputs.dir(capybaraTestSourceDir)
-    outputs.dir(capybaraGeneratedMainDir)
-    outputs.dir(capybaraGeneratedTestDir)
-
-    classpath = capyExecutionClasspath
-    mainClass = 'dev.capylang.Capy'
-
-    doFirst {
-        def capybaraArgs = [
-                'compile-generate',
-                'java',
-                '--skip-java-lib',
-                '-i', capybaraMainSourceDir.asFile.absolutePath,
-                '-o', capybaraGeneratedMainDir.get().asFile.absolutePath,
-                '--test-input', capybaraTestSourceDir.asFile.absolutePath,
-                '--test-output', capybaraGeneratedTestDir.get().asFile.absolutePath
-        ]
-        capybaraArgs.addAll(capybaraDebugEnabled ? ['--log', 'DEBUG'] : ['--log', 'WARN'])
-        setArgs(capybaraArgs)
-    }
-
+    runtimeClasspath.from(capyRuntimeClasspath)
+    inputDir.set(capybaraMainSourceDir)
+    generatedOutputDir.set(capybaraGeneratedMainDir)
+    testInputDir.set(capybaraTestSourceDir)
+    testGeneratedOutputDir.set(capybaraGeneratedTestDir)
+    compileTests.set(false)
+    includeJavaLibResources.set(false)
     onlyIf { capybaraTestBuildRequested.get() }
 }
 
@@ -100,31 +178,17 @@ tasks.register('compileCapybara') {
     dependsOn tasks.named('linkCapybara')
 }
 
-tasks.register('compileTestCapybaraDirect', JavaExec) {
+tasks.register('compileTestCapybaraDirect', InProcessCapybaraCompileTask) {
     group = 'verification'
     description = 'Compiles test Capybara files and generates Java without writing linked intermediates.'
     dependsOn tasks.named('linkCapybaraDirect')
 
-    inputs.dir(capybaraTestSourceDir)
-    inputs.dir(capybaraLinkedMainDir)
-    outputs.dir(capybaraGeneratedTestDir)
-
-    classpath = capyExecutionClasspath
-    mainClass = 'dev.capylang.Capy'
-
-    doFirst {
-        def capybaraArgs = [
-                'compile-generate',
-                'java',
-                '--skip-java-lib',
-                '-i', capybaraTestSourceDir.asFile.absolutePath,
-                '-o', capybaraGeneratedTestDir.get().asFile.absolutePath,
-                '-l', capybaraLinkedMainDir.get().asFile.absolutePath,
-                '--compile-tests'
-        ]
-        capybaraArgs.addAll(capybaraDebugEnabled ? ['--log', 'DEBUG'] : ['--log', 'WARN'])
-        setArgs(capybaraArgs)
-    }
+    runtimeClasspath.from(capyRuntimeClasspath)
+    inputDir.set(capybaraTestSourceDir)
+    additionalInputDirs.from(capybaraLinkedMainDir)
+    generatedOutputDir.set(capybaraGeneratedTestDir)
+    compileTests.set(true)
+    includeJavaLibResources.set(false)
     onlyIf { !capybaraTestBuildRequested.get() }
 }
 
