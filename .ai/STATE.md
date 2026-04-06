@@ -1727,7 +1727,36 @@
 - I could not run Gradle task verification or produce a fresh profile in this sandbox because the requested wrapper command still fails before project execution with `Could not determine a usable wildcard IP for this machine`.
 - Verification for this pass is limited to source inspection and the added plugin test coverage.
 
+## 2026-04-06 build optimization pass remove duplicate non-check main compile in lib capybara build
 
+### Requested baseline
+- Re-ran the requested baseline command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- Gradle still failed during startup before any task execution in this sandbox:
+  - `Could not create service of type FileLockContentionHandler`
+  - `Could not determine a usable wildcard IP for this machine`
+- Checked `build/reports/profile` after the failed run; no fresh profile HTML was produced, so this pass still relies on the existing saved reports plus current build-graph inspection.
+
+### Findings
+- The exact requested `:lib:capybara-lib:check` path is already on the fused `prepareCapybaraForCheck` flow, but the handwritten non-check lifecycle in `lib/capybara-lib` still had one redundant main-source compile.
+- On those non-check paths:
+  - `compileCapybara` depended on `compileCapybaraDirect`, which generated main Java only;
+  - `compileTestCapybaraDirect` separately depended on `linkCapybaraLinkedOnly`, which recompiled the same main Capybara sources just to recreate linked output for test compilation.
+- That means builds that need both main Java generation and test Capybara generation could still compile the same main Capybara sources twice inside `lib/capybara-lib`.
+- The reusable plugin was already aligned on the more efficient shape, so this duplication was limited to the handwritten library build script.
+
+### Changes made
+- Removed the redundant `compileCapybaraDirect` task from `lib/capybara-lib/build.gradle`.
+- Rewired `compileCapybara` to depend on `linkCapybaraDirect`, which already writes both generated main Java and linked main output in one pass.
+- Rewired `compileTestCapybaraDirect` to depend on `compileCapybara`, so test Capybara compilation now reuses the main linked output produced by that single shared compile.
+
+### Expected impact
+- Non-check `lib:capybara-lib` paths that need both main Java generation and test Capybara generation should avoid one full extra Capybara compile of main sources.
+- This keeps the handwritten module build aligned with the fused behavior already implemented in the reusable plugin and earlier repository passes.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run the requested Gradle build or produce a fresh profile in this sandbox because Gradle still fails before project execution with `Could not determine a usable wildcard IP for this machine`.
+- Verification for this pass is limited to source inspection.
 
 ## 2026-04-06 build optimization pass fused lifecycle task detection
 
@@ -1857,3 +1886,34 @@
 - `git diff --check` passed.
 - I could not run Gradle task verification or produce a fresh profile in this sandbox because the requested wrapper command still fails before project execution with `Could not determine a usable wildcard IP for this machine`.
 - Verification for this pass is limited to source inspection and the added plugin test coverage.
+
+## 2026-04-06 build optimization pass remove duplicate non-check main compile in lib capybara build
+
+### Requested baseline
+- Re-ran the requested baseline command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- Gradle still failed during startup before any task execution in this sandbox:
+  - `Could not create service of type FileLockContentionHandler`
+  - `Could not determine a usable wildcard IP for this machine`
+- Checked `build/reports/profile` after the failed run; no fresh profile HTML was produced, so this pass still relies on the existing saved reports plus current build-graph inspection.
+
+### Findings
+- The exact requested `:lib:capybara-lib:check` path is already on the fused `prepareCapybaraForCheck` flow, but the handwritten non-check lifecycle in `lib/capybara-lib` still had one redundant main-source compile.
+- On those non-check paths:
+  - `compileCapybara` depended on `compileCapybaraDirect`, which generated main Java only;
+  - `compileTestCapybaraDirect` separately depended on `linkCapybaraLinkedOnly`, which recompiled the same main Capybara sources just to recreate linked output for test compilation.
+- That means builds that need both main Java generation and test Capybara generation could still compile the same main Capybara sources twice inside `lib/capybara-lib`.
+- The reusable plugin was already aligned on the more efficient shape, so this duplication was limited to the handwritten library build script.
+
+### Changes made
+- Removed the redundant `compileCapybaraDirect` task from `lib/capybara-lib/build.gradle`.
+- Rewired `compileCapybara` to depend on `linkCapybaraDirect`, which already writes both generated main Java and linked main output in one pass.
+- Rewired `compileTestCapybaraDirect` to depend on `compileCapybara`, so test Capybara compilation now reuses the main linked output produced by that single shared compile.
+
+### Expected impact
+- Non-check `lib:capybara-lib` paths that need both main Java generation and test Capybara generation should avoid one full extra Capybara compile of main sources.
+- This keeps the handwritten module build aligned with the fused behavior already implemented in the reusable plugin and earlier repository passes.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run the requested Gradle build or produce a fresh profile in this sandbox because Gradle still fails before project execution with `Could not determine a usable wildcard IP for this machine`.
+- Verification for this pass is limited to source inspection.
