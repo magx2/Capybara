@@ -6,6 +6,11 @@ plugins {
 group = "dev.capylang"
 version = rootProject.version
 
+val githubPackagesUser = providers.environmentVariable("GITHUB_ACTOR")
+    .orElse(providers.gradleProperty("gpr.user"))
+val githubPackagesKey = providers.environmentVariable("GITHUB_TOKEN")
+    .orElse(providers.gradleProperty("gpr.key"))
+
 repositories {
     mavenCentral()
 }
@@ -31,10 +36,8 @@ publishing {
             name = "GitHubPackages"
             url = uri("https://maven.pkg.github.com/grzeslowski/capybara")
             credentials {
-                username = System.getenv("GITHUB_ACTOR")
-                    ?: findProperty("gpr.user") as String?
-                password = System.getenv("GITHUB_TOKEN")
-                    ?: findProperty("gpr.key") as String?
+                username = githubPackagesUser.orNull
+                password = githubPackagesKey.orNull
             }
         }
     }

@@ -2244,6 +2244,30 @@
 - `git diff --check` passed.
 - I could not run Gradle task verification in this sandbox because the requested wrapper invocation still fails before project execution with `Could not determine a usable wildcard IP for this machine`.
 
+## 2026-04-06 build optimization pass configuration-cache-safe publishing credentials
+
+### Requested baseline
+- Re-ran the requested command as `GRADLE_USER_HOME=$PWD/.gradle ./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- The run still failed before project execution in this sandbox with:
+  - `Could not determine a usable wildcard IP for this machine`.
+- Re-checked `build/reports/profile` after the failed run; no new profile HTML was produced, so timing guidance still comes from the existing reports already present there.
+
+### Findings
+- While inspecting existing Gradle daemon and configuration-cache artifacts, `build-tool/gradle/build.gradle.kts` was still reading `GITHUB_ACTOR`, `GITHUB_TOKEN`, `gpr.user`, and `gpr.key` imperatively during configuration.
+- Those eager reads add avoidable configuration-time work to every build that includes `:build-tool:gradle`, even when no publishing task is requested.
+- They also show up as configuration-cache inputs in the existing cache diagnostics, which is avoidable with provider-based wiring.
+
+### Changes made
+- Replaced the direct `System.getenv(...)` and `findProperty(...)` reads in `build-tool/gradle/build.gradle.kts` with `providers.environmentVariable(...).orElse(providers.gradleProperty(...))`.
+- Wired the GitHub Packages publishing credentials from those providers instead of reading environment variables and Gradle properties eagerly.
+
+### Expected impact
+- Repository builds that configure `:build-tool:gradle` should do less eager work during configuration.
+- Configuration-cache entries for builds touching the plugin module should track the credential inputs through Gradle providers instead of imperative environment/property reads.
+
+### Verification status
+- Verification here is limited to source inspection because the requested Gradle baseline command still cannot start in this sandbox.
+
 ## 2026-04-06 build optimization pass wrapper task pruning
 
 ### Requested baseline
