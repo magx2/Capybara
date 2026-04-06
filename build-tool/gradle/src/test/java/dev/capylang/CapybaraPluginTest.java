@@ -188,6 +188,16 @@ class CapybaraPluginTest {
     }
 
     @Test
+    void shouldDeclareOnlyAggregatedProgramFileAsPluginLibraryInput() {
+        var project = newProject();
+        var task = project.getTasks().named("compileTestCapybara", CompileCapybaraTask.class).get();
+        var libraryProgramFiles = task.getLibraryProgramFiles().getFiles();
+
+        assertEquals(1, libraryProgramFiles.size());
+        assertTrue(libraryProgramFiles.contains(project.file("build/classes/capybara/program.json")));
+    }
+
+    @Test
     void shouldPruneStaleFilesWhenReusingTaskOutputs() throws IOException {
         var project = newProject();
         var sourceDir = Files.createDirectories(tempDir.resolve("src/main/capybara/foo"));

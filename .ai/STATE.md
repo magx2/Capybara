@@ -2299,6 +2299,34 @@
 - `git diff --check` passed.
 - I could not run Gradle task verification in this sandbox because the requested wrapper invocation still fails before project execution with `Could not determine a usable wildcard IP for this machine`.
 
+## 2026-04-06 build optimization pass aggregated library input pruning
+
+### Requested baseline
+- Re-ran the requested command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- The run still failed before project execution in this sandbox with:
+  - `Could not determine a usable wildcard IP for this machine`.
+- Re-checked `build/reports/profile` after the failed run; there was still no new profile HTML, so the available data remains the existing reports already present there.
+
+### Findings
+- Test-side Capybara compilation in both the handwritten `lib/capybara-lib` build and the reusable Gradle plugin reads library modules through the aggregated linked program file (`program.json`).
+- Despite that, both task implementations still declared the whole linked-output directory as an input for test Capybara compilation.
+- That forces Gradle to snapshot every linked module JSON under the main output tree even though the compile logic only needs the aggregated program file to reconstruct library modules.
+- On Windows-backed filesystems this kind of avoidable directory input traversal adds repeated filesystem work to rerun-style builds and to plugin consumers using the same task implementation.
+
+### Changes made
+- Replaced the handwritten `InProcessCapybaraCompileTask` library input declaration with `libraryProgramFiles`, pointing test compilation at `build/generated/sources/capybara/linked/main/program.json`.
+- Replaced the reusable `CompileCapybaraTask` library input declaration with the same file-based input and derived the linked root from that file’s parent at execution time.
+- Updated `CapybaraPlugin` to wire `compileTestCapybara` to `build/classes/capybara/program.json` instead of the whole linked-output directory.
+- Added plugin regression coverage proving `compileTestCapybara` now declares only the aggregated `program.json` file as its library input.
+
+### Expected impact
+- Gradle should do less input snapshotting for test-side Capybara compilation because it no longer needs to traverse the full linked-output directory tree just to detect library changes.
+- The optimization applies to the handwritten library build path outside the fused check flow and to downstream consumers of the reusable plugin.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle task verification in this sandbox because the requested wrapper invocation still fails before project execution with `Could not determine a usable wildcard IP for this machine`.
+
 ## 2026-04-06 build optimization pass module-local check linked-output pruning
 
 ### Requested baseline

@@ -10,6 +10,8 @@ import org.gradle.api.tasks.InputDirectory;
 import org.gradle.api.tasks.InputFiles;
 import org.gradle.api.tasks.Optional;
 import org.gradle.api.tasks.OutputDirectory;
+import org.gradle.api.tasks.PathSensitive;
+import org.gradle.api.tasks.PathSensitivity;
 import org.gradle.api.tasks.TaskAction;
 import dev.capylang.compiler.OutputType;
 import dev.capylang.compiler.CompiledModule;
@@ -23,10 +25,12 @@ import java.util.TreeSet;
 
 public abstract class CompileCapybaraTask extends DefaultTask {
     @InputDirectory
+    @PathSensitive(PathSensitivity.RELATIVE)
     public abstract DirectoryProperty getInputDir();
 
     @InputFiles
-    public abstract ConfigurableFileCollection getAdditionalInputDirs();
+    @PathSensitive(PathSensitivity.RELATIVE)
+    public abstract ConfigurableFileCollection getLibraryProgramFiles();
 
     @Optional
     @OutputDirectory
@@ -77,8 +81,10 @@ public abstract class CompileCapybaraTask extends DefaultTask {
         var generatedTestOutput = compileTestSourcesWithMainCompilation && getGeneratedTestOutputDir().isPresent()
                 ? getGeneratedTestOutputDir().get().getAsFile().toPath()
                 : null;
-        var libraries = readLibraryModules(getAdditionalInputDirs().getFiles().stream()
+        var libraries = readLibraryModules(getLibraryProgramFiles().getFiles().stream()
                 .map(java.io.File::toPath)
+                .map(java.nio.file.Path::getParent)
+                .filter(java.util.Objects::nonNull)
                 .toList());
 
         if (output != null) {

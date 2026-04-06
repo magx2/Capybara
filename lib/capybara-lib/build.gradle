@@ -189,7 +189,7 @@ abstract class InProcessCapybaraCompileTask extends DefaultTask {
 
     @InputFiles
     @PathSensitive(PathSensitivity.RELATIVE)
-    abstract ConfigurableFileCollection getAdditionalInputDirs()
+    abstract ConfigurableFileCollection getLibraryProgramFiles()
 
     @Optional
     @OutputDirectory
@@ -224,7 +224,8 @@ abstract class InProcessCapybaraCompileTask extends DefaultTask {
         def generatedOutputPath = generatedOutputDir.present ? generatedOutputDir.get().asFile.toPath() : null
         def testInputPath = testInputDir.present ? testInputDir.get().asFile.toPath() : null
         def testGeneratedOutputPath = testGeneratedOutputDir.present ? testGeneratedOutputDir.get().asFile.toPath() : null
-        def libraries = bridge.readLibraryModules(additionalInputDirs.files)
+        def libraryInputDirs = libraryProgramFiles.files.collect { it.parentFile }.findAll { it != null } as Set<File>
+        def libraries = bridge.readLibraryModules(libraryInputDirs)
 
         def exitCode = bridge.compile(
                 inputDir.get().asFile.toPath(),
@@ -438,7 +439,7 @@ tasks.register('compileTestCapybaraDirect', InProcessCapybaraCompileTask) {
 
     runtimeClasspath.from(capyRuntimeClasspath)
     inputDir.set(capybaraTestSourceDir)
-    additionalInputDirs.from(capybaraLinkedMainDir)
+    libraryProgramFiles.from(capybaraLinkedMainDir.map { it.file('program.json') })
     generatedOutputDir.set(capybaraGeneratedTestDir)
     compileTests.set(true)
     includeJavaLibResources.set(false)

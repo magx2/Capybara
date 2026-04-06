@@ -76,7 +76,7 @@ public class CapybaraPlugin implements Plugin<Project> {
                     task.setDescription("Compiles Capybara files from src/main/capybara.");
                     task.getInputDir().set(project.file("src/main/capybara"));
                     task.getGeneratedOutputDir().set(singleJavaVerificationBuild ? generatedCheckJavaDir : generatedMainJavaDir);
-                    task.getAdditionalInputDirs().from();
+                    task.getLibraryProgramFiles().from();
                     task.getCompilerVersion().set(compilerVersion);
                     task.getCompileTests().set(false);
                     task.getIncludeJavaLibResources().set(true);
@@ -114,7 +114,7 @@ public class CapybaraPlugin implements Plugin<Project> {
                     task.dependsOn(compileCapybara);
                     task.getInputDir().set(project.file("src/test/capybara"));
                     task.getGeneratedOutputDir().set(generatedTestJavaDir);
-                    task.getAdditionalInputDirs().from(layout.getBuildDirectory().dir("classes/capybara"));
+                    task.getLibraryProgramFiles().from(layout.getBuildDirectory().file("classes/capybara/program.json"));
                     task.getCompilerVersion().set(compilerVersion);
                     task.getCompileTests().set(true);
                     task.getIncludeJavaLibResources().set(false);
