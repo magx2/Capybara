@@ -22,6 +22,8 @@ import java.io.PrintStream;
 import java.nio.file.Files;
 import java.util.Collection;
 import java.util.TreeSet;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 public abstract class CompileCapybaraTask extends DefaultTask {
     @InputDirectory
@@ -66,6 +68,9 @@ public abstract class CompileCapybaraTask extends DefaultTask {
     @Input
     public abstract Property<Boolean> getIncludeJavaLibResourcesInTestOutput();
 
+    @Input
+    public abstract Property<String> getLogLevel();
+
     @TaskAction
     public void compile() throws IOException {
         var input = getInputDir().get().getAsFile().toPath();
@@ -97,18 +102,41 @@ public abstract class CompileCapybaraTask extends DefaultTask {
             Files.createDirectories(generatedTestOutput);
         }
         var errors = new ByteArrayOutputStream();
-        var exitCode = compileAndGenerate(
-                input,
-                writeLinkedOutput ? output : null,
-                generatedOutput,
-                testInput,
-                generatedTestOutput,
-                libraries,
-                new PrintStream(errors)
+        var exitCode = withJulLogLevel(
+                Level.parse(getLogLevel().getOrElse("WARNING")),
+                () -> compileAndGenerate(
+                        input,
+                        writeLinkedOutput ? output : null,
+                        generatedOutput,
+                        testInput,
+                        generatedTestOutput,
+                        libraries,
+                        new PrintStream(errors)
+                )
         );
         if (exitCode != 0) {
             var message = errors.toString().trim();
             throw new GradleException(message.isEmpty() ? "Capybara compile failed with exit code " + exitCode : message);
+        }
+    }
+
+    private static int withJulLogLevel(Level level, IntIoSupplier action) throws IOException {
+        var rootLogger = Logger.getLogger("");
+        var previousRootLevel = rootLogger.getLevel();
+        var handlers = rootLogger.getHandlers();
+        var previousHandlerLevels = new Level[handlers.length];
+        for (int i = 0; i < handlers.length; i++) {
+            previousHandlerLevels[i] = handlers[i].getLevel();
+            handlers[i].setLevel(level);
+        }
+        rootLogger.setLevel(level);
+        try {
+            return action.getAsInt();
+        } finally {
+            rootLogger.setLevel(previousRootLevel);
+            for (int i = 0; i < handlers.length; i++) {
+                handlers[i].setLevel(previousHandlerLevels[i]);
+            }
         }
     }
 
@@ -167,5 +195,10 @@ public abstract class CompileCapybaraTask extends DefaultTask {
             modules.addAll(Capy.readLinkedProgram(directory, false).modules());
         }
         return modules;
+    }
+
+    @FunctionalInterface
+    private interface IntIoSupplier {
+        int getAsInt() throws IOException;
     }
 }

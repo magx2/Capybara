@@ -561,6 +561,22 @@ class CapybaraPluginTest {
     }
 
     @ParameterizedTest
+    @MethodSource("gradleCompileLogLevels")
+    void shouldMapGradleLogLevelToCapybaraCompileLogLevel(LogLevel gradleLogLevel, String expectedLogLevel) {
+        assertEquals(expectedLogLevel, CapybaraPlugin.capybaraCompileLogLevel(gradleLogLevel));
+    }
+
+    @Test
+    void shouldApplyMappedCompileLogLevelToCapybaraCompileTasks() {
+        var project = newProject(List.of("check"));
+        var compileCapybara = project.getTasks().named("compileCapybara", CompileCapybaraTask.class).get();
+        var compileTestCapybara = project.getTasks().named("compileTestCapybara", CompileCapybaraTask.class).get();
+
+        assertEquals("WARNING", compileCapybara.getLogLevel().get());
+        assertEquals("WARNING", compileTestCapybara.getLogLevel().get());
+    }
+
+    @ParameterizedTest
     @MethodSource("fusedCapybaraLifecycleTasks")
     void shouldWireLifecycleBuildJavaCompilationDirectlyToFusedCompileTask(String requestedTask) {
         var project = newProject(List.of(requestedTask));
@@ -774,6 +790,17 @@ class CapybaraPluginTest {
                 arguments(LogLevel.WARN, "WARN"),
                 arguments(LogLevel.QUIET, "WARN"),
                 arguments(LogLevel.ERROR, "WARN")
+        );
+    }
+
+    private static Stream<org.junit.jupiter.params.provider.Arguments> gradleCompileLogLevels() {
+        return Stream.of(
+                arguments(LogLevel.DEBUG, "FINE"),
+                arguments(LogLevel.INFO, "INFO"),
+                arguments(LogLevel.LIFECYCLE, "WARNING"),
+                arguments(LogLevel.WARN, "WARNING"),
+                arguments(LogLevel.QUIET, "WARNING"),
+                arguments(LogLevel.ERROR, "WARNING")
         );
     }
 

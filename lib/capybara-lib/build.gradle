@@ -29,6 +29,8 @@ import java.nio.file.Files
 import java.nio.file.DirectoryStream
 import java.util.TreeSet
 import java.util.concurrent.ConcurrentHashMap
+import java.util.logging.Level
+import java.util.logging.Logger
 
 plugins {
     id 'buildlogic.java-library-conventions'
@@ -216,6 +218,9 @@ abstract class InProcessCapybaraCompileTask extends DefaultTask {
     @Input
     abstract Property<String> getCompilerVersion()
 
+    @Input
+    abstract Property<String> getLogLevel()
+
     @TaskAction
     void compileCapybara() {
         def errors = new ByteArrayOutputStream()
@@ -226,22 +231,39 @@ abstract class InProcessCapybaraCompileTask extends DefaultTask {
         def libraryInputDirs = libraryProgramFiles.files.collect { it.parentFile }.findAll { it != null } as Set<File>
         def libraries = bridge.readLibraryModules(libraryInputDirs)
 
-        def exitCode = bridge.compile(
-                inputDir.get().asFile.toPath(),
-                linkedOutputDir.present ? linkedOutputDir.get().asFile.toPath() : null,
-                generatedOutputPath,
-                testInputPath,
-                testGeneratedOutputPath,
-                libraries,
-                compileTests.getOrElse(false),
-                includeJavaLibResources.getOrElse(true),
-                compilerVersion.get(),
-                new PrintStream(errors)
-        )
+        def exitCode = withJulLogLevel(Level.parse(logLevel.getOrElse('WARNING'))) {
+            bridge.compile(
+                    inputDir.get().asFile.toPath(),
+                    linkedOutputDir.present ? linkedOutputDir.get().asFile.toPath() : null,
+                    generatedOutputPath,
+                    testInputPath,
+                    testGeneratedOutputPath,
+                    libraries,
+                    compileTests.getOrElse(false),
+                    includeJavaLibResources.getOrElse(true),
+                    compilerVersion.get(),
+                    new PrintStream(errors)
+            )
+        }
 
         if (exitCode != 0) {
             def message = errors.toString().trim()
             throw new GradleException(message ?: "Capybara compile failed with exit code ${exitCode}")
+        }
+    }
+
+    private static int withJulLogLevel(Level configuredLevel, Closure<Integer> action) {
+        def rootLogger = Logger.getLogger('')
+        def previousRootLevel = rootLogger.level
+        def handlers = rootLogger.handlers
+        def previousHandlerLevels = handlers.collect { it.level }
+        handlers.each { it.level = configuredLevel }
+        rootLogger.level = configuredLevel
+        try {
+            action.call()
+        } finally {
+            rootLogger.level = previousRootLevel
+            handlers.eachWithIndex { handler, index -> handler.level = previousHandlerLevels[index] }
         }
     }
 }
@@ -275,9 +297,20 @@ abstract class InProcessCapybaraTestTask extends DefaultTask {
 }
 
 def capyRuntimeService = gradle.sharedServices.registerIfAbsent('capyRuntimeService', CapyRuntimeService) {}
+def capybaraTestLogLevel = switch (gradle.startParameter.logLevel) {
+    case org.gradle.api.logging.LogLevel.DEBUG -> 'DEBUG'
+    case org.gradle.api.logging.LogLevel.INFO -> 'INFO'
+    default -> 'WARN'
+}
+def capybaraCompileLogLevel = switch (gradle.startParameter.logLevel) {
+    case org.gradle.api.logging.LogLevel.DEBUG -> 'FINE'
+    case org.gradle.api.logging.LogLevel.INFO -> 'INFO'
+    default -> 'WARNING'
+}
 
 tasks.withType(InProcessCapybaraCompileTask).configureEach {
     runtimeService.set(capyRuntimeService)
+    logLevel.set(capybaraCompileLogLevel)
 }
 
 tasks.withType(InProcessCapybaraTestTask).configureEach {
@@ -377,11 +410,6 @@ def hasCapybaraTestSources = directoryContainsFile(capybaraTestSourceDir)
 def testResources = inspectResourceDirectory(layout.projectDirectory.dir('src/test/resources'))
 def hasAnyTestResources = testResources.hasAnyFiles
 def hasNonJvmTestResources = testResources.hasNonJvmFiles
-def capybaraTestLogLevel = switch (gradle.startParameter.logLevel) {
-    case org.gradle.api.logging.LogLevel.DEBUG -> 'DEBUG'
-    case org.gradle.api.logging.LogLevel.INFO -> 'INFO'
-    default -> 'WARN'
-}
 def requestedTaskNames = gradle.startParameter.taskNames
 def requestedTaskBasenames = requestedTaskNames.collect { taskName ->
     def separator = taskName.lastIndexOf(':')

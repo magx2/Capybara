@@ -60,6 +60,7 @@ public class CapybaraPlugin implements Plugin<Project> {
         var capybaraTestBuildRequested = requestedTaskBasenames.stream().anyMatch(CAPYBARA_TEST_BUILD_TASKS::contains);
         var singleJavaVerificationBuild = !hasMainResources
                 && requestedTaskBasenames.stream().anyMatch(SINGLE_JAVA_VERIFICATION_TASKS::contains);
+        var capybaraCompileLogLevel = capybaraCompileLogLevel(project.getGradle().getStartParameter().getLogLevel());
 
         var compileCapybara = project.getTasks().register(
                 "compileCapybara",
@@ -76,6 +77,7 @@ public class CapybaraPlugin implements Plugin<Project> {
                     task.getCompileTestSourcesWithMainCompilation().set(singleJavaVerificationBuild);
                     task.getWriteLinkedOutput().set(!singleJavaVerificationBuild);
                     task.getIncludeJavaLibResourcesInTestOutput().set(false);
+                    task.getLogLevel().set(capybaraCompileLogLevel);
                     if (!singleJavaVerificationBuild) {
                         task.getOutputDir().set(layout.getBuildDirectory().dir("classes/capybara"));
                     }
@@ -114,6 +116,7 @@ public class CapybaraPlugin implements Plugin<Project> {
                     task.getCompileTestSourcesWithMainCompilation().set(false);
                     task.getWriteLinkedOutput().set(false);
                     task.getIncludeJavaLibResourcesInTestOutput().set(false);
+                    task.getLogLevel().set(capybaraCompileLogLevel);
                     task.onlyIf(ignored -> hasCapybaraTestSources && !capybaraTestBuildRequested);
                 }
         );
@@ -278,6 +281,14 @@ public class CapybaraPlugin implements Plugin<Project> {
             case DEBUG -> "DEBUG";
             case INFO -> "INFO";
             default -> "WARN";
+        };
+    }
+
+    static String capybaraCompileLogLevel(LogLevel gradleLogLevel) {
+        return switch (gradleLogLevel) {
+            case DEBUG -> "FINE";
+            case INFO -> "INFO";
+            default -> "WARNING";
         };
     }
 

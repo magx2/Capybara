@@ -2488,6 +2488,46 @@
 - `git diff --check` passed.
 - I could not run Gradle task verification in this sandbox because the requested wrapper invocation still fails before project execution with `Could not determine a usable wildcard IP for this machine`.
 
+## 2026-04-06 build optimization pass quieter in-process compile logging
+
+### Requested baseline
+- Re-ran the requested command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- It still failed before project execution in this sandbox with:
+  - `Could not determine a usable wildcard IP for this machine`.
+- Checked `build/reports/profile` again after the failed run; no new profile HTML was produced, so this pass is based on the existing reports plus source inspection of the current in-process compile path.
+
+### Findings
+- The handwritten `lib:capybara-lib` build and the reusable `build-tool/gradle` plugin both run Capy compilation in-process instead of through the CLI for the hot `check` path.
+- Those in-process compile tasks were not configuring `java.util.logging` before calling into `dev.capylang.Capy`.
+- `Capy` still emits a large amount of INFO-level per-run and per-file logging during compile/generate work, including:
+  - module build/link progress,
+  - generated-source writes,
+  - linked-output writes,
+  - bundled java-lib copy timing.
+- On normal Gradle lifecycle builds, that means `:lib:capybara-lib:check --rerun-tasks --console=plain` can still pay avoidable log formatting and console I/O overhead even after the larger filesystem and task-graph reductions.
+
+### Changes made
+- Added a compile-task log-level input to the handwritten in-process compile task in `lib/capybara-lib/build.gradle`.
+- Mapped Gradle log levels for Capy compilation as:
+  - `DEBUG -> FINE`
+  - `INFO -> INFO`
+  - everything else (`LIFECYCLE`, `WARN`, `QUIET`, `ERROR`) -> `WARNING`
+- Wrapped in-process Capy compilation with temporary JUL root logger/handler level changes so normal builds suppress Capy INFO chatter while `--info` and `--debug` still preserve detailed compile logs.
+- Applied the same log-level mapping and temporary JUL configuration in `build-tool/gradle`’s `CompileCapybaraTask` and `CapybaraPlugin`.
+- Added plugin regression coverage for:
+  - Gradle-log-level to Capy-compile-log-level mapping;
+  - compile tasks receiving the mapped default `WARNING` level on normal `check` builds.
+
+### Expected impact
+- Normal `:lib:capybara-lib:check --rerun-tasks --console=plain` builds should spend less time on Capy compile logging and console output.
+- Plugin consumers using the reusable in-process compile tasks should get the same quieter default behavior on their Capybara compile path.
+- `--info` and `--debug` builds still retain detailed compiler logging when it is explicitly requested.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle task verification in this sandbox because the requested wrapper invocation still fails before project execution with `Could not determine a usable wildcard IP for this machine`.
+- Verification for this pass is limited to source inspection and the added plugin regression coverage.
+
 ## 2026-04-06 build optimization pass lower-overhead configuration probes
 
 ### Requested baseline
