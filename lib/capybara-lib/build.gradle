@@ -66,7 +66,6 @@ tasks.register('prepareCapybaraForCheck', JavaExec) {
     inputs.dir(capybaraMainSourceDir)
     inputs.dir(capybaraTestSourceDir)
     outputs.dir(capybaraGeneratedMainDir)
-    outputs.dir(capybaraLinkedMainDir)
     outputs.dir(capybaraGeneratedTestDir)
 
     classpath = capyExecutionClasspath
@@ -79,7 +78,6 @@ tasks.register('prepareCapybaraForCheck', JavaExec) {
                 '--skip-java-lib',
                 '-i', capybaraMainSourceDir.asFile.absolutePath,
                 '-o', capybaraGeneratedMainDir.get().asFile.absolutePath,
-                '--linked-output', capybaraLinkedMainDir.get().asFile.absolutePath,
                 '--test-input', capybaraTestSourceDir.asFile.absolutePath,
                 '--test-output', capybaraGeneratedTestDir.get().asFile.absolutePath
         ]
@@ -94,8 +92,6 @@ tasks.register('linkCapybara') {
     group = 'build'
     description = 'Compiles Capybara files from src/main/capybara and generates Java in one pass.'
     dependsOn tasks.named('linkCapybaraDirect')
-    dependsOn tasks.named('prepareCapybaraForCheck')
-
 }
 
 tasks.register('compileCapybara') {
@@ -136,7 +132,6 @@ tasks.register('compileTestCapybara') {
     group = 'verification'
     description = 'Compiles test Capybara files and generates Java without writing linked intermediates.'
     dependsOn tasks.named('compileTestCapybaraDirect')
-    dependsOn tasks.named('prepareCapybaraForCheck')
 }
 
 tasks.register('testCapybara', JavaExec) {
@@ -170,10 +165,12 @@ sourceSets {
 }
 
 tasks.named('compileJava') {
+    dependsOn tasks.named('prepareCapybaraForCheck')
     dependsOn tasks.named('compileCapybara')
 }
 
 tasks.named('compileTestJava') {
+    dependsOn tasks.named('prepareCapybaraForCheck')
     dependsOn tasks.named('compileTestCapybara')
 }
 

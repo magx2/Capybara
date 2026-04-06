@@ -219,6 +219,33 @@
 - `git diff --check` passed.
 - I could not run Gradle task verification in this sandbox because Gradle still fails during startup with `Could not determine a usable wildcard IP for this machine`.
 
+## 2026-04-06 build optimization pass check path linked-output pruning
+
+### Requested baseline
+- Re-ran the requested baseline command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- It still cannot start in this sandbox:
+  - with the default Gradle home, the wrapper fails creating `/home/martin/.gradle/.../gradle-9.1.0-bin.zip.lck` on a read-only filesystem;
+  - previous attempts with a writable `GRADLE_USER_HOME` still failed before project execution with `Could not determine a usable wildcard IP for this machine`.
+- No fresh profile report was produced, so this pass is based on current task-graph inspection of `lib/capybara-lib`.
+
+### Findings
+- `lib/capybara-lib` already has a specialized `prepareCapybaraForCheck` task that compiles main and test Capybara sources together for `check`/`test` builds.
+- That combined path was still writing `build/generated/sources/capybara/linked/main` via `--linked-output`, even though the same task compiles test sources against the in-memory main compilation result and the `:lib:capybara-lib:check` path does not consume the linked JSON output.
+- This meant rerun `check` builds were still paying redundant linked-program serialization work and filesystem writes on the hot path that earlier passes had otherwise fused down to a single Capy CLI invocation.
+
+### Changes made
+- Stopped `prepareCapybaraForCheck` from declaring or producing the linked main output directory.
+- Removed `prepareCapybaraForCheck` as a dependency of the compatibility tasks `linkCapybara` and `compileTestCapybara`, so those task names continue to represent the linked-output and standalone-test-generation paths only.
+- Wired `compileJava` and `compileTestJava` directly to `prepareCapybaraForCheck`, so `check`/`test` builds still get the fused main+test generation path without the unnecessary linked-output write.
+
+### Expected impact
+- `:lib:capybara-lib:check --rerun-tasks` should avoid writing the linked main Capybara program when the build only needs generated Java sources for main and test compilation.
+- The `linkCapybara` path remains available for tasks that actually need linked outputs, while the `check` path does less filesystem work.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle task verification or generate a new profile in this sandbox because Gradle still fails before project execution for the reasons listed above.
+
 ## 2026-04-06 build optimization pass combined check preparation
 
 ### Requested baseline
