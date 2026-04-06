@@ -211,6 +211,15 @@ class CapybaraPluginTest {
     }
 
     @Test
+    void shouldWireGenerateTestCapybaraJavaDirectlyToCompileTestCapybaraOnly() {
+        var project = newProject(List.of("generateTestCapybaraJava"));
+        var generateTestCapybaraJava = project.getTasks().named("generateTestCapybaraJava").get();
+
+        assertTrue(generateTestCapybaraJava.getDependsOn().contains(project.getTasks().named("compileTestCapybara")));
+        assertFalse(generateTestCapybaraJava.getDependsOn().contains(project.getTasks().named("compileCapybara")));
+    }
+
+    @Test
     void shouldReadPluginLibraryInputsFromAggregatedProgramFile() throws IOException {
         var project = newProject();
 

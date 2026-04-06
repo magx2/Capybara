@@ -123,7 +123,6 @@ public class CapybaraPlugin implements Plugin<Project> {
                 task -> {
                     task.setGroup("verification");
                     task.setDescription("Compatibility task for generated test Java classes.");
-                    task.dependsOn(compileCapybara);
                     task.dependsOn(compileTestCapybara);
                 }
         );

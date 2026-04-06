@@ -2280,6 +2280,32 @@
 - `git diff --check` passed.
 - I could not run Gradle task verification in this sandbox because the requested wrapper invocation still fails before project execution with `Could not determine a usable wildcard IP for this machine`.
 
+## 2026-04-06 build optimization pass compatibility task indirection pruning
+
+### Requested baseline
+- Re-ran the requested command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- It still failed before project execution in this sandbox with:
+  - `Could not determine a usable wildcard IP for this machine`.
+- Checked `build/reports/profile` after the failed run; no new profile HTML was produced, so this pass is based on source inspection of the current build graph and the existing reports already present there.
+
+### Findings
+- The `integration-tests` project still routed `compileJava` through the no-op compatibility task `generateJavaFromCapybara`, even though that compatibility task only delegates to `linkCapybaraSources`.
+- The reusable `CapybaraPlugin` still gave the compatibility task `generateTestCapybaraJava` two direct dependencies even though `compileTestCapybara` already depends on `compileCapybara`.
+- Those extra compatibility-task edges do not change outputs, but they add avoidable task-graph indirection for direct callers and for repository builds that compile integration-test Java sources.
+
+### Changes made
+- Rewired `integration-tests:compileJava` to depend directly on `linkCapybaraSources` while keeping `generateJavaFromCapybara` available as a compatibility task for direct callers.
+- Removed the redundant direct `compileCapybara` dependency from `build-tool/gradle`'s `generateTestCapybaraJava` compatibility task so it now depends only on `compileTestCapybara`.
+- Added plugin regression coverage verifying the direct dependency shape of `generateTestCapybaraJava`.
+
+### Expected impact
+- Repository builds that compile the `integration-tests` Java sources should avoid one compatibility-task hop on that path.
+- Direct callers of the plugin compatibility task `generateTestCapybaraJava` should see a slightly smaller task graph with the same behavior.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle task verification in this sandbox because the requested wrapper invocation still fails before project execution with `Could not determine a usable wildcard IP for this machine`.
+
 ## 2026-04-06 build optimization pass JVM annotation processor discovery pruning
 
 ### Requested baseline

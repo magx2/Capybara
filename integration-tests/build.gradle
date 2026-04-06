@@ -157,5 +157,5 @@ sourceSets {
 }
 
 tasks.named('compileJava') {
-    dependsOn tasks.named('generateJavaFromCapybara')
+    dependsOn tasks.named('linkCapybaraSources')
 }
