@@ -462,3 +462,37 @@
 - `git diff --check` passed.
 - I could not run Gradle task verification in this sandbox because the requested wrapper command still fails before project execution on the read-only `/home/martin/.gradle` lock path, and repo-local Gradle startup still fails with `Could not determine a usable wildcard IP for this machine`.
 - Verification for this pass is limited to source inspection and the updated CLI regression test coverage.
+
+## 2026-04-06 build optimization pass split generated Capybara test Java
+
+### Requested baseline
+- Re-ran the requested baseline command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- It still failed immediately in this sandbox because the wrapper tried to create `/home/martin/.gradle/.../gradle-9.1.0-bin.zip.lck` on a read-only filesystem.
+- Checked `build/reports/profile` after the run; no new profile HTML was produced, and the latest available report is still `build/reports/profile/profile-2026-04-04-19-07-42.html`.
+
+### Findings
+- The latest available profile still shows non-trivial time in the Java test path after the larger Capy compile optimizations:
+  - `:lib:capybara-lib:test` `1.009s`
+  - `:lib:capybara-lib:compileTestJava` `0.858s`
+- `lib/capybara-lib` was still adding generated Capybara test Java to the regular Gradle `test` source set, so the normal JUnit `test` path compiled and scanned classes that are only consumed by the custom `testCapybara` runner.
+- The reusable Gradle plugin in `build-tool/gradle` had the same wiring, so plugin consumers would keep paying the same extra `compileTestJava` and JUnit discovery work.
+
+### Changes made
+- Removed generated Capybara test Java from the regular Gradle `test` source set in `lib/capybara-lib`.
+- Added a dedicated `compileCapybaraTestJava` task in `lib/capybara-lib` that compiles generated Capybara test Java into its own classes directory.
+- Updated `lib/capybara-lib:testCapybara` to run with that dedicated classes directory on its classpath instead of relying on the Gradle `test` source set to compile those classes.
+- Applied the same split in the reusable `build-tool/gradle` plugin:
+  - added plugin task `compileCapybaraTestJava`,
+  - stopped wiring generated Capybara test Java into the plugin consumer’s `test` source set,
+  - updated plugin `testCapybara` to depend on the dedicated compile task.
+- Updated plugin tests to cover the new source-set and task wiring.
+
+### Expected impact
+- `:lib:capybara-lib:compileTestJava` should now only compile Java unit-test sources instead of also compiling generated Capybara test Java.
+- Gradle’s standard `test` task should stop scanning generated Capybara test classes during JUnit discovery; those classes are now compiled and consumed only by `testCapybara`.
+- Plugin consumers should get the same reduction in redundant test-path compilation and discovery work.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle task verification in this sandbox because the requested wrapper command still fails before project execution on the read-only `/home/martin/.gradle` lock path, and repo-local Gradle startup still fails with `Could not determine a usable wildcard IP for this machine`.
+- Verification for this pass is limited to source inspection and the updated plugin test coverage.
