@@ -1352,3 +1352,30 @@
 - `git diff --check` passed.
 - I could not run Gradle task verification or produce a fresh profile in this sandbox because the requested wrapper command still fails before project execution on the read-only `/home/martin/.gradle` lock path.
 - Verification for this pass is limited to source inspection and the added regression test.
+
+## 2026-04-06 build optimization pass restore narrow local check path after classpath reduction
+
+### Requested baseline
+- Re-ran the requested baseline command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- It still failed immediately in this sandbox because the wrapper tried to create `/home/martin/.gradle/.../gradle-9.1.0-bin.zip.lck` on a read-only filesystem.
+- Checked `build/reports/profile` after the failed run; no fresh profile HTML was produced, so analysis still relies on the latest existing report at `build/reports/profile/profile-2026-04-04-19-07-42.html`.
+
+### Findings
+- An earlier handwritten-build pass had restored linked main output on `prepareCapybaraForCheck` so `:lib:capybara-lib:check` could satisfy the transitive `:compiler:processResources` dependency pulled in through `:capy` runtimeClasspath.
+- A later pass narrowed the handwritten in-process Capy classpath to `:capy` classes, `:compiler` classes, and external runtime artifacts only, so that `prepareCapybaraForCheck` no longer needs `:capy` resource output.
+- With that narrower classpath in place, keeping `linkedOutputDir` on `prepareCapybaraForCheck` once again makes the local `check --rerun-tasks` path write linked main JSON that it does not consume.
+- Routing `linkCapybaraLinked` through `prepareCapybaraForCheck` during test-oriented requests also broadens explicit linked-output requests into the heavier combined main+test preparation path.
+
+### Changes made
+- Removed `linkedOutputDir` from `prepareCapybaraForCheck`, restoring the fused `check` path to generated-Java-only work.
+- Rewired `linkCapybaraLinked` to always depend on `linkCapybaraLinkedOnly`, keeping linked JSON generation on its own explicit path.
+- Updated the fused task description to reflect that it no longer writes linked main output.
+
+### Expected impact
+- `:lib:capybara-lib:check --rerun-tasks` should avoid redundant linked main JSON serialization and filesystem writes on the local handwritten build path.
+- Consumers that truly need linked stdlib output still get it through `linkCapybaraLinked`, without forcing the broader combined check/test preparation task.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle task verification or produce a fresh profile in this sandbox because the requested wrapper command still fails before project execution on the read-only `/home/martin/.gradle` lock path.
+- Verification for this pass is limited to source inspection and task-graph analysis.
