@@ -465,6 +465,38 @@
 - `git diff --check` passed.
 - I could not run Gradle task verification in this sandbox because the requested wrapper command still fails before project execution due the read-only wrapper lock path, and the repository-local Gradle fallback previously still failed on wildcard IP detection.
 
+## 2026-04-06 build optimization pass manifest-based stale pruning
+
+### Requested baseline
+- Re-ran the requested baseline command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- It still failed immediately in this sandbox because the wrapper tried to create `/home/martin/.gradle/.../gradle-9.1.0-bin.zip.lck` on a read-only filesystem.
+- Checked `build/reports/profile` after the run; no new profile HTML was produced, so the latest available data is still the existing report set ending at `build/reports/profile/profile-2026-04-04-19-07-42.html`.
+
+### Findings
+- Earlier passes removed redundant Capy CLI invocations and recursive pre-run output deletion, but every compile/generate pass still called Capy’s stale-output cleanup routine at the end.
+- That routine always walked the entire linked or generated output directory tree with `Files.walk(...)` to discover stale files before deleting them.
+- On the requested `--rerun-tasks` path, those output directories are already populated, so the build still pays a full directory traversal after every Capybara write step even when nothing has gone stale.
+- This affects both linked JSON output and generated Java output, including the fused compile/generate paths already used by `lib:capybara-lib`, `integration-tests`, and the reusable Gradle plugin.
+
+### Changes made
+- Added a per-output manifest file `.capy-output-manifest` that records the files produced by the current Capy compile/generate run.
+- Changed stale pruning to:
+  - read the previous manifest when available,
+  - delete only paths that were produced previously but are not expected now,
+  - prune now-empty parent directories for those deleted files,
+  - rewrite the manifest for the current output set.
+- Kept the old full-directory walk only as a fallback for first use in an existing output directory that has no manifest yet, preserving cleanup behavior for older build trees.
+- Added CLI coverage proving manifests are written for reused linked/generated output directories and that a removed source module is pruned from a manifest-tracked linked output directory on the next run.
+
+### Expected impact
+- Repeated `--rerun-tasks` Capybara builds should avoid a full post-write filesystem walk over populated linked/generated output trees once the manifest exists.
+- Stale-output cleanup remains correct after source removals or generation shape changes, but the steady-state rerun path should do materially less filesystem work.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle task verification in this sandbox because the requested wrapper command still fails before project execution on the read-only `/home/martin/.gradle` lock path.
+- Verification for this pass is limited to source inspection and the added CLI test coverage.
+
 ## 2026-04-06 build optimization pass deterministic linked build info
 
 ### Requested baseline

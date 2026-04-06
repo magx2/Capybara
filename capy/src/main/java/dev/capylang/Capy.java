@@ -66,6 +66,7 @@ public class Capy {
     private static final Logger log = Logger.getLogger(Capy.class.getName());
 
     private static final String BUILD_INFO_FILE = "build-info.json";
+    private static final String OUTPUT_MANIFEST_FILE = ".capy-output-manifest";
     private static final String PACKAGE_FILE = "capy.cbin";
     private static final String PROGRAM_FILE = "program.json";
     private static final String MODULE_FILE = "capy.yml";
@@ -1120,28 +1121,65 @@ public class Capy {
     }
 
     private static void deleteStaleFiles(Path outputDir, Set<Path> expectedFiles) {
-        try (var paths = Files.walk(outputDir)) {
-            for (var path : paths.filter(path -> !path.equals(outputDir))
-                    .sorted(Comparator.reverseOrder())
-                    .toList()) {
-                if (Files.isRegularFile(path)) {
-                    deleteFileIfStale(outputDir, path, expectedFiles);
-                    continue;
-                }
-                if (Files.isDirectory(path)) {
-                    deleteDirectoryIfEmpty(path);
-                }
+        var manifestFile = outputDir.resolve(OUTPUT_MANIFEST_FILE);
+        try {
+            var staleFiles = readStaleFilesFromManifest(outputDir, manifestFile, expectedFiles);
+            for (var staleFile : staleFiles) {
+                deleteFileIfExists(staleFile);
+                deleteEmptyParentDirectories(staleFile.getParent(), outputDir);
             }
+            writeOutputManifest(manifestFile, expectedFiles);
         } catch (IOException e) {
             throw new UncheckedIOException("Unable to prune stale output files: " + outputDir, e);
         }
     }
 
-    private static void deleteFileIfStale(Path outputDir, Path file, Set<Path> expectedFiles) {
-        var relativePath = outputDir.relativize(file).normalize();
-        if (expectedFiles.contains(relativePath)) {
-            return;
+    private static List<Path> readStaleFilesFromManifest(Path outputDir, Path manifestFile, Set<Path> expectedFiles) throws IOException {
+        if (Files.exists(manifestFile)) {
+            try (var lines = Files.lines(manifestFile, StandardCharsets.UTF_8)) {
+                return lines
+                        .map(String::trim)
+                        .filter(line -> !line.isEmpty())
+                        .map(Path::of)
+                        .map(Path::normalize)
+                        .filter(path -> !expectedFiles.contains(path))
+                        .map(outputDir::resolve)
+                        .toList();
+            }
         }
+
+        try (var paths = Files.walk(outputDir)) {
+            return paths
+                    .filter(path -> !path.equals(outputDir))
+                    .filter(Files::isRegularFile)
+                    .filter(path -> !path.equals(manifestFile))
+                    .filter(path -> !expectedFiles.contains(outputDir.relativize(path).normalize()))
+                    .sorted(Comparator.reverseOrder())
+                    .toList();
+        }
+    }
+
+    private static void writeOutputManifest(Path manifestFile, Set<Path> expectedFiles) throws IOException {
+        var parent = manifestFile.getParent();
+        if (parent != null) {
+            Files.createDirectories(parent);
+        }
+        var manifestContents = expectedFiles.stream()
+                .map(Path::normalize)
+                .map(Path::toString)
+                .sorted()
+                .collect(java.util.stream.Collectors.joining(System.lineSeparator()));
+        Files.writeString(
+                manifestFile,
+                manifestContents.isEmpty() ? "" : manifestContents + System.lineSeparator(),
+                StandardCharsets.UTF_8,
+                StandardOpenOption.CREATE,
+                StandardOpenOption.TRUNCATE_EXISTING,
+                StandardOpenOption.WRITE
+        );
+    }
+
+    private static void deleteFileIfExists(Path file) {
         try {
             Files.deleteIfExists(file);
         } catch (IOException e) {
@@ -1149,13 +1187,17 @@ public class Capy {
         }
     }
 
-    private static void deleteDirectoryIfEmpty(Path directory) {
-        try {
-            Files.deleteIfExists(directory);
-        } catch (DirectoryNotEmptyException ignored) {
-            // Directory still contains current outputs.
-        } catch (IOException e) {
-            throw new UncheckedIOException("Unable to delete stale output directory: " + directory, e);
+    private static void deleteEmptyParentDirectories(Path directory, Path outputDir) {
+        var current = directory;
+        while (current != null && !current.equals(outputDir)) {
+            try {
+                Files.deleteIfExists(current);
+            } catch (DirectoryNotEmptyException ignored) {
+                return;
+            } catch (IOException e) {
+                throw new UncheckedIOException("Unable to delete stale output directory: " + current, e);
+            }
+            current = current.getParent();
         }
     }
 

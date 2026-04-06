@@ -127,7 +127,39 @@ class CapyTest {
 
         assertTrue(Files.exists(linkedDir.resolve("foo").resolve("Main.json")));
         assertTrue(Files.exists(linkedDir.resolve("program.json")));
+        assertTrue(Files.exists(linkedDir.resolve(".capy-output-manifest")));
         assertFalse(Files.exists(staleFile));
+    }
+
+    @Test
+    void shouldPruneRemovedModulesFromManifestTrackedLinkedOutputDirectory() throws Exception {
+        var sourceDir = Files.createDirectories(tempDir.resolve("manifest-linked-source"));
+        Files.createDirectories(sourceDir.resolve("foo"));
+        Files.writeString(sourceDir.resolve("foo").resolve("Main.cfun"), "fun main(): int = 1\n");
+        Files.writeString(sourceDir.resolve("foo").resolve("Extra.cfun"), "fun extra(): int = 2\n");
+        var linkedDir = Files.createDirectories(tempDir.resolve("manifest-linked-output"));
+
+        assertEquals(0, Capy.execute(
+                new String[]{"compile", "-i", sourceDir.toString(), "-o", linkedDir.toString()},
+                new PrintStream(new ByteArrayOutputStream()),
+                new PrintStream(new ByteArrayOutputStream())
+        ));
+
+        var removedModule = linkedDir.resolve("foo").resolve("Extra.json");
+        assertTrue(Files.exists(removedModule));
+
+        Files.delete(sourceDir.resolve("foo").resolve("Extra.cfun"));
+        Thread.sleep(1100);
+
+        assertEquals(0, Capy.execute(
+                new String[]{"compile", "-i", sourceDir.toString(), "-o", linkedDir.toString()},
+                new PrintStream(new ByteArrayOutputStream()),
+                new PrintStream(new ByteArrayOutputStream())
+        ));
+
+        assertFalse(Files.exists(removedModule));
+        assertTrue(Files.readString(linkedDir.resolve(".capy-output-manifest")).contains("foo/Main.json"));
+        assertFalse(Files.readString(linkedDir.resolve(".capy-output-manifest")).contains("foo/Extra.json"));
     }
 
     @Test
@@ -291,6 +323,7 @@ class CapyTest {
         ));
 
         assertTrue(Files.exists(generatedDir.resolve("Main.java")));
+        assertTrue(Files.exists(generatedDir.resolve(".capy-output-manifest")));
         assertFalse(Files.exists(staleFile));
         assertFalse(Files.exists(generatedDir.resolve("stale")));
     }
