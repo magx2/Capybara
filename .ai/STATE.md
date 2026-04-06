@@ -1758,6 +1758,42 @@
 - I could not run the requested Gradle build or produce a fresh profile in this sandbox because Gradle still fails before project execution with `Could not determine a usable wildcard IP for this machine`.
 - Verification for this pass is limited to source inspection.
 
+## 2026-04-06 build optimization pass reuse Capy runtime bridge inside lib capybara tasks
+
+### Requested baseline
+- Re-ran the requested baseline command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- Gradle still failed during startup before any task execution in this sandbox:
+  - `Could not create service of type FileLockContentionHandler`
+  - `Could not determine a usable wildcard IP for this machine`
+- Checked `build/reports/profile` after the failed run; no fresh profile HTML was produced, so this pass still relies on the existing saved reports plus current source inspection of the handwritten `lib:capybara-lib` task implementations.
+
+### Findings
+- Earlier passes removed most duplicated task graph work from the `:lib:capybara-lib:check` path, so the remaining fixed overhead in this handwritten module is increasingly dominated by the custom in-process task bootstrap.
+- `prepareCapybaraForCheck` and `testCapybara` were each rebuilding the same runtime bridge independently:
+  - enumerate the same Capy runtime classpath,
+  - create a fresh `URLClassLoader`,
+  - load `dev.capylang.Capy` or `dev.capylang.test.TestRunner`,
+  - resolve reflective methods again.
+- That startup work happens on every requested check build even when the actual Capybara source set is small, and it is specific to the handwritten Groovy build logic in `lib/capybara-lib`.
+
+### Changes made
+- Added a per-build `CapyRuntimeService` shared service in `lib/capybara-lib/build.gradle`.
+- Added a reusable `CapyRuntimeBridge` that caches the handwritten build logic’s reflective handles for:
+  - linked-program reads,
+  - compile / compile-generate entrypoints,
+  - test-runner argument parsing and execution.
+- Rewired `InProcessCapybaraCompileTask` and `InProcessCapybaraTestTask` to use that shared bridge instead of creating and tearing down a new classloader for each task action.
+- Kept the test runner’s thread context classloader behavior intact while moving the reflection bootstrap into the shared bridge.
+
+### Expected impact
+- `:lib:capybara-lib:check --rerun-tasks` should avoid duplicate classloader creation and reflective method lookup across the handwritten in-process Capybara tasks.
+- This reduces fixed per-build overhead on the optimized check path, especially now that larger redundant task work has already been removed.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run the requested Gradle build or produce a fresh profile in this sandbox because Gradle still fails before project execution with `Could not determine a usable wildcard IP for this machine`.
+- Verification for this pass is limited to source inspection.
+
 ## 2026-04-06 build optimization pass compileTestJava main lifecycle pruning
 
 ### Requested baseline
