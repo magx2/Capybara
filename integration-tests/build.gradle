@@ -42,23 +42,28 @@ def prepareEmptyDir = { File dir ->
 
 tasks.register('linkCapybaraSources', JavaExec) {
     group = 'build'
-    description = 'Compiles Capybara files from src/main/capybara into linked JSON artifacts.'
+    description = 'Compiles Capybara files from src/main/capybara and generates Java in one pass.'
     dependsOn project(':lib:capybara-lib').tasks.named('linkCapybara')
 
     inputs.dir(capybaraSourceDir)
     inputs.dir(capybaraLibSourceDir)
     outputs.dir(linkedOutputDir)
+    outputs.dir(generatedJavaDir)
 
     classpath = project(':capy').sourceSets.main.runtimeClasspath
     mainClass = 'dev.capylang.Capy'
 
     doFirst {
         prepareEmptyDir(linkedOutputDir.get().asFile)
+        prepareEmptyDir(generatedJavaDir.get().asFile)
         def capybaraArgs = [
-                'compile',
+                'compile-generate',
+                'java',
+                '--skip-java-lib',
                 '-i', capybaraSourceDir.asFile.absolutePath,
+                '-o', generatedJavaDir.get().asFile.absolutePath,
                 '-l', capybaraLibLinkedDir.get().asFile.absolutePath,
-                '-o', linkedOutputDir.get().asFile.absolutePath
+                '--linked-output', linkedOutputDir.get().asFile.absolutePath
         ]
         if (capybaraDebugEnabled) {
             capybaraArgs.addAll(['--log', 'DEBUG'])
@@ -67,25 +72,10 @@ tasks.register('linkCapybaraSources', JavaExec) {
     }
 }
 
-tasks.register('generateJavaFromCapybara', JavaExec) {
+tasks.register('generateJavaFromCapybara') {
     group = 'build'
-    description = 'Generates Java sources from linked Capybara JSON artifacts.'
+    description = 'Compatibility task for Java generation from Capybara sources.'
     dependsOn tasks.named('linkCapybaraSources')
-
-    inputs.dir(linkedOutputDir)
-    outputs.dir(generatedJavaDir)
-
-    classpath = project(':capy').sourceSets.main.runtimeClasspath
-    mainClass = 'dev.capylang.Capy'
-
-    doFirst {
-        prepareEmptyDir(generatedJavaDir.get().asFile)
-        def capybaraArgs = ['generate', 'java', '--skip-java-lib', '-i', linkedOutputDir.get().asFile.absolutePath, '-o', generatedJavaDir.get().asFile.absolutePath]
-        if (capybaraDebugEnabled) {
-            capybaraArgs.addAll(['--log', 'DEBUG'])
-        }
-        setArgs(capybaraArgs)
-    }
 }
 
 sourceSets {

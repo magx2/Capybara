@@ -112,3 +112,30 @@
 ### Verification status
 - I could not run Gradle task verification in this sandbox because Gradle still fails during startup with `Could not determine a usable wildcard IP for this machine`.
 - Verification for this pass is limited to source inspection and the added CLI test coverage in `capy/src/test/java/dev/capylang/CapyTest.java`.
+
+## 2026-04-06 build optimization pass fused integration generation
+
+### Requested baseline
+- Re-ran the requested baseline command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- In this sandbox it still cannot execute:
+  - with default Gradle home, the wrapper tries to create `/home/martin/.gradle/.../gradle-9.1.0-bin.zip.lck` on a read-only filesystem;
+  - with a writable `GRADLE_USER_HOME`, wrapper startup then requires downloading Gradle 9.1.0, but network access is blocked;
+  - the system `gradle -v` binary is also unusable here because native services fail to initialize (`Failed to load native library 'libnative-platform.so' for Linux amd64`).
+- Because I could not produce a fresh run, analysis continues from the existing checked-in profile reports under `build/reports/profile`.
+
+### Findings
+- The last recorded profile for `clean check` already shows `:lib:capybara-lib` dominating task time, and previous passes in this file removed its separate main and test generation JVMs.
+- The remaining Capybara build logic in `integration-tests` still used a two-step `compile` then `generate java` pipeline even though the CLI now supports `compile-generate java --linked-output`.
+- That path is outside the exact `:lib:capybara-lib:check` target, but it still adds unnecessary work to repository-wide clean builds and repeats the same linked-output reread pattern that was already removed from `lib:capybara-lib`.
+
+### Changes made
+- Switched `integration-tests:linkCapybaraSources` to `compile-generate java --skip-java-lib --linked-output ...`, so one Capy CLI invocation now writes both linked JSON and generated Java.
+- Added `generatedJavaDir` as an output of `linkCapybaraSources` and prepared it alongside the linked output directory before execution.
+- Converted `integration-tests:generateJavaFromCapybara` into a lightweight compatibility task that just depends on `linkCapybaraSources`, preserving the existing task name used by `compileJava`.
+
+### Expected impact
+- Clean full-build paths should avoid one extra Capy CLI JVM launch and one reread of the linked integration-test program.
+- The integration-tests project now follows the same fused generation pattern already applied to `lib:capybara-lib`, reducing duplicated build mechanics across the repo.
+
+### Verification status
+- I could not run Gradle verification in this sandbox for the reasons listed above, so this pass is verified only by source inspection.
