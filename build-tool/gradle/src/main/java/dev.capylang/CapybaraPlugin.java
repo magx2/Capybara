@@ -13,10 +13,12 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.util.List;
 import java.util.Set;
-import java.util.function.Consumer;
+import java.util.function.Predicate;
 
 public class CapybaraPlugin implements Plugin<Project> {
+    private static final List<String> JVM_SOURCE_DIRECTORIES = List.of("java", "kotlin", "kts", "groovy");
     private static final Set<String> CAPYBARA_TEST_BUILD_TASKS = Set.of(
             "build",
             "buildNeeded",
@@ -47,13 +49,14 @@ public class CapybaraPlugin implements Plugin<Project> {
         var generatedMainJavaDir = layout.getBuildDirectory().dir("generated/sources/capybara/java");
         var generatedTestJavaDir = layout.getBuildDirectory().dir("generated/sources/test-capybara/java");
         var generatedCheckJavaDir = layout.getBuildDirectory().dir("generated/sources/capybara/java/check");
-        var mainSourceLayout = inspectSourceLayout(project.file("src/main").toPath(), false);
-        var testSourceLayout = inspectSourceLayout(project.file("src/test").toPath(), true);
-        var hasJvmMainSources = mainSourceLayout.hasJvmSources();
-        var hasMainResources = mainSourceLayout.hasAnyResources();
-        var hasJvmTestSources = testSourceLayout.hasJvmSources();
-        var hasAnyTestResources = testSourceLayout.hasAnyResources();
-        var hasNonJvmTestResources = testSourceLayout.hasNonJvmResources();
+        var hasJvmMainSources = hasJvmSources(project.file("src/main").toPath());
+        var hasMainResources = hasMatchingFile(project.file("src/main/resources").toPath(), relativePath -> true);
+        var hasJvmTestSources = hasJvmSources(project.file("src/test").toPath());
+        var hasAnyTestResources = hasMatchingFile(project.file("src/test/resources").toPath(), relativePath -> true);
+        var hasNonJvmTestResources = hasMatchingFile(
+                project.file("src/test/resources").toPath(),
+                relativePath -> !relativePath.equals("junit-platform.properties")
+        );
         var requestedTaskBasenames = project.getGradle().getStartParameter().getTaskNames().stream()
                 .map(CapybaraPlugin::taskBasename)
                 .collect(java.util.stream.Collectors.toSet());
@@ -250,42 +253,27 @@ public class CapybaraPlugin implements Plugin<Project> {
         };
     }
 
-    private static boolean hasJvmSourceExtension(String relativePath) {
-        return relativePath.endsWith(".java")
-                || relativePath.endsWith(".kt")
-                || relativePath.endsWith(".kts")
-                || relativePath.endsWith(".groovy");
+    private static boolean hasJvmSources(Path sourceRoot) {
+        return JVM_SOURCE_DIRECTORIES.stream()
+                .anyMatch(directory -> hasMatchingFile(sourceRoot.resolve(directory), relativePath -> true));
     }
 
-    private static SourceLayout inspectSourceLayout(Path root, boolean includeResources) {
-        var hasJvmSources = new boolean[1];
-        var hasAnyResources = new boolean[1];
-        var hasNonJvmResources = new boolean[1];
-        scanSourceTree(root, relativePath -> {
-            if (!hasJvmSources[0] && !relativePath.startsWith("capybara/") && hasJvmSourceExtension(relativePath)) {
-                hasJvmSources[0] = true;
-            }
-            if (includeResources && relativePath.startsWith("resources/")) {
-                hasAnyResources[0] = true;
-                if (!relativePath.equals("resources/junit-platform.properties")) {
-                    hasNonJvmResources[0] = true;
-                }
-            }
-        });
-        return new SourceLayout(hasJvmSources[0], hasAnyResources[0], hasNonJvmResources[0]);
-    }
-
-    private static void scanSourceTree(Path root, Consumer<String> relativePathVisitor) {
+    private static boolean hasMatchingFile(Path root, Predicate<String> relativePathMatcher) {
         if (Files.notExists(root) || !Files.isDirectory(root)) {
-            return;
+            return false;
         }
 
+        var found = new boolean[1];
         try {
             Files.walkFileTree(root, new SimpleFileVisitor<>() {
                 @Override
                 public FileVisitResult visitFile(Path path, BasicFileAttributes attributes) {
                     if (attributes.isRegularFile()) {
-                        relativePathVisitor.accept(normalizeRelativePath(root, path));
+                        var relativePath = normalizeRelativePath(root, path);
+                        if (relativePathMatcher.test(relativePath)) {
+                            found[0] = true;
+                            return FileVisitResult.TERMINATE;
+                        }
                     }
                     return FileVisitResult.CONTINUE;
                 }
@@ -293,6 +281,7 @@ public class CapybaraPlugin implements Plugin<Project> {
         } catch (IOException e) {
             throw new UncheckedIOException("Unable to inspect project sources under " + root, e);
         }
+        return found[0];
     }
 
     private static String normalizeRelativePath(Path root, Path path) {
@@ -302,8 +291,5 @@ public class CapybaraPlugin implements Plugin<Project> {
     private static String taskBasename(String taskName) {
         var separator = taskName.lastIndexOf(':');
         return separator >= 0 ? taskName.substring(separator + 1) : taskName;
-    }
-
-    private record SourceLayout(boolean hasJvmSources, boolean hasAnyResources, boolean hasNonJvmResources) {
     }
 }

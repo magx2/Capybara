@@ -2376,3 +2376,33 @@
 ### Verification status
 - `git diff --check` passed.
 - I could not run Gradle task verification in this sandbox because the requested wrapper invocation still fails before project execution with `Could not determine a usable wildcard IP for this machine`.
+
+## 2026-04-06 build optimization pass targeted conventional source probing
+
+### Requested baseline
+- Re-ran the requested command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- The run still failed before project execution in this sandbox with:
+  - `Could not determine a usable wildcard IP for this machine`.
+- Re-checked `build/reports/profile` after the failed run; there was still no new profile HTML, so the latest available data remains `build/reports/profile/profile-2026-04-04-19-07-42.html`.
+
+### Findings
+- The handwritten `lib/capybara-lib` build and the reusable Gradle plugin still derived build-shape booleans by recursively walking whole `src/main` and `src/test` trees during configuration.
+- Those scans traversed large `src/*/capybara/**` trees even though the booleans only care about conventional JVM source roots and `resources/`.
+- For the requested `:lib:capybara-lib:check --profile --rerun-tasks` workflow, that configuration-time filesystem work is paid on every invocation before task execution, and it is especially wasteful on Windows-backed filesystems.
+
+### Changes made
+- Replaced whole-tree configuration scans in `lib/capybara-lib/build.gradle` with targeted file probes of:
+  - `src/main/{java,kotlin,kts,groovy}`
+  - `src/test/{java,kotlin,kts,groovy}`
+  - `src/main/resources`
+  - `src/test/resources`
+- Kept the existing special handling for `src/test/resources/junit-platform.properties` so that file alone still does not enable `processTestResources`.
+- Applied the same targeted probing strategy to `build-tool/gradle`'s reusable `CapybaraPlugin` so plugin consumers get the same reduction in configuration-time filesystem traversal.
+
+### Expected impact
+- The requested `--profile --rerun-tasks` workflow should spend less time in configuration because it no longer walks Capybara source trees just to discover JVM/resource directory presence.
+- This reduces repeated filesystem traversal for both the handwritten module build and plugin consumers while preserving the same task-wiring decisions for conventional Gradle source layouts.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle task verification in this sandbox because the requested wrapper invocation still fails before project execution with `Could not determine a usable wildcard IP for this machine`.
