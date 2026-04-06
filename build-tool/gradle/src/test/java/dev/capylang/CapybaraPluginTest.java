@@ -58,9 +58,11 @@ class CapybaraPluginTest {
 
         project.getTasks().named("compileCapybara", CompileCapybaraTask.class).get().compile();
 
-        assertTrue(project.file("build/classes/capybara/foo/Lib.json").isFile());
         assertTrue(project.file("build/generated/sources/capybara/java/foo/Lib.java").isFile());
         assertTrue(project.file("build/generated/sources/test-capybara/java/bar/TestModule.java").isFile());
+        assertFalse(project.file("build/classes/capybara/foo/Lib.json").exists());
+        assertFalse(project.file("build/classes/capybara/program.json").exists());
+        assertFalse(project.file("build/classes/capybara/build-info.json").exists());
         assertFalse(project.file("build/generated/sources/test-capybara/java/dev/capylang/CapybaraUtil.java").exists());
         assertFalse(project.getTasks().named("compileTestCapybara", CompileCapybaraTask.class).get().getOnlyIf().isSatisfiedBy(
                 project.getTasks().named("compileTestCapybara", CompileCapybaraTask.class).get()

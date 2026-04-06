@@ -28,8 +28,12 @@ public abstract class CompileCapybaraTask extends DefaultTask {
     @InputFiles
     public abstract ConfigurableFileCollection getAdditionalInputDirs();
 
+    @Optional
     @OutputDirectory
     public abstract DirectoryProperty getOutputDir();
+
+    @Input
+    public abstract Property<Boolean> getWriteLinkedOutput();
 
     @Optional
     @OutputDirectory
@@ -62,6 +66,7 @@ public abstract class CompileCapybaraTask extends DefaultTask {
     public void compile() throws IOException {
         var input = getInputDir().get().getAsFile().toPath();
         var output = getOutputDir().get().getAsFile().toPath();
+        var writeLinkedOutput = getWriteLinkedOutput().getOrElse(true);
         var generatedOutput = getGeneratedOutputDir().isPresent() ? getGeneratedOutputDir().get().getAsFile().toPath() : null;
         var compileTestSourcesWithMainCompilation = getCompileTestSourcesWithMainCompilation().getOrElse(false);
         var testInput = compileTestSourcesWithMainCompilation && getTestInputDir().isPresent()
@@ -74,7 +79,9 @@ public abstract class CompileCapybaraTask extends DefaultTask {
                 .map(java.io.File::toPath)
                 .toList());
 
-        Files.createDirectories(output);
+        if (writeLinkedOutput) {
+            Files.createDirectories(output);
+        }
         if (generatedOutput != null) {
             Files.createDirectories(generatedOutput);
         }
@@ -84,7 +91,7 @@ public abstract class CompileCapybaraTask extends DefaultTask {
         var errors = new ByteArrayOutputStream();
         var exitCode = compileAndGenerate(
                 input,
-                output,
+                writeLinkedOutput ? output : null,
                 generatedOutput,
                 testInput,
                 generatedTestOutput,
@@ -111,7 +118,9 @@ public abstract class CompileCapybaraTask extends DefaultTask {
             return 100;
         }
 
-        Capy.writeCompilationOutput(output, compilation, getCompilerVersion().get());
+        if (output != null) {
+            Capy.writeCompilationOutput(output, compilation, getCompilerVersion().get());
+        }
         if (generatedOutput != null) {
             Capy.generateCompiledProgram(
                     OutputType.JAVA,

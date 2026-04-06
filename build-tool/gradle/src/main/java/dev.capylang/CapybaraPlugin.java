@@ -38,6 +38,7 @@ public class CapybaraPlugin implements Plugin<Project> {
                     task.getCompileTests().set(false);
                     task.getIncludeJavaLibResources().set(true);
                     task.getCompileTestSourcesWithMainCompilation().set(capybaraTestBuildRequested);
+                    task.getWriteLinkedOutput().set(capybaraTestBuildRequested.map(requested -> !requested));
                     task.getIncludeJavaLibResourcesInTestOutput().set(false);
                 }
         );
@@ -69,6 +70,7 @@ public class CapybaraPlugin implements Plugin<Project> {
                     task.getCompileTests().set(true);
                     task.getIncludeJavaLibResources().set(false);
                     task.getCompileTestSourcesWithMainCompilation().set(false);
+                    task.getWriteLinkedOutput().set(true);
                     task.getIncludeJavaLibResourcesInTestOutput().set(false);
                     task.onlyIf(ignored -> !capybaraTestBuildRequested.get());
                 }

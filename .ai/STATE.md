@@ -492,6 +492,114 @@
 - `git diff --check` passed.
 - I could not run Gradle task verification in this sandbox because the requested wrapper command still fails before project execution due the read-only wrapper lock path, and the repository-local Gradle fallback previously still failed on wildcard IP detection.
 
+## 2026-04-06 build optimization pass plugin check-path linked-output pruning
+
+### Requested baseline
+- Re-ran the requested baseline command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- It still failed immediately in this sandbox because the wrapper tried to create `/home/martin/.gradle/.../gradle-9.1.0-bin.zip.lck` on a read-only filesystem.
+- Checked `build/reports/profile` after the run; no new profile HTML was produced, and the latest available report is still `build/reports/profile/profile-2026-04-04-19-07-42.html`.
+
+### Findings
+- The handwritten `lib/capybara-lib` build already skips linked main-output writes on its fused `check` path, but the reusable `build-tool/gradle` plugin still always serialized linked JSON during `compileCapybara`.
+- On plugin consumers’ `check`/`test` builds, that linked output is not needed because main Java and test Capybara Java are both generated in the same fused `compileCapybara` task action, and the standalone `compileTestCapybara` compatibility task is skipped.
+- That left plugin consumers paying avoidable linked-program serialization and filesystem writes on rerun test-oriented builds.
+
+### Changes made
+- Added a `writeLinkedOutput` toggle to `build-tool/gradle`’s `CompileCapybaraTask`.
+- Updated `CapybaraPlugin` so `compileCapybara` disables linked-output writes for fused `check`/`test` builds while preserving linked output for standalone compatibility tasks.
+- Extended plugin coverage to verify fused `check` builds generate main and test Java without producing linked `build/classes/capybara` JSON artifacts.
+
+### Expected impact
+- Plugin consumers using `check --rerun-tasks`-style builds should avoid one more round of linked JSON serialization and output-tree writes on the hot path.
+- This aligns the reusable plugin with the earlier handwritten `lib/capybara-lib` optimization for fused test-oriented builds.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle task verification in this sandbox because the requested wrapper command still fails before project execution on the read-only `/home/martin/.gradle` lock path.
+- Verification for this pass is limited to source inspection and the updated plugin test coverage.
+- Verification for this pass is limited to source inspection and the updated plugin test coverage.
+
+## 2026-04-06 build optimization pass plugin check-path linked-output pruning
+
+### Requested baseline
+- Re-ran the requested baseline command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- It still failed immediately in this sandbox because the wrapper tried to create `/home/martin/.gradle/.../gradle-9.1.0-bin.zip.lck` on a read-only filesystem.
+- Checked `build/reports/profile` after the run; no new profile HTML was produced, and the latest available report is still `build/reports/profile/profile-2026-04-04-19-07-42.html`.
+
+### Findings
+- The handwritten `lib/capybara-lib` build already skips linked main-output writes on its fused `check` path, but the reusable `build-tool/gradle` plugin still always serialized linked JSON during `compileCapybara`.
+- On plugin consumers’ `check`/`test` builds, that linked output is not needed because main Java and test Capybara Java are both generated in the same fused `compileCapybara` task action, and the standalone `compileTestCapybara` compatibility task is skipped.
+- That left plugin consumers paying avoidable linked-program serialization and filesystem writes on rerun test-oriented builds.
+
+### Changes made
+- Added a `writeLinkedOutput` toggle to `build-tool/gradle`’s `CompileCapybaraTask`.
+- Updated `CapybaraPlugin` so `compileCapybara` disables linked-output writes for fused `check`/`test` builds while preserving linked output for standalone compatibility tasks.
+- Extended plugin coverage to verify fused `check` builds generate main and test Java without producing linked `build/classes/capybara` JSON artifacts.
+
+### Expected impact
+- Plugin consumers using `check --rerun-tasks`-style builds should avoid one more round of linked JSON serialization and output-tree writes on the hot path.
+- This aligns the reusable plugin with the earlier handwritten `lib/capybara-lib` optimization for fused test-oriented builds.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle task verification in this sandbox because the requested wrapper command still fails before project execution on the read-only `/home/martin/.gradle` lock path.
+- Verification for this pass is limited to source inspection and the updated plugin test coverage.
+
+## 2026-04-06 build optimization pass plugin check-path linked-output pruning
+
+### Requested baseline
+- Re-ran the requested baseline command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- It still failed immediately in this sandbox because the wrapper tried to create `/home/martin/.gradle/.../gradle-9.1.0-bin.zip.lck` on a read-only filesystem.
+- Checked `build/reports/profile` after the run; no new profile HTML was produced, and the latest available report is still `build/reports/profile/profile-2026-04-04-19-07-42.html`.
+
+### Findings
+- The handwritten `lib/capybara-lib` build already skips linked main-output writes on its fused `check` path, but the reusable `build-tool/gradle` plugin still always serialized linked JSON during `compileCapybara`.
+- On plugin consumers’ `check`/`test` builds, that linked output is not needed because main Java and test Capybara Java are both generated in the same fused `compileCapybara` task action, and the standalone `compileTestCapybara` compatibility task is skipped.
+- That left plugin consumers paying avoidable linked-program serialization and filesystem writes on rerun test-oriented builds.
+
+### Changes made
+- Added a `writeLinkedOutput` toggle to `build-tool/gradle`’s `CompileCapybaraTask`.
+- Updated `CapybaraPlugin` so `compileCapybara` disables linked-output writes for fused `check`/`test` builds while preserving linked output for standalone compatibility tasks.
+- Extended plugin coverage to verify fused `check` builds generate main and test Java without producing linked `build/classes/capybara` JSON artifacts.
+
+### Expected impact
+- Plugin consumers using `check --rerun-tasks`-style builds should avoid one more round of linked JSON serialization and output-tree writes on the hot path.
+- This aligns the reusable plugin with the earlier handwritten `lib/capybara-lib` optimization for fused test-oriented builds.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle task verification in this sandbox because the requested wrapper command still fails before project execution on the read-only `/home/martin/.gradle` lock path.
+- Verification for this pass is limited to source inspection and the updated plugin test coverage.
+
+## 2026-04-06 build optimization pass plugin check-path linked-output pruning
+
+### Requested baseline
+- Re-ran the requested baseline command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- It still failed immediately in this sandbox because the wrapper tried to create `/home/martin/.gradle/.../gradle-9.1.0-bin.zip.lck` on a read-only filesystem.
+- Checked `build/reports/profile` after the run; no new profile HTML was produced, and the latest available report is still `build/reports/profile/profile-2026-04-04-19-07-42.html`.
+
+### Findings
+- The handwritten `lib/capybara-lib` build already skips linked main-output writes on its fused `check` preparation path, but the reusable `build-tool/gradle` plugin still always serialized linked JSON during `compileCapybara`.
+- On plugin consumers’ `check`/`test` builds, that linked output is not needed:
+  - main Java is generated in the same `compileCapybara` task action;
+  - test Capybara Java is generated from the in-memory main compilation in that same action;
+  - the standalone `compileTestCapybara` compatibility task is skipped on that path.
+- That meant plugin consumers were still paying avoidable linked-program serialization and filesystem writes on rerun test-oriented builds, even after the handwritten module path had already been optimized.
+
+### Changes made
+- Added a `writeLinkedOutput` toggle to `build-tool/gradle`’s `CompileCapybaraTask`.
+- Updated `CapybaraPlugin` so `compileCapybara` disables linked-output writes for `check`/`test`-oriented fused builds while preserving linked output for standalone main/test compatibility tasks.
+- Extended plugin coverage to verify fused `check` builds generate main and test Java without producing linked `build/classes/capybara` JSON artifacts.
+
+### Expected impact
+- Plugin consumers using `check --rerun-tasks`-style builds should avoid one more round of linked JSON serialization and output-tree writes on the hot path.
+- This brings the reusable plugin in line with the earlier handwritten `lib/capybara-lib` optimization for fused test-oriented builds.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle task verification in this sandbox because the requested wrapper command still fails before project execution on the read-only `/home/martin/.gradle` lock path.
+- Verification for this pass is limited to source inspection and the updated plugin test coverage.
+
 ## 2026-04-06 build optimization pass direct check-path task wiring
 
 ### Requested baseline
@@ -682,3 +790,29 @@
 ### Verification status
 - `git diff --check` passed.
 - I could not run Gradle task verification in this sandbox because the requested wrapper command still fails before project execution due the read-only wrapper lock path, and the repository-local Gradle fallback previously still failed on wildcard IP detection.
+
+## 2026-04-06 build optimization pass plugin check-path linked-output pruning
+
+### Requested baseline
+- Re-ran the requested baseline command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- It still failed immediately in this sandbox because the wrapper tried to create `/home/martin/.gradle/.../gradle-9.1.0-bin.zip.lck` on a read-only filesystem.
+- Checked `build/reports/profile` after the run; no new profile HTML was produced, and the latest available report is still `build/reports/profile/profile-2026-04-04-19-07-42.html`.
+
+### Findings
+- The handwritten `lib/capybara-lib` build already skips linked main-output writes on its fused `check` path, but the reusable `build-tool/gradle` plugin still always serialized linked JSON during `compileCapybara`.
+- On plugin consumers’ `check`/`test` builds, that linked output is not needed because main Java and test Capybara Java are both generated in the same fused `compileCapybara` task action, and the standalone `compileTestCapybara` compatibility task is skipped.
+- That left plugin consumers paying avoidable linked-program serialization and filesystem writes on rerun test-oriented builds.
+
+### Changes made
+- Added a `writeLinkedOutput` toggle to `build-tool/gradle`’s `CompileCapybaraTask`.
+- Updated `CapybaraPlugin` so `compileCapybara` disables linked-output writes for fused `check`/`test` builds while preserving linked output for standalone compatibility tasks.
+- Extended plugin coverage to verify fused `check` builds generate main and test Java without producing linked `build/classes/capybara` JSON artifacts.
+
+### Expected impact
+- Plugin consumers using `check --rerun-tasks`-style builds should avoid one more round of linked JSON serialization and output-tree writes on the hot path.
+- This aligns the reusable plugin with the earlier handwritten `lib/capybara-lib` optimization for fused test-oriented builds.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle task verification in this sandbox because the requested wrapper command still fails before project execution on the read-only `/home/martin/.gradle` lock path.
+- Verification for this pass is limited to source inspection and the updated plugin test coverage.
