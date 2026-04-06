@@ -1669,3 +1669,35 @@
 - `git diff --check` passed.
 - I could not run Gradle task verification or produce a fresh profile in this sandbox because the requested wrapper command still fails before project execution with `Could not determine a usable wildcard IP for this machine`.
 - Verification for this pass is limited to source inspection and the added plugin test coverage.
+
+## 2026-04-06 build optimization pass remove main-output edges from Capybara-only check builds
+
+### Requested baseline
+- Re-ran the requested baseline command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- The wrapper now gets past the earlier read-only Gradle home failure, but Gradle still cannot start in this sandbox:
+  - `Could not create service of type FileLockContentionHandler`
+  - `Could not determine a usable wildcard IP for this machine`
+- Checked `build/reports/profile` after the failed run; no fresh profile HTML was produced, so this pass is based on the existing profile history plus current task-graph inspection of `lib:capybara-lib`.
+
+### Findings
+- The prior pass moved generated main Java into the `test` source set for Capybara-only `check` builds and skipped `compileJava`, but the `test` source set still inherited `main.output` on its default compile/runtime classpaths.
+- That means `compileTestJava` and `testCapybara` could still keep `main` lifecycle tasks such as `compileJava`, `classes`, and `processResources` in the graph through `main.output` built-by relationships even though the needed main classes are already compiled as part of the `test` source set in this narrow case.
+- The same unnecessary `main.output` edge existed in the reusable `CapybaraPlugin`, so plugin consumers could keep paying the same overhead.
+
+### Changes made
+- In `lib/capybara-lib/build.gradle`, when a Capybara-only test-oriented build is requested:
+  - removed `sourceSets.main.output` from the `test` source set compile/runtime classpaths;
+  - narrowed `testCapybara` runtime inputs to dependency runtime classpath plus test classes directories.
+- Applied the same classpath narrowing in `build-tool/gradle`’s `CapybaraPlugin`.
+- Added plugin tests covering:
+  - the Capybara-only `check` path not feeding `compileTestJava` through `compileJava`;
+  - `testCapybara` using dependency runtime classpath plus test classes instead of the full `main` runtime classpath in that case.
+
+### Expected impact
+- `:lib:capybara-lib:check --rerun-tasks` should stop retaining `main.output`-driven lifecycle work after main generated sources are folded into `compileTestJava`.
+- This should further reduce no-op or skipped-task overhead around `compileJava`/`classes`/`processResources` on Capybara-only check builds while preserving the existing behavior for mixed JVM/Capybara projects.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle task verification or produce a fresh profile in this sandbox because the requested wrapper command still fails before project execution with `Could not determine a usable wildcard IP for this machine`.
+- Verification for this pass is limited to source inspection and the added plugin test coverage.

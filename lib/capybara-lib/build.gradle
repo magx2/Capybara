@@ -340,7 +340,11 @@ tasks.register('testCapybara', InProcessCapybaraTestTask) {
     description = 'Runs Capybara tests from compiled test classes without launching a separate JVM.'
     dependsOn tasks.named('compileTestJava')
 
-    runtimeClasspath.from(capybaraTestRuntimeClasspath)
+    runtimeClasspath.from(
+            capybaraTestBuildRequested.get() && !hasJvmMainSources.get()
+                    ? files(configurations.runtimeClasspath, sourceSets.test.output.classesDirs)
+                    : capybaraTestRuntimeClasspath
+    )
     outputDir.set(capybaraTestResultsDir)
     reportType.set('JUNIT')
     logLevel.set(capybaraTestLogLevel)
@@ -354,6 +358,8 @@ sourceSets {
         java.srcDir capybaraGeneratedTestDir
         if (capybaraTestBuildRequested.get() && !hasJvmMainSources.get()) {
             java.srcDir capybaraGeneratedMainDir
+            compileClasspath -= sourceSets.main.output
+            runtimeClasspath -= sourceSets.main.output
         }
     }
 }

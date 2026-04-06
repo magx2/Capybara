@@ -253,6 +253,7 @@ class CapybaraPluginTest {
         assertFalse(compileJavaDependencies.contains(project.getTasks().named("generateCapybaraJava").get()));
         assertTrue(compileTestJavaDependencies.contains(compileCapybara));
         assertFalse(compileTestJavaDependencies.contains(project.getTasks().named("generateTestCapybaraJava").get()));
+        assertFalse(compileTestJavaDependencies.contains(compileJava));
     }
 
     @Test
@@ -275,6 +276,17 @@ class CapybaraPluginTest {
 
         assertTrue(compileJava.getOnlyIf().isSatisfiedBy(compileJava));
         assertFalse(testSrcDirs.contains(project.file("build/generated/sources/capybara/java")));
+    }
+
+    @Test
+    void shouldUseDependencyClasspathAndTestClassesForCapybaraOnlyCheckBuilds() {
+        var project = newProject(List.of("check"));
+        var sourceSets = project.getExtensions().getByType(SourceSetContainer.class);
+        var testCapybara = project.getTasks().named("testCapybara", CapybaraTestTask.class).get();
+        var runtimeClasspathSources = ((ConfigurableFileCollection) testCapybara.getRuntimeClasspath()).getFrom();
+
+        assertFalse(runtimeClasspathSources.contains(sourceSets.getByName("main").getRuntimeClasspath()));
+        assertTrue(runtimeClasspathSources.contains(sourceSets.getByName("test").getOutput().getClassesDirs()));
     }
 
     private Project newProject() {

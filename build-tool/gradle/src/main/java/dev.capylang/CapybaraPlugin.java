@@ -114,6 +114,8 @@ public class CapybaraPlugin implements Plugin<Project> {
                 sourceSet.getJava().srcDir(layout.getBuildDirectory().dir("generated/sources/test-capybara/java"));
                 if (capybaraTestBuildRequested.get() && !hasJvmMainSources.get()) {
                     sourceSet.getJava().srcDir(layout.getBuildDirectory().dir("generated/sources/capybara/java"));
+                    sourceSet.setCompileClasspath(sourceSet.getCompileClasspath().minus(mainSourceSet.getOutput()));
+                    sourceSet.setRuntimeClasspath(sourceSet.getRuntimeClasspath().minus(mainSourceSet.getOutput()));
                 }
             });
             project.getTasks().named("compileJava", task ->
@@ -128,7 +130,10 @@ public class CapybaraPlugin implements Plugin<Project> {
                         task.setGroup("verification");
                         task.setDescription("Runs Capybara tests using generated Java classes without launching a separate JVM.");
                         task.dependsOn(project.getTasks().named("compileTestJava"));
-                        task.getRuntimeClasspath().from(mainSourceSet.getRuntimeClasspath(), testSourceSet.getOutput().getClassesDirs());
+                        var mainRuntimeClasspath = capybaraTestBuildRequested.get() && !hasJvmMainSources.get()
+                                ? mainSourceSet.getRuntimeClasspath().minus(mainSourceSet.getOutput())
+                                : mainSourceSet.getRuntimeClasspath();
+                        task.getRuntimeClasspath().from(mainRuntimeClasspath, testSourceSet.getOutput().getClassesDirs());
                         task.getOutputDir().set(capybaraTestResultsDir);
                         task.getReportType().set("JUNIT");
                         task.getLogLevel().set(capybaraTestLogLevel(project.getGradle().getStartParameter().getLogLevel()));
