@@ -29,7 +29,7 @@ def capybaraDebugEnabled = gradle.startParameter.logLevel == org.gradle.api.logg
 tasks.register('linkCapybaraSources', JavaExec) {
     group = 'build'
     description = 'Compiles Capybara files from src/main/capybara and generates Java in one pass.'
-    dependsOn project(':lib:capybara-lib').tasks.named('linkCapybaraLinkedOnly')
+    dependsOn project(':lib:capybara-lib').tasks.named('linkCapybaraLinked')
 
     inputs.dir(capybaraSourceDir)
     inputs.dir(capybaraLibSourceDir)

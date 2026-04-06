@@ -1203,3 +1203,33 @@
 - `git diff --check` passed.
 - I could not run Gradle task verification in this sandbox because the requested wrapper command still fails before project execution on the read-only `/home/martin/.gradle` lock path.
 - Verification for this pass is limited to source inspection.
+
+## 2026-04-06 build optimization pass reuse linked stdlib output during check builds
+
+### Requested baseline
+- Re-ran the requested baseline command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- It still failed immediately in this sandbox because the wrapper tried to create `/home/martin/.gradle/.../gradle-9.1.0-bin.zip.lck` on a read-only filesystem.
+- Checked `build/reports/profile` after the failed run; no new profile HTML was produced, so analysis still relies on the existing reports already present there.
+
+### Findings
+- `:compiler:processResources` packages the Capybara standard library by depending on `:lib:capybara-lib:linkCapybaraLinkedOnly`.
+- On the requested `:lib:capybara-lib:check --rerun-tasks` path, `lib/capybara-lib` was already compiling the same main Capybara sources through `prepareCapybaraForCheck` to generate main and test Java outputs.
+- Because `prepareCapybaraForCheck` did not also write the linked main output, the compiler dependency path had to trigger a separate main-source compilation just to materialize linked stdlib JSON for resources.
+- The same linked-output dependency pattern was also used by `integration-tests`, so clean builds could pay the extra main compile there as well.
+
+### Changes made
+- Updated `lib/capybara-lib:prepareCapybaraForCheck` to also write `build/generated/sources/capybara/linked/main`.
+- Added a compatibility task `:lib:capybara-lib:linkCapybaraLinked` that:
+  - reuses `prepareCapybaraForCheck` on check/test-oriented builds;
+  - otherwise reuses `linkCapybaraDirect` so main generation and linked output still come from one compilation.
+- Marked `linkCapybaraLinkedOnly` as non-applicable during check/test-oriented builds.
+- Rewired `compiler:processResources` and `integration-tests:linkCapybaraSources` to depend on `:lib:capybara-lib:linkCapybaraLinked`.
+
+### Expected impact
+- `:lib:capybara-lib:check --rerun-tasks` should no longer need a second compilation of `lib/capybara-lib` main Capybara sources just to satisfy `:compiler:processResources`.
+- Builds that also need linked stdlib output should now reuse the fused main/test preparation work already required by the check path.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle task verification in this sandbox because the requested wrapper command still fails before project execution on the read-only `/home/martin/.gradle` lock path.
+- Verification for this pass is limited to source inspection.

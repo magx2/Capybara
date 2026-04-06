@@ -250,14 +250,16 @@ tasks.register('linkCapybaraLinkedOnly', InProcessCapybaraCompileTask) {
     linkedOutputDir.set(capybaraLinkedMainDir)
     compileTests.set(false)
     includeJavaLibResources.set(false)
+    onlyIf { !capybaraTestBuildRequested.get() }
 }
 
 tasks.register('prepareCapybaraForCheck', InProcessCapybaraCompileTask) {
     group = 'verification'
-    description = 'Compiles main and test Capybara files for check/test builds in one pass.'
+    description = 'Compiles main and test Capybara files for check/test builds in one pass and writes linked main output.'
 
     runtimeClasspath.from(capyRuntimeClasspath)
     inputDir.set(capybaraMainSourceDir)
+    linkedOutputDir.set(capybaraLinkedMainDir)
     generatedOutputDir.set(capybaraGeneratedMainDir)
     testInputDir.set(capybaraTestSourceDir)
     testGeneratedOutputDir.set(capybaraGeneratedTestDir)
@@ -270,6 +272,16 @@ tasks.register('linkCapybara') {
     group = 'build'
     description = 'Compiles Capybara files from src/main/capybara and generates Java in one pass.'
     dependsOn tasks.named('linkCapybaraDirect')
+}
+
+tasks.register('linkCapybaraLinked') {
+    group = 'build'
+    description = 'Compatibility task that provides linked main Capybara output.'
+    if (capybaraTestBuildRequested.get()) {
+        dependsOn tasks.named('prepareCapybaraForCheck')
+    } else {
+        dependsOn tasks.named('linkCapybaraDirect')
+    }
 }
 
 tasks.register('compileCapybara') {
