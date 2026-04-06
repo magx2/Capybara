@@ -36,6 +36,7 @@ import java.net.URL;
 import java.net.URLClassLoader;
 import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.DirectoryNotEmptyException;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -1055,38 +1056,42 @@ public class Capy {
     }
 
     private static void deleteStaleFiles(Path outputDir, Set<Path> expectedFiles) {
-        try (var files = Files.walk(outputDir)) {
-            files.filter(Files::isRegularFile)
-                    .forEach(path -> {
-                        var relativePath = outputDir.relativize(path).normalize();
-                        if (expectedFiles.contains(relativePath)) {
-                            return;
-                        }
-                        try {
-                            Files.deleteIfExists(path);
-                        } catch (IOException e) {
-                            throw new UncheckedIOException("Unable to delete stale output file: " + path, e);
-                        }
-                    });
+        try (var paths = Files.walk(outputDir)) {
+            for (var path : paths.filter(path -> !path.equals(outputDir))
+                    .sorted(Comparator.reverseOrder())
+                    .toList()) {
+                if (Files.isRegularFile(path)) {
+                    deleteFileIfStale(outputDir, path, expectedFiles);
+                    continue;
+                }
+                if (Files.isDirectory(path)) {
+                    deleteDirectoryIfEmpty(path);
+                }
+            }
         } catch (IOException e) {
-            throw new UncheckedIOException("Unable to inspect output directory: " + outputDir, e);
+            throw new UncheckedIOException("Unable to prune stale output files: " + outputDir, e);
         }
+    }
 
-        try (var directories = Files.walk(outputDir)) {
-            directories.sorted(Comparator.reverseOrder())
-                    .filter(Files::isDirectory)
-                    .filter(path -> !path.equals(outputDir))
-                    .forEach(path -> {
-                        try (var children = Files.list(path)) {
-                            if (children.findAny().isEmpty()) {
-                                Files.deleteIfExists(path);
-                            }
-                        } catch (IOException e) {
-                            throw new UncheckedIOException("Unable to delete stale output directory: " + path, e);
-                        }
-                    });
+    private static void deleteFileIfStale(Path outputDir, Path file, Set<Path> expectedFiles) {
+        var relativePath = outputDir.relativize(file).normalize();
+        if (expectedFiles.contains(relativePath)) {
+            return;
+        }
+        try {
+            Files.deleteIfExists(file);
         } catch (IOException e) {
-            throw new UncheckedIOException("Unable to prune empty output directories: " + outputDir, e);
+            throw new UncheckedIOException("Unable to delete stale output file: " + file, e);
+        }
+    }
+
+    private static void deleteDirectoryIfEmpty(Path directory) {
+        try {
+            Files.deleteIfExists(directory);
+        } catch (DirectoryNotEmptyException ignored) {
+            // Directory still contains current outputs.
+        } catch (IOException e) {
+            throw new UncheckedIOException("Unable to delete stale output directory: " + directory, e);
         }
     }
 

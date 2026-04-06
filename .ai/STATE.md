@@ -248,3 +248,36 @@
 - I could not run Gradle task verification in this sandbox because the wrapper still fails before task execution with a read-only lockfile path under `/home/martin/.gradle`.
 - Verification for this pass is limited to source inspection and the added unit-test coverage.
 - Verification for this pass is limited to source inspection and the added CLI/plugin test coverage.
+
+## 2026-04-06 build optimization pass single-pass stale output pruning
+
+### Requested baseline
+- Re-ran the requested baseline command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- It still failed immediately in this sandbox because the wrapper tried to create `/home/martin/.gradle/.../gradle-9.1.0-bin.zip.lck` on a read-only filesystem.
+- Checked `build/reports/profile` after the run; no new profile HTML was produced, and the latest available report is still `build/reports/profile/profile-2026-04-04-19-07-42.html`.
+- Tried a narrower startup probe with `GRADLE_USER_HOME=$PWD/.gradle ./gradlew :lib:capybara-lib:help --console=plain --no-daemon -Djava.net.preferIPv4Stack=true -Djava.net.preferIPv6Addresses=false`; Gradle still failed before project execution with `Could not determine a usable wildcard IP for this machine`.
+
+### Findings
+- The earlier reusable-output work removed full pre-run directory deletion, but Capy’s post-write stale pruning still traversed each linked/generated output tree more than once on every rerun build:
+  - one full `Files.walk(...)` to find stale files;
+  - another full `Files.walk(...)` to visit directories in reverse order;
+  - plus `Files.list(...)` calls for every directory to check emptiness.
+- That repeated filesystem traversal sits directly on the hot path for `linkCapybara`, `compileTestCapybara`, and other Capy compile/generate tasks that write under `build/generated/...`.
+- On the requested `--rerun-tasks` path, this overhead is paid every time even when output trees are already mostly up to date.
+
+### Changes made
+- Reworked `Capy.deleteStaleFiles(...)` to use a single reverse-order walk over the output tree.
+- Split stale-file deletion and empty-directory deletion into small helpers so the reverse-order walk can:
+  - delete stale files immediately;
+  - opportunistically delete directories after their children have already been visited.
+- Replaced per-directory `Files.list(...)` emptiness checks with `Files.deleteIfExists(...)` and ignored `DirectoryNotEmptyException` for directories that still contain current outputs.
+- Extended `CapyTest.shouldPruneStaleFilesFromReusedGeneratedOutputDirectory()` to also verify that now-empty stale directories are removed.
+
+### Expected impact
+- Every Capy compile/generate pass that prunes stale outputs should perform less filesystem traversal on reused output directories.
+- `:lib:capybara-lib:check --rerun-tasks` should spend less time in post-write cleanup under linked and generated source trees, especially once earlier passes have already eliminated the larger duplicate compile/generate work.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle task verification in this sandbox because the wrapper still fails before task execution with a read-only lockfile path under `/home/martin/.gradle`, and repo-local Gradle startup still fails with `Could not determine a usable wildcard IP for this machine`.
+- Verification for this pass is limited to source inspection and the updated CLI unit-test coverage.

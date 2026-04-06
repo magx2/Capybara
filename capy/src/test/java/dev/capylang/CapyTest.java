@@ -217,6 +217,7 @@ class CapyTest {
 
         assertTrue(Files.exists(generatedDir.resolve("Main.java")));
         assertFalse(Files.exists(staleFile));
+        assertFalse(Files.exists(generatedDir.resolve("stale")));
     }
 
     @Test
