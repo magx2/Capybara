@@ -22,8 +22,18 @@ def capybaraGeneratedTestDir = layout.buildDirectory.dir('generated/sources/capy
 def capybaraLinkedMainDir = layout.buildDirectory.dir('generated/sources/capybara/linked/main')
 def capybaraTestResultsDir = layout.buildDirectory.dir('test-results/capybara')
 def capybaraDebugEnabled = gradle.startParameter.logLevel == org.gradle.api.logging.LogLevel.DEBUG
+def capybaraTestBuildRequested = providers.provider {
+    gradle.startParameter.taskNames.any { taskName ->
+        taskName == 'check' || taskName.endsWith(':check') ||
+                taskName == 'test' || taskName.endsWith(':test') ||
+                taskName == 'testClasses' || taskName.endsWith(':testClasses') ||
+                taskName == 'compileTestJava' || taskName.endsWith(':compileTestJava') ||
+                taskName == 'compileTestCapybara' || taskName.endsWith(':compileTestCapybara') ||
+                taskName == 'testCapybara' || taskName.endsWith(':testCapybara')
+    }
+}
 
-tasks.register('linkCapybara', JavaExec) {
+tasks.register('linkCapybaraDirect', JavaExec) {
     group = 'build'
     description = 'Compiles Capybara files from src/main/capybara and generates Java in one pass.'
 
@@ -46,6 +56,45 @@ tasks.register('linkCapybara', JavaExec) {
         capybaraArgs.addAll(capybaraDebugEnabled ? ['--log', 'DEBUG'] : ['--log', 'WARN'])
         setArgs(capybaraArgs)
     }
+    onlyIf { !capybaraTestBuildRequested.get() }
+}
+
+tasks.register('prepareCapybaraForCheck', JavaExec) {
+    group = 'verification'
+    description = 'Compiles main and test Capybara files for check/test builds in one pass.'
+
+    inputs.dir(capybaraMainSourceDir)
+    inputs.dir(capybaraTestSourceDir)
+    outputs.dir(capybaraGeneratedMainDir)
+    outputs.dir(capybaraLinkedMainDir)
+    outputs.dir(capybaraGeneratedTestDir)
+
+    classpath = capyExecutionClasspath
+    mainClass = 'dev.capylang.Capy'
+
+    doFirst {
+        def capybaraArgs = [
+                'compile-generate',
+                'java',
+                '--skip-java-lib',
+                '-i', capybaraMainSourceDir.asFile.absolutePath,
+                '-o', capybaraGeneratedMainDir.get().asFile.absolutePath,
+                '--linked-output', capybaraLinkedMainDir.get().asFile.absolutePath,
+                '--test-input', capybaraTestSourceDir.asFile.absolutePath,
+                '--test-output', capybaraGeneratedTestDir.get().asFile.absolutePath
+        ]
+        capybaraArgs.addAll(capybaraDebugEnabled ? ['--log', 'DEBUG'] : ['--log', 'WARN'])
+        setArgs(capybaraArgs)
+    }
+
+    onlyIf { capybaraTestBuildRequested.get() }
+}
+
+tasks.register('linkCapybara') {
+    group = 'build'
+    description = 'Compiles Capybara files from src/main/capybara and generates Java in one pass.'
+    dependsOn tasks.named('linkCapybaraDirect')
+    dependsOn tasks.named('prepareCapybaraForCheck')
 
 }
 
@@ -55,10 +104,10 @@ tasks.register('compileCapybara') {
     dependsOn tasks.named('linkCapybara')
 }
 
-tasks.register('compileTestCapybara', JavaExec) {
+tasks.register('compileTestCapybaraDirect', JavaExec) {
     group = 'verification'
     description = 'Compiles test Capybara files and generates Java without writing linked intermediates.'
-    dependsOn tasks.named('linkCapybara')
+    dependsOn tasks.named('linkCapybaraDirect')
 
     inputs.dir(capybaraTestSourceDir)
     inputs.dir(capybaraLinkedMainDir)
@@ -80,6 +129,14 @@ tasks.register('compileTestCapybara', JavaExec) {
         capybaraArgs.addAll(capybaraDebugEnabled ? ['--log', 'DEBUG'] : ['--log', 'WARN'])
         setArgs(capybaraArgs)
     }
+    onlyIf { !capybaraTestBuildRequested.get() }
+}
+
+tasks.register('compileTestCapybara') {
+    group = 'verification'
+    description = 'Compiles test Capybara files and generates Java without writing linked intermediates.'
+    dependsOn tasks.named('compileTestCapybaraDirect')
+    dependsOn tasks.named('prepareCapybaraForCheck')
 }
 
 tasks.register('testCapybara', JavaExec) {

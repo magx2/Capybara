@@ -46,6 +46,7 @@ class CapyTest {
         assertTrue(text.contains("capy compile-generate"));
         assertTrue(text.contains("capy generate"));
         assertTrue(text.contains("--compile-tests"));
+        assertTrue(text.contains("--test-input <dir> --test-output <dir>"));
         assertTrue(text.contains("capy package"));
     }
 
@@ -407,6 +408,57 @@ class CapyTest {
         assertTrue(Files.exists(linkedDir.resolve("build-info.json")));
         assertTrue(Files.exists(linkedDir.resolve("program.json")));
         assertFalse(Files.exists(generatedDir.resolve("dev").resolve("capylang").resolve("CapybaraUtil.java")));
+    }
+
+    @Test
+    void shouldCompileGenerateMainAndTestsInOneCommand() throws IOException {
+        var mainSourceDir = Files.createDirectories(tempDir.resolve("compile-generate-main-source"));
+        Files.createDirectories(mainSourceDir.resolve("foo"));
+        Files.writeString(mainSourceDir.resolve("foo").resolve("Lib.cfun"), """
+                fun forty_two(): int = 42
+                """);
+
+        var testSourceDir = Files.createDirectories(tempDir.resolve("compile-generate-main-test-source"));
+        Files.createDirectories(testSourceDir.resolve("bar"));
+        Files.writeString(testSourceDir.resolve("bar").resolve("TestModule.cfun"), """
+                from /capy/test/Assert import { * }
+                from /capy/test/CapyTest import { * }
+                from /foo/Lib import { forty_two }
+
+                fun works(): Assert =
+                    assert_that(forty_two()).is_equal_to(42)
+
+                fun tests(): TestFile =
+                    test_file("/bar/TestModule.cfun", [
+                        test("works", works())
+                    ])
+                """);
+
+        var generatedMainDir = tempDir.resolve("compile-generate-main-output");
+        var linkedMainDir = Files.createDirectories(tempDir.resolve("compile-generate-main-linked"));
+        var generatedTestDir = tempDir.resolve("compile-generate-main-test-output");
+
+        assertEquals(0, Capy.execute(
+                new String[]{
+                        "compile-generate",
+                        "java",
+                        "--skip-java-lib",
+                        "-i", mainSourceDir.toString(),
+                        "-o", generatedMainDir.toString(),
+                        "--linked-output", linkedMainDir.toString(),
+                        "--test-input", testSourceDir.toString(),
+                        "--test-output", generatedTestDir.toString()
+                },
+                new PrintStream(new ByteArrayOutputStream()),
+                new PrintStream(new ByteArrayOutputStream())
+        ));
+
+        assertTrue(Files.exists(generatedMainDir.resolve("foo").resolve("Lib.java")));
+        assertTrue(Files.exists(linkedMainDir.resolve("foo").resolve("Lib.json")));
+        assertTrue(Files.exists(generatedTestDir.resolve("bar").resolve("TestModule.java")));
+        assertTrue(Files.exists(generatedTestDir.resolve("capy").resolve("test").resolve("CapyTestRuntime.java")));
+        assertFalse(Files.exists(generatedMainDir.resolve("dev").resolve("capylang").resolve("CapybaraUtil.java")));
+        assertFalse(Files.exists(generatedTestDir.resolve("dev").resolve("capylang").resolve("CapybaraUtil.java")));
     }
 
     @Test

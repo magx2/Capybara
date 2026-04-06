@@ -219,6 +219,38 @@
 - `git diff --check` passed.
 - I could not run Gradle task verification in this sandbox because Gradle still fails during startup with `Could not determine a usable wildcard IP for this machine`.
 
+## 2026-04-06 build optimization pass combined check preparation
+
+### Requested baseline
+- Re-ran the requested baseline command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- It still failed immediately in this sandbox because the wrapper tried to create `/home/martin/.gradle/.../gradle-9.1.0-bin.zip.lck` on a read-only filesystem.
+- I inspected `build/reports/profile` again; the available reports are still the existing HTML files through `build/reports/profile/profile-2026-04-04-19-07-42.html`.
+- No new profile HTML was produced by this pass, so timing guidance remains based on the existing reports plus source inspection of the current `check --rerun-tasks` path.
+
+### Findings
+- Earlier passes removed the old standalone `linkTestCapybara` task, but the current `:lib:capybara-lib:check` path still launches Capy twice:
+  - once for main source compile+generate;
+  - once for test source compile+generate.
+- The second invocation recompiles test sources against the main program by loading the freshly written main linked output back from disk.
+- That extra process boundary only matters for test-oriented builds; main-only builds such as `compileJava` should keep the narrower main-only path.
+
+### Changes made
+- Extended `capy compile-generate` with optional `--test-input` and `--test-output` arguments.
+- The new path compiles main sources, writes linked main output when requested, generates main Java, then compiles test sources against the freshly compiled main modules in the same CLI invocation and generates test Java.
+- Updated `lib/capybara-lib/build.gradle` to use a combined `prepareCapybaraForCheck` task for test-oriented requests (`check`, `test`, `compileTestJava`, `compileTestCapybara`, `testCapybara`, `testClasses`) while keeping the existing main-only and test-only task split for non-test builds.
+- Kept `linkCapybara` and `compileTestCapybara` as compatibility task names so downstream task wiring and cross-project dependencies remain stable.
+- Added CLI tests covering the new combined main+test generation mode and updated the help-text assertion.
+
+### Expected impact
+- `:lib:capybara-lib:check --rerun-tasks` should avoid one Capy CLI JVM launch on the library module path.
+- The check/test path should also avoid rereading the just-produced main linked program from disk before compiling test Capybara sources.
+- Main-only tasks should keep their narrower single-source generation path instead of always compiling test Capybara sources.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle task verification in this sandbox because the requested wrapper command still fails before project execution on the read-only `/home/martin/.gradle` lock path.
+- Verification for this pass is limited to source inspection and the added CLI tests.
+
 ## 2026-04-06 build optimization pass stale test report pruning
 
 ### Requested baseline
