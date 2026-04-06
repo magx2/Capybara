@@ -1234,6 +1234,35 @@
 - I could not run Gradle task verification in this sandbox because the requested wrapper command still fails before project execution on the read-only `/home/martin/.gradle` lock path.
 - Verification for this pass is limited to source inspection.
 
+## 2026-04-06 build optimization pass restore narrow local check path
+
+### Requested baseline
+- Re-ran the requested baseline command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- It still failed immediately in this sandbox because the wrapper tried to create `/home/martin/.gradle/.../gradle-9.1.0-bin.zip.lck` on a read-only filesystem.
+- Checked `build/reports/profile` after the failed run; no new profile HTML was produced, and the available reports still stop at `build/reports/profile/profile-2026-04-04-19-07-42.html`.
+- Re-tried Gradle startup with `GRADLE_USER_HOME=$PWD/.gradle ./gradlew help --console=plain --no-daemon -Dorg.gradle.cache.internal.locklistener.disabled=true -Djava.net.preferIPv4Stack=true`.
+- That variant still failed before project execution with `Could not determine a usable wildcard IP for this machine`.
+
+### Findings
+- The reusable `build-tool/gradle` plugin already keeps its check-oriented fused compile path narrow by disabling linked-output writes when test-oriented tasks are requested.
+- The handwritten `lib/capybara-lib/build.gradle` had diverged from that behavior in the most recent pass:
+  - `prepareCapybaraForCheck` again declared linked main output;
+  - `linkCapybaraLinked` routed through `prepareCapybaraForCheck` whenever a check-style task name was present.
+- For the requested `:lib:capybara-lib:check --rerun-tasks` path, that widened the hot path back out to linked JSON serialization and extra filesystem writes even though the local check flow only needs generated Java for main/test compilation and in-process Capybara test execution.
+
+### Changes made
+- Removed `linkedOutputDir` from `prepareCapybaraForCheck` in `lib/capybara-lib/build.gradle`.
+- Updated the task description so it matches the narrower behavior.
+- Rewired `linkCapybaraLinked` to depend on `linkCapybaraLinkedOnly`, so linked output is produced only when the explicit compatibility task is requested.
+
+### Expected impact
+- `:lib:capybara-lib:check --rerun-tasks` should stop paying for linked main output writes on the local handwritten library build path.
+- Linked stdlib output remains available through the existing compatibility task name for callers that actually need it.
+
+### Verification status
+- `git diff --check` passed.
+- Runtime verification and fresh profile generation are still blocked in this sandbox by the wrapper lock path and the separate wildcard-IP Gradle startup failure.
+
 ## 2026-04-06 build optimization pass reuse linked stdlib output during check builds
 
 ### Requested baseline

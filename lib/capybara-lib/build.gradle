@@ -255,11 +255,10 @@ tasks.register('linkCapybaraLinkedOnly', InProcessCapybaraCompileTask) {
 
 tasks.register('prepareCapybaraForCheck', InProcessCapybaraCompileTask) {
     group = 'verification'
-    description = 'Compiles main and test Capybara files for check/test builds in one pass and writes linked main output.'
+    description = 'Compiles main and test Capybara files for check/test builds in one pass.'
 
     runtimeClasspath.from(capyRuntimeClasspath)
     inputDir.set(capybaraMainSourceDir)
-    linkedOutputDir.set(capybaraLinkedMainDir)
     generatedOutputDir.set(capybaraGeneratedMainDir)
     testInputDir.set(capybaraTestSourceDir)
     testGeneratedOutputDir.set(capybaraGeneratedTestDir)
@@ -277,11 +276,7 @@ tasks.register('linkCapybara') {
 tasks.register('linkCapybaraLinked') {
     group = 'build'
     description = 'Compatibility task that provides linked main Capybara output.'
-    if (capybaraTestBuildRequested.get()) {
-        dependsOn tasks.named('prepareCapybaraForCheck')
-    } else {
-        dependsOn tasks.named('linkCapybaraDirect')
-    }
+    dependsOn tasks.named('linkCapybaraLinkedOnly')
 }
 
 tasks.register('compileCapybara') {
