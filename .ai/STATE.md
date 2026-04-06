@@ -139,3 +139,45 @@
 
 ### Verification status
 - I could not run Gradle verification in this sandbox for the reasons listed above, so this pass is verified only by source inspection.
+
+## 2026-04-06 build optimization pass reusable Gradle plugin
+
+### Requested baseline
+- Re-ran the requested baseline command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- It still failed immediately in this sandbox because the wrapper tried to create `/home/martin/.gradle/.../gradle-9.1.0-bin.zip.lck` on a read-only filesystem.
+- Re-ran a narrower verification attempt as `GRADLE_USER_HOME=$PWD/.gradle ./gradlew :build-tool:gradle:test --console=plain --no-daemon -Djava.net.preferIPv4Stack=true`.
+- Gradle startup still failed before project execution with `Could not determine a usable wildcard IP for this machine`.
+- No new profile HTML was produced, so timing comparisons still rely on the existing report at `build/reports/profile/profile-2026-04-04-19-07-42.html`.
+
+### Findings
+- The handwritten build scripts for `lib/capybara-lib` and `integration-tests` were already moved to the fused `compile-generate` path, but the reusable Gradle plugin in `build-tool/gradle` still used the older two-step pipeline:
+  - `compileCapybara` compiled to linked JSON;
+  - `generateCapybaraJava` reread that output to generate Java;
+  - `compileTestCapybara` then repeated the pattern for tests.
+- The plugin also added main generated Java sources to the `test` source set, which makes test Java compilation recompile code already compiled by the main source set.
+- That left plugin consumers paying the same redundant JVM/process and source-compilation costs that earlier passes had already removed from the repository’s handwritten module builds.
+
+### Changes made
+- Extended `CompileCapybaraTask` so one task invocation can:
+  - compile sources once,
+  - write linked JSON output, and
+  - optionally generate Java from the in-memory compilation result in the same pass.
+- Extended `Capy.generateCompiledProgram(...)` with an overload that can skip bundled Java runtime source copying when the caller already has those classes from main outputs.
+- Rewired `CapybaraPlugin` so:
+  - `compileCapybara` now writes linked main output and generated main Java in one task;
+  - `generateCapybaraJava` is kept only as a lightweight compatibility task depending on `compileCapybara`;
+  - `compileTestCapybara` now writes linked test output and generated test Java in one task while skipping bundled Java runtime copying;
+  - `generateTestCapybaraJava` is kept only as a compatibility dependency task;
+  - the `test` source set no longer includes main generated Java sources.
+- Added plugin tests covering fused main generation, test generation without duplicate bundled runtime copying, and the corrected `test` source-set wiring.
+- Added `gradleTestKit()` to the plugin module test dependencies for `ProjectBuilder`-based coverage.
+
+### Expected impact
+- Plugin consumers should avoid one extra generate pass for main Capybara sources and one extra generate pass for test Capybara sources.
+- Test Java compilation for plugin consumers should stop recompiling main-generated Java sources through the `test` source set.
+- This aligns the reusable plugin with the same build-graph simplifications already applied to `lib/capybara-lib` and `integration-tests`.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle task verification in this sandbox because Gradle still fails during startup with `Could not determine a usable wildcard IP for this machine`.
+- Verification for this pass is limited to source inspection and the added plugin test coverage.

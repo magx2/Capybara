@@ -13,6 +13,7 @@ repositories {
 dependencies {
     implementation(project(":capy"))
     implementation(project(":compiler"))
+    testImplementation(gradleTestKit())
 }
 
 gradlePlugin {

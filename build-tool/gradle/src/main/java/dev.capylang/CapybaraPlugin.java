@@ -5,9 +5,6 @@ import org.gradle.api.Project;
 import org.gradle.api.tasks.SourceSetContainer;
 import org.gradle.api.tasks.testing.Test;
 import org.gradle.api.tasks.JavaExec;
-import dev.capylang.compiler.OutputType;
-
-import java.util.EnumSet;
 
 public class CapybaraPlugin implements Plugin<Project> {
     @Override
@@ -24,22 +21,20 @@ public class CapybaraPlugin implements Plugin<Project> {
                     task.setDescription("Compiles Capybara files from src/main/capybara.");
                     task.getInputDir().set(project.file("src/main/capybara"));
                     task.getOutputDir().set(layout.getBuildDirectory().dir("classes/capybara"));
+                    task.getGeneratedOutputDir().set(layout.getBuildDirectory().dir("generated/sources/capybara/java"));
                     task.getAdditionalInputDirs().from();
                     task.getCompilerVersion().set(compilerVersion);
                     task.getCompileTests().set(false);
+                    task.getIncludeJavaLibResources().set(true);
                 }
         );
 
         var generateCapybaraJava = project.getTasks().register(
                 "generateCapybaraJava",
-                GenerateCapybaraTask.class,
                 task -> {
                     task.setGroup("build");
-                    task.setDescription("Generates Java classes");
+                    task.setDescription("Compatibility task for generated Java classes.");
                     task.dependsOn(compileCapybara);
-                    task.getInputDir().set(layout.getBuildDirectory().dir("classes/capybara"));
-                    task.getOutputRootDir().set(layout.getBuildDirectory().dir("generated/sources/capybara"));
-                    task.getOutputTypes().set(EnumSet.of(OutputType.JAVA));
                 }
         );
 
@@ -54,22 +49,20 @@ public class CapybaraPlugin implements Plugin<Project> {
                     task.dependsOn(compileCapybara);
                     task.getInputDir().set(project.file("src/test/capybara"));
                     task.getOutputDir().set(layout.getBuildDirectory().dir("classes/test-capybara"));
+                    task.getGeneratedOutputDir().set(layout.getBuildDirectory().dir("generated/sources/test-capybara/java"));
                     task.getAdditionalInputDirs().from(layout.getBuildDirectory().dir("classes/capybara"));
                     task.getCompilerVersion().set(compilerVersion);
                     task.getCompileTests().set(true);
+                    task.getIncludeJavaLibResources().set(false);
                 }
         );
 
         var generateTestCapybaraJava = project.getTasks().register(
                 "generateTestCapybaraJava",
-                GenerateCapybaraTask.class,
                 task -> {
                     task.setGroup("verification");
-                    task.setDescription("Generates Java classes for tests");
+                    task.setDescription("Compatibility task for generated test Java classes.");
                     task.dependsOn(compileTestCapybara);
-                    task.getInputDir().set(layout.getBuildDirectory().dir("classes/test-capybara"));
-                    task.getOutputRootDir().set(layout.getBuildDirectory().dir("generated/sources/test-capybara"));
-                    task.getOutputTypes().set(EnumSet.of(OutputType.JAVA));
                 }
         );
 
@@ -79,10 +72,8 @@ public class CapybaraPlugin implements Plugin<Project> {
         if (sourceSets != null) {
             sourceSets.named("main", sourceSet ->
                     sourceSet.getJava().srcDir(layout.getBuildDirectory().dir("generated/sources/capybara/java")));
-            sourceSets.named("test", sourceSet -> {
-                sourceSet.getJava().srcDir(layout.getBuildDirectory().dir("generated/sources/capybara/java"));
-                sourceSet.getJava().srcDir(layout.getBuildDirectory().dir("generated/sources/test-capybara/java"));
-            });
+            sourceSets.named("test", sourceSet ->
+                    sourceSet.getJava().srcDir(layout.getBuildDirectory().dir("generated/sources/test-capybara/java")));
 
             var testCapybara = project.getTasks().register(
                     "testCapybara",
@@ -90,7 +81,7 @@ public class CapybaraPlugin implements Plugin<Project> {
                     task -> {
                         task.setGroup("verification");
                         task.setDescription("Runs Capybara tests using generated Java classes.");
-                        task.dependsOn(generateCapybaraJava);
+                        task.dependsOn(compileCapybara);
                         task.dependsOn(project.getTasks().named("compileTestJava"));
                         task.classpath(sourceSets.getByName("test").getRuntimeClasspath());
                         task.getMainClass().set("dev.capylang.test.TestRunner");
@@ -110,4 +101,3 @@ public class CapybaraPlugin implements Plugin<Project> {
         }
     }
 }
-

@@ -549,12 +549,21 @@ public class Capy {
     }
 
     static void generateCompiledProgram(OutputType outputType, Path generatedOutputDir, CompilationArtifacts compilation) throws IOException {
+        generateCompiledProgram(outputType, generatedOutputDir, compilation, true);
+    }
+
+    static void generateCompiledProgram(
+            OutputType outputType,
+            Path generatedOutputDir,
+            CompilationArtifacts compilation,
+            boolean includeJavaLibResources
+    ) throws IOException {
         if (Files.notExists(generatedOutputDir)) {
             Files.createDirectories(generatedOutputDir);
         } else if (!Files.isDirectory(generatedOutputDir)) {
             throw new CliException("Generated output path is not a directory: " + generatedOutputDir);
         }
-        generateProgram(outputType, generatedOutputDir, selectGenerationInput(compilation.program(), compilation.sourceModules(), true));
+        generateProgram(outputType, generatedOutputDir, selectGenerationInput(compilation.program(), compilation.sourceModules(), includeJavaLibResources));
     }
     private static Path findCompiledInput(PackageOptions options, PrintStream err) throws IOException {
         if (options.compiledInput() != null) {

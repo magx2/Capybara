@@ -8,8 +8,10 @@ import org.gradle.api.provider.Property;
 import org.gradle.api.tasks.Input;
 import org.gradle.api.tasks.InputDirectory;
 import org.gradle.api.tasks.InputFiles;
+import org.gradle.api.tasks.Optional;
 import org.gradle.api.tasks.OutputDirectory;
 import org.gradle.api.tasks.TaskAction;
+import dev.capylang.compiler.OutputType;
 import dev.capylang.compiler.CompiledModule;
 
 import java.io.ByteArrayOutputStream;
@@ -29,34 +31,68 @@ public abstract class CompileCapybaraTask extends DefaultTask {
     @OutputDirectory
     public abstract DirectoryProperty getOutputDir();
 
+    @Optional
+    @OutputDirectory
+    public abstract DirectoryProperty getGeneratedOutputDir();
+
     @Input
     public abstract Property<String> getCompilerVersion();
 
     @Input
     public abstract Property<Boolean> getCompileTests();
 
+    @Input
+    public abstract Property<Boolean> getIncludeJavaLibResources();
+
     @TaskAction
     public void compile() throws IOException {
         var input = getInputDir().get().getAsFile().toPath();
         var output = getOutputDir().get().getAsFile().toPath();
+        var generatedOutput = getGeneratedOutputDir().isPresent() ? getGeneratedOutputDir().get().getAsFile().toPath() : null;
         var libraries = readLibraryModules(getAdditionalInputDirs().getFiles().stream()
                 .map(java.io.File::toPath)
                 .toList());
 
         recreateDirectory(output);
+        if (generatedOutput != null) {
+            recreateDirectory(generatedOutput);
+        }
         var errors = new ByteArrayOutputStream();
-        var exitCode = Capy.compile(
+        var exitCode = compileAndGenerate(
                 input,
                 output,
+                generatedOutput,
                 libraries,
-                getCompileTests().getOrElse(false),
-                new PrintStream(errors),
-                getCompilerVersion().get()
+                new PrintStream(errors)
         );
         if (exitCode != 0) {
             var message = errors.toString().trim();
             throw new GradleException(message.isEmpty() ? "Capybara compile failed with exit code " + exitCode : message);
         }
+    }
+
+    private int compileAndGenerate(
+            java.nio.file.Path input,
+            java.nio.file.Path output,
+            java.nio.file.Path generatedOutput,
+            TreeSet<CompiledModule> libraries,
+            PrintStream errors
+    ) throws IOException {
+        var compilation = Capy.compileSources(input, libraries, getCompileTests().getOrElse(false), errors);
+        if (compilation == null) {
+            return 100;
+        }
+
+        Capy.writeCompilationOutput(output, compilation, getCompilerVersion().get());
+        if (generatedOutput != null) {
+            Capy.generateCompiledProgram(
+                    OutputType.JAVA,
+                    generatedOutput,
+                    compilation,
+                    getIncludeJavaLibResources().getOrElse(true)
+            );
+        }
+        return 0;
     }
 
     private void recreateDirectory(java.nio.file.Path directory) throws IOException {
