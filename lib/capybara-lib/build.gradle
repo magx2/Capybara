@@ -406,6 +406,7 @@ tasks.register('prepareCapybaraForCheck', InProcessCapybaraCompileTask) {
 
     runtimeClasspath.from(capyRuntimeClasspath)
     inputDir.set(capybaraMainSourceDir)
+    linkedOutputDir.set(capybaraLinkedMainDir)
     generatedOutputDir.set(capybaraGeneratedCheckDir)
     testInputDir.set(capybaraTestSourceDir)
     testGeneratedOutputDir.set(capybaraGeneratedCheckDir)
@@ -418,19 +419,25 @@ tasks.register('prepareCapybaraForCheck', InProcessCapybaraCompileTask) {
 tasks.register('linkCapybara') {
     group = 'build'
     description = 'Compiles Capybara files from src/main/capybara and generates Java in one pass.'
-    dependsOn tasks.named('linkCapybaraDirect')
+    dependsOn capybaraTestBuildRequested
+            ? tasks.named('prepareCapybaraForCheck')
+            : tasks.named('linkCapybaraDirect')
 }
 
 tasks.register('linkCapybaraLinked') {
     group = 'build'
     description = 'Compatibility task that provides linked main Capybara output.'
-    dependsOn tasks.named('linkCapybaraLinkedOnly')
+    dependsOn capybaraTestBuildRequested
+            ? tasks.named('prepareCapybaraForCheck')
+            : tasks.named('linkCapybaraLinkedOnly')
 }
 
 tasks.register('compileCapybara') {
     group = 'build'
     description = 'Generates Java from main Capybara sources.'
-    dependsOn tasks.named('linkCapybaraDirect')
+    dependsOn capybaraTestBuildRequested
+            ? tasks.named('prepareCapybaraForCheck')
+            : tasks.named('linkCapybaraDirect')
 }
 
 tasks.register('compileTestCapybaraDirect', InProcessCapybaraCompileTask) {
