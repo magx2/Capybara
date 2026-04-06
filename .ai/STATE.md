@@ -418,7 +418,6 @@
 
 ### Expected impact
 - `:lib:capybara-lib:testCapybara` should avoid a full pre-run tree walk/delete under `build/test-results/capybara` on every `--rerun-tasks` build.
-- Repeated local builds should do less filesystem churn while still removing obsolete JUnit XML files when tests disappear or report paths change.
 
 ## 2026-04-06 build optimization pass main-only compile path
 
@@ -2145,3 +2144,37 @@
 ### Verification status
 - `git diff --check` passed.
 - I could not run Gradle task verification in this sandbox because the requested Gradle invocation still fails before project execution with `Could not determine a usable wildcard IP for this machine`.
+
+## 2026-04-06 build optimization pass plugin fused JVM main compilation
+
+### Requested baseline
+- Re-ran the requested command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- It still failed before project execution in this sandbox with:
+  - `Could not determine a usable wildcard IP for this machine`.
+- Checked `build/reports/profile` again after the run; no new profile HTML was produced, so timing guidance still comes from the existing reports already present there.
+
+### Findings
+- The handwritten `lib/capybara-lib` build already uses a fused verification path for `check`/`test` builds when there are no main resources:
+  - it disables `compileJava`,
+  - adds generated main Java plus `src/main/java` to the `test` source set,
+  - and lets `compileTestJava` compile both main and test Java in one pass.
+- The reusable Gradle plugin still had a stricter gate for its equivalent optimization:
+  - it only enabled the fused path when there were no JVM main sources at all.
+- That meant plugin consumers with `src/main/java` but no main resources still paid an extra `compileJava` task on verification builds even though the repository’s handwritten library module had already proven that a single `compileTestJava` pass is sufficient for that case.
+
+### Changes made
+- Relaxed the plugin’s `singleJavaVerificationBuild` condition to match the handwritten library behavior:
+  - it now applies to verification builds with no main resources, even when `src/main/java` exists.
+- When that fused path is active, the plugin now adds `src/main/java` to the `test` source set alongside generated main Capybara Java so `compileTestJava` can compile all required main and test Java sources in one pass.
+- Updated plugin tests to cover:
+  - disabling `compileJava` for `check` builds that have JVM main sources but no main resources;
+  - wiring `compileTestJava` directly to the fused Capybara compile path in that scenario;
+  - keeping `testCapybara` on dependency classpath plus test classes rather than main output in the fused setup.
+
+### Expected impact
+- Plugin consumers with handwritten Java under `src/main/java` and no `src/main/resources` should avoid an extra `compileJava` task on `check`/`test` builds.
+- This brings the reusable plugin in line with the optimized `lib/capybara-lib` check path and removes another redundant Java compilation boundary from Capybara verification builds.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle task verification in this sandbox because the requested wrapper invocation still fails before project execution with `Could not determine a usable wildcard IP for this machine`.

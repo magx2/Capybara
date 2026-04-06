@@ -374,17 +374,24 @@ class CapybaraPluginTest {
     }
 
     @Test
-    void shouldKeepCompileJavaForCheckBuildsWithJvmMainSources() throws IOException {
+    void shouldFoldJvmMainSourcesIntoCompileTestJavaForCheckBuildsWithoutMainResources() throws IOException {
         var jvmMainSourceDir = Files.createDirectories(tempDir.resolve("src/main/java/dev/capylang"));
         Files.writeString(jvmMainSourceDir.resolve("PluginMain.java"), "class PluginMain {}");
 
         var project = newProject(List.of("check"));
         var compileJava = project.getTasks().named("compileJava").get();
+        var compileTestJava = project.getTasks().named("compileTestJava").get();
+        var compileTestJavaDependencies = compileTestJava.getTaskDependencies().getDependencies(compileTestJava);
         var sourceSets = project.getExtensions().getByType(SourceSetContainer.class);
         var testSrcDirs = sourceSets.getByName("test").getJava().getSrcDirs();
 
-        assertTrue(compileJava.getEnabled());
-        assertFalse(testSrcDirs.contains(project.file("build/generated/sources/capybara/java")));
+        assertFalse(compileJava.getEnabled());
+        assertTrue(compileJava.getDependsOn().isEmpty());
+        assertTrue(compileTestJavaDependencies.contains(project.getTasks().named("compileCapybara").get()));
+        assertFalse(compileTestJavaDependencies.contains(project.getTasks().named("generateTestCapybaraJava").get()));
+        assertFalse(compileTestJavaDependencies.contains(compileJava));
+        assertTrue(testSrcDirs.contains(project.file("src/main/java")));
+        assertTrue(testSrcDirs.contains(project.file("build/generated/sources/capybara/java")));
     }
 
     @Test
@@ -410,6 +417,20 @@ class CapybaraPluginTest {
         assertTrue(compileTestJavaDependencies.contains(project.getTasks().named("generateTestCapybaraJava").get()));
         assertFalse(compileTestJavaDependencies.contains(project.getTasks().named("compileCapybara").get()));
         assertTrue(runtimeClasspathSources.contains(sourceSets.getByName("main").getRuntimeClasspath()));
+    }
+
+    @Test
+    void shouldUseDependencyClasspathAndTestClassesForCheckBuildsWithJvmMainSources() throws IOException {
+        var jvmMainSourceDir = Files.createDirectories(tempDir.resolve("src/main/java/dev/capylang"));
+        Files.writeString(jvmMainSourceDir.resolve("PluginMain.java"), "class PluginMain {}");
+
+        var project = newProject(List.of("check"));
+        var sourceSets = project.getExtensions().getByType(SourceSetContainer.class);
+        var testCapybara = project.getTasks().named("testCapybara", CapybaraTestTask.class).get();
+        var runtimeClasspathSources = ((ConfigurableFileCollection) testCapybara.getRuntimeClasspath()).getFrom();
+
+        assertFalse(runtimeClasspathSources.contains(sourceSets.getByName("main").getRuntimeClasspath()));
+        assertTrue(runtimeClasspathSources.contains(sourceSets.getByName("test").getOutput().getClassesDirs()));
     }
 
     @ParameterizedTest

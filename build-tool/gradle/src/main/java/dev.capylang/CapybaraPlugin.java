@@ -51,7 +51,7 @@ public class CapybaraPlugin implements Plugin<Project> {
                                 taskName.equals("testCapybara") || taskName.endsWith(":testCapybara")
                 ));
         var singleJavaVerificationBuild = project.provider(() ->
-                capybaraTestBuildRequested.get() && !hasJvmMainSources.get() && !hasMainResources.get()
+                capybaraTestBuildRequested.get() && !hasMainResources.get()
         );
 
         var compileCapybara = project.getTasks().register(
@@ -132,6 +132,7 @@ public class CapybaraPlugin implements Plugin<Project> {
                 sourceSet.getJava().srcDir(layout.getBuildDirectory().dir("generated/sources/test-capybara/java"));
                 if (singleJavaVerificationBuild.get()) {
                     sourceSet.getJava().srcDir(layout.getBuildDirectory().dir("generated/sources/capybara/java"));
+                    sourceSet.getJava().srcDir(project.file("src/main/java"));
                     sourceSet.setCompileClasspath(sourceSet.getCompileClasspath().minus(mainSourceSet.getOutput()));
                     sourceSet.setRuntimeClasspath(sourceSet.getRuntimeClasspath().minus(mainSourceSet.getOutput()));
                 }
