@@ -2244,6 +2244,39 @@
 - `git diff --check` passed.
 - I could not run Gradle task verification in this sandbox because the requested wrapper invocation still fails before project execution with `Could not determine a usable wildcard IP for this machine`.
 
+## 2026-04-06 build optimization pass restore lean lib check path
+
+### Requested baseline
+- Re-ran the requested command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- It still failed before project execution in this sandbox with:
+  - `Could not determine a usable wildcard IP for this machine`.
+- Checked `build/reports/profile` after the failed run; no new profile HTML was produced, and the latest available report is still `build/reports/profile/profile-2026-04-04-19-07-42.html`.
+
+### Findings
+- The handwritten `lib/capybara-lib` build still had `prepareCapybaraForCheck` writing `build/generated/sources/capybara/linked/main` on the exact `:lib:capybara-lib:check --rerun-tasks` path.
+- That linked output is not consumed by the module-local `check` graph:
+  - `compileTestJava` depends directly on `prepareCapybaraForCheck`;
+  - `testCapybara` depends on `compileTestJava`;
+  - no downstream project tasks run for the exact requested target.
+- Earlier repository-wide wiring to help downstream linked-output consumers had therefore reintroduced redundant linked JSON serialization and filesystem writes on the hot path the user asked to optimize.
+- The reusable Gradle plugin already keeps its analogous single-Java verification path lean by not writing linked output there, so the handwritten module had drifted from the optimized plugin behavior.
+
+### Changes made
+- Removed linked main output generation from `prepareCapybaraForCheck` in `lib/capybara-lib/build.gradle`.
+- Rewired the compatibility tasks `linkCapybara`, `linkCapybaraLinked`, `compileCapybara`, and `compileTestCapybara` back to their standalone producers so those task names continue to mean:
+  - explicit main compile+generate,
+  - explicit linked-output generation,
+  - explicit standalone test generation.
+- Left `compileJava` and `compileTestJava` wired directly to `prepareCapybaraForCheck`, so the exact `:lib:capybara-lib:check` path keeps the fused single-invocation behavior without the extra linked-output write.
+
+### Expected impact
+- `:lib:capybara-lib:check --rerun-tasks` should stop serializing and writing the linked main Capybara program when the build only needs generated Java for verification.
+- The exact requested module-local check path now matches the leaner single-Java verification behavior already used by the reusable plugin.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle task verification in this sandbox because the requested wrapper invocation still fails before project execution with `Could not determine a usable wildcard IP for this machine`.
+
 ## 2026-04-06 build optimization pass skip empty plugin Capybara test pipeline
 
 ### Requested baseline
