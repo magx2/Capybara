@@ -88,6 +88,25 @@ public class CapybaraPlugin implements Plugin<Project> {
                 }
         );
 
+        var linkCapybaraLinked = project.getTasks().register(
+                "linkCapybaraLinked",
+                CompileCapybaraTask.class,
+                task -> {
+                    task.setGroup("build");
+                    task.setDescription("Compiles Capybara files from src/main/capybara to linked JSON without generating Java.");
+                    task.getInputDir().set(project.file("src/main/capybara"));
+                    task.getOutputDir().set(layout.getBuildDirectory().dir("classes/capybara"));
+                    task.getLibraryProgramFiles().from();
+                    task.getCompilerVersion().set(compilerVersion);
+                    task.getCompileTests().set(false);
+                    task.getIncludeJavaLibResources().set(false);
+                    task.getCompileTestSourcesWithMainCompilation().set(false);
+                    task.getWriteLinkedOutput().set(true);
+                    task.getIncludeJavaLibResourcesInTestOutput().set(false);
+                    task.getLogLevel().set(capybaraCompileLogLevel);
+                }
+        );
+
         var generateCapybaraJava = project.getTasks().register(
                 "generateCapybaraJava",
                 task -> {
@@ -106,7 +125,7 @@ public class CapybaraPlugin implements Plugin<Project> {
                 task -> {
                     task.setGroup("verification");
                     task.setDescription("Compiles Capybara files from src/test/capybara.");
-                    task.dependsOn(compileCapybara);
+                    task.dependsOn(linkCapybaraLinked);
                     task.getInputDir().set(project.file("src/test/capybara"));
                     task.getGeneratedOutputDir().set(generatedTestJavaDir);
                     task.getLibraryProgramFiles().from(layout.getBuildDirectory().file("classes/capybara/program.json"));

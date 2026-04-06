@@ -173,14 +173,16 @@ class CapybaraPluginTest {
                 """);
 
         var project = newProject(List.of("compileTestCapybara"));
-        var compileCapybara = project.getTasks().named("compileCapybara", CompileCapybaraTask.class).get();
+        var linkCapybaraLinked = project.getTasks().named("linkCapybaraLinked", CompileCapybaraTask.class).get();
         var compileTestCapybara = project.getTasks().named("compileTestCapybara", CompileCapybaraTask.class).get();
+        var compileTestCapybaraDependencies = compileTestCapybara.getTaskDependencies().getDependencies(compileTestCapybara);
 
-        assertTrue(compileCapybara.getOutputDir().isPresent());
-        assertFalse(compileCapybara.getTestInputDir().isPresent());
-        assertFalse(compileCapybara.getGeneratedTestOutputDir().isPresent());
+        assertTrue(linkCapybaraLinked.getOutputDir().isPresent());
+        assertFalse(linkCapybaraLinked.getGeneratedOutputDir().isPresent());
         assertTrue(compileTestCapybara.getOnlyIf().isSatisfiedBy(compileTestCapybara));
         assertEquals(project.file("build/generated/sources/test-capybara/java"), compileTestCapybara.getGeneratedOutputDir().get().getAsFile());
+        assertTrue(compileTestCapybaraDependencies.contains(linkCapybaraLinked));
+        assertFalse(compileTestCapybaraDependencies.contains(project.getTasks().named("compileCapybara").get()));
     }
 
     @Test
@@ -200,14 +202,16 @@ class CapybaraPluginTest {
                 """);
 
         var project = newProject(List.of("generateTestCapybaraJava"));
-        var compileCapybara = project.getTasks().named("compileCapybara", CompileCapybaraTask.class).get();
+        var linkCapybaraLinked = project.getTasks().named("linkCapybaraLinked", CompileCapybaraTask.class).get();
         var compileTestCapybara = project.getTasks().named("compileTestCapybara", CompileCapybaraTask.class).get();
+        var compileTestCapybaraDependencies = compileTestCapybara.getTaskDependencies().getDependencies(compileTestCapybara);
 
-        assertTrue(compileCapybara.getOutputDir().isPresent());
-        assertFalse(compileCapybara.getTestInputDir().isPresent());
-        assertFalse(compileCapybara.getGeneratedTestOutputDir().isPresent());
+        assertTrue(linkCapybaraLinked.getOutputDir().isPresent());
+        assertFalse(linkCapybaraLinked.getGeneratedOutputDir().isPresent());
         assertTrue(compileTestCapybara.getOnlyIf().isSatisfiedBy(compileTestCapybara));
         assertEquals(project.file("build/generated/sources/test-capybara/java"), compileTestCapybara.getGeneratedOutputDir().get().getAsFile());
+        assertTrue(compileTestCapybaraDependencies.contains(linkCapybaraLinked));
+        assertFalse(compileTestCapybaraDependencies.contains(project.getTasks().named("compileCapybara").get()));
     }
 
     @Test
@@ -258,6 +262,34 @@ class CapybaraPluginTest {
 
         assertEquals(1, libraryProgramFiles.size());
         assertTrue(libraryProgramFiles.contains(project.file("build/classes/capybara/program.json")));
+    }
+
+    @Test
+    void shouldCompileStandaloneTestSourcesWithoutGeneratingMainJava() throws IOException {
+        var mainSourceDir = Files.createDirectories(tempDir.resolve("src/main/capybara/foo"));
+        Files.writeString(mainSourceDir.resolve("Lib.cfun"), "fun forty_two(): int = 42\n");
+        var testSourceDir = Files.createDirectories(tempDir.resolve("src/test/capybara/bar"));
+        Files.writeString(testSourceDir.resolve("TestModule.cfun"), """
+                from /capy/test/Assert import { * }
+                from /capy/test/CapyTest import { * }
+                from /foo/Lib import { forty_two }
+
+                fun works(): Assert =
+                    assert_that(forty_two()).is_equal_to(42)
+
+                fun tests(): TestFile =
+                    test_file("/bar/TestModule.cfun", [
+                        test("works", works())
+                    ])
+                """);
+
+        var project = newProject(List.of("compileTestCapybara"));
+        project.getTasks().named("compileTestCapybara", CompileCapybaraTask.class).get().compile();
+
+        assertTrue(project.file("build/classes/capybara/program.json").isFile());
+        assertTrue(project.file("build/generated/sources/test-capybara/java/bar/TestModule.java").isFile());
+        assertFalse(project.file("build/generated/sources/capybara/java/foo/Lib.java").exists());
+        assertFalse(project.file("build/generated/sources/capybara/java/dev/capylang/CapybaraUtil.java").exists());
     }
 
     @Test

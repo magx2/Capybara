@@ -2280,6 +2280,68 @@
 - `git diff --check` passed.
 - I could not run Gradle task verification in this sandbox because the requested wrapper invocation still fails before project execution with `Could not determine a usable wildcard IP for this machine`.
 
+## 2026-04-06 build optimization pass standalone test generation linked-only main input
+
+### Requested baseline
+- Re-ran the requested baseline command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- In this sandbox, the wrapper still failed before task execution with:
+  - `Could not create service of type FileLockContentionHandler`
+  - `Could not determine a usable wildcard IP for this machine`
+- Checked `build/reports/profile` after the run; no new profile HTML was produced, so the latest available timing artifact remains `build/reports/profile/profile-2026-04-04-19-07-42.html`.
+
+### Findings
+- The hot `check` path has already been fused down heavily, but the standalone Capybara test-source generation path still had avoidable main-build work.
+- In `lib/capybara-lib`, `compileTestCapybaraDirect` still depended on `linkCapybaraDirect`, which compiles main Capybara sources and generates main Java before generating test Java.
+- The reusable `build-tool/gradle` plugin had the same shape: standalone `compileTestCapybara` depended on `compileCapybara`, so direct `compileTestCapybara` / `generateTestCapybaraJava` requests still generated main Java even though test compilation only consumes the linked main program as a library input.
+- That extra main Java generation is unnecessary on the standalone test-generation path because the task only needs `build/classes/capybara/program.json`, not `build/generated/sources/capybara/java/**`.
+
+### Changes made
+- Rewired `lib/capybara-lib:compileTestCapybaraDirect` to depend on `linkCapybaraLinkedOnly` instead of `linkCapybaraDirect`.
+- Added a linked-only main compile task to `build-tool/gradle`’s `CapybaraPlugin` and rewired standalone `compileTestCapybara` to depend on it instead of the heavier `compileCapybara` task.
+- Added plugin tests covering:
+  - direct standalone `compileTestCapybara` / `generateTestCapybaraJava` task wiring to the linked-only main task;
+  - standalone test-source generation producing test Java and linked main JSON without generating main Java sources.
+
+### Expected impact
+- Direct `compileTestCapybara` / `generateTestCapybaraJava` runs should avoid one unnecessary main Java generation pass.
+- This trims filesystem work and Capybara code generation from standalone test-source generation while preserving the existing fused `check` / `test` path and linked main program availability.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle task verification in this sandbox because the requested wrapper command still fails before project execution with `Could not determine a usable wildcard IP for this machine`.
+- Verification for this pass is limited to source inspection and the added plugin unit tests.
+
+## 2026-04-06 build optimization pass standalone test generation linked-only main input
+
+### Requested baseline
+- Re-ran the requested baseline command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- In this sandbox, the wrapper still failed before task execution with:
+  - `Could not create service of type FileLockContentionHandler`
+  - `Could not determine a usable wildcard IP for this machine`
+- Checked `build/reports/profile` after the run; no new profile HTML was produced, so the latest available timing artifact remains `build/reports/profile/profile-2026-04-04-19-07-42.html`.
+
+### Findings
+- The hot `check` path has already been fused down heavily, but the standalone Capybara test-source generation path still had avoidable main-build work.
+- In `lib/capybara-lib`, `compileTestCapybaraDirect` still depended on `linkCapybaraDirect`, which compiles main Capybara sources and generates main Java before generating test Java.
+- The reusable `build-tool/gradle` plugin had the same shape: standalone `compileTestCapybara` depended on `compileCapybara`, so direct `compileTestCapybara` / `generateTestCapybaraJava` requests still generated main Java even though test compilation only consumes the linked main program as a library input.
+- That extra main Java generation is unnecessary on the standalone test-generation path because the task only needs `build/classes/capybara/program.json`, not `build/generated/sources/capybara/java/**`.
+
+### Changes made
+- Rewired `lib/capybara-lib:compileTestCapybaraDirect` to depend on `linkCapybaraLinkedOnly` instead of `linkCapybaraDirect`.
+- Added a linked-only main compile task to `build-tool/gradle`’s `CapybaraPlugin` and rewired standalone `compileTestCapybara` to depend on it instead of the heavier `compileCapybara` task.
+- Added plugin tests covering:
+  - direct standalone `compileTestCapybara` / `generateTestCapybaraJava` task wiring to the linked-only main task;
+  - standalone test-source generation producing test Java and linked main JSON without generating main Java sources.
+
+### Expected impact
+- Direct `compileTestCapybara` / `generateTestCapybaraJava` runs should avoid one unnecessary main Java generation pass.
+- This trims filesystem work and Capybara code generation from standalone test-source generation while preserving the existing fused `check` / `test` path and linked main program availability.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle task verification in this sandbox because the requested wrapper command still fails before project execution with `Could not determine a usable wildcard IP for this machine`.
+- Verification for this pass is limited to source inspection and the added plugin unit tests.
+
 ## 2026-04-06 build optimization pass compatibility task indirection pruning
 
 ### Requested baseline
@@ -2487,6 +2549,37 @@
 ### Verification status
 - `git diff --check` passed.
 - I could not run Gradle task verification in this sandbox because the requested wrapper invocation still fails before project execution with `Could not determine a usable wildcard IP for this machine`.
+
+## 2026-04-06 build optimization pass standalone test generation linked-only main input
+
+### Requested baseline
+- Re-ran the requested baseline command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- In this sandbox, the wrapper still failed before task execution with:
+  - `Could not create service of type FileLockContentionHandler`
+  - `Could not determine a usable wildcard IP for this machine`
+- Checked `build/reports/profile` after the run; no new profile HTML was produced, so the latest available timing artifact remains `build/reports/profile/profile-2026-04-04-19-07-42.html`.
+
+### Findings
+- The hot `check` path has already been fused down heavily, but the standalone Capybara test-source generation path still had avoidable main-build work.
+- In `lib/capybara-lib`, `compileTestCapybaraDirect` still depended on `linkCapybaraDirect`, which compiles main Capybara sources and generates main Java before generating test Java.
+- The reusable `build-tool/gradle` plugin had the same shape: standalone `compileTestCapybara` depended on `compileCapybara`, so direct `compileTestCapybara` / `generateTestCapybaraJava` requests still generated main Java even though test compilation only consumes the linked main program as a library input.
+- That extra main Java generation is unnecessary on the standalone test-generation path because the task only needs `build/classes/capybara/program.json`, not `build/generated/sources/capybara/java/**`.
+
+### Changes made
+- Rewired `lib/capybara-lib:compileTestCapybaraDirect` to depend on `linkCapybaraLinkedOnly` instead of `linkCapybaraDirect`.
+- Added a linked-only main compile task to `build-tool/gradle`’s `CapybaraPlugin` and rewired standalone `compileTestCapybara` to depend on it instead of the heavier `compileCapybara` task.
+- Added plugin tests covering:
+  - direct standalone `compileTestCapybara` / `generateTestCapybaraJava` task wiring to the linked-only main task;
+  - standalone test-source generation producing test Java and linked main JSON without generating main Java sources.
+
+### Expected impact
+- Direct `compileTestCapybara` / `generateTestCapybaraJava` runs should avoid one unnecessary main Java generation pass.
+- This trims filesystem work and Capybara code generation from standalone test-source generation while preserving the existing fused `check` / `test` path and linked main program availability.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle task verification in this sandbox because the requested wrapper command still fails before project execution with `Could not determine a usable wildcard IP for this machine`.
+- Verification for this pass is limited to source inspection and the added plugin unit tests.
 
 ## 2026-04-06 build optimization pass quieter in-process compile logging
 
@@ -3044,3 +3137,34 @@
 ### Verification status
 - `git diff --check` passed.
 - I could not run Gradle task verification in this sandbox because the requested wrapper invocation still fails before project execution with `Could not determine a usable wildcard IP for this machine`.
+
+## 2026-04-06 build optimization pass standalone test generation linked-only main input
+
+### Requested baseline
+- Re-ran the requested baseline command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- In this sandbox, the wrapper still failed before task execution with:
+  - `Could not create service of type FileLockContentionHandler`
+  - `Could not determine a usable wildcard IP for this machine`
+- Checked `build/reports/profile` after the run; no new profile HTML was produced, so the latest available timing artifact remains `build/reports/profile/profile-2026-04-04-19-07-42.html`.
+
+### Findings
+- The hot `check` path has already been fused down heavily, but the standalone Capybara test-source generation path still had avoidable main-build work.
+- In `lib/capybara-lib`, `compileTestCapybaraDirect` still depended on `linkCapybaraDirect`, which compiles main Capybara sources and generates main Java before generating test Java.
+- The reusable `build-tool/gradle` plugin had the same shape: standalone `compileTestCapybara` depended on `compileCapybara`, so direct `compileTestCapybara` / `generateTestCapybaraJava` requests still generated main Java even though test compilation only consumes the linked main program as a library input.
+- That extra main Java generation is unnecessary on the standalone test-generation path because the task only needs `build/classes/capybara/program.json`, not `build/generated/sources/capybara/java/**`.
+
+### Changes made
+- Rewired `lib/capybara-lib:compileTestCapybaraDirect` to depend on `linkCapybaraLinkedOnly` instead of `linkCapybaraDirect`.
+- Added a linked-only main compile task to `build-tool/gradle`’s `CapybaraPlugin` and rewired standalone `compileTestCapybara` to depend on it instead of the heavier `compileCapybara` task.
+- Added plugin tests covering:
+  - direct standalone `compileTestCapybara` / `generateTestCapybaraJava` task wiring to the linked-only main task;
+  - standalone test-source generation producing test Java and linked main JSON without generating main Java sources.
+
+### Expected impact
+- Direct `compileTestCapybara` / `generateTestCapybaraJava` runs should avoid one unnecessary main Java generation pass.
+- This trims filesystem work and Capybara code generation from standalone test-source generation while preserving the existing fused `check` / `test` path and linked main program availability.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle task verification in this sandbox because the requested wrapper command still fails before project execution with `Could not determine a usable wildcard IP for this machine`.
+- Verification for this pass is limited to source inspection and the added plugin unit tests.

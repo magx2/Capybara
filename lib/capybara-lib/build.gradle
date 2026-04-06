@@ -502,7 +502,7 @@ tasks.register('compileCapybara') {
 tasks.register('compileTestCapybaraDirect', InProcessCapybaraCompileTask) {
     group = 'verification'
     description = 'Compiles test Capybara files and generates Java without writing linked intermediates.'
-    dependsOn tasks.named('linkCapybaraDirect')
+    dependsOn tasks.named('linkCapybaraLinkedOnly')
 
     runtimeClasspath.from(capyRuntimeClasspath)
     inputDir.set(capybaraTestSourceDir)
