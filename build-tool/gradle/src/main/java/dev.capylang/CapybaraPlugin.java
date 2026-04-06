@@ -63,14 +63,13 @@ public class CapybaraPlugin implements Plugin<Project> {
                     task.setDescription("Compiles Capybara files from src/test/capybara.");
                     task.dependsOn(compileCapybara);
                     task.getInputDir().set(project.file("src/test/capybara"));
-                    task.getOutputDir().set(layout.getBuildDirectory().dir("classes/test-capybara"));
                     task.getGeneratedOutputDir().set(layout.getBuildDirectory().dir("generated/sources/test-capybara/java"));
                     task.getAdditionalInputDirs().from(layout.getBuildDirectory().dir("classes/capybara"));
                     task.getCompilerVersion().set(compilerVersion);
                     task.getCompileTests().set(true);
                     task.getIncludeJavaLibResources().set(false);
                     task.getCompileTestSourcesWithMainCompilation().set(false);
-                    task.getWriteLinkedOutput().set(true);
+                    task.getWriteLinkedOutput().set(false);
                     task.getIncludeJavaLibResourcesInTestOutput().set(false);
                     task.onlyIf(ignored -> !capybaraTestBuildRequested.get());
                 }

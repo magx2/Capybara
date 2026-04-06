@@ -578,6 +578,35 @@
 - I could not run Gradle task verification in this sandbox because the requested wrapper command still fails before project execution on the read-only `/home/martin/.gradle` lock path.
 - Verification for this pass is limited to source inspection and the updated regression tests.
 
+## 2026-04-06 build optimization pass plugin test-linked-output removal
+
+### Requested baseline
+- Re-ran the requested baseline command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- It still failed immediately in this sandbox because the wrapper tried to create `/home/martin/.gradle/.../gradle-9.1.0-bin.zip.lck` on a read-only filesystem.
+- Checked `build/reports/profile` after the run; no new profile HTML was produced, so analysis still relies on the latest existing report at `build/reports/profile/profile-2026-04-04-19-07-42.html`.
+
+### Findings
+- The handwritten `lib/capybara-lib` build already avoids writing linked test JSON on its non-fused `compileTestCapybara` path, but the reusable `build-tool/gradle` plugin still configured `compileTestCapybara` to emit `build/classes/test-capybara/**`.
+- Nothing in the repository consumes that linked test output:
+  - `generateTestCapybaraJava` is only a compatibility dependency task;
+  - test Java compilation reads generated Java from `build/generated/sources/test-capybara/java`;
+  - plugin tests only depended on linked main output for library loading, not linked test output.
+- That meant plugin consumers were still paying redundant linked-program serialization and filesystem writes on standalone `compileTestCapybara` / `generateTestCapybaraJava` paths.
+
+### Changes made
+- Updated `build-tool/gradle`’s `CompileCapybaraTask` to treat linked output as truly optional and only resolve/create the output directory when `writeLinkedOutput` is enabled.
+- Updated `CapybaraPlugin` so `compileTestCapybara` no longer configures or writes `build/classes/test-capybara`.
+- Extended plugin tests to assert test-source generation still works and no linked test JSON artifacts are produced.
+
+### Expected impact
+- Plugin consumers should avoid one unnecessary linked-output write tree when compiling Capybara test sources outside the fused `check` path.
+- This removes more filesystem churn from Capybara test generation and brings the reusable plugin in line with the handwritten library build.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle task verification in this sandbox because the requested wrapper command still fails before project execution on the read-only `/home/martin/.gradle` lock path.
+- Verification for this pass is limited to source inspection and the updated plugin test coverage.
+
 ## 2026-04-06 build optimization pass manifest rewrite suppression
 
 ### Requested baseline

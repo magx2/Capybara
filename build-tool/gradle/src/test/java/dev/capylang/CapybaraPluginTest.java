@@ -98,6 +98,8 @@ class CapybaraPluginTest {
         assertTrue(project.file("build/generated/sources/test-capybara/java/bar/TestModule.java").isFile());
         assertTrue(project.file("build/generated/sources/test-capybara/java/capy/test/CapyTestRuntime.java").isFile());
         assertFalse(project.file("build/generated/sources/test-capybara/java/dev/capylang/CapybaraUtil.java").exists());
+        assertFalse(project.file("build/classes/test-capybara/program.json").exists());
+        assertFalse(project.file("build/classes/test-capybara/build-info.json").exists());
     }
 
     @Test

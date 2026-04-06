@@ -65,8 +65,10 @@ public abstract class CompileCapybaraTask extends DefaultTask {
     @TaskAction
     public void compile() throws IOException {
         var input = getInputDir().get().getAsFile().toPath();
-        var output = getOutputDir().get().getAsFile().toPath();
         var writeLinkedOutput = getWriteLinkedOutput().getOrElse(true);
+        var output = writeLinkedOutput && getOutputDir().isPresent()
+                ? getOutputDir().get().getAsFile().toPath()
+                : null;
         var generatedOutput = getGeneratedOutputDir().isPresent() ? getGeneratedOutputDir().get().getAsFile().toPath() : null;
         var compileTestSourcesWithMainCompilation = getCompileTestSourcesWithMainCompilation().getOrElse(false);
         var testInput = compileTestSourcesWithMainCompilation && getTestInputDir().isPresent()
@@ -79,7 +81,7 @@ public abstract class CompileCapybaraTask extends DefaultTask {
                 .map(java.io.File::toPath)
                 .toList());
 
-        if (writeLinkedOutput) {
+        if (output != null) {
             Files.createDirectories(output);
         }
         if (generatedOutput != null) {
