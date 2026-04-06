@@ -419,6 +419,33 @@
 - `:lib:capybara-lib:testCapybara` should avoid a full pre-run tree walk/delete under `build/test-results/capybara` on every `--rerun-tasks` build.
 - Repeated local builds should do less filesystem churn while still removing obsolete JUnit XML files when tests disappear or report paths change.
 
+## 2026-04-06 build optimization pass main-only compile path
+
+### Requested baseline
+- Re-ran the requested command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- It still failed before any task execution in this sandbox:
+  - Gradle startup reported `Could not determine a usable wildcard IP for this machine`.
+- Checked `build/reports/profile` after the run; no new profile HTML was produced, so the only timing data available remains the existing reports already in that directory.
+
+### Findings
+- In `lib/capybara-lib`, the compatibility task `compileCapybara` still depended on `linkCapybara`.
+- For non-test main-source builds such as `:lib:capybara-lib:compileJava`, that meant the build still wrote linked main JSON under `build/generated/sources/capybara/linked/main` even though the caller only needed generated Java.
+- Earlier passes already introduced `linkCapybaraLinkedOnly` for true linked-output consumers, so this remaining `compileCapybara -> linkCapybara` dependency was avoidable work on the main-only build path.
+
+### Changes made
+- Added `compileCapybaraDirect` in `lib/capybara-lib/build.gradle`.
+- Wired it to generate main Java sources without declaring or writing linked output.
+- Changed `compileCapybara` to depend on `compileCapybaraDirect` instead of `linkCapybara`.
+- Kept `linkCapybara` and `linkCapybaraLinkedOnly` unchanged for tasks that actually consume linked stdlib output.
+
+### Expected impact
+- Non-test main-source builds such as `:lib:capybara-lib:compileJava` should avoid writing linked JSON when only generated Java is required.
+- This trims one more source of filesystem work from handwritten `lib/capybara-lib` builds without changing the behavior of linked-output consumers.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle task verification or produce a fresh profile in this sandbox because the requested wrapper command still fails before project execution with `Could not determine a usable wildcard IP for this machine`.
+
 ## 2026-04-06 build optimization pass skip empty main resources
 
 ### Requested baseline
