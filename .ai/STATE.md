@@ -1519,3 +1519,30 @@
 - `git diff --check` passed.
 - I could not run Gradle task verification or produce a fresh profile in this sandbox because the requested wrapper command still fails before project execution on both the default Gradle home lock path and the repository-local cache path.
 - Verification for this pass is limited to source inspection and task-graph analysis.
+
+## 2026-04-06 build optimization pass in-process integration generation
+
+### Requested baseline
+- Re-ran the requested baseline command exactly as `./gradlew :lib:capybara-lib:check --profile --rerun-tasks --console=plain`.
+- It still failed immediately in this sandbox because the wrapper tried to create `/home/martin/.gradle/.../gradle-9.1.0-bin.zip.lck` on a read-only filesystem.
+- Checked `build/reports/profile` again; no fresh profile report was produced, so analysis still relies on the existing HTML reports already present there.
+
+### Findings
+- The exact requested profile target is still blocked here, but current source inspection showed one remaining extra Capy JVM launch in the repository build:
+  - `integration-tests:linkCapybaraSources` still used `JavaExec` to invoke `capy compile-generate java`;
+  - that repeated the same external-process startup cost earlier passes had already removed from `lib:capybara-lib` and the reusable Gradle plugin.
+- `integration-tests:linkCapybaraSources` and `compiler:processResources` only need the stdlib linked JSON output from `lib:capybara-lib`, but they were still depending on the compatibility task `:lib:capybara-lib:linkCapybaraLinked` instead of the real producer task `:lib:capybara-lib:linkCapybaraLinkedOnly`.
+
+### Changes made
+- Replaced `integration-tests:linkCapybaraSources` `JavaExec` with an in-process compile task implemented directly in `integration-tests/build.gradle`.
+- The new task loads `dev.capylang.Capy` from `:capy`'s runtime classpath, reads linked stdlib modules from `:lib:capybara-lib`, and invokes `compile-generate java --skip-java-lib --linked-output ...` via reflection in the current Gradle JVM.
+- Rewired `integration-tests:linkCapybaraSources` to depend directly on `:lib:capybara-lib:linkCapybaraLinkedOnly`.
+- Rewired `compiler:processResources` to depend directly on `:lib:capybara-lib:linkCapybaraLinkedOnly` as well.
+
+### Expected impact
+- Clean repository builds should avoid one extra Capy CLI JVM launch in `integration-tests`.
+- Cross-project consumers that only need stdlib linked JSON should bypass one no-op compatibility task and depend directly on the real linked-output producer.
+
+### Verification status
+- `git diff --check` passed.
+- I could not run Gradle verification in this sandbox because the requested wrapper invocation still fails before Gradle startup on the read-only `/home/martin/.gradle` lock path.
