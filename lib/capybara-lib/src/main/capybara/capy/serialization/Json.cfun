@@ -37,12 +37,11 @@ fun serialize(obj: JsonObject) =
     __serialize(obj)
 
 fun deserialize(json: string): Result[JsonObject] =
-    match _deserializeJsonObject(json) with
-    case Error e -> e
-    case Success { parse } ->
+    _deserializeJsonObject(json)
+    | parse =>
         if parse.parsing_string.is_empty()
         then Success { value: parse.value }
-        else Error { "Expected string to end, but still got `" + parse.parsing_string +"`" }
+        else Error { "Expected string to end, but still got `{parse.parsing_string}`" }
 
 data _Parse[T] { value: T, parsing_string: string }
 
