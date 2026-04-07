@@ -5159,12 +5159,7 @@ public class CapybaraExpressionCompiler {
                         .map(CoercedArgument::expression))
                 .collect(new ResultCollectionCollector<>())
                 .map(values -> {
-                    var elementType = expectedElementType == null
-                            ? values.stream()
-                                    .map(CompiledExpression::type)
-                                    .reduce(CapybaraTypeFinder::findHigherType)
-                                    .orElse(ANY)
-                            : expectedElementType;
+                    var elementType = resolveCollectionElementType(values, expectedElementType);
                     return (CompiledExpression) new CompiledNewList(values, new CompiledList(elementType));
                 });
     }
@@ -5181,12 +5176,7 @@ public class CapybaraExpressionCompiler {
                         .map(CoercedArgument::expression))
                 .collect(new ResultCollectionCollector<>())
                 .map(values -> {
-                    var elementType = expectedElementType == null
-                            ? values.stream()
-                                    .map(CompiledExpression::type)
-                                    .reduce(CapybaraTypeFinder::findHigherType)
-                                    .orElse(ANY)
-                            : expectedElementType;
+                    var elementType = resolveCollectionElementType(values, expectedElementType);
                     return (CompiledExpression) new CompiledNewSet(values, new CompiledSet(elementType));
                 });
     }
@@ -5226,14 +5216,31 @@ public class CapybaraExpressionCompiler {
             entries.add(linkedEntry);
         }
 
-        var valueType = expectedValueType == null
-                ? entries.stream()
-                        .map(CompiledNewDict.Entry::value)
-                        .map(CompiledExpression::type)
-                        .reduce(CapybaraTypeFinder::findHigherType)
-                        .orElse(ANY)
-                : expectedValueType;
+        var valueType = resolveCollectionElementType(
+                entries.stream().map(CompiledNewDict.Entry::value).toList(),
+                expectedValueType
+        );
         return Result.success((CompiledExpression) new CompiledNewDict(List.copyOf(entries), new CompiledDict(valueType)));
+    }
+
+    private CompiledType resolveCollectionElementType(
+            List<? extends CompiledExpression> values,
+            CompiledType expectedElementType
+    ) {
+        if (expectedElementType == null) {
+            return values.stream()
+                    .map(CompiledExpression::type)
+                    .reduce(CapybaraTypeFinder::findHigherType)
+                    .orElse(ANY);
+        }
+        if (!containsGenericTypeParameter(expectedElementType)) {
+            return expectedElementType;
+        }
+        return values.stream()
+                .map(CompiledExpression::type)
+                .filter(type -> !(type instanceof CompiledGenericTypeParameter))
+                .reduce(CapybaraTypeFinder::findHigherType)
+                .orElse(expectedElementType);
     }
 
     private Result<CompiledExpression> linkWithExpression(WithExpression expression, Scope scope) {
