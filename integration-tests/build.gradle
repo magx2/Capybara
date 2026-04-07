@@ -128,7 +128,7 @@ test {
 def capybaraSourceDir = layout.projectDirectory.dir('src/main/capybara')
 def capybaraLibLinkedDir = project(':lib:capybara-lib').layout.buildDirectory.dir('generated/sources/capybara/linked/main')
 def generatedJavaDir = layout.buildDirectory.dir('generated/sources/capybara/java/main')
-def linkedOutputDir = layout.buildDirectory.dir('generated/sources/capybara/linked/main')
+def capybaraLinkedOutputDir = layout.buildDirectory.dir('generated/sources/capybara/linked/main')
 
 tasks.register('linkCapybaraSources', InProcessCapybaraCompileTask) {
     group = 'build'
@@ -138,7 +138,7 @@ tasks.register('linkCapybaraSources', InProcessCapybaraCompileTask) {
     runtimeClasspath.from(project(':capy').sourceSets.main.runtimeClasspath)
     inputDir.set(capybaraSourceDir)
     additionalInputDirs.from(capybaraLibLinkedDir)
-    linkedOutputDir.set(linkedOutputDir)
+    linkedOutputDir.set(capybaraLinkedOutputDir)
     generatedOutputDir.set(generatedJavaDir)
     includeJavaLibResources.set(false)
     compilerVersion.set(project.version.toString())

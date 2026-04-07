@@ -41,8 +41,8 @@ class CapyRuntimeBridge implements Closeable {
     private final def readLinkedProgramMethod
     private final def compileMethod
     private final def compileGenerateMethod
-    private final def parseArgumentsMethod
-    private final def runTestsMethod
+    private def parseArgumentsMethod
+    private def runTestsMethod
     private final Object javaOutputType
 
     CapyRuntimeBridge(Set<File> runtimeClasspathFiles) {
@@ -78,11 +78,6 @@ class CapyRuntimeBridge implements Closeable {
                 String,
                 PrintStream
         )
-
-        def testRunnerClass = Class.forName('dev.capylang.test.TestRunner', true, classLoader)
-        def argumentsClass = Class.forName('dev.capylang.test.TestRunner$Arguments', true, classLoader)
-        parseArgumentsMethod = testRunnerClass.getMethod('parseArguments', String[].class)
-        runTestsMethod = testRunnerClass.getMethod('runTests', argumentsClass)
     }
 
     TreeSet readLibraryModules(Set<File> libraryDirs) {
@@ -138,6 +133,7 @@ class CapyRuntimeBridge implements Closeable {
     }
 
     int runTests(Path outputPath, String reportType, String logLevel) {
+        ensureTestRunnerLoaded()
         def originalContextClassLoader = Thread.currentThread().contextClassLoader
         try {
             Thread.currentThread().contextClassLoader = classLoader
@@ -149,11 +145,21 @@ class CapyRuntimeBridge implements Closeable {
                 args.addAll(['-ll', logLevel])
             }
 
-            def parsedArguments = parseArgumentsMethod.invoke(null, (Object) args.toArray(new String[0]))
-            return runTestsMethod.invoke(null, parsedArguments) as Integer
+            def parsedArguments = parseArgumentsMethod.invoke(null, [args.toArray(new String[0])] as Object[])
+            return runTestsMethod.invoke(null, [parsedArguments] as Object[]) as Integer
         } finally {
             Thread.currentThread().contextClassLoader = originalContextClassLoader
         }
+    }
+
+    private void ensureTestRunnerLoaded() {
+        if (parseArgumentsMethod != null && runTestsMethod != null) {
+            return
+        }
+        def testRunnerClass = Class.forName('dev.capylang.test.TestRunner', true, classLoader)
+        def argumentsClass = Class.forName('dev.capylang.test.TestRunner$Arguments', true, classLoader)
+        parseArgumentsMethod = testRunnerClass.getMethod('parseArguments', String[].class)
+        runTestsMethod = testRunnerClass.getMethod('runTests', argumentsClass)
     }
 
     @Override
@@ -335,7 +341,7 @@ def capybaraGeneratedTestDir = layout.buildDirectory.dir('generated/sources/capy
 def capybaraGeneratedCheckDir = layout.buildDirectory.dir('generated/sources/capybara/java/check')
 def capybaraLinkedMainDir = layout.buildDirectory.dir('generated/sources/capybara/linked/main')
 def capybaraTestResultsDir = layout.buildDirectory.dir('test-results/capybara')
-def capybaraTestRuntimeClasspath = files(sourceSets.main.runtimeClasspath, sourceSets.test.output.classesDirs)
+def capybaraTestRuntimeClasspath = files(capyRuntimeClasspath, sourceSets.main.runtimeClasspath, sourceSets.test.output.classesDirs)
 def directoryContainsFile = { directory, matcher = { true } ->
     Path root = directory.asFile.toPath()
     if (Files.notExists(root) || !Files.isDirectory(root)) {
@@ -436,17 +442,18 @@ def singleJavaVerificationLifecycleTasks = [
         'testCapybara'
 ] as Set
 def capybaraTestBuildRequested = requestedTaskBasenames.any { capybaraTestLifecycleTasks.contains(it) }
-def singleJavaVerificationBuild = !hasMainResources &&
+def singleJavaVerificationBuild = !hasJvmMainSources &&
+        !hasMainResources &&
         requestedTaskBasenames.any { singleJavaVerificationLifecycleTasks.contains(it) }
 
 tasks.register('linkCapybaraDirect', InProcessCapybaraCompileTask) {
     group = 'build'
     description = 'Compiles Capybara files from src/main/capybara and generates Java in one pass.'
+    dependsOn tasks.named('linkCapybaraLinkedOnly')
 
     runtimeClasspath.from(capyRuntimeClasspath)
     inputDir.set(capybaraMainSourceDir)
     generatedOutputDir.set(capybaraGeneratedMainDir)
-    linkedOutputDir.set(capybaraLinkedMainDir)
     compileTests.set(false)
     includeJavaLibResources.set(false)
     compilerVersion.set(project.version.toString())
@@ -511,7 +518,7 @@ tasks.register('compileTestCapybaraDirect', InProcessCapybaraCompileTask) {
     compileTests.set(true)
     includeJavaLibResources.set(false)
     compilerVersion.set(project.version.toString())
-    onlyIf { hasCapybaraTestSources && !capybaraTestBuildRequested }
+    onlyIf { hasCapybaraTestSources && !singleJavaVerificationBuild }
 }
 
 tasks.register('compileTestCapybara') {
@@ -527,7 +534,7 @@ tasks.register('testCapybara', InProcessCapybaraTestTask) {
 
     runtimeClasspath.from(
             singleJavaVerificationBuild
-                    ? files(configurations.runtimeClasspath, sourceSets.test.output.classesDirs)
+                    ? files(capyRuntimeClasspath, configurations.runtimeClasspath, sourceSets.test.output.classesDirs)
                     : capybaraTestRuntimeClasspath
     )
     outputDir.set(capybaraTestResultsDir)
@@ -555,7 +562,7 @@ sourceSets {
 
 tasks.named('compileJava') {
     enabled = !singleJavaVerificationBuild
-    if (capybaraTestBuildRequested) {
+    if (singleJavaVerificationBuild && capybaraTestBuildRequested) {
         dependsOn tasks.named('prepareCapybaraForCheck')
     } else {
         dependsOn tasks.named('linkCapybaraDirect')
@@ -575,7 +582,7 @@ tasks.named('compileTestJava') {
                     dependency != 'processResources'
         })
     }
-    if (capybaraTestBuildRequested) {
+    if (singleJavaVerificationBuild && capybaraTestBuildRequested) {
         dependsOn tasks.named('prepareCapybaraForCheck')
     } else if (hasCapybaraTestSources) {
         dependsOn tasks.named('compileTestCapybaraDirect')
