@@ -1087,6 +1087,18 @@ public class CapybaraExpressionCompiler {
     }
 
     private Optional<Result<CompiledExpression>> resolveBuiltinMethodInvoke(FunctionCall functionCall, Scope scope, String methodName) {
+        var rewrittenReduceMethod = rewriteReduceMethodInvoke(functionCall, scope, methodName);
+        if (rewrittenReduceMethod.isPresent()) {
+            return rewrittenReduceMethod;
+        }
+        var optionAlias = resolveBuiltinOptionMethodInvoke(functionCall, scope, methodName);
+        if (optionAlias.isPresent()) {
+            return optionAlias;
+        }
+        var pipeAlias = resolveBuiltinPipeAliasMethodInvoke(functionCall, scope, methodName);
+        if (pipeAlias.isPresent()) {
+            return pipeAlias;
+        }
         var supportsBoolTwoStrings = "contains".equals(methodName)
                 || "starts_with".equals(methodName)
                 || "end_with".equals(methodName);
@@ -1198,6 +1210,246 @@ public class CapybaraExpressionCompiler {
                 args,
                 STRING
         )));
+    }
+
+    private Optional<Result<CompiledExpression>> rewriteReduceMethodInvoke(
+            FunctionCall functionCall,
+            Scope scope,
+            String methodName
+    ) {
+        if (!"reduce".equals(methodName) && !"reduce_left".equals(methodName)) {
+            return Optional.empty();
+        }
+        if (functionCall.arguments().size() != 2 || !(functionCall.arguments().get(1) instanceof ReduceExpression reduceExpression)) {
+            return Optional.empty();
+        }
+        if (methodsByNameAndArity(functionSignatures, methodName, 3).isEmpty()) {
+            return Optional.empty();
+        }
+        var lambdaArguments = new java.util.ArrayList<String>();
+        lambdaArguments.add(reduceExpression.accumulatorName());
+        reduceExpression.keyName().ifPresent(lambdaArguments::add);
+        lambdaArguments.add(reduceExpression.valueName());
+        var rewritten = new FunctionCall(
+                functionCall.moduleName(),
+                functionCall.name(),
+                List.of(
+                        functionCall.arguments().getFirst(),
+                        reduceExpression.initialValue(),
+                        new LambdaExpression(lambdaArguments, reduceExpression.reducerExpression(), reduceExpression.position())
+                ),
+                functionCall.position()
+        );
+        return Optional.of(resolveMethodInvokeCall(rewritten, scope));
+    }
+
+    private Optional<Result<CompiledExpression>> resolveBuiltinOptionMethodInvoke(
+            FunctionCall functionCall,
+            Scope scope,
+            String methodName
+    ) {
+        if (functionCall.arguments().isEmpty()) {
+            return Optional.empty();
+        }
+        var linkedReceiver = linkExpression(functionCall.arguments().getFirst(), scope);
+        if (linkedReceiver instanceof Result.Error<CompiledExpression> error) {
+            return Optional.of(new Result.Error<>(error.errors()));
+        }
+        if (!(linkedReceiver instanceof Result.Success<CompiledExpression> receiverValue)) {
+            return Optional.empty();
+        }
+        if (resolveSpecializedOptionType(receiverValue.value().type()).isEmpty()) {
+            return Optional.empty();
+        }
+        return switch (methodName) {
+            case "flat_map" -> functionCall.arguments().size() == 2
+                    ? Optional.of(linkBuiltinOptionFlatMapMethodInvoke(functionCall, scope))
+                    : Optional.empty();
+            case "reduce", "reduce_left" -> (functionCall.arguments().size() == 2 || functionCall.arguments().size() == 3)
+                    ? Optional.of(linkBuiltinOptionReduceMethodInvoke(functionCall, scope))
+                    : Optional.empty();
+            default -> Optional.empty();
+        };
+    }
+
+    private Optional<Result<CompiledExpression>> resolveBuiltinPipeAliasMethodInvoke(
+            FunctionCall functionCall,
+            Scope scope,
+            String methodName
+    ) {
+        var arguments = functionCall.arguments();
+        return switch (methodName) {
+            case "map" -> arguments.size() == 2
+                    ? Optional.of(linkBuiltinPipeAliasMethod(scope, arguments.get(0), InfixOperator.PIPE, arguments.get(1), functionCall.position()))
+                    : Optional.empty();
+            case "filter" -> arguments.size() == 2
+                    ? Optional.of(linkBuiltinPipeAliasMethod(scope, arguments.get(0), InfixOperator.PIPE_MINUS, arguments.get(1), functionCall.position()))
+                    : Optional.empty();
+            case "flat_map" -> arguments.size() == 2
+                    ? Optional.of(linkBuiltinPipeAliasMethod(scope, arguments.get(0), InfixOperator.PIPE_FLATMAP, arguments.get(1), functionCall.position()))
+                    : Optional.empty();
+            case "reduce" -> (arguments.size() == 2 || arguments.size() == 3)
+                    ? Optional.of(linkBuiltinReduceMethodInvoke(functionCall, scope))
+                    : Optional.empty();
+            case "reduce_left", "|l>" -> (arguments.size() == 2 || arguments.size() == 3)
+                    ? Optional.of(linkBuiltinReduceMethodInvoke(functionCall, scope))
+                    : Optional.empty();
+            default -> Optional.empty();
+        };
+    }
+
+    private Result<CompiledExpression> linkBuiltinPipeAliasMethod(
+            Scope scope,
+            Expression source,
+            InfixOperator operator,
+            Expression mapper,
+            Optional<SourcePosition> position
+    ) {
+        return linkInfixExpression(new InfixExpression(source, operator, mapper, position), scope);
+    }
+
+    private Result<CompiledExpression> linkBuiltinReduceMethodInvoke(FunctionCall functionCall, Scope scope) {
+        var source = functionCall.arguments().getFirst();
+        ReduceExpression reduceExpression;
+        if (functionCall.arguments().size() == 2 && functionCall.arguments().get(1) instanceof ReduceExpression parsedReduceExpression) {
+            reduceExpression = parsedReduceExpression;
+        } else {
+            var initialValue = functionCall.arguments().get(1);
+            var reducer = functionCall.arguments().get(2);
+            if (!(reducer instanceof LambdaExpression lambdaExpression)) {
+                return withPosition(
+                        Result.error("Reducer in `.reduce(...)` has to be a lambda expression"),
+                        reducer.position()
+                );
+            }
+
+            var reducerArguments = lambdaExpression.argumentNames();
+            if (reducerArguments.size() != 2 && reducerArguments.size() != 3) {
+                return withPosition(
+                        Result.error("Reducer in `.reduce(...)` has to have two or three arguments"),
+                        lambdaExpression.position()
+                );
+            }
+
+            reduceExpression = new ReduceExpression(
+                    initialValue,
+                    reducerArguments.get(0),
+                    reducerArguments.size() == 3 ? Optional.of(reducerArguments.get(1)) : Optional.empty(),
+                    reducerArguments.get(reducerArguments.size() - 1),
+                    lambdaExpression.expression(),
+                    lambdaExpression.position()
+            );
+        }
+        return linkInfixExpression(
+                new InfixExpression(source, InfixOperator.PIPE_REDUCE, reduceExpression, functionCall.position()),
+                scope
+        );
+    }
+
+    private Result<CompiledExpression> linkBuiltinOptionFlatMapMethodInvoke(FunctionCall functionCall, Scope scope) {
+        var position = functionCall.position();
+        var source = functionCall.arguments().get(0);
+        var mapper = functionCall.arguments().get(1);
+        Expression someExpression;
+        String valueName;
+        if (mapper instanceof LambdaExpression lambdaExpression) {
+            valueName = singleLambdaArgument(lambdaExpression).orElse(null);
+            if (valueName == null) {
+                return withPosition(
+                        Result.error("Mapper in `.flat_map(...)` has to have exactly one argument"),
+                        lambdaExpression.position()
+                );
+            }
+            someExpression = lambdaExpression.expression();
+        } else if (mapper instanceof FunctionReference functionReference) {
+            valueName = "__option_value";
+            someExpression = new FunctionInvoke(
+                    functionReference,
+                    List.of(new Value(valueName, functionReference.position())),
+                    functionReference.position()
+            );
+        } else {
+            return withPosition(
+                    Result.error("Mapper in `.flat_map(...)` has to be a lambda expression or function reference"),
+                    mapper.position()
+            );
+        }
+        var matchExpression = new MatchExpression(
+                source,
+                List.of(
+                        new MatchExpression.MatchCase(
+                                new MatchExpression.ConstructorPattern("Some", List.of(new MatchExpression.VariablePattern(valueName))),
+                                Optional.empty(),
+                                someExpression
+                        ),
+                        new MatchExpression.MatchCase(
+                                new MatchExpression.VariablePattern("None"),
+                                Optional.empty(),
+                                noneExpression(position)
+                        )
+                ),
+                position
+        );
+        return linkExpression(matchExpression, scope);
+    }
+
+    private Result<CompiledExpression> linkBuiltinOptionReduceMethodInvoke(FunctionCall functionCall, Scope scope) {
+        var position = functionCall.position();
+        var source = functionCall.arguments().get(0);
+        ReduceExpression reduceExpression;
+        if (functionCall.arguments().size() == 2 && functionCall.arguments().get(1) instanceof ReduceExpression parsedReduceExpression) {
+            reduceExpression = parsedReduceExpression;
+        } else {
+            var initial = functionCall.arguments().get(1);
+            var reducer = functionCall.arguments().get(2);
+            if (!(reducer instanceof LambdaExpression lambdaExpression)) {
+                return withPosition(
+                        Result.error("Reducer in `.reduce(...)` has to be a lambda expression"),
+                        reducer.position()
+                );
+            }
+            if (lambdaExpression.argumentNames().size() != 2) {
+                return withPosition(
+                        Result.error("Reducer in `.reduce(...)` has to have exactly two arguments"),
+                        lambdaExpression.position()
+                );
+            }
+            reduceExpression = new ReduceExpression(
+                    initial,
+                    lambdaExpression.argumentNames().getFirst(),
+                    Optional.empty(),
+                    lambdaExpression.argumentNames().get(1),
+                    lambdaExpression.expression(),
+                    lambdaExpression.position()
+            );
+        }
+        var matchExpression = new MatchExpression(
+                source,
+                List.of(
+                        new MatchExpression.MatchCase(
+                                new MatchExpression.ConstructorPattern("Some", List.of(new MatchExpression.VariablePattern(reduceExpression.valueName()))),
+                                Optional.empty(),
+                                new LetExpression(
+                                        reduceExpression.accumulatorName(),
+                                        Optional.empty(),
+                                        reduceExpression.initialValue(),
+                                        reduceExpression.reducerExpression(),
+                                        reduceExpression.position()
+                                )
+                        ),
+                        new MatchExpression.MatchCase(
+                                new MatchExpression.VariablePattern("None"),
+                                Optional.empty(),
+                                reduceExpression.initialValue()
+                        )
+                ),
+                position
+        );
+        return linkExpression(matchExpression, scope);
+    }
+
+    private NewData noneExpression(Optional<SourcePosition> position) {
+        return new NewData(new DataType("None"), List.of(), List.of(), List.of(), position);
     }
 
     private Optional<CompiledVariable> resolveFunctionVariable(String name, Scope scope) {

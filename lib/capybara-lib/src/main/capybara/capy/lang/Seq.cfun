@@ -159,6 +159,11 @@ fun Seq[T].`|`(map: T => Y): Seq[Y] =
     case End -> End
     case Cons { value, rest } -> Cons { map(value), () => (rest() | map) }
 
+fun Seq[T].map(map: T => Y): Seq[Y] =
+    match this with
+    case End -> End
+    case Cons { value, rest } -> Cons { map(value), () => rest().map(map) }
+
 /// Applies `map` and flattens the resulting sequences.
 ///
 /// Example:
@@ -172,6 +177,23 @@ fun Seq[T].`|*`(map: T => Seq[Y]): Seq[Y] =
         case Cons { value, rest } ->
             map(value) + __flat_map(rest(), map)
     __flat_map(this, map)
+
+fun Seq[T].flat_map(map: T => Seq[Y]): Seq[Y] =
+    fun __flat_map(seq: Seq[T], map: T => Seq[Y]) =
+        match seq with
+        case End -> End
+        case Cons { value, rest } ->
+            map(value) + __flat_map(rest(), map)
+    __flat_map(this, map)
+
+fun Seq[T].reduce(initial: R, reducer: (R, T) => R): R =
+    fun __reduce(seq: Seq[T], acc: R, reducer: (R, T) => R): R =
+        match seq with
+        case End -> acc
+        case Cons { value, rest } -> __reduce(rest(), reducer(acc, value), reducer)
+    __reduce(this, initial, reducer)
+
+fun Seq[T].reduce_left(initial: R, reducer: (R, T) => R): R = this.reduce(initial, reducer)
 
 /// Zips two sequences into a sequence of tuples.
 ///
