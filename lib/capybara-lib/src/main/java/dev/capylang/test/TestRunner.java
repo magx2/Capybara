@@ -207,7 +207,7 @@ public class TestRunner {
             }
             writeStringIfChanged(finalPath, testOutput.content());
             LOG.fine(() -> "Wrote test output to `%s`".formatted(finalPath));
-            return arguments.outputDir().relativize(finalPath.normalize());
+            return normalizeRelativePath(arguments.outputDir().relativize(finalPath.normalize()));
         } catch (IOException e) {
             LOG.log(Level.SEVERE, "Cannot write test output file", e);
             throw new UncheckedIOException("Cannot write test output file", e);
@@ -239,7 +239,7 @@ public class TestRunner {
                         .map(String::trim)
                         .filter(line -> !line.isEmpty())
                         .map(Path::of)
-                        .map(Path::normalize)
+                        .map(TestRunner::normalizeRelativePath)
                         .filter(path -> !expectedFiles.contains(path))
                         .toList();
             }
@@ -251,7 +251,7 @@ public class TestRunner {
                     .filter(Files::isRegularFile)
                     .filter(path -> !path.equals(manifestFile))
                     .map(outputDir::relativize)
-                    .map(Path::normalize)
+                    .map(TestRunner::normalizeRelativePath)
                     .filter(path -> !expectedFiles.contains(path))
                     .toList();
         }
@@ -271,7 +271,8 @@ public class TestRunner {
         while (current != null && !current.equals(outputDir)) {
             try {
                 Files.deleteIfExists(current);
-                LOG.fine(() -> "Deleted empty test output directory `%s`".formatted(current));
+                var deletedDirectory = current;
+                LOG.fine(() -> "Deleted empty test output directory `%s`".formatted(deletedDirectory));
             } catch (DirectoryNotEmptyException ignored) {
                 return;
             } catch (IOException e) {
@@ -283,8 +284,8 @@ public class TestRunner {
 
     private static void writeOutputManifest(Path manifestFile, Set<Path> expectedFiles) throws IOException {
         var manifestContents = expectedFiles.stream()
-                .map(Path::normalize)
-                .map(Path::toString)
+                .map(TestRunner::normalizeRelativePath)
+                .map(TestRunner::normalizeRelativePathString)
                 .sorted()
                 .collect(java.util.stream.Collectors.joining(System.lineSeparator()));
         writeStringIfChanged(
@@ -296,6 +297,14 @@ public class TestRunner {
     private static ClassLoader contextClassLoader() {
         var classLoader = Thread.currentThread().getContextClassLoader();
         return classLoader == null ? TestRunner.class.getClassLoader() : classLoader;
+    }
+
+    private static Path normalizeRelativePath(Path path) {
+        return Path.of(normalizeRelativePathString(path));
+    }
+
+    private static String normalizeRelativePathString(Path path) {
+        return path.normalize().toString().replace('\\', '/');
     }
 
     private static void writeStringIfChanged(Path outputFile, String content) throws IOException {

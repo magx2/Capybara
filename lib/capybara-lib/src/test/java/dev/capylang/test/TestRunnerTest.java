@@ -44,7 +44,8 @@ class TestRunnerTest {
         assertTrue(Files.exists(keptFile));
         assertFalse(Files.exists(staleFile));
         assertFalse(Files.exists(staleFile.getParent()));
-        assertEquals("reports/TEST-keep.xml\n", Files.readString(tempDir.resolve(TestRunner.OUTPUT_MANIFEST_FILE)));
+        assertEquals("reports/TEST-keep.xml" + System.lineSeparator(),
+                Files.readString(tempDir.resolve(TestRunner.OUTPUT_MANIFEST_FILE)));
     }
 
     @Test
@@ -134,7 +135,10 @@ class TestRunnerTest {
         var staleFile = tempDir.resolve("stale").resolve("TEST-old.xml");
         Files.createDirectories(staleFile.getParent());
         Files.writeString(staleFile, "<old/>");
-        Files.writeString(tempDir.resolve(TestRunner.OUTPUT_MANIFEST_FILE), "reports/TEST-keep.xml\nstale/TEST-old.xml\n");
+        Files.writeString(
+                tempDir.resolve(TestRunner.OUTPUT_MANIFEST_FILE),
+                String.join(System.lineSeparator(), "reports/TEST-keep.xml", "stale/TEST-old.xml") + System.lineSeparator()
+        );
 
         Files.delete(staleFile);
 
@@ -142,7 +146,8 @@ class TestRunnerTest {
 
         assertTrue(Files.exists(keptFile));
         assertFalse(Files.exists(tempDir.resolve("stale")));
-        assertEquals("reports/TEST-keep.xml\n", Files.readString(tempDir.resolve(TestRunner.OUTPUT_MANIFEST_FILE)));
+        assertEquals("reports/TEST-keep.xml" + System.lineSeparator(),
+                Files.readString(tempDir.resolve(TestRunner.OUTPUT_MANIFEST_FILE)));
     }
 
     @Test

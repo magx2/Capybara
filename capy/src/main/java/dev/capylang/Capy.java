@@ -38,6 +38,7 @@ import java.net.URLClassLoader;
 import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.DirectoryNotEmptyException;
+import java.nio.file.FileSystemAlreadyExistsException;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -682,8 +683,8 @@ public class Capy {
         try {
             var resourceUri = Capy.class.getResource(JAVA_LIB_RESOURCE_DIR).toURI();
             if ("jar".equals(resourceUri.getScheme())) {
-                try (var fileSystem = FileSystems.newFileSystem(resourceUri, Map.of())) {
-                    var copiedFiles = copyDirectoryContents(fileSystem.getPath(JAVA_LIB_RESOURCE_DIR), generatedOutputDir);
+                try (var openedFileSystem = openJarResourceFileSystem(resourceUri)) {
+                    var copiedFiles = copyDirectoryContents(openedFileSystem.fileSystem().getPath(JAVA_LIB_RESOURCE_DIR), generatedOutputDir);
                     var duration = Duration.ofNanos(System.nanoTime() - startedAt);
                     log.info("Copied bundled java-lib sources to: " + generatedOutputDir + " in " + duration);
                     return copiedFiles;
@@ -696,6 +697,24 @@ public class Capy {
             }
         } catch (URISyntaxException | IOException e) {
             throw new UncheckedIOException("Unable to copy bundled java-lib sources", e instanceof IOException io ? io : new IOException(e));
+        }
+    }
+
+    private static OpenedFileSystem openJarResourceFileSystem(java.net.URI resourceUri) throws IOException {
+        try {
+            var fileSystem = FileSystems.newFileSystem(resourceUri, Map.of());
+            return new OpenedFileSystem(fileSystem, fileSystem);
+        } catch (FileSystemAlreadyExistsException ignored) {
+            var fileSystem = FileSystems.getFileSystem(resourceUri);
+            return new OpenedFileSystem(fileSystem, () -> {
+            });
+        }
+    }
+
+    private record OpenedFileSystem(java.nio.file.FileSystem fileSystem, java.io.Closeable closeAction) implements AutoCloseable {
+        @Override
+        public void close() throws IOException {
+            closeAction.close();
         }
     }
 
@@ -1191,7 +1210,7 @@ public class Capy {
                         .map(String::trim)
                         .filter(line -> !line.isEmpty())
                         .map(Path::of)
-                        .map(Path::normalize)
+                        .map(Capy::normalizeRelativeOutputPath)
                         .filter(path -> !expectedFiles.contains(path))
                         .map(outputDir::resolve)
                         .toList();
@@ -1203,7 +1222,7 @@ public class Capy {
                     .filter(path -> !path.equals(outputDir))
                     .filter(Files::isRegularFile)
                     .filter(path -> !path.equals(manifestFile))
-                    .filter(path -> !expectedFiles.contains(outputDir.relativize(path).normalize()))
+                    .filter(path -> !expectedFiles.contains(normalizeRelativeOutputPath(outputDir.relativize(path))))
                     .sorted(Comparator.reverseOrder())
                     .toList();
         }
@@ -1215,14 +1234,22 @@ public class Capy {
             Files.createDirectories(parent);
         }
         var manifestContents = expectedFiles.stream()
-                .map(Path::normalize)
-                .map(Path::toString)
+                .map(Capy::normalizeRelativeOutputPath)
+                .map(Capy::normalizeRelativeOutputPathString)
                 .sorted()
                 .collect(java.util.stream.Collectors.joining(System.lineSeparator()));
         writeStringIfChanged(
                 manifestFile,
                 manifestContents.isEmpty() ? "" : manifestContents + System.lineSeparator()
         );
+    }
+
+    private static Path normalizeRelativeOutputPath(Path path) {
+        return Path.of(normalizeRelativeOutputPathString(path));
+    }
+
+    private static String normalizeRelativeOutputPathString(Path path) {
+        return path.normalize().toString().replace('\\', '/');
     }
 
     private static void deleteFileIfExists(Path file) {
@@ -1421,8 +1448,8 @@ public class Capy {
         var filteredProgram = new CompiledProgram(linkedProgram.modules().stream()
                 .filter(module -> sourceModuleRefs.contains(new ModuleRef(module.name(), normalizeModulePath(module.path()))))
                 .toList());
-        var shouldCopyJavaLibResources = includeJavaLibResources && filteredProgram.modules().size() == linkedProgram.modules().size();
-            return new GenerationInput(filteredProgram, shouldCopyJavaLibResources);
+        var shouldCopyJavaLibResources = includeJavaLibResources && !filteredProgram.modules().isEmpty();
+        return new GenerationInput(filteredProgram, shouldCopyJavaLibResources);
     }
 
     static ObjectMapper objectMapper() {
