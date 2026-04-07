@@ -136,7 +136,7 @@ public class CapybaraPlugin implements Plugin<Project> {
                     task.getWriteLinkedOutput().set(false);
                     task.getIncludeJavaLibResourcesInTestOutput().set(false);
                     task.getLogLevel().set(capybaraCompileLogLevel);
-                    task.onlyIf(ignored -> hasCapybaraTestSources && !capybaraTestBuildRequested);
+                    task.onlyIf(ignored -> hasCapybaraTestSources && !singleJavaVerificationBuild);
                 }
         );
 

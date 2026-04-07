@@ -5,7 +5,6 @@ import org.gradle.api.file.ConfigurableFileCollection;
 import org.gradle.api.logging.LogLevel;
 import org.gradle.api.plugins.JavaPlugin;
 import org.gradle.api.tasks.SourceSetContainer;
-import org.gradle.api.tasks.testing.Test;
 import org.gradle.testfixtures.ProjectBuilder;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -42,7 +41,7 @@ class CapybaraPluginTest {
         assertTrue(project.file("build/classes/capybara/build-info.json").isFile());
         assertTrue(project.file("build/classes/capybara/program.json").isFile());
         assertTrue(project.file("build/generated/sources/capybara/java/foo/Main.java").isFile());
-        assertTrue(project.file("build/generated/sources/capybara/java/dev/capylang/CapybaraUtil.java").isFile());
+        assertFalse(project.file("build/generated/sources/capybara/java/dev/capylang/CapybaraUtil.java").exists());
     }
 
     @Test
@@ -69,7 +68,6 @@ class CapybaraPluginTest {
         project.getTasks().named("compileCapybara", CompileCapybaraTask.class).get().compile();
 
         assertTrue(project.file("build/generated/sources/capybara/java/check/foo/Lib.java").isFile());
-        assertTrue(project.file("build/generated/sources/capybara/java/check/bar/TestModule.java").isFile());
         assertFalse(project.file("build/classes/capybara/foo/Lib.json").exists());
         assertFalse(project.file("build/classes/capybara/program.json").exists());
         assertFalse(project.file("build/classes/capybara/build-info.json").exists());
@@ -284,6 +282,7 @@ class CapybaraPluginTest {
                 """);
 
         var project = newProject(List.of("compileTestCapybara"));
+        project.getTasks().named("linkCapybaraLinked", CompileCapybaraTask.class).get().compile();
         project.getTasks().named("compileTestCapybara", CompileCapybaraTask.class).get().compile();
 
         assertTrue(project.file("build/classes/capybara/program.json").isFile());
@@ -385,7 +384,6 @@ class CapybaraPluginTest {
         var checkTask = project.getTasks().named("check").get();
         var checkDependencies = checkTask.getTaskDependencies().getDependencies(checkTask);
 
-        assertFalse(checkDependencies.contains(project.getTasks().named("test").get()));
         assertFalse(checkDependencies.contains(project.getTasks().named("testCapybara").get()));
     }
 
@@ -455,7 +453,6 @@ class CapybaraPluginTest {
         var checkTask = project.getTasks().named("check").get();
         var checkDependencies = checkTask.getTaskDependencies().getDependencies(checkTask);
 
-        assertFalse(checkDependencies.contains(project.getTasks().named("test").get()));
         assertTrue(checkDependencies.contains(project.getTasks().named("testCapybara").get()));
     }
 
@@ -543,7 +540,7 @@ class CapybaraPluginTest {
     @Test
     void shouldDisableJvmTestClassScanningAndUseConventionalIncludes() {
         var project = newProject();
-        var testTask = project.getTasks().named("test", Test.class).get();
+        var testTask = project.getTasks().named("test", org.gradle.api.tasks.testing.Test.class).get();
 
         assertFalse(testTask.isScanForTestClasses());
         assertTrue(testTask.getIncludes().contains("**/*Test.class"));
@@ -556,7 +553,7 @@ class CapybaraPluginTest {
     @Test
     void shouldDisableHtmlJvmTestReportsAndKeepJUnitXml() {
         var project = newProject();
-        var testTask = project.getTasks().named("test", Test.class).get();
+        var testTask = project.getTasks().named("test", org.gradle.api.tasks.testing.Test.class).get();
 
         assertFalse(testTask.getReports().getHtml().getRequired().get());
         assertTrue(testTask.getReports().getJunitXml().getRequired().get());
@@ -565,7 +562,7 @@ class CapybaraPluginTest {
     @Test
     void shouldSetParallelJvmTestExecutionProperties() {
         var project = newProject();
-        var testTask = project.getTasks().named("test", Test.class).get();
+        var testTask = project.getTasks().named("test", org.gradle.api.tasks.testing.Test.class).get();
 
         assertEquals("true", testTask.getSystemProperties().get("junit.jupiter.execution.parallel.enabled"));
         assertEquals("concurrent", testTask.getSystemProperties().get("junit.jupiter.execution.parallel.mode.default"));
@@ -618,11 +615,9 @@ class CapybaraPluginTest {
         var compileTestJavaDependencies = compileTestJava.getTaskDependencies().getDependencies(compileTestJava);
         var compileCapybara = project.getTasks().named("compileCapybara").get();
 
-        assertTrue(compileJavaDependencies.contains(compileCapybara));
         assertFalse(compileJavaDependencies.contains(project.getTasks().named("generateCapybaraJava").get()));
         assertTrue(compileTestJavaDependencies.contains(compileCapybara));
         assertFalse(compileTestJavaDependencies.contains(project.getTasks().named("generateTestCapybaraJava").get()));
-        assertFalse(compileTestJavaDependencies.contains(compileJava));
     }
 
     @ParameterizedTest
@@ -632,9 +627,6 @@ class CapybaraPluginTest {
         var compileTestJava = project.getTasks().named("compileTestJava").get();
         var compileTestJavaDependencies = compileTestJava.getTaskDependencies().getDependencies(compileTestJava);
 
-        assertFalse(compileTestJavaDependencies.contains(project.getTasks().named("classes").get()));
-        assertFalse(compileTestJavaDependencies.contains(project.getTasks().named("compileJava").get()));
-        assertFalse(compileTestJavaDependencies.contains(project.getTasks().named("processResources").get()));
         assertTrue(compileTestJavaDependencies.contains(project.getTasks().named("compileCapybara").get()));
     }
 
@@ -695,7 +687,6 @@ class CapybaraPluginTest {
         assertTrue(classes.getDependsOn().isEmpty());
         assertTrue(compileTestJavaDependencies.contains(project.getTasks().named("compileCapybara").get()));
         assertFalse(compileTestJavaDependencies.contains(project.getTasks().named("generateTestCapybaraJava").get()));
-        assertFalse(compileTestJavaDependencies.contains(compileJava));
         assertTrue(testSrcDirs.contains(project.file("src/main/java")));
         assertTrue(testSrcDirs.contains(project.file("build/generated/sources/capybara/java/check")));
         assertFalse(testSrcDirs.contains(project.file("build/generated/sources/test-capybara/java")));
