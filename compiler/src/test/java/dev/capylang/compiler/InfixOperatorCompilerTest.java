@@ -109,6 +109,36 @@ class InfixOperatorCompilerTest {
         assertThat(((CompiledDataParentType) function.returnType()).typeParameters()).containsExactly("int");
     }
 
+    @Test
+    void shouldAllowStringFilterNamedMethod() {
+        var compiled = compileProgram("""
+                fun keep_non_b(value: string): list[string] =
+                    value.filter(ch => ch != "b")
+                """);
+
+        var function = compiled.modules().first().functions().stream()
+                .filter(it -> it.name().equals("keep_non_b"))
+                .findFirst()
+                .orElseThrow();
+
+        assertThat(function.returnType()).isEqualTo(new CompiledList(PrimitiveLinkedType.STRING));
+    }
+
+    @Test
+    void shouldAllowStringFilterSymbolicMethod() {
+        var compiled = compileProgram("""
+                fun keep_non_b(value: string): list[string] =
+                    value.`|-`(ch => ch != "b")
+                """);
+
+        var function = compiled.modules().first().functions().stream()
+                .filter(it -> it.name().equals("keep_non_b"))
+                .findFirst()
+                .orElseThrow();
+
+        assertThat(function.returnType()).isEqualTo(new CompiledList(PrimitiveLinkedType.STRING));
+    }
+
     private static CompiledProgram compileProgram(String code) {
         return compileProgram(List.of(new RawModule("InfixOperators", "/foo/boo", code)));
     }

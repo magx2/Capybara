@@ -1282,7 +1282,7 @@ public class CapybaraExpressionCompiler {
             case "map" -> arguments.size() == 2
                     ? Optional.of(linkBuiltinPipeAliasMethod(scope, arguments.get(0), InfixOperator.PIPE, arguments.get(1), functionCall.position()))
                     : Optional.empty();
-            case "filter" -> arguments.size() == 2
+            case "filter", "|-" -> arguments.size() == 2
                     ? Optional.of(linkBuiltinPipeAliasMethod(scope, arguments.get(0), InfixOperator.PIPE_MINUS, arguments.get(1), functionCall.position()))
                     : Optional.empty();
             case "flat_map" -> arguments.size() == 2

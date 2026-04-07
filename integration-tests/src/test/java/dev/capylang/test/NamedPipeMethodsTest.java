@@ -59,6 +59,12 @@ class NamedPipeMethodsTest {
     }
 
     @Test
+    void stringFilterAliasesMatchExpectedResults() {
+        assertThat(NamedPipeMethods.stringFilterNamed("abc")).isEqualTo(List.of("a", "c"));
+        assertThat(NamedPipeMethods.stringFilterNamed("abc")).isEqualTo(NamedPipeMethods.stringFilterSymbolic("abc"));
+    }
+
+    @Test
     void optionAliasesMatchOperatorsAndExpectedValues() {
         assertThat(NamedPipeMethods.optionMapNamed(Optional.of("capy"))).isEqualTo(NamedPipeMethods.optionMapOperator(Optional.of("capy")));
         assertThat(NamedPipeMethods.optionFilterNamed(Optional.of("drop"))).isEqualTo(NamedPipeMethods.optionFilterOperator(Optional.of("drop")));
