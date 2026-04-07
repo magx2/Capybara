@@ -3,7 +3,7 @@ from /capy/test/CapyTest import { * }
 from /capy/serialization/Json import { * }
 
 fun tests(): TestFile =
-    test_file("/capy/lang/JsonTest.cfun", [
+    test_file("/capy/lang/Json.cfun", [
         test("should serialize simple object", test_serialize_simple_object()),
         test("should serialize empty object", test_empty()),
         test("should serialize object with primitive types", test_serialize_object_with_primitive_types()),
@@ -16,6 +16,10 @@ fun tests(): TestFile =
         test("should fail deserialize object as bool types", should_fail_deserialize_object_as_bool_types()),
         test("should deserialize object as null", should_deserialize_object_as_null()),
         test("should fail deserialize object as null", should_fail_deserialize_object_as_null()),
+        test("should deserialize empty array", should_deserialize_empty_array()),
+        test("should deserialize array with values", should_deserialize_array_with_values()),
+        test("should deserialize array with objects", should_deserialize_array_with_objects()),
+        test("should deserialize array with arrays", should_deserialize_array_with_arrays()),
     ])
 
 fun test_serialize_simple_object(): Assert =
@@ -135,3 +139,48 @@ fun should_deserialize_object_as_null(): Assert =
 fun should_fail_deserialize_object_as_null(): Assert =
     assert_that(deserialize('{"foo":nul}')).fails('Expected `null`, but got `nul`!')
 
+fun should_deserialize_empty_array(): Assert =
+    assert_that(deserialize('{"foo":[]}'))
+        .succeeds(JsonObject { value: { "foo": JsonArray { value: [] } } })
+
+fun should_deserialize_array_with_values(): Assert =
+    assert_that(deserialize('{"foo":[1,"x",false,null]}'))
+        .succeeds(JsonObject {
+            value: {
+                "foo": JsonArray {
+                    value: [
+                        JsonNumberLong { value: 1 },
+                        JsonString { value: "x" },
+                        JsonBool { value: false },
+                        JsonNull
+                    ]
+                }
+            }
+        })
+
+fun should_deserialize_array_with_objects(): Assert =
+    assert_that(deserialize('{"foo":[{"name":"Tom","age":18},{"name":"Bob","age":19},{"name":"Marty","age":21}]}'))
+        .succeeds(JsonObject {
+            value: {
+                "foo": JsonArray {
+                    value: [
+                        JsonObject { value: { "name": JsonString { value: "Tom" }, "age": JsonNumberLong { value: 18 } } },
+                        JsonObject { value: { "name": JsonString { value: "Bob" }, "age": JsonNumberLong { value: 19 } } },
+                        JsonObject { value: { "name": JsonString { value: "Marty" }, "age": JsonNumberLong { value: 21 } } },
+                    ]
+                }
+            }
+        })
+fun should_deserialize_array_with_arrays(): Assert =
+    assert_that(deserialize('{"foo":[[1,2,3],[4,5,6],[7,8,9]]}'))
+        .succeeds(JsonObject {
+            value: {
+                "foo": JsonArray {
+                    value: [
+                        JsonArray { value: [JsonNumberLong { value: 1 }, JsonNumberLong { value: 2 }, JsonNumberLong { value: 3 }] },
+                        JsonArray { value: [JsonNumberLong { value: 4 }, JsonNumberLong { value: 5 }, JsonNumberLong { value: 6 }] },
+                        JsonArray { value: [JsonNumberLong { value: 7 }, JsonNumberLong { value: 8 }, JsonNumberLong { value: 9 }] },
+                    ]
+                }
+            }
+        })

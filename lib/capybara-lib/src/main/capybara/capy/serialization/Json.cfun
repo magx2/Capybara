@@ -4,6 +4,8 @@ from /capy/lang/Result import { * }
 type Json = JsonObject | JsonArray | JsonValue
 data JsonObject { value: dict[Json] }
 data JsonArray { value: list[Json] }
+fun JsonArray.`+`(other: JsonArray): JsonArray = JsonArray { value: this.value + other.value }
+fun JsonArray.`+`(other: Json): JsonArray = JsonArray { value: this.value + other }
 
 type JsonValue = JsonString | JsonValueObject | JsonNumber | JsonValueArray | JsonBool | JsonNull
 data JsonString { value: string }
@@ -44,6 +46,7 @@ fun deserialize(json: string): Result[JsonObject] =
         else Error { "Expected string to end, but still got `{parse.parsing_string}`" }
 
 data _Parse[T] { value: T, parsing_string: string }
+fun _Parse[T].pop(): tuple[Option[string], _Parse[T]] = (this.parsing_string[0], _Parse { this.value, this.parsing_string[1:] })
 
 fun _deserializeJson(json: string): Result[_Parse[Json]] =
     match json[0] with
@@ -55,7 +58,30 @@ fun _deserializeJson(json: string): Result[_Parse[Json]] =
         case '-', '1', '2', '3', '4', '5', '6', '7', '8', '9', '0' ->  _deserialize_json_number(json)
         case 't', 'f' -> _deserialize_json_bool(json)
         case 'n' -> _deserialize_json_null(json)
+        case '[' -> _deserialize_json_array(json)
         case _ -> Error { "Do not know what to do with char `" + first_char + "`!" }
+
+fun _deserialize_json_array(json: string): Result[_Parse[JsonArray]] =
+    fun __deserialize_json_array(parse: _Parse[JsonArray]): Result[_Parse[JsonArray]] =
+        match parse.parsing_string[0] with
+        case None -> Error { "Expected `,` or `]`, but got end of string!" }
+        case Some { ']' } -> Success { parse.pop()[1] }
+        case Some { ',' } ->
+            _deserializeJson(parse.parsing_string[1:])
+                | parse_json => __deserialize_json_array(_Parse {
+                    value: parse.value + parse_json.value,
+                    parsing_string: parse_json.parsing_string
+                })
+        case Some { v } ->  Error { "Expected `,` or `]`, but got `" + v + "`!" }
+
+    if json.starts_with('[]')
+    then Success { _Parse { JsonArray { [] }, json[2:] } }
+    else
+        _deserializeJson(json[1:])
+            | parse => __deserialize_json_array(_Parse {
+                value: JsonArray {[parse.value]},
+                parsing_string: parse.parsing_string
+            })
 
 fun _deserialize_json_null(json: string): Result[_Parse[JsonNull]] =
     if json.starts_with('null')
