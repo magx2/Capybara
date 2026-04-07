@@ -333,8 +333,7 @@ public class CompilationErrorTest {
                         """
                                 error: mismatched types
                                  --> /foo/boo/infix_plus_data_parent_and_subtype.cfun:5:9
-                                fun foo(left: JsonArray, right: Json): Json =
-                                    left + right
+                                fun foo(left: JsonArray, right: Json): Json = left + right
                                          ^ `+` operator is not defined for `JsonArray + Json`
                                 """
                 )

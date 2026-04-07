@@ -2275,14 +2275,7 @@ public class JavaExpressionEvaluator {
         }
 
         var javaType = normalizeJavaTypeReference(dataType.name());
-        var genericSuffix = dataType.typeParameters().isEmpty()
-                ? ""
-                : dataType.typeParameters().stream().anyMatch(JavaExpressionEvaluator::hasUnresolvedTypeDescriptor)
-                ? "<>"
-                : "<" + dataType.typeParameters().stream()
-                        .map(JavaExpressionEvaluator::javaCastTypeFromDescriptor)
-                        .collect(java.util.stream.Collectors.joining(", "))
-                  + ">";
+        var genericSuffix = dataType.typeParameters().isEmpty() ? "" : "<>";
         return current.addExpression("new " + javaType + genericSuffix + "(" + String.join(", ", args) + ")");
     }
 
