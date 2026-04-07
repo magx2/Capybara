@@ -243,6 +243,14 @@ class TestRunnerTest {
     }
 
     @Test
+    void shouldNormalizeActualAndEscapedNewlinesForWindowsOutput() {
+        assertEquals(
+                "Expected int:\r\n1\r\nto be equal to:\r\n2",
+                TestRunner.normalizeFailureMessage("Expected int:\n1\\nto be equal to:\r\n2", "\r\n")
+        );
+    }
+
+    @Test
     void shouldNotPrintAnythingWhenThereAreNoFailures() {
         var stdout = new ByteArrayOutputStream();
         var passingOutput = new TestOutput(relativePath("reports", "TEST-capy.lang.MathTest.xml"), "<testsuite/>", false);

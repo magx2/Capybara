@@ -373,11 +373,18 @@ public class TestRunner {
         }
     }
 
-    private static String normalizeFailureMessage(String message) {
+    static String normalizeFailureMessage(String message) {
+        return normalizeFailureMessage(message, System.lineSeparator());
+    }
+
+    static String normalizeFailureMessage(String message, String lineSeparator) {
         return message
-                .replace("\\r\\n", System.lineSeparator())
-                .replace("\\n", System.lineSeparator())
-                .replace("\\r", System.lineSeparator())
+                .replace("\\r\\n", "\n")
+                .replace("\\n", "\n")
+                .replace("\\r", "\n")
+                .replace("\r\n", "\n")
+                .replace("\r", "\n")
+                .replace("\n", lineSeparator)
                 .replace("\\t", "\t");
     }
 }
