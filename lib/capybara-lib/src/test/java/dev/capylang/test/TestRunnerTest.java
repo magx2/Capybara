@@ -191,17 +191,21 @@ class TestRunnerTest {
 
         TestRunner.printFailureSummary(List.of(failingOutput), new PrintStream(stdout));
 
-        assertEquals("""
-                        
-                        Failures:
-                        
-                          /capy/lang/MathTest > should_add_numbers()
-                        Expected int:
-                        1
-                        to be equal to:
-                        2
-                        
-                        """.replace("\n", System.lineSeparator()), stdout.toString());
+        assertEquals(
+                String.join(
+                        System.lineSeparator(),
+                        "",
+                        "Failures:",
+                        "",
+                        "  /capy/lang/MathTest > should_add_numbers()",
+                        "Expected int:",
+                        "1",
+                        "to be equal to:",
+                        "2",
+                        ""
+                ) + System.lineSeparator(),
+                stdout.toString()
+        );
     }
 
     @Test
@@ -221,17 +225,21 @@ class TestRunnerTest {
 
         TestRunner.printFailureSummary(List.of(failingOutput), new PrintStream(stdout));
 
-        assertEquals("""
-                        
-                        Failures:
-                        
-                          /capy/lang/Json.cfun > should_deserialize_array_with_values()
-                        Expected result:
-                        Error { "message": boom }
-                        to succeed with value:
-                        JsonObject { "value": {} }
-                        
-                        """.replace("\n", System.lineSeparator()), stdout.toString());
+        assertEquals(
+                String.join(
+                        System.lineSeparator(),
+                        "",
+                        "Failures:",
+                        "",
+                        "  /capy/lang/Json.cfun > should_deserialize_array_with_values()",
+                        "Expected result:",
+                        "Error { \"message\": boom }",
+                        "to succeed with value:",
+                        "JsonObject { \"value\": {} }",
+                        ""
+                ) + System.lineSeparator(),
+                stdout.toString()
+        );
     }
 
     @Test
