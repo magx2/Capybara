@@ -88,7 +88,7 @@ class PipeTest {
 
     @Test
     void stringFilter() {
-        assertThat(Pipe.stringFilter("abc")).isEqualTo(List.of("a", "c"));
+        assertThat(Pipe.stringFilter("abc")).isEqualTo("ac");
     }
 
     @Test

@@ -1259,6 +1259,9 @@ public class JavaExpressionEvaluator {
         return switch (type) {
             case dev.capylang.compiler.CollectionLinkedType.CompiledSet ignored ->
                     ".collect(java.util.stream.Collectors.toSet())";
+            case dev.capylang.compiler.PrimitiveLinkedType primitive
+                    when primitive == dev.capylang.compiler.PrimitiveLinkedType.STRING ->
+                    ".collect(java.util.stream.Collectors.joining())";
             default -> ".toList()";
         };
     }

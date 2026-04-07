@@ -60,7 +60,7 @@ class NamedPipeMethodsTest {
 
     @Test
     void stringFilterAliasesMatchExpectedResults() {
-        assertThat(NamedPipeMethods.stringFilterNamed("abc")).isEqualTo(List.of("a", "c"));
+        assertThat(NamedPipeMethods.stringFilterNamed("abc")).isEqualTo("ac");
         assertThat(NamedPipeMethods.stringFilterNamed("abc")).isEqualTo(NamedPipeMethods.stringFilterSymbolic("abc"));
     }
 

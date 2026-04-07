@@ -112,7 +112,7 @@ class InfixOperatorCompilerTest {
     @Test
     void shouldAllowStringFilterNamedMethod() {
         var compiled = compileProgram("""
-                fun keep_non_b(value: string): list[string] =
+                fun keep_non_b(value: string): string =
                     value.filter(ch => ch != "b")
                 """);
 
@@ -121,13 +121,13 @@ class InfixOperatorCompilerTest {
                 .findFirst()
                 .orElseThrow();
 
-        assertThat(function.returnType()).isEqualTo(new CompiledList(PrimitiveLinkedType.STRING));
+        assertThat(function.returnType()).isEqualTo(PrimitiveLinkedType.STRING);
     }
 
     @Test
     void shouldAllowStringFilterSymbolicMethod() {
         var compiled = compileProgram("""
-                fun keep_non_b(value: string): list[string] =
+                fun keep_non_b(value: string): string =
                     value.`|-`(ch => ch != "b")
                 """);
 
@@ -136,7 +136,7 @@ class InfixOperatorCompilerTest {
                 .findFirst()
                 .orElseThrow();
 
-        assertThat(function.returnType()).isEqualTo(new CompiledList(PrimitiveLinkedType.STRING));
+        assertThat(function.returnType()).isEqualTo(PrimitiveLinkedType.STRING);
     }
 
     private static CompiledProgram compileProgram(String code) {

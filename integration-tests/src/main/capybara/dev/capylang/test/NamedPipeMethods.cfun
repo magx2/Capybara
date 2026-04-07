@@ -61,8 +61,8 @@ fun seq_flat_map_operator(values: list[int]): list[int] = (to_seq(values) |* x =
 fun seq_reduce_named(values: list[int]): int = to_seq(values).reduce(0, :sum_int)
 fun seq_reduce_left_named(values: list[int]): int = to_seq(values).reduce_left(0, :sum_int)
 
-fun string_filter_named(value: string): list[string] = value.filter(ch => ch == "b")
-fun string_filter_symbolic(value: string): list[string] = value.`|-`(ch => ch == "b")
+fun string_filter_named(value: string): string = value.filter(ch => ch == "b")
+fun string_filter_symbolic(value: string): string = value.`|-`(ch => ch == "b")
 
 fun option_map_named(value: Option[string]): Option[string] = value.map(text => text + "!")
 fun option_map_operator(value: Option[string]): Option[string] = value | text => text + "!"

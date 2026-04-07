@@ -3228,7 +3228,9 @@ public class CapybaraExpressionCompiler {
                                                 left,
                                                 linked.argumentName(),
                                                 linked.expression(),
-                                                left.type() instanceof CompiledSet
+                                                left.type() == STRING
+                                                        ? STRING
+                                                        : left.type() instanceof CompiledSet
                                                         ? new CompiledSet(elementType)
                                                         : new CompiledList(elementType)
                                         ));
@@ -3252,7 +3254,9 @@ public class CapybaraExpressionCompiler {
                                         left,
                                         lambdaBinding.argumentName(),
                                         predicate,
-                                        left.type() instanceof CompiledSet
+                                        left.type() == STRING
+                                                ? STRING
+                                                : left.type() instanceof CompiledSet
                                                 ? new CompiledSet(elementType)
                                                 : new CompiledList(elementType)
                                 ));

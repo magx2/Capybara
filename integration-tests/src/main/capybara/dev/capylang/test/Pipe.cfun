@@ -41,7 +41,7 @@ fun reduce_string2(l: list[string]): string = l |> "start: ", (acc, v) => acc + 
 
 fun string_map(s: string): list[string] = s | ch => "[" + ch + "]"
 
-fun string_filter(s: string): list[string] = s |- ch => ch == "b"
+fun string_filter(s: string): string = s |- ch => ch == "b"
 
 fun string_reduce(s: string): string = s |> "", (acc, ch) => acc + ch
 
