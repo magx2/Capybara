@@ -15,26 +15,26 @@ data JsonValueArray { value: JsonArray }
 data JsonBool { value: bool }
 single JsonNull
 
-fun serialize(obj: JsonObject) = _serialize(obj)
-
-fun _serialize(json: Json): string =
-    match json with
-    case JsonObject { v } ->
-        "{"
-        + (v
-            |> (k,v) => "\"" + k + "\":" + _serialize(v)
-            |> "", (acc, item) => acc + "," + item)
-        + "}"
-    case JsonArray { value } ->  "["
-        + (value | :_serialize |> "", (acc, item) => acc + "," + item)
-        + "]"
-    case JsonString { value } -> "\"" + value + "\""
-    case JsonNumberDouble { value } -> value + ""
-    case JsonNumberLong { value } -> value + ""
-    case JsonValueObject { value } -> _serialize(value)
-    case JsonValueArray { value } -> _serialize(value)
-    case JsonBool { value } -> value + ""
-    case JsonNull -> "null"
+fun serialize(obj: JsonObject) =
+    fun __serialize(json: Json): string =
+        match json with
+        case JsonObject { v } ->
+            "{"
+            + (v
+                |> (k,v) => "\"" + k + "\":" + __serialize(v)
+                |> "", (acc, item) => acc + "," + item)
+            + "}"
+        case JsonArray { value } ->  "["
+            + (value | :__serialize |> "", (acc, item) => acc + "," + item)
+            + "]"
+        case JsonString { value } -> "\"" + value + "\""
+        case JsonNumberDouble { value } -> value + ""
+        case JsonNumberLong { value } -> value + ""
+        case JsonValueObject { value } -> __serialize(value)
+        case JsonValueArray { value } -> __serialize(value)
+        case JsonBool { value } -> value + ""
+        case JsonNull -> "null"
+    __serialize(obj)
 
 fun deserialize(json: string): Result[JsonObject] =
     match _deserializeJsonObject(json) with
