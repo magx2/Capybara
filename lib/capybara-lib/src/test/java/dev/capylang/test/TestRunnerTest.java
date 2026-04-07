@@ -205,6 +205,36 @@ class TestRunnerTest {
     }
 
     @Test
+    void shouldRenderEscapedLineSeparatorsInFailureMessages() {
+        var stdout = new ByteArrayOutputStream();
+        var failingOutput = new TestOutput(
+                relativePath("reports", "TEST-capy.lang.Json.cfun.xml"),
+                """
+                        <testsuite name="/capy/lang/Json.cfun" tests="1" failures="1" errors="0" skipped="0" assertions="1" time="0" timestamp="1970-01-01T00:00:00Z">
+                          <testcase name="should_deserialize_array_with_values" classname="/capy/lang/Json.cfun" assertions="1" time="0" file="/capy/lang/Json.cfun" line="0">
+                            <failure message="Expected result" type="ResultAssert[T].succeeds"><![CDATA[Expected result:\\nError { "message": boom }\\nto succeed with value:\\nJsonObject { "value": {} }]]></failure>
+                          </testcase>
+                        </testsuite>
+                        """,
+                true
+        );
+
+        TestRunner.printFailureSummary(List.of(failingOutput), new PrintStream(stdout));
+
+        assertEquals("""
+                        
+                        Failures:
+                        
+                          /capy/lang/Json.cfun > should_deserialize_array_with_values()
+                        Expected result:
+                        Error { "message": boom }
+                        to succeed with value:
+                        JsonObject { "value": {} }
+                        
+                        """.replace("\n", System.lineSeparator()), stdout.toString());
+    }
+
+    @Test
     void shouldNotPrintAnythingWhenThereAreNoFailures() {
         var stdout = new ByteArrayOutputStream();
         var passingOutput = new TestOutput(relativePath("reports", "TEST-capy.lang.MathTest.xml"), "<testsuite/>", false);

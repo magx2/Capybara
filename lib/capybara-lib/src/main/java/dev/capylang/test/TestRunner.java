@@ -359,7 +359,7 @@ public class TestRunner {
                     var attributes = testCase.getAttributes();
                     var className = attributes.getNamedItem("classname").getNodeValue();
                     var testName = attributes.getNamedItem("name").getNodeValue();
-                    var failureMessage = failureNode.getTextContent();
+                    var failureMessage = normalizeFailureMessage(failureNode.getTextContent());
                     output.printf("  %s > %s()%n", className, testName);
                     output.println(failureMessage);
                     output.println();
@@ -371,5 +371,13 @@ public class TestRunner {
             output.println(testOutput.content());
             output.println();
         }
+    }
+
+    private static String normalizeFailureMessage(String message) {
+        return message
+                .replace("\\r\\n", System.lineSeparator())
+                .replace("\\n", System.lineSeparator())
+                .replace("\\r", System.lineSeparator())
+                .replace("\\t", "\t");
     }
 }
