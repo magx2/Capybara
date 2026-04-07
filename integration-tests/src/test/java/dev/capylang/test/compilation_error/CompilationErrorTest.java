@@ -318,6 +318,28 @@ public class CompilationErrorTest {
             add(byModule, op, anyType, anyType);
         }
 
+        byModule.putIfAbsent(
+                "infix_plus_data_parent_and_subtype",
+                Arguments.of(
+                        "infix_plus_data_parent_and_subtype",
+                        """
+                                type Json = JsonArray | JsonNull
+                                data JsonArray { value: list[Json] }
+                                single JsonNull
+                                fun foo(left: JsonArray, right: Json): Json =
+                                    left + right
+                                """,
+                        new Position(5, 9),
+                        """
+                                error: mismatched types
+                                 --> /foo/boo/infix_plus_data_parent_and_subtype.cfun:5:9
+                                fun foo(left: JsonArray, right: Json): Json =
+                                    left + right
+                                         ^ `+` operator is not defined for `JsonArray + Json`
+                                """
+                )
+        );
+
         return byModule.values().stream();
     }
 

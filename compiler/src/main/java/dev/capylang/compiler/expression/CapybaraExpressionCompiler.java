@@ -3605,12 +3605,6 @@ public class CapybaraExpressionCompiler {
     }
 
     private CompiledType findPlusType(CompiledType left, CompiledType right) {
-        if (left == STRING && isDataLikeType(right)) {
-            return STRING;
-        }
-        if (right == STRING && isDataLikeType(left)) {
-            return STRING;
-        }
         if (left instanceof CompiledList leftList) {
             if (right instanceof CompiledList rightList) {
                 return new CompiledList(mergeCollectionElementType(leftList.elementType(), rightList.elementType()));
@@ -3634,10 +3628,16 @@ public class CapybaraExpressionCompiler {
             }
             return null;
         }
+        if (left == STRING && right != NOTHING) {
+            return STRING;
+        }
+        if (right == STRING && left != NOTHING) {
+            return STRING;
+        }
         if (left instanceof PrimitiveLinkedType leftPrimitive && right instanceof PrimitiveLinkedType rightPrimitive) {
             return findPlusPrimitiveType(leftPrimitive, rightPrimitive);
         }
-        return findHigherType(left, right);
+        return null;
     }
 
     private CompiledType findMinusType(CompiledType left, CompiledType right) {
@@ -3672,7 +3672,7 @@ public class CapybaraExpressionCompiler {
         if (left instanceof PrimitiveLinkedType leftPrimitive && right instanceof PrimitiveLinkedType rightPrimitive) {
             return findMathPrimitiveType(leftPrimitive, rightPrimitive);
         }
-        return findHigherType(left, right);
+        return null;
     }
 
     private CompiledType mergeCollectionElementType(CompiledType left, CompiledType right) {
