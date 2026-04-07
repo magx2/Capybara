@@ -6,6 +6,8 @@ import capy.test.CapyTest.TestOutput;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.io.ByteArrayOutputStream;
+import java.io.PrintStream;
 import java.nio.file.Files;
 import java.util.List;
 import java.util.Optional;
@@ -167,6 +169,49 @@ class TestRunnerTest {
         assertFalse(Files.exists(staleFileTwo));
         assertFalse(Files.exists(staleDir));
         assertFalse(Files.exists(tempDir.resolve("stale")));
+    }
+
+    @Test
+    void shouldPrintFailureMessagesToStandardOutput() {
+        var stdout = new ByteArrayOutputStream();
+        var failingOutput = new TestOutput(
+                relativePath("reports", "TEST-capy.lang.MathTest.xml"),
+                """
+                        <testsuite name="/capy/lang/MathTest" tests="1" failures="1" errors="0" skipped="0" assertions="1" time="0" timestamp="1970-01-01T00:00:00Z">
+                          <testcase name="should_add_numbers" classname="/capy/lang/MathTest" assertions="1" time="0" file="/capy/lang/MathTest" line="0">
+                            <failure message="Expected int" type="IntAssert.is_equal_to"><![CDATA[Expected int:
+                        1
+                        to be equal to:
+                        2]]></failure>
+                          </testcase>
+                        </testsuite>
+                        """,
+                true
+        );
+
+        TestRunner.printFailureSummary(List.of(failingOutput), new PrintStream(stdout));
+
+        assertEquals("""
+                        
+                        Failures:
+                        
+                          /capy/lang/MathTest > should_add_numbers()
+                        Expected int:
+                        1
+                        to be equal to:
+                        2
+                        
+                        """.replace("\n", System.lineSeparator()), stdout.toString());
+    }
+
+    @Test
+    void shouldNotPrintAnythingWhenThereAreNoFailures() {
+        var stdout = new ByteArrayOutputStream();
+        var passingOutput = new TestOutput(relativePath("reports", "TEST-capy.lang.MathTest.xml"), "<testsuite/>", false);
+
+        TestRunner.printFailureSummary(List.of(passingOutput), new PrintStream(stdout));
+
+        assertEquals("", stdout.toString());
     }
 
     private static Path relativePath(String... segments) {

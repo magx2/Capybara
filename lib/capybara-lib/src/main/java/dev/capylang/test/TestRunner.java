@@ -5,7 +5,9 @@ import capy.test.CapyTest.TestOutput;
 import dev.capylang.PathUtil;
 
 import java.io.IOException;
+import java.io.PrintStream;
 import java.io.UncheckedIOException;
+import java.io.StringReader;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
@@ -20,6 +22,9 @@ import java.util.logging.ConsoleHandler;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.logging.SimpleFormatter;
+import javax.xml.XMLConstants;
+import javax.xml.parsers.DocumentBuilderFactory;
+import org.xml.sax.InputSource;
 
 public class TestRunner {
 
@@ -55,6 +60,7 @@ public class TestRunner {
             writtenFiles.add(writeTestOutputToFile(testOutput, arguments));
             hasFailures |= testOutput.failed();
         }
+        printFailureSummary(testOutputs, System.out);
         deleteStaleOutputs(arguments.outputDir(), writtenFiles);
         return hasFailures ? 1 : 0;
     }
@@ -315,5 +321,55 @@ public class TestRunner {
             }
         }
         Files.write(outputFile, contentBytes);
+    }
+
+    static void printFailureSummary(List<TestOutput> testOutputs, PrintStream output) {
+        var failures = testOutputs.stream()
+                .filter(TestOutput::failed)
+                .toList();
+        if (failures.isEmpty()) {
+            return;
+        }
+
+        output.println();
+        output.println("Failures:");
+        output.println();
+        for (var testOutput : failures) {
+            printTestOutputFailures(testOutput, output);
+        }
+    }
+
+    private static void printTestOutputFailures(TestOutput testOutput, PrintStream output) {
+        try {
+            var documentBuilderFactory = DocumentBuilderFactory.newInstance();
+            documentBuilderFactory.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true);
+            documentBuilderFactory.setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD, "");
+            documentBuilderFactory.setAttribute(XMLConstants.ACCESS_EXTERNAL_SCHEMA, "");
+            var documentBuilder = documentBuilderFactory.newDocumentBuilder();
+            var document = documentBuilder.parse(new InputSource(new StringReader(testOutput.content())));
+            var testCases = document.getElementsByTagName("testcase");
+            for (int i = 0; i < testCases.getLength(); i++) {
+                var testCase = testCases.item(i);
+                var failureNodes = testCase.getChildNodes();
+                for (int j = 0; j < failureNodes.getLength(); j++) {
+                    var failureNode = failureNodes.item(j);
+                    if (!"failure".equals(failureNode.getNodeName())) {
+                        continue;
+                    }
+                    var attributes = testCase.getAttributes();
+                    var className = attributes.getNamedItem("classname").getNodeValue();
+                    var testName = attributes.getNamedItem("name").getNodeValue();
+                    var failureMessage = failureNode.getTextContent();
+                    output.printf("  %s > %s()%n", className, testName);
+                    output.println(failureMessage);
+                    output.println();
+                }
+            }
+        } catch (Exception e) {
+            LOG.log(Level.WARNING, "Cannot print failure summary for `%s`".formatted(testOutput.path()), e);
+            output.printf("  %s%n", testOutput.path());
+            output.println(testOutput.content());
+            output.println();
+        }
     }
 }
