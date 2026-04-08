@@ -49,7 +49,7 @@
 *.woff  binary
 *.woff2 binary
 
-# Prefer tab-based indentation checks for language source files.
-*.java  whitespace=indent-with-non-tab
-*.cfun  whitespace=indent-with-non-tab
-*.coo   whitespace=indent-with-non-tab
+# Prefer space-compatible indentation checks for language source files.
+*.java  whitespace=tab-in-indent
+*.cfun  whitespace=tab-in-indent
+*.coo   whitespace=tab-in-indent
