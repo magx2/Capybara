@@ -693,7 +693,20 @@ public final class JavaGenerator implements Generator {
     }
 
     private boolean requiresUnsupportedHelper(StringBuilder code) {
-        return code.indexOf("__capybaraUnsupported(") >= 0;
+        var marker = "__capybaraUnsupported(\"";
+        var generatedCode = code.toString();
+        var index = generatedCode.indexOf(marker);
+        while (index >= 0) {
+            if (index == 0) {
+                return true;
+            }
+            var previousChar = generatedCode.charAt(index - 1);
+            if (previousChar != '\\' && previousChar != '"') {
+                return true;
+            }
+            index = generatedCode.indexOf(marker, index + 1);
+        }
+        return false;
     }
 
     private String unsupportedHelperMethod() {

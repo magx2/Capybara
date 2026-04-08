@@ -426,12 +426,23 @@ class JavaExpressionEvaluatorTest {
     @Test
     void shouldGenerateUnsupportedHelperWhenUsed() {
         var generated = new JavaGenerator().generate(compileProgram("NeedsUnsupported", "/foo/bar", """
-                fun not_supported(): int = unsupported("not here")
+                fun not_supported(): int = ???
                 """)).modules().stream()
                 .map(dev.capylang.generator.GeneratedModule::code)
                 .collect(joining("\n"));
 
         assertThat(generated).contains("private static <T> T __capybaraUnsupported(String message)");
+    }
+
+    @Test
+    void shouldNotGenerateUnsupportedHelperWhenNameAppearsInStringLiteral() {
+        var generated = new JavaGenerator().generate(compileProgram("LiteralUnsupportedName", "/foo/bar", """
+                fun show(): string = "__capybaraUnsupported("
+                """)).modules().stream()
+                .map(dev.capylang.generator.GeneratedModule::code)
+                .collect(joining("\n"));
+
+        assertThat(generated).doesNotContain("private static <T> T __capybaraUnsupported(String message)");
     }
 
     static Stream<Arguments> wild() {
