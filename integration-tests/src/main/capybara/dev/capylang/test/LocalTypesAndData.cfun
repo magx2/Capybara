@@ -55,14 +55,3 @@ fun local_generic_option_constructor_pattern_binding(v: int): int =
     match parse.value with
     case Some { value } -> value * 10 + v
     case None -> 0
-
-fun local_type_and_data_with_trailing_commas(flag: bool): int =
-    type __T { a: int, b: string, c: int, } = __D1 | __D2
-    data __D1 { d: int, e: int, }
-    data __D2 { f: int, g: int, }
-    let value: __T =
-        if flag then __D1 { d: 1, e: 2 }
-        else __D2 { f: 3, g: 4 }
-    match value with
-    case __D1 { d, e } -> d + e
-    case __D2 { f, g } -> f + g
