@@ -207,6 +207,20 @@ class JavaExpressionEvaluatorTest {
     }
 
     @Test
+    void shouldUseCapybaraToStringUtilForGeneratedRecordToString() {
+        var program = compileProgram("Pretty", "/foo/bar", """
+                data Pretty { value: string }
+                """);
+
+        var generated = new JavaGenerator().generate(program).modules().stream()
+                .map(dev.capylang.generator.GeneratedModule::code)
+                .collect(joining("\n"));
+
+        assertThat(generated).contains("dev.capylang.CapybaraToStringUtil.toStringValue(value)");
+        assertThat(generated).doesNotContain("private static java.lang.String __capybaraToStringValue");
+    }
+
+    @Test
     void shouldImportOptionTypesAsClassesInsteadOfStaticMembers() {
         var program = compileProgram("LocalOption", "/foo/bar", """
                 from /capy/lang/Option import { Option, Some, None }
