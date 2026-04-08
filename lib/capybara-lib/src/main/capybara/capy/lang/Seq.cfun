@@ -10,21 +10,25 @@ single End
 /// ```
 fun natural_seq(): Seq[int] =
     fun __next(i: int): Seq[int] = Cons { i, () => __next(i+1) }
+    ---
     __next(0)
 
 /// Returns an infinite Fibonacci sequence: `1, 1, 2, 3, 5, 8, 13, ...`.
 fun fibonacci_seq(): Seq[int] =
     fun __next(a: int, b: int) = Cons { b, () => __next(b, a+b) }
+    ---
     __next(0,1)
 
 /// Returns an infinite sequence of zeros.
 fun zeros_seq(): Seq[int] =
     fun __next() = Cons { 0, () => __next() }
+    ---
     __next()
 
 /// Returns an infinite sequence of ones.
 fun ones_seq(): Seq[int] =
     fun __next() = Cons { 1, () => __next() }
+    ---
     __next()
 
 /// Returns an infinite sequence of powers of `base`: `base^0, base^1, base^2, ...`.
@@ -48,6 +52,7 @@ fun Seq[T].take(n: int): list[T] =
             match seq with
             case End -> list
             case Cons { value, rest } -> __take(rest(), n-1, list + value)
+    ---
     __take(this, n, [])
 
 /// Collects the entire sequence into a `list`.
@@ -58,6 +63,7 @@ fun Seq[T].as_list(): list[T] =
         match seq with
         case End -> list
         case Cons { value, rest } -> __as_list(rest(), list + value)
+    ---
     __as_list(this, [])
 
 /// Converts a `list` into a finite `Seq`.
@@ -84,6 +90,7 @@ fun Seq[T].take_last(n: int): list[T] =
             match seq with
             case End -> list
             case Cons { value, rest } -> __take_last(rest(), max, n-1, __add_to_list(max, list, value))
+    ---
     __take_last(this, n, n, [])
 
 /// Returns a sequence containing only elements that satisfy `pred`.
@@ -100,6 +107,7 @@ fun Seq[T].filter(pred: T => bool): Seq[T] =
             if pred(value)
             then Cons { value, () => __filter(rest(), pred) }
             else __filter(rest(), pred)
+    ---
     __filter(this, pred)
 
 /// Skips the first `n` elements of the sequence.
@@ -111,6 +119,7 @@ fun Seq[T].drop(n: int): Seq[T] =
             match seq with
             case End -> End
             case Cons { value, rest } -> __drop(rest(), n - 1)
+    ---
     __drop(this, n)
 
 /// Drops elements until `pred` becomes `true`.
@@ -128,6 +137,7 @@ fun Seq[T].drop_until(pred: T => bool): Seq[T] =
             if pred(value)
             then Cons { value, rest }
             else __drop_until(rest(), pred)
+    ---
     __drop_until(this, pred)
 
 /// Returns elements from the start of the sequence until `pred` becomes `true`.
@@ -141,6 +151,7 @@ fun Seq[T].until(pred: T => bool): Seq[T] =
             if pred(value)
             then End
             else Cons { value, () => __until(rest(), pred) }
+    ---
     __until(this, pred)
 
 /// Concatenates this sequence with `other`.
@@ -151,6 +162,7 @@ fun Seq[T].`+`(other: Seq[T]): Seq[T] =
         match seq with
         case End -> other
         case Cons { value, rest } -> Cons { value, () => __add(rest(), other) }
+    ---
     __add(this, other)
 
 /// Transforms each element using `map`.
@@ -176,6 +188,7 @@ fun Seq[T].`|*`(map: T => Seq[Y]): Seq[Y] =
         case End -> End
         case Cons { value, rest } ->
             map(value) + __flat_map(rest(), map)
+    ---
     __flat_map(this, map)
 
 fun Seq[T].flat_map(map: T => Seq[Y]): Seq[Y] =
@@ -184,6 +197,7 @@ fun Seq[T].flat_map(map: T => Seq[Y]): Seq[Y] =
         case End -> End
         case Cons { value, rest } ->
             map(value) + __flat_map(rest(), map)
+    ---
     __flat_map(this, map)
 
 fun Seq[T].reduce(initial: R, reducer: (R, T) => R): R =
@@ -191,6 +205,7 @@ fun Seq[T].reduce(initial: R, reducer: (R, T) => R): R =
         match seq with
         case End -> acc
         case Cons { value, rest } -> __reduce(rest(), reducer(acc, value), reducer)
+    ---
     __reduce(this, initial, reducer)
 
 fun Seq[T].reduce_left(initial: R, reducer: (R, T) => R): R = this.reduce(initial, reducer)
@@ -211,6 +226,7 @@ fun Seq[T].zip(other: Seq[Y]): Seq[tuple[T,Y]] =
             match other with
             case End -> End
             case Cons { v2, r2 } -> Cons { (v1, v2), () => __zip(r1, r2) }
+    ---
     __zip(this, other)
 
 /// Returns the first element wrapped in `Option`.

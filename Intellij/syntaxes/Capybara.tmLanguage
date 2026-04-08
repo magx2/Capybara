@@ -65,6 +65,7 @@
     <dict><key>name</key><string>constant.numeric.capybara</string><key>match</key><string>\b(?:0[xX][0-9a-fA-F]+|\d+[lL]|\d+\.\d*(?:[eE][+\-]?\d+)?[fFdD]?|\d+[eE][+\-]?\d+[fFdD]?|\d+)\b</string></dict>
     <dict><key>name</key><string>constant.language.boolean.capybara</string><key>match</key><string>\b(true|false)\b</string></dict>
     <dict><key>name</key><string>constant.language.unimplemented.capybara</string><key>match</key><string>\?\?\?</string></dict>
+    <dict><key>name</key><string>punctuation.separator.local-definitions.capybara</string><key>match</key><string>---</string></dict>
     <dict>
       <key>name</key><string>meta.function.documented.private.capybara</string>
       <key>match</key><string>((?:^\s*///.*\r?\n)+)(\s*)(fun)(\s+)(__[A-Za-z0-9_]+)</string>

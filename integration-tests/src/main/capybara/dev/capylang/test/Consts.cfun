@@ -26,10 +26,12 @@ fun uses_private_const(): int = _HIDDEN + 1
 fun local_consts(x: int): int =
     const __BASE = 10
     const __INC: int = 5
+    ---
     x + __BASE + __INC
 
 fun local_private_named_const(x: string): bool =
     const __white_space: set[string] = { " ", "\t", "\n" }
+    ---
     __white_space ? x
 
 fun primitives_summary(): string =

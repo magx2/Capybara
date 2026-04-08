@@ -9,6 +9,7 @@ fun reverse_ints(values: list[int]): list[int] =
             match left[0] with
             case Some { v } -> __rev(left[1:], [v] + acc)
             case None -> acc
+    ---
     __rev(values, [])
 
 fun duplicate_strings(values: list[string]): list[string] =
@@ -19,6 +20,7 @@ fun duplicate_strings(values: list[string]): list[string] =
             match left[0] with
             case Some { v } -> __dup(left[1:], acc + [v, v])
             case None -> acc
+    ---
     __dup(values, [])
 
 fun empty_list_of_type_param(v: T): list[T] =

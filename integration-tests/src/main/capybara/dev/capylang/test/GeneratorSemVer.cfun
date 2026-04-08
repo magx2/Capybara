@@ -17,6 +17,7 @@ fun parse_local_option(value: int): Result[int] =
         match parse.value with
         case Some { inner } -> Success { __Parse { buffer: parse.buffer, value: inner } }
         case None -> Error { "missing value" }
+    ---
     __unwrap(__Parse { buffer: "", value: Some { value } })
     | parsed => Success { parsed.value }
 
@@ -26,6 +27,7 @@ fun parse_local_option_none(): Result[int] =
         match parse.value with
         case Some { inner } -> Success { __Parse { buffer: parse.buffer, value: inner } }
         case None -> Error { "missing value" }
+    ---
     let none_value: Option[int] = None {}
     __unwrap(__Parse { buffer: "", value: none_value })
     | parsed => Success { parsed.value }
@@ -34,6 +36,7 @@ fun parse_local_semver_build(version: string): Result[string] =
     data __Parse[T] { buffer: string, value: T }
     fun __parse_build(buffer: string): Result[__Parse[string]] =
         Success { __Parse { buffer: "", value: buffer } }
+    ---
     let parse: __Parse[SemVer] = __Parse {
         buffer: version,
         value: SemVer { major: 1, build_metadata: None {} }
@@ -52,6 +55,7 @@ fun parse_local_semver_build_and_increment(version: string): Result[int] =
     data __Parse[T] { buffer: string, value: T }
     fun __parse_build(buffer: string): Result[__Parse[string]] =
         Success { __Parse { buffer: "", value: buffer } }
+    ---
     let parse: __Parse[SemVer] = __Parse {
         buffer: version,
         value: SemVer { major: 1, build_metadata: None {} }

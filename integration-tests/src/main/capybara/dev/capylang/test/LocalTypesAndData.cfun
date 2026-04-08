@@ -10,6 +10,7 @@ fun foo_me(name: string): string =
         case __Foo { foo } -> foo
         case __Boo { boo } -> boo
         case __Unknown { unkn } -> unkn
+    ---
     let x =
         match name with
         case "foo" -> __Foo { "xyz" }
@@ -19,6 +20,7 @@ fun foo_me(name: string): string =
 
 fun local_data_with_imported_result(v: int): string =
     data __Entry { key: string, value: Result[int] }
+    ---
     let entry = __Entry { "k", Success { value: v } }
     match entry.value with
     case Success { value } -> "ok:" + value
@@ -28,12 +30,14 @@ fun local_data_used_in_local_function(v: int): string =
     data __Parse[T] { value: T }
     fun __unwrap(parse: __Parse[int]): string =
         "value:" + parse.value
+    ---
     __unwrap(__Parse { v })
 
 fun local_generic_data_used_in_local_function_return_type(v: int): string =
     data __Parse[T] { value: T }
     fun __parse(value: int): Result[__Parse[int]] =
         Success { __Parse { value } }
+    ---
     match __parse(v) with
     case Success { value } -> "value:" + value.value
     case Error { message } -> "error:" + message
@@ -42,6 +46,7 @@ fun local_generic_data_field_access_followed_by_index(buffer: string): string =
     data __Parse[T] { buffer: string, value: T }
     fun __parse(value: string): Result[__Parse[int]] =
         Success { __Parse { buffer: value, value: 1 } }
+    ---
     match (__parse(buffer) | parse =>
         match parse.buffer[0] with
         case Some { value } -> Success { value }
@@ -51,6 +56,7 @@ fun local_generic_data_field_access_followed_by_index(buffer: string): string =
 
 fun local_generic_option_constructor_pattern_binding(v: int): int =
     data __Parse[T] { value: T }
+    ---
     let parse: __Parse[Option[int]] = __Parse { Some { v } }
     match parse.value with
     case Some { value } -> value * 10 + v

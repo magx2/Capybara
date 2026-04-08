@@ -157,6 +157,7 @@ class CapybaraParserTest {
         var module = parseSuccess(new RawModule("Test", "/parser", """
                 fun foo(x: string): bool =
                     const __white_space = { " ", "\\t", "\\n" }
+                    ---
                     __white_space ? x
                 """));
 
@@ -177,6 +178,7 @@ class CapybaraParserTest {
         var result = new CapybaraParser().parseModule(new RawModule("Test", "/parser", """
                 fun foo(x: string): bool =
                     const white_space = { " ", "\\t", "\\n" }
+                    ---
                     x == ""
                 """));
 
@@ -198,6 +200,7 @@ class CapybaraParserTest {
                 fun foo(): int =
                     const __white_space = 1
                     const __white_space = 2
+                    ---
                     __white_space
                 """));
 
@@ -279,6 +282,7 @@ class CapybaraParserTest {
                 fun parse(): int =
                     fun __parse_positive_digit(value: int): int = value
                     fun __parse_positive_digit(value: int): int = value + 1
+                    ---
                     0
                 """);
 
@@ -302,11 +306,24 @@ class CapybaraParserTest {
                     /// Internal accumulate
                     fun __accumulate(n: int, acc: int): int =
                         if n <= 0 then acc else __accumulate(n-1, acc+n)
+                    ---
                     __accumulate(n, 0)
                 """));
 
         var localFunction = findFunction("__accumulate__local_fun_0_accumulate", module.functional());
         assertThat(localFunction.comments()).containsExactly("Internal accumulate");
+    }
+
+    @Test
+    @DisplayName("should reject missing separator after local definitions")
+    void rejectMissingSeparatorAfterLocalDefinitions() {
+        var result = new CapybaraParser().parseModule(new RawModule("Test", "/parser", """
+                fun foo(n: int): int =
+                    fun __inc(x: int): int = x + 1
+                    __inc(n)
+                """));
+
+        assertThat(result).isInstanceOf(Result.Error.class);
     }
 
     @Test
@@ -596,6 +613,7 @@ class CapybaraParserTest {
                     data __Parse[T] { buffer: string, value: T }
                     fun __parse_pre_release(version: string): Result[__Parse[string]] = Success { __Parse { version, "rc1" } }
                     fun __parse_build(version: string): Result[__Parse[string]] = Success { __Parse { version, "001" } }
+                    ---
                     let raw_sem_ver = SemVer { None {}, None {} }
                     let parse_patch: __Parse[string] = __Parse { version, "1.2.3" }
                     match parse_patch.buffer[0] with
@@ -648,6 +666,7 @@ class CapybaraParserTest {
                     data __Parse[T] { buffer: string, value: T }
                     fun __parse_tail(buffer: string): Result[__Parse[string]] = Success { __Parse { buffer, "tail" } }
                     fun __parse_build(buffer: string): Result[__Parse[string]] = Success { __Parse { buffer, "build" } }
+                    ---
                     let parse_patch: __Parse[string] = __Parse { input, "base" }
                     match parse_patch.buffer[0] with
                     case Some { ch } when ch == "-" -> {

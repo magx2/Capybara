@@ -18,6 +18,7 @@ class LocalConstCompilationErrorTest {
                 List.of(new RawModule("LocalConst", "/foo/boo", """
                         fun foo(x: string): bool =
                             const white_space = 1
+                            ---
                             x == ""
                         """)),
                 new TreeSet<>()
