@@ -4330,7 +4330,7 @@ public class CapybaraExpressionCompiler {
             MatchExpression matchExpression,
             List<CompiledMatchExpression.MatchCase> cases
     ) {
-        var coveredBooleanValues = new java.util.LinkedHashSet<Boolean>();
+        var coveredBooleanValues = new java.util.LinkedHashSet<String>();
         for (var matchCase : cases) {
             if (matchCase.guard().isPresent()) {
                 continue;
@@ -4351,10 +4351,10 @@ public class CapybaraExpressionCompiler {
             return Result.success(null);
         }
         var missing = new java.util.ArrayList<String>();
-        if (!coveredBooleanValues.contains(Boolean.TRUE)) {
+        if (!coveredBooleanValues.contains("true")) {
             missing.add("`true`");
         }
-        if (!coveredBooleanValues.contains(Boolean.FALSE)) {
+        if (!coveredBooleanValues.contains("false")) {
             missing.add("`false`");
         }
         var missingText = String.join(", ", missing);
