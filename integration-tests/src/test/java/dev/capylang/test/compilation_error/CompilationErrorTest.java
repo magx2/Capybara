@@ -259,8 +259,24 @@ public class CompilationErrorTest {
                                 fun foo(v: string): Option[string] = match v[0] with ...
                                     ^ expected `Option[string]`, found `string`
                                 """
+                ),
+                Arguments.of(
+                        "match_bool_not_exhaustive",
+                        """
+                                fun foo(x: bool): int =
+                                    match x with
+                                    case true -> 1
+                                """,
+                        new Position(2, 4),
+                        """
+                                error: mismatched types
+                                 --> /foo/boo/match_bool_not_exhaustive.cfun:2:4
+                                fun foo(x: bool): int =
+                                    match x with
+                                    ^ `match` is not exhaustive. Use wildcard `case _ -> ...` or add missing branches:`false`.
+                                """
                 ));
-        var primitiveTypes = List.of("string", "byte", "int", "long", "float", "double", "bool");
+        var primitiveTypes = List.of("string", "byte", "int", "long", "float", "double");
         var primitiveCases = primitiveTypes.stream().map(CompilationErrorTest::primitiveMatchNotExhaustiveCase);
         return Stream.concat(base, primitiveCases);
     }
