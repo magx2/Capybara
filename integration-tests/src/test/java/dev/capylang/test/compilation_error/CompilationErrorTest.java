@@ -58,6 +58,25 @@ public class CompilationErrorTest {
                 .anyMatch(message -> message.contains("fun __parse_digits(parse: __Parse[Option[int]]): Result[__Parse[int]] ="));
     }
 
+    @Test
+    void shouldNormalizeLocalTypeNamesInMatchExhaustivenessErrors() {
+        var errors = compileProgram("""
+                        fun parse(value: int): int =
+                            type __Token = __Number | __Stop
+                            data __Number { value: int }
+                            data __Stop {}
+                            let token: __Token = __Number { value }
+                            match token with
+                            case __Number { value } -> value
+                        """,
+                "local_match_not_exhaustive");
+
+        assertThat(errors).hasSize(1);
+        assertThat(errors.first().message())
+                .contains("`match` is not exhaustive. Use wildcard `case _ -> ...` or add missing branches:`__Stop`.")
+                .doesNotContain("__local_type_");
+    }
+
     @ParameterizedTest(name = "{index}: should fail when compiling `{0}.cfun`")
     @MethodSource
     void compilationError(

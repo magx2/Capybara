@@ -1194,7 +1194,7 @@ public class CapybaraCompiler {
         var file = normalizeFile(moduleSourceFile);
         var header = formatFunctionHeader(function) + " =";
         var matchLine = "    " + formatMatchLine(function.expression());
-        var pointer = " ".repeat(Math.max(column, 0)) + "^ " + error.message();
+        var pointer = " ".repeat(Math.max(column, 0)) + "^ " + normalizeUserVisibleNames(error.message());
         var message = "error: mismatched types\n"
                       + " --> " + file + ":" + line + ":" + column + "\n"
                       + header + "\n"
