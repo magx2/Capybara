@@ -1,12 +1,55 @@
-#
-# https://help.github.com/articles/dealing-with-line-endings/
-#
-# Linux start script should use lf
-/gradlew        text eol=lf
+# Normalize all text files to LF in the repository and working tree.
+* text=auto eol=lf
 
-# These are Windows script files and should use crlf
-*.bat           text eol=crlf
+# Explicit text types.
+*.txt   text eol=lf diff
+*.md    text eol=lf diff=markdown
+*.java  text eol=lf diff=java
+*.cfun  text eol=lf
+*.coo   text eol=lf
+*.gradle text eol=lf
+*.kts   text eol=lf
+*.xml   text eol=lf
+*.yml   text eol=lf
+*.yaml  text eol=lf
+*.json  text eol=lf
+*.properties text eol=lf
+*.sh    text eol=lf
+*.bat   text eol=lf
 
-# Binary files should be left untouched
-*.jar           binary
+# Enforce UTF-8 for source-like text files.
+*.txt   working-tree-encoding=UTF-8
+*.md    working-tree-encoding=UTF-8
+*.java  working-tree-encoding=UTF-8
+*.cfun  working-tree-encoding=UTF-8
+*.coo   working-tree-encoding=UTF-8
+*.gradle working-tree-encoding=UTF-8
+*.kts   working-tree-encoding=UTF-8
+*.xml   working-tree-encoding=UTF-8
+*.yml   working-tree-encoding=UTF-8
+*.yaml  working-tree-encoding=UTF-8
+*.json  working-tree-encoding=UTF-8
+*.properties working-tree-encoding=UTF-8
+*.sh    working-tree-encoding=UTF-8
+*.bat   working-tree-encoding=UTF-8
 
+# Treat common binary formats as binary.
+*.jar   binary
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.webp  binary
+*.ico   binary
+*.pdf   binary
+*.zip   binary
+*.gz    binary
+*.tar   binary
+*.class binary
+*.woff  binary
+*.woff2 binary
+
+# Prefer tab-based indentation checks for language source files.
+*.java  whitespace=indent-with-non-tab
+*.cfun  whitespace=indent-with-non-tab
+*.coo   whitespace=indent-with-non-tab
