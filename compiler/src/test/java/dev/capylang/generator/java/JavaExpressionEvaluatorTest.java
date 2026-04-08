@@ -412,6 +412,28 @@ class JavaExpressionEvaluatorTest {
         assertThat(generated).contains("((capy.lang.Result.Error)");
     }
 
+    @Test
+    void shouldNotGenerateUnsupportedHelperWhenUnused() {
+        var generated = new JavaGenerator().generate(compileProgram("NoUnsupported", "/foo/bar", """
+                fun answer(): int = 42
+                """)).modules().stream()
+                .map(dev.capylang.generator.GeneratedModule::code)
+                .collect(joining("\n"));
+
+        assertThat(generated).doesNotContain("private static <T> T __capybaraUnsupported(String message)");
+    }
+
+    @Test
+    void shouldGenerateUnsupportedHelperWhenUsed() {
+        var generated = new JavaGenerator().generate(compileProgram("NeedsUnsupported", "/foo/bar", """
+                fun not_supported(): int = unsupported("not here")
+                """)).modules().stream()
+                .map(dev.capylang.generator.GeneratedModule::code)
+                .collect(joining("\n"));
+
+        assertThat(generated).contains("private static <T> T __capybaraUnsupported(String message)");
+    }
+
     static Stream<Arguments> wild() {
         return Stream.of(
                 Arguments.of(
