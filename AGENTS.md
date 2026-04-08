@@ -13,11 +13,11 @@ Do not edit generated outputs under `build/generated/...`; change source `.cfun`
 
 ## Build, Test, and Development Commands
 Use the wrapper from repository root:
-- `./gradlew.bat clean test`: full build and test for all modules.
-- `./gradlew.bat :compiler:test`: run compiler unit tests only.
-- `./gradlew.bat :integration-tests:test`: run integration suite.
-- `./gradlew.bat :lib:capybara-lib:compileCapybara`: compile library Capybara sources to Java.
-- `./gradlew.bat :lib:capybara-lib:testCapybara`: compile test Capybara sources and run generated `JsonTest` main.
+- `./gradlew clean test`: full build and test for all modules.
+- `./gradlew :compiler:test`: run compiler unit tests only.
+- `./gradlew :integration-tests:test`: run integration suite.
+- `./gradlew :lib:capybara-lib:compileCapybara`: compile library Capybara sources to Java.
+- `./gradlew :lib:capybara-lib:testCapybara`: compile test Capybara sources and run generated `JsonTest` main.
 
 ## Coding Style & Naming Conventions
 - Java toolchain is 21 (configured in `buildSrc` conventions).
@@ -40,7 +40,7 @@ Use the wrapper from repository root:
 - PRs should include:
   - what changed and why,
   - impacted modules,
-  - commands run (for example `./gradlew.bat clean test`),
+  - commands run (for example `./gradlew clean test`),
   - sample `.cfun` snippet/output when behavior changes.
 
 ## Capybara Language Change Rules
