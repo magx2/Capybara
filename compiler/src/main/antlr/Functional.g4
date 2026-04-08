@@ -25,7 +25,8 @@ localTypeDeclaration: 'type' genericTypeDeclaration '=' genericTypeDeclaration (
                     | 'type' genericTypeDeclaration '{' fieldDeclarationList? '}' '=' genericTypeDeclaration (PIPE genericTypeDeclaration)*;
 localDataDeclaration: 'data' genericTypeDeclaration '{' fieldDeclarationList? '}'
                     | 'data' genericTypeDeclaration '=' '{' fieldDeclarationList? '}';
-localConstDeclaration: 'const' TYPE (':' type)? '=' expressionNoLet;
+localConstDeclaration: 'const' privateLocalConstName (':' type)? '=' expressionNoLet;
+privateLocalConstName: NAME | TYPE;
 functionNameDeclaration: identifier | genericTypeDeclaration DOT methodIdentifier;
 methodIdentifier: identifier | 'with' | INFIX_METHOD_LITERAL;
 docComment: DOC_COMMENT;

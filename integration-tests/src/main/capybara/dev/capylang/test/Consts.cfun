@@ -28,6 +28,10 @@ fun local_consts(x: int): int =
     const __INC: int = 5
     x + __BASE + __INC
 
+fun local_private_named_const(x: string): bool =
+    const __white_space: set[string] = { " ", "\t", "\n" }
+    __white_space ? x
+
 fun primitives_summary(): string =
     BYTE_V + ":" + INT_V + ":" + LONG_V + ":" + FLOAT_V + ":" + DOUBLE_V + ":" + BOOL_V + ":" + STRING_V
 

@@ -29,6 +29,7 @@ public class CapybaraParser {
     private static final Pattern NO_VIABLE_ALTERNATIVE_PATTERN = Pattern.compile("no viable alternative at input '(.+)'");
     private static final Pattern MISMATCHED_INPUT_PATTERN = Pattern.compile("mismatched input '(.+)' expecting '(.+)'");
     private static final Pattern CONST_NAME_PATTERN = Pattern.compile("^_?[A-Z_][A-Z0-9_]*$");
+    private static final Pattern PRIVATE_LOCAL_CONST_NAME_PATTERN = Pattern.compile("^__[A-Za-z_][A-Za-z0-9_]*$");
     private static final Pattern ENUM_VALUE_NAME_PATTERN = Pattern.compile("^[A-Z]+(?:_[A-Z]+)*$");
     private static final Pattern IMPORT_PATTERN = Pattern.compile(
             "^\\s*from\\s+([A-Za-z_][A-Za-z0-9_]*|/[A-Za-z_][A-Za-z0-9_]*(?:/[A-Za-z_][A-Za-z0-9_]*)+)\\s+import\\s*\\{\\s*([^}]*)\\s*}(?:\\s+except\\s*\\{\\s*([^}]*)\\s*})?\\s*$"
@@ -99,6 +100,10 @@ public class CapybaraParser {
             var duplicateLocalFunctions = findDuplicateLocalFunctions(parsedDefinitions);
             if (!duplicateLocalFunctions.isEmpty()) {
                 return new Result.Error<>(duplicateLocalFunctions);
+            }
+            var duplicateLocalConsts = findDuplicateLocalConsts(parsedDefinitions);
+            if (!duplicateLocalConsts.isEmpty()) {
+                return new Result.Error<>(duplicateLocalConsts);
             }
             if (!parserErrors.isEmpty()) {
                 return new Result.Error<>(parserErrors);
@@ -213,6 +218,24 @@ public class CapybaraParser {
         );
     }
 
+    private void reportDuplicateLocalConst(String localName, java.util.List<Token> occurrences) {
+        if (currentModule == null || currentSource == null) {
+            return;
+        }
+        var firstDeclaration = occurrences.getFirst();
+        var locations = occurrences.stream()
+                .map(token -> "%d:%d".formatted(token.getLine(), token.getCharPositionInLine()))
+                .collect(java.util.stream.Collectors.joining(", "));
+        parserErrors.add(
+                formatParserError(
+                        currentModule,
+                        currentSource,
+                        "line %d:%d: Duplicate local const name: %s. Declared at: %s"
+                                .formatted(firstDeclaration.getLine(), firstDeclaration.getCharPositionInLine(), localName, locations)
+                )
+        );
+    }
+
     private List<Result.Error.SingleError> findDuplicateLocalFunctions(List<Definition> definitions) {
         if (currentModule == null || currentSource == null) {
             return List.of();
@@ -241,6 +264,38 @@ public class CapybaraParser {
                 currentModule,
                 currentSource,
                 "line %d:%d: Duplicate local function name: %s. Declared at: %s"
+                        .formatted(firstPosition.line(), firstPosition.column(), originalName, locations)
+        );
+    }
+
+    private List<Result.Error.SingleError> findDuplicateLocalConsts(List<Definition> definitions) {
+        if (currentModule == null || currentSource == null) {
+            return List.of();
+        }
+        return definitions.stream()
+                .filter(Function.class::isInstance)
+                .map(Function.class::cast)
+                .filter(function -> function.name().contains("__local_const_"))
+                .collect(java.util.stream.Collectors.groupingBy(Function::name, java.util.LinkedHashMap::new, java.util.stream.Collectors.toList()))
+                .values().stream()
+                .filter(functions -> functions.size() > 1)
+                .map(this::duplicateLocalConstError)
+                .toList();
+    }
+
+    private Result.Error.SingleError duplicateLocalConstError(List<Function> functions) {
+        var firstFunction = functions.getFirst();
+        var firstPosition = firstFunction.position().orElseThrow();
+        var originalName = "__" + firstFunction.name().replaceFirst("^.*__local_const_\\d+_", "");
+        var locations = functions.stream()
+                .map(function -> function.position().orElseThrow())
+                .map(position -> "%d:%d".formatted(position.line(), position.column()))
+                .distinct()
+                .collect(java.util.stream.Collectors.joining(", "));
+        return formatParserError(
+                currentModule,
+                currentSource,
+                "line %d:%d: Duplicate local const name: %s. Declared at: %s"
                         .formatted(firstPosition.line(), firstPosition.column(), originalName, locations)
         );
     }
@@ -483,6 +538,7 @@ public class CapybaraParser {
         var localTypeNameMap = new java.util.LinkedHashMap<String, String>();
         var localConstNameMap = new java.util.LinkedHashMap<String, String>();
         var localFunctionPositions = new java.util.LinkedHashMap<String, java.util.List<Token>>();
+        var localConstPositions = new java.util.LinkedHashMap<String, java.util.List<Token>>();
         var localFunctionIndex = 0;
         var localTypeIndex = 0;
         var localConstIndex = 0;
@@ -537,13 +593,13 @@ public class CapybaraParser {
             }
             var localConst = localDefinition.localConstDeclaration();
             if (localConst != null) {
-                var localConstName = localConst.TYPE().getText();
-                if (!localConstName.startsWith("__")) {
-                    throw new IllegalStateException("Local const name has to start with `__`: " + localConstName);
-                }
-                validateConstName(localConstName);
+                var localConstNameNode = localConst.privateLocalConstName();
+                var localConstName = localConstName(localConstNameNode);
+                validateLocalConstName(localConstName, position(localConst));
+                var occurrences = localConstPositions.computeIfAbsent(localConstName, ignored -> new java.util.ArrayList<>());
+                occurrences.add(localConst.start);
                 if (localConstNameMap.containsKey(localConstName)) {
-                    throw new IllegalStateException("Duplicate local const name: " + localConstName);
+                    continue;
                 }
                 localConstNameMap.put(
                         localConstName,
@@ -555,6 +611,11 @@ public class CapybaraParser {
         localFunctionPositions.forEach((localName, occurrences) -> {
             if (occurrences.size() > 1) {
                 reportDuplicateLocalFunction(localName, occurrences);
+            }
+        });
+        localConstPositions.forEach((localName, occurrences) -> {
+            if (occurrences.size() > 1) {
+                reportDuplicateLocalConst(localName, occurrences);
             }
         });
         var extractedLocalDefinitions = new java.util.ArrayList<Definition>();
@@ -663,7 +724,7 @@ public class CapybaraParser {
             java.util.Map<String, String> localTypeNameMap,
             java.util.Map<String, String> localConstNameMap
     ) {
-        var localName = context.TYPE().getText();
+        var localName = localConstName(context.privateLocalConstName());
         var mappedName = localConstNameMap.get(localName);
         if (mappedName == null) {
             throw new IllegalStateException("Unknown local const mapping for: " + localName);
@@ -2620,6 +2681,20 @@ public class CapybaraParser {
         }
     }
 
+    private static void validateLocalConstName(String name, Optional<SourcePosition> position) {
+        if (PRIVATE_LOCAL_CONST_NAME_PATTERN.matcher(name).matches()) {
+            return;
+        }
+        var message = "Local const name has to start with `__` and use a private identifier style: " + name;
+        if (position.isPresent()) {
+            var sourcePosition = position.orElseThrow();
+            throw new IllegalStateException(
+                    "line %d:%d: %s".formatted(sourcePosition.line(), sourcePosition.column(), message)
+            );
+        }
+        throw new IllegalStateException(message);
+    }
+
     private static void validateEnumValueName(String name) {
         if (!ENUM_VALUE_NAME_PATTERN.matcher(name).matches()) {
             throw new IllegalStateException("Invalid enum value name: " + name);
@@ -2636,8 +2711,22 @@ public class CapybaraParser {
             case FloatValue ignored -> Optional.of(PrimitiveType.FLOAT);
             case StringValue ignored -> Optional.of(PrimitiveType.STRING);
             case NothingValue ignored -> Optional.of(PrimitiveType.NOTHING);
+            case NewListExpression newList -> inferCollectionElementType(newList.values())
+                    .map(CollectionType.ListType::new);
+            case NewSetExpression newSet -> inferCollectionElementType(newSet.values())
+                    .map(CollectionType.SetType::new);
+            case NewDictExpression newDict -> inferCollectionElementType(
+                            newDict.entries().stream().map(NewDictExpression.Entry::value).toList())
+                    .map(CollectionType.DictType::new);
             default -> Optional.empty();
         };
+    }
+
+    private static Optional<Type> inferCollectionElementType(List<Expression> values) {
+        return values.stream()
+                .map(CapybaraParser::inferConstType)
+                .reduce((left, right) -> left.equals(right) ? left : Optional.of(PrimitiveType.ANY))
+                .orElse(Optional.of(PrimitiveType.ANY));
     }
 
     private static String methodIdentifier(FunctionalParser.MethodIdentifierContext context) {
@@ -2653,6 +2742,16 @@ public class CapybaraParser {
             return text.substring(1, text.length() - 1);
         }
         throw new IllegalStateException("Unknown method identifier: " + context.getText());
+    }
+
+    private static String localConstName(FunctionalParser.PrivateLocalConstNameContext context) {
+        if (context.NAME() != null) {
+            return context.NAME().getText();
+        }
+        if (context.TYPE() != null) {
+            return context.TYPE().getText();
+        }
+        throw new IllegalStateException("Unknown local const name: " + context.getText());
     }
 
     private static List<String> genericTypeParameters(FunctionalParser.GenericTypeDeclarationContext context) {

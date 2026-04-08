@@ -228,7 +228,7 @@
         },
         {
           "name": "meta.const.private.capybara",
-          "match": "\\b(const)\\s+(__[A-Z_][A-Z0-9_]*)\\b"
+          "match": "\\b(const)\\s+(__[A-Za-z_][A-Za-z0-9_]*)\\b"
         },
         {
           "name": "meta.const.capybara",

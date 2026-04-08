@@ -152,6 +152,67 @@ class CapybaraParserTest {
     }
 
     @Test
+    @DisplayName("should parse lowercase private local const declaration")
+    void parseLowercasePrivateLocalConstDeclaration() {
+        var module = parseSuccess(new RawModule("Test", "/parser", """
+                fun foo(x: string): bool =
+                    const __white_space = { " ", "\\t", "\\n" }
+                    __white_space ? x
+                """));
+
+        var localConst = findFunction("__foo__local_const_0_white_space", module.functional());
+        assertThat(localConst.parameters()).isEmpty();
+        assertThat(localConst.returnType()).contains(new CollectionType.SetType(PrimitiveType.STRING));
+
+        var function = findFunction("foo", module.functional());
+        assertThat(function.expression()).isInstanceOf(InfixExpression.class);
+        var expression = (InfixExpression) function.expression();
+        assertThat(expression.left()).isInstanceOf(FunctionCall.class);
+        assertThat(((FunctionCall) expression.left()).name()).isEqualTo("__foo__local_const_0_white_space");
+    }
+
+    @Test
+    @DisplayName("should reject local const name without private prefix")
+    void rejectLocalConstNameWithoutPrivatePrefix() {
+        var result = new CapybaraParser().parseModule(new RawModule("Test", "/parser", """
+                fun foo(x: string): bool =
+                    const white_space = { " ", "\\t", "\\n" }
+                    x == ""
+                """));
+
+        assertThat(result).isInstanceOf(Result.Error.class);
+        assertThat(((Result.Error<dev.capylang.compiler.parser.Module>) result).errors())
+                .singleElement()
+                .satisfies(error -> {
+                    assertThat(error.file()).isEqualTo("/parser/Test.cfun");
+                    assertThat(error.line()).isEqualTo(2);
+                    assertThat(error.column()).isEqualTo(4);
+                    assertThat(error.message()).contains("Local const name has to start with `__`");
+                });
+    }
+
+    @Test
+    @DisplayName("should reject duplicate local const names with locations")
+    void rejectDuplicateLocalConstNames() {
+        var result = new CapybaraParser().parseModule(new RawModule("Test", "/parser", """
+                fun foo(): int =
+                    const __white_space = 1
+                    const __white_space = 2
+                    __white_space
+                """));
+
+        assertThat(result).isInstanceOf(Result.Error.class);
+        assertThat(((Result.Error<dev.capylang.compiler.parser.Module>) result).errors())
+                .singleElement()
+                .satisfies(error -> {
+                    assertThat(error.file()).isEqualTo("/parser/Test.cfun");
+                    assertThat(error.line()).isEqualTo(2);
+                    assertThat(error.column()).isEqualTo(4);
+                    assertThat(error.message()).contains("Duplicate local const name: __white_space. Declared at: 2:4, 3:4");
+                });
+    }
+
+    @Test
     @DisplayName("should parse list type")
     void parseListType() {
         // given

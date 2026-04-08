@@ -22,6 +22,12 @@ class ConstsTest {
     }
 
     @Test
+    void localPrivateNamedConst() {
+        assertThat(Consts.localPrivateNamedConst(" ")).isTrue();
+        assertThat(Consts.localPrivateNamedConst("x")).isFalse();
+    }
+
+    @Test
     void primitiveConsts() {
         assertThat(Consts.primitivesSummary())
                 .isEqualTo("26:42:97387717187:1.5:2.5:true:const");

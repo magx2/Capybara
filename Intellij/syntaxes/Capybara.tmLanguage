@@ -101,7 +101,7 @@
     </dict>
     <dict>
       <key>name</key><string>meta.const.private.capybara</string>
-      <key>match</key><string>\b(const)\s+(__[A-Z_][A-Z0-9_]*)\b</string>
+      <key>match</key><string>\b(const)\s+(__[A-Za-z_][A-Za-z0-9_]*)\b</string>
     </dict>
     <dict>
       <key>name</key><string>meta.const.capybara</string>
