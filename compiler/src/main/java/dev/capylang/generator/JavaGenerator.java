@@ -166,7 +166,7 @@ public final class JavaGenerator implements Generator {
         // static methods
         code.append('\n');
         javaClass.staticConsts().stream()
-                .map(javaConst -> mapJavaConst(javaConst, allowPrivateStaticMethods, false))
+                .map(javaConst -> mapJavaConst(javaConst, allowPrivateStaticMethods, false, javaClass.name().toString()))
                 .forEach(code::append);
         javaClass.staticMethods()
                 .stream()
@@ -221,7 +221,7 @@ public final class JavaGenerator implements Generator {
                 .map(this::removeVisibilityModifier)
                 .forEach(code::append);
         javaClass.staticConsts().stream()
-                .map(javaConst -> mapJavaConst(javaConst, false, true))
+                .map(javaConst -> mapJavaConst(javaConst, false, true, javaClass.name().toString()))
                 .forEach(code::append);
         javaClass.staticMethods().stream()
                 .map(method -> mapJavaMethod(method, true, javaClass.javaPackage().toString(), javaClass.name().toString()))
@@ -662,11 +662,16 @@ public final class JavaGenerator implements Generator {
                 .collect(joining("\n", "/**\n", "\n */\n"));
     }
 
-    private String mapJavaConst(JavaConst javaConst, boolean allowPrivateStaticMembers, boolean ownerInterfaceMember) {
+    private String mapJavaConst(
+            JavaConst javaConst,
+            boolean allowPrivateStaticMembers,
+            boolean ownerInterfaceMember,
+            String ownerTypeName
+    ) {
         var visibility = constVisibility(javaConst, allowPrivateStaticMembers, ownerInterfaceMember);
         return mapJavaDoc(javaConst.comments())
                + visibility + "static final " + javaConst.type() + " " + javaConst.name() + " = "
-               + extractInitializerExpression(evaluateExpression(javaConst.expression()))
+               + extractInitializerExpression(evaluateExpression(javaConst.expression(), List.of(), ownerTypeName))
                + ";\n";
     }
 
