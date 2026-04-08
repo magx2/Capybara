@@ -4344,7 +4344,7 @@ public class CapybaraExpressionCompiler {
                 return Result.success(null);
             }
             if (pattern instanceof CompiledMatchExpression.BoolPattern boolPattern) {
-                coveredBooleanValues.add(boolPattern.value());
+                coveredBooleanValues.add(boolPattern.value().toLowerCase(java.util.Locale.ROOT));
             }
         }
         if (coveredBooleanValues.size() == 2) {
