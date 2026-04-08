@@ -8,6 +8,7 @@ public record JavaClass(
         JavaType name,
         JavaPackage javaPackage,
         SortedSet<String> staticImports,
+        SortedSet<JavaConst> staticConsts,
         SortedSet<JavaMethod> staticMethods,
         SortedSet<JavaInterface> interfaces,
         SortedSet<JavaRecord> records,

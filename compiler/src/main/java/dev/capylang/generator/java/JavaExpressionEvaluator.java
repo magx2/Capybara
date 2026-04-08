@@ -34,6 +34,7 @@ public class JavaExpressionEvaluator {
     private static final String DICT_PIPE_ARGS_SEPARATOR = "::";
     private static final String TUPLE_PIPE_ARGS_SEPARATOR = ";;";
     private static final String METHOD_DECL_PREFIX = "__method__";
+    private static final java.util.regex.Pattern CONST_NAME_PATTERN = java.util.regex.Pattern.compile("^_?[A-Z_][A-Z0-9_]*$");
     private static final java.util.Set<String> JAVA_KEYWORDS = java.util.Set.of(
             "abstract", "assert", "boolean", "break", "byte", "case", "catch", "char", "class",
             "const", "continue", "default", "do", "double", "else", "enum", "extends", "final",
@@ -239,9 +240,24 @@ public class JavaExpressionEvaluator {
                 }
                 yield "((float) java.lang.Math.sqrt(" + args.get(0) + "))";
             }
-            default -> normalizeFunctionCallTarget(functionCall.name(), scope) + "(" + String.join(", ", args) + ")";
+            default -> isConstCall(functionCall)
+                    ? normalizeFunctionCallTarget(functionCall.name(), scope)
+                    : normalizeFunctionCallTarget(functionCall.name(), scope) + "(" + String.join(", ", args) + ")";
         };
         return current.addExpression(expression);
+    }
+
+    private static boolean isConstCall(CompiledFunctionCall functionCall) {
+        if (!functionCall.arguments().isEmpty()) {
+            return false;
+        }
+        var name = functionCall.name();
+        if (name.contains("__local_const_")) {
+            return true;
+        }
+        var lastDot = name.lastIndexOf('.');
+        var simpleName = lastDot >= 0 ? name.substring(lastDot + 1) : name;
+        return CONST_NAME_PATTERN.matcher(simpleName).matches();
     }
 
     private static Scope evaluateFunctionInvoke(CompiledFunctionInvoke functionInvoke, Scope scope) {
