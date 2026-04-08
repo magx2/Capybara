@@ -286,6 +286,7 @@ class JavaExpressionEvaluatorTest {
 
         assertThat(generated).contains("case java.lang.Boolean");
         assertThat(generated).contains("java.util.Objects.equals");
+        assertThat(generated).contains("default -> throw new java.lang.IllegalStateException(\"Unexpected bool value:");
         assertThat(generated).doesNotContain("case true ->");
         assertThat(generated).doesNotContain("case false ->");
     }

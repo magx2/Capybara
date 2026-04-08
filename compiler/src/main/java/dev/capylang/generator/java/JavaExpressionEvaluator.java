@@ -1600,6 +1600,11 @@ public class JavaExpressionEvaluator {
         if (optionMatch && !hasWildcard && !hasDefaultCase) {
             cases.add("case java.lang.Object __capybaraUnexpected -> throw new java.lang.IllegalStateException(\"Unexpected value: \" + " + switchTarget + ");");
         }
+        if (matchExpression.matchWith().type() == dev.capylang.compiler.PrimitiveLinkedType.BOOL
+            && !hasWildcard
+            && !hasDefaultCase) {
+            cases.add("default -> throw new java.lang.IllegalStateException(\"Unexpected bool value: \" + " + switchTarget + ");");
+        }
 
         return current.addExpression("switch (" + switchTarget + ") { " + String.join(" ", cases) + " }");
     }
