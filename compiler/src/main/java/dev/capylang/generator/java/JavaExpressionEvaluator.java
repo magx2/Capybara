@@ -1937,7 +1937,11 @@ public class JavaExpressionEvaluator {
                       + " when java.util.Objects.equals(" + longBindingName + ", " + longPattern.value() + ")";
             }
             case CompiledMatchExpression.StringPattern stringPattern -> "case " + stringPattern.value();
-            case CompiledMatchExpression.BoolPattern boolPattern -> "case " + boolPattern.value();
+            case CompiledMatchExpression.BoolPattern boolPattern -> {
+                var boolBindingName = "__capybaraBoolLiteral" + MATCH_BINDING_COUNTER.incrementAndGet();
+                yield "case java.lang.Boolean " + boolBindingName
+                      + " when java.util.Objects.equals(" + boolBindingName + ", " + boolPattern.value() + ")";
+            }
             case CompiledMatchExpression.FloatPattern floatPattern -> "case " + floatPattern.value();
             case CompiledMatchExpression.TypedPattern typedPattern -> {
                 var patternBindingName = caseBindingNames.getOrDefault(typedPattern.name(), typedPattern.name());

@@ -274,6 +274,23 @@ class JavaExpressionEvaluatorTest {
     }
 
     @Test
+    void shouldGenerateBooleanLiteralMatchCasesUsingBooleanPatternGuards() {
+        var generated = new JavaGenerator().generate(compileProgram("BoolMatch", "/foo/bar", """
+                fun mood(value: bool): string =
+                    match value with
+                    case true -> "happy"
+                    case false -> "sad"
+                """)).modules().stream()
+                .map(dev.capylang.generator.GeneratedModule::code)
+                .collect(joining("\n"));
+
+        assertThat(generated).contains("case java.lang.Boolean");
+        assertThat(generated).contains("java.util.Objects.equals");
+        assertThat(generated).doesNotContain("case true ->");
+        assertThat(generated).doesNotContain("case false ->");
+    }
+
+    @Test
     void shouldInferSharedParentForConcatenatedSubtypeLists() {
         var program = compileProgram("EmptyLiteralInference", "/foo/bar", """
                 type Outcome = ParseSucceeded | ParseFailed
