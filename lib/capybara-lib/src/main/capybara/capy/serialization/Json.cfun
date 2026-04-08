@@ -36,6 +36,7 @@ fun serialize(obj: JsonObject) =
         case JsonValueArray { value } -> __serialize(value)
         case JsonBool { value } -> value + ""
         case JsonNull -> "null"
+    ---
     __serialize(obj)
 
 fun deserialize(json: string): Result[JsonObject] =
@@ -74,7 +75,7 @@ fun _deserialize_json_array(json: string): Result[_Parse[JsonArray]] =
                     parsing_string: parse_json.parsing_string
                 })
         case Some { v } ->  Error { "Expected `,` or `]`, but got `" + v + "`!" }
-
+    ---
     if json.starts_with('[]')
     then Success { _Parse { JsonArray { [] }, json[2:] } }
     else
@@ -143,7 +144,7 @@ fun _deserialize_json_number(json: string): Result[_Parse[JsonNumber]] =
                     case None -> Error { 'Expected `}`, `]` or `,`, but got end of string!' }
                     case Some { v2 } -> Error { 'Expected `}`, `]` or `,`, but got `' + v2 + '`!' }
             }
-
+    ---
     __parse_number(_Parse {'', _drop_white_space(json)})
     | parse =>
         if parse.value ? '.'
@@ -254,9 +255,9 @@ fun _parse_string(json: string): Result[_Parse[string]] =
                 case '\\' -> __parse_string_until_quotation(_Parse { parse.value + v, parse.parsing_string[1:] } , true)
                 case '"'  -> Success { _Parse { parse.value, _drop_white_space(parse.parsing_string[1:]) }} // quotation mark found, ending
                 case _    -> __parse_string_until_quotation(_Parse { parse.value + v, parse.parsing_string[1:] }, false) // quotation mark not found, parsing...
-            }
+                }
             case None -> Error { message: '"parse_string: Expected `"`, but got end of string."' }
-
+    ---
     match json[0] with
     case Some { '"' } -> __parse_string_until_quotation(_Parse { "", json[1:] },  false)
     case Some { v } -> Error { message: "parse_string: Expected `\"`, but got `" + v + "`." }
@@ -269,6 +270,7 @@ fun _drop_white_space(s: string): string =
 
 fun _is_white_space(s: string): bool =
     const __white_spaces = { " ", "\r", "\n", "\t" }
+    ---
     match s.size with
     case 0 -> true
     case 1 -> __white_spaces ? s
@@ -284,6 +286,7 @@ fun deserialize(dict: dict[any]): Result[JsonObject] =
             match e.value with
             case Error e -> e
             case Success { json } -> Success { dict + { e.key : json } }
+    ---
     let initial_result: Result[dict[Json]] = __initial_result()
     dict
         // dict[any] => dict[Result[Json]]

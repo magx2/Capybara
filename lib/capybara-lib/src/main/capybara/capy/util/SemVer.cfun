@@ -328,7 +328,7 @@ fun parse_semver(version: string): Result[SemVer] =
                    | 'k' | 'l' | 'm' | 'n' | 'o' | 'p' | 'q' | 'r' | 's' | 't'
                    | 'u' | 'v' | 'w' | 'x' | 'y' | 'z'  -> Success { __Parse { version[1:], value } }
                 case _ -> Error { "Expected A-Z or a-z, but got `" + value + "`!" }
-
+    ---
     __parse_version_core(version)
     | version_parse =>
         if !version_parse.buffer.is_empty

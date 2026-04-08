@@ -147,6 +147,10 @@
         {
           "name": "constant.language.unimplemented.capybara",
           "match": "\\?\\?\\?"
+        },
+        {
+          "name": "punctuation.separator.local-definitions.capybara",
+          "match": "---"
         }
       ]
     },

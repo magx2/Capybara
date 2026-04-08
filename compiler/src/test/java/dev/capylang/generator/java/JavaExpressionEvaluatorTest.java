@@ -232,6 +232,7 @@ class JavaExpressionEvaluatorTest {
                         match parse.value with
                         case Some { inner } -> Success { __Parse { buffer: parse.buffer, value: inner } }
                         case None -> Error { "missing" }
+                    ---
                     __unwrap(__Parse { buffer: "", value: Some { value } }) | parsed => Success { parsed.value }
                 """);
 

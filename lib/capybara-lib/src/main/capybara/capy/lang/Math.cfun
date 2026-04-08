@@ -3,6 +3,7 @@ fun digits(number: int): int =
         if number < 10
         then acc
         else __digits(number / 10, acc + 1)
+    ---
     if number == -2147483648
     // abs function cannot handle -2147483648 because of overflow, so we hardcode the result for this case
     then 10

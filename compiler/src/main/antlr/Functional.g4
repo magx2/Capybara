@@ -15,7 +15,8 @@ definition:
     | constDeclaration;
 
 functionDeclaration: docComment* VISIBILITY? 'fun' functionNameDeclaration '(' parameters? ')' functionType? '=' functionBody;
-functionBody: localDefinition* expression;
+functionBody: expression
+            | localDefinition+ '---' expression;
 localDefinition: localFunctionDeclaration
                | localTypeDeclaration
                | localDataDeclaration

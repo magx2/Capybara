@@ -23,6 +23,7 @@ fun from_string(string: string): Path =
                 else __segments(value[1:], "", acc + current)
             else
                 __segments(value[1:], current + c, acc)
+    ---
     let value =
         if string.starts_with('/')
         then string[1:]
@@ -101,6 +102,7 @@ fun Path.normalize(): Path =
                     case _ -> __normalize_path(root, rest, acc)
             else
                 __normalize_path(root, rest, acc + seg)
+    ---
     Path {
         root: this.root,
         prefix: this.prefix,

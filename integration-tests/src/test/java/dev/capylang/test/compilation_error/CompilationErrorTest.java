@@ -65,6 +65,7 @@ public class CompilationErrorTest {
                             type __Token = __Number | __Stop
                             data __Number { value: int }
                             data __Stop {}
+                            ---
                             let token: __Token = __Number { value }
                             match token with
                             case __Number { value } -> value
@@ -993,6 +994,7 @@ public class CompilationErrorTest {
                                     data __Foo { foo: string }
                                     data __Boo { boo: string }
                                     data __Unknown { unkn: string }
+                                    ---
                                     match name with
                                     case "foo" -> __Foo { foo: "xyz" }
                                     case "boo" -> __Boo { boo: "xyz" }
@@ -1012,6 +1014,7 @@ public class CompilationErrorTest {
                                 fun parse_semver(version: string): int =
                                     data __Parse[T] { value: T }
                                     fun __parse_digits(parse: __Parse[Option[int]]): __Parse[int] = parse.value
+                                    ---
                                     0
                                 """,
                         new Position(3, "    fun __parse_digits(parse: __Parse[Option[int]]): __Parse[int] = "),

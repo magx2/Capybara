@@ -17,7 +17,7 @@ fun grouped_guarded_match_is_exhaustive(input: string): Result[string] =
         Success { __Parse { buffer, "tail" } }
     fun __parse_build(buffer: string): Result[__Parse[string]] =
         Success { __Parse { buffer, "build" } }
-
+    ---
     let parse_patch: __Parse[string] = __Parse { input, "base" }
     match parse_patch.buffer[0] with
     case Some { ch } when ch == '-' -> {
@@ -48,7 +48,7 @@ fun semver_style_mixed_case_pipe_bodies(input: string): Result[string] =
         Success { __Parse { buffer, "rc1" } }
     fun __parse_build(buffer: string): Result[__Parse[string]] =
         Success { __Parse { buffer, "001" } }
-
+    ---
     let parse_patch: __Parse[string] = __Parse { input, "1.2.3" }
     let raw_sem_ver = "1.2.3"
     match parse_patch.buffer[0] with
@@ -80,7 +80,7 @@ fun inner_ungrouped_pipe_in_match_inside_lambda(input: string): Result[string] =
         Success { __Parse { buffer, "rc1" } }
     fun __parse_build(buffer: string): Result[__Parse[string]] =
         Success { __Parse { buffer, "001" } }
-
+    ---
     let parse_patch: __Parse[string] = __Parse { input, "1.2.3" }
     let raw_sem_ver = "1.2.3"
     match parse_patch.buffer[0] with
