@@ -166,7 +166,7 @@ public final class JavaGenerator implements Generator {
         // static methods
         code.append('\n');
         javaClass.staticConsts().stream()
-                .map(this::mapJavaConst)
+                .map(javaConst -> mapJavaConst(javaConst, allowPrivateStaticMethods, false))
                 .forEach(code::append);
         javaClass.staticMethods()
                 .stream()
@@ -221,7 +221,7 @@ public final class JavaGenerator implements Generator {
                 .map(this::removeVisibilityModifier)
                 .forEach(code::append);
         javaClass.staticConsts().stream()
-                .map(this::mapJavaConst)
+                .map(javaConst -> mapJavaConst(javaConst, false, true))
                 .forEach(code::append);
         javaClass.staticMethods().stream()
                 .map(method -> mapJavaMethod(method, true, javaClass.javaPackage().toString(), javaClass.name().toString()))
@@ -662,12 +662,22 @@ public final class JavaGenerator implements Generator {
                 .collect(joining("\n", "/**\n", "\n */\n"));
     }
 
-    private String mapJavaConst(JavaConst javaConst) {
-        var visibility = javaConst.isPrivate() ? "private " : "public ";
+    private String mapJavaConst(JavaConst javaConst, boolean allowPrivateStaticMembers, boolean ownerInterfaceMember) {
+        var visibility = constVisibility(javaConst, allowPrivateStaticMembers, ownerInterfaceMember);
         return mapJavaDoc(javaConst.comments())
                + visibility + "static final " + javaConst.type() + " " + javaConst.name() + " = "
                + extractInitializerExpression(evaluateExpression(javaConst.expression()))
                + ";\n";
+    }
+
+    private String constVisibility(JavaConst javaConst, boolean allowPrivateStaticMembers, boolean ownerInterfaceMember) {
+        if (ownerInterfaceMember) {
+            return "public ";
+        }
+        if (javaConst.isPrivate()) {
+            return allowPrivateStaticMembers ? "private " : "";
+        }
+        return "public ";
     }
 
     private String extractInitializerExpression(String methodBody) {
