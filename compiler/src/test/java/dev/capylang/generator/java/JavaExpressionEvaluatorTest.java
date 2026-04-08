@@ -358,6 +358,28 @@ class JavaExpressionEvaluatorTest {
         assertThat(generated).doesNotContain("((Error)");
     }
 
+    @Test
+    void shouldQualifyNestedMatchReturningOnlyResultError() {
+        var generated = new JavaGenerator().generate(compileProgram("NestedResultErrorCast", "/foo/bar", """
+                from /capy/lang/Result import { * }
+                from /capy/lang/Option import { * }
+
+                fun nested(value: string): Result[int] =
+                    match value with
+                    case "" -> Error { "empty" }
+                    case _ v ->
+                        match v[0] with
+                        case None -> Error { "missing" }
+                        case Some { next } -> Error { next }
+                """)).modules().stream()
+                .map(dev.capylang.generator.GeneratedModule::code)
+                .collect(joining("\n"));
+
+        assertThat(generated).contains("new capy.lang.Result.Error");
+        assertThat(generated).doesNotContain("((Error)");
+        assertThat(generated).contains("((capy.lang.Result.Error)");
+    }
+
     static Stream<Arguments> wild() {
         return Stream.of(
                 Arguments.of(

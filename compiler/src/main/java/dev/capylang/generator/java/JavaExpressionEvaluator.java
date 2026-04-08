@@ -2162,7 +2162,7 @@ public class JavaExpressionEvaluator {
             || resultType instanceof dev.capylang.compiler.CompiledGenericTypeParameter) {
             return expression;
         }
-        return "((" + javaCastType(resultType) + ") (" + expression + "))";
+        return "((" + javaCastTypeForMatchCase(resultType) + ") (" + expression + "))";
     }
 
     private static String javaPatternType(dev.capylang.compiler.CompiledType type) {
