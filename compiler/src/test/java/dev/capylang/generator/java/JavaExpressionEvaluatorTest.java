@@ -336,6 +336,28 @@ class JavaExpressionEvaluatorTest {
         assertThat(generated).doesNotContain("case Error __ignored");
     }
 
+    @Test
+    void shouldQualifyResultErrorMatchCaseCast() {
+        var generated = new JavaGenerator().generate(compileProgram("ResultErrorCast", "/foo/bar", """
+                from /capy/lang/Result import { * }
+
+                fun fail(message: string): Result[int] = Error { message }
+
+                fun nested(value: string): Result[int] =
+                    match value with
+                    case "x" -> fail(value)
+                    case _ v ->
+                        match v with
+                        case "y" -> Error { "bad" }
+                        case _ -> Error { "worse" }
+                """)).modules().stream()
+                .map(dev.capylang.generator.GeneratedModule::code)
+                .collect(joining("\n"));
+
+        assertThat(generated).contains("new capy.lang.Result.Error");
+        assertThat(generated).doesNotContain("((Error)");
+    }
+
     static Stream<Arguments> wild() {
         return Stream.of(
                 Arguments.of(

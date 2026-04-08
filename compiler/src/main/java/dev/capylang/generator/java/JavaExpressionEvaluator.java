@@ -1047,7 +1047,15 @@ public class JavaExpressionEvaluator {
         if (typedEmptyLiteral != null) {
             return typedEmptyLiteral;
         }
-        return "((" + javaCastType(resultType) + ") (" + expression + "))";
+        return "((" + javaCastTypeForMatchCase(resultType) + ") (" + expression + "))";
+    }
+
+    private static String javaCastTypeForMatchCase(dev.capylang.compiler.CompiledType type) {
+        return switch (type) {
+            case dev.capylang.compiler.CompiledDataType dataType when isResultErrorDataType(dataType) ->
+                    resultErrorJavaTypeReference(dataType.name());
+            default -> javaCastType(type);
+        };
     }
 
     private static String typedEmptyCollectionLiteral(
@@ -1780,6 +1788,10 @@ public class JavaExpressionEvaluator {
                         yield javaRaw;
                     }
                     yield javaRaw + "<" + String.join(", ", javaArgs) + ">";
+                }
+                if ("Error".equals(normalized)
+                    || normalizeQualifiedTypeName(normalized).endsWith("/Result.Error")) {
+                    yield resultErrorJavaTypeReference(normalized);
                 }
                 yield normalizeJavaTypeReference(normalized);
             }

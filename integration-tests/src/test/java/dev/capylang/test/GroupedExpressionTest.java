@@ -55,5 +55,23 @@ class GroupedExpressionTest {
         assertThat(GroupedExpression.innerUngroupedPipeInMatchInsideLambda(""))
                 .isEqualTo(new Result.Success<>("1.2.3"));
     }
+
+    @Test
+    void nestedResultErrorMatchCase() {
+        assertThat(GroupedExpression.nestedResultErrorMatchCase("x"))
+                .isEqualTo(new Result.Success<>(1));
+
+        var ended = GroupedExpression.nestedResultErrorMatchCase("a");
+        assertThat(ended).isInstanceOf(Result.Error.class);
+        assertThat(((Result.Error<Integer>) ended).ex().getMessage()).isEqualTo("bad:a:end");
+
+        var tail = GroupedExpression.nestedResultErrorMatchCase("abc");
+        assertThat(tail).isInstanceOf(Result.Error.class);
+        assertThat(((Result.Error<Integer>) tail).ex().getMessage()).isEqualTo("bad:a:bc");
+
+        var empty = GroupedExpression.nestedResultErrorMatchCase("");
+        assertThat(empty).isInstanceOf(Result.Error.class);
+        assertThat(((Result.Error<Integer>) empty).ex().getMessage()).isEqualTo("empty");
+    }
 }
 

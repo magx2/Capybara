@@ -105,3 +105,16 @@ fun inner_ungrouped_pipe_in_match_inside_lambda(input: string): Result[string] =
     }
     case Some { next_char } -> Error { "unexpected:" + next_char }
     case None -> Success { raw_sem_ver }
+
+fun nested_result_error_match_case(input: string): Result[int] =
+    match input[0] with
+    case None -> Error { "empty" }
+    case Some { head } ->
+        match head with
+        case 'x' -> Success { 1 }
+        case _ other -> {
+            let tail = input[1:]
+            match tail with
+            case "" -> Error { "bad:" + other + ":end" }
+            case _ -> Error { "bad:" + other + ":" + tail }
+        }
