@@ -36,4 +36,10 @@ class LocalTypesAndDataTest {
     void genericOptionConstructorPatternShouldBindConcreteType() {
         assertThat(LocalTypesAndData.localGenericOptionConstructorPatternBinding(7)).isEqualTo(77);
     }
+
+    @Test
+    void localTypeAndDataShouldAllowTrailingCommasInFieldDeclarations() {
+        assertThat(LocalTypesAndData.localTypeAndDataWithTrailingCommas(true)).isEqualTo(3);
+        assertThat(LocalTypesAndData.localTypeAndDataWithTrailingCommas(false)).isEqualTo(7);
+    }
 }
