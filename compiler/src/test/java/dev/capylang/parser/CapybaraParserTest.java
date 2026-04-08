@@ -252,6 +252,24 @@ class CapybaraParserTest {
     }
 
     @Test
+    @DisplayName("should parse trailing comma in data and type field declarations")
+    void parseTrailingCommaInDataAndTypeFieldDeclarations() {
+        var module = parseSuccess(new RawModule("Test", "/parser", """
+                type T1 { a: int, b: string, c: int, } = D1 | D2
+                data D1 { d: int, e: int, }
+                data D2 { f: int, g: int, }
+                """));
+
+        var type = findDefinition(TypeDeclaration.class, "T1", module.functional());
+        var d1 = findDefinition(DataDeclaration.class, "D1", module.functional());
+        var d2 = findDefinition(DataDeclaration.class, "D2", module.functional());
+
+        assertThat(type.fields()).hasSize(3);
+        assertThat(d1.fields()).hasSize(2);
+        assertThat(d2.fields()).hasSize(2);
+    }
+
+    @Test
     @DisplayName("should format duplicate local function fallback with first occurrence and all locations")
     void formatDuplicateLocalFunctionFallback() throws Exception {
         var parser = new CapybaraParser();

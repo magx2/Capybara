@@ -38,7 +38,7 @@ dataDeclaration: docComment* VISIBILITY? 'data' genericTypeDeclaration '{' field
                | docComment* VISIBILITY? 'data' genericTypeDeclaration '=' '{' fieldDeclarationList? '}';
 singleDeclaration: 'single' TYPE;
 constDeclaration: VISIBILITY? 'const' TYPE (':' type)? '=' expressionNoLet;
-fieldDeclarationList: fieldDeclaration (',' fieldDeclaration)*;
+fieldDeclarationList: fieldDeclaration (',' fieldDeclaration)* ','?;
 fieldDeclaration: identifier ':' type
                 | STRING_LITERAL ':' type
                 | SPREAD TYPE;

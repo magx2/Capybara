@@ -1,14 +1,14 @@
 data Foo {
     a: int,
     b: string,
-    c: double
+    c: double,
 }
 
-type Letter { x: int } = A | B | C
+type Letter { x: int, } = A | B | C
 
-data A { a: string }
-data B { b: int }
-data C { c: double }
+data A { a: string, }
+data B { b: int, }
+data C { c: double, }
 
 fun update_foo(foo: Foo): Foo = foo.with(a: foo.a + 1, b: "new value")
 
