@@ -20,6 +20,7 @@ fun tests(): TestFile =
         test("should deserialize array with values", should_deserialize_array_with_values()),
         test("should deserialize array with objects", should_deserialize_array_with_objects()),
         test("should deserialize array with arrays", should_deserialize_array_with_arrays()),
+        test("should deserialize JSON with whitespaces", should_deserialize_json_with_white_spaces()),
     ])
 
 fun test_serialize_simple_object(): Assert =
@@ -180,6 +181,22 @@ fun should_deserialize_array_with_arrays(): Assert =
                         JsonArray { value: [JsonNumberLong { value: 1 }, JsonNumberLong { value: 2 }, JsonNumberLong { value: 3 }] },
                         JsonArray { value: [JsonNumberLong { value: 4 }, JsonNumberLong { value: 5 }, JsonNumberLong { value: 6 }] },
                         JsonArray { value: [JsonNumberLong { value: 7 }, JsonNumberLong { value: 8 }, JsonNumberLong { value: 9 }] },
+                    ]
+                }
+            }
+        })
+
+fun should_deserialize_json_with_white_spaces(): Assert =
+    //assert_that(deserialize('{  "foo"  :  [  { "name" :   \n " Tom "} , \t \n \r\n "y o u"  ,  2  ,  3  ]  }'))
+    assert_that(deserialize('{  "foo"  :  [  { "name" :    " Tom "} ,  "y o u"  ,  2  ,  3  ]  }'))
+        .succeeds(JsonObject {
+            value: {
+                "foo": JsonArray {
+                    value: [
+                        JsonObject { value: { "name": JsonString { value: " Tom " } } },
+                        JsonString { value: "y o u" },
+                        JsonNumberLong { value: 2 },
+                        JsonNumberLong { value: 3 },
                     ]
                 }
             }
