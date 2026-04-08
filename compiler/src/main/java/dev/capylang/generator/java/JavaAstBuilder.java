@@ -14,6 +14,7 @@ import static java.util.stream.Collectors.*;
 import static dev.capylang.generator.java.JavaAnnotation.generatedAnnotation;
 
 public class JavaAstBuilder {
+    private static final java.util.regex.Pattern CONST_NAME_PATTERN = java.util.regex.Pattern.compile("^_?[A-Z_][A-Z0-9_]*$");
     private final Map<String, String> normalizedJavaClassReferenceCache = new HashMap<>();
     private final Map<String, String> normalizedRawTypeReferenceCache = new HashMap<>();
     private final Map<String, String> mappedTypeParameterDescriptorCache = new HashMap<>();
@@ -50,6 +51,7 @@ public class JavaAstBuilder {
                 module.staticImports().stream()
                         .map(staticImport -> normalizeJavaClassReference(staticImport.className()) + "." + buildJavaStaticImportMember(staticImport.memberName()))
                         .collect(toCollection(TreeSet::new)),
+                buildStaticConsts(module.functions()),
                 buildStaticMethods(module.functions()),
                 interfaces,
                 buildRecords(typeIndex.dataTypes(), subClassToInterface, functionsByOwnerPrefix),
@@ -123,8 +125,38 @@ public class JavaAstBuilder {
     private SortedSet<JavaMethod> buildStaticMethods(Set<CompiledFunction> functions) {
         return functions.stream()
                 .filter(function -> !function.name().startsWith(METHOD_DECL_PREFIX))
+                .filter(function -> !isConstFunction(function))
                 .map(this::buildStaticMethod)
                 .collect(toCollection(TreeSet::new));
+    }
+
+    private SortedSet<JavaConst> buildStaticConsts(Set<CompiledFunction> functions) {
+        return functions.stream()
+                .filter(function -> !function.name().startsWith(METHOD_DECL_PREFIX))
+                .filter(this::isConstFunction)
+                .map(this::buildStaticConst)
+                .collect(toCollection(TreeSet::new));
+    }
+
+    private boolean isConstFunction(CompiledFunction function) {
+        if (!function.parameters().isEmpty()) {
+            return false;
+        }
+        return isTopLevelConstName(function.name()) || function.name().contains("__local_const_");
+    }
+
+    private boolean isTopLevelConstName(String name) {
+        return CONST_NAME_PATTERN.matcher(name).matches();
+    }
+
+    private JavaConst buildStaticConst(CompiledFunction function) {
+        return new JavaConst(
+                buildMethodName(function.name()),
+                function.name().startsWith("_"),
+                buildJavaType(function.returnType()),
+                function.expression(),
+                function.comments()
+        );
     }
 
     private JavaMethod buildStaticMethod(CompiledFunction function) {

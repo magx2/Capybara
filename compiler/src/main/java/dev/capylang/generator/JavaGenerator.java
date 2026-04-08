@@ -66,12 +66,13 @@ public final class JavaGenerator implements Generator {
         }
             var utilityStaticImports = new TreeSet<>(javaClass.staticImports());
             javaClass.enums().forEach(javaEnum -> utilityStaticImports.add(javaClass.javaPackage() + "." + javaEnum.name() + ".*"));
-        if (!javaClass.staticMethods().isEmpty()) {
+        if (!javaClass.staticMethods().isEmpty() || !javaClass.staticConsts().isEmpty()) {
             var utilityClass = new JavaClass(
                     javaClass.annotations(),
                     new JavaType(javaClass.name() + "Module"),
                     javaClass.javaPackage(),
                     utilityStaticImports,
+                    javaClass.staticConsts(),
                     javaClass.staticMethods(),
                     new TreeSet<>(),
                     new TreeSet<>(),
@@ -164,6 +165,9 @@ public final class JavaGenerator implements Generator {
 
         // static methods
         code.append('\n');
+        javaClass.staticConsts().stream()
+                .map(javaConst -> mapJavaConst(javaConst, allowPrivateStaticMethods, false, javaClass.name().toString()))
+                .forEach(code::append);
         javaClass.staticMethods()
                 .stream()
                 .map(method -> mapJavaMethod(method, allowPrivateStaticMethods, javaClass.javaPackage().toString(), javaClass.name().toString()))
@@ -215,6 +219,9 @@ public final class JavaGenerator implements Generator {
         javaClass.enums().stream()
                 .map(this::mapJavaEnum)
                 .map(this::removeVisibilityModifier)
+                .forEach(code::append);
+        javaClass.staticConsts().stream()
+                .map(javaConst -> mapJavaConst(javaConst, false, true, javaClass.name().toString()))
                 .forEach(code::append);
         javaClass.staticMethods().stream()
                 .map(method -> mapJavaMethod(method, true, javaClass.javaPackage().toString(), javaClass.name().toString()))
@@ -628,6 +635,37 @@ public final class JavaGenerator implements Generator {
         return comments.stream()
                 .map(line -> line.isEmpty() ? " *" : " * " + line)
                 .collect(joining("\n", "/**\n", "\n */\n"));
+    }
+
+    private String mapJavaConst(
+            JavaConst javaConst,
+            boolean allowPrivateStaticMembers,
+            boolean ownerInterfaceMember,
+            String ownerTypeName
+    ) {
+        var visibility = constVisibility(javaConst, allowPrivateStaticMembers, ownerInterfaceMember);
+        return mapJavaDoc(javaConst.comments())
+               + visibility + "static final " + javaConst.type() + " " + javaConst.name() + " = "
+               + extractInitializerExpression(evaluateExpression(javaConst.expression(), List.of(), ownerTypeName))
+               + ";\n";
+    }
+
+    private String constVisibility(JavaConst javaConst, boolean allowPrivateStaticMembers, boolean ownerInterfaceMember) {
+        if (ownerInterfaceMember) {
+            return "public ";
+        }
+        if (javaConst.isPrivate()) {
+            return allowPrivateStaticMembers ? "private " : "";
+        }
+        return "public ";
+    }
+
+    private String extractInitializerExpression(String methodBody) {
+        var trimmed = methodBody.trim();
+        if (trimmed.startsWith("return ") && trimmed.endsWith(";")) {
+            return trimmed.substring("return ".length(), trimmed.length() - 1).trim();
+        }
+        throw new IllegalStateException("Const initializer should be a simple expression: " + methodBody);
     }
 
     private String mapMethodName(String name) {
