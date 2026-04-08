@@ -4300,6 +4300,9 @@ public class CapybaraExpressionCompiler {
                 || matchCase.pattern() instanceof CompiledMatchExpression.WildcardBindingPattern)) {
             return Result.success(null);
         }
+        if (matchType == PrimitiveLinkedType.BOOL) {
+            return validateBoolMatchExhaustiveness(matchExpression, cases);
+        }
         var requiredConstructors = requiredConstructorsForMatch(matchType);
         if (requiredConstructors.isEmpty()) {
             return withPosition(
@@ -4317,6 +4320,44 @@ public class CapybaraExpressionCompiler {
         var missingText = missing.stream()
                 .map(name -> "`" + name + "`")
                 .collect(java.util.stream.Collectors.joining(", "));
+        return withPosition(
+                Result.error("`match` is not exhaustive. Use wildcard `case _ -> ...` or add missing branches:" + missingText + "."),
+                matchExpression.position()
+        );
+    }
+
+    private Result<Void> validateBoolMatchExhaustiveness(
+            MatchExpression matchExpression,
+            List<CompiledMatchExpression.MatchCase> cases
+    ) {
+        var coveredBooleanValues = new java.util.LinkedHashSet<String>();
+        for (var matchCase : cases) {
+            if (matchCase.guard().isPresent()) {
+                continue;
+            }
+            var pattern = matchCase.pattern();
+            if (pattern instanceof CompiledMatchExpression.VariablePattern) {
+                return Result.success(null);
+            }
+            if (pattern instanceof CompiledMatchExpression.TypedPattern typedPattern
+                && typedPattern.type() == PrimitiveLinkedType.BOOL) {
+                return Result.success(null);
+            }
+            if (pattern instanceof CompiledMatchExpression.BoolPattern boolPattern) {
+                coveredBooleanValues.add(boolPattern.value().toLowerCase(java.util.Locale.ROOT));
+            }
+        }
+        if (coveredBooleanValues.size() == 2) {
+            return Result.success(null);
+        }
+        var missing = new java.util.ArrayList<String>();
+        if (!coveredBooleanValues.contains("true")) {
+            missing.add("`true`");
+        }
+        if (!coveredBooleanValues.contains("false")) {
+            missing.add("`false`");
+        }
+        var missingText = String.join(", ", missing);
         return withPosition(
                 Result.error("`match` is not exhaustive. Use wildcard `case _ -> ...` or add missing branches:" + missingText + "."),
                 matchExpression.position()

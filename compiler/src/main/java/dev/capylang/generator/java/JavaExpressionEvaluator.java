@@ -1616,6 +1616,11 @@ public class JavaExpressionEvaluator {
         if (optionMatch && !hasWildcard && !hasDefaultCase) {
             cases.add("case java.lang.Object __capybaraUnexpected -> throw new java.lang.IllegalStateException(\"Unexpected value: \" + " + switchTarget + ");");
         }
+        if (matchExpression.matchWith().type() == dev.capylang.compiler.PrimitiveLinkedType.BOOL
+            && !hasWildcard
+            && !hasDefaultCase) {
+            cases.add("default -> throw new java.lang.IllegalStateException(\"Unexpected bool value: \" + " + switchTarget + ");");
+        }
 
         return current.addExpression("switch (" + switchTarget + ") { " + String.join(" ", cases) + " }");
     }
@@ -1953,7 +1958,11 @@ public class JavaExpressionEvaluator {
                       + " when java.util.Objects.equals(" + longBindingName + ", " + longPattern.value() + ")";
             }
             case CompiledMatchExpression.StringPattern stringPattern -> "case " + stringPattern.value();
-            case CompiledMatchExpression.BoolPattern boolPattern -> "case " + boolPattern.value();
+            case CompiledMatchExpression.BoolPattern boolPattern -> {
+                var boolBindingName = "__capybaraBoolLiteral" + MATCH_BINDING_COUNTER.incrementAndGet();
+                yield "case java.lang.Boolean " + boolBindingName
+                      + " when java.util.Objects.equals(" + boolBindingName + ", " + boolPattern.value() + ")";
+            }
             case CompiledMatchExpression.FloatPattern floatPattern -> "case " + floatPattern.value();
             case CompiledMatchExpression.TypedPattern typedPattern -> {
                 var patternBindingName = caseBindingNames.getOrDefault(typedPattern.name(), typedPattern.name());

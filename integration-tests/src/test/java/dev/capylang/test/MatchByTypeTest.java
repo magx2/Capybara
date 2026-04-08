@@ -57,4 +57,10 @@ class MatchByTypeTest {
         assertThat(MatchByType.classifyJsonCharWithNamedWildcard("7")).isEqualTo("number");
         assertThat(MatchByType.classifyJsonCharWithNamedWildcard("x")).isEqualTo("unknown: x");
     }
+
+    @Test
+    void boolMatchCanBeExhaustiveWithoutWildcard() {
+        assertThat(MatchByType.mood(true)).isEqualTo("I'm happy");
+        assertThat(MatchByType.mood(false)).isEqualTo("I'm sad");
+    }
 }
