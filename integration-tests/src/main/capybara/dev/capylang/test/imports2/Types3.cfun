@@ -1,0 +1,3 @@
+type T5 = D5_1 | D5_2
+data D5_1 { x: int }
+data D5_2 { y: int }

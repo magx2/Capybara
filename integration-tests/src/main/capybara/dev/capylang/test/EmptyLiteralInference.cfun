@@ -1,0 +1,82 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+
+fun reverse_ints(values: list[int]): list[int] =
+    fun __rev(left: list[int], acc: list[int]): list[int] =
+        if left.size == 0
+        then acc
+        else
+            match left[0] with
+            case Some { v } -> __rev(left[1:], [v] + acc)
+            case None -> acc
+    __rev(values, [])
+
+fun duplicate_strings(values: list[string]): list[string] =
+    fun __dup(left: list[string], acc: list[string]): list[string] =
+        if left.size == 0
+        then acc
+        else
+            match left[0] with
+            case Some { v } -> __dup(left[1:], acc + [v, v])
+            case None -> acc
+    __dup(values, [])
+
+fun empty_list_of_type_param(v: T): list[T] =
+    []
+
+data JsonBox { value: string }
+data NamedValue { name: string, value: int }
+data ParseCase { source: string, expected: int }
+
+fun typed_empty_dict_then_append_json_box(name: string): int =
+    let values: dict[JsonBox] = {:}
+    (values + (name, JsonBox { value: "box:" + name })).size
+
+fun reduce_dict_to_named_values_size(values: dict[int]): int =
+    let named_values = values |> [], (acc, name, value) => acc + NamedValue { name, value }
+    named_values.size
+
+fun reduce_dict_to_parse_cases_size(values: dict[int]): int =
+    let parse_test_cases = values |> [], (acc, source, expected) => acc + ParseCase { source, expected }
+    parse_test_cases.size
+
+fun reduce_dict_to_format_cases_size(values: dict[int]): int =
+    let format_test_cases = values |> [], (acc, expected, value) => acc + NamedValue { name: expected, value }
+    format_test_cases.size
+
+fun reduce_dict_to_two_lists_and_concat_sizes(values: dict[int]): int =
+    let parse_test_cases = values |> [], (acc, source, expected) => acc + NamedValue { name: "parse:" + source, value: expected }
+    let format_test_cases = values |> [], (acc, expected, value) => acc + NamedValue { name: "format:" + expected, value }
+    (parse_test_cases + format_test_cases).size
+
+type SeqEnd[T] = ConsEnd[T] | EndEnd
+data ConsEnd[T] { value: T, rest: () => SeqEnd[T] }
+single EndEnd
+
+type Outcome = ParseSucceeded | ParseFailed
+data ParseSucceeded { source: string }
+data ParseFailed { source: string }
+data OutcomeBatch { outcomes: list[Outcome] }
+
+fun to_seq_using_end_literal(list: list[T]): SeqEnd[T] =
+    list
+        |> EndEnd, (acc, value) => ConsEnd { value, () => acc }
+
+fun seq_end_head_or_default(s: SeqEnd[int], d: int): int =
+    match s with
+    case EndEnd -> d
+    case ConsEnd { value, rest } -> value
+
+fun batch_outcomes(outcomes: list[Outcome]): OutcomeBatch =
+    OutcomeBatch { outcomes }
+
+fun concat_inferred_parent_subtype_lists(values: list[string]): OutcomeBatch =
+    let succeeded = values |> [], (acc, source) => acc + ParseSucceeded { source }
+    let failed = values |> [], (acc, source) => acc + ParseFailed { source }
+    batch_outcomes(succeeded + failed)
+
+fun build_test_file_from_three_inferred_test_case_lists(): int =
+    let parse_test_cases = ["1.2.3"] |> [], (acc, value) => acc + test("parse {value}", assert_that(value).is_equal_to(value))
+    let to_string_test_cases = ["1.2.3"] |> [], (acc, value) => acc + test("stringify {value}", assert_that(value).is_equal_to(value))
+    let failed_test_cases = ["1"] |> [], (acc, value) => acc + test("fail {value}", assert_that(value).is_equal_to(value))
+    test_file("/dev/capylang/test/EmptyLiteralInference.cfun", parse_test_cases + to_string_test_cases + failed_test_cases).test_cases.size

@@ -1,0 +1,134 @@
+from Assert import {*}
+from /capy/lang/Option import { None }
+from /capy/io/Path import {*}
+from /capy/lang/Seq import {*}
+
+data TestFile { file_name: string, test_cases: list[TestCase], timestamp: string }
+data TestCase { name: string, result: TestResult, assertions_count: int, execution_time: long }
+type TestResult = Passed | Failed
+single Passed
+data Failed { message: string, type: string }
+
+fun test_file(file_name: string, test_cases: list[TestCase]): TestFile =
+    TestFile {
+        file_name: file_name,
+        test_cases: test_cases,
+        timestamp: '1970-01-01T00:00:00Z' // todo implement date-time in cfun
+    }
+
+fun test(name: string, assert: Assert): TestCase =
+    TestCase {
+        name: name,
+        result: _execute(assert.assertions),
+        assertions_count: assert.assertions.size,
+        execution_time:  -1
+    }
+
+fun _execute(assertions: list[() => Assertion]): TestResult =
+    let failed_assertion = to_seq(assertions)
+        | (supplier => supplier())
+        .drop_until(assertion => !assertion.result)
+        .first()
+    match failed_assertion with
+    case Some { value } -> Failed {
+        message: value.message,
+        type: value.type
+    }
+    case None -> Passed {}
+
+fun TestCase.succeeded(): bool = !this.failed()
+
+fun TestCase.failed(): bool =
+    match this.result with
+    case Passed -> false
+    case Failed -> true
+
+enum ReportType { JUNIT }
+type Report = JUnitReport
+
+/// See: [Complete JUnit XML example](https://github.com/testmoapp/junitxml/blob/main/examples/junit-complete.xml)
+data JUnitReport { suites: list[JUnitTestSuite] }
+/// name        Name of the entire test run
+/// tests       Total number of tests in this file
+/// failures    Total number of failed tests in this file
+/// errors      Total number of errored tests in this file
+/// skipped     Total number of skipped tests in this file
+/// assertions  Total number of assertions for all tests in this file
+/// time        Aggregated time of all tests in this file in seconds
+/// timestamp   Date and time of when the test run was executed (in ISO 8601 format)
+data JUnitTestSuite {
+    name: string,
+    tests: int,
+    failures: int,
+    error: int,
+    skipped: int,
+    assertions: int,
+    time: int,
+    timestamp: string,
+    cases: list[JUnitTestCase]
+}
+/// name        The name of this test case, often the method name
+/// classname   The name of the parent class/folder, often the same as the suite's name
+/// assertions  Number of assertions checked during test case execution
+/// time        Execution time of the test in seconds
+/// file        (not implemented) Source code file of this test case
+/// line        (not implemented) Source code line number of the start of this test case
+data JUnitTestCase { name: string, classname: string, assertions: int, failure: /capy/lang/Option[JUnitFailure] }
+data JUnitFailure { message: string, jtype: string, call_stack: string }
+fun JUnitFailure.`+`(other_message: string): JUnitFailure =
+    JUnitFailure {
+        message: this.message + '\n' + other_message,
+        jtype: this.jtype,
+        call_stack: this.call_stack
+    }
+
+data TestOutput { path: Path, content: string, failed: bool }
+
+fun run_tests(rtype: ReportType, test_files: list[TestFile]): list[TestOutput] =
+    match rtype with
+    case JUNIT -> _junit_run_tests(test_files)
+
+const JUNIT_PREFIX = 'TEST-'
+
+fun _junit_run_tests(test_files: list[TestFile]): list[TestOutput] = test_files | :_junit_run_test
+
+fun _junit_run_test(test_file: TestFile): TestOutput =
+    let tests = test_file.test_cases.size
+    let failures = test_file.test_cases | tc => tc.failed() |> 0, (acc, failed) => if failed then acc + 1 else acc
+    let assertions = test_file.test_cases | tc => tc.assertions_count |> 0, (acc, count) => acc + count
+    let suite_name = _junit_escape_xml_attribute(test_file.file_name)
+    let time = test_file.test_cases | tc => tc.execution_time |> 0L, (acc, t) => acc + t
+    let content = "<testsuite name=\"{suite_name}\" tests=\"{tests}\" failures=\"{failures}\" errors=\"0\" skipped=\"0\" assertions=\"{assertions}\" time=\"{time}\" timestamp=\"{test_file.timestamp}\">"
+    + (test_file.test_cases | tc => _junit_run_test_case(test_file.file_name, tc) |> '', (acc, tc) => acc + tc)
+    + '</testsuite>'
+    TestOutput {
+        path: from_string(JUNIT_PREFIX + test_file.file_name[1:].replace('/', '.') + '.xml'),
+        content: content,
+        failed: failures > 0
+    }
+
+fun _junit_run_test_case(file_name: string, test_case: TestCase): string =
+    let assertions = test_case.assertions_count
+    let escaped_name = _junit_escape_xml_attribute(test_case.name)
+    let escaped_file_name = _junit_escape_xml_attribute(file_name)
+    "<testcase name=\"{escaped_name}\" classname=\"{escaped_file_name}\" assertions=\"{assertions}\" time=\"{test_case.execution_time}\" file=\"{escaped_file_name}\" line=\"0\">"
+    + _junit_run_test_case_message(test_case)
+    + '</testcase>'
+
+fun _junit_run_test_case_message(test_case: TestCase): string =
+    match test_case.result with
+    case Passed -> ''
+    case Failed { message, type } ->
+        let xml_message = _junit_escape_xml_attribute(message)
+        let xml_type = _junit_escape_xml_attribute(type)
+        "<failure message=\"{xml_message}\" type=\"{xml_type}\"><![CDATA["
+        + message
+        + "]]></failure>"
+
+fun _junit_escape_xml_attribute(value: string): string =
+    value
+        .replace('&', '&amp;')
+        .replace('<', '&lt;')
+        .replace('>', '&gt;')
+        .replace('"', '&quot;')
+        .replace("'", '&apos;')

@@ -1,0 +1,13 @@
+enum PathRoot { RELATIVE, ABSOLUTE, HOME }
+
+data Path {
+    root: PathRoot,
+    segments: list[string]
+}
+
+fun root_name(path: Path): string = path.root.name
+
+fun is_absolute(path: Path): bool =
+    match path.root with
+    case ABSOLUTE -> true
+    case _ -> false

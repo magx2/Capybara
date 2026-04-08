@@ -1,0 +1,6 @@
+/// Accumulate
+fun accumulate(n: int): int =
+    /// Internal accumulate
+    fun __accumulate(n: int, acc: int): int =
+        if n <= 0 then acc else __accumulate(n - 1, acc + n)
+    __accumulate(n, 0)

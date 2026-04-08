@@ -1,6 +1,0 @@
-package /imports/a
-
-import /capybara/type
-
-fun test(Int) = int + 1
-

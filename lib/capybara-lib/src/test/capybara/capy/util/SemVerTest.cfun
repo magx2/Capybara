@@ -1,0 +1,52 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/util/SemVer import { * }
+from /capy/lang/Option import { * }
+
+fun tests(): TestFile =
+    let test_cases = {
+        "1.2.3" : SemVer { 1, 2, 3, None {}, None {} },
+        "0.0.0" : SemVer { 0, 0, 0, None {}, None {} },
+        // pre-release
+        "1.2.3-prerelease" : SemVer { 1, 2, 3, Some {'prerelease'}, None {} },
+        "1.2.3-p.r.e.r.e.l.e.a.s.e" : SemVer { 1, 2, 3, Some {'p.r.e.r.e.l.e.a.s.e'}, None {} },
+        "1.2.3-pre.1.RELEASE-100" : SemVer { 1, 2, 3, Some {'pre.1.RELEASE-100'}, None {} },
+        // build
+        "1.2.3+build" : SemVer { 1, 2, 3, None {}, Some { 'build' } },
+        "1.2.3+123456789" : SemVer { 1, 2, 3, None {}, Some { '123456789' } },
+        "1.2.3+a1b2c3" : SemVer { 1, 2, 3, None {}, Some { 'a1b2c3' } },
+        "1.2.3+a1b2c3.1.a.rc" : SemVer { 1, 2, 3, None {}, Some { 'a1b2c3.1.a.rc' } },
+        // pre-release + build
+        "1.2.3-pre-release+build" : SemVer { 1, 2, 3, Some { 'pre-release' }, Some { 'build' } },
+        // "0" prefix in  build
+        "1.2.3+007.build.008" : SemVer { 1, 2, 3, None {}, Some { '007.build.008' } },
+    }
+    let parse_test_cases = test_cases |> [], (acc, str, expected) => acc + test("should parse {str} to {expected}", should_parse_sem_ver(str, expected))
+    let to_string_test_cases = test_cases |> [], (acc, expected, sem_ver) => acc + test("{sem_ver}.to_string() is equal to {expected}", should_stringify_sem_ver(sem_ver, expected))
+
+    let failed_test_cases = {
+        "1" : "Unexpected end of version string!",
+        "1.2" : "Unexpected end of version string!",
+        "1,2.3" : "Expected `.` after major version, but got `,`!",
+        "1.2,3" : "Expected `.` after minor version, but got `,`!",
+        "a.2.3" : "Expected digit between 1 and 9, but got `a`!",
+        "1.b.3" : "Expected digit between 1 and 9, but got `b`!",
+        "1.2.c" : "Expected digit between 1 and 9, but got `c`!",
+        "1.2.3+" : "Unexpected end of version string!",
+        "1.2.3-" : "Unexpected end of version string!",
+        "1.2.3-asd+" : "Unexpected end of version string!",
+        "1.2.3-0asd" : "Expected end of version string or `.` for next pre-release identifier, but got `a`!",
+        "1.2.3-aśd" : "Expected end of version string or `.` for next pre-release identifier, but got `ś`!",
+        "1.2.3-a d" : "Expected end of version string or `.` for next pre-release identifier, but got ` `!",
+        "1.2.3-a%d" : "Expected end of version string or `.` for next pre-release identifier, but got `%`!",
+        "1.2.3-a#d" : "Expected end of version string or `.` for next pre-release identifier, but got `#`!",
+        "1.2.3-asd+QĘT" : "Expected end of version string or `.` for next build identifier, but got `Ę`!", }
+        |> [], (acc, sem_ver, expected_message) => acc + test("should fail parsing {sem_ver}", should_fail_parse_with_message(sem_ver, expected_message))
+
+    test_file("/capy/util/SemVer.cfun", parse_test_cases + to_string_test_cases + failed_test_cases)
+
+fun should_parse_sem_ver(str: string, expected: SemVer) = assert_that(parse_semver(str)).succeeds(expected)
+
+fun should_stringify_sem_ver(sem_ver: SemVer, expected: string) = assert_that(sem_ver.to_string()).is_equal_to(expected)
+
+fun should_fail_parse_with_message(sem_ver: string, expected_message: string) = assert_that(parse_semver(sem_ver)).fails(expected_message)

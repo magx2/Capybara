@@ -1,0 +1,23 @@
+fun simple_no_param_int() = 5
+
+fun simple(x: int) = x
+
+fun infix_operator(x: int, y: int) = x + y
+
+fun if_operator(x: int, y: int) = if x + y > 10 then "mucho" else "not mucho"
+
+fun type_sum(x: int) = "age: " + x
+
+fun list_of_ints(x: int) = [x,x,x]
+
+fun empty_list() = []
+
+fun set_of_ints(x: int) = {x,x,x}
+
+fun empty_set() = {}
+
+fun dict_of_ints() = {
+    "one": 1,
+    "two": 2,
+    "three": 3
+}

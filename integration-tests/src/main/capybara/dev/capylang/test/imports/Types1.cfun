@@ -1,0 +1,4 @@
+type T1 = D1 | D2
+data D1 { foo: int }
+data D2 { boo: int }
+

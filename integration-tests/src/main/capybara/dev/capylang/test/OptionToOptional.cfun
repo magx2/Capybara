@@ -1,0 +1,38 @@
+from /capy/lang/Result import { * }
+
+fun string_option(value: Option[string]): string =
+    match value with
+        case Some { value } -> value,
+        case None -> "<empty>"
+
+fun int_option(value: Option[int]): int =
+    match value with
+        case Some { value } -> value,
+        case None -> -1
+
+fun bool_option(value: Option[bool]): bool =
+    match value with
+        case Some { value } -> value,
+        case None -> false
+
+fun option_to_message(value: Option[string]): string =
+    match value with
+        case Some { value } -> "value=" + value,
+        case None -> "missing"
+
+fun int_option_to_message(value: Option[int]): string =
+    match value with
+        case Some { value } -> "value=" + value,
+        case None -> "missing"
+
+fun _deserialize_json_fragment(raw: string): Result[tuple[string, int]] =
+    if raw == "ok"
+    then Success { value: ("json", 7) }
+    else Error { message: "failed: " + raw }
+
+fun match_deserialize(raw: string): string =
+    let pair = ("prefix", raw)
+    match _deserialize_json_fragment(pair[1]) with
+    case Error e -> "failed: " + raw
+    case Success { json_tuple } -> pair[0] + ":" + json_tuple[0] + ":" + json_tuple[1]
+

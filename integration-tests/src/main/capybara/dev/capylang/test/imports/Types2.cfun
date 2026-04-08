@@ -1,0 +1,5 @@
+type T1 = TD1 | TD2
+data TD1 { x: string }
+data TD2 { y: string }
+
+data DataX { xyz: string }

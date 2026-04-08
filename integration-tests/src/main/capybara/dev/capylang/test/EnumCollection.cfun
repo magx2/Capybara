@@ -1,0 +1,26 @@
+enum Color { RED, BLUE, GREEN_BLUE, YELLOW, BLACK, WHITE }
+
+fun color_match(c: Color): int =
+    match c with
+    case RED -> 1
+    case BLUE -> 2
+    case GREEN_BLUE -> 3
+    case YELLOW -> 4
+    case BLACK -> 5
+    case WHITE -> 6
+
+fun color_match_wildcard(c: Color): int =
+    match c with
+    case RED -> 1
+    case BLUE -> 2
+    case _ -> 0
+
+fun color_order(c: Color): int = c.order
+
+fun color_name(c: Color): string = c.name
+
+fun color_values(): set[Color] = Color.values
+
+fun parse_color_name(name: string): /capy/lang/Result[Color] = Color.parse(name)
+
+fun parse_color_order(order: int): /capy/lang/Result[Color] = Color.parse(order)

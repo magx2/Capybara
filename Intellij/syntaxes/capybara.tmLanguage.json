@@ -1,0 +1,367 @@
+{
+  "scopeName": "source.capybara",
+  "name": "Capybara",
+  "fileTypes": ["cfun"],
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#strings" },
+    { "include": "#numbers" },
+    { "include": "#keywords" },
+    { "include": "#typesAndFunctions" },
+    { "include": "#operatorsAndBrackets" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "markup.quote.todo.comment.line.capybara",
+          "match": "//[/]?\\s*(?i:todo)\\b.*$"
+        },
+        {
+          "name": "markup.changed.fixme.comment.line.capybara",
+          "match": "//[/]?\\s*(?i:fixme)\\b.*$"
+        },
+        {
+          "name": "comment.block.capybara",
+          "begin": "/\\*",
+          "end": "\\*/"
+        },
+        {
+          "name": "comment.block.documentation.capybara",
+          "match": "///.*$"
+        },
+        {
+          "name": "comment.line.double-slash.capybara",
+          "match": "//.*$"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.capybara",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            {
+              "name": "meta.interpolation.capybara",
+              "contentName": "meta.embedded.expression.capybara",
+              "begin": "(?<!\\\\)\\{(?=(?:[^\"\\\\]|\\\\.)*(?<!\\\\)\\})",
+              "beginCaptures": {
+                "0": {
+                  "name": "punctuation.section.embedded.begin.capybara"
+                }
+              },
+              "end": "(?<!\\\\)\\}",
+              "endCaptures": {
+                "0": {
+                  "name": "punctuation.section.embedded.end.capybara"
+                }
+              },
+              "patterns": [
+                {
+                  "include": "#comments"
+                },
+                {
+                  "include": "#strings"
+                },
+                {
+                  "include": "#numbers"
+                },
+                {
+                  "include": "#keywords"
+                },
+                {
+                  "include": "#typesAndFunctions"
+                },
+                {
+                  "include": "#operatorsAndBrackets"
+                },
+                {
+                  "name": "constant.character.escape.capybara",
+                  "match": "\\\\."
+                }
+              ]
+            },
+            {
+              "name": "constant.character.escape.capybara",
+              "match": "\\\\."
+            }
+          ]
+        },
+        {
+          "name": "string.quoted.single.capybara",
+          "begin": "'",
+          "end": "'",
+          "patterns": [
+            {
+              "name": "constant.character.escape.capybara",
+              "match": "\\\\."
+            }
+          ]
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.byte.capybara",
+          "match": "\\b0[xX][0-9a-fA-F]+\\b"
+        },
+        {
+          "name": "constant.numeric.long.capybara",
+          "match": "\\b\\d+[lL]\\b"
+        },
+        {
+          "name": "constant.numeric.double.capybara",
+          "match": "\\b(?:\\d+\\.\\d*(?:[eE][+\\-]?\\d+)?[dD]?|\\d+[eE][+\\-]?\\d+[dD])\\b"
+        },
+        {
+          "name": "constant.numeric.float.capybara",
+          "match": "\\b(?:\\d+\\.\\d*(?:[eE][+\\-]?\\d+)?[fF]?|\\d+[eE][+\\-]?\\d+[fF])\\b"
+        },
+        {
+          "name": "constant.numeric.int.capybara",
+          "match": "\\b\\d+\\b"
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.capybara",
+          "match": "\\b(fun|type|enum|data|single|const|local|match|with|case|when|if|then|else|let|from|import|except)\\b"
+        },
+        {
+          "name": "keyword.operator.word.capybara",
+          "match": "\\b(this|is_empty|size|to_int|to_long|to_double|to_float|to_bool)\\b"
+        },
+        {
+          "name": "support.type.primitive.capybara",
+          "match": "\\b(byte|int|long|float|double|bool|string|any|data|nothing|list|set|dict|tuple)\\b"
+        },
+        {
+          "name": "constant.language.boolean.capybara",
+          "match": "\\b(true|false)\\b"
+        },
+        {
+          "name": "constant.language.unimplemented.capybara",
+          "match": "\\?\\?\\?"
+        }
+      ]
+    },
+    "typesAndFunctions": {
+      "patterns": [
+        {
+          "name": "meta.function.documented.private.capybara",
+          "match": "((?:^\\s*///.*\\r?\\n)+)(\\s*)(fun)(\\s+)(__[A-Za-z0-9_]+)",
+          "captures": {
+            "1": {
+              "name": "comment.block.documentation.capybara"
+            },
+            "3": {
+              "name": "keyword.control.capybara"
+            },
+            "5": {
+              "name": "entity.name.function.private.capybara"
+            }
+          }
+        },
+        {
+          "name": "meta.function.documented.capybara",
+          "match": "((?:^\\s*///.*\\r?\\n)+)(\\s*)(fun)(\\s+)([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": {
+              "name": "comment.block.documentation.capybara"
+            },
+            "3": {
+              "name": "keyword.control.capybara"
+            },
+            "5": {
+              "name": "entity.name.function.capybara"
+            }
+          }
+        },
+        {
+          "name": "entity.name.type.capybara",
+          "match": "\\b_*[A-Z][A-Za-z0-9_]*\\b"
+        },
+        {
+          "name": "entity.name.type.private.capybara",
+          "match": "\\b(type|enum|data|single)\\s+(__[A-Za-z0-9_]*)"
+        },
+        {
+          "name": "entity.name.function.private.capybara",
+          "match": "\\bfun\\s+(__[A-Za-z0-9_]+)"
+        },
+        {
+          "name": "entity.name.function.capybara",
+          "match": "\\bfun\\s+([A-Za-z_][A-Za-z0-9_]*)"
+        },
+        {
+          "name": "meta.function.owner-generic.capybara",
+          "match": "\\b(fun)\\s+(_*[A-Z][A-Za-z0-9_]*\\[[^\\]]+\\])\\.(?:`[^`]+`|[A-Za-z_][A-Za-z0-9_]*)"
+        },
+        {
+          "name": "meta.function.owner-infix.capybara",
+          "match": "\\b(fun)\\s+(_*[A-Z][A-Za-z0-9_]*)\\.([^]+)"
+        },
+        {
+          "name": "entity.name.function.private.capybara",
+          "match": ":(__[A-Za-z0-9_]+)\\b"
+        },
+        {
+          "name": "entity.name.function.capybara",
+          "match": ":([A-Za-z_][A-Za-z0-9_]*)\\b"
+        },
+        {
+          "name": "entity.name.function.private.capybara",
+          "match": "\\b(__[A-Za-z0-9_]+)\\s*(?=\\()"
+        },
+        {
+          "name": "entity.name.function.capybara",
+          "match": "\\b([A-Za-z_][A-Za-z0-9_]*)\\s*(?=\\()"
+        },
+        {
+          "name": "meta.let.declaration.capybara",
+          "match": "\\b(let)\\s+([A-Za-z_][A-Za-z0-9_]*)\\b"
+        },
+        {
+          "name": "meta.const.private.capybara",
+          "match": "\\b(const)\\s+(__[A-Za-z_][A-Za-z0-9_]*)\\b"
+        },
+        {
+          "name": "meta.const.capybara",
+          "match": "\\b(const)\\s+(_*[A-Z_][A-Z0-9_]*)\\b"
+        },
+        {
+          "name": "meta.match.case-branch.capybara",
+          "match": "(\\bcase\\b)([^\\n]*?)(->)"
+        },
+        {
+          "name": "meta.match.typed-pattern.capybara",
+          "match": "(\\bcase\\b)\\s*(_*[A-Z][A-Za-z0-9_]*)\\s+([A-Za-z_][A-Za-z0-9_]*|_)\\s*(=>)"
+        },
+        {
+          "name": "meta.match.wildcard-binding.capybara",
+          "match": "(\\bcase\\b)\\s*(_)\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*(=>)"
+        },
+        {
+          "name": "meta.match.constructor-pattern.capybara",
+          "match": "(\\bcase\\b)\\s*(_*[A-Z][A-Za-z0-9_]*)\\s*(\\{)\\s*([A-Za-z_][A-Za-z0-9_]*)"
+        },
+        {
+          "name": "meta.pipe.lambda.grouped.single.capybara",
+          "match": "(\\|all\\?|\\|any\\?|\\|>|\\|\\*|\\|-|\\|)\\s*(\\()\\s*([A-Za-z_][A-Za-z0-9_]*|_)\\s*(=>)"
+        },
+        {
+          "name": "meta.pipe.lambda.grouped.tuple.capybara",
+          "match": "(\\|all\\?|\\|any\\?|\\|>|\\|\\*|\\|-|\\|)\\s*(\\()\\s*([A-Za-z_][A-Za-z0-9_]*|_)(\\s*,\\s*([A-Za-z_][A-Za-z0-9_]*|_))+\\s*(\\))\\s*(=>)"
+        },
+        {
+          "name": "meta.pipe.lambda.grouped.no-args.capybara",
+          "match": "(\\|all\\?|\\|any\\?|\\|>|\\|\\*|\\|-|\\|)\\s*(\\()\\s*(\\))\\s*(=>)"
+        },
+        {
+          "name": "variable.parameter.unused.capybara",
+          "match": "(?<=\\(|,)\\s*(_) (?=\\s*(?:,|\\)\\s*=>))"
+        },
+        {
+          "name": "meta.lambda.tuple-destructure.capybara",
+          "match": "(\\()\\s*([A-Za-z_][A-Za-z0-9_]*|_)(\\s*,\\s*([A-Za-z_][A-Za-z0-9_]*|_))+\\s*(\\))\\s*(=>)"
+        },
+        {
+          "name": "meta.lambda.no-args.capybara",
+          "match": "(\\()\\s*(\\))\\s*(=>)"
+        },
+        {
+          "name": "meta.method.with.named-argument.capybara",
+          "match": "((?:\\.with\\(|,)\\s*)([A-Za-z_][A-Za-z0-9_]*)(\\s*=)"
+        }
+      ]
+    },
+    "operatorsAndBrackets": {
+      "patterns": [
+        {
+          "name": "keyword.operator.function-type.capybara",
+          "match": "=>"
+        },
+        {
+          "name": "keyword.operator.pipe.capybara",
+          "match": "\\|all\\?|\\|any\\?|\\|>|\\|\\*|\\|-|\\||\\.and\\.|\\.nand\\.|\\.or\\.|\\.xor\\.|\\.not\\.|==|!=|<=|>=|=>|\\+|\\-|\\*|/|%|\\^|<|>|=|&|\\?|:|,"
+        },
+        {
+          "name": "meta.index.capybara",
+          "begin": "\\[",
+          "end": "\\]",
+        "patterns": [
+          {
+            "name": "markup.quote.todo.comment.line.capybara",
+            "match": "//[/]?\\s*(?i:todo)\\b.*$"
+          },
+          {
+            "name": "markup.changed.fixme.comment.line.capybara",
+            "match": "//[/]?\\s*(?i:fixme)\\b.*$"
+          },
+          {
+            "name": "comment.block.capybara",
+            "begin": "/\\*",
+            "end": "\\*/"
+            },
+            {
+              "name": "comment.block.documentation.capybara",
+              "match": "///.*$"
+            },
+            {
+              "name": "comment.line.double-slash.capybara",
+              "match": "//.*$"
+            },
+            {
+              "name": "string.quoted.double.capybara",
+              "begin": "\"",
+              "end": "\"",
+              "patterns": [
+                {
+                  "name": "constant.character.escape.capybara",
+                  "match": "\\\\."
+                }
+              ]
+            },
+            {
+              "name": "string.quoted.single.capybara",
+              "begin": "'",
+              "end": "'",
+              "patterns": [
+                {
+                  "name": "constant.character.escape.capybara",
+                  "match": "\\\\."
+                }
+              ]
+            },
+            {
+              "name": "keyword.operator.capybara",
+              "match": ":"
+            },
+            {
+              "name": "keyword.operator.pipe.capybara",
+              "match": "\\|all\\?|\\|any\\?|\\|>|\\|\\*|\\|-|\\||\\.and\\.|\\.nand\\.|\\.or\\.|\\.xor\\.|\\.not\\.|==|!=|<=|>=|=>|\\+|\\-|\\*|/|%|\\^|<|>|=|&|\\?|:|,"
+            },
+            {
+              "name": "constant.numeric.int.capybara",
+              "match": "-?\\d+"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
+
+
+
+
+
+
+
+
+

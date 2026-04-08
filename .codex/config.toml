@@ -1,0 +1,26 @@
+[features]
+multi_agent = true
+
+[agents]
+max_threads = 6
+max_depth = 1
+
+[agents.researcher]
+description = "Analyzes user requests in the context of the Capybara compiler repository and produces technical requirements for the Principal Developer."
+config_file = "agents/researcher.toml"
+
+[agents.principal_developer]
+description = "Turns Capybara requirements into a concrete implementation and test plan across compiler, app, integration-tests, and library modules."
+config_file = "agents/principal-developer.toml"
+
+[agents.senior_developer]
+description = "Implements scoped Capybara tasks in code and tests, keeping changes minimal and aligned with repository conventions."
+config_file = "agents/senior-developer.toml"
+
+[agents.reviewer]
+description = "Reviews Capybara code changes for correctness, regressions, missing tests, and adherence to repository guidelines."
+config_file = "agents/reviewer.toml"
+
+[agents.principal_FP_developer]
+description = "Principal FP language reviewer focused on idiomatic functional programming and Capybara Functional design. Reviews .cfun code for purity, immutability, composability, and expression-oriented style, and evaluates Functional.g4 syntax against conventions from Scala, F#, Haskell, and OCaml."
+config_file = "agents/principal-fp-developer.toml"

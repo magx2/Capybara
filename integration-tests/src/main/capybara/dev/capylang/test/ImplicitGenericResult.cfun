@@ -1,0 +1,9 @@
+from /capy/lang/Result import { * }
+
+fun error_or_else_without_explicit_result_type(): int =
+    let result = Error { "Some error" }
+    result.or_else(0)
+
+fun error_or_without_explicit_result_type(): int =
+    let result = Error { "Error" }
+    result.or(Success { 101 }).or_else(0)

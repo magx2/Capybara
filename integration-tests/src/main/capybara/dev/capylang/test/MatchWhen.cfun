@@ -1,0 +1,53 @@
+from /capy/lang/Option import {*}
+
+fun foo(option: Option[string]): string =
+    match option with
+    case Some { char } -> "other"
+    case Some { char } when char == '-' -> "minus"
+    case Some { char } when char == '+' -> "plus"
+    case None -> "none"
+
+fun boo(option: Option[int]): string =
+    match option with
+    case Some { value } -> '' + value
+    case Some { value } when value == 1 -> "one"
+    case Some { value } when value == 2 -> "two"
+    case None -> "none"
+
+fun nested_guard(option: Option[int]): string =
+    match option with
+    case Some { value } when value > 10 -> "big"
+    case Some { value } -> '' + value
+    case None -> "none"
+
+data Sign { value: string, weight: int, enabled: bool }
+
+type Letter = Vowel | Consonant
+single Vowel
+single Consonant
+
+fun sign(sign: Sign): string =
+    match sign with
+    case Sign { value, weight, enabled } when enabled & value == '-' & weight > 10 -> "heavy minus"
+    case Sign { value, weight, enabled } when enabled & value == '+' & weight > 10 -> "heavy plus"
+    case Sign { value, _, _ } -> "other"
+    case Sign { value, _, _ } when value == '-' -> "minus"
+    case Sign { value, _, _ } when value == '+' -> "plus"
+
+fun letter(letter: Letter): string =
+    match letter with
+    case Vowel when letter == Vowel -> "vowel"
+    case Consonant when letter == Consonant -> "hard"
+    case Consonant -> "consonant"
+    case Vowel -> "other vowel"
+
+data Range { start: int, stop: int, step: int, enabled: bool }
+
+fun range_label(range: Range): string =
+    match range with
+    case Range { start, stop, step, enabled } when enabled & start < stop & step == 1 -> "ascending"
+    case Range { start, stop, step, enabled } when enabled & start > stop & step == -1 -> "descending"
+    case Range { start, _, _, enabled } when enabled == false -> "disabled " + start
+    case Range { _, _, step, _ } when step == 0 -> "stuck"
+    case Range -> "other"
+

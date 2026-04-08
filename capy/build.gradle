@@ -1,0 +1,83 @@
+plugins {
+    id 'buildlogic.java-application-conventions'
+}
+
+dependencies {
+    implementation project(':compiler')
+    implementation 'com.fasterxml.jackson.core:jackson-databind:2.19.0'
+    implementation 'com.fasterxml.jackson.datatype:jackson-datatype-jdk8:2.19.0'
+    implementation 'org.yaml:snakeyaml:2.4'
+}
+
+def capybaraVersion = project.version.toString()
+def javaLibSourceDir = rootProject.layout.projectDirectory.dir('lib/capybara-lib/src/main/java')
+
+processResources {
+    filesMatching('capybara-version.txt') {
+        expand(version: capybaraVersion)
+    }
+    from(javaLibSourceDir) {
+        into 'java-lib-src'
+    }
+}
+
+application {
+    mainClass = 'dev.capylang.Capy'
+}
+
+jar {
+    manifest {
+        attributes('Main-Class': application.mainClass.get())
+    }
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    dependsOn configurations.runtimeClasspath
+    from {
+        configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
+    }
+}
+
+def isWindows = System.getProperty('os.name').toLowerCase().contains('windows')
+def nativeImageExecutableName = isWindows ? 'native-image.cmd' : 'native-image'
+def nativeBinaryBaseName = "capyc-${project.version}"
+def nativeBinaryName = isWindows ? "${nativeBinaryBaseName}.exe" : nativeBinaryBaseName
+
+tasks.register('nativeCompile', Exec) {
+    group = 'build'
+    description = 'Builds a GraalVM native binary for the CLI application.'
+
+    dependsOn tasks.named('jar')
+
+    def outputDir = layout.buildDirectory.dir('native/nativeCompile')
+    def outputBinary = outputDir.map { it.file(nativeBinaryName).asFile }
+
+    inputs.files(
+            tasks.named('jar').flatMap { it.archiveFile },
+            sourceSets.main.runtimeClasspath
+    )
+    outputs.file(outputBinary)
+
+    doFirst {
+        var javaHome = System.getenv('GRAALVM_HOME') ?: System.getenv('JAVA_HOME')
+        if (javaHome == null || javaHome.isBlank()) {
+            throw new GradleException('Set GRAALVM_HOME (or JAVA_HOME pointing to GraalVM) to build native binary.')
+        }
+
+        var nativeImage = new File(javaHome, "bin/${nativeImageExecutableName}")
+        if (!nativeImage.exists()) {
+            throw new GradleException("native-image not found at `${nativeImage}`. Install GraalVM Native Image.")
+        }
+
+        var jarFile = tasks.named('jar').get().archiveFile.get().asFile
+        var classpath = files(jarFile, sourceSets.main.runtimeClasspath).asPath
+        var output = outputBinary.get()
+        output.parentFile.mkdirs()
+
+        commandLine(
+                nativeImage.absolutePath,
+                '--no-fallback',
+                '-cp', classpath,
+                application.mainClass.get(),
+                output.absolutePath
+        )
+    }
+}

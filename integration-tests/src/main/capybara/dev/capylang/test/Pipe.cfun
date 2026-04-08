@@ -1,0 +1,169 @@
+from /capy/lang/Seq import {*}
+
+fun map1(l: list[int]): list[int] =
+    l | x => x * 2
+
+fun map2(l: list[int]): list[int] =
+    l
+        | x => x * 2
+        | x => x - 1
+
+fun map3(l: list[int]): list[string] = l | x => "Hello " + x
+
+fun filter1(l: list[int]): list[int] = l |- x => x > 0
+
+fun filter2(l: list[int]): list[int] =
+    l
+        |- x => x > 2
+        |- x => x == 1
+
+fun reduce1(l: list[int]): int = l |> 0, (a,b) => a+b
+
+/// returns if any of the ints in the list is positive
+fun any_positive(l: list[int]): bool = l |any? x => x > 0
+
+/// returns if all of the ints in the list is positive
+fun all_positive(l: list[int]): bool = l |all? x => x > 0
+
+fun _is_positive(x: int): bool = x > 0
+fun any_positive_ref(l: list[int]): bool = l |any? :_is_positive
+fun all_positive_ref(l: list[int]): bool = l |all? :_is_positive
+
+fun reduce2(l: list[int]): int =
+    l
+        | x => x * 2
+        |- x => x < 0
+        |> 0, (a,b) => a+b
+
+fun reduce_string1(l: list[string]): string = l |> "", (acc, v) => acc + v
+
+fun reduce_string2(l: list[string]): string = l |> "start: ", (acc, v) => acc + " " + v
+
+fun string_map(s: string): list[string] = s | ch => "[" + ch + "]"
+
+fun string_filter(s: string): string = s |- ch => ch == "b"
+
+fun string_reduce(s: string): string = s |> "", (acc, ch) => acc + ch
+
+data Foo { value: string }
+fun reduce_to_data(l: list[string]): Foo = l
+    | v => Foo {value:v}
+    |> Foo {value:""}, (acc, v) => Foo { value: acc.value + v.value }
+
+fun flatMap1(l: list[int]): list[int] = l |* x => [x, x+1, x+2]
+
+fun flatMap2(l: list[int]): list[int] =
+    l
+        | x => x * 2
+        |- x => x > 0
+        |* x => [x, x+1, x+2]
+
+fun setMap1(s: set[int]): set[int] = s | x => x * 2
+
+fun setFilter1(s: set[int]): set[int] = s |- x => x > 0
+
+fun setReduce1(s: set[int]): int = s |> 0, (a,b) => a+b
+
+fun set_reduce_string2(s: set[string]): string = s |> "start: ", (acc, v) => acc + " " + v
+
+fun setFlatMap1(s: set[int]): set[int] = s |* x => {x, x+10}
+
+fun mapDict(d: dict[int]): dict[string] = d | (k,v) => v + ""
+
+fun filterDict(d: dict[int]): dict[int] = d |- (k,v) => k != "" & v > 0
+
+fun reduceDict(d: dict[int]): string = d
+    |> (k, v) => "(" + k + ":" + v + ")"
+    |> "start: ", (acc, e) => acc + ", " + e
+
+data Entry { key: string, value: string }
+fun reduce_to_data(l: dict[string]): set[Entry] = l
+    |> (k,v) => Entry {key:k,value:v}
+
+fun dict_reduce_string2(d: dict[string]): string = d |> "start: ", (acc, v) => acc + " " + v
+
+fun dict_unused_key_to_sum(d: dict[int]): int =
+    d
+        | (_, v) => v
+        |> 0, (acc, v) => acc + v
+
+fun dict_unused_reduce_key(d: dict[int]): int =
+    d
+        |> (_, v) => v
+        |> 0, (acc, v) => acc + v
+
+fun list_unused_lambda_arg(l: list[int]): list[int] = l | _ => 1
+
+data Value { x: int }
+
+fun add(v: Value, x: int): Value = Value { x: v.x + x }
+
+fun data_pipe(a: int, b: int, c: int): /capy/lang/Option[Value] =
+    Value { x: a }
+        |- v => v.x > 0
+        | v => add(v, b)
+        | v => add(v, c)
+
+type Boxed = IntBox | LongBox
+data IntBox { value: int }
+data LongBox { value: long }
+
+fun keep_boxed(boxed: Boxed): Boxed = boxed
+
+fun add_to_boxed(boxed: Boxed): Boxed =
+    match boxed with
+    case IntBox { value } -> IntBox { value: value + 1 }
+    case LongBox { value } -> LongBox { value: value + 1L }
+
+fun type_pipe_lambda(x: int): Boxed =
+    IntBox { value: x }
+        | b => keep_boxed(b)
+        | b => add_to_boxed(b)
+
+fun type_pipe_ref(x: int): Boxed =
+    IntBox { value: x }
+        | :keep_boxed
+        | :add_to_boxed
+
+fun type_pipe_optional(x: int): /capy/lang/Option[Boxed] =
+    IntBox { value: x }
+        | bx => keep_boxed(bx)
+        |- by => x > 0
+        | bz => add_to_boxed(bz)
+
+fun pipe_then_chain_after_lambda(): int =
+    match ([1, 2, 3]
+        | (value => value + 1))[1] with
+    case Some { value } -> value
+    case None -> 0
+
+fun pipe_then_chain_methods_after_lambda(): string =
+    let ok: () => string = () => "ok"
+    let failed: () => string = () => "failed"
+    let later: () => string = () => "later"
+    let suppliers: list[() => string] = [ok, failed, later]
+    match to_seq(suppliers)
+        | (supplier => supplier())
+        .first() with
+    case Some { value } -> value
+    case None -> ""
+
+fun pipe_lambda_body_multiline_without_parentheses(): list[string] =
+    [" x ", " y "]
+        | value =>
+            value
+                .trim()
+
+fun pipe_filter_lambda_body_multiline_without_parentheses(): list[string] =
+    [" a ", "bb", " c "]
+        |- value =>
+            value
+                .trim()
+                .starts_with("b")
+
+fun pipe_any_lambda_body_multiline_without_parentheses(): bool =
+    [" a ", "bb"]
+        |any? value =>
+            value
+                .trim()
+                .starts_with("a")

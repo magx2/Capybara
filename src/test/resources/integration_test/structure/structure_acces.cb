@@ -1,4 +1,0 @@
-package /structure
-
-fun access_list(list: /capybara/type/List[/capybara/type/String]): /capybara/type/String = list[0]
-

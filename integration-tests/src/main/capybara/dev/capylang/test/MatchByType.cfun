@@ -1,0 +1,47 @@
+fun match_string(value: any): string =
+    match value with
+    case string s -> "s:" + s
+    case int i -> "i:" + i
+    case _ -> ""
+
+fun match_int(value: any): int =
+    match value with
+    case int i -> i + 1
+    case string s -> 0
+    case _ -> 0
+
+fun match_int_ignore_binding(value: any): int =
+    match value with
+    case int _ -> 1
+    case _ -> 0
+
+data Person { name: string }
+type Entity = Person
+
+fun is_data(value: any): bool =
+    match value with
+    case data d -> true
+    case _ -> false
+
+fun is_data_from_entity(value: Entity): bool =
+    match value with
+    case data d -> true
+    case _ -> false
+
+fun classify_json_char(first_char: string): string =
+    match first_char with
+    case '{' -> "object"
+    case '"' -> "string"
+    case '-', '1', '2', '3', '4', '5', '6', '7', '8', '9', '0' -> "number"
+    case _ -> "other"
+
+fun classify_json_char_with_named_wildcard(first_char: string): string =
+    match first_char with
+    case '-' -> "minus"
+    case '1', '2', '3', '4', '5', '6', '7', '8', '9', '0' -> "number"
+    case _ v -> "unknown: " + v
+
+fun mood(b: bool): string =
+    match b with
+    case true -> "I'm happy"
+    case false -> "I'm sad"

@@ -1,0 +1,86 @@
+from /capy/test/Assert import { * }
+from /capy/lang/Seq import { * }
+from /capy/test/CapyTest import { * }
+
+fun tests(): TestFile =
+    test_file("/capy/lang/SeqTest", [
+        test("should assert finite sequence", should_assert_finite_sequence()),
+        test("should assert empty sequence", should_assert_empty_sequence()),
+        test("should take from infinite sequence", should_take_from_infinite_sequence()),
+        test("should convert sequence to list", should_convert_sequence_to_list()),
+        test("should drop and until", should_drop_and_until()),
+        test("should filter values", should_filter_values()),
+        test("should zip two sequences", should_zip_two_sequences()),
+        test("should generate powers of two", should_generate_powers_of_two()),
+        test("should return first element", should_return_first_element()),
+        test("should return empty first on empty sequence", should_return_empty_first_on_empty_sequence()),
+        test("should find first matching element", should_find_first_matching_element()),
+        test("should return empty when first match missing", should_return_empty_when_first_match_missing()),
+        test("should detect any matching element", should_detect_any_matching_element()),
+        test("should detect no matching element", should_detect_no_matching_element()),
+    ])
+
+fun should_assert_finite_sequence(): Assert =
+    let seq = to_seq([1, 2, 3])
+    assert_that(seq)
+        .has_size(3)
+        .contains(1)
+        .does_not_contain(4)
+
+fun should_assert_empty_sequence(): Assert =
+    let seq: Seq[int] = End
+    assert_that(seq)
+        .has_size(0)
+        .is_empty()
+        .is_equal_to(End)
+
+fun should_take_from_infinite_sequence(): Assert =
+    let l = natural_seq().take(5)
+    assert_that(to_seq(l)).has_size(5)
+
+fun should_convert_sequence_to_list(): Assert =
+    let seq = natural_seq().drop(1).until(x => x > 2)
+    assert_that(seq).has_size(2)
+
+fun should_drop_and_until(): Assert =
+    let seq = natural_seq().drop(2).until(x => x > 5)
+    assert_that(seq).has_size(4)
+
+fun should_filter_values(): Assert =
+    let seq = natural_seq().until(x => x > 10).filter(x => x < 5)
+    assert_that(seq).has_size(5)
+
+fun should_zip_two_sequences(): Assert =
+    let zipped = natural_seq().drop(1).zip(ones_seq()).take(3)
+    assert_that(to_seq(zipped)).has_size(3)
+
+fun should_generate_powers_of_two(): Assert =
+    let l = powers_of_2_seq().take(5)
+    assert_that(to_seq(l)).has_size(5)
+
+fun should_return_first_element(): Assert =
+    let seq = to_seq([3, 5, 8])
+    assert_that(seq.first()).is_equal_to(Some { value: 3 })
+
+fun should_return_empty_first_on_empty_sequence(): Assert =
+    let seq: Seq[int] = End
+    assert_that(seq.first()).is_equal_to(None {})
+
+fun should_find_first_matching_element(): Assert =
+    let seq = to_seq([1, 3, 4, 7])
+    assert_that(seq.first_match(x => x % 2 == 0)).is_equal_to(Some { value: 4 })
+
+fun should_return_empty_when_first_match_missing(): Assert =
+    let seq = to_seq([1, 3, 5, 7])
+    assert_that(seq.first_match(x => x % 2 == 0)).is_equal_to(None {})
+
+fun should_detect_any_matching_element(): Assert =
+    let seq = to_seq([1, 2, 3])
+    assert_that(seq.any(x => x > 2)).is_equal_to(true)
+
+fun should_detect_no_matching_element(): Assert =
+    let seq = to_seq([1, 2, 3])
+    assert_that(seq.any(x => x > 10)).is_equal_to(false)
+
+
+

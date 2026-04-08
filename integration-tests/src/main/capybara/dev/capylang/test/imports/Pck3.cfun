@@ -1,0 +1,8 @@
+fun foo_boo(is_big: bool, is_small: bool) =
+    if is_big
+    then if is_small
+         then 100
+         else 10
+    else if is_small
+    then 1
+    else 0

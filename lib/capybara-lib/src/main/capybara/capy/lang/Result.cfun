@@ -1,0 +1,48 @@
+type Result[T] = Success[T] | Error
+data Success[T] { value: T }
+data Error { message: string }
+
+fun Result[T].`|`(map: T => Result[Y]): Result[Y] =
+    match this with
+    case Error e -> e
+    case Success s -> map(s.value)
+
+fun Result[T].map(map: T => Result[Y]): Result[Y] =
+    match this with
+    case Error e -> e
+    case Success s -> map(s.value)
+
+fun Result[T].`|*`(flatmap: T => Result[Result[Y]]): Result[Y] =
+    match this with
+    case Error e -> e
+    case Success s ->
+        match flatmap(s.value) with
+        case Error e -> e
+        case Success { top_result } -> top_result
+
+fun Result[T].flat_map(flatmap: T => Result[Result[Y]]): Result[Y] =
+    match this with
+    case Error e -> e
+    case Success s ->
+        match flatmap(s.value) with
+        case Error e -> e
+        case Success { top_result } -> top_result
+
+fun Result[T].or_else(v: T): T =
+    match this with
+    case Error _ -> v
+    case Success { v } -> v
+
+fun Result[T].or(r: Result[T]): Result[T] =
+    match this with
+    case Error _ -> r
+    case Success s -> s
+
+fun Result[T].`|>`(reduce: tuple[T => R, string => R]): R =
+    match this with
+    case Success { v } -> reduce[0](v)
+    case Error { msg } -> reduce[1](msg)
+
+fun Result[T].reduce(on_success: T => R, on_error: string => R): R = this |> (on_success, on_error)
+
+fun Result[T].reduce_left(on_success: T => R, on_error: string => R): R = this.reduce(on_success, on_error)

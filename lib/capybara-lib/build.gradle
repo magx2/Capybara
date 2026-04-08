@@ -1,0 +1,665 @@
+import org.gradle.api.DefaultTask
+import org.gradle.api.GradleException
+import org.gradle.api.Task
+import org.gradle.api.artifacts.component.ProjectComponentIdentifier
+import org.gradle.api.file.ConfigurableFileCollection
+import org.gradle.api.file.DirectoryProperty
+import org.gradle.api.provider.Property
+import org.gradle.api.services.BuildService
+import org.gradle.api.services.BuildServiceParameters
+import org.gradle.api.tasks.TaskProvider
+import org.gradle.api.tasks.Classpath
+import org.gradle.api.tasks.Input
+import org.gradle.api.tasks.InputDirectory
+import org.gradle.api.tasks.InputFiles
+import org.gradle.api.tasks.Internal
+import org.gradle.api.tasks.Optional
+import org.gradle.api.tasks.OutputDirectory
+import org.gradle.api.tasks.PathSensitive
+import org.gradle.api.tasks.PathSensitivity
+import org.gradle.api.tasks.TaskAction
+import org.gradle.api.tasks.compile.JavaCompile
+
+import java.io.ByteArrayOutputStream
+import java.io.PrintStream
+import java.net.URL
+import java.net.URLClassLoader
+import java.nio.file.Path
+import java.nio.file.Files
+import java.nio.file.DirectoryStream
+import java.util.TreeSet
+import java.util.concurrent.ConcurrentHashMap
+import java.util.logging.Level
+import java.util.logging.Logger
+
+plugins {
+    id 'buildlogic.java-library-conventions'
+}
+
+class CapyRuntimeBridge implements Closeable {
+    private final URLClassLoader classLoader
+    private final def readLinkedProgramMethod
+    private final def compileMethod
+    private final def compileGenerateMethod
+    private def parseArgumentsMethod
+    private def runTestsMethod
+    private final Object javaOutputType
+
+    CapyRuntimeBridge(Set<File> runtimeClasspathFiles) {
+        def runtimeUrls = runtimeClasspathFiles.collect { it.toURI().toURL() } as URL[]
+        classLoader = new URLClassLoader(runtimeUrls, ClassLoader.getPlatformClassLoader())
+
+        def capyClass = Class.forName('dev.capylang.Capy', true, classLoader)
+        readLinkedProgramMethod = capyClass.getDeclaredMethod('readLinkedProgram', Path, Boolean.TYPE)
+        readLinkedProgramMethod.accessible = true
+        compileMethod = capyClass.getMethod(
+                'compile',
+                Path,
+                Path,
+                TreeSet,
+                Boolean.TYPE,
+                PrintStream,
+                String
+        )
+
+        def outputTypeClass = Class.forName('dev.capylang.compiler.OutputType', true, classLoader)
+        javaOutputType = outputTypeClass.enumConstants.find { it.name() == 'JAVA' }
+        compileGenerateMethod = capyClass.getMethod(
+                'compileGenerate',
+                outputTypeClass,
+                Path,
+                Path,
+                Path,
+                Path,
+                Path,
+                TreeSet,
+                Boolean.TYPE,
+                Boolean.TYPE,
+                String,
+                PrintStream
+        )
+    }
+
+    TreeSet readLibraryModules(Set<File> libraryDirs) {
+        def modules = new TreeSet()
+        libraryDirs.each { libraryDir ->
+            Path libraryPath = libraryDir.toPath()
+            if (Files.notExists(libraryPath) || !Files.isDirectory(libraryPath)) {
+                return
+            }
+            def program = readLinkedProgramMethod.invoke(null, libraryPath, false)
+            modules.addAll(program.modules())
+        }
+        modules
+    }
+
+    int compile(
+            Path inputPath,
+            Path linkedOutputPath,
+            Path generatedOutputPath,
+            Path testInputPath,
+            Path testGeneratedOutputPath,
+            TreeSet libraries,
+            boolean compileTests,
+            boolean includeJavaLibResources,
+            String compilerVersion,
+            PrintStream errors
+    ) {
+        if (generatedOutputPath == null && testInputPath == null && testGeneratedOutputPath == null) {
+            return compileMethod.invoke(
+                    null,
+                    inputPath,
+                    linkedOutputPath,
+                    libraries,
+                    compileTests,
+                    errors,
+                    compilerVersion
+            ) as Integer
+        }
+        return compileGenerateMethod.invoke(
+                null,
+                javaOutputType,
+                inputPath,
+                generatedOutputPath,
+                linkedOutputPath,
+                testInputPath,
+                testGeneratedOutputPath,
+                libraries,
+                compileTests,
+                includeJavaLibResources,
+                compilerVersion,
+                errors
+        ) as Integer
+    }
+
+    int runTests(Path outputPath, String reportType, String logLevel) {
+        ensureTestRunnerLoaded()
+        def originalContextClassLoader = Thread.currentThread().contextClassLoader
+        try {
+            Thread.currentThread().contextClassLoader = classLoader
+            def args = [
+                    '-o', outputPath.toFile().absolutePath,
+                    '-rt', reportType
+            ]
+            if (logLevel != null && !logLevel.isBlank()) {
+                args.addAll(['-ll', logLevel])
+            }
+
+            def parsedArguments = parseArgumentsMethod.invoke(null, [args.toArray(new String[0])] as Object[])
+            return runTestsMethod.invoke(null, [parsedArguments] as Object[]) as Integer
+        } finally {
+            Thread.currentThread().contextClassLoader = originalContextClassLoader
+        }
+    }
+
+    private void ensureTestRunnerLoaded() {
+        if (parseArgumentsMethod != null && runTestsMethod != null) {
+            return
+        }
+        def testRunnerClass = Class.forName('dev.capylang.test.TestRunner', true, classLoader)
+        def argumentsClass = Class.forName('dev.capylang.test.TestRunner$Arguments', true, classLoader)
+        parseArgumentsMethod = testRunnerClass.getMethod('parseArguments', String[].class)
+        runTestsMethod = testRunnerClass.getMethod('runTests', argumentsClass)
+    }
+
+    @Override
+    void close() {
+        classLoader.close()
+    }
+}
+
+abstract class CapyRuntimeService implements BuildService<BuildServiceParameters.None>, AutoCloseable {
+    private final Map<String, CapyRuntimeBridge> bridges = new ConcurrentHashMap<>()
+
+    CapyRuntimeBridge bridgeFor(Set<File> runtimeClasspathFiles) {
+        def key = runtimeClasspathFiles.collect { it.absolutePath }.sort().join(File.pathSeparator)
+        bridges.computeIfAbsent(key) { new CapyRuntimeBridge(runtimeClasspathFiles) }
+    }
+
+    @Override
+    void close() {
+        bridges.values().each { it.close() }
+        bridges.clear()
+    }
+}
+
+abstract class InProcessCapybaraCompileTask extends DefaultTask {
+    @Classpath
+    abstract ConfigurableFileCollection getRuntimeClasspath()
+
+    @Internal
+    abstract Property<CapyRuntimeService> getRuntimeService()
+
+    @InputDirectory
+    @PathSensitive(PathSensitivity.RELATIVE)
+    abstract DirectoryProperty getInputDir()
+
+    @InputFiles
+    @PathSensitive(PathSensitivity.RELATIVE)
+    abstract ConfigurableFileCollection getLibraryProgramFiles()
+
+    @Optional
+    @OutputDirectory
+    abstract DirectoryProperty getLinkedOutputDir()
+
+    @Optional
+    @OutputDirectory
+    abstract DirectoryProperty getGeneratedOutputDir()
+
+    @Optional
+    @InputDirectory
+    @PathSensitive(PathSensitivity.RELATIVE)
+    abstract DirectoryProperty getTestInputDir()
+
+    @Optional
+    @OutputDirectory
+    abstract DirectoryProperty getTestGeneratedOutputDir()
+
+    @Input
+    abstract Property<Boolean> getCompileTests()
+
+    @Input
+    abstract Property<Boolean> getIncludeJavaLibResources()
+
+    @Input
+    abstract Property<String> getCompilerVersion()
+
+    @Input
+    abstract Property<String> getLogLevel()
+
+    @TaskAction
+    void compileCapybara() {
+        def errors = new ByteArrayOutputStream()
+        def bridge = runtimeService.get().bridgeFor(runtimeClasspath.files)
+        def generatedOutputPath = generatedOutputDir.present ? generatedOutputDir.get().asFile.toPath() : null
+        def testInputPath = testInputDir.present ? testInputDir.get().asFile.toPath() : null
+        def testGeneratedOutputPath = testGeneratedOutputDir.present ? testGeneratedOutputDir.get().asFile.toPath() : null
+        def libraryInputDirs = libraryProgramFiles.files.collect { it.parentFile }.findAll { it != null } as Set<File>
+        def libraries = bridge.readLibraryModules(libraryInputDirs)
+
+        def exitCode = withJulLogLevel(Level.parse(logLevel.getOrElse('WARNING'))) {
+            bridge.compile(
+                    inputDir.get().asFile.toPath(),
+                    linkedOutputDir.present ? linkedOutputDir.get().asFile.toPath() : null,
+                    generatedOutputPath,
+                    testInputPath,
+                    testGeneratedOutputPath,
+                    libraries,
+                    compileTests.getOrElse(false),
+                    includeJavaLibResources.getOrElse(true),
+                    compilerVersion.get(),
+                    new PrintStream(errors)
+            )
+        }
+
+        if (exitCode != 0) {
+            def message = errors.toString().trim()
+            throw new GradleException(message ?: "Capybara compile failed with exit code ${exitCode}")
+        }
+    }
+
+    private static int withJulLogLevel(Level configuredLevel, Closure<Integer> action) {
+        def rootLogger = Logger.getLogger('')
+        def previousRootLevel = rootLogger.level
+        def handlers = rootLogger.handlers
+        def previousHandlerLevels = handlers.collect { it.level }
+        handlers.each { it.level = configuredLevel }
+        rootLogger.level = configuredLevel
+        try {
+            action.call()
+        } finally {
+            rootLogger.level = previousRootLevel
+            handlers.eachWithIndex { handler, index -> handler.level = previousHandlerLevels[index] }
+        }
+    }
+}
+
+abstract class InProcessCapybaraTestTask extends DefaultTask {
+    @Classpath
+    abstract ConfigurableFileCollection getRuntimeClasspath()
+
+    @Internal
+    abstract Property<CapyRuntimeService> getRuntimeService()
+
+    @OutputDirectory
+    abstract DirectoryProperty getOutputDir()
+
+    @Input
+    abstract Property<String> getReportType()
+
+    @Input
+    abstract Property<String> getLogLevel()
+
+    @TaskAction
+    void runCapybaraTests() {
+        outputDir.get().asFile.mkdirs()
+
+        def bridge = runtimeService.get().bridgeFor(runtimeClasspath.files)
+        def exitCode = bridge.runTests(outputDir.get().asFile.toPath(), reportType.get(), logLevel.orNull)
+        if (exitCode != 0) {
+            throw new GradleException("Capybara tests failed with exit code ${exitCode}")
+        }
+    }
+}
+
+def capyRuntimeService = gradle.sharedServices.registerIfAbsent('capyRuntimeService', CapyRuntimeService) {}
+def capybaraTestLogLevel = switch (gradle.startParameter.logLevel) {
+    case org.gradle.api.logging.LogLevel.DEBUG -> 'DEBUG'
+    case org.gradle.api.logging.LogLevel.INFO -> 'INFO'
+    default -> 'WARN'
+}
+def capybaraCompileLogLevel = switch (gradle.startParameter.logLevel) {
+    case org.gradle.api.logging.LogLevel.DEBUG -> 'FINE'
+    case org.gradle.api.logging.LogLevel.INFO -> 'INFO'
+    default -> 'WARNING'
+}
+
+tasks.withType(InProcessCapybaraCompileTask).configureEach {
+    runtimeService.set(capyRuntimeService)
+    logLevel.set(capybaraCompileLogLevel)
+}
+
+tasks.withType(InProcessCapybaraTestTask).configureEach {
+    runtimeService.set(capyRuntimeService)
+}
+
+def capyProject = project(':capy')
+def compilerProject = project(':compiler')
+def capyRuntimeDependencies = capyProject.configurations.runtimeClasspath.incoming.artifactView {
+    componentFilter { componentIdentifier -> !(componentIdentifier instanceof ProjectComponentIdentifier) }
+}.files
+def capyRuntimeClasspath = files(
+        capyProject.sourceSets.main.output.classesDirs,
+        compilerProject.sourceSets.main.output.classesDirs,
+        capyRuntimeDependencies
+)
+
+def capybaraMainSourceDir = layout.projectDirectory.dir('src/main/capybara')
+def capybaraTestSourceDir = layout.projectDirectory.dir('src/test/capybara')
+def capybaraGeneratedMainDir = layout.buildDirectory.dir('generated/sources/capybara/java/main')
+def capybaraGeneratedTestDir = layout.buildDirectory.dir('generated/sources/capybara/java/test')
+def capybaraGeneratedCheckDir = layout.buildDirectory.dir('generated/sources/capybara/java/check')
+def capybaraLinkedMainDir = layout.buildDirectory.dir('generated/sources/capybara/linked/main')
+def capybaraTestResultsDir = layout.buildDirectory.dir('test-results/capybara')
+def capybaraTestRuntimeClasspath = files(capyRuntimeClasspath, sourceSets.main.runtimeClasspath, sourceSets.test.output.classesDirs)
+def directoryContainsFile = { directory, matcher = { true } ->
+    Path root = directory.asFile.toPath()
+    if (Files.notExists(root) || !Files.isDirectory(root)) {
+        return false
+    }
+
+    Deque<Path> directories = new ArrayDeque<>()
+    directories.push(root)
+    while (!directories.isEmpty()) {
+        DirectoryStream<Path> entries = Files.newDirectoryStream(directories.pop())
+        try {
+            for (Path entry : entries) {
+                if (Files.isDirectory(entry)) {
+                    directories.push(entry)
+                    continue
+                }
+                if (Files.isRegularFile(entry) &&
+                        matcher(root.relativize(entry).toString().replace(File.separatorChar, '/' as char))) {
+                    return true
+                }
+            }
+        } finally {
+            entries.close()
+        }
+    }
+
+    false
+}
+def inspectResourceDirectory = { directory ->
+    Path root = directory.asFile.toPath()
+    def state = [hasAnyFiles: false, hasNonJvmFiles: false]
+    if (Files.notExists(root) || !Files.isDirectory(root)) {
+        return state
+    }
+
+    Deque<Path> directories = new ArrayDeque<>()
+    directories.push(root)
+    while (!directories.isEmpty()) {
+        DirectoryStream<Path> entries = Files.newDirectoryStream(directories.pop())
+        try {
+            for (Path entry : entries) {
+                if (Files.isDirectory(entry)) {
+                    directories.push(entry)
+                    continue
+                }
+                if (!Files.isRegularFile(entry)) {
+                    continue
+                }
+                state.hasAnyFiles = true
+                def relativePath = root.relativize(entry).toString().replace(File.separatorChar, '/' as char)
+                if (relativePath != 'junit-platform.properties') {
+                    state.hasNonJvmFiles = true
+                    return state
+                }
+            }
+        }
+        finally {
+            entries.close()
+        }
+    }
+
+    state
+}
+def conventionalJvmSourceDirs = ['java', 'kotlin', 'kts', 'groovy']
+def hasJvmSources = { sourceRoot ->
+    conventionalJvmSourceDirs.any { directoryContainsFile(sourceRoot.dir(it)) }
+}
+def hasJvmMainSources = hasJvmSources(layout.projectDirectory.dir('src/main'))
+def hasMainResources = directoryContainsFile(layout.projectDirectory.dir('src/main/resources'))
+def hasJvmTestSources = hasJvmSources(layout.projectDirectory.dir('src/test'))
+def hasCapybaraTestSources = directoryContainsFile(capybaraTestSourceDir)
+def testResources = inspectResourceDirectory(layout.projectDirectory.dir('src/test/resources'))
+def hasAnyTestResources = testResources.hasAnyFiles
+def hasNonJvmTestResources = testResources.hasNonJvmFiles
+def requestedTaskNames = gradle.startParameter.taskNames
+def requestedTaskBasenames = requestedTaskNames.collect { taskName ->
+    def separator = taskName.lastIndexOf(':')
+    separator >= 0 ? taskName.substring(separator + 1) : taskName
+}.toSet()
+def capybaraTestLifecycleTasks = [
+        'build',
+        'buildNeeded',
+        'buildDependents',
+        'check',
+        'test',
+        'testClasses',
+        'compileTestJava',
+        'testCapybara'
+] as Set
+def singleJavaVerificationLifecycleTasks = [
+        'build',
+        'buildNeeded',
+        'buildDependents',
+        'check',
+        'test',
+        'testClasses',
+        'compileTestJava',
+        'testCapybara'
+] as Set
+def capybaraTestBuildRequested = requestedTaskBasenames.any { capybaraTestLifecycleTasks.contains(it) }
+def singleJavaVerificationBuild = !hasJvmMainSources &&
+        !hasMainResources &&
+        requestedTaskBasenames.any { singleJavaVerificationLifecycleTasks.contains(it) }
+
+tasks.register('linkCapybaraDirect', InProcessCapybaraCompileTask) {
+    group = 'build'
+    description = 'Compiles Capybara files from src/main/capybara and generates Java in one pass.'
+    dependsOn tasks.named('linkCapybaraLinkedOnly')
+
+    runtimeClasspath.from(capyRuntimeClasspath)
+    inputDir.set(capybaraMainSourceDir)
+    generatedOutputDir.set(capybaraGeneratedMainDir)
+    compileTests.set(false)
+    includeJavaLibResources.set(false)
+    compilerVersion.set(project.version.toString())
+}
+
+tasks.register('linkCapybaraLinkedOnly', InProcessCapybaraCompileTask) {
+    group = 'build'
+    description = 'Compiles Capybara files from src/main/capybara to linked JSON without generating Java.'
+
+    runtimeClasspath.from(capyRuntimeClasspath)
+    inputDir.set(capybaraMainSourceDir)
+    linkedOutputDir.set(capybaraLinkedMainDir)
+    compileTests.set(false)
+    includeJavaLibResources.set(false)
+    compilerVersion.set(project.version.toString())
+}
+
+tasks.register('prepareCapybaraForCheck', InProcessCapybaraCompileTask) {
+    group = 'verification'
+    description = 'Compiles main and test Capybara files for check/test builds in one pass.'
+
+    runtimeClasspath.from(capyRuntimeClasspath)
+    inputDir.set(capybaraMainSourceDir)
+    generatedOutputDir.set(capybaraGeneratedCheckDir)
+    if (hasCapybaraTestSources) {
+        testInputDir.set(capybaraTestSourceDir)
+        testGeneratedOutputDir.set(capybaraGeneratedCheckDir)
+    }
+    compileTests.set(false)
+    includeJavaLibResources.set(false)
+    compilerVersion.set(project.version.toString())
+    onlyIf { capybaraTestBuildRequested }
+}
+
+tasks.register('linkCapybara') {
+    group = 'build'
+    description = 'Compiles Capybara files from src/main/capybara and generates Java in one pass.'
+    dependsOn tasks.named('linkCapybaraDirect')
+}
+
+tasks.register('linkCapybaraLinked') {
+    group = 'build'
+    description = 'Compatibility task that provides linked main Capybara output.'
+    dependsOn tasks.named('linkCapybaraLinkedOnly')
+}
+
+tasks.register('compileCapybara') {
+    group = 'build'
+    description = 'Generates Java from main Capybara sources.'
+    dependsOn tasks.named('linkCapybaraDirect')
+}
+
+tasks.register('compileTestCapybaraDirect', InProcessCapybaraCompileTask) {
+    group = 'verification'
+    description = 'Compiles test Capybara files and generates Java without writing linked intermediates.'
+    dependsOn tasks.named('linkCapybaraLinkedOnly')
+
+    runtimeClasspath.from(capyRuntimeClasspath)
+    inputDir.set(capybaraTestSourceDir)
+    libraryProgramFiles.from(capybaraLinkedMainDir.map { it.file('program.json') })
+    generatedOutputDir.set(capybaraGeneratedTestDir)
+    compileTests.set(true)
+    includeJavaLibResources.set(false)
+    compilerVersion.set(project.version.toString())
+    onlyIf { hasCapybaraTestSources && !singleJavaVerificationBuild }
+}
+
+tasks.register('compileTestCapybara') {
+    group = 'verification'
+    description = 'Compiles test Capybara files and generates Java without writing linked intermediates.'
+    dependsOn tasks.named('compileTestCapybaraDirect')
+}
+
+tasks.register('testCapybara', InProcessCapybaraTestTask) {
+    group = 'verification'
+    description = 'Runs Capybara tests from compiled test classes without launching a separate JVM.'
+    dependsOn tasks.named('compileTestJava')
+
+    runtimeClasspath.from(
+            singleJavaVerificationBuild
+                    ? files(capyRuntimeClasspath, configurations.runtimeClasspath, sourceSets.test.output.classesDirs)
+                    : capybaraTestRuntimeClasspath
+    )
+    outputDir.set(capybaraTestResultsDir)
+    reportType.set('JUNIT')
+    logLevel.set(capybaraTestLogLevel)
+}
+
+sourceSets {
+    main {
+        java.srcDir capybaraGeneratedMainDir
+    }
+    test {
+        if (singleJavaVerificationBuild) {
+            java.srcDir capybaraGeneratedCheckDir
+            if (hasJvmMainSources) {
+                java.srcDir layout.projectDirectory.dir('src/main/java')
+            }
+            compileClasspath -= sourceSets.main.output
+            runtimeClasspath -= sourceSets.main.output
+        } else {
+            java.srcDir capybaraGeneratedTestDir
+        }
+    }
+}
+
+tasks.named('compileJava') {
+    enabled = !singleJavaVerificationBuild
+    if (singleJavaVerificationBuild && capybaraTestBuildRequested) {
+        dependsOn tasks.named('prepareCapybaraForCheck')
+    } else {
+        dependsOn tasks.named('linkCapybaraDirect')
+    }
+    if (!enabled) {
+        setDependsOn([])
+    }
+}
+
+tasks.named('compileTestJava') {
+    if (singleJavaVerificationBuild) {
+        setDependsOn(dependsOn.findAll { dependency ->
+            !(dependency instanceof TaskProvider && (dependency.name == 'classes' || dependency.name == 'compileJava' || dependency.name == 'processResources')) &&
+                    !(dependency instanceof Task && (dependency.name == 'classes' || dependency.name == 'compileJava' || dependency.name == 'processResources')) &&
+                    dependency != 'classes' &&
+                    dependency != 'compileJava' &&
+                    dependency != 'processResources'
+        })
+    }
+    if (singleJavaVerificationBuild && capybaraTestBuildRequested) {
+        dependsOn tasks.named('prepareCapybaraForCheck')
+    } else if (hasCapybaraTestSources) {
+        dependsOn tasks.named('compileTestCapybaraDirect')
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.compilerArgs.add('-proc:none')
+}
+
+tasks.named('processResources') {
+    enabled = hasMainResources
+}
+
+tasks.named('processTestResources') {
+    enabled = hasNonJvmTestResources || (hasJvmTestSources && hasAnyTestResources)
+}
+
+tasks.named('classes') {
+    enabled = !singleJavaVerificationBuild && (hasJvmMainSources || hasMainResources)
+    if (!enabled) {
+        setDependsOn([])
+    }
+}
+
+tasks.named('testClasses') {
+    enabled = hasJvmTestSources || hasNonJvmTestResources
+    if (singleJavaVerificationBuild) {
+        setDependsOn(dependsOn.findAll { dependency ->
+            !(dependency instanceof TaskProvider && dependency.name == 'classes') &&
+                    !(dependency instanceof Task && dependency.name == 'classes') &&
+                    dependency != 'classes'
+        })
+    }
+    if (!enabled) {
+        setDependsOn([])
+    }
+}
+
+tasks.matching { it.name == 'test' }.configureEach {
+    if (hasCapybaraTestSources) {
+        dependsOn tasks.named('testCapybara')
+    }
+    scanForTestClasses = false
+    include '**/*Test.class', '**/*Tests.class', '**/*IT.class', '**/*IntegrationTest.class'
+    exclude 'capy/**'
+    reports.html.required = false
+    reports.junitXml.required = true
+    enabled = hasJvmTestSources
+    systemProperty 'junit.jupiter.execution.parallel.enabled', 'true'
+    systemProperty 'junit.jupiter.execution.parallel.mode.default', 'concurrent'
+    systemProperty 'junit.jupiter.execution.parallel.mode.classes.default', 'concurrent'
+    systemProperty 'junit.jupiter.execution.parallel.config.strategy', 'dynamic'
+    if (!hasJvmTestSources) {
+        setDependsOn([])
+    }
+    if (it.hasProperty('failOnNoDiscoveredTests')) {
+        failOnNoDiscoveredTests = false
+    }
+}
+
+tasks.matching { it.name == 'check' }.configureEach {
+    if (!hasJvmTestSources) {
+        setDependsOn(dependsOn.findAll { dependency ->
+            !(dependency instanceof TaskProvider && dependency.name == 'test') &&
+                    !(dependency instanceof Task && dependency.name == 'test') &&
+                    dependency != 'test'
+        })
+    }
+    if (hasCapybaraTestSources && !hasJvmTestSources) {
+        dependsOn tasks.named('testCapybara')
+    }
+}
+
+tasks.named('testCapybara') {
+    enabled = hasCapybaraTestSources
+    if (!hasCapybaraTestSources) {
+        setDependsOn([])
+    }
+}

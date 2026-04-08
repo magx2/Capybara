@@ -1,0 +1,23 @@
+fun sum_down(x: int): int =
+    fun __sum_down(x: int, sum: int): int =
+        if x <= 0
+        then sum
+        else __sum_down(x - 1, sum + x)
+    __sum_down(x, 0)
+
+fun parity(x: int): bool =
+    fun __is_even(n: int): bool =
+        if n == 0
+        then true
+        else __is_odd(n - 1)
+    fun __is_odd(n: int): bool =
+        if n == 0
+        then false
+        else __is_even(n - 1)
+    __is_even(x)
+
+fun local_with_let(x: int): int =
+    fun __inc(y: int): int =
+        let z = y + 1
+        z
+    __inc(x)

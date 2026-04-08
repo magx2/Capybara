@@ -1,0 +1,30 @@
+from /capy/test/Assert import { * }
+from /capy/lang/Math import { * }
+from /capy/lang/Result import { * }
+from /capy/test/CapyTest import { * }
+
+fun tests(): TestFile =
+    let test_cases = [
+        (0, 1),
+        (1, 1),
+        (9, 1),
+        (10, 2),
+        (99, 2),
+        (100, 3),
+        (999, 3),
+        // max int value
+        (2147483647, 10),
+        // negative numbers should have the same number of digits as their positive counterparts
+        (-1, 1),
+        (-9, 1),
+        (-10, 2),
+        (-99, 2),
+        (-100, 3),
+        (-999, 3),
+        // min int value
+        (-2147483648, 10),]
+        | (number, expected) =>
+              test("digits(" + number + ") should return " + expected, _test_digits(number, expected))
+    test_file("/capy/lang/Math.cfun", test_cases)
+
+fun _test_digits(number: int, expected: int): Assert = assert_that(digits(number) == expected).is_equal_to(true)

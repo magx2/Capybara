@@ -1,0 +1,5 @@
+fun main(args: list[string]): /capy/lang/Program =
+    if args ? "ok"
+    then /capy/lang/Program.Success { results: args }
+    else /capy/lang/Program.Failed { exitCode: 2, errors: ["missing ok"] }
+

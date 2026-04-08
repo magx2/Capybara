@@ -1,0 +1,120 @@
+from /capy/lang/Result import { *}
+
+fun nested_pipe_in_match_branch(value: int): Result[int] =
+    Success { value }
+    | parsed => {
+        match parsed with
+        case int v when v > 0 -> {
+            Success { v + 1 }
+            | next => Success { next + 1 }
+        }
+        case _ -> Error { "invalid" }
+    }
+
+fun grouped_guarded_match_is_exhaustive(input: string): Result[string] =
+    data __Parse[T] { buffer: string, value: T }
+    fun __parse_tail(buffer: string): Result[__Parse[string]] =
+        Success { __Parse { buffer, "tail" } }
+    fun __parse_build(buffer: string): Result[__Parse[string]] =
+        Success { __Parse { buffer, "build" } }
+
+    let parse_patch: __Parse[string] = __Parse { input, "base" }
+    match parse_patch.buffer[0] with
+    case Some { ch } when ch == '-' -> {
+        __parse_tail(parse_patch.buffer[1:])
+        | parse_tail => Success { __Parse {
+            buffer: parse_tail.buffer,
+            value: "pre:" + parse_tail.value
+        }}
+        | parse => {
+            match parse.buffer[0] with
+            case None -> Success { parse.value }
+            case Some { ch } when ch == '+' -> {
+                __parse_build(parse.buffer[1:])
+                | parse_build => Success { "plus:" + parse.value + ":" + parse_build.value }
+            }
+            case Some { ch } -> Error { "bad:" + ch }
+        }
+    }
+    case Some { ch } when ch == '+' ->
+        __parse_build(parse_patch.buffer[1:])
+        | parse_build => Success { "plus:" + parse_build.value }
+    case Some { ch } -> Success { "other:" + ch }
+    case None -> Success { "none" }
+
+fun semver_style_mixed_case_pipe_bodies(input: string): Result[string] =
+    data __Parse[T] { buffer: string, value: T }
+    fun __parse_pre_release(buffer: string): Result[__Parse[string]] =
+        Success { __Parse { buffer, "rc1" } }
+    fun __parse_build(buffer: string): Result[__Parse[string]] =
+        Success { __Parse { buffer, "001" } }
+
+    let parse_patch: __Parse[string] = __Parse { input, "1.2.3" }
+    let raw_sem_ver = "1.2.3"
+    match parse_patch.buffer[0] with
+    case Some { next_char } when next_char == '-' -> {
+        __parse_pre_release(parse_patch.buffer[1:])
+        | parse_pre_release => Success { __Parse {
+            buffer: parse_pre_release.buffer,
+            value: raw_sem_ver + "-" + parse_pre_release.value
+        }}
+        | parse => {
+            match parse.buffer[0] with
+            case None -> Success { parse.value }
+            case Some { char } when char == '+' -> {
+                __parse_build(parse.buffer[1:])
+                | parse_build => Success { parse.value + "+" + parse_build.value }
+            }
+            case Some { char } -> Error { "bad:" + char }
+        }
+    }
+    case Some { next_char } when next_char == '+' ->
+        __parse_build(parse_patch.buffer[1:])
+        | parse_build => Success { raw_sem_ver + "+" + parse_build.value }
+    case Some { next_char } -> Error { "unexpected:" + next_char }
+    case None -> Success { raw_sem_ver }
+
+fun inner_ungrouped_pipe_in_match_inside_lambda(input: string): Result[string] =
+    data __Parse[T] { buffer: string, value: T }
+    fun __parse_pre_release(buffer: string): Result[__Parse[string]] =
+        Success { __Parse { buffer, "rc1" } }
+    fun __parse_build(buffer: string): Result[__Parse[string]] =
+        Success { __Parse { buffer, "001" } }
+
+    let parse_patch: __Parse[string] = __Parse { input, "1.2.3" }
+    let raw_sem_ver = "1.2.3"
+    match parse_patch.buffer[0] with
+    case Some { next_char } when next_char == '-' -> {
+        __parse_pre_release(parse_patch.buffer[1:])
+        | parse_pre_release => Success { __Parse {
+            buffer: parse_pre_release.buffer,
+            value: raw_sem_ver + "-" + parse_pre_release.value
+        }}
+        | parse => {
+            match parse.buffer[0] with
+            case None -> Success { parse.value }
+            case Some { char } when char == '+' ->
+                __parse_build(parse.buffer[1:])
+                | parse_build => Success { parse.value + "+" + parse_build.value }
+            case Some { char } -> Error { "bad:" + char }
+        }
+    }
+    case Some { next_char } when next_char == '+' -> {
+        __parse_build(parse_patch.buffer[1:])
+        | parse_build => Success { raw_sem_ver + "+" + parse_build.value }
+    }
+    case Some { next_char } -> Error { "unexpected:" + next_char }
+    case None -> Success { raw_sem_ver }
+
+fun nested_result_error_match_case(input: string): Result[int] =
+    match input[0] with
+    case None -> Error { "empty" }
+    case Some { head } ->
+        match head with
+        case 'x' -> Success { 1 }
+        case _ other -> {
+            let tail = input[1:]
+            match tail with
+            case "" -> Error { "bad:" + other + ":end" }
+            case _ -> Error { "bad:" + other + ":" + tail }
+        }
