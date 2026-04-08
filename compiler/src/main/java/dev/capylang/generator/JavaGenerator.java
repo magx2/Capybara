@@ -163,7 +163,7 @@ public final class JavaGenerator implements Generator {
                 .map(this::mapJavaEnum)
                 .forEach(code::append);
 
-        // static methods
+        // static members
         code.append('\n');
         javaClass.staticConsts().stream()
                 .map(javaConst -> mapJavaConst(javaConst, allowPrivateStaticMethods, false, javaClass.name().toString()))
@@ -172,7 +172,9 @@ public final class JavaGenerator implements Generator {
                 .stream()
                 .map(method -> mapJavaMethod(method, allowPrivateStaticMethods, javaClass.javaPackage().toString(), javaClass.name().toString()))
                 .forEach(code::append);
-        code.append('\n').append(unsupportedHelperMethod());
+        if (requiresUnsupportedHelper(code)) {
+            code.append('\n').append(unsupportedHelperMethod());
+        }
 
         // close object declaration
         code.append("}");
@@ -226,7 +228,9 @@ public final class JavaGenerator implements Generator {
         javaClass.staticMethods().stream()
                 .map(method -> mapJavaMethod(method, true, javaClass.javaPackage().toString(), javaClass.name().toString()))
                 .forEach(code::append);
-        code.append('\n').append(unsupportedHelperMethod());
+        if (requiresUnsupportedHelper(code)) {
+            code.append('\n').append(unsupportedHelperMethod());
+        }
 
         code.append("}\n");
         return code.toString();
@@ -686,6 +690,23 @@ public final class JavaGenerator implements Generator {
 
     private String mapFunctionParameter(JavaMethod.JavaFunctionParameter parameter) {
         return parameter.type() + " " + parameter.generatedName();
+    }
+
+    private boolean requiresUnsupportedHelper(StringBuilder code) {
+        var marker = "__capybaraUnsupported(\"";
+        var generatedCode = code.toString();
+        var index = generatedCode.indexOf(marker);
+        while (index >= 0) {
+            if (index == 0) {
+                return true;
+            }
+            var previousChar = generatedCode.charAt(index - 1);
+            if (previousChar != '\\' && previousChar != '"') {
+                return true;
+            }
+            index = generatedCode.indexOf(marker, index + 1);
+        }
+        return false;
     }
 
     private String unsupportedHelperMethod() {
