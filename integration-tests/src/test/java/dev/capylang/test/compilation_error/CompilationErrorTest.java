@@ -3,6 +3,7 @@ package dev.capylang.test.compilation_error;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.api.Test;
 import dev.capylang.compiler.ImportDeclaration;
 import dev.capylang.compiler.CapybaraCompiler;
 import dev.capylang.compiler.CompiledProgram;
@@ -16,6 +17,47 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertAll;
 
 public class CompilationErrorTest {
+    @Test
+    void shouldKeepOriginalLocalNamesInUserVisibleErrors() {
+        var errors = compileProgram("""
+                        fun parse_semver(version: string): Result[int] =
+                            data __Parse[T] { buffer: string, value: T }
+                            fun __parse_digit(buffer: string): Result[__Parse[int]] =
+                                Success { __Parse { buffer: buffer[1:], value: 1 } }
+                            fun __parse_digits(parse: __Parse[Option[int]]): Result[__Parse[int]] =
+                                match parse.buffer[0] with
+                                case None ->
+                                    match parse.value with
+                                    case Some { value } -> Success { __Parse { '', value } }
+                                    case None -> Error { 'Expected digit, but got end of version string!' }
+                                case Some { next_char } ->
+                                    let next_digit: Result[__Parse[int]] = __parse_digit(parse.buffer)
+                                    match next_digit with
+                                    case Error error ->
+                                        match parse.value with
+                                        case Some { value } -> Success { __Parse { parse.buffer[1:], value } }
+                                        case None -> error
+                                    case Success { next_digit_parse } ->
+                                        let new_parse: __Parse[Option[int]] = __Parse {
+                                            buffer: next_digit_parse.buffer,
+                                            value:
+                                                match parse.value with
+                                                case Some { value } -> Some { value * 10 + next_digit_parse.value }
+                                                case None -> Some { next_digit_parse.value }
+                                        }
+                                        __parse_digits(new_parse)
+                            __parse_digits(__Parse { buffer: version, value: None })|version_parse =>
+                                if version_parse.buffer==false.is_empty then Error { "Unexpected characters after patch version: `"+version_parse.buffer+"`!" } else Success { version_parse.value }
+                        """,
+                "local_names_in_errors");
+
+        assertThat(errors).isNotEmpty();
+        assertThat(errors.stream().map(Result.Error.SingleError::message))
+                .allMatch(message -> !message.contains("__parse_semver__local_fun_"))
+                .allMatch(message -> !message.contains("__parse_semver__local_type_"))
+                .anyMatch(message -> message.contains("fun __parse_digits(parse: __Parse[Option[int]]): Result[__Parse[int]] ="));
+    }
+
     @ParameterizedTest(name = "{index}: should fail when compiling `{0}.cfun`")
     @MethodSource
     void compilationError(
@@ -943,6 +985,22 @@ public class CompilationErrorTest {
                                  --> /foo/boo/function_private_type_escapes_signature.cfun:1:26
                                 fun foo_me(name: string): __Name = ...
                                                           ^ Private type `__Name` cannot be used in function signature
+                                """
+                ),
+                Arguments.of(
+                        "local_function_error_restores_private_names",
+                        """
+                                fun parse_semver(version: string): int =
+                                    data __Parse[T] { value: T }
+                                    fun __parse_digits(parse: __Parse[Option[int]]): __Parse[int] = parse.value
+                                    0
+                                """,
+                        new Position(3, "    fun __parse_digits(parse: __Parse[Option[int]]): __Parse[int] = "),
+                        """
+                                error: mismatched types
+                                 --> /foo/boo/local_function_error_restores_private_names.cfun:%d:%d
+                                fun __parse_digits(parse: __Parse[Option[int]]): __Parse[int] = parse.value
+                                %3$s^ expected `__Parse[int]`, found `Option[int]`
                                 """
                 )
         );

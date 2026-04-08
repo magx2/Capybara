@@ -1118,7 +1118,7 @@ public class CapybaraCompiler {
         var functionPreview = functionLine == line
                 ? formatFunctionHeaderAndExpression(function, formatExpressionPreviewWithSpaces(function.expression()))
                 : formatFunctionPreviewUpToLine(function, line);
-        var pointer = " ".repeat(Math.max(column, 0)) + "^ " + error.message();
+        var pointer = " ".repeat(Math.max(column, 0)) + "^ " + normalizeUserVisibleNames(error.message());
         var message = "error: mismatched types\n"
                       + " --> " + file + ":" + line + ":" + column + "\n"
                       + functionPreview + "\n"
@@ -1141,7 +1141,7 @@ public class CapybaraCompiler {
         var functionPreview = functionLine == line
                 ? formatFunctionHeaderAndExpression(function, formatExpressionPreviewWithSpaces(function.expression()))
                 : formatFunctionPreviewUpToLine(function, line);
-        var pointer = " ".repeat(Math.max(column, 0)) + "^ " + error.message();
+        var pointer = " ".repeat(Math.max(column, 0)) + "^ " + normalizeUserVisibleNames(error.message());
         var message = "error: mismatched types\n"
                       + " --> " + file + ":" + line + ":" + column + "\n"
                       + functionPreview + "\n"
@@ -1253,9 +1253,9 @@ public class CapybaraCompiler {
         if (function.expression() instanceof LetExpression && expressionPosition.line() != position.line()) {
             return formatMultilineFunctionPreview(function, declaredReturnType);
         }
-        return "fun " + function.name()
+        return "fun " + restorePrivateFunctionNameForDisplay(function.name())
                + "(" + function.parameters().stream()
-                       .map(parameter -> parameter.name() + ": " + formatParserType(parameter.type()))
+                       .map(parameter -> parameter.name() + ": " + formatParserTypeInHeader(parameter.type()))
                        .collect(java.util.stream.Collectors.joining(", "))
                + "): " + formatLinkedType(declaredReturnType)
                + " = " + formatExpressionPreview(function.expression());
@@ -1272,7 +1272,7 @@ public class CapybaraCompiler {
                 .orElse(function.parameters());
         var methodHeaderName = methodDeclaration
                 .map(this::formatMethodDeclarationName)
-                .orElse(function.name());
+                .orElse(restorePrivateFunctionNameForDisplay(function.name()));
         var header = new StringBuilder("fun ")
                 .append(methodHeaderName)
                 .append("(")
@@ -1350,7 +1350,7 @@ public class CapybaraCompiler {
         var ownerWithTypeParameters = function.parameters().stream()
                 .findFirst()
                 .map(Parameter::type)
-                .map(this::formatParserType)
+                .map(this::formatParserTypeInHeader)
                 .orElse(ownerFromName);
         return Optional.of(new MethodDeclarationInfo(ownerWithTypeParameters, methodName));
     }
@@ -1360,7 +1360,7 @@ public class CapybaraCompiler {
             case FunctionType functionType -> formatParserTypeInHeader(functionType.argumentType())
                                               + " => "
                                               + formatParserTypeInHeader(functionType.returnType());
-            default -> formatParserType(type);
+            default -> formatParserType(restorePrivateTypeNameForDisplay(type));
         };
     }
 
@@ -1377,10 +1377,10 @@ public class CapybaraCompiler {
     private String formatMultilineFunctionPreview(Function function, CompiledType declaredReturnType) {
         var builder = new StringBuilder();
         builder.append("  fun ")
-                .append(function.name())
+                .append(restorePrivateFunctionNameForDisplay(function.name()))
                 .append("(")
                 .append(function.parameters().stream()
-                        .map(parameter -> parameter.name() + ": " + formatParserType(parameter.type()))
+                        .map(parameter -> parameter.name() + ": " + formatParserTypeInHeader(parameter.type()))
                         .collect(java.util.stream.Collectors.joining(", ")))
                 .append("): ")
                 .append(formatLinkedType(declaredReturnType))
@@ -1578,7 +1578,7 @@ public class CapybaraCompiler {
                     .collect(java.util.stream.Collectors.joining(", ")) + "]";
             case FunctionType functionType ->
                     formatParserType(functionType.argumentType()) + "=>" + formatParserType(functionType.returnType());
-            case DataType dataType -> dataType.name();
+            case DataType dataType -> restorePrivateTypeNameForDisplay(dataType.name());
         };
     }
 
@@ -1591,7 +1591,7 @@ public class CapybaraCompiler {
             case DoubleValue doubleValue -> doubleValue.doubleValue();
             case ByteValue byteValue -> byteValue.byteValue();
             case BooleanValue booleanValue -> String.valueOf(booleanValue.value());
-            case Value value -> value.name();
+            case Value value -> restorePrivateFunctionNameForDisplay(value.name());
             case FieldAccess fieldAccess -> formatExpressionPreview(fieldAccess.source()) + "." + fieldAccess.field();
             case IndexExpression indexExpression -> formatExpressionPreview(indexExpression.source())
                                                     + "[" + formatExpressionPreview(indexExpression.index()) + "]";
@@ -1600,7 +1600,7 @@ public class CapybaraCompiler {
                                                   + "(" + functionInvoke.arguments().stream()
                                                           .map(this::formatExpressionPreview)
                                                           .collect(java.util.stream.Collectors.joining(", ")) + ")";
-            case FunctionReference functionReference -> ":" + functionReference.name();
+            case FunctionReference functionReference -> ":" + restorePrivateFunctionNameForDisplay(functionReference.name());
             case NewData newData -> formatNewDataPreview(newData);
             case WithExpression withExpression -> formatWithPreview(withExpression);
             case NewListExpression newListExpression -> "["
@@ -1663,7 +1663,7 @@ public class CapybaraCompiler {
 
     private String formatFunctionCallPreview(FunctionCall functionCall) {
         var modulePrefix = functionCall.moduleName().map(moduleName -> moduleName + ".").orElse("");
-        return modulePrefix + functionCall.name()
+        return modulePrefix + restorePrivateFunctionNameForDisplay(functionCall.name())
                + "(" + functionCall.arguments().stream()
                        .map(this::formatExpressionPreview)
                        .collect(java.util.stream.Collectors.joining(", ")) + ")";
@@ -1714,21 +1714,21 @@ public class CapybaraCompiler {
             return "dict[" + normalizeReportedTypeName(inner) + "]";
         }
         if (typeName.startsWith("CompiledGenericTypeParameter[name=") && typeName.endsWith("]")) {
-            return typeName.substring("CompiledGenericTypeParameter[name=".length(), typeName.length() - 1);
+            return normalizeUserVisibleNames(typeName.substring("CompiledGenericTypeParameter[name=".length(), typeName.length() - 1));
         }
         if (typeName.startsWith("CompiledDataType[name=")) {
             var end = typeName.indexOf(',');
             if (end > "CompiledDataType[name=".length()) {
-                return typeName.substring("CompiledDataType[name=".length(), end);
+                return restorePrivateTypeNameForDisplay(typeName.substring("CompiledDataType[name=".length(), end));
             }
         }
         if (typeName.startsWith("CompiledDataParentType[name=")) {
             var end = typeName.indexOf(',');
             if (end > "CompiledDataParentType[name=".length()) {
-                return typeName.substring("CompiledDataParentType[name=".length(), end);
+                return restorePrivateTypeNameForDisplay(typeName.substring("CompiledDataParentType[name=".length(), end));
             }
         }
-        return switch (typeName) {
+        return restorePrivateTypeNameForDisplay(switch (typeName) {
             case "BOOL" -> "bool";
             case "BYTE" -> "byte";
             case "INT" -> "int";
@@ -1739,7 +1739,7 @@ public class CapybaraCompiler {
             case "ANY" -> "any";
             case "NOTHING" -> "nothing";
             default -> typeName;
-        };
+        });
     }
 
     private String formatLinkedType(CompiledType type) {
@@ -1756,12 +1756,16 @@ public class CapybaraCompiler {
             case CompiledFunctionType linkedFunctionType ->
                     formatLinkedType(linkedFunctionType.argumentType()) + "=>" + formatLinkedType(linkedFunctionType.returnType());
             case CompiledDataType linkedDataType -> linkedDataType.typeParameters().isEmpty()
-                    ? linkedDataType.name()
-                    : linkedDataType.name() + "[" + String.join(", ", linkedDataType.typeParameters()) + "]";
+                    ? restorePrivateTypeNameForDisplay(linkedDataType.name())
+                    : restorePrivateTypeNameForDisplay(linkedDataType.name()) + "[" + linkedDataType.typeParameters().stream()
+                    .map(this::restorePrivateTypeNameForDisplay)
+                    .collect(java.util.stream.Collectors.joining(", ")) + "]";
             case CompiledDataParentType linkedDataParentType -> linkedDataParentType.typeParameters().isEmpty()
-                    ? linkedDataParentType.name()
-                    : linkedDataParentType.name() + "[" + String.join(", ", linkedDataParentType.typeParameters()) + "]";
-            case CompiledGenericTypeParameter linkedGenericTypeParameter -> linkedGenericTypeParameter.name();
+                    ? restorePrivateTypeNameForDisplay(linkedDataParentType.name())
+                    : restorePrivateTypeNameForDisplay(linkedDataParentType.name()) + "[" + linkedDataParentType.typeParameters().stream()
+                    .map(this::restorePrivateTypeNameForDisplay)
+                    .collect(java.util.stream.Collectors.joining(", ")) + "]";
+            case CompiledGenericTypeParameter linkedGenericTypeParameter -> restorePrivateTypeNameForDisplay(linkedGenericTypeParameter.name());
         };
     }
 
@@ -2421,9 +2425,9 @@ public class CapybaraCompiler {
     private String normalizeSignatureTypeError(String message) {
         if (message.startsWith("Data type \"") && message.endsWith("\" not found")) {
             var typeName = message.substring("Data type \"".length(), message.length() - "\" not found".length());
-            return "Data type `" + typeName + "` not found";
+            return "Data type `" + restorePrivateTypeNameForDisplay(typeName) + "` not found";
         }
-        return message;
+        return normalizeUserVisibleNames(message);
     }
 
     private Optional<Result.Error<CompiledFunction>> privateTypeEscapingFunctionSignatureError(
@@ -2552,25 +2556,92 @@ public class CapybaraCompiler {
     }
 
     private String restorePrivateTypeNameForDisplay(String typeName) {
-        var genericStart = typeName.indexOf('[');
-        if (genericStart > 0 && typeName.endsWith("]")) {
-            var base = typeName.substring(0, genericStart);
-            var suffix = typeName.substring(genericStart);
-            return toUserPrivateTypeName(base) + suffix;
-        }
-        return toUserPrivateTypeName(typeName);
+        return replacePrivateLocalNamesInText(typeName, "__local_type_");
     }
 
     private String toUserPrivateTypeName(String typeName) {
         var marker = "__local_type_";
-        var idx = typeName.indexOf(marker);
-        if (idx < 0) {
-            return typeName;
+        return toUserPrivateLocalName(typeName, marker);
+    }
+
+    private String restorePrivateFunctionNameForDisplay(String functionName) {
+        var restoredLocalFunction = toUserPrivateLocalName(functionName, "__local_fun_");
+        return toUserPrivateLocalName(restoredLocalFunction, "__local_const_");
+    }
+
+    private String normalizeUserVisibleNames(String message) {
+        var expectedFoundMatcher = java.util.regex.Pattern.compile("^Expected `([^`]+)`, but got `([^`]+)`$").matcher(message);
+        if (expectedFoundMatcher.matches()) {
+            var expected = normalizeReportedTypeName(expectedFoundMatcher.group(1));
+            var got = normalizeReportedTypeName(expectedFoundMatcher.group(2));
+            message = "Expected `" + expected + "`, but got `" + got + "`";
         }
-        var suffix = typeName.substring(idx + marker.length());
+        var restoredLocalFunctions = replacePrivateLocalNamesInText(message, "__local_fun_");
+        var restoredLocalConsts = replacePrivateLocalNamesInText(restoredLocalFunctions, "__local_const_");
+        return replacePrivateLocalNamesInText(restoredLocalConsts, "__local_type_");
+    }
+
+    private String replacePrivateLocalNamesInText(String text, String marker) {
+        var normalized = new StringBuilder(text.length());
+        var cursor = 0;
+        while (cursor < text.length()) {
+            var markerIndex = text.indexOf(marker, cursor);
+            if (markerIndex < 0) {
+                normalized.append(text, cursor, text.length());
+                break;
+            }
+            var qualifiedNameStart = findQualifiedLocalNameStart(text, markerIndex);
+            if (qualifiedNameStart < cursor) {
+                normalized.append(text, cursor, markerIndex + marker.length());
+                cursor = markerIndex + marker.length();
+                continue;
+            }
+            var localSuffixStart = markerIndex + marker.length();
+            var localSuffixEnd = localSuffixStart;
+            while (localSuffixEnd < text.length() && isLocalNameChar(text.charAt(localSuffixEnd))) {
+                localSuffixEnd++;
+            }
+            var localSuffix = text.substring(localSuffixStart, localSuffixEnd);
+            var underscoreIndex = localSuffix.indexOf('_');
+            if (underscoreIndex < 0 || underscoreIndex + 1 >= localSuffix.length()) {
+                normalized.append(text, cursor, localSuffixEnd);
+                cursor = localSuffixEnd;
+                continue;
+            }
+            normalized.append(text, cursor, qualifiedNameStart);
+            normalized.append("__").append(localSuffix.substring(underscoreIndex + 1));
+            cursor = localSuffixEnd;
+        }
+        return normalized.toString();
+    }
+
+    private int findQualifiedLocalNameStart(String text, int markerIndex) {
+        var start = markerIndex;
+        while (start > 0 && isLocalNameChar(text.charAt(start - 1))) {
+            start--;
+        }
+        if (start + 1 >= text.length() || text.charAt(start) != '_' || text.charAt(start + 1) != '_') {
+            return -1;
+        }
+        return start;
+    }
+
+    private boolean isLocalNameChar(char c) {
+        return Character.isLetterOrDigit(c) || c == '_';
+    }
+
+    private String toUserPrivateLocalName(String name, String marker) {
+        var idx = name.indexOf(marker);
+        if (idx < 0) {
+            return name;
+        }
+        if (findQualifiedLocalNameStart(name, idx) != 0) {
+            return name;
+        }
+        var suffix = name.substring(idx + marker.length());
         var underscoreIdx = suffix.indexOf('_');
         if (underscoreIdx < 0 || underscoreIdx + 1 >= suffix.length()) {
-            return typeName;
+            return name;
         }
         return "__" + suffix.substring(underscoreIdx + 1);
     }
@@ -2593,7 +2664,7 @@ public class CapybaraCompiler {
 
     private String formatFunctionHeaderWithRestoredPrivateTypes(Function function) {
         var header = new StringBuilder("fun ")
-                .append(function.name())
+                .append(restorePrivateFunctionNameForDisplay(function.name()))
                 .append("(")
                 .append(function.parameters().stream()
                         .map(parameter -> parameter.name() + ": " + formatParserTypeForPosition(parameter.type()))
@@ -3706,18 +3777,6 @@ public class CapybaraCompiler {
                 .toList();
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
