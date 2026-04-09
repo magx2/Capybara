@@ -2688,9 +2688,24 @@ public class CapybaraExpressionCompiler {
             if (coerceArgument(new CompiledVariable("__specificity__", candidateParam), currentBestParam) == null) {
                 return false;
             }
-            strictlyMoreSpecific = true;
+            var candidateIsBroad = isBroadSpecificityType(candidateParam);
+            var currentBestIsBroad = isBroadSpecificityType(currentBestParam);
+            if (candidateIsBroad && !currentBestIsBroad) {
+                return false;
+            }
+            if (!candidateIsBroad && currentBestIsBroad) {
+                strictlyMoreSpecific = true;
+                continue;
+            }
+            if (!candidateIsBroad && !currentBestIsBroad) {
+                strictlyMoreSpecific = true;
+            }
         }
         return strictlyMoreSpecific;
+    }
+
+    private boolean isBroadSpecificityType(CompiledType type) {
+        return !isResolvedTypeForInference(type);
     }
 
     private Set<String> methodOwnerCandidates(CompiledType receiverType) {
