@@ -59,6 +59,11 @@ class ExtensionTest {
     }
 
     @Test
+    void overloadPrefersParentOverAnyWhenCoercionsTie() {
+        assertThat(Extension.overloadAnyPrefersParent(new Extension.Point3D(3.0f, 4.0f, 5.0f))).isEqualTo("point");
+    }
+
+    @Test
     void createsMultiExtendedDataByNamedFields() {
         var result = Extension.newLabeledPoint(1.0f, 2.0f, "origin");
 

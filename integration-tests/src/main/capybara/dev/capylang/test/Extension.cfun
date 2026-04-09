@@ -37,3 +37,9 @@ fun weighted_labeled_point_score(point: WeightedLabeledPoint3D): float =
 fun weighted_labeled_point_label(point: WeightedLabeledPoint3D): string = point.label + ":" + point.tag
 
 fun overload_prefers_most_concrete(point: WeightedLabeledPoint3D): float = length(point)
+
+fun overload_any_vs_parent(point: Point): string = "point"
+
+fun overload_any_vs_parent(value: any): string = "any"
+
+fun overload_any_prefers_parent(point: Point3D): string = overload_any_vs_parent(point)
