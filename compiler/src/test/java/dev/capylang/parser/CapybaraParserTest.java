@@ -143,6 +143,39 @@ class CapybaraParserTest {
     }
 
     @Test
+    @DisplayName("should parse data extension from multiple parent data declarations")
+    void parseDataExtensionFromMultipleParents() {
+        var module = parseSuccess(new RawModule("Test", "/parser", """
+                data Foo { a: int, b: int }
+                data Boo { b: int, c: int }
+                data Bar { d: int, ...Foo, ...Boo }
+                """));
+
+        var data = findDefinition(DataDeclaration.class, "Bar", module.functional());
+        assertThat(data.fields()).extracting(DataDeclaration.DataField::name).containsExactly("d");
+        assertThat(data.extendsTypes()).containsExactly("Foo", "Boo");
+    }
+
+    @Test
+    @DisplayName("should reject data extension spread when it is not at the end")
+    void rejectDataExtensionSpreadNotAtTheEnd() {
+        var result = new CapybaraParser().parseModule(new RawModule("Test", "/parser", """
+                data Foo { a: int }
+                data Bar { ...Foo, b: int }
+                """));
+
+        assertThat(result).isInstanceOf(Result.Error.class);
+        assertThat(((Result.Error<dev.capylang.compiler.parser.Module>) result).errors())
+                .singleElement()
+                .satisfies(error -> {
+                    assertThat(error.file()).isEqualTo("/parser/Test.cfun");
+                    assertThat(error.line()).isEqualTo(2);
+                    assertThat(error.column()).isEqualTo(19);
+                    assertThat(error.message()).contains("Spread data extension `...Type` must be declared at the end of data fields");
+                });
+    }
+
+    @Test
     @DisplayName("should parse const declaration as zero-arg function")
     void parseConstDeclaration() {
         var module = parseSuccess(new RawModule("Test", "/parser", "const E: double = 2."));
@@ -703,7 +736,6 @@ class CapybaraParserTest {
         assertThat(outerMatch.cases().getFirst().expression()).isInstanceOf(InfixExpression.class);
     }
 }
-
 
 
 

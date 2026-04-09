@@ -522,6 +522,16 @@ public class CompilationErrorTest {
     static Stream<Arguments> simpleCompilationError() {
         return Stream.of(
                 Arguments.of(
+                        "data_extension_conflicting_inherited_field_types",
+                        """
+                                data Foo { a: int, b: int }
+                                data Boo { b: string, c: int }
+                                data Bar { d: int, ...Foo, ...Boo }
+                                """,
+                        new Position(3, 0),
+                        "Conflicting inherited field `b` for data `Bar`: `Foo.b` has type `INT` and `Boo.b` has type `STRING`"
+                ),
+                Arguments.of(
                         "parser_syntax_error_missing_brace_in_then_branch",
                         """
                                 type Seq[T] = Cons[T] | End
@@ -1253,8 +1263,6 @@ public class CompilationErrorTest {
         return out;
     }
 }
-
-
 
 
 
