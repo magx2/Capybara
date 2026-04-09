@@ -452,7 +452,7 @@ public class CapybaraExpressionCompiler {
                 deepestError = preferDeeperError(deepestError, unsafeCollectionError);
                 continue;
             }
-            if (best == null || resolved.coercions() < best.coercions()) {
+            if (isBetterResolvedCall(candidate, resolved.coercions(), best)) {
                 best = new ResolvedFunctionCall(candidate, resolved.arguments(), resolved.coercions());
             }
         }
@@ -591,7 +591,7 @@ public class CapybaraExpressionCompiler {
                 deepestError = preferDeeperError(deepestError, unsafeCollectionError);
                 continue;
             }
-            if (best == null || resolved.coercions() < best.coercions()) {
+            if (isBetterResolvedCall(candidate, resolved.coercions(), best)) {
                 best = new ResolvedFunctionCall(candidate, resolved.arguments(), resolved.coercions());
             }
         }
@@ -789,7 +789,7 @@ public class CapybaraExpressionCompiler {
                 continue;
             }
             var resolved = resolvedValue.value();
-            if (best == null || resolved.coercions() < best.coercions()) {
+            if (isBetterResolvedCall(candidate, resolved.coercions(), best)) {
                 best = new ResolvedFunctionCall(candidate, resolved.arguments(), resolved.coercions());
             }
         }
@@ -1686,13 +1686,17 @@ public class CapybaraExpressionCompiler {
         }
 
         ResolvedFunctionReference best = null;
+        FunctionSignature bestCandidate = null;
         for (var candidate : candidates) {
             var resolved = resolveFunctionReferenceCandidate(candidate, expectedShape);
             if (resolved == null) {
                 continue;
             }
-            if (best == null || resolved.coercions() < best.coercions()) {
+            if (best == null
+                || resolved.coercions() < best.coercions()
+                || (resolved.coercions() == best.coercions() && bestCandidate != null && isSignatureMoreSpecific(candidate, bestCandidate))) {
                 best = resolved;
+                bestCandidate = candidate;
             }
         }
         if (best == null) {
@@ -2492,7 +2496,9 @@ public class CapybaraExpressionCompiler {
             }
             var arguments = List.of(maybeReceiver.expression(), maybeArgument.expression());
             var coercions = maybeReceiver.coercions() + maybeArgument.coercions();
-            if (best == null || coercions < best.coercions()) {
+            if (best == null
+                || coercions < best.coercions()
+                || (coercions == best.coercions() && isSignatureMoreSpecific(candidate, best.signature()))) {
                 best = new ResolvedFunctionCall(candidate, arguments, coercions);
             }
         }
@@ -2547,7 +2553,9 @@ public class CapybaraExpressionCompiler {
             var coercedArgument = ((Result.Success<CoercedArgument>) maybeArgument).value();
             var arguments = List.of(maybeReceiver.expression(), coercedArgument.expression());
             var coercions = maybeReceiver.coercions() + coercedArgument.coercions();
-            if (best == null || coercions < best.coercions()) {
+            if (best == null
+                || coercions < best.coercions()
+                || (coercions == best.coercions() && isSignatureMoreSpecific(candidate, best.signature()))) {
                 best = new ResolvedFunctionCall(candidate, arguments, coercions);
             }
         }
@@ -2653,6 +2661,36 @@ public class CapybaraExpressionCompiler {
             return candidate.column() > current.column() ? candidate : current;
         }
         return candidate.message().length() >= current.message().length() ? candidate : current;
+    }
+
+    private boolean isBetterResolvedCall(FunctionSignature candidate, int coercions, ResolvedFunctionCall currentBest) {
+        if (currentBest == null) {
+            return true;
+        }
+        if (coercions < currentBest.coercions()) {
+            return true;
+        }
+        return coercions == currentBest.coercions()
+               && isSignatureMoreSpecific(candidate, currentBest.signature());
+    }
+
+    private boolean isSignatureMoreSpecific(FunctionSignature candidate, FunctionSignature currentBest) {
+        if (candidate.parameterTypes().size() != currentBest.parameterTypes().size()) {
+            return false;
+        }
+        var strictlyMoreSpecific = false;
+        for (var i = 0; i < candidate.parameterTypes().size(); i++) {
+            var candidateParam = candidate.parameterTypes().get(i);
+            var currentBestParam = currentBest.parameterTypes().get(i);
+            if (candidateParam.equals(currentBestParam)) {
+                continue;
+            }
+            if (coerceArgument(new CompiledVariable("__specificity__", candidateParam), currentBestParam) == null) {
+                return false;
+            }
+            strictlyMoreSpecific = true;
+        }
+        return strictlyMoreSpecific;
     }
 
     private Set<String> methodOwnerCandidates(CompiledType receiverType) {
@@ -2902,7 +2940,7 @@ public class CapybaraExpressionCompiler {
                     List.of(coerced.expression()),
                     coerced.coercions()
             );
-            if (best == null || resolved.coercions() < best.coercions()) {
+            if (isBetterResolvedCall(candidate, resolved.coercions(), best)) {
                 best = resolved;
             }
         }

@@ -2228,14 +2228,33 @@ public class CapybaraParser {
         }
         var fields = new java.util.ArrayList<DataDeclaration.DataField>();
         var extendsTypes = new java.util.ArrayList<String>();
+        var seenSpread = false;
         for (var declaration : context.fieldDeclaration()) {
             if (declaration.SPREAD() != null) {
+                seenSpread = true;
                 extendsTypes.add(declaration.TYPE().getText());
             } else {
+                if (seenSpread) {
+                    reportSpreadTypeMustBeAtEnd(declaration.getStart());
+                }
                 fields.add(fieldDeclaration(declaration));
             }
         }
         return new DataFieldDeclarations(List.copyOf(fields), List.copyOf(extendsTypes));
+    }
+
+    private void reportSpreadTypeMustBeAtEnd(Token token) {
+        if (token == null || currentModule == null || currentSource == null) {
+            return;
+        }
+        parserErrors.add(
+                formatParserError(
+                        currentModule,
+                        currentSource,
+                        "line %d:%d: Spread data extension `...Type` must be declared at the end of data fields"
+                                .formatted(token.getLine(), token.getCharPositionInLine())
+                )
+        );
     }
 
     private NewDataFieldAssignments fieldAssignments(FunctionalParser.FieldAssignmentListContext context) {
@@ -3092,7 +3111,6 @@ public class CapybaraParser {
     }
 
 }
-
 
 
 
