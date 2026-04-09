@@ -243,6 +243,15 @@ public class CapybaraCompiler {
     private record ModuleRef(String name, String path) {
     }
 
+    private record FieldOrigin(String ownerName, CompiledType type) {
+    }
+
+    private record LinkedDataFields(
+            List<List<CompiledDataType.CompiledField>> inherited,
+            List<CompiledDataType.CompiledField> own
+    ) {
+    }
+
     private ModuleLinkIndex buildModuleLinkIndex(
             List<ModuleRef> allModuleRefs,
             Map<String, SortedMap<String, GenericDataType>> linkedTypesByModule
@@ -3338,28 +3347,69 @@ public class CapybaraCompiler {
                         normalizedFile))
                 .collect(new ResultCollectionCollector<>());
         var linked = Result.join(
-                (List<List<CompiledDataType.CompiledField>> inherited, List<CompiledDataType.CompiledField> own) -> {
-                    var fields = inherited.stream()
-                            .flatMap(Collection::stream)
-                            .collect(java.util.stream.Collectors.toCollection(ArrayList::new));
-                    fields.addAll(own);
-                    return new CompiledDataType(
-                            dataDeclaration.name(),
-                            List.copyOf(fields),
-                            dataDeclaration.typeParameters(),
-                            dataDeclaration.extendsTypes(),
-                            dataDeclaration.comments(),
-                            dataDeclaration.visibility(),
-                            false
-                    );
-                },
+                LinkedDataFields::new,
                 inheritedFields,
                 ownFields
-        );
+        ).flatMap(linkedFields -> {
+            var fields = new ArrayList<CompiledDataType.CompiledField>();
+            var fieldOrigins = new LinkedHashMap<String, FieldOrigin>();
+            for (var i = 0; i < dataDeclaration.extendsTypes().size(); i++) {
+                var parentName = dataDeclaration.extendsTypes().get(i);
+                var parentFields = linkedFields.inherited().get(i);
+                var duplicateError = mergeDataFields(fields, fieldOrigins, parentFields, parentName, dataDeclaration.name());
+                if (duplicateError != null) {
+                    return Result.error(duplicateError);
+                }
+            }
+            var ownDuplicateError = mergeDataFields(fields, fieldOrigins, linkedFields.own(), dataDeclaration.name(), dataDeclaration.name());
+            if (ownDuplicateError != null) {
+                return Result.error(ownDuplicateError);
+            }
+            return Result.success(new CompiledDataType(
+                    dataDeclaration.name(),
+                    List.copyOf(fields),
+                    dataDeclaration.typeParameters(),
+                    dataDeclaration.extendsTypes(),
+                    dataDeclaration.comments(),
+                    dataDeclaration.visibility(),
+                    false
+            ));
+        });
         visiting.remove(dataDeclaration.name());
         var withPosition = withPosition(linked, dataDeclaration.position(), normalizedFile);
         cache.put(dataDeclaration.name(), withPosition);
         return withPosition;
+    }
+
+    private String mergeDataFields(
+            List<CompiledDataType.CompiledField> mergedFields,
+            Map<String, FieldOrigin> fieldOrigins,
+            List<CompiledDataType.CompiledField> candidateFields,
+            String ownerName,
+            String dataName
+    ) {
+        for (var field : candidateFields) {
+            var existing = fieldOrigins.get(field.name());
+            if (existing == null) {
+                mergedFields.add(field);
+                fieldOrigins.put(field.name(), new FieldOrigin(ownerName, field.type()));
+                continue;
+            }
+            if (!existing.type().equals(field.type())) {
+                return "Conflicting inherited field `%s` for data `%s`: `%s.%s` has type `%s` and `%s.%s` has type `%s`"
+                        .formatted(
+                                field.name(),
+                                dataName,
+                                existing.ownerName(),
+                                field.name(),
+                                existing.type(),
+                                ownerName,
+                                field.name(),
+                                field.type()
+                        );
+            }
+        }
+        return null;
     }
 
     private Result<CompiledDataType> linkSingleDeclaration(SingleDeclaration singleDeclaration) {
@@ -3777,11 +3827,6 @@ public class CapybaraCompiler {
                 .toList();
     }
 }
-
-
-
-
-
 
 
 
