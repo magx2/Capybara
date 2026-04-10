@@ -130,7 +130,11 @@
       "patterns": [
         {
           "name": "keyword.control.capybara",
-          "match": "\\b(fun|type|enum|data|single|const|local|match|with|case|when|if|then|else|let|from|import|except)\\b"
+          "match": "\\b(fun|type|enum|data|single|const|local|match|with|constructor|case|when|if|then|else|let|from|import|except)\\b"
+        },
+        {
+          "name": "keyword.operator.constructor.capybara",
+          "match": "(?<=\\bconstructor\\s*\\{[^\\n]*)\\*(?=\\s*\\{)"
         },
         {
           "name": "keyword.operator.word.capybara",
@@ -360,7 +364,6 @@
     }
   }
 }
-
 
 
 

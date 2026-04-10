@@ -462,12 +462,20 @@ public class CapybaraParser {
                 dataFields.fields(),
                 dataFields.extendsTypes(),
                 genericTypeParameters(declaration),
+                constructorExpression(context.constructorClause()),
                 context.docComment().stream()
                         .map(comment -> stripDocComment(comment.getText()))
                         .toList(),
                 context.VISIBILITY() != null ? dev.capylang.compiler.Visibility.LOCAL : null,
                 position(context)
         );
+    }
+
+    private Optional<Expression> constructorExpression(FunctionalParser.ConstructorClauseContext context) {
+        if (context == null) {
+            return Optional.empty();
+        }
+        return Optional.of(expression(context.expression()));
     }
 
     private EnumDeclaration enumDeclaration(FunctionalParser.EnumDeclarationContext context) {
@@ -635,7 +643,12 @@ public class CapybaraParser {
                 );
             } else if (localDefinition.localDataDeclaration() != null) {
                 extractedLocalDefinitions.add(
-                        dataDeclaration(localDefinition.localDataDeclaration(), localTypeNameMap)
+                        dataDeclaration(
+                                localDefinition.localDataDeclaration(),
+                                localFunctionNameMap,
+                                localTypeNameMap,
+                                localConstNameMap
+                        )
                 );
             } else if (localDefinition.localConstDeclaration() != null) {
                 extractedLocalDefinitions.add(
@@ -780,7 +793,10 @@ public class CapybaraParser {
 
     private DataDeclaration dataDeclaration(
             FunctionalParser.LocalDataDeclarationContext context,
+            java.util.Map<String, String> localFunctionNameMap,
             java.util.Map<String, String> localTypeNameMap
+            ,
+            java.util.Map<String, String> localConstNameMap
     ) {
         var declaration = context.genericTypeDeclaration();
         var localDataName = genericTypeName(declaration);
@@ -801,6 +817,8 @@ public class CapybaraParser {
                         .map(name -> rewriteLocalTypeName(name, localTypeNameMap))
                         .toList(),
                 genericTypeParameters(declaration),
+                constructorExpression(context.constructorClause())
+                        .map(expression -> rewriteLocalNames(expression, localFunctionNameMap, localTypeNameMap, localConstNameMap)),
                 List.of(),
                 position(context)
         );
@@ -940,6 +958,21 @@ public class CapybaraParser {
                             .map(spread -> rewriteLocalNames(spread, localFunctionNameMap, localTypeNameMap, localConstNameMap))
                             .toList(),
                     newData.position()
+            );
+            case ConstructorData constructorData -> new ConstructorData(
+                    constructorData.assignments().stream()
+                            .map(assignment -> new NewData.FieldAssignment(
+                                    assignment.name(),
+                                    rewriteLocalNames(assignment.value(), localFunctionNameMap, localTypeNameMap, localConstNameMap)
+                            ))
+                            .toList(),
+                    constructorData.positionalArguments().stream()
+                            .map(argument -> rewriteLocalNames(argument, localFunctionNameMap, localTypeNameMap, localConstNameMap))
+                            .toList(),
+                    constructorData.spreads().stream()
+                            .map(spread -> rewriteLocalNames(spread, localFunctionNameMap, localTypeNameMap, localConstNameMap))
+                            .toList(),
+                    constructorData.position()
             );
             case WithExpression withExpression -> new WithExpression(
                     rewriteLocalNames(withExpression.source(), localFunctionNameMap, localTypeNameMap, localConstNameMap),
@@ -1264,6 +1297,17 @@ public class CapybaraParser {
             );
         }
 
+        var constructorData = expression.constructorData();
+        if (constructorData != null) {
+            var assignments = fieldAssignments(constructorData.fieldAssignmentList());
+            return new ConstructorData(
+                    assignments.assignments(),
+                    assignments.positionalArguments(),
+                    assignments.spreads(),
+                    position(constructorData)
+            );
+        }
+
         var matchExpression = expression.matchExpression();
         if (matchExpression != null) {
             return matchExpression(matchExpression);
@@ -1533,6 +1577,17 @@ public class CapybaraParser {
                     assignments.positionalArguments(),
                     assignments.spreads(),
                     position(newData)
+            );
+        }
+
+        var constructorData = expression.constructorData();
+        if (constructorData != null) {
+            var assignments = fieldAssignments(constructorData.fieldAssignmentList());
+            return new ConstructorData(
+                    assignments.assignments(),
+                    assignments.positionalArguments(),
+                    assignments.spreads(),
+                    position(constructorData)
             );
         }
 
@@ -2501,6 +2556,15 @@ public class CapybaraParser {
                     value.spreads().stream().map(argument -> shiftInterpolationPositions(argument, stringPosition, interpolationOffset)).toList(),
                     shiftPosition(value.position(), stringPosition, interpolationOffset)
             );
+            case ConstructorData value -> new ConstructorData(
+                    value.assignments().stream().map(assignment -> new NewData.FieldAssignment(
+                            assignment.name(),
+                            shiftInterpolationPositions(assignment.value(), stringPosition, interpolationOffset)
+                    )).toList(),
+                    value.positionalArguments().stream().map(argument -> shiftInterpolationPositions(argument, stringPosition, interpolationOffset)).toList(),
+                    value.spreads().stream().map(argument -> shiftInterpolationPositions(argument, stringPosition, interpolationOffset)).toList(),
+                    shiftPosition(value.position(), stringPosition, interpolationOffset)
+            );
             case WithExpression value -> new WithExpression(
                     shiftInterpolationPositions(value.source(), stringPosition, interpolationOffset),
                     value.assignments().stream().map(assignment -> new NewData.FieldAssignment(
@@ -3111,9 +3175,6 @@ public class CapybaraParser {
     }
 
 }
-
-
-
 
 
 

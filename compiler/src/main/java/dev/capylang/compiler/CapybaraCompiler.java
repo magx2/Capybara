@@ -30,6 +30,7 @@ import static java.util.stream.Collectors.toMap;
 public class CapybaraCompiler {
     public static final CapybaraCompiler INSTANCE = new CapybaraCompiler();
     private static final String METHOD_DECL_PREFIX = "__method__";
+    private static final String CONSTRUCTOR_FUNCTION_PREFIX = "__constructor__";
     private static final java.util.regex.Pattern IDENTIFIER_PATTERN = java.util.regex.Pattern.compile("[A-Za-z_][A-Za-z0-9_]*");
     private static final ObjectMapper OBJECT_MAPPER = objectMapper();
     private static final Logger log = Logger.getLogger(CapybaraCompiler.class.getName());
@@ -168,6 +169,7 @@ public class CapybaraCompiler {
 
         var moduleLinkIndex = buildModuleLinkIndex(allModuleRefs, linkedTypesByModule);
         var moduleClassNameByModuleName = moduleLinkIndex.moduleJavaClassNameByModuleName();
+        var protectedConstructorsByType = protectedConstructors(program.modules());
 
         var availableTypesStartedAt = System.nanoTime();
         var visibleTypesByModule = new HashMap<String, Map<String, GenericDataType>>();
@@ -187,13 +189,46 @@ public class CapybaraCompiler {
             signaturesByModule.put(library.name(), signaturesFromLinkedFunctions(List.copyOf(library.functions())));
         }
         for (var module : program.modules()) {
-            var functions = findFunctions(module.functional().definitions());
+            var functions = functions(module, linkedTypesByModule.get(module.name()));
             var sourceFile = moduleSourceFile(module);
             var signatures = withFile(linkFunctionSignatures(functions, visibleTypesByModule.get(module.name()), compileCache, sourceFile), sourceFile);
             if (signatures instanceof Result.Error<List<CapybaraExpressionCompiler.FunctionSignature>> error) {
                 return new Result.Error<>(error.errors());
             }
             signaturesByModule.put(module.name(), ((Result.Success<List<CapybaraExpressionCompiler.FunctionSignature>>) signatures).value());
+        }
+
+        for (var module : program.modules()) {
+            var constructors = constructorFunctions(module.functional().definitions(), linkedTypesByModule.get(module.name()));
+            if (constructors.isEmpty()) {
+                continue;
+            }
+            var sourceFile = moduleSourceFile(module);
+            var availableConstructorSignatures = availableSignatures(module, modulesByName, linkedTypesByModule, signaturesByModule, compileCache);
+            if (availableConstructorSignatures instanceof Result.Error<List<CapybaraExpressionCompiler.FunctionSignature>> error) {
+                return new Result.Error<>(error.errors());
+            }
+            var linkedConstructors = withFile(linkFunctions(
+                    constructors,
+                    visibleTypesByModule.get(module.name()),
+                    linkedTypesByModule.get(module.name()).keySet(),
+                    ((Result.Success<List<CapybaraExpressionCompiler.FunctionSignature>>) availableConstructorSignatures).value(),
+                    signaturesByModule,
+                    moduleClassNameByModuleName,
+                    protectedConstructorsByType,
+                    sourceFile,
+                    compileCache
+            ), sourceFile);
+            if (linkedConstructors instanceof Result.Error<List<CompiledFunction>> error) {
+                return new Result.Error<>(error.errors());
+            }
+            signaturesByModule.put(
+                    module.name(),
+                    mergeSignatures(
+                            signaturesByModule.get(module.name()),
+                            signaturesFromLinkedFunctions(((Result.Success<List<CompiledFunction>>) linkedConstructors).value())
+                    )
+            );
         }
         log.info("Prepared available signatures for " + program.modules().size() + " modules in " + Duration.ofNanos(System.nanoTime() - availableSignaturesStartedAt));
 
@@ -207,6 +242,7 @@ public class CapybaraCompiler {
                     visibleTypesByModule,
                     signaturesByModule,
                     moduleClassNameByModuleName,
+                    protectedConstructorsByType,
                     compileCache
             );
             firstPassFunctions = withFile(firstPassFunctions, moduleSourceFile(module));
@@ -230,6 +266,7 @@ public class CapybaraCompiler {
                         visibleTypesByModule,
                         refinedSignaturesByModule,
                         moduleClassNameByModuleName,
+                        protectedConstructorsByType,
                         compileCache
                 ))
                 .collect(new ResultCollectionCollector<>())
@@ -325,18 +362,19 @@ public class CapybaraCompiler {
             Map<String, Map<String, GenericDataType>> visibleTypesByModule,
             Map<String, List<CapybaraExpressionCompiler.FunctionSignature>> signaturesByModule,
             Map<String, String> moduleClassNameByModuleName,
+            Map<String, CapybaraExpressionCompiler.ProtectedConstructorRef> protectedConstructorsByType,
             CompileCache compileCache
     ) {
         var dataTypes = visibleTypesByModule.get(module.name());
         var localTypeNames = linkedTypesByModule.get(module.name()).keySet();
-        var functions = findFunctions(module.functional().definitions());
+        var functions = functions(module, linkedTypesByModule.get(module.name()));
         var moduleSourceFile = moduleSourceFile(module);
         var availableSignatures = availableSignatures(module, modulesByName, linkedTypesByModule, signaturesByModule, compileCache);
         if (availableSignatures instanceof Result.Error<List<CapybaraExpressionCompiler.FunctionSignature>> error) {
             return withFile(new Result.Error<>(error.errors()), moduleSourceFile);
         }
         var initialSignatures = ((Result.Success<List<CapybaraExpressionCompiler.FunctionSignature>>) availableSignatures).value();
-        return withFile(linkFunctions(functions, dataTypes, localTypeNames, initialSignatures, signaturesByModule, moduleClassNameByModuleName, moduleSourceFile, compileCache), moduleSourceFile);
+        return withFile(linkFunctions(functions, dataTypes, localTypeNames, initialSignatures, signaturesByModule, moduleClassNameByModuleName, protectedConstructorsByType, moduleSourceFile, compileCache), moduleSourceFile);
     }
 
     private Result<CompiledModule> linkModule(
@@ -346,18 +384,19 @@ public class CapybaraCompiler {
             Map<String, Map<String, GenericDataType>> visibleTypesByModule,
             Map<String, List<CapybaraExpressionCompiler.FunctionSignature>> signaturesByModule,
             Map<String, String> moduleClassNameByModuleName,
+            Map<String, CapybaraExpressionCompiler.ProtectedConstructorRef> protectedConstructorsByType,
             CompileCache compileCache
     ) {
         var localTypes = linkedTypesByModule.get(module.name());
         var visibleTypes = visibleTypesByModule.get(module.name());
-        var functions = findFunctions(module.functional().definitions());
+        var functions = functions(module, localTypes);
         var moduleSourceFile = moduleSourceFile(module);
         var availableSignatures = availableSignatures(module, modulesByName, linkedTypesByModule, signaturesByModule, compileCache);
         if (availableSignatures instanceof Result.Error<List<CapybaraExpressionCompiler.FunctionSignature>> error) {
             return withFile(new Result.Error<>(error.errors()), moduleSourceFile);
         }
         var initialSignatures = ((Result.Success<List<CapybaraExpressionCompiler.FunctionSignature>>) availableSignatures).value();
-        return withFile(linkFunctions(functions, visibleTypes, localTypes.keySet(), initialSignatures, signaturesByModule, moduleClassNameByModuleName, moduleSourceFile, compileCache)
+        return withFile(linkFunctions(functions, visibleTypes, localTypes.keySet(), initialSignatures, signaturesByModule, moduleClassNameByModuleName, protectedConstructorsByType, moduleSourceFile, compileCache)
                 .flatMap(firstPassFunctions -> {
                     var refinedSignatures = mergeSignatures(
                             signaturesByModule.get(module.name()),
@@ -373,7 +412,7 @@ public class CapybaraCompiler {
                         ));
                     }
                     var refinedAvailableSignatures = mergeSignatures(initialSignatures, refinedSignatures);
-                    return linkFunctions(functions, visibleTypes, localTypes.keySet(), refinedAvailableSignatures, signaturesByModule, moduleClassNameByModuleName, moduleSourceFile, compileCache)
+                    return linkFunctions(functions, visibleTypes, localTypes.keySet(), refinedAvailableSignatures, signaturesByModule, moduleClassNameByModuleName, protectedConstructorsByType, moduleSourceFile, compileCache)
                             .map(linkedFunctions -> new CompiledModule(
                                     module.name(),
                                     module.path(),
@@ -856,6 +895,79 @@ public class CapybaraCompiler {
                 .toList();
     }
 
+    private List<Function> functions(Module module, SortedMap<String, GenericDataType> linkedTypes) {
+        var combined = new ArrayList<Function>();
+        combined.addAll(findFunctions(module.functional().definitions()));
+        combined.addAll(constructorFunctions(module.functional().definitions(), linkedTypes));
+        combined.sort(Comparator
+                .comparingInt((Function function) -> function.position().map(SourcePosition::line).orElse(Integer.MAX_VALUE))
+                .thenComparingInt(function -> function.position().map(SourcePosition::column).orElse(Integer.MAX_VALUE))
+                .thenComparing(Function::name));
+        return List.copyOf(combined);
+    }
+
+    private List<Function> constructorFunctions(Set<Definition> definitions, SortedMap<String, GenericDataType> linkedTypes) {
+        return definitions.stream()
+                .filter(DataDeclaration.class::isInstance)
+                .map(DataDeclaration.class::cast)
+                .filter(dataDeclaration -> dataDeclaration.constructor().isPresent())
+                .map(dataDeclaration -> constructorFunction(dataDeclaration, linkedTypes))
+                .flatMap(Optional::stream)
+                .toList();
+    }
+
+    private Optional<Function> constructorFunction(DataDeclaration dataDeclaration, SortedMap<String, GenericDataType> linkedTypes) {
+        var constructor = dataDeclaration.constructor();
+        if (constructor.isEmpty()) {
+            return Optional.empty();
+        }
+        var linkedType = linkedTypes.get(dataDeclaration.name());
+        if (!(linkedType instanceof GenericDataType genericDataType)) {
+            return Optional.empty();
+        }
+        var parameters = genericDataType.fields().stream()
+                .map(field -> new Parameter(compiledTypeToParserType(field.type()), field.name(), dataDeclaration.position()))
+                .toList();
+        return Optional.of(new Function(
+                constructorFunctionName(dataDeclaration.name()),
+                parameters,
+                Optional.empty(),
+                constructor.orElseThrow(),
+                List.of(),
+                dataDeclaration.visibility(),
+                dataDeclaration.position()
+        ));
+    }
+
+    private Map<String, CapybaraExpressionCompiler.ProtectedConstructorRef> protectedConstructors(List<Module> modules) {
+        var protectedConstructors = new HashMap<String, CapybaraExpressionCompiler.ProtectedConstructorRef>();
+        for (var module : modules) {
+            module.functional().definitions().stream()
+                    .filter(DataDeclaration.class::isInstance)
+                    .map(DataDeclaration.class::cast)
+                    .filter(dataDeclaration -> dataDeclaration.constructor().isPresent())
+                    .forEach(dataDeclaration -> protectedConstructors.put(
+                            dataDeclaration.name(),
+                            new CapybaraExpressionCompiler.ProtectedConstructorRef(
+                                    module.name(),
+                                    constructorFunctionName(dataDeclaration.name())
+                            )
+                    ));
+        }
+        return Map.copyOf(protectedConstructors);
+    }
+
+    private static String constructorFunctionName(String dataTypeName) {
+        return CONSTRUCTOR_FUNCTION_PREFIX + dataTypeName;
+    }
+
+    private static Optional<String> constructorTargetTypeName(String functionName) {
+        if (!functionName.startsWith(CONSTRUCTOR_FUNCTION_PREFIX)) {
+            return Optional.empty();
+        }
+        return Optional.of(functionName.substring(CONSTRUCTOR_FUNCTION_PREFIX.length()));
+    }
+
     private Result<List<CompiledFunction>> linkFunctions(
             List<Function> functions,
             Map<String, GenericDataType> dataTypes,
@@ -863,6 +975,7 @@ public class CapybaraCompiler {
             List<CapybaraExpressionCompiler.FunctionSignature> signatures,
             Map<String, List<CapybaraExpressionCompiler.FunctionSignature>> signaturesByModule,
             Map<String, String> moduleClassNameByModuleName,
+            Map<String, CapybaraExpressionCompiler.ProtectedConstructorRef> protectedConstructorsByType,
             String moduleSourceFile,
             CompileCache compileCache
     ) {
@@ -871,7 +984,7 @@ public class CapybaraCompiler {
                 CapybaraExpressionCompiler.LinkCache::new
         );
         return functions.stream()
-                .map(f -> linkFunction(f, dataTypes, localTypeNames, signatures, signaturesByModule, moduleClassNameByModuleName, moduleSourceFile, linkCache, compileCache))
+                .map(f -> linkFunction(f, dataTypes, localTypeNames, signatures, signaturesByModule, moduleClassNameByModuleName, protectedConstructorsByType, moduleSourceFile, linkCache, compileCache))
                 .collect(new ResultCollectionCollector<>());
     }
 
@@ -882,6 +995,7 @@ public class CapybaraCompiler {
             List<CapybaraExpressionCompiler.FunctionSignature> signatures,
             Map<String, List<CapybaraExpressionCompiler.FunctionSignature>> signaturesByModule,
             Map<String, String> moduleClassNameByModuleName,
+            Map<String, CapybaraExpressionCompiler.ProtectedConstructorRef> protectedConstructorsByType,
             String moduleSourceFile,
             CapybaraExpressionCompiler.LinkCache linkCache,
             CompileCache compileCache
@@ -903,20 +1017,22 @@ public class CapybaraCompiler {
                         signatures,
                         signaturesByModule,
                         moduleClassNameByModuleName,
+                        protectedConstructorsByType,
                         linkCache
-                ).flatMap(ex -> function.returnType()
-                        .map(type -> linkType(type, dataTypes, functionGenericTypeNames, compileCache))
-                        .orElseGet(() -> Result.success(ex.type()))
-                        .flatMap(rtype -> validateFunctionReturnType(function, ex, rtype, dataTypes, moduleSourceFile)
-                                .map(validatedExpression -> new CompiledFunction(
-                                        function.name(),
-                                        rtype,
-                                        parameters,
-                                        enrichNothing(validatedExpression, function.name(), moduleSourceFile),
-                                        function.comments(),
-                                        function.visibility(),
-                                        isProgramMain(function.name(), rtype, parameters)
-                                )))));
+                ).flatMap(ex -> validateConstructorReturnType(function, ex, dataTypes, functionGenericTypeNames, compileCache)
+                        .flatMap(validatedExpression -> function.returnType()
+                                .map(type -> linkType(type, dataTypes, functionGenericTypeNames, compileCache))
+                                .orElseGet(() -> Result.success(validatedExpression.type()))
+                                .flatMap(rtype -> validateFunctionReturnType(function, validatedExpression, rtype, dataTypes, moduleSourceFile)
+                                        .map(finalExpression -> new CompiledFunction(
+                                                function.name(),
+                                                rtype,
+                                                parameters,
+                                                enrichNothing(finalExpression, function.name(), moduleSourceFile),
+                                                function.comments(),
+                                                function.visibility(),
+                                                isProgramMain(function.name(), rtype, parameters)
+                                        ))))));
         linked = normalizeInfixOperatorErrors(linked, function, moduleSourceFile);
         linked = normalizeMatchExhaustivenessErrors(linked, function, moduleSourceFile);
         linked = normalizeIntLiteralErrors(linked, function, moduleSourceFile);
@@ -927,6 +1043,39 @@ public class CapybaraCompiler {
         return normalizeReadableFunctionErrors(linked, function, moduleSourceFile);
     }
 
+    private Result<dev.capylang.compiler.expression.CompiledExpression> validateConstructorReturnType(
+            Function function,
+            dev.capylang.compiler.expression.CompiledExpression expression,
+            Map<String, GenericDataType> dataTypes,
+            Set<String> functionGenericTypeNames,
+            CompileCache compileCache
+    ) {
+        var constructorTarget = constructorTargetTypeName(function.name());
+        if (constructorTarget.isEmpty()) {
+            return Result.success(expression);
+        }
+        var linkedTarget = linkType(new DataType(constructorTarget.orElseThrow()), dataTypes, functionGenericTypeNames, compileCache);
+        if (linkedTarget instanceof Result.Error<CompiledType> error) {
+            return new Result.Error<>(error.errors());
+        }
+        var targetType = ((Result.Success<CompiledType>) linkedTarget).value();
+        if (!(targetType instanceof CompiledDataType dataType)) {
+            return Result.success(expression);
+        }
+        if (expression.type().equals(dataType)) {
+            return Result.success(expression);
+        }
+        var resultType = resultTypeForData(dataType, dataTypes);
+        if (resultType != null && expression.type().equals(resultType)) {
+            return Result.success(expression);
+        }
+        return withPosition(
+                Result.error("Constructor for `" + dataType.name() + "` must return `" + dataType.name() + "` or `Result[" + dataType.name() + "]`, but got `" + expression.type() + "`"),
+                returnExpressionPosition(function.expression()).or(() -> function.position()),
+                ""
+        );
+    }
+
     private Result<dev.capylang.compiler.expression.CompiledExpression> linkExpressionWithRecursiveInference(
             Function function,
             List<CompiledFunctionParameter> parameters,
@@ -934,6 +1083,7 @@ public class CapybaraCompiler {
             List<CapybaraExpressionCompiler.FunctionSignature> signatures,
             Map<String, List<CapybaraExpressionCompiler.FunctionSignature>> signaturesByModule,
             Map<String, String> moduleClassNameByModuleName,
+            Map<String, CapybaraExpressionCompiler.ProtectedConstructorRef> protectedConstructorsByType,
             CapybaraExpressionCompiler.LinkCache linkCache
     ) {
         var linker = new CapybaraExpressionCompiler(
@@ -942,7 +1092,9 @@ public class CapybaraCompiler {
                 signatures,
                 signaturesByModule,
                 moduleClassNameByModuleName,
-                linkCache
+                protectedConstructorsByType,
+                linkCache,
+                constructorTargetTypeName(function.name())
         );
         return linker.linkExpression(function.expression()).flatMap(expression -> {
             if (function.returnType().isPresent()
@@ -966,7 +1118,9 @@ public class CapybaraCompiler {
                     selfSignatureAsNothing,
                     signaturesByModule,
                     moduleClassNameByModuleName,
-                    linkCache
+                    protectedConstructorsByType,
+                    linkCache,
+                    constructorTargetTypeName(function.name())
             );
             return retryLinker.linkExpression(function.expression()).map(retry ->
                     retry.type() != PrimitiveLinkedType.ANY ? retry : expression
@@ -1262,7 +1416,7 @@ public class CapybaraCompiler {
         if (function.expression() instanceof LetExpression && expressionPosition.line() != position.line()) {
             return formatMultilineFunctionPreview(function, declaredReturnType);
         }
-        return "fun " + restorePrivateFunctionNameForDisplay(function.name())
+        return "fun " + displayFunctionName(function.name())
                + "(" + function.parameters().stream()
                        .map(parameter -> parameter.name() + ": " + formatParserTypeInHeader(parameter.type()))
                        .collect(java.util.stream.Collectors.joining(", "))
@@ -1281,7 +1435,7 @@ public class CapybaraCompiler {
                 .orElse(function.parameters());
         var methodHeaderName = methodDeclaration
                 .map(this::formatMethodDeclarationName)
-                .orElse(restorePrivateFunctionNameForDisplay(function.name()));
+                .orElse(displayFunctionName(function.name()));
         var header = new StringBuilder("fun ")
                 .append(methodHeaderName)
                 .append("(")
@@ -1386,7 +1540,7 @@ public class CapybaraCompiler {
     private String formatMultilineFunctionPreview(Function function, CompiledType declaredReturnType) {
         var builder = new StringBuilder();
         builder.append("  fun ")
-                .append(restorePrivateFunctionNameForDisplay(function.name()))
+                .append(displayFunctionName(function.name()))
                 .append("(")
                 .append(function.parameters().stream()
                         .map(parameter -> parameter.name() + ": " + formatParserTypeInHeader(parameter.type()))
@@ -2578,6 +2732,14 @@ public class CapybaraCompiler {
         return toUserPrivateLocalName(restoredLocalFunction, "__local_const_");
     }
 
+    private String displayFunctionName(String functionName) {
+        var constructorTarget = constructorTargetTypeName(functionName);
+        if (constructorTarget.isPresent()) {
+            return restorePrivateTypeNameForDisplay(constructorTarget.orElseThrow());
+        }
+        return restorePrivateFunctionNameForDisplay(functionName);
+    }
+
     private String normalizeUserVisibleNames(String message) {
         var expectedFoundMatcher = java.util.regex.Pattern.compile("^Expected `([^`]+)`, but got `([^`]+)`$").matcher(message);
         if (expectedFoundMatcher.matches()) {
@@ -2673,7 +2835,7 @@ public class CapybaraCompiler {
 
     private String formatFunctionHeaderWithRestoredPrivateTypes(Function function) {
         var header = new StringBuilder("fun ")
-                .append(restorePrivateFunctionNameForDisplay(function.name()))
+                .append(displayFunctionName(function.name()))
                 .append("(")
                 .append(function.parameters().stream()
                         .map(parameter -> parameter.name() + ": " + formatParserTypeForPosition(parameter.type()))
@@ -2742,6 +2904,47 @@ public class CapybaraCompiler {
                 ignored -> new CapybaraTypeCompiler.LinkCache()
         );
         return CapybaraTypeCompiler.linkType(type, dataTypes, linkCache);
+    }
+
+    private Type compiledTypeToParserType(CompiledType type) {
+        return switch (type) {
+            case PrimitiveLinkedType primitive -> switch (primitive) {
+                case BYTE -> PrimitiveType.BYTE;
+                case INT -> PrimitiveType.INT;
+                case LONG -> PrimitiveType.LONG;
+                case DOUBLE -> PrimitiveType.DOUBLE;
+                case BOOL -> PrimitiveType.BOOL;
+                case STRING -> PrimitiveType.STRING;
+                case FLOAT -> PrimitiveType.FLOAT;
+                case ANY -> PrimitiveType.ANY;
+                case NOTHING -> PrimitiveType.NOTHING;
+                case DATA -> PrimitiveType.DATA;
+            };
+            case CollectionLinkedType.CompiledList compiledList ->
+                    new CollectionType.ListType(compiledTypeToParserType(compiledList.elementType()));
+            case CollectionLinkedType.CompiledSet compiledSet ->
+                    new CollectionType.SetType(compiledTypeToParserType(compiledSet.elementType()));
+            case CollectionLinkedType.CompiledDict compiledDict ->
+                    new CollectionType.DictType(compiledTypeToParserType(compiledDict.valueType()));
+            case CompiledTupleType tupleType -> new TupleType(
+                    tupleType.elementTypes().stream().map(this::compiledTypeToParserType).toList()
+            );
+            case CompiledFunctionType functionType -> new FunctionType(
+                    compiledTypeToParserType(functionType.argumentType()),
+                    compiledTypeToParserType(functionType.returnType())
+            );
+            case CompiledGenericTypeParameter genericTypeParameter -> new DataType(genericTypeParameter.name());
+            case CompiledDataType compiledDataType -> compiledDataType.typeParameters().isEmpty()
+                    ? new DataType(compiledDataType.name())
+                    : new DataType(compiledDataType.name() + "["
+                                   + String.join(", ", compiledDataType.typeParameters())
+                                   + "]");
+            case CompiledDataParentType compiledDataParentType -> compiledDataParentType.typeParameters().isEmpty()
+                    ? new DataType(compiledDataParentType.name())
+                    : new DataType(compiledDataParentType.name() + "["
+                                   + String.join(", ", compiledDataParentType.typeParameters())
+                                   + "]");
+        };
     }
 
     private Result<CompiledType> linkType(
@@ -3161,6 +3364,27 @@ public class CapybaraCompiler {
 
     private boolean isKnownTypeName(String typeName, Map<String, GenericDataType> dataTypes) {
         return CapybaraTypeCompiler.linkType(new DataType(typeName), dataTypes) instanceof Result.Success<CompiledType>;
+    }
+
+    private CompiledDataParentType resultTypeForData(CompiledDataType dataType, Map<String, GenericDataType> dataTypes) {
+        var resultParent = dataTypes.values().stream()
+                .filter(CompiledDataParentType.class::isInstance)
+                .map(CompiledDataParentType.class::cast)
+                .filter(parentType -> "Result".equals(parentType.name()) || normalizeQualifiedTypeName(parentType.name()).endsWith("/Result"))
+                .findFirst()
+                .orElse(null);
+        if (resultParent == null) {
+            return null;
+        }
+        return new CompiledDataParentType(
+                resultParent.name(),
+                resultParent.fields(),
+                resultParent.subTypes(),
+                List.of(dataType.name(), PrimitiveLinkedType.STRING.name()),
+                resultParent.comments(),
+                resultParent.visibility(),
+                resultParent.enumType()
+        );
     }
 
     private record ParsedGenericTypeName(String baseName, List<String> typeArguments) {
@@ -3827,18 +4051,6 @@ public class CapybaraCompiler {
                 .toList();
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
