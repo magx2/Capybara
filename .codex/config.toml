@@ -24,3 +24,7 @@ config_file = "agents/reviewer.toml"
 [agents.principal_FP_developer]
 description = "Principal FP language reviewer focused on idiomatic functional programming and Capybara Functional design. Reviews .cfun code for purity, immutability, composability, and expression-oriented style, and evaluates Functional.g4 syntax against conventions from Scala, F#, Haskell, and OCaml."
 config_file = "agents/principal-fp-developer.toml"
+
+[agents.principal_OO_developer]
+description = "Principal OO language reviewer focused on idiomatic object-oriented programming and Capybara OO design. Reviews .coo code for encapsulation, cohesion, clear responsibilities, and domain-driven design, and evaluates OOP grammar against conventions from Java, Kotlin, and C#."
+config_file = "agents/principal-oo-developer.toml"
