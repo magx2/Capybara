@@ -174,6 +174,22 @@ class CapybaraParserTest {
     }
 
     @Test
+    @DisplayName("should parse type constructor and constructor-local star data")
+    void parseTypeConstructor() {
+        var module = parseSuccess(new RawModule("Test", "/parser", """
+                type User { age: int } = Adult | Child with constructor {
+                    if age > 0 then Success { * { age: age } } else Error { "age" }
+                }
+                """));
+
+        var type = findDefinition(TypeDeclaration.class, "User", module.functional());
+        assertThat(type.constructor()).isPresent();
+        assertThat(type.constructor().orElseThrow()).isInstanceOf(IfExpression.class);
+        var constructor = (IfExpression) type.constructor().orElseThrow();
+        assertThat(constructor.thenBranch()).isInstanceOf(NewData.class);
+    }
+
+    @Test
     @DisplayName("should reject data extension spread when it is not at the end")
     void rejectDataExtensionSpreadNotAtTheEnd() {
         var result = new CapybaraParser().parseModule(new RawModule("Test", "/parser", """
@@ -753,5 +769,4 @@ class CapybaraParserTest {
         assertThat(outerMatch.cases().getFirst().expression()).isInstanceOf(InfixExpression.class);
     }
 }
-
 

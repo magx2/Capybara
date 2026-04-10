@@ -57,7 +57,7 @@ public class CapybaraExpressionCompiler {
     private final List<FunctionSignature> functionSignatures;
     private final Map<String, List<FunctionSignature>> functionSignaturesByModule;
     private final Map<String, String> moduleClassNameByModuleName;
-    private final Map<String, ProtectedConstructorRef> protectedConstructorsByType;
+    private final ConstructorRegistry constructorRegistry;
     private final Optional<String> currentConstructorTypeName;
 
     public CapybaraExpressionCompiler(
@@ -66,9 +66,9 @@ public class CapybaraExpressionCompiler {
             List<FunctionSignature> functionSignatures,
             Map<String, List<FunctionSignature>> functionSignaturesByModule,
             Map<String, String> moduleClassNameByModuleName,
-            Map<String, ProtectedConstructorRef> protectedConstructorsByType
+            ConstructorRegistry constructorRegistry
     ) {
-        this(parameters, dataTypes, functionSignatures, functionSignaturesByModule, moduleClassNameByModuleName, protectedConstructorsByType, new LinkCache(dataTypes));
+        this(parameters, dataTypes, functionSignatures, functionSignaturesByModule, moduleClassNameByModuleName, constructorRegistry, new LinkCache(dataTypes));
     }
 
     public CapybaraExpressionCompiler(
@@ -77,10 +77,10 @@ public class CapybaraExpressionCompiler {
             List<FunctionSignature> functionSignatures,
             Map<String, List<FunctionSignature>> functionSignaturesByModule,
             Map<String, String> moduleClassNameByModuleName,
-            Map<String, ProtectedConstructorRef> protectedConstructorsByType,
+            ConstructorRegistry constructorRegistry,
             LinkCache linkCache
     ) {
-        this(parameters, dataTypes, functionSignatures, functionSignaturesByModule, moduleClassNameByModuleName, protectedConstructorsByType, linkCache, Optional.empty());
+        this(parameters, dataTypes, functionSignatures, functionSignaturesByModule, moduleClassNameByModuleName, constructorRegistry, linkCache, Optional.empty());
     }
 
     public CapybaraExpressionCompiler(
@@ -89,11 +89,11 @@ public class CapybaraExpressionCompiler {
             List<FunctionSignature> functionSignatures,
             Map<String, List<FunctionSignature>> functionSignaturesByModule,
             Map<String, String> moduleClassNameByModuleName,
-            Map<String, ProtectedConstructorRef> protectedConstructorsByType,
+            ConstructorRegistry constructorRegistry,
             LinkCache linkCache,
             Optional<String> currentConstructorTypeName
     ) {
-        this(parameters, dataTypes, functionSignatures, functionSignaturesByModule, moduleClassNameByModuleName, protectedConstructorsByType, linkCache, currentConstructorTypeName, true);
+        this(parameters, dataTypes, functionSignatures, functionSignaturesByModule, moduleClassNameByModuleName, constructorRegistry, linkCache, currentConstructorTypeName, true);
     }
 
     private CapybaraExpressionCompiler(
@@ -102,7 +102,7 @@ public class CapybaraExpressionCompiler {
             List<FunctionSignature> functionSignatures,
             Map<String, List<FunctionSignature>> functionSignaturesByModule,
             Map<String, String> moduleClassNameByModuleName,
-            Map<String, ProtectedConstructorRef> protectedConstructorsByType,
+            ConstructorRegistry constructorRegistry,
             LinkCache linkCache,
             Optional<String> currentConstructorTypeName,
             boolean ignored
@@ -113,7 +113,7 @@ public class CapybaraExpressionCompiler {
         this.functionSignatures = functionSignatures;
         this.functionSignaturesByModule = functionSignaturesByModule;
         this.moduleClassNameByModuleName = moduleClassNameByModuleName;
-        this.protectedConstructorsByType = protectedConstructorsByType;
+        this.constructorRegistry = constructorRegistry;
         this.currentConstructorTypeName = currentConstructorTypeName;
     }
 
@@ -174,7 +174,7 @@ public class CapybaraExpressionCompiler {
                 functionSignatures,
                 functionSignaturesByModule,
                 moduleClassNameByModuleName,
-                protectedConstructorsByType,
+                constructorRegistry,
                 linkCache,
                 Optional.of(dataTypeName)
         );
@@ -4069,6 +4069,42 @@ public class CapybaraExpressionCompiler {
         return new CompiledDataParentType(resultType.name(), resultType.fields(), resultType.subTypes(), typeParameters);
     }
 
+    private boolean isResultType(CompiledType type) {
+        if (!(type instanceof GenericDataType genericDataType)) {
+            return false;
+        }
+        var normalized = normalizeTypeName(genericDataType.name());
+        return "Result".equals(genericDataType.name())
+               || normalized.endsWith("/Result.Result")
+               || normalized.endsWith("/Result");
+    }
+
+    private Optional<CompiledDataParentType> resolveSpecializedResultType(CompiledType type) {
+        if (type instanceof CompiledDataParentType resultParent && isResultType(resultParent)) {
+            return Optional.of(resultParent);
+        }
+        if (!(type instanceof CompiledDataType resultSubtype)) {
+            return Optional.empty();
+        }
+        var resultType = findResultType();
+        if (resultType == null || !isSubtypeOfParent(resultSubtype, resultType)) {
+            return Optional.empty();
+        }
+        return resultSubtype.extendedTypes().stream()
+                .map(this::parseLinkedTypeDescriptor)
+                .flatMap(Optional::stream)
+                .filter(CompiledDataParentType.class::isInstance)
+                .map(CompiledDataParentType.class::cast)
+                .filter(parentType -> sameRawTypeName(parentType.name(), resultType.name()))
+                .findFirst()
+                .or(() -> specializeParentFromSubtypeFields(resultSubtype, resultType)
+                        .filter(CompiledDataParentType.class::isInstance)
+                        .map(CompiledDataParentType.class::cast))
+                .or(() -> instantiateExtendedParentFromSubtypeFields(resultSubtype, resultType)
+                        .filter(CompiledDataParentType.class::isInstance)
+                        .map(CompiledDataParentType.class::cast));
+    }
+
     private boolean isOptionType(CompiledType type) {
         if (!(type instanceof GenericDataType genericDataType)) {
             return false;
@@ -5468,7 +5504,7 @@ public class CapybaraExpressionCompiler {
                 ));
             }
         }
-        if (protectedConstructorsByType.containsKey(dataType.name())) {
+        if (hasProtectedConstructorPipeline(dataType)) {
             return applyProtectedConstructorIfNeeded(new CompiledNewData(dataType, List.copyOf(assignments)), position);
         }
         var args = new java.util.ArrayList<CompiledExpression>(assignments.size() + 1);
@@ -5611,35 +5647,270 @@ public class CapybaraExpressionCompiler {
         if (!(newData.type() instanceof CompiledDataType dataType)) {
             return Result.success(newData);
         }
-        var protectedConstructor = protectedConstructorsByType.get(dataType.name());
-        if (protectedConstructor == null) {
+        var directConstructor = constructorRegistry.constructorsByType().get(dataType.name());
+        var parentConstructors = constructorRegistry.parentTypeConstructorsByDataType()
+                .getOrDefault(dataType.name(), List.of());
+        if ((directConstructor == null || directConstructor.typeConstructor()) && parentConstructors.isEmpty()) {
             return Result.success(newData);
         }
-        var resolvedModule = resolveQualifiedModule(protectedConstructor.ownerModuleName());
+        return applyConstructorPipeline(
+                dataType,
+                orderedAssignmentsByName(newData, dataType),
+                parentConstructors,
+                directConstructor != null && !directConstructor.typeConstructor() ? Optional.of(directConstructor) : Optional.empty(),
+                position,
+                0
+        );
+    }
+
+    private boolean hasProtectedConstructorPipeline(CompiledDataType dataType) {
+        return constructorRegistry.constructorsByType().containsKey(dataType.name())
+               || constructorRegistry.parentTypeConstructorsByDataType().containsKey(dataType.name());
+    }
+
+    private Result<CompiledExpression> applyConstructorPipeline(
+            CompiledDataType dataType,
+            LinkedHashMap<String, CompiledExpression> fieldValues,
+            List<ProtectedConstructorRef> parentConstructors,
+            Optional<ProtectedConstructorRef> directConstructor,
+            Optional<SourcePosition> position,
+            int index
+    ) {
+        if (index >= parentConstructors.size()) {
+            return applyDirectConstructorOrRaw(dataType, fieldValues, directConstructor, position);
+        }
+        var parentConstructor = parentConstructors.get(index);
+        var stateType = resolveConstructorTargetType(parentConstructor, position);
+        if (stateType instanceof Result.Error<CompiledDataType> error) {
+            return new Result.Error<>(error.errors());
+        }
+        var linkedStateType = ((Result.Success<CompiledDataType>) stateType).value();
+        var constructorCall = constructorCall(parentConstructor, linkedStateType, fieldValues, position);
+        if (constructorCall instanceof Result.Error<CompiledExpression> error) {
+            return new Result.Error<>(error.errors());
+        }
+        var callExpression = ((Result.Success<CompiledExpression>) constructorCall).value();
+        var resultType = resolveSpecializedResultType(callExpression.type());
+        if (resultType.isEmpty()) {
+            return applyConstructorPipeline(
+                    dataType,
+                    updatedFieldValues(fieldValues, linkedStateType, callExpression),
+                    parentConstructors,
+                    directConstructor,
+                    position,
+                    index + 1
+            );
+        }
+
+        var successVariable = "__constructor_state_" + index;
+        var messageVariable = "__constructor_error_" + index;
+        var successExpression = applyConstructorPipeline(
+                dataType,
+                updatedFieldValues(fieldValues, linkedStateType, new CompiledVariable(successVariable, linkedStateType)),
+                parentConstructors,
+                directConstructor,
+                position,
+                index + 1
+        );
+        if (successExpression instanceof Result.Error<CompiledExpression> error) {
+            return new Result.Error<>(error.errors());
+        }
+        var finalResultType = resultParentForExpression(((Result.Success<CompiledExpression>) successExpression).value(), position);
+        if (finalResultType instanceof Result.Error<CompiledDataParentType> error) {
+            return new Result.Error<>(error.errors());
+        }
+        var resultParent = ((Result.Success<CompiledDataParentType>) finalResultType).value();
+        var successResult = ensureResultExpression(((Result.Success<CompiledExpression>) successExpression).value(), resultParent, position);
+        if (successResult instanceof Result.Error<CompiledExpression> error) {
+            return new Result.Error<>(error.errors());
+        }
+        var errorResult = errorResultExpression(resultParent, messageVariable, position);
+        return Result.success(new CompiledMatchExpression(
+                callExpression,
+                List.of(
+                        new CompiledMatchExpression.MatchCase(
+                                new CompiledMatchExpression.ConstructorPattern(
+                                        "Success",
+                                        List.of(new CompiledMatchExpression.VariablePattern(successVariable))
+                                ),
+                                Optional.empty(),
+                                ((Result.Success<CompiledExpression>) successResult).value()
+                        ),
+                        new CompiledMatchExpression.MatchCase(
+                                new CompiledMatchExpression.ConstructorPattern(
+                                        "Error",
+                                        List.of(new CompiledMatchExpression.VariablePattern(messageVariable))
+                                ),
+                                Optional.empty(),
+                                errorResult
+                        )
+                ),
+                resultParent
+        ));
+    }
+
+    private Result<CompiledExpression> applyDirectConstructorOrRaw(
+            CompiledDataType dataType,
+            LinkedHashMap<String, CompiledExpression> fieldValues,
+            Optional<ProtectedConstructorRef> directConstructor,
+            Optional<SourcePosition> position
+    ) {
+        if (directConstructor.isEmpty()) {
+            return Result.success(rawConstructedData(dataType, fieldValues));
+        }
+        return constructorCall(directConstructor.orElseThrow(), dataType, fieldValues, position);
+    }
+
+    private Result<CompiledDataType> resolveConstructorTargetType(
+            ProtectedConstructorRef constructorRef,
+            Optional<SourcePosition> position
+    ) {
+        var type = resolveDataTypeByName(constructorRef.internalTargetTypeName());
+        if (type instanceof CompiledDataType dataType) {
+            return Result.success(dataType);
+        }
+        return withPosition(
+                Result.error("Constructor target `" + constructorRef.internalTargetTypeName() + "` not found"),
+                position
+        );
+    }
+
+    private Result<CompiledExpression> constructorCall(
+            ProtectedConstructorRef constructorRef,
+            CompiledDataType targetType,
+            LinkedHashMap<String, CompiledExpression> fieldValues,
+            Optional<SourcePosition> position
+    ) {
+        var resolvedModule = resolveQualifiedModule(constructorRef.ownerModuleName());
         if (resolvedModule == null) {
             return withPosition(
-                    Result.error("Unknown module `" + protectedConstructor.ownerModuleName() + "` for constructor `" + protectedConstructor.functionName() + "`"),
+                    Result.error("Unknown module `" + constructorRef.ownerModuleName() + "` for constructor `" + constructorRef.functionName() + "`"),
                     position
             );
         }
         var signatures = functionsByNameAndArity(
                 resolvedModule.signatures(),
-                protectedConstructor.functionName(),
-                newData.assignments().size()
+                constructorRef.functionName(),
+                targetType.fields().size()
         );
         if (signatures.isEmpty()) {
             return withPosition(
-                    Result.error("Constructor `" + protectedConstructor.functionName() + "` not found for `" + dataType.name() + "`"),
+                    Result.error("Constructor `" + constructorRef.functionName() + "` not found for `" + constructorRef.targetTypeName() + "`"),
                     position
             );
         }
-        var arguments = orderedAssignments(newData, dataType);
+        var arguments = orderedAssignments(fieldValues, targetType.fields());
         var signature = signatures.getFirst();
         return Result.success(new CompiledFunctionCall(
-                resolvedModule.javaModuleName() + "." + protectedConstructor.functionName(),
+                resolvedModule.javaModuleName() + "." + constructorRef.functionName(),
                 arguments,
                 resolveReturnType(signature, arguments)
         ));
+    }
+
+    private LinkedHashMap<String, CompiledExpression> orderedAssignmentsByName(CompiledNewData newData, CompiledDataType dataType) {
+        var byName = new LinkedHashMap<String, CompiledExpression>();
+        var orderedValues = orderedAssignments(newData, dataType);
+        for (var i = 0; i < dataType.fields().size(); i++) {
+            byName.put(dataType.fields().get(i).name(), orderedValues.get(i));
+        }
+        return byName;
+    }
+
+    private List<CompiledExpression> orderedAssignments(
+            LinkedHashMap<String, CompiledExpression> fieldValues,
+            List<CompiledDataType.CompiledField> fields
+    ) {
+        return fields.stream()
+                .map(CompiledDataType.CompiledField::name)
+                .map(fieldValues::get)
+                .toList();
+    }
+
+    private LinkedHashMap<String, CompiledExpression> updatedFieldValues(
+            LinkedHashMap<String, CompiledExpression> originalValues,
+            CompiledDataType stateType,
+            CompiledExpression source
+    ) {
+        var updated = new LinkedHashMap<>(originalValues);
+        for (var field : stateType.fields()) {
+            updated.put(field.name(), new CompiledFieldAccess(source, field.name(), field.type()));
+        }
+        return updated;
+    }
+
+    private CompiledExpression rawConstructedData(
+            CompiledDataType dataType,
+            LinkedHashMap<String, CompiledExpression> fieldValues
+    ) {
+        return new CompiledNewData(
+                dataType,
+                dataType.fields().stream()
+                        .map(field -> new CompiledNewData.FieldAssignment(field.name(), fieldValues.get(field.name())))
+                        .toList()
+        );
+    }
+
+    private Result<CompiledExpression> ensureResultExpression(
+            CompiledExpression expression,
+            CompiledDataParentType resultParent,
+            Optional<SourcePosition> position
+    ) {
+        if (resolveSpecializedResultType(expression.type()).isPresent()) {
+            return Result.success(expression);
+        }
+        var successType = findSubtype("Success", resultParent);
+        if (successType instanceof Result.Error<CompiledDataType> error) {
+            return new Result.Error<>(error.errors());
+        }
+        var linkedSuccessType = ((Result.Success<CompiledDataType>) successType).value();
+        var valueField = linkedSuccessType.fields().stream()
+                .filter(field -> field.name().equals("value"))
+                .findFirst();
+        if (valueField.isEmpty()) {
+            return withPosition(Result.error("`Result.Success` is missing `value` field"), position);
+        }
+        var coerced = coerceExpressionToType(expression, valueField.orElseThrow().type());
+        if (coerced.isEmpty()) {
+            return withPosition(Result.error("Cannot coerce constructor result to `" + valueField.orElseThrow().type() + "`"), position);
+        }
+        return Result.success(new CompiledNewData(
+                linkedSuccessType,
+                List.of(new CompiledNewData.FieldAssignment("value", coerced.orElseThrow()))
+        ));
+    }
+
+    private Result<CompiledDataParentType> resultParentForExpression(
+            CompiledExpression expression,
+            Optional<SourcePosition> position
+    ) {
+        var existing = resolveSpecializedResultType(expression.type());
+        if (existing.isPresent()) {
+            return Result.success(existing.orElseThrow());
+        }
+        var wrapped = resultTypeFor(expression.type());
+        if (wrapped != null) {
+            return Result.success(wrapped);
+        }
+        return withPosition(Result.error("Cannot wrap constructor result `" + expression.type() + "` into `Result`"), position);
+    }
+
+    private CompiledExpression errorResultExpression(
+            CompiledDataParentType resultParent,
+            String messageVariable,
+            Optional<SourcePosition> position
+    ) {
+        var errorType = findSubtype("Error", resultParent);
+        if (errorType instanceof Result.Error<CompiledDataType>) {
+            throw new IllegalStateException("Result.Error constructor not found at " + position);
+        }
+        return new CompiledNewData(
+                ((Result.Success<CompiledDataType>) errorType).value(),
+                List.of(new CompiledNewData.FieldAssignment(
+                        "message",
+                        new CompiledVariable(messageVariable, PrimitiveLinkedType.STRING)
+                ))
+        );
     }
 
     private List<CompiledExpression> orderedAssignments(CompiledNewData newData, CompiledDataType dataType) {
@@ -6424,7 +6695,27 @@ public class CapybaraExpressionCompiler {
         }
     }
 
-    public record ProtectedConstructorRef(String ownerModuleName, String functionName) {
+    public record ConstructorRegistry(
+            Map<String, ProtectedConstructorRef> constructorsByType,
+            Map<String, List<ProtectedConstructorRef>> parentTypeConstructorsByDataType
+    ) {
+        public ConstructorRegistry {
+            parentTypeConstructorsByDataType = parentTypeConstructorsByDataType.entrySet().stream()
+                    .collect(java.util.stream.Collectors.toUnmodifiableMap(
+                            Map.Entry::getKey,
+                            entry -> List.copyOf(entry.getValue())
+                    ));
+            constructorsByType = Map.copyOf(constructorsByType);
+        }
+    }
+
+    public record ProtectedConstructorRef(
+            String ownerModuleName,
+            String functionName,
+            String targetTypeName,
+            String internalTargetTypeName,
+            boolean typeConstructor
+    ) {
     }
     private record CoercedArgument(CompiledExpression expression, int coercions) {
     }

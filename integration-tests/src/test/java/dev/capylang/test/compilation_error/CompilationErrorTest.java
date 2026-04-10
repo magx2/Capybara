@@ -110,6 +110,29 @@ public class CompilationErrorTest {
                 .doesNotContain("__local_type_");
     }
 
+    @Test
+    void shouldRequireResultDataConstructorWhenParentTypeConstructorReturnsResult() {
+                var errors = compileProgram("""
+                        from /capy/lang/Result import { * }
+                        type Parent { foo: string } = Child with constructor {
+                            if foo.size == 0 then
+                                Error { message: "missing" }
+                            else
+                                Success { value: * { foo: foo } }
+                        }
+                        data Child { foo: string, bar: string } with constructor {
+                            * { foo: foo, bar: bar }
+                        }
+                        fun create(foo: string, bar: string): string =
+                            ""
+                        """,
+                "type_constructor_requires_result_child");
+
+        assertThat(errors).hasSize(1);
+        assertThat(errors.first().message())
+                .contains("Constructor for `Child` must return `Result[Child]` because parent type constructor for `Parent` returns `Result[Parent]`");
+    }
+
     @ParameterizedTest(name = "{index}: should fail when compiling `{0}.cfun`")
     @MethodSource
     void compilationError(
@@ -1295,9 +1318,6 @@ public class CompilationErrorTest {
         return out;
     }
 }
-
-
-
 
 
 

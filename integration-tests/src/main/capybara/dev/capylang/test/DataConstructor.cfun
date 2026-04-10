@@ -21,3 +21,29 @@ fun validated_user_age(age: int): string =
     match User { age: age } with
     case Success { value } -> "ok:" + value.age
     case Error { message } -> "err:" + message
+
+type ValidatedName { name: string } = NamedUser | NamedGuest with constructor {
+    if name.size == 0 then
+        Error { "Name was empty" }
+    else
+        Success { * { name: name } }
+}
+
+data NamedUser { name: string, role: string } with constructor {
+    if role.size == 0 then
+        Error { "Role was empty" }
+    else
+        Success { * { name: name, role: role } }
+}
+
+data NamedGuest { name: string, badge: string }
+
+fun validated_named_user(name: string, role: string): string =
+    match NamedUser { name: name, role: role } with
+    case Success { value } -> "ok:" + value.name + ":" + value.role
+    case Error { message } -> "err:" + message
+
+fun validated_named_guest(name: string, badge: string): string =
+    match NamedGuest { name: name, badge: badge } with
+    case Success { value } -> "ok:" + value.name + ":" + value.badge
+    case Error { message } -> "err:" + message
