@@ -57,15 +57,18 @@ public class CapybaraExpressionCompiler {
     private final List<FunctionSignature> functionSignatures;
     private final Map<String, List<FunctionSignature>> functionSignaturesByModule;
     private final Map<String, String> moduleClassNameByModuleName;
+    private final Map<String, ProtectedConstructorRef> protectedConstructorsByType;
+    private final Optional<String> currentConstructorTypeName;
 
     public CapybaraExpressionCompiler(
             List<CompiledFunction.CompiledFunctionParameter> parameters,
             Map<String, GenericDataType> dataTypes,
             List<FunctionSignature> functionSignatures,
             Map<String, List<FunctionSignature>> functionSignaturesByModule,
-            Map<String, String> moduleClassNameByModuleName
+            Map<String, String> moduleClassNameByModuleName,
+            Map<String, ProtectedConstructorRef> protectedConstructorsByType
     ) {
-        this(parameters, dataTypes, functionSignatures, functionSignaturesByModule, moduleClassNameByModuleName, new LinkCache(dataTypes));
+        this(parameters, dataTypes, functionSignatures, functionSignaturesByModule, moduleClassNameByModuleName, protectedConstructorsByType, new LinkCache(dataTypes));
     }
 
     public CapybaraExpressionCompiler(
@@ -74,7 +77,35 @@ public class CapybaraExpressionCompiler {
             List<FunctionSignature> functionSignatures,
             Map<String, List<FunctionSignature>> functionSignaturesByModule,
             Map<String, String> moduleClassNameByModuleName,
+            Map<String, ProtectedConstructorRef> protectedConstructorsByType,
             LinkCache linkCache
+    ) {
+        this(parameters, dataTypes, functionSignatures, functionSignaturesByModule, moduleClassNameByModuleName, protectedConstructorsByType, linkCache, Optional.empty());
+    }
+
+    public CapybaraExpressionCompiler(
+            List<CompiledFunction.CompiledFunctionParameter> parameters,
+            Map<String, GenericDataType> dataTypes,
+            List<FunctionSignature> functionSignatures,
+            Map<String, List<FunctionSignature>> functionSignaturesByModule,
+            Map<String, String> moduleClassNameByModuleName,
+            Map<String, ProtectedConstructorRef> protectedConstructorsByType,
+            LinkCache linkCache,
+            Optional<String> currentConstructorTypeName
+    ) {
+        this(parameters, dataTypes, functionSignatures, functionSignaturesByModule, moduleClassNameByModuleName, protectedConstructorsByType, linkCache, currentConstructorTypeName, true);
+    }
+
+    private CapybaraExpressionCompiler(
+            List<CompiledFunction.CompiledFunctionParameter> parameters,
+            Map<String, GenericDataType> dataTypes,
+            List<FunctionSignature> functionSignatures,
+            Map<String, List<FunctionSignature>> functionSignaturesByModule,
+            Map<String, String> moduleClassNameByModuleName,
+            Map<String, ProtectedConstructorRef> protectedConstructorsByType,
+            LinkCache linkCache,
+            Optional<String> currentConstructorTypeName,
+            boolean ignored
     ) {
         this.parameters = parameters;
         this.dataTypes = dataTypes;
@@ -82,6 +113,8 @@ public class CapybaraExpressionCompiler {
         this.functionSignatures = functionSignatures;
         this.functionSignaturesByModule = functionSignaturesByModule;
         this.moduleClassNameByModuleName = moduleClassNameByModuleName;
+        this.protectedConstructorsByType = protectedConstructorsByType;
+        this.currentConstructorTypeName = currentConstructorTypeName;
     }
 
     public Result<CompiledExpression> linkExpression(Expression expression) {
@@ -95,6 +128,7 @@ public class CapybaraExpressionCompiler {
             case DoubleValue doubleValue -> linkDoubleValue(doubleValue, scope);
             case FieldAccess fieldAccess -> linkFieldAccess(fieldAccess, scope);
             case FloatValue floatValue -> linkFloatValue(floatValue, scope);
+            case ConstructorData constructorData -> linkConstructorData(constructorData, scope);
             case FunctionCall functionCall -> linkFunctionCall(functionCall, scope);
             case FunctionInvoke functionInvoke -> linkFunctionInvoke(functionInvoke, scope);
             case FunctionReference functionReference -> linkFunctionReference(functionReference, scope);
@@ -131,6 +165,19 @@ public class CapybaraExpressionCompiler {
             }
             return position;
         });
+    }
+
+    private CapybaraExpressionCompiler insideConstructor(String dataTypeName) {
+        return new CapybaraExpressionCompiler(
+                parameters,
+                dataTypes,
+                functionSignatures,
+                functionSignaturesByModule,
+                moduleClassNameByModuleName,
+                protectedConstructorsByType,
+                linkCache,
+                Optional.of(dataTypeName)
+        );
     }
 
     private Result<CompiledExpression> linkStandaloneLambdaExpression(LambdaExpression lambdaExpression, Scope scope) {
@@ -5401,8 +5448,7 @@ public class CapybaraExpressionCompiler {
             Map<String, CompiledExpression> linkedUpdates,
             Optional<SourcePosition> position
     ) {
-        var args = new java.util.ArrayList<CompiledExpression>(dataType.fields().size() + 1);
-        args.add(source);
+        var assignments = new java.util.ArrayList<CompiledNewData.FieldAssignment>(dataType.fields().size());
         for (var field : dataType.fields()) {
             var fieldType = resolveFieldType(dataType, field);
             var updated = linkedUpdates.get(field.name());
@@ -5414,11 +5460,20 @@ public class CapybaraExpressionCompiler {
                             position
                     );
                 }
-                args.add(coerced.orElseThrow());
+                assignments.add(new CompiledNewData.FieldAssignment(field.name(), coerced.orElseThrow()));
             } else {
-                args.add(new CompiledFieldAccess(source, field.name(), fieldType));
+                assignments.add(new CompiledNewData.FieldAssignment(
+                        field.name(),
+                        new CompiledFieldAccess(source, field.name(), fieldType)
+                ));
             }
         }
+        if (protectedConstructorsByType.containsKey(dataType.name())) {
+            return applyProtectedConstructorIfNeeded(new CompiledNewData(dataType, List.copyOf(assignments)), position);
+        }
+        var args = new java.util.ArrayList<CompiledExpression>(assignments.size() + 1);
+        args.add(source);
+        args.addAll(assignments.stream().map(CompiledNewData.FieldAssignment::value).toList());
         return Result.success((CompiledExpression) new CompiledFunctionCall(
                 METHOD_DECL_PREFIX + dataType.name() + "__with",
                 List.copyOf(args),
@@ -5479,7 +5534,36 @@ public class CapybaraExpressionCompiler {
         return Optional.of(coerced.expression());
     }
 
+    private Result<CompiledExpression> linkConstructorData(ConstructorData constructorData, Scope scope) {
+        if (currentConstructorTypeName.isEmpty()) {
+            return withPosition(
+                    Result.error("`* { ... }` can only be used inside `with constructor`"),
+                    constructorData.position()
+            );
+        }
+        return rawLinkNewData(
+                new NewData(
+                        new DataType(currentConstructorTypeName.orElseThrow()),
+                        constructorData.assignments(),
+                        constructorData.positionalArguments(),
+                        constructorData.spreads(),
+                        constructorData.position()
+                ),
+                scope
+        );
+    }
+
     private Result<CompiledExpression> linkNewData(NewData newData, Scope scope) {
+        return rawLinkNewData(newData, scope)
+                .flatMap(expression -> {
+                    if (!(expression instanceof CompiledNewData compiledNewData)) {
+                        return Result.success(expression);
+                    }
+                    return applyProtectedConstructorIfNeeded(compiledNewData, newData.position());
+                });
+    }
+
+    private Result<CompiledExpression> rawLinkNewData(NewData newData, Scope scope) {
         return linkTypeInScope(newData.type(), scope)
                 .flatMap(type -> linkSpreadAssignments(newData.spreads(), scope)
                         .flatMap(spreadAssignments ->
@@ -5518,6 +5602,55 @@ public class CapybaraExpressionCompiler {
                                                 ));
                                             });
                                         }))));
+    }
+
+    private Result<CompiledExpression> applyProtectedConstructorIfNeeded(
+            CompiledNewData newData,
+            Optional<SourcePosition> position
+    ) {
+        if (!(newData.type() instanceof CompiledDataType dataType)) {
+            return Result.success(newData);
+        }
+        var protectedConstructor = protectedConstructorsByType.get(dataType.name());
+        if (protectedConstructor == null) {
+            return Result.success(newData);
+        }
+        var resolvedModule = resolveQualifiedModule(protectedConstructor.ownerModuleName());
+        if (resolvedModule == null) {
+            return withPosition(
+                    Result.error("Unknown module `" + protectedConstructor.ownerModuleName() + "` for constructor `" + protectedConstructor.functionName() + "`"),
+                    position
+            );
+        }
+        var signatures = functionsByNameAndArity(
+                resolvedModule.signatures(),
+                protectedConstructor.functionName(),
+                newData.assignments().size()
+        );
+        if (signatures.isEmpty()) {
+            return withPosition(
+                    Result.error("Constructor `" + protectedConstructor.functionName() + "` not found for `" + dataType.name() + "`"),
+                    position
+            );
+        }
+        var arguments = orderedAssignments(newData, dataType);
+        var signature = signatures.getFirst();
+        return Result.success(new CompiledFunctionCall(
+                resolvedModule.javaModuleName() + "." + protectedConstructor.functionName(),
+                arguments,
+                resolveReturnType(signature, arguments)
+        ));
+    }
+
+    private List<CompiledExpression> orderedAssignments(CompiledNewData newData, CompiledDataType dataType) {
+        var byName = new java.util.LinkedHashMap<String, CompiledExpression>();
+        for (var assignment : newData.assignments()) {
+            byName.put(assignment.name(), assignment.value());
+        }
+        return dataType.fields().stream()
+                .map(CompiledDataType.CompiledField::name)
+                .map(byName::get)
+                .toList();
     }
 
     private CompiledType inferDataTypeFromAssignments(CompiledType type, List<CompiledNewData.FieldAssignment> assignments) {
@@ -6289,6 +6422,9 @@ public class CapybaraExpressionCompiler {
         public FunctionSignature(String name, List<CompiledType> parameterTypes, CompiledType returnType) {
             this(name, parameterTypes, returnType, null);
         }
+    }
+
+    public record ProtectedConstructorRef(String ownerModuleName, String functionName) {
     }
     private record CoercedArgument(CompiledExpression expression, int coercions) {
     }

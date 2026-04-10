@@ -78,6 +78,38 @@ public class CompilationErrorTest {
                 .doesNotContain("__local_type_");
     }
 
+    @Test
+    void shouldRejectConstructorStarOutsideConstructor() {
+        var errors = compileProgram("""
+                        fun parse(): int =
+                            * { value: 1 }
+                        """,
+                "constructor_star_outside_constructor");
+
+        assertThat(errors).hasSize(1);
+        assertThat(errors.first().message())
+                .contains("`* { ... }` can only be used inside `with constructor`");
+    }
+
+    @Test
+    void shouldNormalizeLocalTypeNamesInConstructorReturnErrors() {
+        var errors = compileProgram("""
+                        fun parse(value: int): int =
+                            data __Token { value: int } with constructor {
+                                value
+                            }
+                            ---
+                            let token = __Token { value: value }
+                            token.value
+                        """,
+                "local_constructor_invalid_return");
+
+        assertThat(errors).hasSize(1);
+        assertThat(errors.first().message())
+                .contains("Constructor for `__Token` must return `__Token` or `Result[__Token]`")
+                .doesNotContain("__local_type_");
+    }
+
     @ParameterizedTest(name = "{index}: should fail when compiling `{0}.cfun`")
     @MethodSource
     void compilationError(
@@ -1263,8 +1295,6 @@ public class CompilationErrorTest {
         return out;
     }
 }
-
-
 
 
 

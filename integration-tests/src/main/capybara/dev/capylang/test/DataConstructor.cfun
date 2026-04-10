@@ -1,0 +1,23 @@
+from /capy/lang/Result import { * }
+
+data OddInt { number: int } with constructor {
+    if number % 2 == 1 then
+        * { number: number }
+    else
+        * { number: number + 1 }
+}
+
+data User { age: int } with constructor {
+    if age <= 0 then
+        Error { "Age has to be greater than 0. Was " + age + "." }
+    else
+        Success { * { age: age } }
+}
+
+fun odd_number(x: int): int =
+    (OddInt { number: x }).number
+
+fun validated_user_age(age: int): string =
+    match User { age: age } with
+    case Success { value } -> "ok:" + value.age
+    case Error { message } -> "err:" + message

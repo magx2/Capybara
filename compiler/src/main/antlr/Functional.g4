@@ -24,8 +24,8 @@ localDefinition: localFunctionDeclaration
 localFunctionDeclaration: docComment* 'fun' NAME '(' parameters? ')' functionType? '=' expression;
 localTypeDeclaration: 'type' genericTypeDeclaration '=' genericTypeDeclaration (PIPE genericTypeDeclaration)*
                     | 'type' genericTypeDeclaration '{' fieldDeclarationList? '}' '=' genericTypeDeclaration (PIPE genericTypeDeclaration)*;
-localDataDeclaration: 'data' genericTypeDeclaration '{' fieldDeclarationList? '}'
-                    | 'data' genericTypeDeclaration '=' '{' fieldDeclarationList? '}';
+localDataDeclaration: 'data' genericTypeDeclaration '{' fieldDeclarationList? '}' constructorClause?
+                    | 'data' genericTypeDeclaration '=' '{' fieldDeclarationList? '}' constructorClause?;
 localConstDeclaration: 'const' privateLocalConstName (':' type)? '=' expressionNoLet;
 privateLocalConstName: NAME | TYPE;
 functionNameDeclaration: identifier | genericTypeDeclaration DOT methodIdentifier;
@@ -35,8 +35,9 @@ docComment: DOC_COMMENT;
 typeDeclaration: docComment* VISIBILITY? 'type' genericTypeDeclaration '=' genericTypeDeclaration (PIPE genericTypeDeclaration)*
                | docComment* VISIBILITY? 'type' genericTypeDeclaration '{' fieldDeclarationList? '}' '=' genericTypeDeclaration (PIPE genericTypeDeclaration)*;
 enumDeclaration: 'enum' TYPE '{' TYPE (COMMA TYPE)* COMMA? '}';
-dataDeclaration: docComment* VISIBILITY? 'data' genericTypeDeclaration '{' fieldDeclarationList? '}'
-               | docComment* VISIBILITY? 'data' genericTypeDeclaration '=' '{' fieldDeclarationList? '}';
+dataDeclaration: docComment* VISIBILITY? 'data' genericTypeDeclaration '{' fieldDeclarationList? '}' constructorClause?
+               | docComment* VISIBILITY? 'data' genericTypeDeclaration '=' '{' fieldDeclarationList? '}' constructorClause?;
+constructorClause: 'with' 'constructor' '{' expression '}';
 singleDeclaration: 'single' TYPE;
 constDeclaration: VISIBILITY? 'const' TYPE (':' type)? '=' expressionNoLet;
 fieldDeclarationList: fieldDeclaration (',' fieldDeclaration)* ','?;
@@ -101,6 +102,7 @@ expressionNoLet: ifExpression
                | expressionNoLet infixOperator expressionNoLet
                | value
                | newData
+               | constructorData
                | matchExpression;
 indexLiteral: MINUS? INT_LITERAL;
 sliceIndexLiteral: MINUS? INT_LITERAL;
@@ -130,6 +132,7 @@ expressionNoLetNoPipe: ifExpression
                      | expressionNoLetNoPipe infixOperatorNoPipe expressionNoLetNoPipe
                      | value
                      | newData
+                     | constructorData
                      | matchExpressionNoPipe;
 indexNoPipeLiteral: MINUS? INT_LITERAL;
 sliceIndexNoPipeLiteral: MINUS? INT_LITERAL;
@@ -203,6 +206,7 @@ constructorPattern: TYPE '{' fieldPatternList? '}';
 fieldPatternList: pattern (',' pattern)*;
 
 newData: type '{' fieldAssignmentList? '}';
+constructorData: MUL '{' fieldAssignmentList? '}';
 new_list: '[' (expression (',' expression)* ','?)? ']';
 new_set: '{' (expression (',' expression)* ','?)? '}';
 new_dict: '{' (dict_entry (',' dict_entry)* ','? | COLON) '}';
@@ -326,7 +330,6 @@ DOC_COMMENT : '///' ~[\r\n]*;
 LINE_COMMENT : '//' ~[\r\n]* -> skip;
 BLOCK_COMMENT : '/*' .*? '*/' -> skip;
 WS : [ \t\r\n]+ -> skip;
-
 
 
 
