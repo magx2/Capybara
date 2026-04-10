@@ -38,6 +38,7 @@ Use the multi-agent workflow for this Capybara repository:
 
 5. Language Designer
     - Review `Functional.g4` and `.cfun` syntax changes
+    - Review `ObjectOriented.g4` and `.coo` syntax changes
     - Ensure consistency, minimalism, and expressiveness of the language
     - Compare syntax decisions with Scala, F#, Haskell, and OCaml
     - Detect constructs that encourage imperative or OOP thinking
@@ -45,7 +46,7 @@ Use the multi-agent workflow for this Capybara repository:
 
 6. Compiler Engineer
     - Review grammar, parsing, AST shape, compile-time validation, and code generation impact
-    - Check whether `Functional.g4` changes are safe for the compiler pipeline
+    - Check whether `Functional.g4` and `ObjectOriented.g4` changes are safe for the compiler pipeline
     - Identify ambiguity, precedence issues, parser conflicts, and poor error-reporting risks
     - Verify that syntax changes map cleanly to Java, JavaScript, and Python backends
     - Protect compile-error tests and developer-facing diagnostics
