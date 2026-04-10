@@ -22,8 +22,8 @@ localDefinition: localFunctionDeclaration
                | localDataDeclaration
                | localConstDeclaration;
 localFunctionDeclaration: docComment* 'fun' NAME '(' parameters? ')' functionType? '=' expression;
-localTypeDeclaration: 'type' genericTypeDeclaration '=' genericTypeDeclaration (PIPE genericTypeDeclaration)*
-                    | 'type' genericTypeDeclaration '{' fieldDeclarationList? '}' '=' genericTypeDeclaration (PIPE genericTypeDeclaration)*;
+localTypeDeclaration: 'type' genericTypeDeclaration '=' genericTypeDeclaration (PIPE genericTypeDeclaration)* constructorClause?
+                    | 'type' genericTypeDeclaration '{' fieldDeclarationList? '}' '=' genericTypeDeclaration (PIPE genericTypeDeclaration)* constructorClause?;
 localDataDeclaration: 'data' genericTypeDeclaration '{' fieldDeclarationList? '}' constructorClause?
                     | 'data' genericTypeDeclaration '=' '{' fieldDeclarationList? '}' constructorClause?;
 localConstDeclaration: 'const' privateLocalConstName (':' type)? '=' expressionNoLet;
@@ -32,8 +32,8 @@ functionNameDeclaration: identifier | genericTypeDeclaration DOT methodIdentifie
 methodIdentifier: identifier | 'with' | INFIX_METHOD_LITERAL;
 docComment: DOC_COMMENT;
 
-typeDeclaration: docComment* VISIBILITY? 'type' genericTypeDeclaration '=' genericTypeDeclaration (PIPE genericTypeDeclaration)*
-               | docComment* VISIBILITY? 'type' genericTypeDeclaration '{' fieldDeclarationList? '}' '=' genericTypeDeclaration (PIPE genericTypeDeclaration)*;
+typeDeclaration: docComment* VISIBILITY? 'type' genericTypeDeclaration '=' genericTypeDeclaration (PIPE genericTypeDeclaration)* constructorClause?
+               | docComment* VISIBILITY? 'type' genericTypeDeclaration '{' fieldDeclarationList? '}' '=' genericTypeDeclaration (PIPE genericTypeDeclaration)* constructorClause?;
 enumDeclaration: 'enum' TYPE '{' TYPE (COMMA TYPE)* COMMA? '}';
 dataDeclaration: docComment* VISIBILITY? 'data' genericTypeDeclaration '{' fieldDeclarationList? '}' constructorClause?
                | docComment* VISIBILITY? 'data' genericTypeDeclaration '=' '{' fieldDeclarationList? '}' constructorClause?;
@@ -330,7 +330,6 @@ DOC_COMMENT : '///' ~[\r\n]*;
 LINE_COMMENT : '//' ~[\r\n]* -> skip;
 BLOCK_COMMENT : '/*' .*? '*/' -> skip;
 WS : [ \t\r\n]+ -> skip;
-
 
 
 

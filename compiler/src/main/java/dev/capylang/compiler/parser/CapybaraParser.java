@@ -446,6 +446,7 @@ public class CapybaraParser {
                 context.genericTypeDeclaration().stream().skip(1).map(CapybaraParser::genericTypeName).toList(),
                 fieldDeclarationList,
                 genericTypeParameters(declaredType),
+                constructorExpression(context.constructorClause()),
                 context.docComment().stream()
                         .map(comment -> stripDocComment(comment.getText()))
                         .toList(),
@@ -639,7 +640,12 @@ public class CapybaraParser {
                 );
             } else if (localDefinition.localTypeDeclaration() != null) {
                 extractedLocalDefinitions.add(
-                        localTypeDeclaration(localDefinition.localTypeDeclaration(), localTypeNameMap)
+                        localTypeDeclaration(
+                                localDefinition.localTypeDeclaration(),
+                                localFunctionNameMap,
+                                localTypeNameMap,
+                                localConstNameMap
+                        )
                 );
             } else if (localDefinition.localDataDeclaration() != null) {
                 extractedLocalDefinitions.add(
@@ -758,7 +764,9 @@ public class CapybaraParser {
 
     private TypeDeclaration localTypeDeclaration(
             FunctionalParser.LocalTypeDeclarationContext context,
-            java.util.Map<String, String> localTypeNameMap
+            java.util.Map<String, String> localFunctionNameMap,
+            java.util.Map<String, String> localTypeNameMap,
+            java.util.Map<String, String> localConstNameMap
     ) {
         var declaredType = context.genericTypeDeclaration(0);
         var declaredTypeName = genericTypeName(declaredType);
@@ -786,6 +794,8 @@ public class CapybaraParser {
                 subTypes,
                 fieldDeclarationList,
                 genericTypeParameters(declaredType),
+                constructorExpression(context.constructorClause())
+                        .map(expression -> rewriteLocalNames(expression, localFunctionNameMap, localTypeNameMap, localConstNameMap)),
                 List.of(),
                 position(context)
         );
@@ -3175,8 +3185,6 @@ public class CapybaraParser {
     }
 
 }
-
-
 
 
 

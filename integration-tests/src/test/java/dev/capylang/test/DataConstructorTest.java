@@ -16,4 +16,17 @@ class DataConstructorTest {
         assertThat(DataConstructor.validatedUserAge(7)).isEqualTo("ok:7");
         assertThat(DataConstructor.validatedUserAge(0)).isEqualTo("err:Age has to be greater than 0. Was 0.");
     }
+
+    @Test
+    void typeConstructorRunsBeforeDataConstructor() {
+        assertThat(DataConstructor.validatedNamedUser("Ada", "admin")).isEqualTo("ok:Ada:admin");
+        assertThat(DataConstructor.validatedNamedUser("", "admin")).isEqualTo("err:Name was empty");
+        assertThat(DataConstructor.validatedNamedUser("Ada", "")).isEqualTo("err:Role was empty");
+    }
+
+    @Test
+    void typeConstructorAlsoWrapsDataWithoutOwnConstructor() {
+        assertThat(DataConstructor.validatedNamedGuest("Ada", "guest")).isEqualTo("ok:Ada:guest");
+        assertThat(DataConstructor.validatedNamedGuest("", "guest")).isEqualTo("err:Name was empty");
+    }
 }

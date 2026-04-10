@@ -30,7 +30,9 @@ import static java.util.stream.Collectors.toMap;
 public class CapybaraCompiler {
     public static final CapybaraCompiler INSTANCE = new CapybaraCompiler();
     private static final String METHOD_DECL_PREFIX = "__method__";
-    private static final String CONSTRUCTOR_FUNCTION_PREFIX = "__constructor__";
+    private static final String DATA_CONSTRUCTOR_FUNCTION_PREFIX = "__constructor__data__";
+    private static final String TYPE_CONSTRUCTOR_FUNCTION_PREFIX = "__constructor__type__";
+    private static final String CONSTRUCTOR_STATE_TYPE_PREFIX = "__constructor_state__";
     private static final java.util.regex.Pattern IDENTIFIER_PATTERN = java.util.regex.Pattern.compile("[A-Za-z_][A-Za-z0-9_]*");
     private static final ObjectMapper OBJECT_MAPPER = objectMapper();
     private static final Logger log = Logger.getLogger(CapybaraCompiler.class.getName());
@@ -169,7 +171,7 @@ public class CapybaraCompiler {
 
         var moduleLinkIndex = buildModuleLinkIndex(allModuleRefs, linkedTypesByModule);
         var moduleClassNameByModuleName = moduleLinkIndex.moduleJavaClassNameByModuleName();
-        var protectedConstructorsByType = protectedConstructors(program.modules());
+        var protectedConstructorsByType = protectedConstructors(program.modules(), linkedTypesByModule);
 
         var availableTypesStartedAt = System.nanoTime();
         var visibleTypesByModule = new HashMap<String, Map<String, GenericDataType>>();
@@ -222,6 +224,15 @@ public class CapybaraCompiler {
             if (linkedConstructors instanceof Result.Error<List<CompiledFunction>> error) {
                 return new Result.Error<>(error.errors());
             }
+            var constructorValidation = validateResultReturningTypeConstructors(
+                    module,
+                    ((Result.Success<List<CompiledFunction>>) linkedConstructors).value(),
+                    visibleTypesByModule.get(module.name()),
+                    sourceFile
+            );
+            if (constructorValidation instanceof Result.Error<Void> error) {
+                return new Result.Error<>(error.errors());
+            }
             signaturesByModule.put(
                     module.name(),
                     mergeSignatures(
@@ -271,6 +282,12 @@ public class CapybaraCompiler {
                 ))
                 .collect(new ResultCollectionCollector<>())
                 .map(CompiledProgram::new);
+        if (result instanceof Result.Success<CompiledProgram> success) {
+            var postValidation = validateResultReturningTypeConstructors(program, success.value());
+            if (postValidation instanceof Result.Error<Void> error) {
+                return new Result.Error<>(error.errors());
+            }
+        }
         log.info("Completed final linking for " + program.modules().size() + " modules in " + Duration.ofNanos(System.nanoTime() - finalLinkStartedAt));
         log.info("Generated static imports in " + Duration.ofNanos(compileCache.staticImportGenerationNanos));
         log.info("Compiled program with " + allModuleRefs.size() + " total modules in " + Duration.ofNanos(System.nanoTime() - totalStartedAt));
@@ -286,6 +303,21 @@ public class CapybaraCompiler {
     private record LinkedDataFields(
             List<List<CompiledDataType.CompiledField>> inherited,
             List<CompiledDataType.CompiledField> own
+    ) {
+    }
+
+    private enum ConstructorKind {
+        DATA,
+        TYPE
+    }
+
+    private record ConstructorDescriptor(ConstructorKind kind, String targetTypeName) {
+    }
+
+    private record TypeConstructorPlan(
+            TypeDeclaration declaration,
+            CompiledDataParentType linkedType,
+            CompiledDataType stateType
     ) {
     }
 
@@ -362,7 +394,7 @@ public class CapybaraCompiler {
             Map<String, Map<String, GenericDataType>> visibleTypesByModule,
             Map<String, List<CapybaraExpressionCompiler.FunctionSignature>> signaturesByModule,
             Map<String, String> moduleClassNameByModuleName,
-            Map<String, CapybaraExpressionCompiler.ProtectedConstructorRef> protectedConstructorsByType,
+            CapybaraExpressionCompiler.ConstructorRegistry protectedConstructorsByType,
             CompileCache compileCache
     ) {
         var dataTypes = visibleTypesByModule.get(module.name());
@@ -384,7 +416,7 @@ public class CapybaraCompiler {
             Map<String, Map<String, GenericDataType>> visibleTypesByModule,
             Map<String, List<CapybaraExpressionCompiler.FunctionSignature>> signaturesByModule,
             Map<String, String> moduleClassNameByModuleName,
-            Map<String, CapybaraExpressionCompiler.ProtectedConstructorRef> protectedConstructorsByType,
+            CapybaraExpressionCompiler.ConstructorRegistry protectedConstructorsByType,
             CompileCache compileCache
     ) {
         var localTypes = linkedTypesByModule.get(module.name());
@@ -907,13 +939,21 @@ public class CapybaraCompiler {
     }
 
     private List<Function> constructorFunctions(Set<Definition> definitions, SortedMap<String, GenericDataType> linkedTypes) {
-        return definitions.stream()
+        var functions = new ArrayList<Function>();
+        var typeDeclarations = definitions.stream()
+                .filter(TypeDeclaration.class::isInstance)
+                .map(TypeDeclaration.class::cast)
+                .toList();
+        for (var typeDeclaration : typeDeclarations) {
+            constructorFunction(typeDeclaration, linkedTypes).ifPresent(functions::add);
+        }
+        definitions.stream()
                 .filter(DataDeclaration.class::isInstance)
                 .map(DataDeclaration.class::cast)
-                .filter(dataDeclaration -> dataDeclaration.constructor().isPresent())
                 .map(dataDeclaration -> constructorFunction(dataDeclaration, linkedTypes))
                 .flatMap(Optional::stream)
-                .toList();
+                .forEach(functions::add);
+        return List.copyOf(functions);
     }
 
     private Optional<Function> constructorFunction(DataDeclaration dataDeclaration, SortedMap<String, GenericDataType> linkedTypes) {
@@ -929,7 +969,7 @@ public class CapybaraCompiler {
                 .map(field -> new Parameter(compiledTypeToParserType(field.type()), field.name(), dataDeclaration.position()))
                 .toList();
         return Optional.of(new Function(
-                constructorFunctionName(dataDeclaration.name()),
+                dataConstructorFunctionName(dataDeclaration.name()),
                 parameters,
                 Optional.empty(),
                 constructor.orElseThrow(),
@@ -939,9 +979,44 @@ public class CapybaraCompiler {
         ));
     }
 
-    private Map<String, CapybaraExpressionCompiler.ProtectedConstructorRef> protectedConstructors(List<Module> modules) {
+    private Optional<Function> constructorFunction(TypeDeclaration typeDeclaration, SortedMap<String, GenericDataType> linkedTypes) {
+        var constructor = typeDeclaration.constructor();
+        if (constructor.isEmpty()) {
+            return Optional.empty();
+        }
+        var linkedType = linkedTypes.get(typeDeclaration.name());
+        var stateType = linkedTypes.get(constructorStateTypeName(typeDeclaration.name()));
+        if (!(linkedType instanceof GenericDataType genericDataType) || !(stateType instanceof GenericDataType)) {
+            return Optional.empty();
+        }
+        var parameters = genericDataType.fields().stream()
+                .map(field -> new Parameter(compiledTypeToParserType(field.type()), field.name(), typeDeclaration.position()))
+                .toList();
+        return Optional.of(new Function(
+                typeConstructorFunctionName(typeDeclaration.name()),
+                parameters,
+                Optional.empty(),
+                constructor.orElseThrow(),
+                List.of(),
+                typeDeclaration.visibility(),
+                typeDeclaration.position()
+        ));
+    }
+
+    private CapybaraExpressionCompiler.ConstructorRegistry protectedConstructors(
+            List<Module> modules,
+            Map<String, SortedMap<String, GenericDataType>> linkedTypesByModule
+    ) {
         var protectedConstructors = new HashMap<String, CapybaraExpressionCompiler.ProtectedConstructorRef>();
+        var parentConstructorsBySubtype = new HashMap<String, List<CapybaraExpressionCompiler.ProtectedConstructorRef>>();
         for (var module : modules) {
+            var linkedTypes = linkedTypesByModule.get(module.name());
+            var typeDeclarations = module.functional().definitions().stream()
+                    .filter(TypeDeclaration.class::isInstance)
+                    .map(TypeDeclaration.class::cast)
+                    .toList();
+            var typeDeclarationsByName = typeDeclarations.stream()
+                    .collect(toMap(TypeDeclaration::name, identity(), (first, second) -> first));
             module.functional().definitions().stream()
                     .filter(DataDeclaration.class::isInstance)
                     .map(DataDeclaration.class::cast)
@@ -950,22 +1025,290 @@ public class CapybaraCompiler {
                             dataDeclaration.name(),
                             new CapybaraExpressionCompiler.ProtectedConstructorRef(
                                     module.name(),
-                                    constructorFunctionName(dataDeclaration.name())
+                                    dataConstructorFunctionName(dataDeclaration.name()),
+                                    dataDeclaration.name(),
+                                    dataDeclaration.name(),
+                                    false
                             )
                     ));
+            typeDeclarations.stream()
+                    .filter(typeDeclaration -> typeDeclaration.constructor().isPresent())
+                    .forEach(typeDeclaration -> protectedConstructors.put(
+                            typeDeclaration.name(),
+                            new CapybaraExpressionCompiler.ProtectedConstructorRef(
+                                    module.name(),
+                                    typeConstructorFunctionName(typeDeclaration.name()),
+                                    typeDeclaration.name(),
+                                    constructorStateTypeName(typeDeclaration.name()),
+                                    true
+                            )
+                    ));
+            var referencedNestedTypes = typeDeclarations.stream()
+                    .flatMap(typeDeclaration -> typeDeclaration.subTypes().stream())
+                    .filter(typeDeclarationsByName::containsKey)
+                    .collect(java.util.stream.Collectors.toSet());
+            var visitedTypes = new HashSet<String>();
+            typeDeclarations.stream()
+                    .filter(typeDeclaration -> !referencedNestedTypes.contains(typeDeclaration.name()))
+                    .forEach(typeDeclaration -> collectParentConstructorChains(
+                            typeDeclaration,
+                            typeDeclarationsByName,
+                            protectedConstructors,
+                            List.of(),
+                            parentConstructorsBySubtype,
+                            visitedTypes
+                    ));
+            typeDeclarations.stream()
+                    .filter(typeDeclaration -> !visitedTypes.contains(typeDeclaration.name()))
+                    .forEach(typeDeclaration -> collectParentConstructorChains(
+                            typeDeclaration,
+                            typeDeclarationsByName,
+                            protectedConstructors,
+                            List.of(),
+                            parentConstructorsBySubtype,
+                            visitedTypes
+                    ));
         }
-        return Map.copyOf(protectedConstructors);
+        var normalizedParentConstructors = new HashMap<String, List<CapybaraExpressionCompiler.ProtectedConstructorRef>>();
+        parentConstructorsBySubtype.forEach((name, refs) -> normalizedParentConstructors.put(name, List.copyOf(refs)));
+        return new CapybaraExpressionCompiler.ConstructorRegistry(Map.copyOf(protectedConstructors), Map.copyOf(normalizedParentConstructors));
     }
 
-    private static String constructorFunctionName(String dataTypeName) {
-        return CONSTRUCTOR_FUNCTION_PREFIX + dataTypeName;
+    private void collectParentConstructorChains(
+            TypeDeclaration typeDeclaration,
+            Map<String, TypeDeclaration> typeDeclarationsByName,
+            Map<String, CapybaraExpressionCompiler.ProtectedConstructorRef> constructorsByType,
+            List<CapybaraExpressionCompiler.ProtectedConstructorRef> activeConstructors,
+            Map<String, List<CapybaraExpressionCompiler.ProtectedConstructorRef>> parentConstructorsBySubtype,
+            Set<String> visitedTypes
+    ) {
+        if (!visitedTypes.add(typeDeclaration.name())) {
+            return;
+        }
+        var nextActive = new ArrayList<>(activeConstructors);
+        var currentConstructor = constructorsByType.get(typeDeclaration.name());
+        if (currentConstructor != null && currentConstructor.typeConstructor()) {
+            nextActive.add(currentConstructor);
+        }
+        for (var subtypeName : typeDeclaration.subTypes()) {
+            var nestedType = typeDeclarationsByName.get(subtypeName);
+            if (nestedType != null) {
+                collectParentConstructorChains(
+                        nestedType,
+                        typeDeclarationsByName,
+                        constructorsByType,
+                        nextActive,
+                        parentConstructorsBySubtype,
+                        visitedTypes
+                );
+                continue;
+            }
+            if (!nextActive.isEmpty()) {
+                parentConstructorsBySubtype.put(subtypeName, List.copyOf(nextActive));
+            }
+        }
     }
 
-    private static Optional<String> constructorTargetTypeName(String functionName) {
-        if (!functionName.startsWith(CONSTRUCTOR_FUNCTION_PREFIX)) {
-            return Optional.empty();
+    private Result<Void> validateResultReturningTypeConstructors(
+            Module module,
+            List<CompiledFunction> linkedConstructors,
+            Map<String, GenericDataType> dataTypes,
+            String moduleSourceFile
+    ) {
+        var typeDeclarations = module.functional().definitions().stream()
+                .filter(TypeDeclaration.class::isInstance)
+                .map(TypeDeclaration.class::cast)
+                .toList();
+        var typeDeclarationsByName = typeDeclarations.stream()
+                .collect(toMap(TypeDeclaration::name, identity(), (first, second) -> first));
+        var typeConstructorRefs = typeDeclarations.stream()
+                .filter(typeDeclaration -> typeDeclaration.constructor().isPresent())
+                .collect(toMap(
+                        TypeDeclaration::name,
+                        typeDeclaration -> new CapybaraExpressionCompiler.ProtectedConstructorRef(
+                                module.name(),
+                                typeConstructorFunctionName(typeDeclaration.name()),
+                                typeDeclaration.name(),
+                                constructorStateTypeName(typeDeclaration.name()),
+                                true
+                        ),
+                        (first, second) -> first
+                ));
+        var resultReturningTypeNames = typeDeclarations.stream()
+                .filter(typeDeclaration -> typeDeclaration.constructor().isPresent())
+                .filter(typeDeclaration -> expressionMayProduceResult(typeDeclaration.constructor().orElseThrow()))
+                .map(TypeDeclaration::name)
+                .collect(java.util.stream.Collectors.toSet());
+        var parentConstructorsBySubtype = new HashMap<String, List<CapybaraExpressionCompiler.ProtectedConstructorRef>>();
+        var referencedNestedTypes = typeDeclarations.stream()
+                .flatMap(typeDeclaration -> typeDeclaration.subTypes().stream())
+                .filter(typeDeclarationsByName::containsKey)
+                .collect(java.util.stream.Collectors.toSet());
+        var visitedTypes = new HashSet<String>();
+        typeDeclarations.stream()
+                .filter(typeDeclaration -> !referencedNestedTypes.contains(typeDeclaration.name()))
+                .forEach(typeDeclaration -> collectParentConstructorChains(
+                        typeDeclaration,
+                        typeDeclarationsByName,
+                        typeConstructorRefs,
+                        List.of(),
+                        parentConstructorsBySubtype,
+                        visitedTypes
+                ));
+        typeDeclarations.stream()
+                .filter(typeDeclaration -> !visitedTypes.contains(typeDeclaration.name()))
+                .forEach(typeDeclaration -> collectParentConstructorChains(
+                        typeDeclaration,
+                        typeDeclarationsByName,
+                        typeConstructorRefs,
+                        List.of(),
+                        parentConstructorsBySubtype,
+                        visitedTypes
+                ));
+        var linkedConstructorsByName = linkedConstructors.stream()
+                .collect(toMap(CompiledFunction::name, identity(), (first, second) -> first));
+        for (var dataDeclaration : module.functional().definitions().stream()
+                .filter(DataDeclaration.class::isInstance)
+                .map(DataDeclaration.class::cast)
+                .filter(dataDeclaration -> dataDeclaration.constructor().isPresent())
+                .toList()) {
+            var parentType = parentConstructorsBySubtype.getOrDefault(dataDeclaration.name(), List.of()).stream()
+                    .filter(ref -> resultReturningTypeNames.contains(ref.targetTypeName()))
+                    .findFirst();
+            if (parentType.isEmpty()) {
+                continue;
+            }
+            var linkedDataConstructor = linkedConstructorsByName.get(dataConstructorFunctionName(dataDeclaration.name()));
+            if (linkedDataConstructor != null && !isResultLikeType(linkedDataConstructor.returnType(), dataTypes)) {
+                var parentTarget = parentType.orElseThrow().targetTypeName();
+                return withPosition(
+                        Result.error("Constructor for `" + dataDeclaration.name() + "` must return `Result[" + dataDeclaration.name() + "]` because parent type constructor for `"
+                                     + parentTarget + "` returns `Result[" + parentTarget + "]`"),
+                        dataDeclaration.position(),
+                        normalizeFile(moduleSourceFile)
+                );
+            }
         }
-        return Optional.of(functionName.substring(CONSTRUCTOR_FUNCTION_PREFIX.length()));
+        return Result.success(null);
+    }
+
+    private Result<Void> validateResultReturningTypeConstructors(
+            Program program,
+            CompiledProgram compiledProgram
+    ) {
+        var modulesByName = compiledProgram.modules().stream()
+                .collect(toMap(CompiledModule::name, identity(), (first, second) -> first));
+        for (var module : program.modules()) {
+            var compiledModule = modulesByName.get(module.name());
+            if (compiledModule == null) {
+                continue;
+            }
+            var validation = validateResultReturningTypeConstructors(
+                    module,
+                    List.copyOf(compiledModule.functions()),
+                    compiledModule.types(),
+                    moduleSourceFile(module)
+            );
+            if (validation instanceof Result.Error<Void> error) {
+                return new Result.Error<>(error.errors());
+            }
+        }
+        return Result.success(null);
+    }
+
+    private boolean isResultLikeType(CompiledType type, Map<String, GenericDataType> dataTypes) {
+        if (type instanceof CompiledDataType dataType) {
+            return resultTypeForData(dataType, dataTypes) != null;
+        }
+        if (!(type instanceof CompiledDataParentType parentType)) {
+            return false;
+        }
+        if ("Result".equals(parentType.name())
+            || parentType.subTypes().stream().anyMatch(subType -> "Success".equals(subType.name()) || "Error".equals(subType.name()))) {
+            return true;
+        }
+        return dataTypes.values().stream()
+                .filter(CompiledDataParentType.class::isInstance)
+                .map(CompiledDataParentType.class::cast)
+                .filter(candidate -> candidate.subTypes().stream().anyMatch(subType -> "Success".equals(subType.name()) || "Error".equals(subType.name())))
+                .anyMatch(candidate -> sameTypeName(candidate.name(), parentType.name()));
+    }
+
+    private boolean expressionMayProduceResult(Expression expression) {
+        return switch (expression) {
+            case NewData newData -> newData.type() instanceof DataType dataType
+                                    && ("Success".equals(dataType.name()) || "Error".equals(dataType.name()));
+            case ConstructorData ignored -> false;
+            case IfExpression ifExpression ->
+                    expressionMayProduceResult(ifExpression.thenBranch()) || expressionMayProduceResult(ifExpression.elseBranch());
+            case LetExpression letExpression ->
+                    expressionMayProduceResult(letExpression.value()) || expressionMayProduceResult(letExpression.rest());
+            case MatchExpression matchExpression ->
+                    matchExpression.cases().stream().anyMatch(matchCase -> expressionMayProduceResult(matchCase.expression()));
+            case FieldAccess ignored -> false;
+            case FunctionCall ignored -> false;
+            case FunctionInvoke ignored -> false;
+            case FunctionReference ignored -> false;
+            case InfixExpression ignored -> false;
+            case IndexExpression ignored -> false;
+            case LambdaExpression ignored -> false;
+            case ReduceExpression ignored -> false;
+            case SliceExpression ignored -> false;
+            case NewDictExpression ignored -> false;
+            case NewListExpression ignored -> false;
+            case NewSetExpression ignored -> false;
+            case TupleExpression ignored -> false;
+            case Value ignored -> false;
+            case BooleanValue ignored -> false;
+            case ByteValue ignored -> false;
+            case DoubleValue ignored -> false;
+            case FloatValue ignored -> false;
+            case IntValue ignored -> false;
+            case LongValue ignored -> false;
+            case NothingValue ignored -> false;
+            case StringValue ignored -> false;
+            case WithExpression withExpression -> expressionMayProduceResult(withExpression.source());
+        };
+    }
+
+    private static String dataConstructorFunctionName(String dataTypeName) {
+        return DATA_CONSTRUCTOR_FUNCTION_PREFIX + dataTypeName;
+    }
+
+    private static String typeConstructorFunctionName(String typeName) {
+        return TYPE_CONSTRUCTOR_FUNCTION_PREFIX + typeName;
+    }
+
+    private static String constructorStateTypeName(String typeName) {
+        return CONSTRUCTOR_STATE_TYPE_PREFIX + typeName;
+    }
+
+    private static CompiledDataType constructorStateType(CompiledDataParentType parentType) {
+        return new CompiledDataType(
+                constructorStateTypeName(parentType.name()),
+                parentType.fields(),
+                parentType.typeParameters(),
+                List.of(),
+                List.of(),
+                parentType.visibility(),
+                false
+        );
+    }
+
+    private static Optional<ConstructorDescriptor> constructorTargetTypeName(String functionName) {
+        if (functionName.startsWith(DATA_CONSTRUCTOR_FUNCTION_PREFIX)) {
+            return Optional.of(new ConstructorDescriptor(
+                    ConstructorKind.DATA,
+                    functionName.substring(DATA_CONSTRUCTOR_FUNCTION_PREFIX.length())
+            ));
+        }
+        if (functionName.startsWith(TYPE_CONSTRUCTOR_FUNCTION_PREFIX)) {
+            return Optional.of(new ConstructorDescriptor(
+                    ConstructorKind.TYPE,
+                    functionName.substring(TYPE_CONSTRUCTOR_FUNCTION_PREFIX.length())
+            ));
+        }
+        return Optional.empty();
     }
 
     private Result<List<CompiledFunction>> linkFunctions(
@@ -975,7 +1318,7 @@ public class CapybaraCompiler {
             List<CapybaraExpressionCompiler.FunctionSignature> signatures,
             Map<String, List<CapybaraExpressionCompiler.FunctionSignature>> signaturesByModule,
             Map<String, String> moduleClassNameByModuleName,
-            Map<String, CapybaraExpressionCompiler.ProtectedConstructorRef> protectedConstructorsByType,
+            CapybaraExpressionCompiler.ConstructorRegistry protectedConstructorsByType,
             String moduleSourceFile,
             CompileCache compileCache
     ) {
@@ -995,7 +1338,7 @@ public class CapybaraCompiler {
             List<CapybaraExpressionCompiler.FunctionSignature> signatures,
             Map<String, List<CapybaraExpressionCompiler.FunctionSignature>> signaturesByModule,
             Map<String, String> moduleClassNameByModuleName,
-            Map<String, CapybaraExpressionCompiler.ProtectedConstructorRef> protectedConstructorsByType,
+            CapybaraExpressionCompiler.ConstructorRegistry protectedConstructorsByType,
             String moduleSourceFile,
             CapybaraExpressionCompiler.LinkCache linkCache,
             CompileCache compileCache
@@ -1054,7 +1397,11 @@ public class CapybaraCompiler {
         if (constructorTarget.isEmpty()) {
             return Result.success(expression);
         }
-        var linkedTarget = linkType(new DataType(constructorTarget.orElseThrow()), dataTypes, functionGenericTypeNames, compileCache);
+        var target = constructorTarget.orElseThrow();
+        var internalTargetName = target.kind() == ConstructorKind.TYPE
+                ? constructorStateTypeName(target.targetTypeName())
+                : target.targetTypeName();
+        var linkedTarget = linkType(new DataType(internalTargetName), dataTypes, functionGenericTypeNames, compileCache);
         if (linkedTarget instanceof Result.Error<CompiledType> error) {
             return new Result.Error<>(error.errors());
         }
@@ -1069,8 +1416,9 @@ public class CapybaraCompiler {
         if (resultType != null && expression.type().equals(resultType)) {
             return Result.success(expression);
         }
+        var userVisibleName = target.targetTypeName();
         return withPosition(
-                Result.error("Constructor for `" + dataType.name() + "` must return `" + dataType.name() + "` or `Result[" + dataType.name() + "]`, but got `" + expression.type() + "`"),
+                Result.error("Constructor for `" + userVisibleName + "` must return `" + userVisibleName + "` or `Result[" + userVisibleName + "]`, but got `" + expression.type() + "`"),
                 returnExpressionPosition(function.expression()).or(() -> function.position()),
                 ""
         );
@@ -1083,7 +1431,7 @@ public class CapybaraCompiler {
             List<CapybaraExpressionCompiler.FunctionSignature> signatures,
             Map<String, List<CapybaraExpressionCompiler.FunctionSignature>> signaturesByModule,
             Map<String, String> moduleClassNameByModuleName,
-            Map<String, CapybaraExpressionCompiler.ProtectedConstructorRef> protectedConstructorsByType,
+            CapybaraExpressionCompiler.ConstructorRegistry protectedConstructorsByType,
             CapybaraExpressionCompiler.LinkCache linkCache
     ) {
         var linker = new CapybaraExpressionCompiler(
@@ -1095,6 +1443,9 @@ public class CapybaraCompiler {
                 protectedConstructorsByType,
                 linkCache,
                 constructorTargetTypeName(function.name())
+                        .map(target -> target.kind() == ConstructorKind.TYPE
+                                ? constructorStateTypeName(target.targetTypeName())
+                                : target.targetTypeName())
         );
         return linker.linkExpression(function.expression()).flatMap(expression -> {
             if (function.returnType().isPresent()
@@ -1121,6 +1472,9 @@ public class CapybaraCompiler {
                     protectedConstructorsByType,
                     linkCache,
                     constructorTargetTypeName(function.name())
+                            .map(target -> target.kind() == ConstructorKind.TYPE
+                                    ? constructorStateTypeName(target.targetTypeName())
+                                    : target.targetTypeName())
             );
             return retryLinker.linkExpression(function.expression()).map(retry ->
                     retry.type() != PrimitiveLinkedType.ANY ? retry : expression
@@ -2735,7 +3089,7 @@ public class CapybaraCompiler {
     private String displayFunctionName(String functionName) {
         var constructorTarget = constructorTargetTypeName(functionName);
         if (constructorTarget.isPresent()) {
-            return restorePrivateTypeNameForDisplay(constructorTarget.orElseThrow());
+            return restorePrivateTypeNameForDisplay(constructorTarget.orElseThrow().targetTypeName());
         }
         return restorePrivateFunctionNameForDisplay(functionName);
     }
@@ -3486,6 +3840,19 @@ public class CapybaraCompiler {
         var map = new TreeMap<>(set.stream().collect(toMap(GenericDataType::name, identity())));
         typeDeclarations.forEach(parentType -> parentType.subTypes().forEach(subType -> map.put(subType.name(), subType)));
         enumDeclarations.forEach(enumType -> enumType.subTypes().forEach(subType -> map.put(subType.name(), subType)));
+        rawTypeDeclarations.stream()
+                .filter(typeDeclaration -> typeDeclaration.constructor().isPresent())
+                .forEach(typeDeclaration -> {
+                    var linkedType = typeDeclarations.stream()
+                            .filter(parentType -> parentType.name().equals(typeDeclaration.name()))
+                            .findFirst();
+                    if (linkedType.isPresent()) {
+                        map.put(
+                                constructorStateTypeName(typeDeclaration.name()),
+                                constructorStateType(linkedType.orElseThrow())
+                        );
+                    }
+                });
         return Result.success(map);
     }
 
@@ -4051,12 +4418,3 @@ public class CapybaraCompiler {
                 .toList();
     }
 }
-
-
-
-
-
-
-
-
-
