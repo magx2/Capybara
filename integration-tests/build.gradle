@@ -1,5 +1,6 @@
 import org.gradle.api.DefaultTask
 import org.gradle.api.GradleException
+import org.gradle.api.artifacts.component.ProjectComponentIdentifier
 import org.gradle.api.file.ConfigurableFileCollection
 import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.provider.Property
@@ -129,13 +130,48 @@ def capybaraSourceDir = layout.projectDirectory.dir('src/main/capybara')
 def capybaraLibLinkedDir = project(':lib:capybara-lib').layout.buildDirectory.dir('generated/sources/capybara/linked/main')
 def generatedJavaDir = layout.buildDirectory.dir('generated/sources/capybara/java/main')
 def capybaraLinkedOutputDir = layout.buildDirectory.dir('generated/sources/capybara/linked/main')
+def integrationTestRuntimeDependencies = configurations.testRuntimeClasspath.incoming.artifactView {
+    componentFilter { componentIdentifier -> !(componentIdentifier instanceof ProjectComponentIdentifier) }
+}.files
+def capyClassesDir = project(':capy').layout.buildDirectory.dir('classes/java/main')
+def capyResourcesDir = project(':capy').layout.buildDirectory.dir('resources/main')
+def compilerClassesDir = project(':compiler').layout.buildDirectory.dir('classes/java/main')
+def compilerResourcesDir = project(':compiler').layout.buildDirectory.dir('resources/main')
+def capybaraLibClassesDir = project(':lib:capybara-lib').layout.buildDirectory.dir('classes/java/main')
+def capybaraLibResourcesDir = project(':lib:capybara-lib').layout.buildDirectory.dir('resources/main')
+def capyRuntimeDependencies = project(':capy').configurations.runtimeClasspath.incoming.artifactView {
+    componentFilter { componentIdentifier -> !(componentIdentifier instanceof ProjectComponentIdentifier) }
+}.files
+def capyRuntimeClasspath = files(
+        capyClassesDir,
+        capyResourcesDir,
+        compilerClassesDir,
+        compilerResourcesDir,
+        capyRuntimeDependencies
+)
+
+test {
+    dependsOn ':compiler:classes'
+    dependsOn ':lib:capybara-lib:classes'
+    classpath = files(
+            sourceSets.test.output,
+            sourceSets.main.output,
+            compilerClassesDir,
+            compilerResourcesDir,
+            capybaraLibClassesDir,
+            capybaraLibResourcesDir,
+            integrationTestRuntimeDependencies
+    )
+}
 
 tasks.register('linkCapybaraSources', InProcessCapybaraCompileTask) {
     group = 'build'
     description = 'Compiles Capybara files from src/main/capybara and generates Java in one pass without launching a separate JVM.'
     dependsOn project(':lib:capybara-lib').tasks.named('linkCapybaraLinked')
+    dependsOn ':capy:classes'
+    dependsOn ':compiler:classes'
 
-    runtimeClasspath.from(project(':capy').sourceSets.main.runtimeClasspath)
+    runtimeClasspath.from(capyRuntimeClasspath)
     inputDir.set(capybaraSourceDir)
     additionalInputDirs.from(capybaraLibLinkedDir)
     linkedOutputDir.set(capybaraLinkedOutputDir)

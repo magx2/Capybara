@@ -1,3 +1,5 @@
+import org.gradle.api.artifacts.component.ProjectComponentIdentifier
+
 plugins {
     id 'buildlogic.java-application-conventions'
 }
@@ -11,6 +13,13 @@ dependencies {
 
 def capybaraVersion = project.version.toString()
 def javaLibSourceDir = rootProject.layout.projectDirectory.dir('lib/capybara-lib/src/main/java')
+def capyClassesDir = layout.buildDirectory.dir('classes/java/main')
+def capyResourcesDir = layout.buildDirectory.dir('resources/main')
+def compilerClassesDir = project(':compiler').layout.buildDirectory.dir('classes/java/main')
+def compilerResourcesDir = project(':compiler').layout.buildDirectory.dir('resources/main')
+def testRuntimeDependencies = configurations.testRuntimeClasspath.incoming.artifactView {
+    componentFilter { componentIdentifier -> !(componentIdentifier instanceof ProjectComponentIdentifier) }
+}.files
 
 processResources {
     filesMatching('capybara-version.txt') {
@@ -25,14 +34,31 @@ application {
     mainClass = 'dev.capylang.Capy'
 }
 
+test {
+    dependsOn ':compiler:classes'
+    classpath = files(
+            sourceSets.test.output,
+            capyClassesDir,
+            capyResourcesDir,
+            compilerClassesDir,
+            compilerResourcesDir,
+            testRuntimeDependencies
+    )
+}
+
 jar {
     manifest {
         attributes('Main-Class': application.mainClass.get())
     }
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     dependsOn configurations.runtimeClasspath
+    dependsOn ':compiler:classes'
+    from compilerClassesDir
+    from compilerResourcesDir
     from {
-        configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
+        configurations.runtimeClasspath
+                .findAll { it.exists() }
+                .collect { it.isDirectory() ? it : zipTree(it) }
     }
 }
 
