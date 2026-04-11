@@ -201,7 +201,7 @@ class JavaExpressionEvaluatorTest {
                 """);
 
         var generatedDate = new JavaGenerator().generate(program).modules().stream()
-                .filter(module -> module.relativePath().toString().endsWith("capy/dateTime/Date.java"))
+                .filter(module -> module.relativePath().equals(java.nio.file.Path.of("capy", "dateTime", "Date.java")))
                 .findFirst()
                 .orElseThrow()
                 .code();
