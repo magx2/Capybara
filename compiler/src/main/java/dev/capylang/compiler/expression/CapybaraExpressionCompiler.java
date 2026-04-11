@@ -5647,9 +5647,8 @@ public class CapybaraExpressionCompiler {
         if (!(newData.type() instanceof CompiledDataType dataType)) {
             return Result.success(newData);
         }
-        var directConstructor = constructorRegistry.constructorsByType().get(dataType.name());
-        var parentConstructors = constructorRegistry.parentTypeConstructorsByDataType()
-                .getOrDefault(dataType.name(), List.of());
+        var directConstructor = directConstructorFor(dataType);
+        var parentConstructors = parentConstructorsFor(dataType);
         if ((directConstructor == null || directConstructor.typeConstructor()) && parentConstructors.isEmpty()) {
             return Result.success(newData);
         }
@@ -5664,8 +5663,31 @@ public class CapybaraExpressionCompiler {
     }
 
     private boolean hasProtectedConstructorPipeline(CompiledDataType dataType) {
-        return constructorRegistry.constructorsByType().containsKey(dataType.name())
-               || constructorRegistry.parentTypeConstructorsByDataType().containsKey(dataType.name());
+        return directConstructorFor(dataType) != null || !parentConstructorsFor(dataType).isEmpty();
+    }
+
+    private ProtectedConstructorRef directConstructorFor(CompiledDataType dataType) {
+        var direct = constructorRegistry.constructorsByType().get(dataType.name());
+        if (direct != null) {
+            return direct;
+        }
+        return constructorRegistry.constructorsByType().entrySet().stream()
+                .filter(entry -> sameRawTypeName(entry.getKey(), dataType.name()))
+                .map(Map.Entry::getValue)
+                .findFirst()
+                .orElse(null);
+    }
+
+    private List<ProtectedConstructorRef> parentConstructorsFor(CompiledDataType dataType) {
+        var direct = constructorRegistry.parentTypeConstructorsByDataType().get(dataType.name());
+        if (direct != null) {
+            return direct;
+        }
+        return constructorRegistry.parentTypeConstructorsByDataType().entrySet().stream()
+                .filter(entry -> sameRawTypeName(entry.getKey(), dataType.name()))
+                .map(Map.Entry::getValue)
+                .findFirst()
+                .orElse(List.of());
     }
 
     private Result<CompiledExpression> applyConstructorPipeline(
