@@ -27,8 +27,8 @@ class DataTest {
 
     @Test
     void areaUsesAlgebraicMatch() {
-        assertThat(Data.area(new Data.Circle(2.0f))).isEqualTo(12.56f);
-        assertThat(Data.area(new Data.Rectangle(3.0f, 4.0f))).isEqualTo(12.0f);
+        assertThat(Data.area(new Data.Circle(2.0))).isEqualTo(12.56);
+        assertThat(Data.area(new Data.Rectangle(3.0, 4.0))).isEqualTo(12.0);
     }
 
     @Test

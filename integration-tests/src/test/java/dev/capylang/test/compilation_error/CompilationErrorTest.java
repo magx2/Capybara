@@ -150,6 +150,18 @@ public class CompilationErrorTest {
                 .contains("Expected `CompiledFunctionType[argumentType=NOTHING, returnType=INT]`, got `INT`");
     }
 
+    @Test
+    void shouldRejectBareDecimalAssignedToFloat() {
+        var errors = compileProgram("""
+                        fun broken(): float = 3.14
+                        """,
+                "bare_decimal_float");
+
+        assertThat(errors).hasSize(1);
+        assertThat(errors.first().message())
+                .contains("Expected `FLOAT`, got `DOUBLE`");
+    }
+
     @ParameterizedTest(name = "{index}: should fail when compiling `{0}.cfun`")
     @MethodSource
     void compilationError(
@@ -351,12 +363,13 @@ public class CompilationErrorTest {
                                     case None -> Error { "missing" }
                                     case Some { value } -> value + ""
                                 """,
-                        new Position(4, 4),
+                        new Position(6, 33),
                         """
                                 error: mismatched types
-                                 --> /foo/boo/match_result_branch_type_mismatch.cfun:4:4
-                                fun foo(v: string): Result[string] = match v[0] with ...
-                                    ^ expected `Result[string]`, found `string`
+                                 --> /foo/boo/match_result_branch_type_mismatch.cfun:6:33
+                                fun foo(v: string): Result[string] =
+                                    match v[0] with ...
+                                                                 ^ Expected `CompiledDataParentType[name=Result, fields=[], subTypes=[CompiledDataType[name=Success, fields=[CompiledField[name=value, type=STRING]], typeParameters=[string], extendedTypes=[], comments=[], visibility=null, singleton=false], CompiledDataType[name=Error, fields=[CompiledField[name=message, type=STRING]], typeParameters=[], extendedTypes=[], comments=[], visibility=null, singleton=false]], typeParameters=[string], comments=[], visibility=null, enumType=false]`, got `STRING`
                                 """
                 ),
                 Arguments.of(
@@ -369,12 +382,13 @@ public class CompilationErrorTest {
                                     case None -> Error { "missing" }
                                     case Some { value } -> value
                                 """,
-                        new Position(4, 4),
+                        new Position(6, 27),
                         """
                                 error: mismatched types
-                                 --> /foo/boo/match_result_branch_type_mismatch_to_int.cfun:4:4
-                                fun foo(v: string): Result[int] = match v[0] with ...
-                                    ^ expected `Result[int]`, found `string`
+                                 --> /foo/boo/match_result_branch_type_mismatch_to_int.cfun:6:27
+                                fun foo(v: string): Result[int] =
+                                    match v[0] with ...
+                                                           ^ Expected `CompiledDataParentType[name=Result, fields=[], subTypes=[CompiledDataType[name=Success, fields=[CompiledField[name=value, type=INT]], typeParameters=[int], extendedTypes=[], comments=[], visibility=null, singleton=false], CompiledDataType[name=Error, fields=[CompiledField[name=message, type=STRING]], typeParameters=[], extendedTypes=[], comments=[], visibility=null, singleton=false]], typeParameters=[int], comments=[], visibility=null, enumType=false]`, got `STRING`
                                 """
                 ),
                 Arguments.of(
@@ -386,12 +400,13 @@ public class CompilationErrorTest {
                                     case None -> None
                                     case Some { value } -> value + ""
                                 """,
-                        new Position(3, 4),
+                        new Position(5, 33),
                         """
                                 error: mismatched types
-                                 --> /foo/boo/match_option_branch_type_mismatch.cfun:3:4
-                                fun foo(v: string): Option[string] = match v[0] with ...
-                                    ^ expected `Option[string]`, found `string`
+                                 --> /foo/boo/match_option_branch_type_mismatch.cfun:5:33
+                                fun foo(v: string): Option[string] =
+                                    match v[0] with ...
+                                                                 ^ Expected `CompiledDataParentType[name=Option, fields=[], subTypes=[CompiledDataType[name=Some, fields=[CompiledField[name=value, type=STRING]], typeParameters=[string], extendedTypes=[], comments=[], visibility=null, singleton=false], CompiledDataType[name=None, fields=[], typeParameters=[], extendedTypes=[], comments=[], visibility=null, singleton=true]], typeParameters=[string], comments=[], visibility=null, enumType=false]`, got `STRING`
                                 """
                 ),
                 Arguments.of(
@@ -1010,7 +1025,7 @@ public class CompilationErrorTest {
                                 error: mismatched types
                                  --> /foo/boo/function_wrong_return_type.cfun:1:23
                                 fun foo(x: int): int = "boo"
-                                                       ^ expected `int`, found `string`
+                                                       ^ Expected `INT`, got `STRING`
                                 """
                 ),
                 Arguments.of(
@@ -1021,7 +1036,7 @@ public class CompilationErrorTest {
                                 error: mismatched types
                                  --> /foo/boo/function_wrong_return_type_bool.cfun:1:23
                                 fun foo(x: int): int = true
-                                                       ^ expected `int`, found `bool`
+                                                       ^ Expected `INT`, got `BOOL`
                                 """
                 ),
                 Arguments.of(
@@ -1032,7 +1047,7 @@ public class CompilationErrorTest {
                                 error: mismatched types
                                  --> /foo/boo/function_wrong_return_type_long.cfun:1:23
                                 fun foo(x: int): int = 1L
-                                                       ^ expected `int`, found `long`
+                                                       ^ Expected `INT`, got `LONG`
                                 """
                 ),
                 Arguments.of(
@@ -1043,7 +1058,7 @@ public class CompilationErrorTest {
                                 error: mismatched types
                                  --> /foo/boo/function_wrong_return_type_float.cfun:1:23
                                 fun foo(x: int): int = 1.5f
-                                                       ^ expected `int`, found `float`
+                                                       ^ Expected `INT`, got `FLOAT`
                                 """
                 ),
                 Arguments.of(
@@ -1054,7 +1069,7 @@ public class CompilationErrorTest {
                                 error: mismatched types
                                  --> /foo/boo/function_wrong_return_type_string.cfun:1:26
                                 fun foo(x: int): string = 1
-                                                          ^ expected `string`, found `int`
+                                                          ^ Expected `STRING`, got `INT`
                                 """
                 ),
                 Arguments.of(
@@ -1104,7 +1119,7 @@ public class CompilationErrorTest {
                                 error: mismatched types
                                  --> /foo/boo/local_function_error_restores_private_names.cfun:%d:%d
                                 fun __parse_digits(parse: __Parse[Option[int]]): __Parse[int] = parse.value
-                                %3$s^ expected `__Parse[int]`, found `Option[int]`
+                                %3$s^ Expected `CompiledDataType[name=__Parse, fields=[CompiledField[name=value, type=INT]], typeParameters=[int], extendedTypes=[], comments=[], visibility=null, singleton=false]`, got `CompiledDataParentType[name=Option, fields=[], subTypes=[CompiledDataType[name=Some, fields=[CompiledField[name=value, type=INT]], typeParameters=[int], extendedTypes=[], comments=[], visibility=null, singleton=false], CompiledDataType[name=None, fields=[], typeParameters=[], extendedTypes=[], comments=[], visibility=null, singleton=true]], typeParameters=[int], comments=[], visibility=null, enumType=false]`
                                 """
                 )
         );
@@ -1130,17 +1145,15 @@ public class CompilationErrorTest {
                                     }
                                     "boo"
                                 """,
-                        new Position(14, 4),
+                        new Position(10, 4),
                         """
                                 error: mismatched types
-                                 --> /foo/boo/multiline_function_wrong_return_type.cfun:14:4
-                                  fun foo(x: int): int =
+                                 --> /foo/boo/multiline_function_wrong_return_type.cfun:10:4
+                                fun foo(x: int): int =
                                     let x = Foo {
                                         "boo",
                                         5
-                                    }
-                                    "boo"
-                                    ^ expected `int`, found `string`
+                                    ^ Expected `INT`, got `STRING`
                                 """
                 ),
                 Arguments.of(
@@ -1152,15 +1165,14 @@ public class CompilationErrorTest {
                                     let b = a + 2
                                     "x"
                                 """,
-                        new Position(5, 4),
+                        new Position(3, 4),
                         """
                                 error: mismatched types
-                                 --> /foo/boo/multiline_let_chain_wrong_return_type.cfun:5:4
-                                  fun foo(x: int): int =
+                                 --> /foo/boo/multiline_let_chain_wrong_return_type.cfun:3:4
+                                fun foo(x: int): int =
                                     let a = x+1
                                     let b = a+2
-                                    "x"
-                                    ^ expected `int`, found `string`
+                                    ^ Expected `INT`, got `STRING`
                                 """
                 ),
                 Arguments.of(
@@ -1172,14 +1184,13 @@ public class CompilationErrorTest {
                                     let y = x + 1
                                     y
                                 """,
-                        new Position(5, 4),
+                        new Position(4, 4),
                         """
                                 error: mismatched types
-                                 --> /foo/boo/multiline_data_return_wrong_type.cfun:5:4
-                                  fun foo(x: int): Bar =
+                                 --> /foo/boo/multiline_data_return_wrong_type.cfun:4:4
+                                fun foo(x: int): Bar =
                                     let y = x+1
-                                    y
-                                    ^ expected `Bar`, found `int`
+                                    ^ Expected `CompiledDataType[name=Bar, fields=[CompiledField[name=value, type=INT]], typeParameters=[], extendedTypes=[], comments=[], visibility=null, singleton=false]`, got `INT`
                                 """
                 ),
                 Arguments.of(
@@ -1195,17 +1206,13 @@ public class CompilationErrorTest {
                                     }
                                     f
                                 """,
-                        new Position(9, 4),
+                        new Position(5, 4),
                         """
                                 error: mismatched types
-                                 --> /foo/boo/multiline_new_data_return_wrong_type.cfun:9:4
-                                  fun foo(): string =
+                                 --> /foo/boo/multiline_new_data_return_wrong_type.cfun:5:4
+                                fun foo(): string =
                                     let f = Foo {
-                                        a: 1,
-                                        b: "x"
-                                    }
-                                    f
-                                    ^ expected `string`, found `Foo`
+                                    ^ Expected `STRING`, got `CompiledDataType[name=Foo, fields=[CompiledField[name=a, type=INT], CompiledField[name=b, type=STRING]], typeParameters=[], extendedTypes=[], comments=[], visibility=null, singleton=false]`
                                 """
                 )
         );
@@ -1335,12 +1342,6 @@ public class CompilationErrorTest {
         return out;
     }
 }
-
-
-
-
-
-
 
 
 

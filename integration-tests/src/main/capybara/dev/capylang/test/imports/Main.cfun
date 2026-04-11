@@ -24,7 +24,7 @@ fun x(a: int, b: int, op: string) = /dev/capylang/capybara/imports2/Pck4.awesome
 
 fun y(a: int, b: int, op: string) = /dev/capylang/capybara/imports2/Pck4.awesome(lvl_multiplier(calculator(a,b,op)))
 
-fun t1(x: int): T1 = D1 { foo: x }
+fun t1_types1(x: int): T1 = D1 { foo: x }
 
 fun t1(x: int): Types2.T1 = TD1 { x: "x: " + x }
 

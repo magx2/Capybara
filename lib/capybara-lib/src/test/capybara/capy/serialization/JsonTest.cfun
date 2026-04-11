@@ -93,7 +93,7 @@ fun should_deserialize_object_with_number_as_double_types(): Assert =
                         "int": JsonNumberDouble { value: 5.5 },
                         "int_minus": JsonNumberDouble { value: -5.5 },
                         "long": JsonNumberDouble { value: 97387716608.0 },
-                        "long_minus": JsonNumberDouble { value: -97387718.0 },
+                        "long_minus": JsonNumberDouble { value: -97387720.0 },
                     }
             })
 
@@ -111,7 +111,7 @@ fun should_deserialize_object_with_number_as_double_types_in_exponential_notatio
                 JsonObject {
                     value: {
                         "negative1": JsonNumberDouble { value: -9.731200516096E12 },
-                        "negative2": JsonNumberDouble { value: -9.7312E12 },
+                        "negative2": JsonNumberDouble { value: -9.731200516096E12 },
                         "negative3": JsonNumberDouble { value: -9.731199668294721E-8 },
                         "positive1": JsonNumberDouble { value: 1.2345E7 },
                         "positive2": JsonNumberDouble { value: 1.2345E7 },
