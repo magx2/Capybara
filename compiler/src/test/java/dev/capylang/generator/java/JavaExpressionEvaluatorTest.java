@@ -433,6 +433,26 @@ class JavaExpressionEvaluatorTest {
     }
 
     @Test
+    void shouldCastGenericConstructorPatternBindingsBeforeFunctionApplication() {
+        var generated = new JavaGenerator().generate(compileProgram("GenericResultBinding", "/foo/bar", """
+                from /capy/lang/Result import { * }
+
+                type Assert { assertions: list[() => string] } = StringAssert
+                data StringAssert { assertions: list[() => string] }
+                data ResultAssert[T] { value: Result[T] }
+
+                fun ResultAssert[T].succeeds(assert_: T => Assert): list[() => string] =
+                    match this.value with
+                    case Error e -> [() => e.message]
+                    case Success { value } -> assert_(value).assertions
+                """)).modules().stream()
+                .map(dev.capylang.generator.GeneratedModule::code)
+                .collect(joining("\n"));
+
+        assertThat(generated).contains("assert_.apply(((T) __capybaraMatchBinding");
+    }
+
+    @Test
     void shouldNotGenerateUnsupportedHelperWhenUnused() {
         var generated = new JavaGenerator().generate(compileProgram("NoUnsupported", "/foo/bar", """
                 fun answer(): int = 42
