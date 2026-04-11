@@ -191,6 +191,10 @@
           }
         },
         {
+          "name": "meta.type.constructor.capybara",
+          "match": "\\b(type)\\s+(_*[A-Z][A-Za-z0-9_]*(?:\\[[^\\]]+\\])?)(?:\\s*\\{[^{}\\n]*\\})?\\s+(with)\\s+(constructor)\\s*\\{"
+        },
+        {
           "name": "entity.name.type.capybara",
           "match": "\\b_*[A-Z][A-Za-z0-9_]*\\b"
         },
@@ -364,7 +368,6 @@
     }
   }
 }
-
 
 
 

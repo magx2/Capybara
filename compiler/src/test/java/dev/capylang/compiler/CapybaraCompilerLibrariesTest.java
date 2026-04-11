@@ -1,5 +1,7 @@
 package dev.capylang.compiler;
 
+import dev.capylang.compiler.expression.CompiledFunctionCall;
+import dev.capylang.compiler.expression.CompiledMatchExpression;
 import org.junit.jupiter.api.Test;
 import dev.capylang.compiler.parser.RawModule;
 
@@ -39,6 +41,57 @@ class CapybaraCompilerLibrariesTest {
         assertThat(compiled.modules().first().functions())
                 .extracting(CompiledFunction::name)
                 .containsExactlyInAnyOrder("consume", "unwrap");
+    }
+
+    @Test
+    void shouldApplyLibraryDataConstructorWhenInstantiatingImportedData() {
+        var librarySource = """
+                data OddInt { number: int } with constructor {
+                    if number % 2 == 0 then
+                        * { number: number + 1 }
+                    else
+                        * { number: number }
+                }
+                """;
+        var libraries = compileProgram(List.of(new RawModule("Library", "/foo/lib", librarySource)), new java.util.TreeSet<>()).modules();
+
+        var consumerSource = """
+                from Library import { * }
+                fun build(value: int): OddInt = OddInt { number: value }
+                """;
+        var compiled = compileProgram(List.of(new RawModule("Consumer", "/foo/app", consumerSource)), libraries);
+
+        assertThat(compiledFunction(compiled, "Consumer", "build").expression())
+                .isInstanceOfSatisfying(CompiledFunctionCall.class, call ->
+                        assertThat(call.name()).endsWith(".Library.__constructor__data__OddInt"));
+    }
+
+    @Test
+    void shouldApplyLibraryTypeConstructorWhenInstantiatingImportedSubtype() {
+        var librarySource = """
+                from /capy/lang/Result import { * }
+
+                type ValidatedName { name: string } with constructor {
+                   if name.size == 0 then
+                       Error { message: "Name was empty" }
+                   else
+                       Success { value: * { name: name } }
+                } = NamedUser
+
+                data NamedUser { name: string, role: string }
+                """;
+        var libraries = compileProgram(List.of(new RawModule("Library", "/foo/lib", librarySource)), new java.util.TreeSet<>()).modules();
+
+        var consumerSource = """
+                from Library import { * }
+
+                fun build(name: string, role: string): Result[NamedUser] =
+                    NamedUser { name: name, role: role }
+                """;
+        var compiled = compileProgram(List.of(new RawModule("Consumer", "/foo/app", consumerSource)), libraries);
+
+        assertThat(compiledFunction(compiled, "Consumer", "build").expression())
+                .isInstanceOf(CompiledMatchExpression.class);
     }
 
     @Test
@@ -203,4 +256,3 @@ class CapybaraCompilerLibrariesTest {
                 .orElseThrow();
     }
 }
-

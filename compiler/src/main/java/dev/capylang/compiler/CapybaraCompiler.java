@@ -171,7 +171,7 @@ public class CapybaraCompiler {
 
         var moduleLinkIndex = buildModuleLinkIndex(allModuleRefs, linkedTypesByModule);
         var moduleClassNameByModuleName = moduleLinkIndex.moduleJavaClassNameByModuleName();
-        var protectedConstructorsByType = protectedConstructors(program.modules(), linkedTypesByModule);
+        var protectedConstructorsByType = protectedConstructors(program.modules(), libraries, linkedTypesByModule);
 
         var availableTypesStartedAt = System.nanoTime();
         var visibleTypesByModule = new HashMap<String, Map<String, GenericDataType>>();
@@ -1005,73 +1005,155 @@ public class CapybaraCompiler {
 
     private CapybaraExpressionCompiler.ConstructorRegistry protectedConstructors(
             List<Module> modules,
+            SortedSet<CompiledModule> libraries,
             Map<String, SortedMap<String, GenericDataType>> linkedTypesByModule
     ) {
         var protectedConstructors = new HashMap<String, CapybaraExpressionCompiler.ProtectedConstructorRef>();
         var parentConstructorsBySubtype = new HashMap<String, List<CapybaraExpressionCompiler.ProtectedConstructorRef>>();
         for (var module : modules) {
-            var linkedTypes = linkedTypesByModule.get(module.name());
-            var typeDeclarations = module.functional().definitions().stream()
-                    .filter(TypeDeclaration.class::isInstance)
-                    .map(TypeDeclaration.class::cast)
-                    .toList();
-            var typeDeclarationsByName = typeDeclarations.stream()
-                    .collect(toMap(TypeDeclaration::name, identity(), (first, second) -> first));
-            module.functional().definitions().stream()
-                    .filter(DataDeclaration.class::isInstance)
-                    .map(DataDeclaration.class::cast)
-                    .filter(dataDeclaration -> dataDeclaration.constructor().isPresent())
-                    .forEach(dataDeclaration -> protectedConstructors.put(
-                            dataDeclaration.name(),
-                            new CapybaraExpressionCompiler.ProtectedConstructorRef(
-                                    module.name(),
-                                    dataConstructorFunctionName(dataDeclaration.name()),
-                                    dataDeclaration.name(),
-                                    dataDeclaration.name(),
-                                    false
-                            )
-                    ));
-            typeDeclarations.stream()
-                    .filter(typeDeclaration -> typeDeclaration.constructor().isPresent())
-                    .forEach(typeDeclaration -> protectedConstructors.put(
-                            typeDeclaration.name(),
-                            new CapybaraExpressionCompiler.ProtectedConstructorRef(
-                                    module.name(),
-                                    typeConstructorFunctionName(typeDeclaration.name()),
-                                    typeDeclaration.name(),
-                                    constructorStateTypeName(typeDeclaration.name()),
-                                    true
-                            )
-                    ));
-            var referencedNestedTypes = typeDeclarations.stream()
-                    .flatMap(typeDeclaration -> typeDeclaration.subTypes().stream())
-                    .filter(typeDeclarationsByName::containsKey)
-                    .collect(java.util.stream.Collectors.toSet());
-            var visitedTypes = new HashSet<String>();
-            typeDeclarations.stream()
-                    .filter(typeDeclaration -> !referencedNestedTypes.contains(typeDeclaration.name()))
-                    .forEach(typeDeclaration -> collectParentConstructorChains(
-                            typeDeclaration,
-                            typeDeclarationsByName,
-                            protectedConstructors,
-                            List.of(),
-                            parentConstructorsBySubtype,
-                            visitedTypes
-                    ));
-            typeDeclarations.stream()
-                    .filter(typeDeclaration -> !visitedTypes.contains(typeDeclaration.name()))
-                    .forEach(typeDeclaration -> collectParentConstructorChains(
-                            typeDeclaration,
-                            typeDeclarationsByName,
-                            protectedConstructors,
-                            List.of(),
-                            parentConstructorsBySubtype,
-                            visitedTypes
-                    ));
+            registerSourceProtectedConstructors(module, protectedConstructors, parentConstructorsBySubtype);
+        }
+        for (var library : libraries) {
+            registerLibraryProtectedConstructors(
+                    library,
+                    linkedTypesByModule.getOrDefault(library.name(), new TreeMap<>()),
+                    protectedConstructors,
+                    parentConstructorsBySubtype
+            );
         }
         var normalizedParentConstructors = new HashMap<String, List<CapybaraExpressionCompiler.ProtectedConstructorRef>>();
         parentConstructorsBySubtype.forEach((name, refs) -> normalizedParentConstructors.put(name, List.copyOf(refs)));
         return new CapybaraExpressionCompiler.ConstructorRegistry(Map.copyOf(protectedConstructors), Map.copyOf(normalizedParentConstructors));
+    }
+
+    private void registerSourceProtectedConstructors(
+            Module module,
+            Map<String, CapybaraExpressionCompiler.ProtectedConstructorRef> protectedConstructors,
+            Map<String, List<CapybaraExpressionCompiler.ProtectedConstructorRef>> parentConstructorsBySubtype
+    ) {
+        var typeDeclarations = module.functional().definitions().stream()
+                .filter(TypeDeclaration.class::isInstance)
+                .map(TypeDeclaration.class::cast)
+                .toList();
+        var typeDeclarationsByName = typeDeclarations.stream()
+                .collect(toMap(TypeDeclaration::name, identity(), (first, second) -> first));
+        module.functional().definitions().stream()
+                .filter(DataDeclaration.class::isInstance)
+                .map(DataDeclaration.class::cast)
+                .filter(dataDeclaration -> dataDeclaration.constructor().isPresent())
+                .forEach(dataDeclaration -> protectedConstructors.put(
+                        dataDeclaration.name(),
+                        new CapybaraExpressionCompiler.ProtectedConstructorRef(
+                                module.name(),
+                                dataConstructorFunctionName(dataDeclaration.name()),
+                                dataDeclaration.name(),
+                                dataDeclaration.name(),
+                                false
+                        )
+                ));
+        typeDeclarations.stream()
+                .filter(typeDeclaration -> typeDeclaration.constructor().isPresent())
+                .forEach(typeDeclaration -> protectedConstructors.put(
+                        typeDeclaration.name(),
+                        new CapybaraExpressionCompiler.ProtectedConstructorRef(
+                                module.name(),
+                                typeConstructorFunctionName(typeDeclaration.name()),
+                                typeDeclaration.name(),
+                                constructorStateTypeName(typeDeclaration.name()),
+                                true
+                        )
+                ));
+        var referencedNestedTypes = typeDeclarations.stream()
+                .flatMap(typeDeclaration -> typeDeclaration.subTypes().stream())
+                .filter(typeDeclarationsByName::containsKey)
+                .collect(java.util.stream.Collectors.toSet());
+        var visitedTypes = new HashSet<String>();
+        typeDeclarations.stream()
+                .filter(typeDeclaration -> !referencedNestedTypes.contains(typeDeclaration.name()))
+                .forEach(typeDeclaration -> collectParentConstructorChains(
+                        typeDeclaration,
+                        typeDeclarationsByName,
+                        protectedConstructors,
+                        List.of(),
+                        parentConstructorsBySubtype,
+                        visitedTypes
+                ));
+        typeDeclarations.stream()
+                .filter(typeDeclaration -> !visitedTypes.contains(typeDeclaration.name()))
+                .forEach(typeDeclaration -> collectParentConstructorChains(
+                        typeDeclaration,
+                        typeDeclarationsByName,
+                        protectedConstructors,
+                        List.of(),
+                        parentConstructorsBySubtype,
+                        visitedTypes
+                ));
+    }
+
+    private void registerLibraryProtectedConstructors(
+            CompiledModule library,
+            SortedMap<String, GenericDataType> linkedTypes,
+            Map<String, CapybaraExpressionCompiler.ProtectedConstructorRef> protectedConstructors,
+            Map<String, List<CapybaraExpressionCompiler.ProtectedConstructorRef>> parentConstructorsBySubtype
+    ) {
+        var typeConstructorsByName = new HashMap<String, CapybaraExpressionCompiler.ProtectedConstructorRef>();
+        for (var function : library.functions()) {
+            var constructorTarget = constructorTargetTypeName(function.name());
+            if (constructorTarget.isEmpty()) {
+                continue;
+            }
+            var target = constructorTarget.orElseThrow();
+            var linkedType = linkedTypes.get(target.targetTypeName());
+            if (target.kind() == ConstructorKind.DATA && linkedType instanceof CompiledDataType) {
+                protectedConstructors.put(
+                        target.targetTypeName(),
+                        new CapybaraExpressionCompiler.ProtectedConstructorRef(
+                                library.name(),
+                                function.name(),
+                                target.targetTypeName(),
+                                target.targetTypeName(),
+                                false
+                        )
+                );
+                continue;
+            }
+            if (target.kind() == ConstructorKind.TYPE && linkedType instanceof CompiledDataParentType) {
+                var constructorRef = new CapybaraExpressionCompiler.ProtectedConstructorRef(
+                        library.name(),
+                        function.name(),
+                        target.targetTypeName(),
+                        constructorStateTypeName(target.targetTypeName()),
+                        true
+                );
+                protectedConstructors.put(target.targetTypeName(), constructorRef);
+                typeConstructorsByName.put(target.targetTypeName(), constructorRef);
+            }
+        }
+
+        var parentTypes = linkedTypes.values().stream()
+                .filter(CompiledDataParentType.class::isInstance)
+                .map(CompiledDataParentType.class::cast)
+                .filter(parentType -> typeConstructorsByName.containsKey(parentType.name()))
+                .sorted(
+                        Comparator.comparingInt((CompiledDataParentType parentType) -> parentType.subTypes().size())
+                                .reversed()
+                                .thenComparing(CompiledDataParentType::name)
+                )
+                .toList();
+
+        linkedTypes.values().stream()
+                .filter(CompiledDataType.class::isInstance)
+                .map(CompiledDataType.class::cast)
+                .filter(dataType -> !dataType.name().startsWith(CONSTRUCTOR_STATE_TYPE_PREFIX))
+                .forEach(dataType -> {
+                    var constructorChain = parentTypes.stream()
+                            .filter(parentType -> parentType.subTypes().stream().anyMatch(subType -> subType.name().equals(dataType.name())))
+                            .map(parentType -> typeConstructorsByName.get(parentType.name()))
+                            .toList();
+                    if (!constructorChain.isEmpty()) {
+                        parentConstructorsBySubtype.put(dataType.name(), List.copyOf(constructorChain));
+                    }
+                });
     }
 
     private void collectParentConstructorChains(
@@ -1104,9 +1186,28 @@ public class CapybaraCompiler {
                 continue;
             }
             if (!nextActive.isEmpty()) {
-                parentConstructorsBySubtype.put(subtypeName, List.copyOf(nextActive));
+                mergeParentConstructorChain(parentConstructorsBySubtype, subtypeName, nextActive);
             }
         }
+    }
+
+    private void mergeParentConstructorChain(
+            Map<String, List<CapybaraExpressionCompiler.ProtectedConstructorRef>> parentConstructorsBySubtype,
+            String subtypeName,
+            List<CapybaraExpressionCompiler.ProtectedConstructorRef> nextActive
+    ) {
+        parentConstructorsBySubtype.merge(
+                subtypeName,
+                List.copyOf(nextActive),
+                (existing, incoming) -> {
+                    var merged = new ArrayList<CapybaraExpressionCompiler.ProtectedConstructorRef>(existing.size() + incoming.size());
+                    merged.addAll(existing);
+                    incoming.stream()
+                            .filter(ref -> !merged.contains(ref))
+                            .forEach(merged::add);
+                    return List.copyOf(merged);
+                }
+        );
     }
 
     private Result<Void> validateResultReturningTypeConstructors(

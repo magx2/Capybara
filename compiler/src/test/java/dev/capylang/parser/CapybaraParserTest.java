@@ -177,9 +177,9 @@ class CapybaraParserTest {
     @DisplayName("should parse type constructor and constructor-local star data")
     void parseTypeConstructor() {
         var module = parseSuccess(new RawModule("Test", "/parser", """
-                type User { age: int } = Adult | Child with constructor {
-                    if age > 0 then Success { * { age: age } } else Error { "age" }
-                }
+                type User { age: int } with constructor {
+                   if age > 0 then Success { * { age: age } } else Error { "age" }
+                } = Adult | Child
                 """));
 
         var type = findDefinition(TypeDeclaration.class, "User", module.functional());
@@ -769,4 +769,3 @@ class CapybaraParserTest {
         assertThat(outerMatch.cases().getFirst().expression()).isInstanceOf(InfixExpression.class);
     }
 }
-
