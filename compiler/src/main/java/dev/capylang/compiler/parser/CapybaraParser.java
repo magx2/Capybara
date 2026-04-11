@@ -2422,6 +2422,13 @@ public class CapybaraParser {
                 current.append(ch);
                 continue;
             }
+            if (current.length() >= 2
+                && current.charAt(current.length() - 2) == '\\'
+                && current.charAt(current.length() - 1) == '{') {
+                // Treat \{{expr}} as a literal opening brace followed by interpolation.
+                current.setLength(current.length() - 2);
+                current.append('{');
+            }
             if (current.length() > 0) {
                 parts.add(new StringValue(quoteDoubleQuotedSegment(normalizeDoubleQuotedContent(current.toString())), Optional.of(position)));
                 current.setLength(0);
@@ -3185,7 +3192,6 @@ public class CapybaraParser {
     }
 
 }
-
 
 
 

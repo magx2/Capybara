@@ -6,6 +6,8 @@ fun expression(name: string, x: int): string = "Hello {name + x}"
 
 fun escaped(name: string): string = "Hello \{}"
 
+fun escaped_with_interpolation_value(foo: string): string = "xyz \{{foo}}"
+
 fun data_field(foo: Foo): string = "Hello {foo.name}"
 
 fun quote_escape(foo: Foo): string = "Hello \"{foo.name}\""
