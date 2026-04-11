@@ -133,6 +133,23 @@ public class CompilationErrorTest {
                 .contains("Constructor for `Child` must return `Result[Child]` because parent type constructor for `Parent` returns `Result[Parent]`");
     }
 
+    @Test
+    void shouldRejectMatchAssignedToIncompatibleTypedLet() {
+        var errors = compileProgram("""
+                        fun broken(): int =
+                            let xs: list[() => int] =
+                                match true with
+                                case true -> [1]
+                                case false -> [() => 2]
+                            0
+                        """,
+                "typed_let_match_branch_mismatch");
+
+        assertThat(errors).hasSize(1);
+        assertThat(errors.first().message())
+                .contains("Expected `CompiledFunctionType[argumentType=NOTHING, returnType=INT]`, got `INT`");
+    }
+
     @ParameterizedTest(name = "{index}: should fail when compiling `{0}.cfun`")
     @MethodSource
     void compilationError(
@@ -1318,8 +1335,6 @@ public class CompilationErrorTest {
         return out;
     }
 }
-
-
 
 
 

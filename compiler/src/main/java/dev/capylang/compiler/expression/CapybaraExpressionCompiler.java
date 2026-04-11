@@ -1614,6 +1614,32 @@ public class CapybaraExpressionCompiler {
     }
 
     private Result<CoercedArgument> linkArgumentForExpectedType(Expression argument, Scope scope, CompiledType expected) {
+        if (argument instanceof IfExpression ifExpression) {
+            return linkIfExpression(ifExpression, scope, expected)
+                    .flatMap(linkedArgument -> {
+                        var maybeCoerced = coerceArgument(linkedArgument, expected);
+                        if (maybeCoerced == null) {
+                            return withPosition(
+                                    Result.error("Expected `" + expected + "`, got `" + linkedArgument.type() + "`"),
+                                    argument.position()
+                            );
+                        }
+                        return Result.success(maybeCoerced);
+                    });
+        }
+        if (argument instanceof MatchExpression matchExpression) {
+            return linkMatchExpression(matchExpression, scope, expected)
+                    .flatMap(linkedArgument -> {
+                        var maybeCoerced = coerceArgument(linkedArgument, expected);
+                        if (maybeCoerced == null) {
+                            return withPosition(
+                                    Result.error("Expected `" + expected + "`, got `" + linkedArgument.type() + "`"),
+                                    argument.position()
+                            );
+                        }
+                        return Result.success(maybeCoerced);
+                    });
+        }
         if (argument instanceof TupleExpression tupleExpression
             && expected instanceof CompiledTupleType expectedTupleType) {
             if (tupleExpression.values().size() != expectedTupleType.elementTypes().size()) {
@@ -2271,6 +2297,27 @@ public class CapybaraExpressionCompiler {
                             .flatMap(t ->
                                     linkExpression(ifExpression.elseBranch(), scope)
                                             .map(e -> new CompiledIfExpression(c, t, e, mergeBranchTypes(t.type(), e.type()))));
+                });
+    }
+
+    private Result<CompiledExpression> linkIfExpression(IfExpression ifExpression, Scope scope, CompiledType expectedType) {
+        return linkExpression(ifExpression.condition(), scope)
+                .flatMap(c -> {
+                    if (!isBooleanConvertibleType(c.type())) {
+                        return withPosition(
+                                Result.error("condition in if statement has to have type `" + BOOL + "`, was `" + c.type() + "`"),
+                                ifExpression.condition().position()
+                        );
+                    }
+                    return linkArgumentForExpectedType(ifExpression.thenBranch(), scope, expectedType)
+                            .flatMap(t ->
+                                    linkArgumentForExpectedType(ifExpression.elseBranch(), scope, expectedType)
+                                            .map(e -> new CompiledIfExpression(
+                                                    c,
+                                                    t.expression(),
+                                                    e.expression(),
+                                                    mergeBranchTypes(t.expression().type(), e.expression().type())
+                                            )));
                 });
     }
 
@@ -4301,6 +4348,20 @@ public class CapybaraExpressionCompiler {
                         })));
     }
 
+    private Result<CompiledExpression> linkMatchExpression(
+            MatchExpression matchExpression,
+            Scope scope,
+            CompiledType expectedType
+    ) {
+        return linkExpression(matchExpression.matchWith(), scope)
+                .flatMap(matchWith -> matchExpression.cases().stream()
+                        .map(matchCase -> linkMatchCase(matchCase, matchWith, scope, Optional.of(expectedType)))
+                        .collect(new ResultCollectionCollector<>())
+                        .map(this::orderMatchCases)
+                        .flatMap(cases -> validateMatchExhaustiveness(matchExpression, matchWith.type(), cases)
+                                .map(ignored -> (CompiledExpression) new CompiledMatchExpression(matchWith, cases, expectedType))));
+    }
+
     private CompiledType mergeBranchTypes(CompiledType left, CompiledType right) {
         if (left.equals(right)) {
             return left;
@@ -4552,6 +4613,15 @@ public class CapybaraExpressionCompiler {
             CompiledExpression matchWith,
             Scope scope
     ) {
+        return linkMatchCase(matchCase, matchWith, scope, Optional.empty());
+    }
+
+    private Result<CompiledMatchExpression.MatchCase> linkMatchCase(
+            MatchExpression.MatchCase matchCase,
+            CompiledExpression matchWith,
+            Scope scope,
+            Optional<CompiledType> expectedType
+    ) {
         return linkPattern(matchCase.pattern(), matchWith.type(), scope)
                 .flatMap(patternAndScope -> {
                     var branchScope = patternAndScope.scope();
@@ -4562,7 +4632,10 @@ public class CapybaraExpressionCompiler {
                     }
                     var caseScope = branchScope;
                     return linkGuard(matchCase.guard(), caseScope)
-                            .flatMap(guard -> linkExpression(matchCase.expression(), caseScope)
+                            .flatMap(guard -> expectedType
+                                    .<Result<CompiledExpression>>map(type -> linkArgumentForExpectedType(matchCase.expression(), caseScope, type)
+                                            .map(CoercedArgument::expression))
+                                    .orElseGet(() -> linkExpression(matchCase.expression(), caseScope))
                                     .map(expression -> new CompiledMatchExpression.MatchCase(patternAndScope.pattern(), guard, expression)));
                 });
     }
@@ -6340,46 +6413,36 @@ public class CapybaraExpressionCompiler {
     }
 
     private Result<CompiledExpression> linkLetExpression(LetExpression expression, Scope scope) {
+        if (expression.declaredType().isPresent()) {
+            return linkTypeInScope(expression.declaredType().orElseThrow(), scope)
+                    .flatMap(linkedDeclaredType -> linkArgumentForExpectedType(expression.value(), scope, linkedDeclaredType)
+                            .flatMap(coercedValue -> linkExpression(expression.rest(), scope.add(expression.name(), linkedDeclaredType))
+                                    .map(rest -> new CompiledLetExpression(
+                                            expression.name(),
+                                            coercedValue.expression(),
+                                            Optional.of(linkedDeclaredType),
+                                            rest
+                                    ))));
+        }
+
         return linkExpression(expression.value(), scope)
-                .flatMap(value -> expression.declaredType()
-                        .map(declaredType -> linkTypeInScope(declaredType, scope)
-                                .flatMap(linkedDeclaredType -> {
-                                    var coerced = coerceArgument(value, linkedDeclaredType);
-                                    if (coerced == null) {
-                                        return withPosition(
-                                                Result.error(
-                                                        "Cannot assign let `" + expression.name() + "` of type `"
-                                                        + linkedDeclaredType + "` from `" + value.type() + "`"
-                                                ),
-                                                expression.position()
-                                        );
-                                    }
-                                    var typedValue = coerced.expression();
-                                    return linkExpression(expression.rest(), scope.add(expression.name(), linkedDeclaredType))
-                                            .map(rest -> new CompiledLetExpression(
-                                                    expression.name(),
-                                                    typedValue,
-                                                    Optional.of(linkedDeclaredType),
-                                                    rest
-                                            ));
-                                }))
-                        .orElseGet(() -> {
-                            var inferredDeclarationType = inferImplicitLetDeclarationType(
-                                    expression.name(),
-                                    value.type(),
-                                    expression.rest(),
-                                    scope
-                            );
-                            var letType = inferredDeclarationType.orElse(value.type());
-                            return linkExpression(expression.rest(), scope.add(expression.name(), letType))
-                                    .map(rest ->
-                                            new CompiledLetExpression(
-                                                    expression.name(),
-                                                    value,
-                                                    inferredDeclarationType,
-                                                    rest
-                                            ));
-                        }));
+                .flatMap(value -> {
+                    var inferredDeclarationType = inferImplicitLetDeclarationType(
+                            expression.name(),
+                            value.type(),
+                            expression.rest(),
+                            scope
+                    );
+                    var letType = inferredDeclarationType.orElse(value.type());
+                    return linkExpression(expression.rest(), scope.add(expression.name(), letType))
+                            .map(rest ->
+                                    new CompiledLetExpression(
+                                            expression.name(),
+                                            value,
+                                            inferredDeclarationType,
+                                            rest
+                                    ));
+                });
     }
 
     private Optional<CompiledType> inferImplicitLetDeclarationType(
