@@ -29,4 +29,11 @@ class DataConstructorTest {
         assertThat(DataConstructor.validatedNamedGuest("Ada", "guest")).isEqualTo("ok:Ada:guest");
         assertThat(DataConstructor.validatedNamedGuest("", "guest")).isEqualTo("err:Name was empty");
     }
+
+    @Test
+    void sharedSubtypeAppliesAllParentTypeConstructors() {
+        assertThat(DataConstructor.validatedProfile("Ada", "admin")).isEqualTo("ok:Ada:admin");
+        assertThat(DataConstructor.validatedProfile("", "admin")).isEqualTo("err:Profile name was empty");
+        assertThat(DataConstructor.validatedProfile("Ada", "")).isEqualTo("err:Profile role was empty");
+    }
 }

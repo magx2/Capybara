@@ -1186,9 +1186,28 @@ public class CapybaraCompiler {
                 continue;
             }
             if (!nextActive.isEmpty()) {
-                parentConstructorsBySubtype.put(subtypeName, List.copyOf(nextActive));
+                mergeParentConstructorChain(parentConstructorsBySubtype, subtypeName, nextActive);
             }
         }
+    }
+
+    private void mergeParentConstructorChain(
+            Map<String, List<CapybaraExpressionCompiler.ProtectedConstructorRef>> parentConstructorsBySubtype,
+            String subtypeName,
+            List<CapybaraExpressionCompiler.ProtectedConstructorRef> nextActive
+    ) {
+        parentConstructorsBySubtype.merge(
+                subtypeName,
+                List.copyOf(nextActive),
+                (existing, incoming) -> {
+                    var merged = new ArrayList<CapybaraExpressionCompiler.ProtectedConstructorRef>(existing.size() + incoming.size());
+                    merged.addAll(existing);
+                    incoming.stream()
+                            .filter(ref -> !merged.contains(ref))
+                            .forEach(merged::add);
+                    return List.copyOf(merged);
+                }
+        );
     }
 
     private Result<Void> validateResultReturningTypeConstructors(

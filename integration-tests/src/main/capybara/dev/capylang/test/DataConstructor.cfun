@@ -38,6 +38,22 @@ data NamedUser { name: string, role: string } with constructor {
 
 data NamedGuest { name: string, badge: string }
 
+type ValidatedProfileName { name: string } = Profile with constructor {
+    if name.size == 0 then
+        Error { "Profile name was empty" }
+    else
+        Success { * { name: name } }
+}
+
+type ValidatedProfileRole { role: string } = Profile with constructor {
+    if role.size == 0 then
+        Error { "Profile role was empty" }
+    else
+        Success { * { role: role } }
+}
+
+data Profile { name: string, role: string }
+
 fun validated_named_user(name: string, role: string): string =
     match NamedUser { name: name, role: role } with
     case Success { value } -> "ok:" + value.name + ":" + value.role
@@ -46,4 +62,9 @@ fun validated_named_user(name: string, role: string): string =
 fun validated_named_guest(name: string, badge: string): string =
     match NamedGuest { name: name, badge: badge } with
     case Success { value } -> "ok:" + value.name + ":" + value.badge
+    case Error { message } -> "err:" + message
+
+fun validated_profile(name: string, role: string): string =
+    match Profile { name: name, role: role } with
+    case Success { value } -> "ok:" + value.name + ":" + value.role
     case Error { message } -> "err:" + message
