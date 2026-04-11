@@ -121,6 +121,11 @@ public class CapybaraExpressionCompiler {
         return linkExpression(expression, Scope.EMPTY);
     }
 
+    public Result<CompiledExpression> linkExpressionForExpectedType(Expression expression, CompiledType expectedType) {
+        return linkArgumentForExpectedType(expression, Scope.EMPTY, expectedType)
+                .map(CoercedArgument::expression);
+    }
+
     private Result<CompiledExpression> linkExpression(Expression expression, Scope scope) {
         return switch (expression) {
             case BooleanValue booleanValue -> linkBooleanValue(booleanValue, scope);
@@ -440,14 +445,22 @@ public class CapybaraExpressionCompiler {
     }
 
     private Result<CompiledExpression> linkFunctionCall(FunctionCall functionCall, Scope scope) {
+        return linkFunctionCall(functionCall, scope, Optional.empty());
+    }
+
+    private Result<CompiledExpression> linkFunctionCall(
+            FunctionCall functionCall,
+            Scope scope,
+            Optional<CompiledType> expectedType
+    ) {
         if (functionCall.moduleName().isPresent()) {
-            return resolveQualifiedFunctionCall(functionCall, scope);
+            return resolveQualifiedFunctionCall(functionCall, scope, expectedType);
         }
         var functionVariable = resolveFunctionVariable(functionCall.name(), scope);
         if (functionVariable.isPresent()) {
             return resolveFunctionInvoke(functionCall, scope, functionVariable.get());
         }
-        return resolveGlobalFunctionCall(functionCall, scope);
+        return resolveGlobalFunctionCall(functionCall, scope, expectedType);
     }
 
     private Result<CompiledExpression> linkFunctionInvoke(FunctionInvoke functionInvoke, Scope scope) {
@@ -455,7 +468,11 @@ public class CapybaraExpressionCompiler {
                 .flatMap(function -> resolveFunctionInvoke(functionInvoke, scope, function));
     }
 
-    private Result<CompiledExpression> resolveQualifiedFunctionCall(FunctionCall functionCall, Scope scope) {
+    private Result<CompiledExpression> resolveQualifiedFunctionCall(
+            FunctionCall functionCall,
+            Scope scope,
+            Optional<CompiledType> expectedType
+    ) {
         var rawModuleName = functionCall.moduleName().orElseThrow();
         var moduleName = normalizeQualifiedModuleName(rawModuleName);
         var enumQualified = resolveEnumQualifiedFunctionCall(functionCall, scope, moduleName);
@@ -499,8 +516,12 @@ public class CapybaraExpressionCompiler {
                 deepestError = preferDeeperError(deepestError, unsafeCollectionError);
                 continue;
             }
+            var returnType = resolveReturnType(candidate, resolved.arguments());
+            if (expectedType.isPresent() && !canCoerceToExpectedType(returnType, expectedType.orElseThrow())) {
+                continue;
+            }
             if (isBetterResolvedCall(candidate, resolved.coercions(), best)) {
-                best = new ResolvedFunctionCall(candidate, resolved.arguments(), resolved.coercions());
+                best = new ResolvedFunctionCall(candidate, resolved.arguments(), resolved.coercions(), returnType);
             }
         }
         if (best == null) {
@@ -525,7 +546,7 @@ public class CapybaraExpressionCompiler {
         return Result.success(new CompiledFunctionCall(
                 resolvedModule.javaModuleName() + "." + functionCall.name(),
                 best.arguments(),
-                resolveReturnType(best.signature(), best.arguments())
+                best.returnType()
         ));
     }
 
@@ -602,9 +623,13 @@ public class CapybaraExpressionCompiler {
         return normalized;
     }
 
-    private Result<CompiledExpression> resolveGlobalFunctionCall(FunctionCall functionCall, Scope scope) {
+    private Result<CompiledExpression> resolveGlobalFunctionCall(
+            FunctionCall functionCall,
+            Scope scope,
+            Optional<CompiledType> expectedType
+    ) {
         if (functionCall.name().startsWith(METHOD_INVOKE_PREFIX)) {
-            return resolveMethodInvokeCall(functionCall, scope);
+            return resolveMethodInvokeCall(functionCall, scope, expectedType);
         }
         var candidates = functionsByNameAndArity(functionSignatures, functionCall.name(), functionCall.arguments().size());
         if (candidates.isEmpty()) {
@@ -638,8 +663,12 @@ public class CapybaraExpressionCompiler {
                 deepestError = preferDeeperError(deepestError, unsafeCollectionError);
                 continue;
             }
+            var returnType = resolveReturnType(candidate, resolved.arguments());
+            if (expectedType.isPresent() && !canCoerceToExpectedType(returnType, expectedType.orElseThrow())) {
+                continue;
+            }
             if (isBetterResolvedCall(candidate, resolved.coercions(), best)) {
-                best = new ResolvedFunctionCall(candidate, resolved.arguments(), resolved.coercions());
+                best = new ResolvedFunctionCall(candidate, resolved.arguments(), resolved.coercions(), returnType);
             }
         }
         if (best == null) {
@@ -663,7 +692,7 @@ public class CapybaraExpressionCompiler {
         return Result.success(new CompiledFunctionCall(
                 functionCall.name(),
                 best.arguments(),
-                resolveReturnType(best.signature(), best.arguments())
+                best.returnType()
         ));
     }
 
@@ -814,6 +843,14 @@ public class CapybaraExpressionCompiler {
     }
 
     private Result<CompiledExpression> resolveMethodInvokeCall(FunctionCall functionCall, Scope scope) {
+        return resolveMethodInvokeCall(functionCall, scope, Optional.empty());
+    }
+
+    private Result<CompiledExpression> resolveMethodInvokeCall(
+            FunctionCall functionCall,
+            Scope scope,
+            Optional<CompiledType> expectedType
+    ) {
         var methodName = functionCall.name().substring(METHOD_INVOKE_PREFIX.length());
         var candidates = methodsByNameAndArity(functionSignatures, methodName, functionCall.arguments().size());
         if (candidates.isEmpty()) {
@@ -836,8 +873,12 @@ public class CapybaraExpressionCompiler {
                 continue;
             }
             var resolved = resolvedValue.value();
+            var returnType = resolveReturnType(candidate, resolved.arguments());
+            if (expectedType.isPresent() && !canCoerceToExpectedType(returnType, expectedType.orElseThrow())) {
+                continue;
+            }
             if (isBetterResolvedCall(candidate, resolved.coercions(), best)) {
-                best = new ResolvedFunctionCall(candidate, resolved.arguments(), resolved.coercions());
+                best = new ResolvedFunctionCall(candidate, resolved.arguments(), resolved.coercions(), returnType);
             }
         }
         if (best == null) {
@@ -863,7 +904,7 @@ public class CapybaraExpressionCompiler {
         return Result.success(new CompiledFunctionCall(
                 best.signature().name(),
                 best.arguments(),
-                resolveReturnType(best.signature(), best.arguments())
+                best.returnType()
         ));
     }
 
@@ -1694,6 +1735,19 @@ public class CapybaraExpressionCompiler {
                     argument.position()
             );
         }
+        if (argument instanceof FunctionCall functionCall) {
+            return linkFunctionCall(functionCall, scope, Optional.of(expected))
+                    .flatMap(linkedArgument -> {
+                        var maybeCoerced = coerceArgument(linkedArgument, expected);
+                        if (maybeCoerced == null) {
+                            return withPosition(
+                                    Result.error("Expected `" + expected + "`, got `" + linkedArgument.type() + "`"),
+                                    argument.position()
+                            );
+                        }
+                        return Result.success(maybeCoerced);
+                    });
+        }
         if (argument instanceof NewListExpression newListExpression && expected instanceof CompiledList expectedList) {
             return linkNewListExpression(newListExpression, scope, expectedList.elementType())
                     .flatMap(linkedArgument -> {
@@ -2079,6 +2133,10 @@ public class CapybaraExpressionCompiler {
             }
         }
         return null;
+    }
+
+    private boolean canCoerceToExpectedType(CompiledType actualType, CompiledType expectedType) {
+        return coerceArgument(new CompiledVariable("__expected__", actualType), expectedType) != null;
     }
 
     private boolean areTupleTypesCompatible(CompiledTupleType actual, CompiledTupleType expected) {
@@ -2590,10 +2648,11 @@ public class CapybaraExpressionCompiler {
             }
             var arguments = List.of(maybeReceiver.expression(), maybeArgument.expression());
             var coercions = maybeReceiver.coercions() + maybeArgument.coercions();
+            var returnType = resolveMethodReturnType(operatorSymbol, candidate, arguments);
             if (best == null
                 || coercions < best.coercions()
                 || (coercions == best.coercions() && isSignatureMoreSpecific(candidate, best.signature()))) {
-                best = new ResolvedFunctionCall(candidate, arguments, coercions);
+                best = new ResolvedFunctionCall(candidate, arguments, coercions, returnType);
             }
         }
         if (best == null) {
@@ -2605,11 +2664,10 @@ public class CapybaraExpressionCompiler {
                     position
             );
         }
-        var returnType = resolveMethodReturnType(operatorSymbol, best.signature(), best.arguments());
         return Result.success(new CompiledFunctionCall(
                 best.signature().name(),
                 best.arguments(),
-                returnType
+                best.returnType()
         ));
     }
 
@@ -2647,10 +2705,11 @@ public class CapybaraExpressionCompiler {
             var coercedArgument = ((Result.Success<CoercedArgument>) maybeArgument).value();
             var arguments = List.of(maybeReceiver.expression(), coercedArgument.expression());
             var coercions = maybeReceiver.coercions() + coercedArgument.coercions();
+            var returnType = resolveMethodReturnType(operatorSymbol, candidate, arguments);
             if (best == null
                 || coercions < best.coercions()
                 || (coercions == best.coercions() && isSignatureMoreSpecific(candidate, best.signature()))) {
-                best = new ResolvedFunctionCall(candidate, arguments, coercions);
+                best = new ResolvedFunctionCall(candidate, arguments, coercions, returnType);
             }
         }
         if (best == null) {
@@ -2665,11 +2724,10 @@ public class CapybaraExpressionCompiler {
                     position
             );
         }
-        var returnType = resolveMethodReturnType(operatorSymbol, best.signature(), best.arguments());
         return Result.success(new CompiledFunctionCall(
                 best.signature().name(),
                 best.arguments(),
-                returnType
+                best.returnType()
         ));
     }
 
@@ -3047,7 +3105,8 @@ public class CapybaraExpressionCompiler {
             var resolved = new ResolvedFunctionCall(
                     candidate,
                     List.of(coerced.expression()),
-                    coerced.coercions()
+                    coerced.coercions(),
+                    resolveReturnType(candidate, List.of(coerced.expression()))
             );
             if (isBetterResolvedCall(candidate, resolved.coercions(), best)) {
                 best = resolved;
@@ -6808,7 +6867,12 @@ public class CapybaraExpressionCompiler {
     private record CoercedArguments(List<CompiledExpression> arguments, int coercions) {
     }
 
-    private record ResolvedFunctionCall(FunctionSignature signature, List<CompiledExpression> arguments, int coercions) {
+    private record ResolvedFunctionCall(
+            FunctionSignature signature,
+            List<CompiledExpression> arguments,
+            int coercions,
+            CompiledType returnType
+    ) {
     }
 
     private record PipeMapper(String argumentName, CompiledExpression expression) {

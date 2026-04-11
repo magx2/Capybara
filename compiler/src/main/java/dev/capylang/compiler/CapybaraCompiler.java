@@ -1021,6 +1021,7 @@ public class CapybaraCompiler {
                     parentConstructorsBySubtype
             );
         }
+        collectProtectedConstructorsFromLibraries(libraries, protectedConstructors, parentConstructorsBySubtype);
         var normalizedParentConstructors = new HashMap<String, List<CapybaraExpressionCompiler.ProtectedConstructorRef>>();
         parentConstructorsBySubtype.forEach((name, refs) -> normalizedParentConstructors.put(name, List.copyOf(refs)));
         return new CapybaraExpressionCompiler.ConstructorRegistry(Map.copyOf(protectedConstructors), Map.copyOf(normalizedParentConstructors));
@@ -1594,7 +1595,25 @@ public class CapybaraCompiler {
                                 ? constructorStateTypeName(target.targetTypeName())
                                 : target.targetTypeName())
         );
-        return linker.linkExpression(function.expression()).flatMap(expression -> {
+        var linkedDeclaredReturnType = function.returnType().isPresent()
+                ? signatures.stream()
+                        .filter(signature -> signature.name().equals(function.name()))
+                        .filter(signature -> signature.parameterTypes().size() == parameters.size())
+                        .filter(signature -> {
+                            for (var i = 0; i < parameters.size(); i++) {
+                                if (!signature.parameterTypes().get(i).equals(parameters.get(i).type())) {
+                                    return false;
+                                }
+                            }
+                            return true;
+                        })
+                        .map(CapybaraExpressionCompiler.FunctionSignature::returnType)
+                        .findFirst()
+                : Optional.<CompiledType>empty();
+        var linkedExpression = linkedDeclaredReturnType.isPresent()
+                ? linker.linkExpressionForExpectedType(function.expression(), linkedDeclaredReturnType.orElseThrow())
+                : linker.linkExpression(function.expression());
+        return linkedExpression.flatMap(expression -> {
             if (function.returnType().isPresent()
                 || expression.type() != PrimitiveLinkedType.ANY
                 || !function.name().contains("__local_fun_")) {
