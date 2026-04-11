@@ -6434,10 +6434,52 @@ public class CapybaraExpressionCompiler {
 
     private String renderTypeForError(CompiledType type) {
         return switch (type) {
-            case PrimitiveLinkedType.FLOAT -> "double";
             case PrimitiveLinkedType primitive -> primitive.name().toLowerCase(java.util.Locale.ROOT);
+            case CollectionLinkedType.CompiledList listType ->
+                    "list[" + renderTypeForError(listType.elementType()) + "]";
+            case CollectionLinkedType.CompiledSet setType ->
+                    "set[" + renderTypeForError(setType.elementType()) + "]";
+            case CollectionLinkedType.CompiledDict dictType ->
+                    "dict[" + renderTypeForError(dictType.valueType()) + "]";
+            case CompiledTupleType tupleType -> "tuple[" + tupleType.elementTypes().stream()
+                    .map(this::renderTypeForError)
+                    .collect(java.util.stream.Collectors.joining(", ")) + "]";
+            case CompiledFunctionType functionType ->
+                    renderTypeForError(functionType.argumentType()) + "=>" + renderTypeForError(functionType.returnType());
+            case CompiledGenericTypeParameter genericTypeParameter -> genericTypeParameter.name();
+            case CompiledDataType dataType -> renderNamedTypeForError(dataType.name(), dataType.typeParameters());
+            case CompiledDataParentType dataParentType -> renderNamedTypeForError(dataParentType.name(), dataParentType.typeParameters());
             default -> type.toString();
         };
+    }
+
+    private String renderNamedTypeForError(String name, List<String> typeParameters) {
+        var displayName = stripQualifiedTypeName(name);
+        if (typeParameters.isEmpty()) {
+            return displayName;
+        }
+        return displayName + "[" + typeParameters.stream()
+                .map(this::renderTypeDescriptorForError)
+                .collect(java.util.stream.Collectors.joining(", ")) + "]";
+    }
+
+    private String renderTypeDescriptorForError(String descriptor) {
+        return parseLinkedTypeDescriptor(descriptor)
+                .map(this::renderTypeForError)
+                .orElseGet(() -> stripQualifiedTypeName(descriptor));
+    }
+
+    private String stripQualifiedTypeName(String typeName) {
+        var normalized = typeName == null ? "" : typeName.trim();
+        var slash = normalized.lastIndexOf('/');
+        if (slash >= 0 && slash + 1 < normalized.length()) {
+            normalized = normalized.substring(slash + 1);
+        }
+        var dot = normalized.lastIndexOf('.');
+        if (dot >= 0 && dot + 1 < normalized.length()) {
+            normalized = normalized.substring(dot + 1);
+        }
+        return normalized;
     }
 
     private Result<CompiledExpression> linkStringValue(StringValue value, Scope scope) {
