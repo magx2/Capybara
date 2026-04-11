@@ -1,0 +1,14 @@
+from /capy/lang/Result import { * }
+
+data Date {
+    day: int,
+    month: int,
+    year: int
+}
+
+fun Date.first_day_of_month(): Result[Date] =
+    Success { Date { day: 1, month: this.month, year: this.year } }
+
+fun Date.with_day(day: int): Result[Date] =
+    Success { Date { day, month: this.month, year: this.year } }
+

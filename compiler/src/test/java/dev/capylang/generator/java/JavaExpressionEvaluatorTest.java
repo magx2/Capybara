@@ -192,6 +192,25 @@ class JavaExpressionEvaluatorTest {
     }
 
     @Test
+    void shouldFullyQualifyResultReturnTypeInTopLevelRecordMethods() {
+        var program = compileProgram("Date", "/capy/date_time", """
+                from /capy/lang/Result import {*}
+
+                data Date { day: int }
+                fun Date.first_day_of_month(): Result[Date] = Success { Date { day: 1 } }
+                """);
+
+        var generatedDate = new JavaGenerator().generate(program).modules().stream()
+                .filter(module -> module.relativePath().toString().endsWith("capy/dateTime/Date.java"))
+                .findFirst()
+                .orElseThrow()
+                .code();
+
+        assertThat(generatedDate).contains("public capy.lang.Result firstDayOfMonth()");
+        assertThat(generatedDate).doesNotContain("public Result firstDayOfMonth()");
+    }
+
+    @Test
     void shouldNotGenerateDuplicateRecordToStringWhenCapybaraDefinesToString() {
         var program = compileProgram("Pretty", "/foo/bar", """
                 data Pretty { value: string }
@@ -597,4 +616,3 @@ class JavaExpressionEvaluatorTest {
         );
     }
 }
-
