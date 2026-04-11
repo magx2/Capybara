@@ -49,7 +49,7 @@ class WithCompilationErrorTest {
                                 data Foo { a: int }
                                 fun foo(foo: Foo): Foo = foo.with(a: \"x\")
                                 """,
-                        "Expected `INT`, got `STRING`"
+                        "Expected `int`, got `string`"
                 ),
                 Arguments.of(
                         "non data receiver",
@@ -71,5 +71,4 @@ class WithCompilationErrorTest {
         );
     }
 }
-
 
