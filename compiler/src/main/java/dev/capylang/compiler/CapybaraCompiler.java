@@ -1875,7 +1875,7 @@ public class CapybaraCompiler {
             Function function,
             String moduleSourceFile
     ) {
-        if (!error.message().matches("^Expected `[^`]+`, but got `[^`]+`$")) {
+        if (!error.message().matches("^Expected `[^`]+`, (but )?got `[^`]+`$")) {
             return error;
         }
         var line = Math.max(error.line(), 1);
@@ -2445,6 +2445,7 @@ public class CapybaraCompiler {
     }
 
     private String normalizeReportedTypeName(String typeName) {
+        typeName = typeName.trim();
         if (typeName.startsWith("CompiledList[elementType=") && typeName.endsWith("]")) {
             var inner = typeName.substring("CompiledList[elementType=".length(), typeName.length() - 1);
             return "list[" + normalizeReportedTypeName(inner) + "]";
@@ -2460,16 +2461,31 @@ public class CapybaraCompiler {
         if (typeName.startsWith("CompiledGenericTypeParameter[name=") && typeName.endsWith("]")) {
             return normalizeUserVisibleNames(typeName.substring("CompiledGenericTypeParameter[name=".length(), typeName.length() - 1));
         }
+        if (typeName.startsWith("CompiledTupleType[elementTypes=[") && typeName.endsWith("]]")) {
+            var inner = typeName.substring("CompiledTupleType[elementTypes=[".length(), typeName.length() - 2);
+            return "tuple[" + splitTopLevelTypeArguments(inner).stream()
+                    .map(this::normalizeReportedTypeName)
+                    .collect(java.util.stream.Collectors.joining(", ")) + "]";
+        }
+        if (typeName.startsWith("CompiledFunctionType[")) {
+            var argumentType = extractStructuredFieldValue(typeName, "argumentType=");
+            var returnType = extractStructuredFieldValue(typeName, "returnType=");
+            if (argumentType != null && returnType != null) {
+                return normalizeReportedTypeName(argumentType) + "=>" + normalizeReportedTypeName(returnType);
+            }
+        }
         if (typeName.startsWith("CompiledDataType[name=")) {
-            var end = typeName.indexOf(',');
-            if (end > "CompiledDataType[name=".length()) {
-                return restorePrivateTypeNameForDisplay(typeName.substring("CompiledDataType[name=".length(), end));
+            var name = extractStructuredFieldValue(typeName, "name=");
+            var typeParameters = extractStructuredFieldValue(typeName, "typeParameters=");
+            if (name != null) {
+                return renderReportedNamedType(name, typeParameters);
             }
         }
         if (typeName.startsWith("CompiledDataParentType[name=")) {
-            var end = typeName.indexOf(',');
-            if (end > "CompiledDataParentType[name=".length()) {
-                return restorePrivateTypeNameForDisplay(typeName.substring("CompiledDataParentType[name=".length(), end));
+            var name = extractStructuredFieldValue(typeName, "name=");
+            var typeParameters = extractStructuredFieldValue(typeName, "typeParameters=");
+            if (name != null) {
+                return renderReportedNamedType(name, typeParameters);
             }
         }
         return restorePrivateTypeNameForDisplay(switch (typeName) {
@@ -2484,6 +2500,59 @@ public class CapybaraCompiler {
             case "NOTHING" -> "nothing";
             default -> typeName;
         });
+    }
+
+    private String renderReportedNamedType(String rawName, String rawTypeParameters) {
+        var displayName = restorePrivateTypeNameForDisplay(stripQualifiedTypeName(rawName));
+        if (rawTypeParameters == null || rawTypeParameters.isBlank() || "[]".equals(rawTypeParameters)) {
+            return displayName;
+        }
+        var inner = rawTypeParameters;
+        if (inner.startsWith("[") && inner.endsWith("]")) {
+            inner = inner.substring(1, inner.length() - 1);
+        }
+        if (inner.isBlank()) {
+            return displayName;
+        }
+        return displayName + "[" + splitTopLevelTypeArguments(inner).stream()
+                .map(this::normalizeReportedTypeName)
+                .collect(java.util.stream.Collectors.joining(", ")) + "]";
+    }
+
+    private String extractStructuredFieldValue(String source, String fieldName) {
+        var start = source.indexOf(fieldName);
+        if (start < 0) {
+            return null;
+        }
+        start += fieldName.length();
+        var depth = 0;
+        for (var i = start; i < source.length(); i++) {
+            var current = source.charAt(i);
+            if (current == '[') {
+                depth++;
+            } else if (current == ']') {
+                if (depth == 0) {
+                    return source.substring(start, i).trim();
+                }
+                depth--;
+            } else if (current == ',' && depth == 0) {
+                return source.substring(start, i).trim();
+            }
+        }
+        return source.substring(start).trim();
+    }
+
+    private String stripQualifiedTypeName(String typeName) {
+        var normalized = typeName.trim();
+        var slash = normalized.lastIndexOf('/');
+        if (slash >= 0 && slash + 1 < normalized.length()) {
+            normalized = normalized.substring(slash + 1);
+        }
+        var dot = normalized.lastIndexOf('.');
+        if (dot >= 0 && dot + 1 < normalized.length()) {
+            normalized = normalized.substring(dot + 1);
+        }
+        return normalized;
     }
 
     private String formatLinkedType(CompiledType type) {
@@ -3322,11 +3391,12 @@ public class CapybaraCompiler {
     }
 
     private String normalizeUserVisibleNames(String message) {
-        var expectedFoundMatcher = java.util.regex.Pattern.compile("^Expected `([^`]+)`, but got `([^`]+)`$").matcher(message);
+        var expectedFoundMatcher = java.util.regex.Pattern.compile("^Expected `([^`]+)`, (but )?got `([^`]+)`$").matcher(message);
         if (expectedFoundMatcher.matches()) {
             var expected = normalizeReportedTypeName(expectedFoundMatcher.group(1));
-            var got = normalizeReportedTypeName(expectedFoundMatcher.group(2));
-            message = "Expected `" + expected + "`, but got `" + got + "`";
+            var got = normalizeReportedTypeName(expectedFoundMatcher.group(3));
+            var separator = expectedFoundMatcher.group(2) == null ? ", got `" : ", but got `";
+            message = "Expected `" + expected + "`" + separator + got + "`";
         }
         var restoredLocalFunctions = replacePrivateLocalNamesInText(message, "__local_fun_");
         var restoredLocalConsts = replacePrivateLocalNamesInText(restoredLocalFunctions, "__local_const_");
