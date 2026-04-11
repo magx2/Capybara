@@ -21,6 +21,11 @@ class StringInterpolationTest {
     }
 
     @Test
+    void escapedOpeningBraceBeforeInterpolationStaysLiteral() {
+        assertThat(StringInterpolation.escapedWithInterpolationValue("boo")).isEqualTo("xyz {boo}");
+    }
+
+    @Test
     void quoteEscapeInterpolation() {
         assertThat(StringInterpolation.quoteEscape(new StringInterpolation.Foo("Martin"))).isEqualTo("Hello \"Martin\"");
     }
@@ -35,6 +40,5 @@ class StringInterpolationTest {
         assertThat(StringInterpolation.singleQuoted("Capybara")).isEqualTo("Hello {name}");
     }
 }
-
 
 
