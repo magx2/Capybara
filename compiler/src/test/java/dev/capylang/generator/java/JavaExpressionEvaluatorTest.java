@@ -207,21 +207,21 @@ class JavaExpressionEvaluatorTest {
 
     @Test
     void shouldFullyQualifyResultReturnTypeInTopLevelRecordMethods() {
-        var program = compileProgram("Date", "/capy/date_time", """
+        var program = compileProgram("LocalDateModule", "/foo/bar", """
                 from /capy/lang/Result import {*}
 
-                data Date { day: int }
-                fun Date.first_day_of_month(): Result[Date] = Success { Date { day: 1 } }
+                data LocalDate { day: int }
+                fun LocalDate.first_day_of_month(): Result[LocalDate] = Success { LocalDate { day: 1 } }
                 """);
 
         var generatedDate = new JavaGenerator().generate(program).modules().stream()
-                .filter(module -> module.relativePath().equals(java.nio.file.Path.of("capy", "dateTime", "Date.java")))
+                .filter(module -> module.relativePath().equals(java.nio.file.Path.of("foo", "bar", "LocalDateModule.java")))
                 .findFirst()
                 .orElseThrow()
                 .code();
 
-        assertThat(generatedDate).contains("public capy.lang.Result<Date> firstDayOfMonth()");
-        assertThat(generatedDate).doesNotContain("public Result<Date> firstDayOfMonth()");
+        assertThat(generatedDate).contains("public capy.lang.Result<LocalDate> firstDayOfMonth()");
+        assertThat(generatedDate).doesNotContain("public Result<LocalDate> firstDayOfMonth()");
     }
 
     @Test
@@ -472,15 +472,15 @@ class JavaExpressionEvaluatorTest {
                 from /capy/lang/Result import { * }
                 from /capy/test/Assert import { * }
 
-                data Date { day: int }
+                data LocalDate { day: int }
 
-                fun test(value: Result[Date]): Assert = assert_that(value).succeeds(Date { day: 1 })
+                fun test(value: Result[LocalDate]): Assert = assert_that(value).succeeds(LocalDate { day: 1 })
                 """));
         var generated = generatedProgram.modules().stream()
                 .map(dev.capylang.generator.GeneratedModule::code)
                 .collect(joining("\n"));
 
-        assertThat(generated).contains(".succeeds(new Date(1))");
+        assertThat(generated).contains(".succeeds(new LocalDate(1))");
         assertGeneratedJavaCompiles(generatedProgram);
     }
 
