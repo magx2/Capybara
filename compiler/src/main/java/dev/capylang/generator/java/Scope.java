@@ -15,22 +15,33 @@ class Scope {
     private static final Logger LOG = Logger.getLogger(Scope.class.getName());
     private static final String SEPARATOR = "_j";
     private static final Pattern LAST_NUMBER_PATTERN = Pattern.compile("(.+)" + SEPARATOR + "(\\d+)");
-    static final Scope EMPTY = new Scope(0L, Set.of(), Map.of(), List.of(), Optional.empty(), Optional.empty());
+    private static final Set<String> JAVA_KEYWORDS = Set.of(
+            "abstract", "assert", "boolean", "break", "byte", "case", "catch", "char", "class",
+            "const", "continue", "default", "do", "double", "else", "enum", "extends", "false",
+            "final", "finally", "float", "for", "goto", "if", "implements", "import", "instanceof",
+            "int", "interface", "long", "native", "new", "null", "package", "private", "protected",
+            "public", "return", "short", "static", "strictfp", "super", "switch", "synchronized",
+            "this", "throw", "throws", "transient", "true", "try", "void", "volatile", "while"
+    );
+    static final Scope EMPTY = new Scope(0L, Set.of(), Set.of(), Map.of(), List.of(), Optional.empty(), Optional.empty());
 
     private final long valueIdx;
     private final Set<String> localValues;
+    private final Set<String> javaLocalValues;
     private final Map<String, String> valueNameToUniqueName;
     private final List<String> statements;
     private final Optional<String> expression;
     private final Optional<String> moduleHelperClass;
 
     private Scope(long valueIdx, Set<String> localValues,
+                  Set<String> javaLocalValues,
                   Map<String, String> valueNameToUniqueName,
                   List<String> statements,
                   Optional<String> expression,
                   Optional<String> moduleHelperClass) {
         this.valueIdx = valueIdx;
         this.localValues = Set.copyOf(localValues);
+        this.javaLocalValues = Set.copyOf(javaLocalValues);
         this.valueNameToUniqueName = Map.copyOf(valueNameToUniqueName);
         this.statements = List.copyOf(statements);
         this.expression = expression;
@@ -38,14 +49,21 @@ class Scope {
     }
 
     UniqueNameScopeExpression addValue(String name, CompiledExpression expression) {
+        var javaName = normalizeJavaLocalIdentifier(name);
         return Optional.of(name)
-                .filter(not(localValues::contains))
+                .filter(n -> !localValues.contains(n) && !javaLocalValues.contains(javaName))
                 .map(n -> {
                     var updatedValues = new HashSet<>(localValues);
                     updatedValues.add(name);
+                    var updatedJavaValues = new HashSet<>(javaLocalValues);
+                    updatedJavaValues.add(javaName);
+                    var updatedMappings = new HashMap<>(valueNameToUniqueName);
+                    if (!name.equals(javaName)) {
+                        updatedMappings.put(name, javaName);
+                    }
                     return new UniqueNameScopeExpression(
-                            n,
-                            new Scope(valueIdx, updatedValues, valueNameToUniqueName, statements, this.expression, moduleHelperClass),
+                            javaName,
+                            new Scope(valueIdx, updatedValues, updatedJavaValues, updatedMappings, statements, this.expression, moduleHelperClass),
                             expression
                     );
                 })
@@ -73,52 +91,90 @@ class Scope {
     }
 
     Scope addLocalValue(String name) {
-        if (localValues.contains(name)) {
+        var javaName = normalizeJavaLocalIdentifier(name);
+        if (!localValues.contains(name) && !javaLocalValues.contains(javaName)) {
+            var updated = new HashSet<>(localValues);
+            updated.add(name);
+            var updatedJavaValues = new HashSet<>(javaLocalValues);
+            updatedJavaValues.add(javaName);
+            var updatedMappings = new HashMap<>(valueNameToUniqueName);
+            if (!name.equals(javaName)) {
+                updatedMappings.put(name, javaName);
+            }
+            return new Scope(valueIdx, updated, updatedJavaValues, updatedMappings, statements, expression, moduleHelperClass);
+        }
+        if (localValues.contains(name) && Objects.equals(valueNameToUniqueName.get(name), javaName)) {
             return this;
         }
+
+        var reserved = reserveUniqueJavaLocalName(name);
         var updated = new HashSet<>(localValues);
         updated.add(name);
-        return new Scope(valueIdx, updated, valueNameToUniqueName, statements, expression, moduleHelperClass);
+        var updatedJavaValues = new HashSet<>(javaLocalValues);
+        updatedJavaValues.add(reserved.javaName());
+        var updatedMappings = new HashMap<>(valueNameToUniqueName);
+        updatedMappings.put(name, reserved.javaName());
+        return new Scope(reserved.nextValueIdx(), updated, updatedJavaValues, updatedMappings, statements, expression, moduleHelperClass);
     }
 
     private Scope addStatementUnchecked(String statement) {
         var updated = new ArrayList<>(statements);
         updated.add(statement);
-        return new Scope(valueIdx, localValues, valueNameToUniqueName, updated, expression, moduleHelperClass);
+        return new Scope(valueIdx, localValues, javaLocalValues, valueNameToUniqueName, updated, expression, moduleHelperClass);
     }
 
     public Scope addExpression(String expression) {
         if (this.expression.isPresent()) {
             throw new IllegalStateException("Expression already exists and it's set to: " + this.expression.get());
         }
-        return new Scope(valueIdx, localValues, valueNameToUniqueName, statements, Optional.of(expression), moduleHelperClass);
+        return new Scope(valueIdx, localValues, javaLocalValues, valueNameToUniqueName, statements, Optional.of(expression), moduleHelperClass);
     }
 
     private record UniqueNameScopeExpression(String uniqueName, Scope scope, CompiledExpression expression) {
+    }
+
+    private record ReservedJavaLocalName(String logicalName, String javaName, long nextValueIdx) {
+    }
+
+    private ReservedJavaLocalName reserveUniqueJavaLocalName(String baseName) {
+        var idx = valueIdx;
+        var matcher = LAST_NUMBER_PATTERN.matcher(baseName);
+        if (matcher.matches()) {
+            idx = parseLong(matcher.group(2));
+            baseName = matcher.group(1);
+        }
+        String logicalName;
+        String javaName;
+        do {
+            idx++;
+            logicalName = baseName + SEPARATOR + idx;
+            javaName = normalizeJavaLocalIdentifier(logicalName);
+        } while (javaLocalValues.contains(javaName));
+        return new ReservedJavaLocalName(logicalName, javaName, idx);
     }
 
     private UniqueNameScopeExpression generateUniqueName(String name, CompiledExpression expression) {
         if (!localValues.contains(name)) {
             throw new IllegalStateException("Name `%s` should be in `localValues`: %s".formatted(name, localValues));
         }
-        var idx = valueIdx;
-        var matcher = LAST_NUMBER_PATTERN.matcher(name);
-        if (matcher.matches()) {
-            idx = parseLong(matcher.group(2));
-            name = matcher.group(1);
-        }
-        var uniqueName = name + SEPARATOR + (idx + 1);
-        LOG.fine("findUniqueName: " + name + " -> " + uniqueName);
+        var reserved = reserveUniqueJavaLocalName(name);
+        var uniqueName = reserved.logicalName();
+        var javaUniqueName = reserved.javaName();
+        LOG.fine("findUniqueName: " + name + " -> " + uniqueName + " (" + javaUniqueName + ")");
 
         var set = new HashSet<>(localValues);
         set.add(uniqueName);
+        var javaSet = new HashSet<>(javaLocalValues);
+        javaSet.add(javaUniqueName);
         var map = new HashMap<>(valueNameToUniqueName);
-        map.put(name, uniqueName);
+        map.put(name, javaUniqueName);
+        map.put(uniqueName, javaUniqueName);
         return new UniqueNameScopeExpression(
-                uniqueName,
+                javaUniqueName,
                 new Scope(
-                        valueIdx + 1,
+                        reserved.nextValueIdx(),
                         set,
+                        javaSet,
                         map,
                         statements,
                         this.expression,
@@ -130,7 +186,7 @@ class Scope {
     Scope addValueOverride(String sourceName, String targetName) {
         var updatedMap = new HashMap<>(valueNameToUniqueName);
         updatedMap.put(sourceName, targetName);
-        return new Scope(valueIdx, localValues, updatedMap, statements, expression, moduleHelperClass);
+        return new Scope(valueIdx, localValues, javaLocalValues, updatedMap, statements, expression, moduleHelperClass);
     }
 
     public List<String> getStatements() {
@@ -144,6 +200,7 @@ class Scope {
     public Scope add(Scope other) {
         return new Scope(valueIdx,
                 union(localValues, other.localValues),
+                union(javaLocalValues, other.javaLocalValues),
                 union(valueNameToUniqueName, other.valueNameToUniqueName),
                 union(statements, other.statements), union(expression, other.expression),
                 moduleHelperClass.or(() -> other.moduleHelperClass));
@@ -180,7 +237,7 @@ class Scope {
     }
 
     Scope withoutValueOverrides() {
-        return new Scope(valueIdx, localValues, Map.of(), statements, expression, moduleHelperClass);
+        return new Scope(valueIdx, localValues, javaLocalValues, Map.of(), statements, expression, moduleHelperClass);
     }
 
     record ScopeExpression(Scope scope, CompiledExpression expression) {
@@ -205,11 +262,11 @@ class Scope {
 
     public ExpressionScope popExpression() {
         var expression = getExpression();
-        return new ExpressionScope(expression, new Scope(valueIdx, localValues, valueNameToUniqueName, statements, Optional.empty(), moduleHelperClass));
+        return new ExpressionScope(expression, new Scope(valueIdx, localValues, javaLocalValues, valueNameToUniqueName, statements, Optional.empty(), moduleHelperClass));
     }
 
     Scope withModuleHelperClass(String moduleHelperClass) {
-        return new Scope(valueIdx, localValues, valueNameToUniqueName, statements, expression, Optional.of(moduleHelperClass));
+        return new Scope(valueIdx, localValues, javaLocalValues, valueNameToUniqueName, statements, expression, Optional.of(moduleHelperClass));
     }
 
     Optional<String> moduleHelperClass() {
@@ -220,9 +277,32 @@ class Scope {
     public String toString() {
         return "Scope{" +
                "localValues=" + localValues +
+               ", javaLocalValues=" + javaLocalValues +
                ", valueNameToUniqueName=" + valueNameToUniqueName +
                ", statements=" + statements +
                ", expression=" + expression +
                '}';
+    }
+
+    private static String normalizeJavaLocalIdentifier(String identifier) {
+        if ("_".equals(identifier)) {
+            return "__unused";
+        }
+        if (identifier.isEmpty()) {
+            return "__value";
+        }
+        var normalized = new StringBuilder(identifier.length());
+        for (int i = 0; i < identifier.length(); i++) {
+            var ch = identifier.charAt(i);
+            normalized.append(Character.isJavaIdentifierPart(ch) ? ch : '_');
+        }
+        var candidate = normalized.toString();
+        if (!Character.isJavaIdentifierStart(candidate.charAt(0))) {
+            candidate = "_" + candidate;
+        }
+        if (JAVA_KEYWORDS.contains(candidate)) {
+            return candidate + "_";
+        }
+        return candidate;
     }
 }
