@@ -45,6 +45,100 @@ class InfixOperatorCompilerTest {
     }
 
     @Test
+    void shouldAllowSubtypeElementsForDeclaredListParentReturnType() {
+        var compiled = compileProgram("""
+                type Assert = ResultAssert | StringAssert
+                data ResultAssert { value: bool }
+                data StringAssert { value: string }
+
+                fun collect(): list[Assert] =
+                    [ResultAssert { value: true }]
+                """);
+
+        var function = compiled.modules().first().functions().stream()
+                .filter(it -> it.name().equals("collect"))
+                .findFirst()
+                .orElseThrow();
+
+        assertThat(function.returnType()).isInstanceOf(CompiledList.class);
+        assertThat(((CompiledList) function.returnType()).elementType()).isInstanceOf(CompiledDataParentType.class);
+        assertThat(((CompiledDataParentType) ((CompiledList) function.returnType()).elementType()).name()).isEqualTo("Assert");
+    }
+
+    @Test
+    void shouldAllowGenericSubtypeElementsForDeclaredListParentReturnType() {
+        var compiled = compileProgram("""
+                type Result[T] = Success[T] | Error
+                data Success[T] { value: T }
+                data Error { message: string }
+
+                type Assert[T] = ResultAssert[T] | StringAssert
+                data ResultAssert[T] { value: Result[T] }
+                data StringAssert { value: string }
+
+                fun collect(): list[Assert[bool]] =
+                    [ResultAssert { value: Success { value: true } }]
+                """);
+
+        var function = compiled.modules().first().functions().stream()
+                .filter(it -> it.name().equals("collect"))
+                .findFirst()
+                .orElseThrow();
+
+        assertThat(function.returnType()).isInstanceOf(CompiledList.class);
+        assertThat(((CompiledList) function.returnType()).elementType()).isInstanceOf(CompiledDataParentType.class);
+        assertThat(((CompiledDataParentType) ((CompiledList) function.returnType()).elementType()).name()).isEqualTo("Assert");
+        assertThat(((CompiledDataParentType) ((CompiledList) function.returnType()).elementType()).typeParameters()).containsExactly("bool");
+    }
+
+    @Test
+    void shouldAllowSubtypeElementsFromPipeMapperForDeclaredListParentReturnType() {
+        var compiled = compileProgram("""
+                type Assert = ResultAssert | StringAssert
+                data ResultAssert { value: bool }
+                data StringAssert { value: string }
+
+                fun collect(values: list[bool]): list[Assert] =
+                    values | value => ResultAssert { value: value }
+                """);
+
+        var function = compiled.modules().first().functions().stream()
+                .filter(it -> it.name().equals("collect"))
+                .findFirst()
+                .orElseThrow();
+
+        assertThat(function.returnType()).isInstanceOf(CompiledList.class);
+        assertThat(((CompiledList) function.returnType()).elementType()).isInstanceOf(CompiledDataParentType.class);
+        assertThat(((CompiledDataParentType) ((CompiledList) function.returnType()).elementType()).name()).isEqualTo("Assert");
+    }
+
+    @Test
+    void shouldAllowGenericSubtypeElementsFromPipeMapperForDeclaredListParentReturnType() {
+        var compiled = compileProgram("""
+                type Result[T] = Success[T] | Error
+                data Success[T] { value: T }
+                data Error { message: string }
+
+                type Assert[T] = ResultAssert[T] | StringAssert
+                data ResultAssert[T] { value: Result[T] }
+                data StringAssert { value: string }
+
+                fun collect(values: list[bool]): list[Assert[bool]] =
+                    values | value => ResultAssert { value: Success { value: value } }
+                """);
+
+        var function = compiled.modules().first().functions().stream()
+                .filter(it -> it.name().equals("collect"))
+                .findFirst()
+                .orElseThrow();
+
+        assertThat(function.returnType()).isInstanceOf(CompiledList.class);
+        assertThat(((CompiledList) function.returnType()).elementType()).isInstanceOf(CompiledDataParentType.class);
+        assertThat(((CompiledDataParentType) ((CompiledList) function.returnType()).elementType()).name()).isEqualTo("Assert");
+        assertThat(((CompiledDataParentType) ((CompiledList) function.returnType()).elementType()).typeParameters()).containsExactly("bool");
+    }
+
+    @Test
     void shouldInferConcreteElementTypeForImportedGenericMethodCallAgainstCompiledLibraries() {
         var libraries = compileProgram(List.of(
                 new RawModule("Seq", "/capy/lang", """
