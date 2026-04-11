@@ -358,6 +358,9 @@ public class JavaAstBuilder {
         if ("Program".equals(rawTypeName) || isProgramTypeName(rawTypeName)) {
             return new JavaType("capy.lang.Program");
         }
+        if ("Result".equals(rawTypeName) || isResultTypeName(rawTypeName)) {
+            return new JavaType("capy.lang.Result");
+        }
         if (rawTypeName.startsWith("/") && !rawTypeName.contains(".")) {
             var slashIndex = rawTypeName.lastIndexOf('/');
             if (slashIndex > 0 && slashIndex < rawTypeName.length() - 1) {
@@ -497,6 +500,9 @@ public class JavaAstBuilder {
         if ("Program".equals(rawTypeName) || isProgramTypeName(rawTypeName)) {
             return "capy.lang.Program";
         }
+        if ("Result".equals(rawTypeName) || isResultTypeName(rawTypeName)) {
+            return "capy.lang.Result";
+        }
         if (rawTypeName.startsWith("/") && !rawTypeName.contains(".")) {
             var slashIndex = rawTypeName.lastIndexOf('/');
             if (slashIndex > 0 && slashIndex < rawTypeName.length() - 1) {
@@ -584,6 +590,16 @@ public class JavaAstBuilder {
                || normalized.equals("/cap/lang/Option.Option")
                || normalized.equals("/capy/lang/Option")
                || normalized.equals("/capy/lang/Option.Option");
+    }
+
+    private boolean isResultTypeName(String name) {
+        var normalized = normalizeQualifiedTypeName(name);
+        return normalized.equals("/cap/lang/Result")
+               || normalized.equals("/cap/lang/Result.Result")
+               || normalized.equals("/capy/lang/Result")
+               || normalized.equals("/capy/lang/Result.Result")
+               || normalized.endsWith("/Result")
+               || normalized.endsWith("/Result.Result");
     }
 
     private boolean isResultErrorTypeName(String name) {
