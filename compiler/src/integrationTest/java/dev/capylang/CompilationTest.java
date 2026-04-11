@@ -48,10 +48,10 @@ class CompilationTest {
                 Arguments.of("""
                                 // algebraic type
                                 type Shape = Circle | Rectangle
-                                data Circle { radius: float }
-                                data Rectangle { width: float, height: float }
+                                data Circle { radius: double }
+                                data Rectangle { width: double, height: double }
                                 
-                                fun area(shape: Shape): float =
+                                fun area(shape: Shape): double =
                                     match shape with
                                     case Circle { radius } -> 3.14 * radius ^ 2
                                     case Rectangle { width, height } -> width * height
@@ -74,10 +74,10 @@ class CompilationTest {
                                 
                                 // algebraic type
                                 type Shape = Circle | Rectangle
-                                data Circle { radius: float }
-                                data Rectangle { width: float, height: float }
+                                data Circle { radius: double }
+                                data Rectangle { width: double, height: double }
                                 
-                                fun area(shape: Shape): float =
+                                fun area(shape: Shape): double =
                                     match shape with
                                     case Circle { radius } -> 3.14 * radius * radius
                                     case Rectangle { width, height } -> width * height
@@ -90,10 +90,10 @@ class CompilationTest {
                         """
                                 // algebraic type
                                 type Shape = Circle | Rectangle
-                                data Circle { radius: float }
-                                data Rectangle { width: float, height: float }
+                                data Circle { radius: double }
+                                data Rectangle { width: double, height: double }
                                 
-                                fun area(shape: Shape): float =
+                                fun area(shape: Shape): double =
                                     match shape with
                                     case Circle { radius } -> 3.14 * radius ^ 2
                                     case Rectangle { width, height } -> width * height

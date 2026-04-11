@@ -347,6 +347,50 @@ class CapybaraCompilerLibrariesTest {
                 .isEqualTo("ResultAssert");
     }
 
+    @Test
+    void shouldResolveMethodsDefinedInLinkedLibraryModules() {
+        var libraries = compileProgram(List.of(
+                new RawModule("FooAssert", "/foo/test", """
+                        data OutcomeAssert { value: bool }
+                        fun OutcomeAssert.ok(): bool = this.value
+                        fun check(value: bool): OutcomeAssert = OutcomeAssert { value: value }
+                        """)
+        ), new java.util.TreeSet<>()).modules();
+
+        var compiled = compileProgram(List.of(
+                new RawModule("Consumer", "/foo/app", """
+                        from /foo/test/FooAssert import { * }
+
+                        fun use_method(): bool = check(true).ok()
+                        """)
+        ), libraries);
+
+        assertThat(compiledFunction(compiled, "Consumer", "use_method").returnType())
+                .isEqualTo(PrimitiveLinkedType.BOOL);
+    }
+
+    @Test
+    void shouldResolveQualifiedImportsWhenSimpleModuleNamesCollide() {
+        var libraries = compileProgram(List.of(
+                new RawModule("Assert", "/foo/test", """
+                        data OutcomeAssert { value: bool }
+                        fun OutcomeAssert.ok(): bool = this.value
+                        fun check(value: bool): OutcomeAssert = OutcomeAssert { value: value }
+                        """)
+        ), new java.util.TreeSet<>()).modules();
+
+        var compiled = compileProgram(List.of(
+                new RawModule("Consumer", "/foo/app", """
+                        from /foo/test/Assert import { * }
+
+                        fun use_method(): bool = check(true).ok()
+                        """)
+        ), libraries);
+
+        assertThat(compiledFunction(compiled, "Consumer", "use_method").returnType())
+                .isEqualTo(PrimitiveLinkedType.BOOL);
+    }
+
     private static CompiledProgram compileProgram(List<RawModule> rawModules, SortedSet<CompiledModule> libraries) {
         var result = CapybaraCompiler.INSTANCE.compile(rawModules, libraries);
         if (result instanceof Result.Error<CompiledProgram> error) {

@@ -429,7 +429,7 @@ class JavaExpressionEvaluatorTest {
 
         assertThat(generated).contains("new capy.lang.Result.Error");
         assertThat(generated).doesNotContain("((Error)");
-        assertThat(generated).contains("((capy.lang.Result.Error)");
+        assertThat(generated).contains("((Result)");
     }
 
     @Test

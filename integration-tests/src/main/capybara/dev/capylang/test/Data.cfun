@@ -1,10 +1,10 @@
 // algebraic type
 
 type Shape = Circle | Rectangle
-data Circle { radius: float }
-data Rectangle { width: float, "height": float }
+data Circle { radius: double }
+data Rectangle { width: double, "height": double }
 
-fun area(shape: Shape): float =
+fun area(shape: Shape): double =
     match shape with
     case Circle { radius } -> 3.14 * radius * radius
     case Rectangle { width, height } -> width * height
@@ -19,7 +19,7 @@ data Foo[T] { foo: T }
 data Boo[T] { boo: T }
 
 type Knight = EnglishKnight | Tom
-data EnglishKnight { power: float }
+data EnglishKnight { power: double }
 single Tom
 
 fun summon_tom(): Knight = Tom
@@ -41,8 +41,8 @@ fun jerry_or_french(king: King[int]): string =
     case FrenchKing { head, foo } -> head + ":" + foo
 
 type Worker {name: string, surname: string } = BlueCollar | WhiteCollar
-data BlueCollar { strength: float }
-data WhiteCollar { intelligence: float }
+data BlueCollar { strength: double }
+data WhiteCollar { intelligence: double }
 
 data PrintableData { foo: string, boo: int }
 data PositionalData { text: string, number: int }

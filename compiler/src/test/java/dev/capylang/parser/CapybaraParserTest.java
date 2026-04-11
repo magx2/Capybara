@@ -218,6 +218,24 @@ class CapybaraParserTest {
     }
 
     @Test
+    @DisplayName("should parse bare decimal literal as double")
+    void parseBareDecimalLiteralAsDouble() {
+        var module = parseSuccess(new RawModule("Test", "/parser", "fun pi(): double = 3.14"));
+        var function = findFunction("pi", module.functional());
+        assertThat(function.returnType()).contains(PrimitiveType.DOUBLE);
+        assertThat(function.expression()).isInstanceOf(DoubleValue.class);
+    }
+
+    @Test
+    @DisplayName("should parse suffixed float literal as float")
+    void parseSuffixedFloatLiteralAsFloat() {
+        var module = parseSuccess(new RawModule("Test", "/parser", "fun ratio(): float = 3.14f"));
+        var function = findFunction("ratio", module.functional());
+        assertThat(function.returnType()).contains(PrimitiveType.FLOAT);
+        assertThat(function.expression()).isInstanceOf(FloatValue.class);
+    }
+
+    @Test
     @DisplayName("should parse lowercase private local const declaration")
     void parseLowercasePrivateLocalConstDeclaration() {
         var module = parseSuccess(new RawModule("Test", "/parser", """
