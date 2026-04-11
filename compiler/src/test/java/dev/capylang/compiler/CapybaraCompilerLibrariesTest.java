@@ -71,12 +71,12 @@ class CapybaraCompilerLibrariesTest {
         var librarySource = """
                 from /capy/lang/Result import { * }
 
-                type ValidatedName { name: string } = NamedUser with constructor {
-                    if name.size == 0 then
-                        Error { message: "Name was empty" }
-                    else
-                        Success { value: * { name: name } }
-                }
+                type ValidatedName { name: string } with constructor {
+                   if name.size == 0 then
+                       Error { message: "Name was empty" }
+                   else
+                       Success { value: * { name: name } }
+                } = NamedUser
 
                 data NamedUser { name: string, role: string }
                 """;
