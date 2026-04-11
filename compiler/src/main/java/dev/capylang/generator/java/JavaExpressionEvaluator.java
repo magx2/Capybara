@@ -1488,14 +1488,17 @@ public class JavaExpressionEvaluator {
                         branchScope = branchScope.addValueOverride(variablePattern.name(), bindingName);
                         var castType = bindingCastTypes.get(i);
                         if (castType != null && !"java.lang.Object".equals(castType)) {
+                            branchScope = branchScope.addValueOverride(bindingName, "((" + castType + ") " + bindingName + ")");
                             branchScope = branchScope.addValueOverride(variablePattern.name(), "((" + castType + ") " + bindingName + ")");
                         }
                     }
                     if (fieldPattern instanceof CompiledMatchExpression.TypedPattern typedPattern) {
                         branchScope = branchScope.addLocalValue(typedPattern.name());
+                        var typedValue = "((" + javaPatternType(typedPattern.type()) + ") " + bindingName + ")";
+                        branchScope = branchScope.addValueOverride(bindingName, typedValue);
                         branchScope = branchScope.addValueOverride(
                                 typedPattern.name(),
-                                "((" + javaPatternType(typedPattern.type()) + ") " + bindingName + ")"
+                                typedValue
                         );
                     }
                 }
@@ -1661,7 +1664,14 @@ public class JavaExpressionEvaluator {
                         return null;
                     }
                     if (fieldType instanceof dev.capylang.compiler.CompiledGenericTypeParameter genericTypeParameter) {
-                        return sanitizePatternCastType(genericCasts.get(genericTypeParameter.name()));
+                        var resolvedGenericCast = sanitizePatternCastType(genericCasts.get(genericTypeParameter.name()));
+                        return resolvedGenericCast != null ? resolvedGenericCast : genericTypeParameter.name();
+                    }
+                    if (fieldType instanceof dev.capylang.compiler.CompiledDataParentType parentType
+                        && parentType.subTypes().isEmpty()
+                        && parentType.name().matches("[A-Z]")) {
+                        var resolvedGenericCast = sanitizePatternCastType(genericCasts.get(parentType.name()));
+                        return resolvedGenericCast != null ? resolvedGenericCast : parentType.name();
                     }
                     return sanitizePatternCastType(javaCastType(fieldType));
                 })
@@ -2835,4 +2845,3 @@ public class JavaExpressionEvaluator {
     }
 
 }
-
