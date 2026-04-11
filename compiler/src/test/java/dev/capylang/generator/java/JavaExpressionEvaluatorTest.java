@@ -474,14 +474,13 @@ class JavaExpressionEvaluatorTest {
 
                 data Date { day: int }
 
-                fun test(value: Result[Date]): Assert =
-                    assert_that(value).succeeds(date => assert_that(date.day).is_equal_to(1))
+                fun test(value: Result[Date]): Assert = assert_that(value).succeeds(Date { day: 1 })
                 """));
         var generated = generatedProgram.modules().stream()
                 .map(dev.capylang.generator.GeneratedModule::code)
                 .collect(joining("\n"));
 
-        assertThat(generated).contains(".succeeds(date -> (assertThat((date).day()).isEqualTo(1)))");
+        assertThat(generated).contains(".succeeds(new Date(1))");
         assertGeneratedJavaCompiles(generatedProgram);
     }
 
@@ -553,7 +552,7 @@ class JavaExpressionEvaluatorTest {
                                 var a_j1 = (x*2);
                                 var a_j2 = (x*x);
                                 var a_j3 = (x/2);
-                                return ((a_j1>2)) ? (("I'm happy "+java.lang.String.valueOf(a_j2))) : (("I'm not happy "+java.lang.String.valueOf(a_j3)));"""
+                                return ((a_j1>2)) ? ((("I'm happy ")+(java.lang.String.valueOf(a_j2)))) : ((("I'm not happy ")+(java.lang.String.valueOf(a_j3))));"""
                 ),
                 Arguments.of(
                         "wild_infix",
