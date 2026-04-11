@@ -114,12 +114,12 @@ public class CompilationErrorTest {
     void shouldRequireResultDataConstructorWhenParentTypeConstructorReturnsResult() {
                 var errors = compileProgram("""
                         from /capy/lang/Result import { * }
-                        type Parent { foo: string } = Child with constructor {
-                            if foo.size == 0 then
-                                Error { message: "missing" }
-                            else
-                                Success { value: * { foo: foo } }
-                        }
+                        type Parent { foo: string } with constructor {
+                           if foo.size == 0 then
+                               Error { message: "missing" }
+                           else
+                               Success { value: * { foo: foo } }
+                        } = Child
                         data Child { foo: string, bar: string } with constructor {
                             * { foo: foo, bar: bar }
                         }
@@ -1318,7 +1318,6 @@ public class CompilationErrorTest {
         return out;
     }
 }
-
 
 
 
