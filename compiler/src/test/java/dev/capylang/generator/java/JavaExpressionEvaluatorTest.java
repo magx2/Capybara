@@ -206,8 +206,8 @@ class JavaExpressionEvaluatorTest {
                 .orElseThrow()
                 .code();
 
-        assertThat(generatedDate).contains("public capy.lang.Result firstDayOfMonth()");
-        assertThat(generatedDate).doesNotContain("public Result firstDayOfMonth()");
+        assertThat(generatedDate).contains("public capy.lang.Result<Date> firstDayOfMonth()");
+        assertThat(generatedDate).doesNotContain("public Result<Date> firstDayOfMonth()");
     }
 
     @Test

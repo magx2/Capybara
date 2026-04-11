@@ -356,10 +356,10 @@ public class JavaAstBuilder {
             return new JavaType("java.util.Optional");
         }
         if ("Program".equals(rawTypeName) || isProgramTypeName(rawTypeName)) {
-            return new JavaType("capy.lang.Program");
+            return withTypeParametersIfGeneric(type, "capy.lang.Program");
         }
         if ("Result".equals(rawTypeName) || isResultTypeName(rawTypeName)) {
-            return new JavaType("capy.lang.Result");
+            return withTypeParametersIfGeneric(type, "capy.lang.Result");
         }
         if (rawTypeName.startsWith("/") && !rawTypeName.contains(".")) {
             var slashIndex = rawTypeName.lastIndexOf('/');

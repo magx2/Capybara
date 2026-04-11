@@ -267,6 +267,45 @@ class CapybaraCompilerLibrariesTest {
         assertThat(compiledFunction(compiled, "Consumer", "build").returnType().name()).isEqualTo("/foo/bar/Program");
     }
 
+    @Test
+    void shouldPreferResultOverDataOverloadForConstructorExpressionsInMethodChains() {
+        var compiled = compileProgram(List.of(
+                new RawModule("Result", "/capy/lang", """
+                        type Result[T] = Success[T] | Error
+                        data Success[T] { value: T }
+                        data Error { message: string }
+                        """),
+                new RawModule("Assert", "/capy/test", """
+                        from /capy/lang/Result import { * }
+
+                        data ResultAssert[T] { value: Result[T] }
+                        data DataAssert { value: data }
+
+                        fun ResultAssert[T].succeeds(): bool = true
+
+                        fun assert_that(value: Result[T]): ResultAssert[T] = ResultAssert { value: value }
+                        fun assert_that(value: data): DataAssert = DataAssert { value: value }
+                        """),
+                new RawModule("Date", "/capy/date_time", """
+                        from /capy/lang/Result import { * }
+
+                        data Date { day: int } with constructor {
+                            if day > 0
+                            then Success { value: * { day: day } }
+                            else Error { message: "invalid" }
+                        }
+                        """),
+                new RawModule("Consumer", "/foo/app", """
+                        from /capy/test/Assert import { * }
+                        from /capy/date_time/Date import { * }
+
+                        fun prefer_result(): bool = assert_that(Date { day: 1 }).succeeds()
+                        """)
+        ), new java.util.TreeSet<>());
+
+        assertThat(compiledFunction(compiled, "Consumer", "prefer_result").returnType()).isEqualTo(PrimitiveLinkedType.BOOL);
+    }
+
     private static CompiledProgram compileProgram(List<RawModule> rawModules, SortedSet<CompiledModule> libraries) {
         var result = CapybaraCompiler.INSTANCE.compile(rawModules, libraries);
         if (result instanceof Result.Error<CompiledProgram> error) {

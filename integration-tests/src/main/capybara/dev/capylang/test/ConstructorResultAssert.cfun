@@ -1,0 +1,15 @@
+from /capy/lang/Result import { * }
+from /capy/test/Assert import { * }
+
+data Date { day: int } with constructor {
+    if day > 0
+    then Success { value: * { day: day } }
+    else Error { message: "invalid" }
+}
+
+fun valid_date_assert_succeeds(): bool =
+    assert_that(Date { day: 1 }).succeeds().succeeded()
+
+fun invalid_date_assert_fails(): bool =
+    assert_that(Date { day: 0 }).fails().succeeded()
+
