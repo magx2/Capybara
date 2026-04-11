@@ -348,6 +348,46 @@ class CapybaraCompilerLibrariesTest {
     }
 
     @Test
+    void shouldRejectNestedResultWhenResultAssertExpectsSingleResult() {
+        var error = compileFailure(List.of(
+                new RawModule("Result", "/capy/lang", """
+                        type Result[T] = Success[T] | Error
+                        data Success[T] { value: T }
+                        data Error { message: string }
+                        """),
+                new RawModule("Assert", "/capy/test", """
+                        from /capy/lang/Result import { * }
+
+                        data ResultAssert[T] { value: Result[T] }
+                        data DataAssert { value: data }
+
+                        fun ResultAssert[T].is_equal_to(other: Result[T]): ResultAssert[T] = this
+                        fun DataAssert.is_equal_to(other: data): DataAssert = this
+
+                        fun assert_that(value: Result[T]): ResultAssert[T] = ResultAssert { value: value }
+                        fun assert_that(value: data): DataAssert = DataAssert { value: value }
+                        """),
+                new RawModule("Widget", "/foo/model", """
+                        from /capy/lang/Result import { * }
+
+                        data Widget { size: int }
+                        fun Widget.wrap(): Result[Widget] = Success { value: this }
+                        """),
+                new RawModule("Consumer", "/foo/app", """
+                        from /capy/lang/Result import { * }
+                        from /capy/test/Assert import { * }
+                        from /foo/model/Widget import { * }
+
+                        fun broken() =
+                            assert_that(Success { value: Widget { size: 1 } } | widget => Success { value: widget.wrap() })
+                                .is_equal_to(Success { value: Widget { size: 2 } })
+                        """)
+        ));
+
+        assertThat(error.message()).contains("Expected `Widget`, got `Success`");
+    }
+
+    @Test
     void shouldPreferLocalConstructorOverUnimportedLinkedLibraryConstructorWithSameName() {
         var libraries = compileProgram(List.of(
                 new RawModule("Result", "/capy/lang", """
@@ -452,6 +492,16 @@ class CapybaraCompilerLibrariesTest {
             fail(error.errors().toString());
         }
         return ((Result.Success<CompiledProgram>) result).value();
+    }
+
+    private static Result.Error.SingleError compileFailure(List<RawModule> rawModules) {
+        var result = CapybaraCompiler.INSTANCE.compile(rawModules, new java.util.TreeSet<>());
+        if (result instanceof Result.Success<CompiledProgram> value) {
+            fail("Expected compilation to fail but it succeeded: " + value);
+        }
+        var errors = ((Result.Error<CompiledProgram>) result).errors();
+        assertThat(errors).isNotEmpty();
+        return errors.first();
     }
 
     private static CompiledFunction compiledFunction(CompiledProgram program, String moduleName, String functionName) {

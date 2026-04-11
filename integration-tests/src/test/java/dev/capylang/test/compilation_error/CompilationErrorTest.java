@@ -162,6 +162,50 @@ public class CompilationErrorTest {
                 .contains("Expected `float`, got `double`");
     }
 
+    @Test
+    void shouldRejectNestedResultPipeBeforeJavaGeneration() {
+        var result = CapybaraCompiler.INSTANCE.compile(List.of(
+                new RawModule("Result", "/capy/lang", """
+                        type Result[T] = Success[T] | Error
+                        data Success[T] { value: T }
+                        data Error { message: string }
+                        """),
+                new RawModule("Assert", "/capy/test", """
+                        from /capy/lang/Result import { * }
+
+                        data ResultAssert[T] { value: Result[T] }
+                        data DataAssert { value: data }
+
+                        fun ResultAssert[T].is_equal_to(other: Result[T]): ResultAssert[T] = this
+                        fun DataAssert.is_equal_to(other: data): DataAssert = this
+
+                        fun assert_that(value: Result[T]): ResultAssert[T] = ResultAssert { value }
+                        fun assert_that(value: data): DataAssert = DataAssert { value }
+                        """),
+                new RawModule("Widget", "/foo/model", """
+                        from /capy/lang/Result import { * }
+
+                        data Widget { size: int }
+                        fun Widget.wrap(): Result[Widget] = Success { value: this }
+                        """),
+                new RawModule("Consumer", "/foo/app", """
+                        from /capy/lang/Result import { * }
+                        from /capy/test/Assert import { * }
+                        from /foo/model/Widget import { * }
+
+                        fun broken(): ResultAssert[Widget] =
+                            assert_that(Success { value: Widget { size: 1 } } | widget => Success { value: widget.wrap() })
+                                .is_equal_to(Success { value: Widget { size: 2 } })
+                        """)
+        ), new java.util.TreeSet<>());
+
+        assertThat(result).isInstanceOf(Result.Error.class);
+        var errors = ((Result.Error<CompiledProgram>) result).errors();
+        assertThat(errors).hasSize(1);
+        assertThat(errors.first().message())
+                .contains("Expected `Widget`, got `Success`");
+    }
+
     @ParameterizedTest(name = "{index}: should fail when compiling `{0}.cfun`")
     @MethodSource
     void compilationError(
@@ -1342,12 +1386,6 @@ public class CompilationErrorTest {
         return out;
     }
 }
-
-
-
-
-
-
 
 
 
