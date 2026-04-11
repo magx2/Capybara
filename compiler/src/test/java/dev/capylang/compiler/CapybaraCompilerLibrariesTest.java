@@ -348,6 +348,61 @@ class CapybaraCompilerLibrariesTest {
     }
 
     @Test
+    void shouldPreferLocalConstructorOverUnimportedLinkedLibraryConstructorWithSameName() {
+        var libraries = compileProgram(List.of(
+                new RawModule("Result", "/capy/lang", """
+                        type Result[T] = Success[T] | Error
+                        data Success[T] { value: T }
+                        data Error { message: string }
+                        """),
+                new RawModule("Assert", "/capy/test", """
+                        from /capy/lang/Result import { * }
+
+                        data ResultAssert[T] { value: Result[T] }
+
+                        fun ResultAssert[T].succeeds(): bool = true
+                        fun ResultAssert[T].fails(): bool = true
+
+                        fun assert_that(value: Result[T]): ResultAssert[T] = ResultAssert { value: value }
+                        """),
+                new RawModule("Date", "/capy/date_time", """
+                        from /capy/lang/Result import { * }
+
+                        data Date { day: int, month: int, year: int } with constructor {
+                            if day > 0 then
+                                Success { value: * { day: day, month: month, year: year } }
+                            else
+                                Error { message: "invalid" }
+                        }
+                        """)
+        ), new java.util.TreeSet<>()).modules();
+
+        var compiled = compileProgram(List.of(
+                new RawModule("Consumer", "/dev/capylang/test", """
+                        from /capy/lang/Result import { * }
+                        from /capy/test/Assert import { * }
+
+                        data Date { day: int } with constructor {
+                            if day > 0
+                            then Success { value: * { day: day } }
+                            else Error { message: "invalid" }
+                        }
+
+                        fun valid_date_assert_succeeds(): bool =
+                            assert_that(Date { day: 1 }).succeeds()
+
+                        fun invalid_date_assert_fails(): bool =
+                            assert_that(Date { day: 0 }).fails()
+                        """)
+        ), libraries);
+
+        assertThat(compiledFunction(compiled, "Consumer", "valid_date_assert_succeeds").returnType())
+                .isEqualTo(PrimitiveLinkedType.BOOL);
+        assertThat(compiledFunction(compiled, "Consumer", "invalid_date_assert_fails").returnType())
+                .isEqualTo(PrimitiveLinkedType.BOOL);
+    }
+
+    @Test
     void shouldResolveMethodsDefinedInLinkedLibraryModules() {
         var libraries = compileProgram(List.of(
                 new RawModule("FooAssert", "/foo/test", """
