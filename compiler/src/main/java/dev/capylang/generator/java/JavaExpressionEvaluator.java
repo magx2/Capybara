@@ -544,12 +544,12 @@ public class JavaExpressionEvaluator {
 
     private static String stringConcatOperand(String expression, dev.capylang.compiler.CompiledType type) {
         if (type == dev.capylang.compiler.PrimitiveLinkedType.STRING) {
-            return expression;
+            return "(" + expression + ")";
         }
         if (isOptionType(type)) {
-            return expression + ".map(java.lang.String::valueOf).orElse(\"\")";
+            return "(" + expression + ".map(java.lang.String::valueOf).orElse(\"\"))";
         }
-        return "java.lang.String.valueOf(" + expression + ")";
+        return "(java.lang.String.valueOf(" + expression + "))";
     }
 
     private static String evaluateListRemoveExpression(CompiledInfixExpression infixExpression, String left, String right) {
