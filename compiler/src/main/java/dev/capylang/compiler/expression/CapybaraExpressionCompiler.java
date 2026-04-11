@@ -3064,8 +3064,8 @@ public class CapybaraExpressionCompiler {
                         lambdaBinding.argumentName(),
                         mapper,
                         left.type() instanceof CompiledSet
-                                ? new CompiledSet(mapper.type())
-                                : new CompiledList(mapper.type())
+                                ? new CompiledSet(expectedResultElementType.orElse(mapper.type()))
+                                : new CompiledList(expectedResultElementType.orElse(mapper.type()))
                 )));
     }
 
@@ -3112,7 +3112,7 @@ public class CapybaraExpressionCompiler {
                             left,
                             valueName,
                             mapper,
-                            new CompiledDict(mapper.type())
+                            new CompiledDict(expectedValueType.orElse(mapper.type()))
                     ));
         }
         if (argumentNames.size() == 2) {
@@ -3131,7 +3131,7 @@ public class CapybaraExpressionCompiler {
                             left,
                             encodeDictPipeArguments(keyName, valueName),
                             mapper,
-                            new CompiledDict(mapper.type())
+                            new CompiledDict(expectedValueType.orElse(mapper.type()))
                     ));
         }
         return withPosition(
