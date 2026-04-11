@@ -485,6 +485,32 @@ class JavaExpressionEvaluatorTest {
     }
 
     @Test
+    void shouldSanitizeJavaKeywordsUsedAsLocalNames() {
+        var generatedProgram = new JavaGenerator().generate(compileProgram("KeywordLocalNames", "/foo/bar", """
+                data Date { day: int }
+
+                fun test_keyword_let(is_valid: bool): bool =
+                    let assert: bool = is_valid
+                    assert
+
+                fun test_keyword_lambda(values: list[Date]): list[int] =
+                    values | assert => assert.day
+
+                fun test_keyword_reduce(values: list[int]): int =
+                    let acc = 1
+                    values |> 0, (acc, count) => acc + count
+                """));
+        var generated = generatedProgram.modules().stream()
+                .map(dev.capylang.generator.GeneratedModule::code)
+                .collect(joining("\n"));
+
+        assertThat(generated).contains("java.lang.Boolean assert_ =");
+        assertThat(generated).contains("return assert_;");
+        assertThat(generated).contains(".stream().map(assert_ ->");
+        assertGeneratedJavaCompiles(generatedProgram);
+    }
+
+    @Test
     void shouldParenthesizeIfExpressionsInsideStringConcatenation() {
         var generated = new JavaGenerator().generate(compileProgram("StringIfConcat", "/foo/bar", """
                 fun label(is_valid: bool): string =

@@ -629,7 +629,6 @@ public class JavaExpressionEvaluator {
             var statements = String.join("; ", addedStatements);
             return scope.addExpression("() -> { " + statements + "; return (" + bodyExSc.expression() + "); }");
         }
-        var javaArgumentName = normalizeJavaLocalIdentifier(lambdaExpression.argumentName());
         var baseScope = scope.addLocalValue(lambdaExpression.argumentName());
         var bodyExSc = evaluateExpression(lambdaExpression.expression(), baseScope).popExpression();
         return scope.addExpression(lambdaExpression(
@@ -972,7 +971,7 @@ public class JavaExpressionEvaluator {
                             .addValueOverride(pipeReduceExpression.valueName(), entryVar + ".getValue()")
             ).popExpression();
             var reduceInitialExpression = reduceInitialExpression(pipeReduceExpression.initialValue(), pipeReduceExpression.type(), initialExSc.expression());
-            var javaAccumulatorName = normalizeJavaLocalIdentifier(pipeReduceExpression.accumulatorName());
+            var javaAccumulatorName = resolveJavaLocalIdentifier(reducerExSc.scope(), pipeReduceExpression.accumulatorName());
             var javaReducerExpression = pipeReduceExpression.accumulatorName().equals(javaAccumulatorName)
                     ? reducerExSc.expression()
                     : replaceIdentifier(reducerExSc.expression(), pipeReduceExpression.accumulatorName(), javaAccumulatorName);
@@ -996,8 +995,8 @@ public class JavaExpressionEvaluator {
                         .addLocalValue(pipeReduceExpression.valueName())
         ).popExpression();
         var reduceInitialExpression = reduceInitialExpression(pipeReduceExpression.initialValue(), pipeReduceExpression.type(), initialExSc.expression());
-        var javaAccumulatorName = normalizeJavaLocalIdentifier(pipeReduceExpression.accumulatorName());
-        var javaValueName = normalizeJavaLocalIdentifier(pipeReduceExpression.valueName());
+        var javaAccumulatorName = resolveJavaLocalIdentifier(reducerExSc.scope(), pipeReduceExpression.accumulatorName());
+        var javaValueName = resolveJavaLocalIdentifier(reducerExSc.scope(), pipeReduceExpression.valueName());
         var javaReducerExpression = reducerExSc.expression();
         if (!pipeReduceExpression.accumulatorName().equals(javaAccumulatorName)) {
             javaReducerExpression = replaceIdentifier(javaReducerExpression, pipeReduceExpression.accumulatorName(), javaAccumulatorName);
@@ -1240,7 +1239,7 @@ public class JavaExpressionEvaluator {
             Scope evaluatedScope,
             String expression
     ) {
-        var javaArgumentName = normalizeJavaLocalIdentifier(argumentName);
+        var javaArgumentName = resolveJavaLocalIdentifier(baseScope, argumentName);
         var bodyExpression = argumentName.equals(javaArgumentName)
                 ? expression
                 : replaceIdentifier(expression, argumentName, javaArgumentName);
@@ -1258,7 +1257,7 @@ public class JavaExpressionEvaluator {
             Scope evaluatedScope,
             String expression
     ) {
-        var javaArgumentName = normalizeJavaLocalIdentifier(argumentName);
+        var javaArgumentName = resolveJavaLocalIdentifier(baseScope, argumentName);
         var bodyExpression = argumentName.equals(javaArgumentName)
                 ? expression
                 : replaceIdentifier(expression, argumentName, javaArgumentName);
@@ -1277,6 +1276,10 @@ public class JavaExpressionEvaluator {
             return java.util.List.of();
         }
         return evaluatedStatements.subList(baseStatements.size(), evaluatedStatements.size());
+    }
+
+    private static String resolveJavaLocalIdentifier(Scope scope, String identifier) {
+        return scope.findValueOverride(identifier).orElseGet(() -> normalizeJavaLocalIdentifier(identifier));
     }
 
     private static String terminalCollect(dev.capylang.compiler.CompiledType type) {
