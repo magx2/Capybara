@@ -1,0 +1,20 @@
+fun leap_year(year: int): bool =
+    (year % 4 == 0 & year % 100 != 0) | year % 400 == 0
+
+fun and_binds_after_modulo_and_comparison(left: int, right: int): bool =
+    left % 2 == 0 & right % 3 == 0
+
+fun or_binds_after_modulo_and_comparison(left: int, right: int): bool =
+    left % 2 == 0 | right % 3 == 0
+
+fun multiplication_binds_before_addition(): bool =
+    1 + 2 * 3 == 7
+
+fun power_binds_before_multiplication(): bool =
+    2 * 3 ^ 2 == 18
+
+fun arithmetic_binds_before_comparison_and_equality(): bool =
+    1 + 2 * 3 > 6 == true
+
+fun and_binds_before_or(): bool =
+    false & false | true

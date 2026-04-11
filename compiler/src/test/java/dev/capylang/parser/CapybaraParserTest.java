@@ -617,6 +617,78 @@ class CapybaraParserTest {
     }
 
     @Test
+    @DisplayName("should parse modulo and comparison before boolean and or")
+    void parseModuloAndComparisonBeforeBooleanAndOr() {
+        var module = parseSuccess(new RawModule("Test", "/parser", """
+                fun leap_year(year: int): bool =
+                    (year % 4 == 0 & year % 100 != 0) | year % 400 == 0
+                """));
+
+        var function = findFunction("leap_year", module.functional());
+        assertThat(function.expression()).isInstanceOf(InfixExpression.class);
+
+        var orExpression = (InfixExpression) function.expression();
+        assertThat(orExpression.operator()).isEqualTo(InfixOperator.PIPE);
+
+        assertThat(orExpression.left()).isInstanceOf(InfixExpression.class);
+        var andExpression = (InfixExpression) orExpression.left();
+        assertThat(andExpression.operator()).isEqualTo(InfixOperator.AND);
+
+        assertThat(andExpression.left()).isInstanceOf(InfixExpression.class);
+        assertThat(((InfixExpression) andExpression.left()).operator()).isEqualTo(InfixOperator.EQUAL);
+
+        assertThat(andExpression.right()).isInstanceOf(InfixExpression.class);
+        assertThat(((InfixExpression) andExpression.right()).operator()).isEqualTo(InfixOperator.NOTEQUAL);
+
+        assertThat(orExpression.right()).isInstanceOf(InfixExpression.class);
+        assertThat(((InfixExpression) orExpression.right()).operator()).isEqualTo(InfixOperator.EQUAL);
+    }
+
+    @Test
+    @DisplayName("should parse arithmetic before comparison equality and boolean operators")
+    void parseArithmeticBeforeComparisonEqualityAndBooleanOperators() {
+        var module = parseSuccess(new RawModule("Test", "/parser", """
+                fun precedence(): bool =
+                    1 + 2 * 3 > 6 == true & 2 * 3 ^ 2 == 18 | false
+                """));
+
+        var function = findFunction("precedence", module.functional());
+        assertThat(function.expression()).isInstanceOf(InfixExpression.class);
+
+        var orExpression = (InfixExpression) function.expression();
+        assertThat(orExpression.operator()).isEqualTo(InfixOperator.PIPE);
+        assertThat(orExpression.right()).isInstanceOf(BooleanValue.class);
+
+        assertThat(orExpression.left()).isInstanceOf(InfixExpression.class);
+        var andExpression = (InfixExpression) orExpression.left();
+        assertThat(andExpression.operator()).isEqualTo(InfixOperator.AND);
+
+        assertThat(andExpression.left()).isInstanceOf(InfixExpression.class);
+        var equalityLeft = (InfixExpression) andExpression.left();
+        assertThat(equalityLeft.operator()).isEqualTo(InfixOperator.EQUAL);
+        assertThat(equalityLeft.left()).isInstanceOf(InfixExpression.class);
+        assertThat(((InfixExpression) equalityLeft.left()).operator()).isEqualTo(InfixOperator.GT);
+
+        var greaterThan = (InfixExpression) equalityLeft.left();
+        assertThat(greaterThan.left()).isInstanceOf(InfixExpression.class);
+        assertThat(((InfixExpression) greaterThan.left()).operator()).isEqualTo(InfixOperator.PLUS);
+
+        var plus = (InfixExpression) greaterThan.left();
+        assertThat(plus.right()).isInstanceOf(InfixExpression.class);
+        assertThat(((InfixExpression) plus.right()).operator()).isEqualTo(InfixOperator.MUL);
+
+        assertThat(andExpression.right()).isInstanceOf(InfixExpression.class);
+        var equalityRight = (InfixExpression) andExpression.right();
+        assertThat(equalityRight.operator()).isEqualTo(InfixOperator.EQUAL);
+        assertThat(equalityRight.left()).isInstanceOf(InfixExpression.class);
+        assertThat(((InfixExpression) equalityRight.left()).operator()).isEqualTo(InfixOperator.MUL);
+
+        var mul = (InfixExpression) equalityRight.left();
+        assertThat(mul.right()).isInstanceOf(InfixExpression.class);
+        assertThat(((InfixExpression) mul.right()).operator()).isEqualTo(InfixOperator.POWER);
+    }
+
+    @Test
     @DisplayName("should parse match case with pattern alternatives")
     void parseMatchCaseWithPatternAlternatives() {
         var module = parseSuccess(new RawModule("Test", "/parser", """
