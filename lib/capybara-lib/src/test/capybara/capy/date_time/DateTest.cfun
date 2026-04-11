@@ -1,0 +1,78 @@
+from /capy/date_time/Date import { * }
+from /capy/test/Assert import { * }
+from /capy/lang/Math import { * }
+from /capy/lang/Result import { * }
+from /capy/test/CapyTest import { * }
+
+fun tests(): TestFile =
+    let test_cases = [
+        // valid dates - first day
+        (1, JANUARY, 2020, true),
+        (1, FEBRUARY, 2020, true),
+        (1, MARCH, 2020, true),
+        (1, APRIL, 2020, true),
+        (1, MAY, 2020, true),
+        (1, JUNE, 2020, true),
+        (1, JULY, 2020, true),
+        (1, AUGUST, 2020, true),
+        (1, SEPTEMBER, 2020, true),
+        (1, OCTOBER, 2020, true),
+        (1, NOVEMBER, 2020, true),
+        (1, DECEMBER, 2020, true),
+        // valid dates - last day
+        (31, JANUARY, 2020, true),
+        (28, FEBRUARY, 2020, true), // leap year, 28th is valid
+        (29, FEBRUARY, 2020, true), // leap year, 29th is valid
+        (28, FEBRUARY, 2019, true), // normal year
+        (31, MARCH, 2020, true),
+        (30, APRIL, 2020, true),
+        (31, MAY, 2020, true),
+        (30, JUNE, 2020, true),
+        (31, JULY, 2020, true),
+        (31, AUGUST, 2020, true),
+        (30, SEPTEMBER, 2020, true),
+        (31, OCTOBER, 2020, true),
+        (30, NOVEMBER, 2020, true),
+        (31, DECEMBER, 2020, true),
+        // invalid dates - too high day
+        (31 + 1, JANUARY, 2020, false),
+        (29 + 1, FEBRUARY, 2020, false), // leap year
+        (28 + 1, FEBRUARY, 2019, false), // normal year
+        (31 + 1, MARCH, 2020, false),
+        (30 + 1, APRIL, 2020, false),
+        (31 + 1, MAY, 2020, false),
+        (30 + 1, JUNE, 2020, false),
+        (31 + 1, JULY, 2020, false),
+        (31 + 1, AUGUST, 2020, false),
+        (30 + 1, SEPTEMBER, 2020, false),
+        (31 + 1, OCTOBER, 2020, false),
+        (30 + 1, NOVEMBER, 2020, false),
+        (31 + 1, DECEMBER, 2020, false),
+        // invalid dates
+        (-1, JANUARY, 2020, false),
+        (0, FEBRUARY, 2020, false),
+        (1, JANUARY - 1, 2020, false),
+        (1, DECEMBER + 1, 2020, false),
+    ] | (day, month, year, is_valid) => _test_date(day, month, year, is_valid)
+    test_file('/capy/date_time/Date.cfun', test_cases + _test_leap_year())
+
+fun _test_date(day: int, month: int, year: int, is_valid: bool): TestCase =
+    let assert: Assert =
+        if is_valid
+        then assert_that(Date { day, month, year })
+            .succeeds(date =>
+                assert_all(
+                    [assert_that(date.day).is_equal_to(day),
+                    assert_that(date.month).is_equal_to(month),
+                    assert_that(date.year).is_equal_to(year),]))
+        else assert_that(Date { day, month, year }).fails()
+    test(
+        "Date \{ day: {day}, month: {month}, year: {year} } should be " + (if is_valid then 'valid' else 'invalid'),
+        assert)
+
+fun _test_leap_year(): list[TestCase] =
+    let leap_year = Date { day: 1, month: JANUARY, year: 2020 } | d => Success { d.leap_year() }
+    let not_leap_year = Date { day: 1, month: JANUARY, year: 2019 } | d => Success { d.leap_year() }
+    [
+        test('1/1/2020 should be a leap year', assert_that(leap_year).succeeds(true)),
+        test('1/1/2019 should not be a leap year', assert_that(not_leap_year).succeeds(false)) ]

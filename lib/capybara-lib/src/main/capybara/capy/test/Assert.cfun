@@ -5,7 +5,8 @@ from /capy/lang/Seq import { * }
 data Assertion { result: bool, message: string, type: string }
 
 type Assert { assertions: list[() => Assertion] } =
-    StringAssert | IntAssert | LongAssert | DoubleAssert | FloatAssert | BoolAssert
+    _TechnicalAssert
+    | StringAssert | IntAssert | LongAssert | DoubleAssert | FloatAssert | BoolAssert
     | DataAssert | OptionAssert | ResultAssert
     | ListAssert | SetAssert | DictAssert | SeqAssert
 
@@ -13,6 +14,7 @@ fun Assert.failed(): bool = this.assertions | supplier => supplier().result |any
 
 fun Assert.succeeded(): bool = !this.failed()
 
+data _TechnicalAssert { assertions: list[() => Assertion] }
 data StringAssert { value: string }
 data IntAssert { value: int }
 data LongAssert { value: long }
@@ -26,6 +28,10 @@ data ListAssert[T] { value: list[T] }
 data SetAssert[T] { value: set[T] }
 data DictAssert[T] { value: dict[T] }
 data SeqAssert[T] { value: Seq[T] }
+
+fun assert_all(asserts: list[Assert]): Assert =
+    let assertions: list[() => Assertion] = asserts | assert => assert.assertions |> [], (acc, assertions) => acc + assertions
+    _TechnicalAssert { assertions: assertions }
 
 fun StringAssert.is_equal_to(other: string): StringAssert =
     let assertion = Assertion {
@@ -120,6 +126,28 @@ fun BoolAssert.is_equal_to(other: bool): BoolAssert =
         result: this.value == other,
         message: "Expected bool:\n" + this.value + "\nto be equal to:\n" + other,
         type: 'BoolAssert.is_equal_to'
+    }
+    BoolAssert {
+        value: this.value,
+        assertions: this.assertions + () => assertion
+    }
+
+fun BoolAssert.is_true(): BoolAssert =
+    let assertion = Assertion {
+        result: this.value,
+        message: "Expected bool:\n" + this.value + "\nto be equal to:\ntrue",
+        type: 'BoolAssert.is_true'
+    }
+    BoolAssert {
+        value: this.value,
+        assertions: this.assertions + () => assertion
+    }
+
+fun BoolAssert.is_false(): BoolAssert =
+    let assertion = Assertion {
+        result: !this.value,
+        message: "Expected bool:\n" + this.value + "\nto be equal to:\nfalse",
+        type: 'BoolAssert.is_false'
     }
     BoolAssert {
         value: this.value,
@@ -222,6 +250,22 @@ fun ResultAssert[T].succeeds(other: T): ResultAssert[T] =
     ResultAssert {
         value: this.value,
         assertions: this.assertions + () => assertion
+    }
+
+fun ResultAssert[T].succeeds(assert: T => Assert): ResultAssert[T] =
+    let assertions: list[() => Assertion] =
+        match this.value with
+        case Error e -> [() => Assertion {
+            result: false,
+            message: "Expected result:\n"
+                + this.value
+                + "\nto succeed with value that satisfies assertion",
+            type: 'ResultAssert[T].succeeds'
+        }]
+        case Success { v } -> assert(v).assertions
+    ResultAssert {
+        value: this.value,
+        assertions: this.assertions + assertions
     }
 
 fun ResultAssert[T].fails(): ResultAssert[T] =
