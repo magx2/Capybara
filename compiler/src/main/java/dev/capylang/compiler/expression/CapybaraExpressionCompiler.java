@@ -2890,7 +2890,17 @@ public class CapybaraExpressionCompiler {
     }
 
     private boolean isBroadSpecificityType(CompiledType type) {
-        return !isResolvedTypeForInference(type);
+        return switch (type) {
+            case PrimitiveLinkedType primitive -> primitive == ANY || primitive == DATA;
+            case CompiledGenericTypeParameter ignored -> true;
+            case CompiledDataType ignored -> false;
+            case CompiledDataParentType ignored -> false;
+            case CompiledList ignored -> false;
+            case CompiledSet ignored -> false;
+            case CompiledDict ignored -> false;
+            case CompiledTupleType ignored -> false;
+            case CompiledFunctionType ignored -> false;
+        };
     }
 
     private Set<String> methodOwnerCandidates(CompiledType receiverType) {
