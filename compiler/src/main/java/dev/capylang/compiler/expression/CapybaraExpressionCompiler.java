@@ -1748,6 +1748,21 @@ public class CapybaraExpressionCompiler {
                         return Result.success(maybeCoerced);
                     });
         }
+        if (argument instanceof InfixExpression infixExpression
+            && infixExpression.operator() == InfixOperator.PIPE
+            && (expected instanceof CompiledList || expected instanceof CompiledSet || expected instanceof CompiledDict)) {
+            return linkPipeExpression(infixExpression, scope, expected)
+                    .flatMap(linkedArgument -> {
+                        var maybeCoerced = coerceArgument(linkedArgument, expected);
+                        if (maybeCoerced == null) {
+                            return withPosition(
+                                    Result.error("Expected `" + expected + "`, got `" + linkedArgument.type() + "`"),
+                                    argument.position()
+                            );
+                        }
+                        return Result.success(maybeCoerced);
+                    });
+        }
         if (argument instanceof NewListExpression newListExpression && expected instanceof CompiledList expectedList) {
             return linkNewListExpression(newListExpression, scope, expectedList.elementType())
                     .flatMap(linkedArgument -> {
@@ -2050,19 +2065,22 @@ public class CapybaraExpressionCompiler {
         if (expected instanceof CompiledList expectedList
             && argument.type() instanceof CompiledList argumentList
             && argumentList.elementType() != ANY
-            && isTypeCompatible(argumentList.elementType(), expectedList.elementType())) {
+            && (isTypeCompatible(argumentList.elementType(), expectedList.elementType())
+                || canCoerceToExpectedType(argumentList.elementType(), expectedList.elementType()))) {
             return new CoercedArgument(argument, 1);
         }
         if (expected instanceof CompiledSet expectedSet
             && argument.type() instanceof CompiledSet argumentSet
             && argumentSet.elementType() != ANY
-            && isTypeCompatible(argumentSet.elementType(), expectedSet.elementType())) {
+            && (isTypeCompatible(argumentSet.elementType(), expectedSet.elementType())
+                || canCoerceToExpectedType(argumentSet.elementType(), expectedSet.elementType()))) {
             return new CoercedArgument(argument, 1);
         }
         if (expected instanceof CompiledDict expectedDict
             && argument.type() instanceof CompiledDict argumentDict
             && argumentDict.valueType() != ANY
-            && isTypeCompatible(argumentDict.valueType(), expectedDict.valueType())) {
+            && (isTypeCompatible(argumentDict.valueType(), expectedDict.valueType())
+                || canCoerceToExpectedType(argumentDict.valueType(), expectedDict.valueType()))) {
             return new CoercedArgument(argument, 1);
         }
         if (expected instanceof CompiledFunctionType expectedFunction
@@ -2157,6 +2175,12 @@ public class CapybaraExpressionCompiler {
     }
 
     private boolean isTypeCompatible(CompiledType actual, CompiledType expected) {
+        if (actual instanceof GenericDataType actualDataType) {
+            actual = resolveGenericTypeCompatibility(actualDataType);
+        }
+        if (expected instanceof GenericDataType expectedDataType) {
+            expected = resolveGenericTypeCompatibility(expectedDataType);
+        }
         if (actual.equals(expected)) {
             return true;
         }
@@ -2220,6 +2244,15 @@ public class CapybaraExpressionCompiler {
             return false;
         }
         return false;
+    }
+
+    private GenericDataType resolveGenericTypeCompatibility(GenericDataType type) {
+        return dataTypes.values().stream()
+                .filter(GenericDataType.class::isInstance)
+                .map(GenericDataType.class::cast)
+                .filter(candidate -> sameRawTypeName(candidate.name(), type.name()))
+                .findFirst()
+                .orElse(type);
     }
 
     private boolean areTypeParameterDescriptorsCompatible(List<String> actualTypeParameters, List<String> expectedTypeParameters) {
@@ -2923,6 +2956,37 @@ public class CapybaraExpressionCompiler {
                 });
     }
 
+    private Result<CompiledExpression> linkPipeExpression(
+            InfixExpression expression,
+            Scope scope,
+            CompiledType expectedType
+    ) {
+        var reAssociated = reAssociatePipeChain(expression);
+        if (reAssociated != expression) {
+            return linkArgumentForExpectedType(reAssociated, scope, expectedType)
+                    .map(CoercedArgument::expression);
+        }
+        return linkExpression(expression.left(), scope)
+                .flatMap(left -> {
+                    var specializedOptionType = resolveSpecializedOptionType(left.type()).orElse(null);
+                    if (specializedOptionType != null) {
+                        return linkOptionPipeExpression(expression, scope, left, optionElementType(left));
+                    }
+                    var sourceElementType = switch (left.type()) {
+                        case CompiledList linkedList -> linkedList.elementType();
+                        case CompiledSet linkedSet -> linkedSet.elementType();
+                        case CompiledDict linkedDict -> linkedDict.valueType();
+                        case PrimitiveLinkedType primitive when primitive == STRING -> STRING;
+                        default -> null;
+                    };
+                    if (sourceElementType == null) {
+                        return linkScalarPipeExpression(expression, scope, left);
+                    }
+                    var expectedElementType = expectedPipeElementType(left.type(), expectedType);
+                    return linkCollectionPipeExpression(expression, scope, left, sourceElementType, expectedElementType);
+                });
+    }
+
     private Result<CompiledExpression> linkOptionPipeExpression(
             InfixExpression expression,
             Scope scope,
@@ -2960,8 +3024,18 @@ public class CapybaraExpressionCompiler {
             CompiledExpression left,
             CompiledType elementType
     ) {
+        return linkCollectionPipeExpression(expression, scope, left, elementType, Optional.empty());
+    }
+
+    private Result<CompiledExpression> linkCollectionPipeExpression(
+            InfixExpression expression,
+            Scope scope,
+            CompiledExpression left,
+            CompiledType elementType,
+            Optional<CompiledType> expectedResultElementType
+    ) {
         if (left.type() instanceof CompiledDict dictType) {
-            return linkDictPipeExpression(expression, scope, left, dictType);
+            return linkDictPipeExpression(expression, scope, left, dictType, expectedResultElementType);
         }
         if (!(expression.right() instanceof LambdaExpression lambdaExpression)) {
             if (expression.right() instanceof FunctionReference functionReference) {
@@ -2981,7 +3055,10 @@ public class CapybaraExpressionCompiler {
             );
         }
         return linkPipeLambdaArguments(scope, lambdaExpression, elementType, "|")
-                .flatMap(lambdaBinding -> linkExpression(lambdaExpression.expression(), lambdaBinding.scope())
+                .flatMap(lambdaBinding -> expectedResultElementType
+                        .<Result<CompiledExpression>>map(type -> linkArgumentForExpectedType(lambdaExpression.expression(), lambdaBinding.scope(), type)
+                                .map(CoercedArgument::expression))
+                        .orElseGet(() -> linkExpression(lambdaExpression.expression(), lambdaBinding.scope()))
                 .map(mapper -> (CompiledExpression) new CompiledPipeExpression(
                         left,
                         lambdaBinding.argumentName(),
@@ -2997,6 +3074,16 @@ public class CapybaraExpressionCompiler {
             Scope scope,
             CompiledExpression left,
             CompiledDict dictType
+    ) {
+        return linkDictPipeExpression(expression, scope, left, dictType, Optional.empty());
+    }
+
+    private Result<CompiledExpression> linkDictPipeExpression(
+            InfixExpression expression,
+            Scope scope,
+            CompiledExpression left,
+            CompiledDict dictType,
+            Optional<CompiledType> expectedValueType
     ) {
         if (!(expression.right() instanceof LambdaExpression lambdaExpression)) {
             if (expression.right() instanceof FunctionReference functionReference) {
@@ -3017,7 +3104,10 @@ public class CapybaraExpressionCompiler {
         if (argumentNames.size() == 1) {
             var valueName = argumentNames.get(0);
             var lambdaScope = addLambdaBinding(scope, valueName, dictType.valueType());
-            return linkExpression(lambdaExpression.expression(), lambdaScope)
+            return expectedValueType
+                    .<Result<CompiledExpression>>map(type -> linkArgumentForExpectedType(lambdaExpression.expression(), lambdaScope, type)
+                            .map(CoercedArgument::expression))
+                    .orElseGet(() -> linkExpression(lambdaExpression.expression(), lambdaScope))
                     .map(mapper -> (CompiledExpression) new CompiledPipeExpression(
                             left,
                             valueName,
@@ -3033,7 +3123,10 @@ public class CapybaraExpressionCompiler {
                     valueName,
                     dictType.valueType()
             );
-            return linkExpression(lambdaExpression.expression(), lambdaScope)
+            return expectedValueType
+                    .<Result<CompiledExpression>>map(type -> linkArgumentForExpectedType(lambdaExpression.expression(), lambdaScope, type)
+                            .map(CoercedArgument::expression))
+                    .orElseGet(() -> linkExpression(lambdaExpression.expression(), lambdaScope))
                     .map(mapper -> (CompiledExpression) new CompiledPipeExpression(
                             left,
                             encodeDictPipeArguments(keyName, valueName),
@@ -3045,6 +3138,19 @@ public class CapybaraExpressionCompiler {
                 Result.error("Right side lambda of `|` for dict has to have one or two arguments"),
                 lambdaExpression.position()
         );
+    }
+
+    private Optional<CompiledType> expectedPipeElementType(CompiledType sourceType, CompiledType expectedType) {
+        if (sourceType instanceof CompiledList && expectedType instanceof CompiledList expectedList) {
+            return Optional.of(expectedList.elementType());
+        }
+        if (sourceType instanceof CompiledSet && expectedType instanceof CompiledSet expectedSet) {
+            return Optional.of(expectedSet.elementType());
+        }
+        if (sourceType instanceof CompiledDict && expectedType instanceof CompiledDict expectedDict) {
+            return Optional.of(expectedDict.valueType());
+        }
+        return Optional.empty();
     }
 
     private Result<CompiledExpression> linkScalarPipeExpression(
