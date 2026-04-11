@@ -4,12 +4,23 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import dev.capylang.compiler.*;
 import dev.capylang.compiler.parser.RawModule;
 import dev.capylang.generator.JavaGenerator;
 
+import javax.tools.DiagnosticCollector;
+import javax.tools.JavaFileObject;
+import javax.tools.ToolProvider;
+import java.io.PrintWriter;
+import java.io.StringWriter;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Collection;
 import java.util.List;
+import java.util.Locale;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.logging.Handler;
 import java.util.logging.Level;
@@ -22,6 +33,9 @@ import static dev.capylang.compiler.CompiledExpressionPrinter.printExpression;
 import static dev.capylang.compiler.PrimitiveLinkedType.ANY;
 
 class JavaExpressionEvaluatorTest {
+    @TempDir
+    Path tempDir;
+
     static {
         var rootLogger = Logger.getLogger("");
         rootLogger.setLevel(Level.FINE);
@@ -453,6 +467,37 @@ class JavaExpressionEvaluatorTest {
     }
 
     @Test
+    void shouldPreserveTypedLambdaArgumentsForResultAssertChains() {
+        var generatedProgram = new JavaGenerator().generate(compileProgram("DateTestLike", "/foo/bar", """
+                from /capy/lang/Result import { * }
+                from /capy/test/Assert import { * }
+
+                data Date { day: int }
+
+                fun test(value: Result[Date]): Assert =
+                    assert_that(value).succeeds(date => assert_that(date.day).is_equal_to(1))
+                """));
+        var generated = generatedProgram.modules().stream()
+                .map(dev.capylang.generator.GeneratedModule::code)
+                .collect(joining("\n"));
+
+        assertThat(generated).contains(".succeeds(date -> (assertThat((date).day()).isEqualTo(1)))");
+        assertGeneratedJavaCompiles(generatedProgram);
+    }
+
+    @Test
+    void shouldParenthesizeIfExpressionsInsideStringConcatenation() {
+        var generated = new JavaGenerator().generate(compileProgram("StringIfConcat", "/foo/bar", """
+                fun label(is_valid: bool): string =
+                    "Date should be " + (if is_valid then 'valid' else 'invalid')
+                """)).modules().stream()
+                .map(dev.capylang.generator.GeneratedModule::code)
+                .collect(joining("\n"));
+
+        assertThat(generated).contains("((\"Date should be \")+((is_valid) ? (\"valid\") : (\"invalid\")))");
+    }
+
+    @Test
     void shouldNotGenerateUnsupportedHelperWhenUnused() {
         var generated = new JavaGenerator().generate(compileProgram("NoUnsupported", "/foo/bar", """
                 fun answer(): int = 42
@@ -634,5 +679,79 @@ class JavaExpressionEvaluatorTest {
                         "return l.stream().flatMap(x -> (java.util.List.of(x, (x+1))).stream()).toList();"
                 )
         );
+    }
+
+    private void assertGeneratedJavaCompiles(dev.capylang.generator.GeneratedProgram generatedProgram) {
+        var sourceDir = tempDir.resolve("generated");
+        var classesDir = tempDir.resolve("classes");
+
+        generatedProgram.modules().forEach(module -> {
+            try {
+                var path = sourceDir.resolve(module.relativePath());
+                Files.createDirectories(path.getParent());
+                Files.writeString(path, module.code(), StandardCharsets.UTF_8);
+            } catch (Exception e) {
+                throw new AssertionError("Unable to write generated source", e);
+            }
+        });
+
+        var compiler = ToolProvider.getSystemJavaCompiler();
+        assertThat(compiler).as("system Java compiler").isNotNull();
+
+        try {
+            Files.createDirectories(classesDir);
+            var javaFiles = new java.util.ArrayList<Path>();
+            try (var files = Files.walk(sourceDir)) {
+                javaFiles.addAll(files.filter(Files::isRegularFile)
+                        .filter(path -> path.getFileName().toString().endsWith(".java"))
+                        .toList());
+            }
+            var dependencyRoots = List.of(
+                    resolveRepositoryPath("lib/capybara-lib/src/main/java"),
+                    resolveRepositoryPath("lib/capybara-lib/build/generated/sources/capybara/java/main")
+            );
+            for (var dependencyRoot : dependencyRoots) {
+                if (!Files.exists(dependencyRoot)) {
+                    continue;
+                }
+                try (var files = Files.walk(dependencyRoot)) {
+                    javaFiles.addAll(files.filter(Files::isRegularFile)
+                            .filter(path -> path.getFileName().toString().endsWith(".java"))
+                            .toList());
+                }
+            }
+            var diagnostics = new DiagnosticCollector<JavaFileObject>();
+            var output = new StringWriter();
+            try (var fileManager = compiler.getStandardFileManager(diagnostics, Locale.ROOT, StandardCharsets.UTF_8)) {
+                var compilationUnits = fileManager.getJavaFileObjectsFromFiles(javaFiles.stream().map(Path::toFile).toList());
+                var options = List.of(
+                        "--release", "21",
+                        "-classpath", System.getProperty("java.class.path"),
+                        "-d", classesDir.toString()
+                );
+                var success = compiler.getTask(new PrintWriter(output), fileManager, diagnostics, options, null, compilationUnits).call();
+                assertThat(success)
+                        .as(diagnostics.getDiagnostics().stream().map(Objects::toString).collect(joining(System.lineSeparator())))
+                        .isTrue();
+            }
+        } catch (Exception e) {
+            throw new AssertionError("Unable to compile generated Java", e);
+        }
+    }
+
+    private Path resolveRepositoryPath(String relativePath) {
+        var cwd = Path.of("").toAbsolutePath().normalize();
+        var direct = cwd.resolve(relativePath).normalize();
+        if (Files.exists(direct)) {
+            return direct;
+        }
+        var parent = cwd.getParent();
+        if (parent != null) {
+            var fromParent = parent.resolve(relativePath).normalize();
+            if (Files.exists(fromParent)) {
+                return fromParent;
+            }
+        }
+        return direct;
     }
 }
