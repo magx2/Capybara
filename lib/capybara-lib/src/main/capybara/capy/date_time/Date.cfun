@@ -1,0 +1,43 @@
+from /capy/lang/Result import {*}
+
+fun _leap_year(year: int): bool = (year % 4 == 0 & year % 100 != 0) | year % 400 == 0
+fun _days_31_month(month: int): bool = month == JANUARY | month == MARCH | month == MAY | month == JULY | month == AUGUST | month == OCTOBER | month == DECEMBER
+fun _days_30_month(month: int): bool = month == APRIL | month == JUNE | month == SEPTEMBER | month == NOVEMBER
+
+const JANUARY: int = 1
+const FEBRUARY: int = 2
+const MARCH: int = 3
+const APRIL: int = 4
+const MAY: int = 5
+const JUNE: int = 6
+const JULY: int = 7
+const AUGUST: int = 8
+const SEPTEMBER: int = 9
+const OCTOBER: int = 10
+const NOVEMBER: int = 11
+const DECEMBER: int = 12
+
+data Date {
+    day: int,
+    month: int,
+    year: int
+} with constructor {
+    if month < JANUARY | month > DECEMBER
+        | day < 1
+        | (_days_31_month(month) & day > 31)
+        | (_days_30_month(month) & day > 30)
+        | (month == FEBRUARY & ( (_leap_year(year) & day > 29) | (!_leap_year(year) & day > 28) ))
+    then Error { "Invalid date `{day}/{month}/{year}`!" }
+    else Success {* { day, month, year }}
+}
+
+fun Date.leap_year(): bool = _leap_year(this.year)
+fun Date.first_day_of_month(): Result[Date] = Date { day: 1, month: this.month, year: this.year }
+fun Date.last_day_of_month(): Result[Date] =
+    if this.month == FEBRUARY
+    then if _leap_year(this.year)
+        then Date { day: 29, month: this.month, year: this.year }
+        else Date { day: 28, month: this.month, year: this.year }
+    else if _days_31_month(this.month)
+        then Date { day: 31, month: this.month, year: this.year }
+        else Date { day: 30, month: this.month, year: this.year }
