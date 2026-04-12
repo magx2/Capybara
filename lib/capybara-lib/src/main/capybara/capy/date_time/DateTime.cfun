@@ -5,8 +5,8 @@ from /capy/lang/Result import { * }
 data DateTime { date: Date, time: Time }
 
 fun unix_epoch(): Result[DateTime] =
-    let date = Date { year: 1970, month: 1, day: 1 }
-    let time = Time { hour: 0, minute: 0, second: 0 }
+    let date = UNIX_DATE
+    let time = MIDNIGHT
     date | d => time | t => Success { DateTime { date: d, time: t } }
 
 /*
