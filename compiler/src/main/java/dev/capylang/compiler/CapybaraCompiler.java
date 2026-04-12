@@ -1257,7 +1257,7 @@ public class CapybaraCompiler {
         var visitedTypes = new HashSet<String>();
         parentTypesByName.values().stream()
                 .filter(parentType -> !referencedNestedTypes.contains(parentType.name()))
-                .forEach(parentType -> collectParentConstructorChainsFromCompiledTypes(
+                .forEach(parentType -> collectLibraryParentConstructorChains(
                         parentType,
                         parentTypesByName,
                         constructors,
@@ -1267,7 +1267,7 @@ public class CapybaraCompiler {
                 ));
         parentTypesByName.values().stream()
                 .filter(parentType -> !visitedTypes.contains(parentType.name()))
-                .forEach(parentType -> collectParentConstructorChainsFromCompiledTypes(
+                .forEach(parentType -> collectLibraryParentConstructorChains(
                         parentType,
                         parentTypesByName,
                         constructors,
