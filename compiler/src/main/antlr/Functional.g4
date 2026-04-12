@@ -206,7 +206,7 @@ patternType: COLLECTION '[' type ']'
 constructorPattern: TYPE '{' fieldPatternList? '}';
 fieldPatternList: pattern (',' pattern)*;
 
-newData: type '{' fieldAssignmentList? '}';
+newData: type BANG? '{' fieldAssignmentList? '}';
 constructorData: MUL '{' fieldAssignmentList? '}';
 new_list: '[' (expression (',' expression)* ','?)? ']';
 new_set: '{' (expression (',' expression)* ','?)? '}';
@@ -331,5 +331,4 @@ DOC_COMMENT : '///' ~[\r\n]*;
 LINE_COMMENT : '//' ~[\r\n]* -> skip;
 BLOCK_COMMENT : '/*' .*? '*/' -> skip;
 WS : [ \t\r\n]+ -> skip;
-
 

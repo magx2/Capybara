@@ -1,13 +1,9 @@
 from /capy/date_time/Date import { * }
 from /capy/date_time/Time import { * }
-from /capy/lang/Result import { * }
-
 data DateTime { date: Date, time: Time }
 
-fun unix_epoch(): Result[DateTime] =
-    let date <- UNIX_DATE
-    let time <- MIDNIGHT
-    DateTime { date: date, time: time }
+fun unix_epoch(): DateTime =
+    DateTime { date: UNIX_DATE, time: MIDNIGHT }
 
 /*
 fun DateTime.timestamp(): int =

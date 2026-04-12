@@ -88,6 +88,15 @@
       </dict>
     </dict>
     <dict><key>name</key><string>meta.type.constructor.capybara</string><key>match</key><string>\b(type)\s+(_*[A-Z][A-Za-z0-9_]*(?:\[[^\]]+\])?)(?:\s*\{[^{}\n]*\})?\s+(with)\s+(constructor)\s*\{</string></dict>
+    <dict>
+      <key>name</key><string>meta.data.constructor-bypass.capybara</string>
+      <key>match</key><string>(_*[A-Z][A-Za-z0-9_]*(?:\[[^\]]+\])?)(!)(?=\s*\{)</string>
+      <key>captures</key>
+      <dict>
+        <key>1</key><dict><key>name</key><string>entity.name.type.capybara</string></dict>
+        <key>2</key><dict><key>name</key><string>keyword.operator.constructor.capybara</string></dict>
+      </dict>
+    </dict>
     <dict><key>name</key><string>entity.name.type.capybara</string><key>match</key><string>\b_*[A-Z][A-Za-z0-9_]*\b</string></dict>
     <dict><key>name</key><string>entity.name.type.private.capybara</string><key>match</key><string>\b(type|enum|data|single)\s+(__[A-Za-z0-9_]*)</string></dict>
     <dict><key>name</key><string>entity.name.function.private.capybara</string><key>match</key><string>\bfun\s+(__[A-Za-z0-9_]+)</string></dict>
@@ -193,7 +202,6 @@
   </array>
 </dict>
 </plist>
-
 
 
 

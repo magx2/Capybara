@@ -134,6 +134,51 @@ public class CompilationErrorTest {
     }
 
     @Test
+    void shouldRejectConstructorBypassOutsideDeclaringModule() {
+        var result = CapybaraCompiler.INSTANCE.compile(List.of(
+                new RawModule("UserModel", "/foo/model", """
+                        from /capy/lang/Result import { * }
+
+                        data User { age: int } with constructor {
+                            if age <= 0 then
+                                Error { message: "invalid" }
+                            else
+                                Success { value: * { age: age } }
+                        }
+                        """),
+                new RawModule("Consumer", "/foo/app", """
+                        from /foo/model/UserModel import { * }
+
+                        fun broken(): User = User! { age: 1 }
+                        """)
+        ), new TreeSet<>());
+
+        assertThat(result).isInstanceOf(Result.Error.class);
+        var error = ((Result.Error<CompiledProgram>) result).errors().first();
+        assertThat(error.message())
+                .contains("Constructor bypass `User! { ... }` can only be used in module `/foo/model/UserModel` where `User` is defined");
+    }
+
+    @Test
+    void shouldRejectConstructorBypassForNonResultConstructor() {
+        var errors = compileProgram("""
+                        data OddInt { value: int } with constructor {
+                            if value % 2 == 0 then
+                                * { value: value + 1 }
+                            else
+                                * { value: value }
+                        }
+
+                        fun broken(): OddInt = OddInt! { value: 1 }
+                        """,
+                "constructor_bypass_non_result");
+
+        assertThat(errors).hasSize(1);
+        assertThat(errors.first().message())
+                .contains("Constructor bypass `!` is available only for data with Result-returning constructor");
+    }
+
+    @Test
     void shouldRejectMatchAssignedToIncompatibleTypedLet() {
         var errors = compileProgram("""
                         fun broken(): int =

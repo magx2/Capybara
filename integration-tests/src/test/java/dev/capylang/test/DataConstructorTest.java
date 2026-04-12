@@ -18,6 +18,12 @@ class DataConstructorTest {
     }
 
     @Test
+    void sameFileCanBypassResultReturningDataConstructor() {
+        assertThat(DataConstructor.validatedUserAgeOrDefault(7)).isEqualTo(7);
+        assertThat(DataConstructor.validatedUserAgeOrDefault(0)).isEqualTo(1);
+    }
+
+    @Test
     void typeConstructorRunsBeforeDataConstructor() {
         assertThat(DataConstructor.validatedNamedUser("Ada", "admin")).isEqualTo("ok:Ada:admin");
         assertThat(DataConstructor.validatedNamedUser("", "admin")).isEqualTo("err:Name was empty");

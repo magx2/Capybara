@@ -956,6 +956,7 @@ public class CapybaraParser {
             );
             case NewData newData -> new NewData(
                     rewriteLocalTypeNames(newData.type(), localTypeNameMap),
+                    newData.bypassConstructor(),
                     newData.assignments().stream()
                             .map(assignment -> new NewData.FieldAssignment(
                                     assignment.name(),
@@ -1303,6 +1304,7 @@ public class CapybaraParser {
             var assignments = fieldAssignments(newData.fieldAssignmentList());
             return new NewData(
                     type(newData.type()),
+                    newData.BANG() != null,
                     assignments.assignments(),
                     assignments.positionalArguments(),
                     assignments.spreads(),
@@ -1586,6 +1588,7 @@ public class CapybaraParser {
             var assignments = fieldAssignments(newData.fieldAssignmentList());
             return new NewData(
                     type(newData.type()),
+                    newData.BANG() != null,
                     assignments.assignments(),
                     assignments.positionalArguments(),
                     assignments.spreads(),
@@ -2569,6 +2572,7 @@ public class CapybaraParser {
             );
             case NewData value -> new NewData(
                     value.type(),
+                    value.bypassConstructor(),
                     value.assignments().stream().map(assignment -> new NewData.FieldAssignment(
                             assignment.name(),
                             shiftInterpolationPositions(assignment.value(), stringPosition, interpolationOffset)
@@ -3196,7 +3200,6 @@ public class CapybaraParser {
     }
 
 }
-
 
 
 

@@ -174,6 +174,23 @@ class CapybaraParserTest {
     }
 
     @Test
+    @DisplayName("should parse data constructor bypass")
+    void parseDataConstructorBypass() {
+        var module = parseSuccess(new RawModule("Test", "/parser", """
+                data User { age: int } with constructor {
+                    if age > 0 then Success { value: * { age: age } } else Error { "age" }
+                }
+
+                fun fallback(): User = User! { age: 1 }
+                """));
+
+        var function = findFunction("fallback", module.functional());
+        assertThat(function.expression()).isInstanceOf(NewData.class);
+        var newData = (NewData) function.expression();
+        assertThat(newData.bypassConstructor()).isTrue();
+    }
+
+    @Test
     @DisplayName("should parse type constructor and constructor-local star data")
     void parseTypeConstructor() {
         var module = parseSuccess(new RawModule("Test", "/parser", """

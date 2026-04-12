@@ -342,7 +342,8 @@ public class CapybaraCompiler {
 
     private record ConstructorCatalog(
             Map<String, Map<String, CapybaraExpressionCompiler.ProtectedConstructorRef>> constructorsByModule,
-            Map<String, Map<String, List<CapybaraExpressionCompiler.ProtectedConstructorRef>>> parentConstructorsByModule
+            Map<String, Map<String, List<CapybaraExpressionCompiler.ProtectedConstructorRef>>> parentConstructorsByModule,
+            Map<String, Map<String, String>> dataOwnersByModule
     ) {
     }
 
@@ -451,6 +452,23 @@ public class CapybaraCompiler {
             if (module.name().equals(typeName)) {
                 all.put(modulePath, constructors);
                 all.put("/" + modulePath, constructors);
+            }
+        });
+    }
+
+    private void addQualifiedDataOwnerAliases(
+            Map<String, String> all,
+            ModuleRef module,
+            Map<String, String> dataOwners
+    ) {
+        dataOwners.forEach((typeName, ownerModule) -> {
+            all.put(module.name() + "." + typeName, ownerModule);
+            var modulePath = module.path().replace('\\', '/') + "/" + module.name();
+            all.put(modulePath + "." + typeName, ownerModule);
+            all.put("/" + modulePath + "." + typeName, ownerModule);
+            if (module.name().equals(typeName)) {
+                all.put(modulePath, ownerModule);
+                all.put("/" + modulePath, ownerModule);
             }
         });
     }
@@ -1121,17 +1139,34 @@ public class CapybaraCompiler {
     ) {
         var constructorsByModule = new LinkedHashMap<String, Map<String, CapybaraExpressionCompiler.ProtectedConstructorRef>>();
         var parentConstructorsByModule = new LinkedHashMap<String, Map<String, List<CapybaraExpressionCompiler.ProtectedConstructorRef>>>();
+        var dataOwnersByModule = new LinkedHashMap<String, Map<String, String>>();
         for (var module : modules) {
             var moduleRef = new ModuleRef(module.name(), module.path());
             putOwnedModuleEntry(constructorsByModule, moduleRef, moduleConstructors(module, moduleRef));
             putOwnedModuleEntry(parentConstructorsByModule, moduleRef, moduleParentConstructors(module, moduleRef));
+            putOwnedModuleEntry(dataOwnersByModule, moduleRef, moduleDataOwners(module, moduleRef));
         }
         for (var library : libraries) {
             var moduleRef = new ModuleRef(library.name(), library.path());
             putImportedModuleEntry(constructorsByModule, moduleRef, libraryConstructors(library, moduleRef));
             putImportedModuleEntry(parentConstructorsByModule, moduleRef, libraryParentConstructors(library, moduleRef));
+            putImportedModuleEntry(dataOwnersByModule, moduleRef, libraryDataOwners(library, moduleRef));
         }
-        return new ConstructorCatalog(Map.copyOf(constructorsByModule), Map.copyOf(parentConstructorsByModule));
+        return new ConstructorCatalog(Map.copyOf(constructorsByModule), Map.copyOf(parentConstructorsByModule), Map.copyOf(dataOwnersByModule));
+    }
+
+    private Map<String, String> moduleDataOwners(
+            Module module,
+            ModuleRef moduleRef
+    ) {
+        return module.functional().definitions().stream()
+                .filter(DataDeclaration.class::isInstance)
+                .map(DataDeclaration.class::cast)
+                .collect(java.util.stream.Collectors.toUnmodifiableMap(
+                        DataDeclaration::name,
+                        ignored -> qualifiedModuleName(moduleRef),
+                        (first, second) -> first
+                ));
     }
 
     private Map<String, CapybaraExpressionCompiler.ProtectedConstructorRef> moduleConstructors(
@@ -1283,6 +1318,20 @@ public class CapybaraCompiler {
                 ));
     }
 
+    private Map<String, String> libraryDataOwners(
+            CompiledModule library,
+            ModuleRef moduleRef
+    ) {
+        return library.types().values().stream()
+                .filter(CompiledDataType.class::isInstance)
+                .map(CompiledDataType.class::cast)
+                .collect(java.util.stream.Collectors.toUnmodifiableMap(
+                        CompiledDataType::name,
+                        ignored -> qualifiedModuleName(moduleRef),
+                        (first, second) -> first
+                ));
+    }
+
     private CapybaraExpressionCompiler.ConstructorRegistry availableConstructors(
             Module module,
             ModuleLinkIndex moduleLinkIndex,
@@ -1292,10 +1341,13 @@ public class CapybaraCompiler {
         var moduleRef = new ModuleRef(module.name(), module.path());
         var localConstructors = Optional.ofNullable(getModuleEntry(constructorCatalog.constructorsByModule(), moduleRef)).orElse(Map.of());
         var localParentConstructors = Optional.ofNullable(getModuleEntry(constructorCatalog.parentConstructorsByModule(), moduleRef)).orElse(Map.of());
+        var localDataOwners = Optional.ofNullable(getModuleEntry(constructorCatalog.dataOwnersByModule(), moduleRef)).orElse(Map.of());
         var constructors = new LinkedHashMap<String, CapybaraExpressionCompiler.ProtectedConstructorRef>(localConstructors);
         var parentConstructors = new LinkedHashMap<String, List<CapybaraExpressionCompiler.ProtectedConstructorRef>>(localParentConstructors);
+        var dataOwners = new LinkedHashMap<String, String>(localDataOwners);
         addQualifiedConstructorAliases(constructors, moduleRef, localConstructors);
         addQualifiedParentConstructorAliases(parentConstructors, moduleRef, localParentConstructors);
+        addQualifiedDataOwnerAliases(dataOwners, moduleRef, localDataOwners);
 
         for (var importDeclaration : module.imports()) {
             var importedModule = resolveImportedModule(importDeclaration.moduleName(), moduleLinkIndex);
@@ -1304,11 +1356,14 @@ public class CapybaraCompiler {
             }
             var importedConstructors = Optional.ofNullable(getModuleEntry(constructorCatalog.constructorsByModule(), importedModule)).orElse(Map.of());
             var importedParentConstructors = Optional.ofNullable(getModuleEntry(constructorCatalog.parentConstructorsByModule(), importedModule)).orElse(Map.of());
+            var importedDataOwners = Optional.ofNullable(getModuleEntry(constructorCatalog.dataOwnersByModule(), importedModule)).orElse(Map.of());
             addQualifiedConstructorAliases(constructors, importedModule, importedConstructors);
             addQualifiedParentConstructorAliases(parentConstructors, importedModule, importedParentConstructors);
+            addQualifiedDataOwnerAliases(dataOwners, importedModule, importedDataOwners);
             if (importDeclaration.isStarImport() && importDeclaration.excludedSymbols().isEmpty()) {
                 importedConstructors.forEach(constructors::put);
                 importedParentConstructors.forEach(parentConstructors::put);
+                importedDataOwners.forEach(dataOwners::put);
                 continue;
             }
             var selected = importDeclaration.selectedSymbols(importedConstructors.keySet());
@@ -1321,16 +1376,22 @@ public class CapybaraCompiler {
                 if (importedParentConstructor != null) {
                     parentConstructors.put(symbol, importedParentConstructor);
                 }
+                var importedDataOwner = importedDataOwners.get(symbol);
+                if (importedDataOwner != null) {
+                    dataOwners.put(symbol, importedDataOwner);
+                }
             }
         }
 
         allModules.forEach(knownModule -> {
             var knownConstructors = Optional.ofNullable(getModuleEntry(constructorCatalog.constructorsByModule(), knownModule)).orElse(Map.of());
             var knownParentConstructors = Optional.ofNullable(getModuleEntry(constructorCatalog.parentConstructorsByModule(), knownModule)).orElse(Map.of());
+            var knownDataOwners = Optional.ofNullable(getModuleEntry(constructorCatalog.dataOwnersByModule(), knownModule)).orElse(Map.of());
             addQualifiedConstructorAliases(constructors, knownModule, knownConstructors);
             addQualifiedParentConstructorAliases(parentConstructors, knownModule, knownParentConstructors);
+            addQualifiedDataOwnerAliases(dataOwners, knownModule, knownDataOwners);
         });
-        return new CapybaraExpressionCompiler.ConstructorRegistry(Map.copyOf(constructors), Map.copyOf(parentConstructors));
+        return new CapybaraExpressionCompiler.ConstructorRegistry(Map.copyOf(constructors), Map.copyOf(parentConstructors), Map.copyOf(dataOwners));
     }
 
     private void registerSourceProtectedConstructors(
@@ -1816,6 +1877,7 @@ public class CapybaraCompiler {
                 .flatMap(parameters -> linkExpressionWithRecursiveInference(
                         function,
                         parameters,
+                        moduleSourceFile,
                         dataTypes,
                         signatures,
                         signaturesByModule,
@@ -1887,6 +1949,7 @@ public class CapybaraCompiler {
     private Result<dev.capylang.compiler.expression.CompiledExpression> linkExpressionWithRecursiveInference(
             Function function,
             List<CompiledFunctionParameter> parameters,
+            String moduleSourceFile,
             Map<String, GenericDataType> dataTypes,
             List<CapybaraExpressionCompiler.FunctionSignature> signatures,
             Map<String, List<CapybaraExpressionCompiler.FunctionSignature>> signaturesByModule,
@@ -1902,6 +1965,7 @@ public class CapybaraCompiler {
                 moduleClassNameByModuleName,
                 protectedConstructorsByType,
                 linkCache,
+                Optional.of(qualifiedModuleNameFromSourceFile(moduleSourceFile)),
                 constructorTargetTypeName(function.name())
                         .map(target -> target.kind() == ConstructorKind.TYPE
                                 ? constructorStateTypeName(target.targetTypeName())
@@ -1950,6 +2014,7 @@ public class CapybaraCompiler {
                     moduleClassNameByModuleName,
                     protectedConstructorsByType,
                     linkCache,
+                    Optional.of(qualifiedModuleNameFromSourceFile(moduleSourceFile)),
                     constructorTargetTypeName(function.name())
                             .map(target -> target.kind() == ConstructorKind.TYPE
                                     ? constructorStateTypeName(target.targetTypeName())
@@ -4974,6 +5039,14 @@ public class CapybaraCompiler {
     private static String normalizeFile(String moduleSourceFile) {
         var normalized = moduleSourceFile.replace('\\', '/');
         return normalized.startsWith("/") ? normalized : "/" + normalized;
+    }
+
+    private static String qualifiedModuleNameFromSourceFile(String moduleSourceFile) {
+        var normalized = normalizeFile(moduleSourceFile);
+        if (normalized.endsWith(".cfun")) {
+            normalized = normalized.substring(0, normalized.length() - ".cfun".length());
+        }
+        return normalized;
     }
 
     private static <T> List<T> castList(Module module, Class<T> clazz) {

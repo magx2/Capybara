@@ -31,15 +31,15 @@ data Date {
     else Success {* { day, month, year }}
 }
 
-const UNIX_DATE: Result[Date] = Date { day: 1, month: JANUARY, year: 1970 }
+const UNIX_DATE: Date = Date! { day: 1, month: JANUARY, year: 1970 }
 
 fun Date.leap_year(): bool = _leap_year(this.year)
-fun Date.first_day_of_month(): Result[Date] = Date { day: 1, month: this.month, year: this.year }
-fun Date.last_day_of_month(): Result[Date] =
+fun Date.first_day_of_month(): Date = Date! { day: 1, month: this.month, year: this.year }
+fun Date.last_day_of_month(): Date =
     if this.month == FEBRUARY
     then if _leap_year(this.year)
-        then Date { day: 29, month: this.month, year: this.year }
-        else Date { day: 28, month: this.month, year: this.year }
+        then Date! { day: 29, month: this.month, year: this.year }
+        else Date! { day: 28, month: this.month, year: this.year }
     else if _days_31_month(this.month)
-        then Date { day: 31, month: this.month, year: this.year }
-        else Date { day: 30, month: this.month, year: this.year }
+        then Date! { day: 31, month: this.month, year: this.year }
+        else Date! { day: 30, month: this.month, year: this.year }
