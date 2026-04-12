@@ -1656,6 +1656,9 @@ public class CapybaraExpressionCompiler {
     }
 
     private Result<CoercedArgument> linkArgumentForExpectedType(Expression argument, Scope scope, CompiledType expected) {
+        if (resolveSpecializedResultType(expected).isPresent()) {
+            return linkArgumentForExpectedResultType(argument, scope, expected);
+        }
         if (argument instanceof IfExpression ifExpression) {
             return linkIfExpression(ifExpression, scope, expected)
                     .flatMap(linkedArgument -> {
@@ -1671,6 +1674,19 @@ public class CapybaraExpressionCompiler {
         }
         if (argument instanceof MatchExpression matchExpression) {
             return linkMatchExpression(matchExpression, scope, expected)
+                    .flatMap(linkedArgument -> {
+                        var maybeCoerced = coerceArgument(linkedArgument, expected);
+                        if (maybeCoerced == null) {
+                            return withPosition(
+                                    Result.error("Expected `" + expected + "`, got `" + linkedArgument.type() + "`"),
+                                    argument.position()
+                            );
+                        }
+                        return Result.success(maybeCoerced);
+                    });
+        }
+        if (argument instanceof LetExpression letExpression) {
+            return linkLetExpression(letExpression, scope, Optional.of(expected))
                     .flatMap(linkedArgument -> {
                         var maybeCoerced = coerceArgument(linkedArgument, expected);
                         if (maybeCoerced == null) {
@@ -1815,6 +1831,42 @@ public class CapybaraExpressionCompiler {
                     }
                     return Result.success(maybeCoerced);
                 });
+    }
+
+    private Result<CoercedArgument> linkArgumentForExpectedResultType(
+            Expression argument,
+            Scope scope,
+            CompiledType expected
+    ) {
+        var expectedResultParent = resolveSpecializedResultType(expected);
+        if (expectedResultParent.isEmpty()) {
+            return withPosition(Result.error("Expected `Result[...]`, got `" + expected + "`"), argument.position());
+        }
+        var linkedArgument = switch (argument) {
+            case IfExpression ifExpression -> linkIfExpression(ifExpression, scope, expected);
+            case MatchExpression matchExpression -> linkMatchExpression(matchExpression, scope, expected);
+            case LetExpression letExpression -> linkLetExpression(letExpression, scope, Optional.of(expected));
+            default -> linkExpression(argument, scope);
+        };
+        return linkedArgument.flatMap(linked -> {
+            var maybeCoerced = coerceArgument(linked, expected);
+            if (maybeCoerced != null) {
+                return Result.success(maybeCoerced);
+            }
+            var wrapped = ensureResultExpression(linked, expectedResultParent.orElseThrow(), argument.position());
+            if (wrapped instanceof Result.Error<CompiledExpression> error) {
+                return new Result.Error<>(error.errors());
+            }
+            var resultCompatibleExpression = ((Result.Success<CompiledExpression>) wrapped).value();
+            maybeCoerced = coerceArgument(resultCompatibleExpression, expected);
+            if (maybeCoerced == null) {
+                return withPosition(
+                        Result.error("Expected `" + expected + "`, got `" + linked.type() + "`"),
+                        argument.position()
+                );
+            }
+            return Result.success(maybeCoerced);
+        });
     }
 
     private Result<CompiledExpression> linkFunctionReference(FunctionReference functionReference, CompiledFunctionType expectedType) {
@@ -6625,13 +6677,25 @@ public class CapybaraExpressionCompiler {
     }
 
     private Result<CompiledExpression> linkLetExpression(LetExpression expression, Scope scope) {
+        return linkLetExpression(expression, scope, Optional.empty());
+    }
+
+    private Result<CompiledExpression> linkLetExpression(
+            LetExpression expression,
+            Scope scope,
+            Optional<CompiledType> expectedType
+    ) {
         if (expression.kind() == LetExpression.Kind.RESULT_BIND) {
-            return linkResultBindLetExpression(expression, scope);
+            return linkResultBindLetExpression(expression, scope, expectedType);
         }
         if (expression.declaredType().isPresent()) {
             return linkTypeInScope(expression.declaredType().orElseThrow(), scope)
                     .flatMap(linkedDeclaredType -> linkArgumentForExpectedType(expression.value(), scope, linkedDeclaredType)
-                            .flatMap(coercedValue -> linkExpression(expression.rest(), scope.add(expression.name(), linkedDeclaredType))
+                            .flatMap(coercedValue -> linkLetRestExpression(
+                                            expression.rest(),
+                                            scope.add(expression.name(), linkedDeclaredType),
+                                            expectedType
+                                    )
                                     .map(rest -> new CompiledLetExpression(
                                             expression.name(),
                                             coercedValue.expression(),
@@ -6649,7 +6713,7 @@ public class CapybaraExpressionCompiler {
                             scope
                     );
                     var letType = inferredDeclarationType.orElse(value.type());
-                    return linkExpression(expression.rest(), scope.add(expression.name(), letType))
+                    return linkLetRestExpression(expression.rest(), scope.add(expression.name(), letType), expectedType)
                             .map(rest ->
                                     new CompiledLetExpression(
                                             expression.name(),
@@ -6660,7 +6724,51 @@ public class CapybaraExpressionCompiler {
                 });
     }
 
-    private Result<CompiledExpression> linkResultBindLetExpression(LetExpression expression, Scope scope) {
+    private Result<CompiledExpression> linkResultBindLetExpression(
+            LetExpression expression,
+            Scope scope,
+            Optional<CompiledType> expectedType
+    ) {
+        if (expression.declaredType().isPresent()) {
+            return linkTypeInScope(expression.declaredType().orElseThrow(), scope)
+                    .flatMap(declaredType -> {
+                        var expectedResultType = resultTypeFor(declaredType);
+                        var linkedSource = linkResultBindSourceExpression(
+                                expression.value(),
+                                scope,
+                                Optional.ofNullable(expectedResultType)
+                        );
+                        return linkedSource.flatMap(resultExpression -> {
+                            var resultParent = resolveSpecializedResultType(resultExpression.type());
+                            if (resultParent.isEmpty()) {
+                                return withPosition(
+                                        Result.error("`<-` can only be used with `Result[...]`, got `" + resultExpression.type() + "`"),
+                                        expression.value().position().or(expression::position)
+                                );
+                            }
+                            var successTypeResult = findSubtype("Success", resultParent.orElseThrow());
+                            if (successTypeResult instanceof Result.Error<CompiledDataType> error) {
+                                return new Result.Error<>(error.errors());
+                            }
+                            var successType = ((Result.Success<CompiledDataType>) successTypeResult).value();
+                            var successValueField = successType.fields().stream()
+                                    .filter(field -> field.name().equals("value"))
+                                    .findFirst();
+                            if (successValueField.isEmpty()) {
+                                return withPosition(Result.error("`Result.Success` is missing `value` field"), expression.position());
+                            }
+                            return linkResultBindContinuation(
+                                    expression,
+                                    scope,
+                                    resultExpression,
+                                    resultParent.orElseThrow(),
+                                    successValueField.orElseThrow().type(),
+                                    declaredType,
+                                    expectedType
+                            );
+                        });
+                    });
+        }
         return linkResultBindSourceExpression(expression.value(), scope)
                 .flatMap(resultExpression -> {
                     var resultParent = resolveSpecializedResultType(resultExpression.type());
@@ -6681,25 +6789,14 @@ public class CapybaraExpressionCompiler {
                     if (successValueField.isEmpty()) {
                         return withPosition(Result.error("`Result.Success` is missing `value` field"), expression.position());
                     }
-                    var payloadType = successValueField.orElseThrow().type();
-                    if (expression.declaredType().isPresent()) {
-                        return linkTypeInScope(expression.declaredType().orElseThrow(), scope)
-                                .flatMap(declaredType -> linkResultBindContinuation(
-                                        expression,
-                                        scope,
-                                        resultExpression,
-                                        resultParent.orElseThrow(),
-                                        payloadType,
-                                        declaredType
-                                ));
-                    }
                     return linkResultBindContinuation(
                             expression,
                             scope,
                             resultExpression,
                             resultParent.orElseThrow(),
-                            payloadType,
-                            payloadType
+                            successValueField.orElseThrow().type(),
+                            successValueField.orElseThrow().type(),
+                            expectedType
                     );
                 });
     }
@@ -6736,13 +6833,29 @@ public class CapybaraExpressionCompiler {
                 });
     }
 
+    private Result<CompiledExpression> linkResultBindSourceExpression(
+            Expression expression,
+            Scope scope,
+            Optional<CompiledType> expectedResultType
+    ) {
+        if (expectedResultType.isPresent()
+            && (expression instanceof LetExpression
+                || expression instanceof MatchExpression
+                || expression instanceof IfExpression)) {
+            return linkArgumentForExpectedType(expression, scope, expectedResultType.orElseThrow())
+                    .map(CoercedArgument::expression);
+        }
+        return linkResultBindSourceExpression(expression, scope);
+    }
+
     private Result<CompiledExpression> linkResultBindContinuation(
             LetExpression expression,
             Scope scope,
             CompiledExpression resultExpression,
             CompiledDataParentType resultParent,
             CompiledType payloadType,
-            CompiledType letType
+            CompiledType letType,
+            Optional<CompiledType> expectedType
     ) {
         var rawPayloadName = "__result_bind_value_" + scope.localValues().size();
         var boundPayload = new CompiledVariable(rawPayloadName, payloadType);
@@ -6753,7 +6866,7 @@ public class CapybaraExpressionCompiler {
                     expression.position()
             );
         }
-        return linkExpression(expression.rest(), scope.add(expression.name(), letType))
+        return linkResultBindRestExpression(expression.rest(), scope.add(expression.name(), letType), expectedType)
                 .flatMap(rest -> {
                     var successContinuation = new CompiledLetExpression(
                             expression.name(),
@@ -6801,6 +6914,32 @@ public class CapybaraExpressionCompiler {
                             ((Result.Success<CompiledDataParentType>) successResultType).value()
                     ));
                 });
+    }
+
+    private Result<CompiledExpression> linkLetRestExpression(
+            Expression expression,
+            Scope scope,
+            Optional<CompiledType> expectedType
+    ) {
+        return expectedType
+                .<Result<CompiledExpression>>map(type -> linkArgumentForExpectedType(expression, scope, type)
+                        .map(CoercedArgument::expression))
+                .orElseGet(() -> linkExpression(expression, scope));
+    }
+
+    private Result<CompiledExpression> linkResultBindRestExpression(
+            Expression expression,
+            Scope scope,
+            Optional<CompiledType> expectedType
+    ) {
+        if (expectedType.isPresent()
+            && (expression instanceof LetExpression
+                || expression instanceof MatchExpression
+                || expression instanceof IfExpression)) {
+            return linkArgumentForExpectedType(expression, scope, expectedType.orElseThrow())
+                    .map(CoercedArgument::expression);
+        }
+        return linkExpression(expression, scope);
     }
 
     private Optional<CompiledType> inferImplicitLetDeclarationType(
