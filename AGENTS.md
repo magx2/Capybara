@@ -18,6 +18,7 @@ Use the wrapper from repository root:
 - `./gradlew :integration-tests:test`: run integration suite.
 - `./gradlew :lib:capybara-lib:compileCapybara`: compile library Capybara sources to Java.
 - `./gradlew :lib:capybara-lib:testCapybara`: compile test Capybara sources and run generated `JsonTest` main.
+- If Gradle has sandbox or cache permission issues, run it with a temporary Gradle home, for example: `env GRADLE_USER_HOME=/tmp/gradle-home ./gradlew clean check`.
 
 ## Coding Style & Naming Conventions
 - Java toolchain is 21 (configured in `buildSrc` conventions).
