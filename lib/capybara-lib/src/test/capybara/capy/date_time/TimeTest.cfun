@@ -1,0 +1,126 @@
+from /capy/date_time/Time import { * }
+from /capy/test/Assert import { * }
+from /capy/lang/Math import { * }
+from /capy/lang/Result import { * }
+from /capy/test/CapyTest import { * }
+
+fun tests(): TestFile =
+    let test_cases = [
+        // valid times
+        (0, 0, 0, true),
+        (23, 59, 59, true),
+        (12, 30, 45, true),
+        // invalid times - too high
+        (24, 0, 0, false),
+        (0, 60, 0, false),
+        (0, 0, 60, false),
+        // invalid times - negative
+        (-1, 0, 0, false),
+        (0, -1, 0, false),
+        (0, 0, -1, false),
+    ] | (hour, minute, second, is_valid) => _test_time(hour, minute, second, is_valid)
+    test_file('/capy/date_time/Time.cfun',
+        test_cases
+        + _test_to_seconds()
+        + _test_to_minutes()
+        + _test_to_hours()
+        + _test_round_to_minutes()
+        + _test_round_to_hours()
+        + _test_add_seconds()
+        + _test_add_minutes()
+        + _test_add_hours())
+
+fun _test_time(hour: int, minute: int, second: int, is_valid: bool): TestCase =
+    let assert: Assert =
+        if is_valid
+        then assert_that(Time { hour, minute, second })
+            .succeeds(time =>
+                assert_all([
+                    assert_that(time.hour).is_equal_to(hour),
+                    assert_that(time.minute).is_equal_to(minute),
+                    assert_that(time.second).is_equal_to(second),
+                ]))
+        else assert_that(Time { hour, minute, second }).fails()
+    test("Time \{ hour: {hour}, minute: {minute}, second: {second} } should " + (if is_valid then "succeed" else "fail"), assert)
+
+fun _test_to_seconds(): list[TestCase] =
+    [
+        (Time { hour: 4, minute: 23, second: 59 }, 15839),
+        (Time { hour: 2, minute: 30, second: 0 }, 9000),
+        (Time { hour: 3, minute: 0, second: 0 }, 10800),
+    ] | (time, expected) => test(
+        "{time}.to_seconds() should return the {expected} seconds",
+        assert_that(time | t => Success { t.to_seconds() }).succeeds(expected))
+
+fun _test_to_minutes(): list[TestCase] =
+    [
+        (Time { hour: 4, minute: 23, second: 59 }, 263),
+        (Time { hour: 2, minute: 30, second: 0 }, 150),
+        (Time { hour: 3, minute: 0, second: 0 }, 180),
+    ] | (time, expected) => test(
+        "{time}.to_minutes() should return the {expected} minutes",
+        assert_that(time | t => Success { t.to_minutes() }).succeeds(expected))
+
+fun _test_to_hours(): list[TestCase] =
+    [
+        (Time { hour: 4, minute: 23, second: 59 }, 4),
+        (Time { hour: 2, minute: 30, second: 0 }, 2),
+        (Time { hour: 3, minute: 0, second: 0 }, 3),
+    ] | (time, expected) => test(
+        "{time}.to_hours() should return the {expected} hours",
+        assert_that(time | t => Success { t.to_hours() }).succeeds(expected))
+
+fun _test_round_to_minutes(): TestCase =
+    test(
+        "Time \{hour: 23, minute: 59, seconds: 59}.round_to_minutes() should return Time \{hour: 23, minute: 59, seconds: 0}",
+        assert_that(Time { hour: 23, minute: 59, second: 59 } | t => t.round_to_minutes())
+            .is_equal_to(Time {hour: 23, minute: 59, second: 0 }))
+
+fun _test_round_to_hours(): TestCase =
+    test(
+        "Time \{hour: 23, minute: 59, seconds: 59}.round_to_hours() should return Time \{hour: 23, minute: 0, seconds: 0}",
+        assert_that(Time { hour: 23, minute: 59, second: 59 } | t => t.round_to_hours())
+            .is_equal_to(Time {hour: 23, minute: 0, second: 0 }))
+
+fun _test_add_seconds(): list[TestCase] =
+    [
+        // plus
+        (Time { hour: 23, minute: 59, second: 59 }, 1, Time { hour: 0, minute: 0, second: 0 }),
+        (Time { hour: 23, minute: 59, second: 59 }, 60, Time { hour: 0, minute: 0, second: 59 }),
+        (Time { hour: 23, minute: 59, second: 59 }, 3600, Time { hour: 0, minute: 59, second: 59 }),
+        (Time { hour: 23, minute: 59, second: 59 }, 3661, Time { hour: 1, minute: 1, second: 0 }),
+        // minus
+        (Time { hour: 23, minute: 59, second: 59 }, -1, Time { hour: 23, minute: 59, second: 58 }),
+        (Time { hour: 0, minute: 0, second: 0 }, -1, Time { hour: 23, minute: 59, second: 59 }),
+        (Time { hour: 0, minute: 0, second: 0 }, -60, Time { hour: 23, minute: 59, second: 0 }),
+        (Time { hour: 0, minute: 0, second: 0 }, -3600, Time { hour: 23, minute: 0, second: 0 }),
+        (Time { hour: 0, minute: 0, second: 0 }, -3661, Time { hour: 22, minute: 58, second: 59 }),
+    ] | (time, seconds_to_add, expected) => test(
+        "{time}.add_seconds({seconds_to_add}) should return {expected}",
+        assert_that(time | t => t.add_seconds(seconds_to_add)).is_equal_to(expected))
+
+fun _test_add_minutes(): list[TestCase] =
+    [
+        // plus
+        (Time { hour: 23, minute: 59, second: 59 }, 1, Time { hour: 0, minute: 0, second: 59 }),
+        (Time { hour: 23, minute: 59, second: 59 }, 60, Time { hour: 0, minute: 59, second: 59 }),
+        (Time { hour: 23, minute: 59, second: 59 }, 61, Time { hour: 1, minute: 0, second: 59 }),
+        // minus
+        (Time { hour: 23, minute: 59, second: 59 }, -1, Time { hour: 23, minute: 58, second: 59 }),
+        (Time { hour: 0, minute: 0, second: 0 }, -1, Time { hour: 23, minute: 59, second: 0 }),
+        (Time { hour: 0, minute: 0, second: 0 }, -60, Time { hour: 23, minute: 0, second: 0 }),
+        (Time { hour: 0, minute: 0, second: 0 }, -61, Time { hour: 22, minute: 59, second: 0 }),
+    ] | (time, seconds_to_add, expected) => test(
+        "{time}.add_minutes({seconds_to_add}) should return {expected}",
+        assert_that(time | t => t.add_minutes(seconds_to_add)).is_equal_to(expected))
+
+fun _test_add_hours(): list[TestCase] =
+    [
+        // plus
+        (Time { hour: 23, minute: 59, second: 59 }, 1, Time { hour: 0, minute: 59, second: 59 }),
+        // minus
+        (Time { hour: 23, minute: 59, second: 59 }, -1, Time { hour: 22, minute: 59, second: 59 }),
+        (Time { hour: 0, minute: 0, second: 0 }, -1, Time { hour: 23, minute: 0, second: 0 }),
+    ] | (time, seconds_to_add, expected) => test(
+        "{time}.add_hours({seconds_to_add}) should return {expected}",
+        assert_that(time | t => t.add_hours(seconds_to_add)).is_equal_to(expected))
