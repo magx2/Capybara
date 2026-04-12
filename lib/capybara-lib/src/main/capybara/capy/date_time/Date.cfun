@@ -31,6 +31,8 @@ data Date {
     else Success {* { day, month, year }}
 }
 
+const UNIX_DATE: Result[Date] = Date { day: 1, month: JANUARY, year: 1970 }
+
 fun Date.leap_year(): bool = _leap_year(this.year)
 fun Date.first_day_of_month(): Result[Date] = Date { day: 1, month: this.month, year: this.year }
 fun Date.last_day_of_month(): Result[Date] =

@@ -8,8 +8,8 @@ data Time { hour: int, minute: int, second: int } with constructor {
     else Success {* { hour, minute, second }}
 }
 
-fun midnight(): Result[Time] = Time { hour: 0, minute: 0, second: 0 }
-fun noon(): Result[Time] = Time { hour: 12, minute: 0, second: 0 }
+const MIDNIGHT: Result[Time] = Time { hour: 0, minute: 0, second: 0 }
+const NOON: Result[Time] = Time { hour: 12, minute: 0, second: 0 }
 
 fun Time.to_seconds(): int = this.hour * 3600 + this.minute * 60 + this.second
 fun Time.to_minutes(): int = this.hour * 60 + this.minute
