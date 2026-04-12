@@ -1,0 +1,19 @@
+from /capy/date_time/Date import { * }
+from /capy/date_time/Time import { * }
+from /capy/lang/Result import { * }
+
+data DateTime { date: Date, time: Time }
+
+fun unix_epoch(): Result[DateTime] =
+    let date = Date { year: 1970, month: 1, day: 1 }
+    let time = Time { hour: 0, minute: 0, second: 0 }
+    date | d => time | t => Success { DateTime { date: d, time: t } }
+
+/*
+fun DateTime.timestamp(): int =
+    const __seconds_in_day: int = 24 * 3600
+    ---
+    let days_since_epoch = this.date.to_days() - unix_epoch() | dt => dt.date.to_days()
+    let seconds_since_midnight = this.time.to_seconds()
+    days_since_epoch * __seconds_in_day + seconds_since_midnight
+*/
