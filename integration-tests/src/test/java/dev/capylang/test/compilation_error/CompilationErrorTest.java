@@ -179,6 +179,51 @@ public class CompilationErrorTest {
     }
 
     @Test
+    void shouldRejectResultBindOnNonResultExpression() {
+        var errors = compileProgram("""
+                        fun broken(): int =
+                            let value <- 1
+                            value
+                        """,
+                "result_bind_non_result");
+
+        assertThat(errors).hasSize(1);
+        assertThat(errors.first().message())
+                .contains("`<-` can only be used with `Result[...]`")
+                .contains("`INT`");
+    }
+
+    @Test
+    void shouldRejectResultBindDeclaredTypeMismatch() {
+        var errors = compileProgram("""
+                        from /capy/lang/Result import { * }
+                        fun broken(): Result[int] =
+                            let value: string <- Success { value: 1 }
+                            value
+                        """,
+                "result_bind_type_mismatch");
+
+        assertThat(errors).hasSize(1);
+        assertThat(errors.first().message())
+                .contains("Expected `string`, got `int`");
+    }
+
+    @Test
+    void shouldRejectResultBindInNonResultContext() {
+        var errors = compileProgram("""
+                        from /capy/lang/Result import { * }
+                        fun broken(): int =
+                            let value <- Success { value: 1 }
+                            value
+                        """,
+                "result_bind_non_result_context");
+
+        assertThat(errors).hasSize(1);
+        assertThat(errors.first().message())
+                .contains("Expected `int`, got `Result[T]`");
+    }
+
+    @Test
     void shouldRejectNestedResultPipeBeforeJavaGeneration() {
         var result = CapybaraCompiler.INSTANCE.compile(List.of(
                 new RawModule("Result", "/capy/lang", """
@@ -1402,7 +1447,5 @@ public class CompilationErrorTest {
         return out;
     }
 }
-
-
 
 

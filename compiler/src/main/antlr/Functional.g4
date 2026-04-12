@@ -76,9 +76,10 @@ TYPE: [_]* [A-Z][a-zA-Z0-9_]*
 TYPE_FULL: '/' [A-Za-z_][a-zA-Z0-9_]* ( '/' [A-Za-z_][a-zA-Z0-9_]* )+;
 INFIX_METHOD_LITERAL: '`' ('|l>' | [+\-*/\\^%$#@~!:<>|]+) '`';
 expression: letExpression* expressionNoLet;
-letExpression: 'let' NAME (':' type)? '=' expressionNoLet ';'?;
+letExpression: 'let' NAME (':' type)? letBindingOperator expressionNoLet ';'?;
 expressionNoPipe: letExpressionNoPipe* expressionNoLetNoPipe;
-letExpressionNoPipe: 'let' NAME (':' type)? '=' expressionNoLet ';'?;
+letExpressionNoPipe: 'let' NAME (':' type)? letBindingOperator expressionNoLet ';'?;
+letBindingOperator: ASSIGN | LT MINUS;
 expressionNoLet: ifExpression
                | lambdaExpression
                | reduceExpression
@@ -330,8 +331,6 @@ DOC_COMMENT : '///' ~[\r\n]*;
 LINE_COMMENT : '//' ~[\r\n]* -> skip;
 BLOCK_COMMENT : '/*' .*? '*/' -> skip;
 WS : [ \t\r\n]+ -> skip;
-
-
 
 
 
