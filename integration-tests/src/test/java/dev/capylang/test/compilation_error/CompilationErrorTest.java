@@ -163,6 +163,22 @@ public class CompilationErrorTest {
     }
 
     @Test
+    void shouldRejectIncompatibleConcreteGenericArguments() {
+        var errors = compileProgram("""
+                        data Box[T] { value: T }
+                        fun broken(): Box[int] =
+                            let box: Box[bool] = Box { value: true }
+                            box
+                        """,
+                "generic_type_argument_mismatch");
+
+        assertThat(errors).hasSize(1);
+        assertThat(errors.first().message())
+                .contains("Box[bool]")
+                .contains("Box[int]");
+    }
+
+    @Test
     void shouldRejectNestedResultPipeBeforeJavaGeneration() {
         var result = CapybaraCompiler.INSTANCE.compile(List.of(
                 new RawModule("Result", "/capy/lang", """
@@ -1386,10 +1402,6 @@ public class CompilationErrorTest {
         return out;
     }
 }
-
-
-
-
 
 
 

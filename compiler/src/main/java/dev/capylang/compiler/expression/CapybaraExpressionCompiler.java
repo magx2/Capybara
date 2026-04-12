@@ -2175,13 +2175,7 @@ public class CapybaraExpressionCompiler {
     }
 
     private boolean isTypeCompatible(CompiledType actual, CompiledType expected) {
-        if (actual instanceof GenericDataType actualDataType) {
-            actual = resolveGenericTypeCompatibility(actualDataType);
-        }
-        if (expected instanceof GenericDataType expectedDataType) {
-            expected = resolveGenericTypeCompatibility(expectedDataType);
-        }
-        if (actual.equals(expected)) {
+        if (!(actual instanceof GenericDataType) && !(expected instanceof GenericDataType) && actual.equals(expected)) {
             return true;
         }
         if (expected instanceof CompiledList expectedList && actual instanceof CompiledList actualList) {
@@ -2239,20 +2233,14 @@ public class CapybaraExpressionCompiler {
                         .findFirst()
                         .or(() -> specializeParentFromSubtypeFields(actualSubtype, expectedParent))
                         .or(() -> instantiateExtendedParentFromSubtypeFields(actualSubtype, expectedParent));
-                return specializedParent.map(parent -> isTypeCompatible(parent, expectedParent)).orElse(false);
+                if (specializedParent.isPresent()) {
+                    return isTypeCompatible(specializedParent.orElseThrow(), expectedParent);
+                }
+                return !containsGenericTypeParameter(actualSubtype);
             }
             return false;
         }
         return false;
-    }
-
-    private GenericDataType resolveGenericTypeCompatibility(GenericDataType type) {
-        return dataTypes.values().stream()
-                .filter(GenericDataType.class::isInstance)
-                .map(GenericDataType.class::cast)
-                .filter(candidate -> sameRawTypeName(candidate.name(), type.name()))
-                .findFirst()
-                .orElse(type);
     }
 
     private boolean areTypeParameterDescriptorsCompatible(List<String> actualTypeParameters, List<String> expectedTypeParameters) {

@@ -1916,7 +1916,10 @@ public class CapybaraCompiler {
                         .map(CapybaraExpressionCompiler.FunctionSignature::returnType)
                         .findFirst()
                 : Optional.<CompiledType>empty();
-        var linkedExpression = linkedDeclaredReturnType.isPresent()
+        var shouldLinkForExpectedType = linkedDeclaredReturnType.isPresent()
+                                        && !(function.expression() instanceof LetExpression
+                                        && isParameterizedGenericReturnType(linkedDeclaredReturnType.orElseThrow()));
+        var linkedExpression = shouldLinkForExpectedType
                 ? linker.linkExpressionForExpectedType(function.expression(), linkedDeclaredReturnType.orElseThrow())
                 : linker.linkExpression(function.expression());
         return linkedExpression.flatMap(expression -> {
@@ -1982,6 +1985,14 @@ public class CapybaraCompiler {
                 message
         );
         return Optional.of(new Result.Error<>(List.of(error)));
+    }
+
+    private boolean isParameterizedGenericReturnType(CompiledType type) {
+        return switch (type) {
+            case CompiledDataType dataType -> !dataType.typeParameters().isEmpty();
+            case CompiledDataParentType parentType -> !parentType.typeParameters().isEmpty();
+            default -> false;
+        };
     }
 
     private Optional<String> methodOwnerType(String functionName) {
@@ -2217,7 +2228,10 @@ public class CapybaraCompiler {
             CompiledType actualReturnType,
             String moduleSourceFile
     ) {
-        var position = returnExpressionPosition(function.expression()).or(() -> function.position()).orElse(SourcePosition.EMPTY);
+        var position = returnExpressionPosition(returnExpression)
+                .or(() -> returnExpression.position())
+                .or(() -> function.position())
+                .orElse(SourcePosition.EMPTY);
         var line = Math.max(position.line(), 1);
         var column = Math.max(position.column(), 1);
         var file = normalizeFile(moduleSourceFile);
@@ -2828,7 +2842,8 @@ public class CapybaraCompiler {
     }
 
     private boolean isAssignableReturnType(CompiledType expected, CompiledType actual, Map<String, GenericDataType> dataTypes) {
-        if (expected == actual || expected.equals(actual)) {
+        if (expected == actual
+            || (!(expected instanceof GenericDataType) && !(actual instanceof GenericDataType) && expected.equals(actual))) {
             return true;
         }
         if (actual == PrimitiveLinkedType.NOTHING
@@ -3315,7 +3330,7 @@ public class CapybaraCompiler {
         if (expected.equals(actual)) {
             return true;
         }
-        if (expected.matches("[A-Z]")) {
+        if (expected.matches("[A-Z]") || actual.matches("[A-Z]")) {
             return true;
         }
 
@@ -3424,6 +3439,18 @@ public class CapybaraCompiler {
                 return true;
             }
             if (isSubtypeNameOfParent(parsedExtended.baseName(), expectedParentName, dataTypes, visited)) {
+                return true;
+            }
+        }
+        for (var parentType : dataTypes.values().stream()
+                .filter(CompiledDataParentType.class::isInstance)
+                .map(CompiledDataParentType.class::cast)
+                .filter(parent -> parent.subTypes().stream().anyMatch(subType -> sameTypeName(subType.name(), actualData.name())))
+                .toList()) {
+            if (sameTypeName(parentType.name(), expectedParentName)) {
+                return true;
+            }
+            if (isSubtypeNameOfParent(parentType.name(), expectedParentName, dataTypes, visited)) {
                 return true;
             }
         }
