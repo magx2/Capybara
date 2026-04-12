@@ -1,0 +1,38 @@
+from /capy/date_time/DateTime import { * }
+from /capy/date_time/Time import { * }
+from /capy/date_time/Date import { * }
+from /capy/test/Assert import { * }
+from /capy/lang/Math import { * }
+from /capy/lang/Result import { * }
+from /capy/test/CapyTest import { * }
+
+fun tests(): TestFile =
+    test_file('/capy/date_time/Time.cfun',
+        [_test_unix_epoch()
+        /*, _test_timestamp()*/])
+
+fun _test_unix_epoch(): TestCase =
+    test("unix_epoch() should return the correct DateTime for 1 January 1970 at 00:00:00",
+        assert_that(unix_epoch()).succeeds(epoch =>
+            assert_all([
+                assert_that(epoch.date.year).is_equal_to(1970),
+                assert_that(epoch.date.month).is_equal_to(1),
+                assert_that(epoch.date.day).is_equal_to(1),
+                assert_that(epoch.time.hour).is_equal_to(0),
+                assert_that(epoch.time.minute).is_equal_to(0),
+                assert_that(epoch.time.second).is_equal_to(0),
+            ])))
+
+/*
+fun _test_timestamp(): list[TestCase] =
+    [
+        (DateTime { date: Date { year: 1970, month: 1, day: 1 }, time: Time { hour: 0, minute: 0, second: 0 } }, 0),
+        (DateTime { date: Date { year: 1970, month: 1, day: 2 }, time: Time { hour: 0, minute: 0, second: 0 } }, 86400),
+        (DateTime { date: Date { year: 1970, month: 1, day: 1 }, time: Time { hour: 1, minute: 0, second: 0 } }, 3600),
+        (DateTime { date: Date { year: 1970, month: 1, day: 1 }, time: Time { hour: 0, minute: 1, second: 0 } }, 60),
+        (DateTime { date: Date { year: 1970, month: 1, day: 1 }, time: Time { hour: 0, minute: 0, second: 1 } }, 1),
+        (DateTime { date: Date { year: 1970, month: 1, day: 2 }, time: Time { hour: 1, minute: 0, second: 0 } }, 90000),
+    ] | (datetime, expected) => test(
+        "{datetime}.timestamp() should return the correct Unix timestamp",
+        assert_that(datetime | dt => Success { dt.timestamp() }).succeeds(expected))
+*/
