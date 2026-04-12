@@ -6744,22 +6744,29 @@ public class CapybaraExpressionCompiler {
             CompiledType payloadType,
             CompiledType letType
     ) {
-        var boundPayload = new CompiledVariable(expression.name(), payloadType);
+        var rawPayloadName = "__result_bind_value_" + scope.localValues().size();
+        var boundPayload = new CompiledVariable(rawPayloadName, payloadType);
         var coercedPayload = coerceExpressionToType(boundPayload, letType);
         if (coercedPayload.isEmpty()) {
             return withPosition(
                     Result.error("Expected `" + letType + "`, got `" + payloadType + "`"),
-                                expression.position()
+                    expression.position()
             );
         }
         return linkExpression(expression.rest(), scope.add(expression.name(), letType))
                 .flatMap(rest -> {
+                    var successContinuation = new CompiledLetExpression(
+                            expression.name(),
+                            coercedPayload.orElseThrow(),
+                            expression.declaredType().isPresent() ? Optional.of(letType) : Optional.empty(),
+                            rest
+                    );
                     var successResultType = resultParentForExpression(rest, expression.position());
                     if (successResultType instanceof Result.Error<CompiledDataParentType> error) {
                         return new Result.Error<>(error.errors());
                     }
                     var wrappedSuccess = ensureResultExpression(
-                            rest,
+                            successContinuation,
                             ((Result.Success<CompiledDataParentType>) successResultType).value(),
                             expression.position()
                     );
@@ -6773,7 +6780,7 @@ public class CapybaraExpressionCompiler {
                                     new CompiledMatchExpression.MatchCase(
                                             new CompiledMatchExpression.ConstructorPattern(
                                                     "Success",
-                                                    List.of(new CompiledMatchExpression.VariablePattern(expression.name()))
+                                                    List.of(new CompiledMatchExpression.VariablePattern(rawPayloadName))
                                             ),
                                             Optional.empty(),
                                             ((Result.Success<CompiledExpression>) wrappedSuccess).value()

@@ -1,7 +1,9 @@
 package dev.capylang.compiler;
 
 import dev.capylang.compiler.expression.CompiledFunctionCall;
+import dev.capylang.compiler.expression.CompiledLetExpression;
 import dev.capylang.compiler.expression.CompiledMatchExpression;
+import dev.capylang.compiler.expression.CompiledNewData;
 import org.junit.jupiter.api.Test;
 import dev.capylang.compiler.parser.RawModule;
 
@@ -122,6 +124,32 @@ class CapybaraCompilerLibrariesTest {
 
         assertThat(compiledFunction(compiled, "Consumer", "build").expression())
                 .isInstanceOf(CompiledMatchExpression.class);
+    }
+
+    @Test
+    void shouldApplyDeclaredTypeCoercionInsideResultBindSuccessBranch() {
+        var compiled = compileProgram(List.of(
+                new RawModule("Consumer", "/foo/app", """
+                        from /capy/lang/Result import { * }
+
+                        data Parent { name: string }
+                        data Child { age: int, ...Parent }
+
+                        fun child(): Result[Child] =
+                            Success { value: 1 } | value => Success { value: Child { age: value, name: "Ada" } }
+
+                        fun use_parent(): Result[string] =
+                            let parent: Parent <- child()
+                            parent.name
+                        """)
+        ), new java.util.TreeSet<>());
+
+        assertThat(compiledFunction(compiled, "Consumer", "use_parent").expression())
+                .isInstanceOfSatisfying(CompiledMatchExpression.class, match ->
+                        assertThat(match.cases().getFirst().expression())
+                                .isInstanceOfSatisfying(CompiledNewData.class, success ->
+                                        assertThat(success.assignments().getFirst().value())
+                                                .isInstanceOf(CompiledLetExpression.class)));
     }
 
     @Test
