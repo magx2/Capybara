@@ -1922,9 +1922,7 @@ public class CapybaraCompiler {
                         .map(CapybaraExpressionCompiler.FunctionSignature::returnType)
                         .findFirst()
                 : Optional.<CompiledType>empty();
-        var shouldLinkForExpectedType = linkedDeclaredReturnType.isPresent()
-                                        && !(function.expression() instanceof LetExpression
-                                        && isParameterizedGenericReturnType(linkedDeclaredReturnType.orElseThrow()));
+        var shouldLinkForExpectedType = linkedDeclaredReturnType.isPresent();
         var linkedExpression = shouldLinkForExpectedType
                 ? linker.linkExpressionForExpectedType(function.expression(), linkedDeclaredReturnType.orElseThrow())
                 : linker.linkExpression(function.expression());
@@ -1991,14 +1989,6 @@ public class CapybaraCompiler {
                 message
         );
         return Optional.of(new Result.Error<>(List.of(error)));
-    }
-
-    private boolean isParameterizedGenericReturnType(CompiledType type) {
-        return switch (type) {
-            case CompiledDataType dataType -> !dataType.typeParameters().isEmpty();
-            case CompiledDataParentType parentType -> !parentType.typeParameters().isEmpty();
-            default -> false;
-        };
     }
 
     private Optional<String> methodOwnerType(String functionName) {

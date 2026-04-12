@@ -32,21 +32,21 @@ fun parse_semver(version: string): Result[SemVer] =
     /// <version core> ::= <major> "." <minor> "." <patch>
     /// ```
     fun __parse_version_core(version: string): Result[__Parse[SemVer]] =
-        let parse_major <- __parse_major(version)
+        let parse_major: __Parse[int] <- __parse_major(version)
         match parse_major.buffer[0] with
         case None ->  Error { 'Unexpected end of version string!' }
         case Some { dot1 } ->
             if dot1 != '.'
             then Error { 'Expected `.` after major version, but got `' + dot1 + '`!' }
             else {
-                let parse_minor <- __parse_minor(parse_major.buffer[1:])
+                let parse_minor: __Parse[int] <- __parse_minor(parse_major.buffer[1:])
                 match parse_minor.buffer[0] with
                 case None -> Error { 'Unexpected end of version string!' }
                 case Some { dot2 } ->
                     if dot2 != '.'
                     then Error { 'Expected `.` after minor version, but got `' + dot2 + '`!' }
                     else {
-                        let parse_patch <- __parse_patch(parse_minor.buffer[1:])
+                        let parse_patch: __Parse[int] <- __parse_patch(parse_minor.buffer[1:])
                         let raw_sem_ver =
                             __Parse {
                                 buffer: parse_patch.buffer,
@@ -59,7 +59,7 @@ fun parse_semver(version: string): Result[SemVer] =
                             }}
                         match parse_patch.buffer[0] with
                         case Some { next_char } when next_char == '-' -> {
-                            let parse_pre_release <- __parse_pre_release(parse_patch.buffer[1:])
+                            let parse_pre_release: __Parse[string] <- __parse_pre_release(parse_patch.buffer[1:])
                             let parse =
                                 __Parse {
                                     buffer: parse_pre_release.buffer,
@@ -68,7 +68,7 @@ fun parse_semver(version: string): Result[SemVer] =
                             match parse.buffer[0] with
                             case None -> parse
                             case Some { char } when char == '+' -> {
-                                let parse_build <- __parse_build(parse.buffer[1:])
+                                let parse_build: __Parse[string] <- __parse_build(parse.buffer[1:])
                                 __Parse {
                                     buffer: parse_build.buffer,
                                     value: parse.value.with(build_metadata: Some { parse_build.value })
@@ -77,7 +77,7 @@ fun parse_semver(version: string): Result[SemVer] =
                             case Some { char } -> Error { 'Expected end of version string or `+` for build metadata, but got `' + char + '`!' }
                         }
                         case Some { next_char } when next_char == '+' -> {
-                            let parse_build <- __parse_build(parse_patch.buffer[1:])
+                            let parse_build: __Parse[string] <- __parse_build(parse_patch.buffer[1:])
                             __Parse {
                                 buffer: parse_build.buffer,
                                 value: raw_sem_ver.value.with(build_metadata: Some { parse_build.value })

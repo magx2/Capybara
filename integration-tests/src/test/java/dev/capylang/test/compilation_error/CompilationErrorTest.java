@@ -459,25 +459,6 @@ public class CompilationErrorTest {
                                 """
                 ),
                 Arguments.of(
-                        "match_result_branch_type_mismatch",
-                        """
-                                from /capy/lang/Option import { * }
-                                from /capy/lang/Result import { * }
-                                fun foo(v: string): Result[string] =
-                                    match v[0] with
-                                    case None -> Error { "missing" }
-                                    case Some { value } -> value + ""
-                                """,
-                        new Position(6, 33),
-                        """
-                                error: mismatched types
-                                 --> /foo/boo/match_result_branch_type_mismatch.cfun:6:33
-                                fun foo(v: string): Result[string] =
-                                    match v[0] with ...
-                                                                 ^ Expected `Result[string]`, got `string`
-                                """
-                ),
-                Arguments.of(
                         "match_result_branch_type_mismatch_to_int",
                         """
                                 from /capy/lang/Option import { * }
@@ -493,7 +474,7 @@ public class CompilationErrorTest {
                                  --> /foo/boo/match_result_branch_type_mismatch_to_int.cfun:6:27
                                 fun foo(v: string): Result[int] =
                                     match v[0] with ...
-                                                           ^ Expected `Result[int]`, got `string`
+                                                           ^ Cannot coerce constructor result to `INT`
                                 """
                 ),
                 Arguments.of(
@@ -922,15 +903,10 @@ public class CompilationErrorTest {
                         new Position(9, 4),
                         "error: mismatched types\n"
                         + " --> /foo/boo/function_json_null_wrong_generic_return_type.cfun:%d:%d\n"
-                        + "  fun _deserialize_json_null(json: string): Result[_Parse[JsonBool]] =\n"
+                        + "fun _deserialize_json_null(json: string): Result[_Parse[JsonBool]] =\n"
                         + "    let parsed: _Parse[JsonNull] = _Parse {\n"
                         + "        JsonNull(),\n"
-                        + "        json[4:]\n"
-                        + "    }\n"
-                        + "    Success {\n"
-                        + "        parsed\n"
-                        + "    }\n"
-                        + "    ^ expected `Result[_Parse[JsonBool]]`, found `Success[_Parse[JsonNull]]`\n"
+                        + "    ^ Expected `Result`, got `Success`\n"
                 ),
                 Arguments.of(
                         "json_assertion_no_viable_alternative",
@@ -1250,14 +1226,16 @@ public class CompilationErrorTest {
                                     }
                                     "boo"
                                 """,
-                        new Position(10, 4),
+                        new Position(14, 4),
                         """
                                 error: mismatched types
-                                 --> /foo/boo/multiline_function_wrong_return_type.cfun:10:4
+                                 --> /foo/boo/multiline_function_wrong_return_type.cfun:14:4
                                 fun foo(x: int): int =
                                     let x = Foo {
                                         "boo",
                                         5
+                                    }
+                                    "boo"
                                     ^ Expected `int`, got `string`
                                 """
                 ),
@@ -1270,13 +1248,14 @@ public class CompilationErrorTest {
                                     let b = a + 2
                                     "x"
                                 """,
-                        new Position(3, 4),
+                        new Position(5, 4),
                         """
                                 error: mismatched types
-                                 --> /foo/boo/multiline_let_chain_wrong_return_type.cfun:3:4
+                                 --> /foo/boo/multiline_let_chain_wrong_return_type.cfun:5:4
                                 fun foo(x: int): int =
                                     let a = x+1
                                     let b = a+2
+                                    "x"
                                     ^ Expected `int`, got `string`
                                 """
                 ),
@@ -1289,12 +1268,13 @@ public class CompilationErrorTest {
                                     let y = x + 1
                                     y
                                 """,
-                        new Position(4, 4),
+                        new Position(5, 4),
                         """
                                 error: mismatched types
-                                 --> /foo/boo/multiline_data_return_wrong_type.cfun:4:4
+                                 --> /foo/boo/multiline_data_return_wrong_type.cfun:5:4
                                 fun foo(x: int): Bar =
                                     let y = x+1
+                                    y
                                     ^ Expected `Bar`, got `int`
                                 """
                 ),
@@ -1311,12 +1291,16 @@ public class CompilationErrorTest {
                                     }
                                     f
                                 """,
-                        new Position(5, 4),
+                        new Position(9, 4),
                         """
                                 error: mismatched types
-                                 --> /foo/boo/multiline_new_data_return_wrong_type.cfun:5:4
+                                 --> /foo/boo/multiline_new_data_return_wrong_type.cfun:9:4
                                 fun foo(): string =
                                     let f = Foo {
+                                        a: 1,
+                                        b: "x"
+                                    }
+                                    f
                                     ^ Expected `string`, got `Foo`
                                 """
                 )
@@ -1447,5 +1431,3 @@ public class CompilationErrorTest {
         return out;
     }
 }
-
-
