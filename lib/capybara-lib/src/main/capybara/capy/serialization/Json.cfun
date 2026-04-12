@@ -148,17 +148,21 @@ fun _deserialize_json_number(json: string): Result[_Parse[JsonNumber]] =
     __parse_number(_Parse {'', _drop_white_space(json)})
     | parse =>
         if parse.value ? '.'
-        then parse.value.to_double() | double => Success { _Parse { JsonNumberDouble { double }, _drop_white_space(parse.parsing_string) } }
-        else parse.value.to_long()   | long   => Success { _Parse { JsonNumberLong { long }, _drop_white_space(parse.parsing_string) } }
+        then {
+            let parsed_double <- parse.value.to_double()
+            _Parse { JsonNumberDouble { parsed_double }, _drop_white_space(parse.parsing_string) }
+        }
+        else {
+            let parsed_long <- parse.value.to_long()
+            _Parse { JsonNumberLong { parsed_long }, _drop_white_space(parse.parsing_string) }
+        }
 
 fun _deserialize_json_string(json: string): Result[_Parse[JsonString]] =
-    match _parse_string(json) with
-    case Error e -> e
-    case Success { parse } ->
-        Success { _Parse {
+    let parse <- _parse_string(json)
+    _Parse {
             value: JsonString { parse.value },
             parsing_string: parse.parsing_string
-        } }
+    }
 
 fun _deserialize_json_object(json: string): Result[_Parse[JsonObject]] =
     match json[0] with
@@ -280,12 +284,9 @@ fun deserialize(dict: dict[any]): Result[JsonObject] =
     data __Entry { key: string, value: Result[Json] }
     fun __initial_result(): Result[dict[Json]] = Success { {:} }
     fun __merge(acc: Result[dict[Json]], e: __Entry): Result[dict[Json]] =
-        match acc with
-        case Error e -> e
-        case Success { dict } ->
-            match e.value with
-            case Error e -> e
-            case Success { json } -> Success { dict + { e.key : json } }
+        let parsed_dict <- acc
+        let json <- e.value
+        parsed_dict + { e.key : json }
     ---
     let initial_result: Result[dict[Json]] = __initial_result()
     dict

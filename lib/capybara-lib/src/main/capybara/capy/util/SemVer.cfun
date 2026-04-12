@@ -32,61 +32,61 @@ fun parse_semver(version: string): Result[SemVer] =
     /// <version core> ::= <major> "." <minor> "." <patch>
     /// ```
     fun __parse_version_core(version: string): Result[__Parse[SemVer]] =
-        __parse_major(version)
-        | parse_major =>
-            match parse_major.buffer[0] with
-            case None ->  Error { 'Unexpected end of version string!' }
-            case Some { dot1 } ->
-                if dot1 != '.'
-                then Error { 'Expected `.` after major version, but got `' + dot1 + '`!' }
-                else __parse_minor(parse_major.buffer[1:])
-                     | parse_minor =>
-                        match parse_minor.buffer[0] with
-                        case None -> Error { 'Unexpected end of version string!' }
-                        case Some { dot2 } ->
-                            if dot2 != '.'
-                            then Error { 'Expected `.` after minor version, but got `' + dot2 + '`!' }
-                            else __parse_patch(parse_minor.buffer[1:])
-                            | parse_patch =>
-                                let raw_sem_ver =
-                                    __Parse {
-                                        buffer: parse_patch.buffer,
-                                        value: SemVer {
-                                           major: parse_major.value,
-                                           minor: parse_minor.value,
-                                           patch: parse_patch.value,
-                                           pre_release: None {},
-                                           build_metadata: None {}
-                                    }}
-                                match parse_patch.buffer[0] with
-                                case Some { next_char } when next_char == '-' -> {
-                                    __parse_pre_release(parse_patch.buffer[1:])
-                                    | parse_pre_release => Success { __Parse {
-                                        buffer: parse_pre_release.buffer,
-                                        value: raw_sem_ver.value.with(pre_release: Some { parse_pre_release.value })
-                                    }}
-                                    | parse => {
-                                        match parse.buffer[0] with
-                                        case None -> Success { parse }
-                                        case Some { char } when char == '+' -> {
-                                                __parse_build(parse.buffer[1:])
-                                                | parse_build => Success { __Parse {
-                                                    buffer: parse_build.buffer,
-                                                    value: parse.value.with(build_metadata: Some { parse_build.value })
-                                                }}
-                                            }
-                                        case Some { char } -> Error { 'Expected end of version string or `+` for build metadata, but got `' + char + '`!' }
-                                    }
+        let parse_major <- __parse_major(version)
+        match parse_major.buffer[0] with
+        case None ->  Error { 'Unexpected end of version string!' }
+        case Some { dot1 } ->
+            if dot1 != '.'
+            then Error { 'Expected `.` after major version, but got `' + dot1 + '`!' }
+            else {
+                let parse_minor <- __parse_minor(parse_major.buffer[1:])
+                match parse_minor.buffer[0] with
+                case None -> Error { 'Unexpected end of version string!' }
+                case Some { dot2 } ->
+                    if dot2 != '.'
+                    then Error { 'Expected `.` after minor version, but got `' + dot2 + '`!' }
+                    else {
+                        let parse_patch <- __parse_patch(parse_minor.buffer[1:])
+                        let raw_sem_ver =
+                            __Parse {
+                                buffer: parse_patch.buffer,
+                                value: SemVer {
+                                   major: parse_major.value,
+                                   minor: parse_minor.value,
+                                   patch: parse_patch.value,
+                                   pre_release: None {},
+                                   build_metadata: None {}
+                            }}
+                        match parse_patch.buffer[0] with
+                        case Some { next_char } when next_char == '-' -> {
+                            let parse_pre_release <- __parse_pre_release(parse_patch.buffer[1:])
+                            let parse =
+                                __Parse {
+                                    buffer: parse_pre_release.buffer,
+                                    value: raw_sem_ver.value.with(pre_release: Some { parse_pre_release.value })
                                 }
-                                case Some { next_char } when next_char == '+' -> {
-                                    __parse_build(parse_patch.buffer[1:])
-                                    | parse_build => Success { __Parse {
-                                        buffer: parse_build.buffer,
-                                        value: raw_sem_ver.value.with(build_metadata: Some { parse_build.value })
-                                    }}
+                            match parse.buffer[0] with
+                            case None -> parse
+                            case Some { char } when char == '+' -> {
+                                let parse_build <- __parse_build(parse.buffer[1:])
+                                __Parse {
+                                    buffer: parse_build.buffer,
+                                    value: parse.value.with(build_metadata: Some { parse_build.value })
                                 }
-                                case Some { next_char }  -> Error { 'Expected end of version string or `-` for pre-release or `+` for build metadata, but got `' + next_char + '`!' }
-                                case None -> Success { raw_sem_ver }
+                            }
+                            case Some { char } -> Error { 'Expected end of version string or `+` for build metadata, but got `' + char + '`!' }
+                        }
+                        case Some { next_char } when next_char == '+' -> {
+                            let parse_build <- __parse_build(parse_patch.buffer[1:])
+                            __Parse {
+                                buffer: parse_build.buffer,
+                                value: raw_sem_ver.value.with(build_metadata: Some { parse_build.value })
+                            }
+                        }
+                        case Some { next_char }  -> Error { 'Expected end of version string or `-` for pre-release or `+` for build metadata, but got `' + next_char + '`!' }
+                        case None -> raw_sem_ver
+                    }
+            }
 
 
     /// ```
