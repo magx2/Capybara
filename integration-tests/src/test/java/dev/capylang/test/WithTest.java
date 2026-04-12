@@ -50,5 +50,32 @@ class WithTest {
         assertThat(result.x()).isEqualTo(6);
         assertThat(result.a()).isEqualTo("abc!");
     }
-}
 
+    @Test
+    void withReappliesConstructorForSingleUpdate() {
+        var result = With.updateSanitizedCounter(With.makeSanitizedCounter(3));
+
+        assertThat(result.number()).isEqualTo(5);
+        assertThat(result.constructor_runs()).isEqualTo(2);
+    }
+
+    @Test
+    void withReappliesConstructorForChainedUpdates() {
+        var result = With.chainSanitizedCounter(With.makeSanitizedCounter(3));
+
+        assertThat(result.number()).isEqualTo(9);
+        assertThat(result.constructor_runs()).isEqualTo(3);
+    }
+
+    @Test
+    void withReappliesResultReturningConstructorForSingleUpdate() {
+        assertThat(With.validatedCounterAfterSingleWith(1)).isEqualTo("ok:2:2");
+        assertThat(With.validatedCounterAfterSingleWith(-1)).isEqualTo("err:negative:-1");
+    }
+
+    @Test
+    void withReappliesResultReturningConstructorForChainedUpdates() {
+        assertThat(With.validatedCounterAfterMultipleWiths(4)).isEqualTo("ok:0:3");
+        assertThat(With.validatedCounterAfterMultipleWiths(3)).isEqualTo("err:negative:-1");
+    }
+}

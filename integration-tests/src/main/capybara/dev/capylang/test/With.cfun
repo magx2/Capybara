@@ -1,3 +1,5 @@
+from /capy/lang/Result import { * }
+
 data Foo {
     a: int,
     b: string,
@@ -9,6 +11,20 @@ type Letter { x: int, } = A | B | C
 data A { a: string, }
 data B { b: int, }
 data C { c: double, }
+
+data SanitizedCounter { number: int, constructor_runs: int } with constructor {
+    if number % 2 == 0 then
+        * { number: number + 1, constructor_runs: constructor_runs + 1 }
+    else
+        * { number: number, constructor_runs: constructor_runs + 1 }
+}
+
+data ValidatedCounter { number: int, constructor_runs: int } with constructor {
+    if number < 0 then
+        Error { "negative:" + number }
+    else
+        Success { * { number: number, constructor_runs: constructor_runs + 1 } }
+}
 
 fun update_foo(foo: Foo): Foo = foo.with(a: foo.a + 1, b: "new value")
 
@@ -26,3 +42,28 @@ fun chain_letter(letter: Letter): Letter =
 
 fun update_a(a: A): A = a.with(x: a.x + 1, a: a.a + "!")
 
+fun make_sanitized_counter(number: int): SanitizedCounter =
+    SanitizedCounter { number: number, constructor_runs: 0 }
+
+fun update_sanitized_counter(counter: SanitizedCounter): SanitizedCounter =
+    counter.with(number: counter.number + 1)
+
+fun chain_sanitized_counter(counter: SanitizedCounter): SanitizedCounter =
+    counter
+        .with(number: counter.number + 1)
+        .with(number: 8)
+
+fun validated_counter_after_single_with(number: int): string =
+    ValidatedCounter { number: number, constructor_runs: 0 }
+        | value => value.with(number: value.number + 1)
+        |>
+            (value => "ok:" + value.number + ":" + value.constructor_runs,
+            message => "err:" + message)
+
+fun validated_counter_after_multiple_withs(number: int): string =
+    ValidatedCounter { number: number, constructor_runs: 0 }
+        | value => value.with(number: value.number + 1)
+        | updated => updated.with(number: updated.number - 5)
+        |>
+            (value => "ok:" + value.number + ":" + value.constructor_runs,
+            message => "err:" + message)
