@@ -511,6 +511,22 @@ class JavaExpressionEvaluatorTest {
     }
 
     @Test
+    void shouldAvoidJavaNameCollisionsAfterKeywordSanitization() {
+        var generatedProgram = new JavaGenerator().generate(compileProgram("KeywordSanitizedCollision", "/foo/bar", """
+                fun test(assert_: bool): bool =
+                    let assert: bool = !assert_
+                    assert
+                """));
+        var generated = generatedProgram.modules().stream()
+                .map(dev.capylang.generator.GeneratedModule::code)
+                .collect(joining("\n"));
+
+        assertThat(generated).contains("java.lang.Boolean assert_j1 =");
+        assertThat(generated).contains("return assert_j1;");
+        assertGeneratedJavaCompiles(generatedProgram);
+    }
+
+    @Test
     void shouldParenthesizeIfExpressionsInsideStringConcatenation() {
         var generated = new JavaGenerator().generate(compileProgram("StringIfConcat", "/foo/bar", """
                 fun label(is_valid: bool): string =

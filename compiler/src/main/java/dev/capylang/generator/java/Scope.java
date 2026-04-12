@@ -50,24 +50,25 @@ class Scope {
 
     UniqueNameScopeExpression addValue(String name, CompiledExpression expression) {
         var javaName = normalizeJavaLocalIdentifier(name);
-        return Optional.of(name)
-                .filter(n -> !localValues.contains(n) && !javaLocalValues.contains(javaName))
-                .map(n -> {
-                    var updatedValues = new HashSet<>(localValues);
-                    updatedValues.add(name);
-                    var updatedJavaValues = new HashSet<>(javaLocalValues);
-                    updatedJavaValues.add(javaName);
-                    var updatedMappings = new HashMap<>(valueNameToUniqueName);
-                    if (!name.equals(javaName)) {
-                        updatedMappings.put(name, javaName);
-                    }
-                    return new UniqueNameScopeExpression(
-                            javaName,
-                            new Scope(valueIdx, updatedValues, updatedJavaValues, updatedMappings, statements, this.expression, moduleHelperClass),
-                            expression
-                    );
-                })
-                .orElseGet(() -> generateUniqueName(name, expression));
+        if (!localValues.contains(name) && !javaLocalValues.contains(javaName)) {
+            var updatedValues = new HashSet<>(localValues);
+            updatedValues.add(name);
+            var updatedJavaValues = new HashSet<>(javaLocalValues);
+            updatedJavaValues.add(javaName);
+            var updatedMappings = new HashMap<>(valueNameToUniqueName);
+            if (!name.equals(javaName)) {
+                updatedMappings.put(name, javaName);
+            }
+            return new UniqueNameScopeExpression(
+                    javaName,
+                    new Scope(valueIdx, updatedValues, updatedJavaValues, updatedMappings, statements, this.expression, moduleHelperClass),
+                    expression
+            );
+        }
+        if (localValues.contains(name)) {
+            return generateUniqueName(name, expression);
+        }
+        return reserveUniqueJavaLocalName(name, expression);
 /*
         var updatedVariableNameToUniqueName = new HashMap<>(valueNameToUniqueName);
         var scope = this;
@@ -180,6 +181,32 @@ class Scope {
                         this.expression,
                         moduleHelperClass),
                 rewriteValueInExpression(name, uniqueName, expression)
+        );
+    }
+
+    private UniqueNameScopeExpression reserveUniqueJavaLocalName(String name, CompiledExpression expression) {
+        var reserved = reserveUniqueJavaLocalName(name);
+        var uniqueName = reserved.logicalName();
+        var javaUniqueName = reserved.javaName();
+
+        var updatedValues = new HashSet<>(localValues);
+        updatedValues.add(name);
+        var updatedJavaValues = new HashSet<>(javaLocalValues);
+        updatedJavaValues.add(javaUniqueName);
+        var updatedMappings = new HashMap<>(valueNameToUniqueName);
+        updatedMappings.put(name, javaUniqueName);
+        return new UniqueNameScopeExpression(
+                javaUniqueName,
+                new Scope(
+                        reserved.nextValueIdx(),
+                        updatedValues,
+                        updatedJavaValues,
+                        updatedMappings,
+                        statements,
+                        this.expression,
+                        moduleHelperClass
+                ),
+                expression
         );
     }
 
