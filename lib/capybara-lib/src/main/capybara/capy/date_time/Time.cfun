@@ -8,15 +8,15 @@ data Time { hour: int, minute: int, second: int } with constructor {
     else Success {* { hour, minute, second }}
 }
 
-const MIDNIGHT: Result[Time] = Time { hour: 0, minute: 0, second: 0 }
-const NOON: Result[Time] = Time { hour: 12, minute: 0, second: 0 }
+const MIDNIGHT: Time = Time! { hour: 0, minute: 0, second: 0 }
+const NOON: Time = Time! { hour: 12, minute: 0, second: 0 }
 
 fun Time.to_seconds(): int = this.hour * 3600 + this.minute * 60 + this.second
 fun Time.to_minutes(): int = this.hour * 60 + this.minute
 fun Time.to_hours(): int = this.hour
-fun Time.round_to_minutes(): Result[Time] = Time { hour: this.hour, minute: this.minute, second: 0 }
-fun Time.round_to_hours(): Result[Time] = Time { hour: this.hour, minute: 0, second: 0 }
-fun Time.add_seconds(seconds: int): Result[Time] =
+fun Time.round_to_minutes(): Time = Time! { hour: this.hour, minute: this.minute, second: 0 }
+fun Time.round_to_hours(): Time = Time! { hour: this.hour, minute: 0, second: 0 }
+fun Time.add_seconds(seconds: int): Time =
     const __seconds_in_day: int = 24 * 3600
     fun __normalize_day_seconds(total_seconds: int): int =
         ((total_seconds % __seconds_in_day) + __seconds_in_day) % __seconds_in_day
@@ -25,6 +25,6 @@ fun Time.add_seconds(seconds: int): Result[Time] =
     let new_hour = (total_seconds / 3600) % 24
     let new_minute = (total_seconds / 60) % 60
     let new_second = total_seconds % 60
-    Time { hour: new_hour, minute: new_minute, second: new_second }
-fun Time.add_minutes(minutes: int): Result[Time] = this.add_seconds(minutes * 60)
-fun Time.add_hours(hours: int): Result[Time] = this.add_seconds(hours * 3600)
+    Time! { hour: new_hour, minute: new_minute, second: new_second }
+fun Time.add_minutes(minutes: int): Time = this.add_seconds(minutes * 60)
+fun Time.add_hours(hours: int): Time = this.add_seconds(hours * 3600)

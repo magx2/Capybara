@@ -22,6 +22,9 @@ fun validated_user_age(age: int): string =
     case Success { value } -> "ok:" + value.age
     case Error { message } -> "err:" + message
 
+fun validated_user_age_or_default(age: int): int =
+    (User { age: age }).or_else(User! { age: 1 }).age
+
 type ValidatedName { name: string } with constructor {
    if name.size == 0 then
        Error { "Name was empty" }

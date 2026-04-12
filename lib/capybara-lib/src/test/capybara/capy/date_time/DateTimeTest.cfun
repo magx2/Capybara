@@ -3,7 +3,6 @@ from /capy/date_time/Time import { * }
 from /capy/date_time/Date import { * }
 from /capy/test/Assert import { * }
 from /capy/lang/Math import { * }
-from /capy/lang/Result import { * }
 from /capy/test/CapyTest import { * }
 
 fun tests(): TestFile =
@@ -13,15 +12,15 @@ fun tests(): TestFile =
 
 fun _test_unix_epoch(): TestCase =
     test("unix_epoch() should return the correct DateTime for 1 January 1970 at 00:00:00",
-        assert_that(unix_epoch()).succeeds(epoch =>
-            assert_all([
-                assert_that(epoch.date.year).is_equal_to(1970),
-                assert_that(epoch.date.month).is_equal_to(1),
-                assert_that(epoch.date.day).is_equal_to(1),
-                assert_that(epoch.time.hour).is_equal_to(0),
-                assert_that(epoch.time.minute).is_equal_to(0),
-                assert_that(epoch.time.second).is_equal_to(0),
-            ])))
+        let epoch = unix_epoch()
+        assert_all([
+            assert_that(epoch.date.year).is_equal_to(1970),
+            assert_that(epoch.date.month).is_equal_to(1),
+            assert_that(epoch.date.day).is_equal_to(1),
+            assert_that(epoch.time.hour).is_equal_to(0),
+            assert_that(epoch.time.minute).is_equal_to(0),
+            assert_that(epoch.time.second).is_equal_to(0),
+        ]))
 
 /*
 fun _test_timestamp(): list[TestCase] =

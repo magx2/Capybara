@@ -58,6 +58,7 @@ public class CapybaraExpressionCompiler {
     private final Map<String, List<FunctionSignature>> functionSignaturesByModule;
     private final Map<String, String> moduleClassNameByModuleName;
     private final ConstructorRegistry constructorRegistry;
+    private final Optional<String> currentSourceModuleName;
     private final Optional<String> currentConstructorTypeName;
 
     public CapybaraExpressionCompiler(
@@ -80,7 +81,7 @@ public class CapybaraExpressionCompiler {
             ConstructorRegistry constructorRegistry,
             LinkCache linkCache
     ) {
-        this(parameters, dataTypes, functionSignatures, functionSignaturesByModule, moduleClassNameByModuleName, constructorRegistry, linkCache, Optional.empty());
+        this(parameters, dataTypes, functionSignatures, functionSignaturesByModule, moduleClassNameByModuleName, constructorRegistry, linkCache, Optional.empty(), Optional.empty());
     }
 
     public CapybaraExpressionCompiler(
@@ -91,9 +92,10 @@ public class CapybaraExpressionCompiler {
             Map<String, String> moduleClassNameByModuleName,
             ConstructorRegistry constructorRegistry,
             LinkCache linkCache,
+            Optional<String> currentSourceModuleName,
             Optional<String> currentConstructorTypeName
     ) {
-        this(parameters, dataTypes, functionSignatures, functionSignaturesByModule, moduleClassNameByModuleName, constructorRegistry, linkCache, currentConstructorTypeName, true);
+        this(parameters, dataTypes, functionSignatures, functionSignaturesByModule, moduleClassNameByModuleName, constructorRegistry, linkCache, currentSourceModuleName, currentConstructorTypeName, true);
     }
 
     private CapybaraExpressionCompiler(
@@ -104,6 +106,7 @@ public class CapybaraExpressionCompiler {
             Map<String, String> moduleClassNameByModuleName,
             ConstructorRegistry constructorRegistry,
             LinkCache linkCache,
+            Optional<String> currentSourceModuleName,
             Optional<String> currentConstructorTypeName,
             boolean ignored
     ) {
@@ -114,6 +117,7 @@ public class CapybaraExpressionCompiler {
         this.functionSignaturesByModule = functionSignaturesByModule;
         this.moduleClassNameByModuleName = moduleClassNameByModuleName;
         this.constructorRegistry = constructorRegistry;
+        this.currentSourceModuleName = currentSourceModuleName;
         this.currentConstructorTypeName = currentConstructorTypeName;
     }
 
@@ -181,6 +185,7 @@ public class CapybaraExpressionCompiler {
                 moduleClassNameByModuleName,
                 constructorRegistry,
                 linkCache,
+                currentSourceModuleName,
                 Optional.of(dataTypeName)
         );
     }
@@ -1538,7 +1543,7 @@ public class CapybaraExpressionCompiler {
     }
 
     private NewData noneExpression(Optional<SourcePosition> position) {
-        return new NewData(new DataType("None"), List.of(), List.of(), List.of(), position);
+        return new NewData(new DataType("None"), false, List.of(), List.of(), List.of(), position);
     }
 
     private Optional<CompiledVariable> resolveFunctionVariable(String name, Scope scope) {
@@ -5869,6 +5874,7 @@ public class CapybaraExpressionCompiler {
         return rawLinkNewData(
                 new NewData(
                         new DataType(currentConstructorTypeName.orElseThrow()),
+                        false,
                         constructorData.assignments(),
                         constructorData.positionalArguments(),
                         constructorData.spreads(),
@@ -5884,8 +5890,48 @@ public class CapybaraExpressionCompiler {
                     if (!(expression instanceof CompiledNewData compiledNewData)) {
                         return Result.success(expression);
                     }
+                    if (newData.bypassConstructor()) {
+                        return validateConstructorBypass(compiledNewData, newData.position());
+                    }
                     return applyProtectedConstructorIfNeeded(compiledNewData, newData.position());
                 });
+    }
+
+    private Result<CompiledExpression> validateConstructorBypass(
+            CompiledNewData newData,
+            Optional<SourcePosition> position
+    ) {
+        if (!(newData.type() instanceof CompiledDataType dataType)) {
+            return withPosition(
+                    Result.error("Constructor bypass `!` can only be used with data types"),
+                    position
+            );
+        }
+        var directConstructor = directConstructorFor(dataType);
+        var parentConstructors = parentConstructorsFor(dataType);
+        var pipelineReturnsResult = (directConstructor != null && !directConstructor.typeConstructor() && directConstructor.resultReturning())
+                || parentConstructors.stream().anyMatch(ProtectedConstructorRef::resultReturning);
+        if (!pipelineReturnsResult) {
+            return withPosition(
+                    Result.error("Constructor bypass `!` is available only for data with Result-returning constructor"),
+                    position
+            );
+        }
+        var ownerModule = dataOwnerModuleFor(dataType);
+        if (ownerModule.isEmpty()
+            || currentSourceModuleName.isEmpty()
+            || !canonicalModuleName(currentSourceModuleName.orElseThrow()).equals(canonicalModuleName(ownerModule.orElseThrow()))) {
+            var ownerDisplayName = ownerModule
+                    .map(moduleName -> moduleName.contains(".")
+                            ? moduleName.substring(moduleName.lastIndexOf('.') + 1)
+                            : moduleName)
+                    .orElse(dataType.name());
+            return withPosition(
+                    Result.error("Constructor bypass `" + dataType.name() + "! { ... }` can only be used in module `" + ownerDisplayName + "` where `" + dataType.name() + "` is defined"),
+                    position
+            );
+        }
+        return Result.success(newData);
     }
 
     private Result<CompiledExpression> rawLinkNewData(NewData newData, Scope scope) {
@@ -5977,6 +6023,21 @@ public class CapybaraExpressionCompiler {
                 .map(Map.Entry::getValue)
                 .findFirst()
                 .orElse(List.of());
+    }
+
+    private Optional<String> dataOwnerModuleFor(CompiledDataType dataType) {
+        var direct = constructorRegistry.ownerModuleByDataType().get(dataType.name());
+        if (direct != null) {
+            return Optional.of(direct);
+        }
+        return constructorRegistry.ownerModuleByDataType().entrySet().stream()
+                .filter(entry -> sameRawTypeName(entry.getKey(), dataType.name()))
+                .map(Map.Entry::getValue)
+                .findFirst();
+    }
+
+    private String canonicalModuleName(String moduleName) {
+        return moduleName.startsWith("/") ? moduleName.substring(1) : moduleName;
     }
 
     private Result<CompiledExpression> applyConstructorPipeline(
@@ -7294,7 +7355,8 @@ public class CapybaraExpressionCompiler {
 
     public record ConstructorRegistry(
             Map<String, ProtectedConstructorRef> constructorsByType,
-            Map<String, List<ProtectedConstructorRef>> parentTypeConstructorsByDataType
+            Map<String, List<ProtectedConstructorRef>> parentTypeConstructorsByDataType,
+            Map<String, String> ownerModuleByDataType
     ) {
         public ConstructorRegistry {
             parentTypeConstructorsByDataType = parentTypeConstructorsByDataType.entrySet().stream()
@@ -7303,6 +7365,7 @@ public class CapybaraExpressionCompiler {
                             entry -> List.copyOf(entry.getValue())
                     ));
             constructorsByType = Map.copyOf(constructorsByType);
+            ownerModuleByDataType = Map.copyOf(ownerModuleByDataType);
         }
     }
 

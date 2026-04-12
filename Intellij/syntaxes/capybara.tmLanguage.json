@@ -195,6 +195,18 @@
           "match": "\\b(type)\\s+(_*[A-Z][A-Za-z0-9_]*(?:\\[[^\\]]+\\])?)(?:\\s*\\{[^{}\\n]*\\})?\\s+(with)\\s+(constructor)\\s*\\{"
         },
         {
+          "name": "meta.data.constructor-bypass.capybara",
+          "match": "(_*[A-Z][A-Za-z0-9_]*(?:\\[[^\\]]+\\])?)(!)(?=\\s*\\{)",
+          "captures": {
+            "1": {
+              "name": "entity.name.type.capybara"
+            },
+            "2": {
+              "name": "keyword.operator.constructor.capybara"
+            }
+          }
+        },
+        {
           "name": "entity.name.type.capybara",
           "match": "\\b_*[A-Z][A-Za-z0-9_]*\\b"
         },
@@ -368,7 +380,6 @@
     }
   }
 }
-
 
 
 
