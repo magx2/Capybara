@@ -34,7 +34,8 @@ Use the wrapper from repository root:
 - Prefer focused test names (e.g., `reduceDict`, `should_dict_of_obj`).
 
 ## Commit & Pull Request Guidelines
-- Follow concise conventional-style commits seen in history: `feat: ...`, `fix: ...`, `test: ...`, `chore: ...`.
+- Follow concise conventional-style commits and include the issue number in the type prefix: `feat(#99): ...`, `fix(#99): ...`, `test(#99): ...`, `chore(#99): ...`.
+- Take the issue number from the branch name when available. If the branch name does not contain an issue number, ask for it before creating the commit.
 - Keep commits logically scoped (grammar, linker, generator, tests).
 - When renaming or moving tracked files, use `git mv` instead of deleting and re-adding files.
 - PRs should include:
