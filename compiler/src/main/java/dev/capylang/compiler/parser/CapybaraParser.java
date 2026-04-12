@@ -897,6 +897,7 @@ public class CapybaraParser {
             case LetExpression letExpression -> new LetExpression(
                     letExpression.name(),
                     letExpression.declaredType().map(type -> rewriteLocalTypeNames(type, localTypeNameMap)),
+                    letExpression.kind(),
                     rewriteLocalNames(letExpression.value(), localFunctionNameMap, localTypeNameMap, localConstNameMap),
                     rewriteLocalNames(letExpression.rest(), localFunctionNameMap, localTypeNameMap, localConstNameMap),
                     letExpression.position()
@@ -1198,6 +1199,7 @@ public class CapybaraParser {
             result = new LetExpression(
                     letExpression.NAME().getText(),
                     Optional.ofNullable(letExpression.type()).map(CapybaraParser::type),
+                    letExpression.letBindingOperator().ASSIGN() != null ? LetExpression.Kind.ASSIGN : LetExpression.Kind.RESULT_BIND,
                     expressionNoLet(letExpression.expressionNoLet()),
                     result,
                     position(letExpression)
@@ -1214,6 +1216,7 @@ public class CapybaraParser {
             result = new LetExpression(
                     letExpression.NAME().getText(),
                     Optional.ofNullable(letExpression.type()).map(CapybaraParser::type),
+                    letExpression.letBindingOperator().ASSIGN() != null ? LetExpression.Kind.ASSIGN : LetExpression.Kind.RESULT_BIND,
                     expressionNoLet(letExpression.expressionNoLet()),
                     result,
                     position(letExpression)
@@ -2549,6 +2552,7 @@ public class CapybaraParser {
             case LetExpression value -> new LetExpression(
                     value.name(),
                     value.declaredType(),
+                    value.kind(),
                     shiftInterpolationPositions(value.value(), stringPosition, interpolationOffset),
                     shiftInterpolationPositions(value.rest(), stringPosition, interpolationOffset),
                     shiftPosition(value.position(), stringPosition, interpolationOffset)
@@ -3192,8 +3196,6 @@ public class CapybaraParser {
     }
 
 }
-
-
 
 
 

@@ -1150,7 +1150,8 @@ public class CapybaraCompiler {
                                 dataConstructorFunctionName(dataDeclaration.name()),
                                 dataDeclaration.name(),
                                 qualifiedTypeName(moduleRef, dataDeclaration.name()),
-                                false
+                                false,
+                                expressionMayProduceResult(dataDeclaration.constructor().orElseThrow())
                         )
                 ));
         module.functional().definitions().stream()
@@ -1164,7 +1165,8 @@ public class CapybaraCompiler {
                                 typeConstructorFunctionName(typeDeclaration.name()),
                                 typeDeclaration.name(),
                                 qualifiedTypeName(moduleRef, constructorStateTypeName(typeDeclaration.name())),
-                                true
+                                true,
+                                expressionMayProduceResult(typeDeclaration.constructor().orElseThrow())
                         )
                 ));
         return Map.copyOf(constructors);
@@ -1219,11 +1221,8 @@ public class CapybaraCompiler {
             ModuleRef moduleRef
     ) {
         var constructors = new LinkedHashMap<String, CapybaraExpressionCompiler.ProtectedConstructorRef>();
-        library.functions().stream()
-                .map(CompiledFunction::name)
-                .map(CapybaraCompiler::constructorTargetTypeName)
-                .flatMap(Optional::stream)
-                .forEach(descriptor -> constructors.put(
+        library.functions().forEach(function -> constructorTargetTypeName(function.name())
+                .ifPresent(descriptor -> constructors.put(
                         descriptor.targetTypeName(),
                         new CapybaraExpressionCompiler.ProtectedConstructorRef(
                                 qualifiedModuleName(moduleRef),
@@ -1234,9 +1233,10 @@ public class CapybaraCompiler {
                                 descriptor.kind() == ConstructorKind.DATA
                                         ? qualifiedTypeName(moduleRef, descriptor.targetTypeName())
                                         : qualifiedTypeName(moduleRef, constructorStateTypeName(descriptor.targetTypeName())),
-                                descriptor.kind() == ConstructorKind.TYPE
+                                descriptor.kind() == ConstructorKind.TYPE,
+                                isResultLikeType(function.returnType(), library.types())
                         )
-                ));
+                )));
         return Map.copyOf(constructors);
     }
 
@@ -1355,7 +1355,8 @@ public class CapybaraCompiler {
                                 dataConstructorFunctionName(dataDeclaration.name()),
                                 dataDeclaration.name(),
                                 dataDeclaration.name(),
-                                false
+                                false,
+                                expressionMayProduceResult(dataDeclaration.constructor().orElseThrow())
                         )
                 ));
         typeDeclarations.stream()
@@ -1367,7 +1368,8 @@ public class CapybaraCompiler {
                                 typeConstructorFunctionName(typeDeclaration.name()),
                                 typeDeclaration.name(),
                                 constructorStateTypeName(typeDeclaration.name()),
-                                true
+                                true,
+                                expressionMayProduceResult(typeDeclaration.constructor().orElseThrow())
                         )
                 ));
         var referencedNestedTypes = typeDeclarations.stream()
@@ -1419,7 +1421,8 @@ public class CapybaraCompiler {
                                 function.name(),
                                 target.targetTypeName(),
                                 target.targetTypeName(),
-                                false
+                                false,
+                                isResultLikeType(function.returnType(), linkedTypes)
                         )
                 );
                 continue;
@@ -1430,7 +1433,8 @@ public class CapybaraCompiler {
                         function.name(),
                         target.targetTypeName(),
                         constructorStateTypeName(target.targetTypeName()),
-                        true
+                        true,
+                        isResultLikeType(function.returnType(), linkedTypes)
                 );
                 protectedConstructors.put(target.targetTypeName(), constructorRef);
                 typeConstructorsByName.put(target.targetTypeName(), constructorRef);
@@ -1584,7 +1588,8 @@ public class CapybaraCompiler {
                                 typeConstructorFunctionName(typeDeclaration.name()),
                                 typeDeclaration.name(),
                                 constructorStateTypeName(typeDeclaration.name()),
-                                true
+                                true,
+                                expressionMayProduceResult(typeDeclaration.constructor().orElseThrow())
                         ),
                         (first, second) -> first
                 ));
@@ -1696,7 +1701,8 @@ public class CapybaraCompiler {
             case IfExpression ifExpression ->
                     expressionMayProduceResult(ifExpression.thenBranch()) || expressionMayProduceResult(ifExpression.elseBranch());
             case LetExpression letExpression ->
-                    expressionMayProduceResult(letExpression.value()) || expressionMayProduceResult(letExpression.rest());
+                    letExpression.kind() == LetExpression.Kind.RESULT_BIND
+                    || expressionMayProduceResult(letExpression.value()) || expressionMayProduceResult(letExpression.rest());
             case MatchExpression matchExpression ->
                     matchExpression.cases().stream().anyMatch(matchCase -> expressionMayProduceResult(matchCase.expression()));
             case FieldAccess ignored -> false;
@@ -2400,7 +2406,7 @@ public class CapybaraCompiler {
                         .append("let ")
                         .append(letExpression.name());
                 letExpression.declaredType().ifPresent(type -> builder.append(": ").append(formatParserType(type)));
-                builder.append(" = ");
+                builder.append(letExpression.kind() == LetExpression.Kind.RESULT_BIND ? " <- " : " = ");
                 if (isMultilinePreviewExpression(letExpression.value())) {
                     builder.append(formatExpressionMultilineForLetValue(letExpression.value(), indent));
                 } else {
@@ -2640,7 +2646,8 @@ public class CapybaraCompiler {
                                               + " then " + formatExpressionPreview(ifExpression.thenBranch())
                                               + " else " + formatExpressionPreview(ifExpression.elseBranch());
             case LetExpression letExpression -> "let " + letExpression.name()
-                                                + " = " + formatExpressionPreview(letExpression.value())
+                                                + (letExpression.kind() == LetExpression.Kind.RESULT_BIND ? " <- " : " = ")
+                                                + formatExpressionPreview(letExpression.value())
                                                 + " " + formatExpressionPreview(letExpression.rest());
             case MatchExpression matchExpression ->
                     "match " + formatExpressionPreview(matchExpression.matchWith()) + " with ...";

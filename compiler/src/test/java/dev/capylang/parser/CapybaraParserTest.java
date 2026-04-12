@@ -190,6 +190,38 @@ class CapybaraParserTest {
     }
 
     @Test
+    @DisplayName("should parse result bind lets")
+    void parseResultBindLets() {
+        var module = parseSuccess(new RawModule("Test", "/parser", """
+                from /capy/lang/Result import { * }
+
+                fun users(name: string): Result[string] =
+                    let user <- Success { value: name }
+                    user
+                """));
+
+        var function = findFunction("users", module.functional());
+        assertThat(function.expression()).isInstanceOf(LetExpression.class);
+        var letExpression = (LetExpression) function.expression();
+        assertThat(letExpression.kind()).isEqualTo(LetExpression.Kind.RESULT_BIND);
+        assertThat(letExpression.name()).isEqualTo("user");
+        assertThat(letExpression.rest()).isInstanceOf(Value.class);
+    }
+
+    @Test
+    @DisplayName("should keep comparison with unary minus when there are no spaces")
+    void parseComparisonWithUnaryMinusWithoutSpaces() {
+        var module = parseSuccess(new RawModule("Test", "/parser", """
+                fun negative_compare(a: int): bool = a<-1
+                """));
+
+        var function = findFunction("negative_compare", module.functional());
+        assertThat(function.expression()).isInstanceOf(InfixExpression.class);
+        var infixExpression = (InfixExpression) function.expression();
+        assertThat(infixExpression.operator()).isEqualTo(InfixOperator.LT);
+    }
+
+    @Test
     @DisplayName("should reject data extension spread when it is not at the end")
     void rejectDataExtensionSpreadNotAtTheEnd() {
         var result = new CapybaraParser().parseModule(new RawModule("Test", "/parser", """

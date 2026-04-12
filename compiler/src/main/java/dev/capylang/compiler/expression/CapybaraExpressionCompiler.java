@@ -1520,6 +1520,7 @@ public class CapybaraExpressionCompiler {
                                 new LetExpression(
                                         reduceExpression.accumulatorName(),
                                         Optional.empty(),
+                                        LetExpression.Kind.ASSIGN,
                                         reduceExpression.initialValue(),
                                         reduceExpression.reducerExpression(),
                                         reduceExpression.position()
@@ -6059,10 +6060,16 @@ public class CapybaraExpressionCompiler {
         }
         var arguments = orderedAssignments(fieldValues, targetType.fields());
         var signature = signatures.getFirst();
+        var resolvedReturnType = resolveReturnType(signature, arguments);
+        if (resolvedReturnType == PrimitiveLinkedType.ANY) {
+            resolvedReturnType = constructorRef.resultReturning()
+                    ? resultTypeFor(targetType)
+                    : targetType;
+        }
         return Result.success(new CompiledFunctionCall(
                 resolvedModule.javaModuleName() + "." + constructorRef.functionName(),
                 arguments,
-                resolveReturnType(signature, arguments)
+                resolvedReturnType
         ));
     }
 
@@ -6618,6 +6625,9 @@ public class CapybaraExpressionCompiler {
     }
 
     private Result<CompiledExpression> linkLetExpression(LetExpression expression, Scope scope) {
+        if (expression.kind() == LetExpression.Kind.RESULT_BIND) {
+            return linkResultBindLetExpression(expression, scope);
+        }
         if (expression.declaredType().isPresent()) {
             return linkTypeInScope(expression.declaredType().orElseThrow(), scope)
                     .flatMap(linkedDeclaredType -> linkArgumentForExpectedType(expression.value(), scope, linkedDeclaredType)
@@ -6647,6 +6657,142 @@ public class CapybaraExpressionCompiler {
                                             inferredDeclarationType,
                                             rest
                                     ));
+                });
+    }
+
+    private Result<CompiledExpression> linkResultBindLetExpression(LetExpression expression, Scope scope) {
+        return linkResultBindSourceExpression(expression.value(), scope)
+                .flatMap(resultExpression -> {
+                    var resultParent = resolveSpecializedResultType(resultExpression.type());
+                    if (resultParent.isEmpty()) {
+                        return withPosition(
+                                Result.error("`<-` can only be used with `Result[...]`, got `" + resultExpression.type() + "`"),
+                                expression.value().position().or(expression::position)
+                        );
+                    }
+                    var successTypeResult = findSubtype("Success", resultParent.orElseThrow());
+                    if (successTypeResult instanceof Result.Error<CompiledDataType> error) {
+                        return new Result.Error<>(error.errors());
+                    }
+                    var successType = ((Result.Success<CompiledDataType>) successTypeResult).value();
+                    var successValueField = successType.fields().stream()
+                            .filter(field -> field.name().equals("value"))
+                            .findFirst();
+                    if (successValueField.isEmpty()) {
+                        return withPosition(Result.error("`Result.Success` is missing `value` field"), expression.position());
+                    }
+                    var payloadType = successValueField.orElseThrow().type();
+                    if (expression.declaredType().isPresent()) {
+                        return linkTypeInScope(expression.declaredType().orElseThrow(), scope)
+                                .flatMap(declaredType -> linkResultBindContinuation(
+                                        expression,
+                                        scope,
+                                        resultExpression,
+                                        resultParent.orElseThrow(),
+                                        payloadType,
+                                        declaredType
+                                ));
+                    }
+                    return linkResultBindContinuation(
+                            expression,
+                            scope,
+                            resultExpression,
+                            resultParent.orElseThrow(),
+                            payloadType,
+                            payloadType
+                    );
+                });
+    }
+
+    private Result<CompiledExpression> linkResultBindSourceExpression(Expression expression, Scope scope) {
+        return linkExpression(expression, scope)
+                .flatMap(linked -> {
+                    if (resolveSpecializedResultType(linked.type()).isPresent()) {
+                        return Result.success(linked);
+                    }
+                    if (expression instanceof NewData newData) {
+                        var linkedType = linkTypeInScope(newData.type(), scope);
+                        if (linkedType instanceof Result.Success<CompiledType> success
+                            && success.value() instanceof CompiledDataType dataType) {
+                            var expectedResultType = resultTypeFor(dataType);
+                            if (expectedResultType != null) {
+                                return linkArgumentForExpectedType(expression, scope, expectedResultType)
+                                        .map(coerced -> {
+                                            var resolvedExpression = coerced.expression();
+                                            if (resolvedExpression instanceof CompiledFunctionCall functionCall
+                                                && resolveSpecializedResultType(functionCall.type()).isEmpty()) {
+                                                return (CompiledExpression) new CompiledFunctionCall(
+                                                        functionCall.name(),
+                                                        functionCall.arguments(),
+                                                        expectedResultType
+                                                );
+                                            }
+                                            return resolvedExpression;
+                                        });
+                            }
+                        }
+                    }
+                    return Result.success(linked);
+                });
+    }
+
+    private Result<CompiledExpression> linkResultBindContinuation(
+            LetExpression expression,
+            Scope scope,
+            CompiledExpression resultExpression,
+            CompiledDataParentType resultParent,
+            CompiledType payloadType,
+            CompiledType letType
+    ) {
+        var boundPayload = new CompiledVariable(expression.name(), payloadType);
+        var coercedPayload = coerceExpressionToType(boundPayload, letType);
+        if (coercedPayload.isEmpty()) {
+            return withPosition(
+                    Result.error("Expected `" + letType + "`, got `" + payloadType + "`"),
+                                expression.position()
+            );
+        }
+        return linkExpression(expression.rest(), scope.add(expression.name(), letType))
+                .flatMap(rest -> {
+                    var successResultType = resultParentForExpression(rest, expression.position());
+                    if (successResultType instanceof Result.Error<CompiledDataParentType> error) {
+                        return new Result.Error<>(error.errors());
+                    }
+                    var wrappedSuccess = ensureResultExpression(
+                            rest,
+                            ((Result.Success<CompiledDataParentType>) successResultType).value(),
+                            expression.position()
+                    );
+                    if (wrappedSuccess instanceof Result.Error<CompiledExpression> error) {
+                        return new Result.Error<>(error.errors());
+                    }
+                    var messageVariable = "__result_bind_error_" + scope.localValues().size();
+                    return Result.success((CompiledExpression) new CompiledMatchExpression(
+                            resultExpression,
+                            List.of(
+                                    new CompiledMatchExpression.MatchCase(
+                                            new CompiledMatchExpression.ConstructorPattern(
+                                                    "Success",
+                                                    List.of(new CompiledMatchExpression.VariablePattern(expression.name()))
+                                            ),
+                                            Optional.empty(),
+                                            ((Result.Success<CompiledExpression>) wrappedSuccess).value()
+                                    ),
+                                    new CompiledMatchExpression.MatchCase(
+                                            new CompiledMatchExpression.ConstructorPattern(
+                                                    "Error",
+                                                    List.of(new CompiledMatchExpression.VariablePattern(messageVariable))
+                                            ),
+                                            Optional.empty(),
+                                            errorResultExpression(
+                                                    ((Result.Success<CompiledDataParentType>) successResultType).value(),
+                                                    messageVariable,
+                                                    expression.position()
+                                            )
+                                    )
+                            ),
+                            ((Result.Success<CompiledDataParentType>) successResultType).value()
+                    ));
                 });
     }
 
@@ -6708,7 +6854,22 @@ public class CapybaraExpressionCompiler {
                 var nestedScope = scope;
                 var linkedValue = linkExpression(letExpression.value(), scope);
                 if (linkedValue instanceof Result.Success<CompiledExpression> success) {
-                    nestedScope = nestedScope.add(letExpression.name(), success.value().type());
+                    var letType = success.value().type();
+                    if (letExpression.kind() == LetExpression.Kind.RESULT_BIND) {
+                        letType = resolveSpecializedResultType(success.value().type())
+                                .flatMap(resultType -> {
+                                    var successType = findSubtype("Success", resultType);
+                                    if (!(successType instanceof Result.Success<CompiledDataType> successDataType)) {
+                                        return Optional.<CompiledType>empty();
+                                    }
+                                    return successDataType.value().fields().stream()
+                                            .filter(field -> field.name().equals("value"))
+                                            .map(CompiledDataType.CompiledField::type)
+                                            .findFirst();
+                                })
+                                .orElse(letType);
+                    }
+                    nestedScope = nestedScope.add(letExpression.name(), letType);
                 }
                 collectGenericBindingsFromExpression(variableName, parentType, letExpression.rest(), nestedScope, bindings);
             }
@@ -7004,7 +7165,8 @@ public class CapybaraExpressionCompiler {
             String functionName,
             String targetTypeName,
             String internalTargetTypeName,
-            boolean typeConstructor
+            boolean typeConstructor,
+            boolean resultReturning
     ) {
     }
     private record CoercedArgument(CompiledExpression expression, int coercions) {
