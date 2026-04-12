@@ -50,3 +50,7 @@ fun dict_to_string(d: dict[int]): string =
             if acc == ""
             then k + " " + v
             else acc + "," + k + " " + v
+
+fun let_named_dict(): int =
+    let dict: dict[int] = { "one": 1, "two": 2 }
+    dict.size
