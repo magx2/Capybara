@@ -156,6 +156,11 @@ class DictCollectionTest {
     }
 
     @Test
+    void letNamedDict() {
+        assertThat(DictCollection.letNamedDict()).isEqualTo(2);
+    }
+
+    @Test
     void dictToList() {
         assertThat(DictCollection.dictToList(EXPECTED))
                 .containsExactlyInAnyOrder(

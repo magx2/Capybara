@@ -25,3 +25,7 @@ fun not_is_empty(s: set[int]): bool = !s.is_empty
 fun not_nested_is_empty(holder: SetHolder): bool = !holder.values.is_empty
 
 fun size(s: set[int]): int = s.size
+
+fun let_named_set(): int =
+    let set: set[int] = {1, 2, 3}
+    set.size

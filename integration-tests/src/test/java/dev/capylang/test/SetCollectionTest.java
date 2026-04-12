@@ -101,4 +101,9 @@ class SetCollectionTest {
         assertThat(SetCollection.size(Set.of(1, 2, 3))).isEqualTo(3);
         assertThat(SetCollection.size(Set.of())).isEqualTo(0);
     }
+
+    @Test
+    void letNamedSet() {
+        assertThat(SetCollection.letNamedSet()).isEqualTo(3);
+    }
 }

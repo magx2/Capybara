@@ -96,4 +96,9 @@ class ListCollectionTest {
         assertThat(ListCollection.size(List.of(1, 2, 3))).isEqualTo(3);
         assertThat(ListCollection.size(List.of())).isEqualTo(0);
     }
+
+    @Test
+    void letNamedList() {
+        assertThat(ListCollection.letNamedList()).isEqualTo(4);
+    }
 }

@@ -1197,7 +1197,7 @@ public class CapybaraParser {
         for (var i = lets.size() - 1; i >= 0; i--) {
             var letExpression = lets.get(i);
             result = new LetExpression(
-                    letExpression.NAME().getText(),
+                    letExpression.identifier().getText(),
                     Optional.ofNullable(letExpression.type()).map(CapybaraParser::type),
                     letExpression.letBindingOperator().ASSIGN() != null ? LetExpression.Kind.ASSIGN : LetExpression.Kind.RESULT_BIND,
                     expressionNoLet(letExpression.expressionNoLet()),
@@ -1214,7 +1214,7 @@ public class CapybaraParser {
         for (var i = lets.size() - 1; i >= 0; i--) {
             var letExpression = lets.get(i);
             result = new LetExpression(
-                    letExpression.NAME().getText(),
+                    letExpression.identifier().getText(),
                     Optional.ofNullable(letExpression.type()).map(CapybaraParser::type),
                     letExpression.letBindingOperator().ASSIGN() != null ? LetExpression.Kind.ASSIGN : LetExpression.Kind.RESULT_BIND,
                     expressionNoLet(letExpression.expressionNoLet()),
@@ -3196,7 +3196,6 @@ public class CapybaraParser {
     }
 
 }
-
 
 
 
