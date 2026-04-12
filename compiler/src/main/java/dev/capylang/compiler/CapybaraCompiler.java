@@ -1133,27 +1133,73 @@ public class CapybaraCompiler {
         var parentTypes = linkedTypes.values().stream()
                 .filter(CompiledDataParentType.class::isInstance)
                 .map(CompiledDataParentType.class::cast)
-                .filter(parentType -> typeConstructorsByName.containsKey(parentType.name()))
-                .sorted(
-                        Comparator.comparingInt((CompiledDataParentType parentType) -> parentType.subTypes().size())
-                                .reversed()
-                                .thenComparing(CompiledDataParentType::name)
-                )
-                .toList();
+                .collect(java.util.stream.Collectors.toMap(CompiledDataParentType::name, java.util.function.Function.identity()));
+        var referencedNestedTypes = parentTypes.values().stream()
+                .flatMap(parentType -> parentType.subTypes().stream())
+                .map(CompiledDataType::name)
+                .filter(parentTypes::containsKey)
+                .collect(java.util.stream.Collectors.toSet());
+        var visitedTypes = new HashSet<String>();
 
-        linkedTypes.values().stream()
-                .filter(CompiledDataType.class::isInstance)
-                .map(CompiledDataType.class::cast)
-                .filter(dataType -> !dataType.name().startsWith(CONSTRUCTOR_STATE_TYPE_PREFIX))
-                .forEach(dataType -> {
-                    var constructorChain = parentTypes.stream()
-                            .filter(parentType -> parentType.subTypes().stream().anyMatch(subType -> subType.name().equals(dataType.name())))
-                            .map(parentType -> typeConstructorsByName.get(parentType.name()))
-                            .toList();
-                    if (!constructorChain.isEmpty()) {
-                        parentConstructorsBySubtype.put(dataType.name(), List.copyOf(constructorChain));
-                    }
-                });
+        parentTypes.values().stream()
+                .filter(parentType -> !referencedNestedTypes.contains(parentType.name()))
+                .forEach(parentType -> collectLibraryParentConstructorChains(
+                        parentType,
+                        parentTypes,
+                        typeConstructorsByName,
+                        List.of(),
+                        parentConstructorsBySubtype,
+                        visitedTypes
+                ));
+        parentTypes.values().stream()
+                .filter(parentType -> !visitedTypes.contains(parentType.name()))
+                .forEach(parentType -> collectLibraryParentConstructorChains(
+                        parentType,
+                        parentTypes,
+                        typeConstructorsByName,
+                        List.of(),
+                        parentConstructorsBySubtype,
+                        visitedTypes
+                ));
+    }
+
+    private void collectLibraryParentConstructorChains(
+            CompiledDataParentType parentType,
+            Map<String, CompiledDataParentType> parentTypesByName,
+            Map<String, CapybaraExpressionCompiler.ProtectedConstructorRef> constructorsByType,
+            List<CapybaraExpressionCompiler.ProtectedConstructorRef> activeConstructors,
+            Map<String, List<CapybaraExpressionCompiler.ProtectedConstructorRef>> parentConstructorsBySubtype,
+            Set<String> visitedTypes
+    ) {
+        if (!visitedTypes.add(parentType.name())) {
+            return;
+        }
+        var nextActive = new ArrayList<>(activeConstructors);
+        var currentConstructor = constructorsByType.get(parentType.name());
+        if (currentConstructor != null) {
+            nextActive.add(currentConstructor);
+        }
+
+        for (var subtype : parentType.subTypes()) {
+            if (subtype.name().startsWith(CONSTRUCTOR_STATE_TYPE_PREFIX)) {
+                continue;
+            }
+            var nestedType = parentTypesByName.get(subtype.name());
+            if (nestedType != null) {
+                collectLibraryParentConstructorChains(
+                        nestedType,
+                        parentTypesByName,
+                        constructorsByType,
+                        nextActive,
+                        parentConstructorsBySubtype,
+                        visitedTypes
+                );
+                continue;
+            }
+            if (!nextActive.isEmpty()) {
+                mergeParentConstructorChain(parentConstructorsBySubtype, subtype.name(), nextActive);
+            }
+        }
     }
 
     private void collectParentConstructorChains(

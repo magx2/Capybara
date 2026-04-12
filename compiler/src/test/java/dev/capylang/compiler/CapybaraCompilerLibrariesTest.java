@@ -95,6 +95,36 @@ class CapybaraCompilerLibrariesTest {
     }
 
     @Test
+    void shouldApplyTransitiveLibraryTypeConstructorWhenInstantiatingImportedSubtype() {
+        var librarySource = """
+                from /capy/lang/Result import { * }
+
+                type ValidatedName { name: string } with constructor {
+                   if name.size == 0 then
+                       Error { message: "Name was empty" }
+                   else
+                       Success { value: * { name: name } }
+                } = NamedEntity
+
+                type NamedEntity { name: string } = NamedUser
+
+                data NamedUser { name: string, role: string }
+                """;
+        var libraries = compileProgram(List.of(new RawModule("Library", "/foo/lib", librarySource)), new java.util.TreeSet<>()).modules();
+
+        var consumerSource = """
+                from Library import { * }
+
+                fun build(name: string, role: string): Result[NamedUser] =
+                    NamedUser { name: name, role: role }
+                """;
+        var compiled = compileProgram(List.of(new RawModule("Consumer", "/foo/app", consumerSource)), libraries);
+
+        assertThat(compiledFunction(compiled, "Consumer", "build").expression())
+                .isInstanceOf(CompiledMatchExpression.class);
+    }
+
+    @Test
     void shouldResolveImportedParentTypeFieldsAcrossModules() {
         var compiled = compileProgram(List.of(
                 new RawModule("Assert", "/capy/test", """
