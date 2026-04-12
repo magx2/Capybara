@@ -1251,6 +1251,7 @@ public class CapybaraCompiler {
                 .collect(toMap(CompiledDataParentType::name, identity(), (first, second) -> first));
         var referencedNestedTypes = parentTypesByName.values().stream()
                 .flatMap(parentType -> parentType.subTypes().stream())
+                .map(CompiledDataType::name)
                 .filter(parentTypesByName::containsKey)
                 .collect(java.util.stream.Collectors.toSet());
         var parentConstructorsBySubtype = new LinkedHashMap<String, List<CapybaraExpressionCompiler.ProtectedConstructorRef>>();
