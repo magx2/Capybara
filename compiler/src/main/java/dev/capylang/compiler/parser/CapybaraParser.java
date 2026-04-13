@@ -502,7 +502,9 @@ public class CapybaraParser {
                 List.of(),
                 Optional.ofNullable(context.type()).map(CapybaraParser::type).or(() -> inferConstType(constExpression)),
                 constExpression,
-                List.of(),
+                context.docComment().stream()
+                        .map(comment -> stripDocComment(comment.getText()))
+                        .toList(),
                 context.VISIBILITY() != null ? dev.capylang.compiler.Visibility.LOCAL : null,
                 position(context)
         );
@@ -757,7 +759,9 @@ public class CapybaraParser {
                         .map(type -> rewriteLocalTypeNames(type, localTypeNameMap))
                         .or(() -> inferConstType(constExpression)),
                 constExpression,
-                List.of(),
+                context.docComment().stream()
+                        .map(comment -> stripDocComment(comment.getText()))
+                        .toList(),
                 position(context)
         );
     }
@@ -3200,7 +3204,6 @@ public class CapybaraParser {
     }
 
 }
-
 
 
 

@@ -448,6 +448,27 @@ class CapybaraParserTest {
     }
 
     @Test
+    @DisplayName("should parse doc comments for const declarations")
+    void parseConstComments() {
+        var module = parseSuccess(new RawModule("Test", "/parser", """
+                /// Global threshold
+                const THRESHOLD: int = 10
+
+                fun config(): int =
+                    /// Internal threshold
+                    const __threshold: int = THRESHOLD
+                    ---
+                    __threshold
+                """));
+
+        var globalConst = findFunction("THRESHOLD", module.functional());
+        var localConst = findFunction("__config__local_const_0_threshold", module.functional());
+
+        assertThat(globalConst.comments()).containsExactly("Global threshold");
+        assertThat(localConst.comments()).containsExactly("Internal threshold");
+    }
+
+    @Test
     @DisplayName("should reject missing separator after local definitions")
     void rejectMissingSeparatorAfterLocalDefinitions() {
         var result = new CapybaraParser().parseModule(new RawModule("Test", "/parser", """
