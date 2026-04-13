@@ -641,14 +641,23 @@ public final class JavaGenerator implements Generator {
                 .collect(joining("\n", "/**\n", "\n */\n"));
     }
 
+    private String mapMarkdownDoc(List<String> comments) {
+        if (comments == null || comments.isEmpty()) {
+            return "";
+        }
+        return comments.stream()
+                .map(line -> line.isEmpty() ? "///" : "/// " + line)
+                .collect(joining("\n", "", "\n"));
+    }
+
     private String mapJavaConst(
             JavaConst javaConst,
             boolean allowPrivateStaticMembers,
             boolean ownerInterfaceMember,
-            String ownerTypeName
+        String ownerTypeName
     ) {
         var visibility = constVisibility(javaConst, allowPrivateStaticMembers, ownerInterfaceMember);
-        return mapJavaDoc(javaConst.comments())
+        return mapMarkdownDoc(javaConst.comments())
                + visibility + "static final " + javaConst.type() + " " + javaConst.name() + " = "
                + extractInitializerExpression(evaluateExpression(javaConst.expression(), List.of(), ownerTypeName))
                + ";\n";
@@ -716,7 +725,6 @@ public final class JavaGenerator implements Generator {
     }
 
 }
-
 
 
 

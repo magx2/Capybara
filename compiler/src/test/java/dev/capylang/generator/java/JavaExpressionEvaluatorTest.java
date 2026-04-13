@@ -164,10 +164,11 @@ class JavaExpressionEvaluatorTest {
                 .map(dev.capylang.generator.GeneratedModule::code)
                 .collect(joining("\n"));
 
-        assertThat(generated).contains(" * Global threshold");
+        assertThat(generated).contains("/// Global threshold");
         assertThat(generated).contains("public static final int");
-        assertThat(generated).contains(" * Internal threshold");
+        assertThat(generated).contains("/// Internal threshold");
         assertThat(generated).contains("__configLocalConst0Threshold");
+        assertThat(generated).doesNotContain(" * Global threshold");
     }
 
     @Test
