@@ -151,17 +151,29 @@ fun from_iso_8601(iso: string): Result[Duration] =
         if parse.buffer.is_empty
         then Success { parse.value }
         else Error { __invalid("expected digits for " + label + ", got `" + value + "`") }
+    fun __is_exact_digits(value: string): bool =
+        match __parse_exact_digits(value, "value") with
+        case Success -> true
+        case Error -> false
     fun __is_combined_basic(value: string): bool =
         if value.size == 15
-        then value[8:9] == "T"
+        then __is_exact_digits(value[0:8])
+            & value[8:9] == "T"
+            & __is_exact_digits(value[9:15])
         else false
     fun __is_combined_extended(value: string): bool =
         if value.size == 19
-        then value[4:5] == "-"
+        then __is_exact_digits(value[0:4])
+            & value[4:5] == "-"
+            & __is_exact_digits(value[5:7])
             & value[7:8] == "-"
+            & __is_exact_digits(value[8:10])
             & value[10:11] == "T"
+            & __is_exact_digits(value[11:13])
             & value[13:14] == ":"
+            & __is_exact_digits(value[14:16])
             & value[16:17] == ":"
+            & __is_exact_digits(value[17:19])
         else false
     fun __to_duration(parts: __Parts): Duration =
         if parts.weeks != 0
