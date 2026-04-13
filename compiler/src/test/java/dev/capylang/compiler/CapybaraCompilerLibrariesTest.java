@@ -89,6 +89,26 @@ class CapybaraCompilerLibrariesTest {
     }
 
     @Test
+    void shouldBypassLocalResultReturningDataConstructorWithNonCanonicalModulePath() {
+        var compiled = compileProgram(List.of(new RawModule("Consumer", "/./foo//app/", """
+                from /capy/lang/Result import { * }
+
+                data User { age: int } with constructor {
+                    if age <= 0 then
+                        Error { message: "invalid" }
+                    else
+                        Success { value: * { age: age } }
+                }
+
+                fun fallback(): User = User! { age: 1 }
+                """)), new java.util.TreeSet<>());
+
+        assertThat(compiledFunction(compiled, "Consumer", "fallback").expression())
+                .isInstanceOfSatisfying(CompiledNewData.class, newData ->
+                        assertThat(((CompiledDataType) newData.type()).name()).isEqualTo("User"));
+    }
+
+    @Test
     void shouldApplyLibraryTypeConstructorWhenInstantiatingImportedSubtype() {
         var librarySource = """
                 from /capy/lang/Result import { * }
