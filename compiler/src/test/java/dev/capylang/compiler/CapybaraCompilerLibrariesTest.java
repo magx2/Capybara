@@ -416,6 +416,29 @@ class CapybaraCompilerLibrariesTest {
     }
 
     @Test
+    void shouldResolveAbsoluteImportsAgainstRelativeModulePaths() {
+        var compiled = compileProgram(List.of(
+                new RawModule("Result", "capy/lang", """
+                        type Result[T] = Success[T] | Error
+                        data Success[T] { value: T }
+                        data Error { message: string }
+                        """),
+                new RawModule("Date", "capy/date_time", """
+                        from /capy/lang/Result import { * }
+
+                        data Date { day: int } with constructor {
+                            if day > 0
+                            then Success { value: * { day: day } }
+                            else Error { message: "invalid" }
+                        }
+                        """)
+        ), new java.util.TreeSet<>());
+
+        assertThat(compiled.modules()).extracting(CompiledModule::name)
+                .containsExactlyInAnyOrder("Result", "Date");
+    }
+
+    @Test
     void shouldRejectNestedResultWhenResultAssertExpectsSingleResult() {
         var error = compileFailure(List.of(
                 new RawModule("Result", "/capy/lang", """
