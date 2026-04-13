@@ -6,6 +6,7 @@ fun tests(): TestFile =
     let round_trip_test_cases = {
         "PT0S" : ZERO,
         "P3Y6M4DT12H30M5S" : DateDuration { years: 3, months: 6, days: 4, hours: 12, minutes: 30, seconds: 5 },
+        "P123Y4M5DT6H7M8S" : DateDuration { years: 123, months: 4, days: 5, hours: 6, minutes: 7, seconds: 8 },
         "P4Y" : DateDuration { years: 4, months: 0, days: 0, hours: 0, minutes: 0, seconds: 0 },
         "P23DT23H" : DateDuration { years: 0, months: 0, days: 23, hours: 23, minutes: 0, seconds: 0 },
         "P2W" : WeekDuration { weeks: 2 },
