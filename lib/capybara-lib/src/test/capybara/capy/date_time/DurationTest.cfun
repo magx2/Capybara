@@ -1,0 +1,33 @@
+from /capy/date_time/Duration import { * }
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+
+fun tests(): TestFile =
+    let round_trip_test_cases = {
+        "PT0S" : ZERO,
+        "P3Y6M4DT12H30M5S" : DateDuration { years: 3, months: 6, days: 4, hours: 12, minutes: 30, seconds: 5 },
+        "P4Y" : DateDuration { years: 4, months: 0, days: 0, hours: 0, minutes: 0, seconds: 0 },
+        "P23DT23H" : DateDuration { years: 0, months: 0, days: 23, hours: 23, minutes: 0, seconds: 0 },
+        "P2W" : WeekDuration { weeks: 2 },
+    } |> [], (acc, iso, expected) => acc + test("should round-trip {iso}",
+        assert_all([
+            assert_that(from_iso_8601(iso)).succeeds(expected),
+            assert_that(expected.to_iso_8601()).is_equal_to(iso),
+        ]))
+    let parse_only_test_cases = [
+        ("PT36H", DateDuration { years: 0, months: 0, days: 0, hours: 36, minutes: 0, seconds: 0 }),
+        ("P00030604T123005", DateDuration { years: 3, months: 6, days: 4, hours: 12, minutes: 30, seconds: 5 }),
+        ("P0003-06-04T12:30:05", DateDuration { years: 3, months: 6, days: 4, hours: 12, minutes: 30, seconds: 5 }),
+    ] | (iso, expected) => test("should parse {iso}", assert_that(from_iso_8601(iso)).succeeds(expected))
+    let failed_test_cases = [
+        "P",
+        "PT",
+        "1DT2H",
+        "P1H",
+        "P1S",
+        "P1W2D",
+        "P1WT2H",
+        "P1D2Y",
+        "P0003-13-04T12:30:05",
+    ] | iso => test("should fail parsing {iso}", assert_that(from_iso_8601(iso)).fails())
+    test_file("/capy/date_time/Duration.cfun", round_trip_test_cases + parse_only_test_cases + failed_test_cases)

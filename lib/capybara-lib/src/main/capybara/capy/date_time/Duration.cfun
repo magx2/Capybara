@@ -1,0 +1,339 @@
+from /capy/lang/Result import { * }
+from /capy/lang/Option import { * }
+
+/// [ISO 8601 - Durations](https://en.wikipedia.org/wiki/ISO_860101)
+///
+/// Represents a calendar/time duration using integer components.
+///
+/// Supported fields:
+/// - `years`, `months`, `weeks`, `days`
+/// - `hours`, `minutes`, `seconds`
+///
+/// Notes:
+/// - `weeks` is treated as a standalone ISO 8601 duration unit.
+/// - The parser accepts integer-only values.
+/// - Fractional values like `PT0.5S` are not supported.
+///
+/// `Duration` is a sum type:
+/// - `DateDuration` for year/month/day/time durations
+/// - `WeekDuration` for ISO week-only durations like `P2W`
+type Duration = DateDuration | WeekDuration
+
+/// Duration expressed with calendar and clock components.
+///
+/// Supported ISO 8601 units:
+/// - `Y` years
+/// - `M` months
+/// - `D` days
+/// - `H` hours
+/// - `M` minutes in the time part
+/// - `S` seconds
+///
+/// Example:
+/// ```cfun
+/// DateDuration { years: 3, months: 6, days: 4, hours: 12, minutes: 30, seconds: 5 }
+/// ```
+data DateDuration {
+    years: int, months: int, days: int,
+    hours: int, minutes: int, seconds: int
+}
+
+/// ISO 8601 week-only duration.
+///
+/// This variant is used for strings like `P2W`.
+/// It is intentionally separate from `DateDuration`, because ISO week durations
+/// are not mixed with year/month/day/time components in this API.
+///
+/// Example:
+/// ```cfun
+/// WeekDuration { weeks: 2 }
+/// ```
+data WeekDuration { weeks: int }
+
+const ZERO: Duration = DateDuration { years: 0, months: 0, days: 0, hours: 0, minutes: 0, seconds: 0 }
+
+/// Formats this duration as a canonical ISO 8601 string.
+///
+/// Examples:
+/// ```cfun
+/// ZERO.to_iso_8601() == "PT0S"
+/// DateDuration { years: 3, months: 6, days: 4, hours: 12, minutes: 30, seconds: 5 }.to_iso_8601() == "P3Y6M4DT12H30M5S"
+/// WeekDuration { weeks: 2 }.to_iso_8601() == "P2W"
+/// ```
+///
+/// The output uses the symbolic ISO 8601 form and omits zero-valued components.
+fun Duration.to_iso_8601(): string =
+    match this with
+    case WeekDuration { weeks } -> "P" + weeks + "W"
+    case DateDuration { years, months, days, hours, minutes, seconds } ->
+        if this == ZERO then "PT0S"
+        else
+            "P"
+            + (if years != 0 then "" + years + "Y" else "")
+            + (if months != 0 then "" + months + "M" else "")
+            + (if days != 0 then "" + days + "D" else "")
+            // T is the date/time separator, only needed if there are any time components
+            + (if hours != 0 | minutes != 0 | seconds != 0 then "T" else "")
+            + (if hours != 0 then "" + hours + "H" else "")
+            + (if minutes != 0 then "" + minutes + "M" else "")
+            + (if seconds != 0 then "" + seconds + "S" else "")
+
+/// Parses an ISO 8601 duration string.
+///
+/// Accepted inputs:
+/// - symbolic durations like `P3Y6M4DT12H30M5S`
+/// - week-only durations like `P2W`
+/// - combined basic form like `P00030604T123005`
+/// - combined extended form like `P0003-06-04T12:30:05`
+///
+/// Parsing rules:
+/// - at least one component must be present
+/// - `W` cannot be mixed with other components
+/// - components must appear in ISO 8601 order
+/// - only integer values are supported
+///
+/// Returns `Error` with a readable message when the input is invalid.
+fun from_iso_8601(iso: string): Result[Duration] =
+    data __Parse[T] { buffer: string, value: T }
+    data __Parts {
+        years: int,
+        months: int,
+        weeks: int,
+        days: int,
+        hours: int,
+        minutes: int,
+        seconds: int
+    }
+    data __DurationParse {
+        buffer: string,
+        value: __Parts,
+        in_time: bool,
+        previous_order: int,
+        has_component: bool,
+        has_time_component: bool
+    }
+    fun __invalid(message: string): string = "Invalid ISO 8601 duration format: " + message
+    fun __parse_positive_digit(value: string): Result[__Parse[int]] =
+        match value[0] with
+        case None -> Error { __invalid("unexpected end of string while parsing digits") }
+        case Some { '1' }  -> Success { __Parse { buffer: value[1:], value: 1 } }
+        case Some { '2' }  -> Success { __Parse { buffer: value[1:], value: 2 } }
+        case Some { '3' }  -> Success { __Parse { buffer: value[1:], value: 3 } }
+        case Some { '4' }  -> Success { __Parse { buffer: value[1:], value: 4 } }
+        case Some { '5' }  -> Success { __Parse { buffer: value[1:], value: 5 } }
+        case Some { '6' }  -> Success { __Parse { buffer: value[1:], value: 6 } }
+        case Some { '7' }  -> Success { __Parse { buffer: value[1:], value: 7 } }
+        case Some { '8' }  -> Success { __Parse { buffer: value[1:], value: 8 } }
+        case Some { '9' }  -> Success { __Parse { buffer: value[1:], value: 9 } }
+        case Some { char } -> Error { __invalid("expected digit between `1` and `9`, got `" + char + "`") }
+    fun __parse_digit(value: string): Result[__Parse[int]] =
+        match value[0] with
+        case None -> Error { __invalid("unexpected end of string while parsing digits") }
+        case Some { '0' } -> Success { __Parse { buffer: value[1:], value: 0 } }
+        case Some -> __parse_positive_digit(value)
+    fun __parse_rest_digits(value: string, parsed: int): Result[__Parse[int]] =
+        match value[0] with
+        case Some { char } ->
+            if match char with
+               case '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' -> true
+               case _ -> false
+            then {
+                let parse_digit <- __parse_digit(value)
+                __parse_rest_digits(parse_digit.buffer, parsed * 10 + parse_digit.value)
+            }
+            else Success { __Parse { buffer: value, value: parsed } }
+        case _ -> Success { __Parse { buffer: value, value: parsed } }
+    fun __parse_digits(value: string): Result[__Parse[int]] =
+        let parse <- __parse_digit(value)
+        __parse_rest_digits(parse.buffer, parse.value)
+    fun __parse_exact_digits(value: string, label: string): Result[int] =
+        let parse <- __parse_digits(value)
+        if parse.buffer.is_empty
+        then Success { parse.value }
+        else Error { __invalid("expected digits for " + label + ", got `" + value + "`") }
+    fun __is_combined_basic(value: string): bool =
+        if value.size == 15
+        then value[8:9] == "T"
+        else false
+    fun __is_combined_extended(value: string): bool =
+        if value.size == 19
+        then value[4:5] == "-"
+            & value[7:8] == "-"
+            & value[10:11] == "T"
+            & value[13:14] == ":"
+            & value[16:17] == ":"
+        else false
+    fun __to_duration(parts: __Parts): Duration =
+        if parts.weeks != 0
+        then WeekDuration { weeks: parts.weeks }
+        else DateDuration {
+            years: parts.years,
+            months: parts.months,
+            days: parts.days,
+            hours: parts.hours,
+            minutes: parts.minutes,
+            seconds: parts.seconds
+        }
+    fun __validate_combined(parts: __Parts): Result[Duration] =
+        if parts.months < 0 | parts.months > 12
+        then Error { __invalid("combined duration month component must be between 0 and 12") }
+        else if parts.days < 0 | parts.days > 31
+        then Error { __invalid("combined duration day component must be between 0 and 31") }
+        else if parts.hours < 0 | parts.hours > 23
+        then Error { __invalid("combined duration hour component must be between 0 and 23") }
+        else if parts.minutes < 0 | parts.minutes > 59
+        then Error { __invalid("combined duration minute component must be between 0 and 59") }
+        else if parts.seconds < 0 | parts.seconds > 59
+        then Error { __invalid("combined duration second component must be between 0 and 59") }
+        else Success { __to_duration(parts) }
+    fun __parse_combined_basic(value: string): Result[Duration] =
+        let years <- __parse_exact_digits(value[0:4], "years")
+        let months <- __parse_exact_digits(value[4:6], "months")
+        let days <- __parse_exact_digits(value[6:8], "days")
+        let hours <- __parse_exact_digits(value[9:11], "hours")
+        let minutes <- __parse_exact_digits(value[11:13], "minutes")
+        let seconds <- __parse_exact_digits(value[13:15], "seconds")
+        __validate_combined(__Parts {
+            years,
+            months,
+            weeks: 0,
+            days,
+            hours,
+            minutes,
+            seconds
+        })
+    fun __parse_combined_extended(value: string): Result[Duration] =
+        let years <- __parse_exact_digits(value[0:4], "years")
+        let months <- __parse_exact_digits(value[5:7], "months")
+        let days <- __parse_exact_digits(value[8:10], "days")
+        let hours <- __parse_exact_digits(value[11:13], "hours")
+        let minutes <- __parse_exact_digits(value[14:16], "minutes")
+        let seconds <- __parse_exact_digits(value[17:19], "seconds")
+        __validate_combined(__Parts {
+            years,
+            months,
+            weeks: 0,
+            days,
+            hours,
+            minutes,
+            seconds
+        })
+    fun __has_non_week_components(parts: __Parts): bool =
+        parts.years != 0
+        | parts.months != 0
+        | parts.days != 0
+        | parts.hours != 0
+        | parts.minutes != 0
+        | parts.seconds != 0
+    fun __component_order(in_time: bool, designator: string): Result[int] =
+        if in_time
+        then
+            if designator == "H"
+            then Success { 5 }
+            else if designator == "M"
+            then Success { 6 }
+            else if designator == "S"
+            then Success { 7 }
+            else Error { __invalid("unexpected time designator `" + designator + "`") }
+        else
+            if designator == "Y"
+            then Success { 1 }
+            else if designator == "M"
+            then Success { 2 }
+            else if designator == "W"
+            then Success { 3 }
+            else if designator == "D"
+            then Success { 4 }
+            else Error { __invalid("unexpected date designator `" + designator + "`") }
+    fun __set_component(parts: __Parts, in_time: bool, designator: string, amount: int): __Parts =
+        if designator == "Y"
+        then parts.with(years: amount)
+        else if designator == "M"
+        then if in_time
+            then parts.with(minutes: amount)
+            else parts.with(months: amount)
+        else if designator == "W"
+        then parts.with(weeks: amount)
+        else if designator == "D"
+        then parts.with(days: amount)
+        else if designator == "H"
+        then parts.with(hours: amount)
+        else parts.with(seconds: amount)
+    fun __apply_component(parse: __DurationParse, amount: int, designator: string): Result[__DurationParse] =
+        let order <- __component_order(parse.in_time, designator)
+        if order <= parse.previous_order
+        then Error { __invalid("components must appear in ISO 8601 order and may not repeat") }
+        else if designator == "W" & (__has_non_week_components(parse.value) | parse.in_time)
+        then Error { __invalid("week durations cannot be combined with other components") }
+        else if designator != "W" & parse.value.weeks != 0
+        then Error { __invalid("week durations cannot be combined with other components") }
+        else Success { __DurationParse {
+            buffer: parse.buffer,
+            value: __set_component(parse.value, parse.in_time, designator, amount),
+            in_time: parse.in_time,
+            previous_order: order,
+            has_component: true,
+            has_time_component: parse.has_time_component | parse.in_time
+        }}
+    fun __parse_designator_duration(parse: __DurationParse): Result[Duration] =
+        match parse.buffer[0] with
+        case None ->
+            if !parse.has_component
+            then Error { __invalid("missing components") }
+            else if parse.in_time & !parse.has_time_component
+            then Error { __invalid("missing time components after `T`") }
+            else Success { __to_duration(parse.value) }
+        case Some { 'T' } ->
+            if parse.in_time
+            then Error { __invalid("duplicate `T` separator") }
+            else if parse.value.weeks != 0
+            then Error { __invalid("week durations cannot be combined with time components") }
+            else __parse_designator_duration(__DurationParse {
+                buffer: parse.buffer[1:],
+                value: parse.value,
+                in_time: true,
+                previous_order: 4,
+                has_component: parse.has_component,
+                has_time_component: false
+            })
+        case Some { char } ->
+            if !(match char with
+                case '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' -> true
+                case _ -> false)
+            then Error { __invalid("expected digit or `T`, got `" + char + "`") }
+            else {
+                let parse_number <- __parse_digits(parse.buffer)
+                match parse_number.buffer[0] with
+                case None -> Error { __invalid("missing designator after `" + parse_number.value + "`") }
+                case Some { designator } -> {
+                    let next_parse <- __apply_component(__DurationParse {
+                        buffer: parse_number.buffer[1:],
+                        value: parse.value,
+                        in_time: parse.in_time,
+                        previous_order: parse.previous_order,
+                        has_component: parse.has_component,
+                        has_time_component: parse.has_time_component
+                    }, parse_number.value, "" + designator)
+                    __parse_designator_duration(next_parse)
+                }
+            }
+    ---
+    if !iso.starts_with("P")
+    then Error { __invalid("must start with `P`") }
+    else {
+        let duration = iso[1:]
+        if duration.is_empty
+        then Error { __invalid("missing components") }
+        else if __is_combined_basic(duration)
+        then __parse_combined_basic(duration)
+        else if __is_combined_extended(duration)
+        then __parse_combined_extended(duration)
+        else __parse_designator_duration(__DurationParse {
+            buffer: duration,
+            value: __Parts { years: 0, months: 0, weeks: 0, days: 0, hours: 0, minutes: 0, seconds: 0 },
+            in_time: false,
+            previous_order: 0,
+            has_component: false,
+            has_time_component: false
+        })
+    }
