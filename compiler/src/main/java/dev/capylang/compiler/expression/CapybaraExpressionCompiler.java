@@ -6037,7 +6037,15 @@ public class CapybaraExpressionCompiler {
     }
 
     private String canonicalModuleName(String moduleName) {
-        return moduleName.startsWith("/") ? moduleName.substring(1) : moduleName;
+        var normalized = moduleName.replace('\\', '/');
+        var parts = new java.util.ArrayList<String>();
+        for (var part : normalized.split("/+")) {
+            if (part.isBlank() || part.equals(".")) {
+                continue;
+            }
+            parts.add(part);
+        }
+        return String.join("/", parts);
     }
 
     private Result<CompiledExpression> applyConstructorPipeline(
