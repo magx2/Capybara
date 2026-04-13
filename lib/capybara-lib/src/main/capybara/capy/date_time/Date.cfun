@@ -1,7 +1,10 @@
 from /capy/lang/Result import {*}
 
+/// Checks whether a year is a leap year in the Gregorian calendar.
 fun _leap_year(year: int): bool = (year % 4 == 0 & year % 100 != 0) | year % 400 == 0
+/// Returns `true` when the month has 31 days.
 fun _days_31_month(month: int): bool = month == JANUARY | month == MARCH | month == MAY | month == JULY | month == AUGUST | month == OCTOBER | month == DECEMBER
+/// Returns `true` when the month has 30 days.
 fun _days_30_month(month: int): bool = month == APRIL | month == JUNE | month == SEPTEMBER | month == NOVEMBER
 
 const JANUARY: int = 1
@@ -17,6 +20,10 @@ const OCTOBER: int = 10
 const NOVEMBER: int = 11
 const DECEMBER: int = 12
 
+/// Calendar date represented by day, month and year.
+///
+/// The constructor validates the provided values and returns an error for
+/// impossible dates.
 data Date {
     day: int,
     month: int,
@@ -33,8 +40,11 @@ data Date {
 
 const UNIX_DATE: Date = Date! { day: 1, month: JANUARY, year: 1970 }
 
+/// Returns `true` when this date is in a leap year.
 fun Date.leap_year(): bool = _leap_year(this.year)
+/// Returns the first day of this date's month.
 fun Date.first_day_of_month(): Date = Date! { day: 1, month: this.month, year: this.year }
+/// Returns the last valid day of this date's month.
 fun Date.last_day_of_month(): Date =
     if this.month == FEBRUARY
     then if _leap_year(this.year)
