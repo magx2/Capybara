@@ -26,7 +26,7 @@ localTypeDeclaration: 'type' genericTypeDeclaration constructorClause? '=' gener
                     | 'type' genericTypeDeclaration '{' fieldDeclarationList? '}' constructorClause? '=' genericTypeDeclaration (PIPE genericTypeDeclaration)*;
 localDataDeclaration: 'data' genericTypeDeclaration '{' fieldDeclarationList? '}' constructorClause?
                     | 'data' genericTypeDeclaration '=' '{' fieldDeclarationList? '}' constructorClause?;
-localConstDeclaration: 'const' privateLocalConstName (':' type)? '=' expressionNoLet;
+localConstDeclaration: docComment* 'const' privateLocalConstName (':' type)? '=' expressionNoLet;
 privateLocalConstName: NAME | TYPE;
 functionNameDeclaration: identifier | genericTypeDeclaration DOT methodIdentifier;
 methodIdentifier: identifier | 'with' | INFIX_METHOD_LITERAL;
@@ -39,7 +39,7 @@ dataDeclaration: docComment* VISIBILITY? 'data' genericTypeDeclaration '{' field
                | docComment* VISIBILITY? 'data' genericTypeDeclaration '=' '{' fieldDeclarationList? '}' constructorClause?;
 constructorClause: 'with' 'constructor' '{' expression '}';
 singleDeclaration: 'single' TYPE;
-constDeclaration: VISIBILITY? 'const' TYPE (':' type)? '=' expressionNoLet;
+constDeclaration: docComment* VISIBILITY? 'const' TYPE (':' type)? '=' expressionNoLet;
 fieldDeclarationList: fieldDeclaration (',' fieldDeclaration)* ','?;
 fieldDeclaration: identifier ':' type
                 | STRING_LITERAL ':' type
@@ -331,4 +331,3 @@ DOC_COMMENT : '///' ~[\r\n]*;
 LINE_COMMENT : '//' ~[\r\n]* -> skip;
 BLOCK_COMMENT : '/*' .*? '*/' -> skip;
 WS : [ \t\r\n]+ -> skip;
-

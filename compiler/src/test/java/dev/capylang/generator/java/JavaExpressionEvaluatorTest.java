@@ -141,10 +141,32 @@ class JavaExpressionEvaluatorTest {
         assertThat(generated).contains("JUnitReport");
         assertThat(generated).contains("Node type");
         assertThat(generated).contains("JUnitNode");
-        assertThat(generated).contains("/**");
-        assertThat(generated).contains(" * Complete report");
-        assertThat(generated).contains(" */");
-        assertThat(generated).doesNotContain("///");
+        assertThat(generated).contains("/// Complete report");
+        assertThat(generated).contains("/// Node type");
+    }
+
+    @Test
+    void shouldGenerateCommentsForTopLevelAndLocalConsts() {
+        var program = compileProgram("""
+                /// Global threshold
+                const THRESHOLD: int = 10
+
+                fun config(): int =
+                    /// Internal threshold
+                    const __threshold: int = THRESHOLD
+                    ---
+                    __threshold
+                """);
+
+        var generated = new JavaGenerator().generate(program).modules().stream()
+                .map(dev.capylang.generator.GeneratedModule::code)
+                .collect(joining("\n"));
+
+        assertThat(generated).contains("/// Global threshold");
+        assertThat(generated).contains("public static final int");
+        assertThat(generated).contains("/// Internal threshold");
+        assertThat(generated).contains("__configLocalConst0Threshold");
+        assertThat(generated).doesNotContain(" * Global threshold");
     }
 
     @Test

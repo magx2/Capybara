@@ -637,15 +637,15 @@ public final class JavaGenerator implements Generator {
             return "";
         }
         return comments.stream()
-                .map(line -> line.isEmpty() ? " *" : " * " + line)
-                .collect(joining("\n", "/**\n", "\n */\n"));
+                .map(line -> line.isEmpty() ? "///" : "/// " + line)
+                .collect(joining("\n", "", "\n"));
     }
 
     private String mapJavaConst(
             JavaConst javaConst,
             boolean allowPrivateStaticMembers,
             boolean ownerInterfaceMember,
-            String ownerTypeName
+        String ownerTypeName
     ) {
         var visibility = constVisibility(javaConst, allowPrivateStaticMembers, ownerInterfaceMember);
         return mapJavaDoc(javaConst.comments())
@@ -716,7 +716,5 @@ public final class JavaGenerator implements Generator {
     }
 
 }
-
-
 
 
