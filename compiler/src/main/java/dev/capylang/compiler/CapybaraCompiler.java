@@ -58,12 +58,21 @@ public class CapybaraCompiler {
     private SortedSet<CompiledModule> mergeLibraries(Collection<RawModule> rawModules, SortedSet<CompiledModule> libraries) {
         var merged = new TreeSet<>(loadBundledLibraries(rawModules));
         libraries.forEach(library -> {
-            // TreeSet uniqueness is based on module path+name, so remove+add replaces
-            // the bundled stdlib module with an explicitly provided one when they match.
-            merged.remove(library);
+            // Replace bundled stdlib modules using canonical module identity so
+            // `/capy/foo/Bar` and `capy/foo/Bar` are treated as the same module.
+            merged.removeIf(existing -> canonicalModuleIdentity(existing.path(), existing.name())
+                    .equals(canonicalModuleIdentity(library.path(), library.name())));
             merged.add(library);
         });
         return merged;
+    }
+
+    private String canonicalModuleIdentity(String path, String name) {
+        var normalizedPath = normalizeModulePath(path);
+        if (normalizedPath.isBlank()) {
+            return name;
+        }
+        return normalizedPath + "/" + name;
     }
 
     private static SortedSet<CompiledModule> loadBundledLibraries(Collection<RawModule> rawModules) {
