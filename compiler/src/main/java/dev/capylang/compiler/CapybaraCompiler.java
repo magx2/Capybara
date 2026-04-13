@@ -1026,10 +1026,14 @@ public class CapybaraCompiler {
 
     private String normalizeModulePath(String modulePath) {
         var normalized = modulePath.replace('\\', '/');
-        while (normalized.endsWith("/") && normalized.length() > 1) {
-            normalized = normalized.substring(0, normalized.length() - 1);
+        var parts = new java.util.ArrayList<String>();
+        for (var part : normalized.split("/+")) {
+            if (part.isBlank() || part.equals(".")) {
+                continue;
+            }
+            parts.add(part);
         }
-        return normalized;
+        return String.join("/", parts);
     }
 
     private List<CapybaraExpressionCompiler.FunctionSignature> mergeSignatures(
