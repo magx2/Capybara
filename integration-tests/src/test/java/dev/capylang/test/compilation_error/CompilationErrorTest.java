@@ -156,7 +156,7 @@ public class CompilationErrorTest {
         assertThat(result).isInstanceOf(Result.Error.class);
         var error = ((Result.Error<CompiledProgram>) result).errors().first();
         assertThat(error.message())
-                .contains("Constructor bypass `User! { ... }` can only be used in module `/foo/model/UserModel` where `User` is defined");
+                .contains("Constructor bypass `User! { ... }` can only be used in module `foo/model/UserModel` where `User` is defined");
     }
 
     @Test
