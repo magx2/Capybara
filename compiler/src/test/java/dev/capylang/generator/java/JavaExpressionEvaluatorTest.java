@@ -141,10 +141,8 @@ class JavaExpressionEvaluatorTest {
         assertThat(generated).contains("JUnitReport");
         assertThat(generated).contains("Node type");
         assertThat(generated).contains("JUnitNode");
-        assertThat(generated).contains("/**");
-        assertThat(generated).contains(" * Complete report");
-        assertThat(generated).contains(" */");
-        assertThat(generated).doesNotContain("///");
+        assertThat(generated).contains("/// Complete report");
+        assertThat(generated).contains("/// Node type");
     }
 
     @Test

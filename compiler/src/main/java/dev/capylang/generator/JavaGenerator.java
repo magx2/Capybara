@@ -637,15 +637,6 @@ public final class JavaGenerator implements Generator {
             return "";
         }
         return comments.stream()
-                .map(line -> line.isEmpty() ? " *" : " * " + line)
-                .collect(joining("\n", "/**\n", "\n */\n"));
-    }
-
-    private String mapMarkdownDoc(List<String> comments) {
-        if (comments == null || comments.isEmpty()) {
-            return "";
-        }
-        return comments.stream()
                 .map(line -> line.isEmpty() ? "///" : "/// " + line)
                 .collect(joining("\n", "", "\n"));
     }
@@ -657,7 +648,7 @@ public final class JavaGenerator implements Generator {
         String ownerTypeName
     ) {
         var visibility = constVisibility(javaConst, allowPrivateStaticMembers, ownerInterfaceMember);
-        return mapMarkdownDoc(javaConst.comments())
+        return mapJavaDoc(javaConst.comments())
                + visibility + "static final " + javaConst.type() + " " + javaConst.name() + " = "
                + extractInitializerExpression(evaluateExpression(javaConst.expression(), List.of(), ownerTypeName))
                + ";\n";
@@ -725,6 +716,5 @@ public final class JavaGenerator implements Generator {
     }
 
 }
-
 
 
