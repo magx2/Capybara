@@ -2,6 +2,7 @@ package dev.capylang.test;
 
 import org.junit.jupiter.api.Test;
 
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class ObjectOrientedRuntimeTest {
@@ -28,5 +29,24 @@ class ObjectOrientedRuntimeTest {
 
         assertThat(printable.print()).isEqualTo("hello Capy!");
         assertThat(naming.bracket("Capy")).isEqualTo("[Capy]");
+    }
+
+    @Test
+    void nestedStatementBlockCanReturnFromMethod() {
+        var person = new Person("Capy");
+
+        assertThat(person.nested_label()).isEqualTo("hello Capy");
+    }
+
+    @Test
+    void voidMethodsCompileAndExecuteForExpressionAndBlockBodies() throws Exception {
+        var person = new Person("Capy");
+
+        assertThat(Person.class.getMethod("ping").getReturnType()).isEqualTo(void.class);
+        assertThat(Person.class.getMethod("warmup", boolean.class).getReturnType()).isEqualTo(void.class);
+
+        assertThatCode(() -> person.ping()).doesNotThrowAnyException();
+        assertThatCode(() -> person.warmup(true)).doesNotThrowAnyException();
+        assertThatCode(() -> person.warmup(false)).doesNotThrowAnyException();
     }
 }
