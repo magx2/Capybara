@@ -60,7 +60,7 @@ fieldDeclaration
     ;
 
 methodDeclaration
-    : visibility? methodModifier* 'fun' NAME '(' parameters? ')' ':' type methodBody?
+    : visibility? methodModifier* 'def' NAME '(' parameters? ')' ':' type methodBody?
     ;
 
 methodBody
@@ -69,7 +69,7 @@ methodBody
     ;
 
 interfaceMethodDeclaration
-    : visibility? methodModifier* 'fun' NAME '(' parameters? ')' ':' type
+    : visibility? methodModifier* 'def' NAME '(' parameters? ')' ':' type
     ;
 
 initBlock
@@ -128,7 +128,7 @@ VISIBILITY: 'local';
 BOOL_LITERAL: 'true' | 'false';
 COLLECTION: 'list' | 'set' | 'dict';
 NAME : [_]* [a-z] [a-zA-Z0-9_]*;
-identifier: NAME | COLLECTION | 'fun' | 'type' | 'byte' | 'int' | 'long' | 'double' | 'bool' | 'string' | 'float' | 'nothing' | 'any' | 'return';
+identifier: NAME | COLLECTION | 'def' | 'type' | 'byte' | 'int' | 'long' | 'double' | 'bool' | 'string' | 'float' | 'nothing' | 'any' | 'return';
 
 type
     : COLLECTION '[' type ']'
@@ -239,7 +239,7 @@ functionReference: COLON identifier;
 functionCall
     : NAME LPAREN argumentList? RPAREN
     | COLLECTION LPAREN argumentList? RPAREN
-    | 'fun' LPAREN argumentList? RPAREN
+    | 'def' LPAREN argumentList? RPAREN
     | 'byte' LPAREN argumentList? RPAREN
     | 'int' LPAREN argumentList? RPAREN
     | 'long' LPAREN argumentList? RPAREN

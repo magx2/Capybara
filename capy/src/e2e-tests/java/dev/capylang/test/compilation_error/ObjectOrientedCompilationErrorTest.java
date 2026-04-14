@@ -13,6 +13,30 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class ObjectOrientedCompilationErrorTest {
     @Test
+    void shouldRejectFunKeywordForObjectOrientedMethods() {
+        var result = CapybaraCompiler.INSTANCE.compile(List.of(
+                new RawModule(
+                        "Printable",
+                        "/foo/boo",
+                        """
+                                interface Printable {
+                                    fun print(): string
+                                }
+                                """,
+                        SourceKind.OBJECT_ORIENTED
+                )
+        ), new TreeSet<>());
+
+        assertThat(result).isInstanceOf(Result.Error.class);
+        assertThat(((Result.Error<?>) result).errors())
+                .singleElement()
+                .satisfies(error -> {
+                    assertThat(error.file()).isEqualTo("/foo/boo/Printable.coo");
+                    assertThat(error.message()).contains("line 2");
+                });
+    }
+
+    @Test
     void shouldReportParserErrorsForMalformedObjectOrientedModules() {
         var result = CapybaraCompiler.INSTANCE.compile(List.of(
                 new RawModule(
@@ -20,7 +44,7 @@ class ObjectOrientedCompilationErrorTest {
                         "/foo/boo",
                         """
                                 interface Printable {
-                                    fun print(): string =
+                                    def print(): string =
                                 }
                                 """,
                         SourceKind.OBJECT_ORIENTED

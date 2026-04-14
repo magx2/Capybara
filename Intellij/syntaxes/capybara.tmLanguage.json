@@ -130,7 +130,7 @@
       "patterns": [
         {
           "name": "keyword.control.capybara",
-          "match": "\\b(fun|type|enum|data|single|const|local|match|with|constructor|case|when|if|then|else|let|from|import|except|class|trait|interface|field|open|abstract|override|final|private|public|init|super)\\b"
+          "match": "\\b(fun|def|type|enum|data|single|const|local|match|with|constructor|case|when|if|then|else|let|from|import|except|class|trait|interface|field|open|abstract|override|final|private|public|init|super)\\b"
         },
         {
           "name": "keyword.operator.constructor.capybara",
@@ -162,7 +162,7 @@
       "patterns": [
         {
           "name": "meta.function.documented.private.capybara",
-          "match": "((?:^\\s*///.*\\r?\\n)+)(\\s*)(fun)(\\s+)(__[A-Za-z0-9_]+)",
+          "match": "((?:^\\s*///.*\\r?\\n)+)(\\s*)((?:fun|def))(\\s+)(__[A-Za-z0-9_]+)",
           "captures": {
             "1": {
               "name": "comment.block.documentation.capybara"
@@ -177,7 +177,7 @@
         },
         {
           "name": "meta.function.documented.capybara",
-          "match": "((?:^\\s*///.*\\r?\\n)+)(\\s*)(fun)(\\s+)([A-Za-z_][A-Za-z0-9_]*)",
+          "match": "((?:^\\s*///.*\\r?\\n)+)(\\s*)((?:fun|def))(\\s+)([A-Za-z_][A-Za-z0-9_]*)",
           "captures": {
             "1": {
               "name": "comment.block.documentation.capybara"
@@ -384,6 +384,5 @@
     }
   }
 }
-
 
 

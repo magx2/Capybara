@@ -120,7 +120,7 @@ class CapyTest {
                 class Main(name: string) {
                     field name: string = name
 
-                    fun greet(): string = "hello " + this.name
+                    def greet(): string = "hello " + this.name
                 }
                 """);
         var generatedDir = tempDir.resolve("oo-source-generated");
@@ -156,7 +156,7 @@ class CapyTest {
         Files.writeString(sourceDir.resolve("foo").resolve("User.coo"), """
                 class User(name: string) {
                     field name: string = name
-                    fun greet(): string = "hi " + this.name
+                    def greet(): string = "hi " + this.name
                 }
                 """);
         var generatedDir = tempDir.resolve("mixed-oo-functional-generated");

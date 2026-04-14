@@ -20,7 +20,7 @@ class ObjectOrientedMethodReturnCompilationErrorTest {
                         "/foo/boo",
                         """
                                 class InvalidReturn {
-                                    fun broken(): int {
+                                    def broken(): int {
                                         return
                                     }
                                 }
@@ -46,7 +46,7 @@ class ObjectOrientedMethodReturnCompilationErrorTest {
                         "/foo/boo",
                         """
                                 class InvalidIfReturn {
-                                    fun broken(flag: bool): int {
+                                    def broken(flag: bool): int {
                                         if flag return 1
                                         else {
                                             return 0
