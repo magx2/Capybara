@@ -122,6 +122,30 @@ class ObjectOrientedParserTest {
     }
 
     @Test
+    @DisplayName("should reject super bracket parent call syntax")
+    void rejectSuperBracketParentCalls() {
+        var result = ObjectOrientedParser.INSTANCE.parseModule(new RawModule(
+                "Broken",
+                "/parser",
+                """
+                        open class Base {
+                            def label(): string = "base"
+                        }
+
+                        class Broken: Base {
+                            def print(): string = super[Base].label()
+                        }
+                        """,
+                SourceKind.OBJECT_ORIENTED
+        ));
+
+        assertThat(result).isInstanceOf(Result.Error.class);
+        assertThat(((Result.Error<ObjectOrientedModule>) result).errors())
+                .singleElement()
+                .satisfies(error -> assertThat(error.file()).isEqualTo("/parser/Broken.coo"));
+    }
+
+    @Test
     @DisplayName("should reject bare expression statements in method blocks")
     void rejectBareExpressionStatements() {
         var result = ObjectOrientedParser.INSTANCE.parseModule(new RawModule(
@@ -180,7 +204,7 @@ class ObjectOrientedParserTest {
                                 }
                             }
 
-                            def call_parent(): string = super[Base].label()
+                            def call_parent(): string = Base.label()
                         }
                         """,
                 SourceKind.OBJECT_ORIENTED

@@ -187,7 +187,6 @@ expressionNoLet
     | constructorData
     | matchExpression
     | thisExpression
-    | superCall
     ;
 
 indexLiteral: MINUS? INT_LITERAL;
@@ -227,7 +226,6 @@ expressionNoLetNoPipe
     | constructorData
     | matchExpressionNoPipe
     | thisExpression
-    | superCall
     ;
 
 indexNoPipeLiteral: MINUS? INT_LITERAL;
@@ -254,7 +252,6 @@ functionCall
 
 value: literal | identifier | typeReference;
 thisExpression: 'this';
-superCall: 'super' LBRACK typeReference RBRACK DOT NAME LPAREN argumentList? RPAREN;
 expressionBlock: LBRACE expression RBRACE;
 argumentList: expression (COMMA expression)*;
 methodArgumentList: methodArgument (COMMA methodArgument)*;
