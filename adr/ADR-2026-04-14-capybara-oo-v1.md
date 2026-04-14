@@ -33,3 +33,15 @@ Capybara OO v1 starts with a separate frontend boundary instead of extending `Fu
   - trait state and initialization order
   - `.cfun`/`.coo` interoperability
   - Java-first lowering and explicit JS/Python behavior
+
+## Method Bodies v1
+
+- `.coo` methods support either `= expression` bodies or brace-delimited statement blocks.
+- `.coo` reuses the functional expression core from `Functional.g4` as closely as practical.
+- Expressions are not valid stand-alone statements in OO method blocks.
+- v1 statement set is intentionally minimal:
+  - `let`
+  - `return`
+  - `if` / `else`
+  - nested statement blocks
+- Mutation-oriented statements such as assignment, loops, and exception control flow are postponed.

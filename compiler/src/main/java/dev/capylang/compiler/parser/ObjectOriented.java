@@ -1,6 +1,7 @@
 package dev.capylang.compiler.parser;
 
 import java.util.List;
+import java.util.Optional;
 
 public record ObjectOriented(List<TypeDeclaration> definitions) {
     public sealed interface TypeDeclaration permits ClassDeclaration, TraitDeclaration, InterfaceDeclaration {
@@ -12,6 +13,12 @@ public record ObjectOriented(List<TypeDeclaration> definitions) {
     }
 
     public sealed interface MemberDeclaration permits FieldDeclaration, MethodDeclaration, InitBlock {
+    }
+
+    public sealed interface MethodBody permits ExpressionBody, StatementBlock {
+    }
+
+    public sealed interface Statement permits LetStatement, ReturnStatement, IfStatement, StatementBlock {
     }
 
     public record ClassDeclaration(
@@ -41,7 +48,7 @@ public record ObjectOriented(List<TypeDeclaration> definitions) {
             String name,
             String type,
             String visibility,
-            boolean hasInitializer
+            Optional<String> initializer
     ) implements MemberDeclaration {
     }
 
@@ -51,11 +58,26 @@ public record ObjectOriented(List<TypeDeclaration> definitions) {
             String returnType,
             String visibility,
             List<String> modifiers,
-            boolean hasBody
+            Optional<MethodBody> body
     ) implements MemberDeclaration {
     }
 
-    public record InitBlock() implements MemberDeclaration {
+    public record InitBlock(StatementBlock body) implements MemberDeclaration {
+    }
+
+    public record ExpressionBody(String expression) implements MethodBody {
+    }
+
+    public record StatementBlock(List<Statement> statements) implements MethodBody, Statement {
+    }
+
+    public record LetStatement(String name, Optional<String> type, String expression) implements Statement {
+    }
+
+    public record ReturnStatement(String expression) implements Statement {
+    }
+
+    public record IfStatement(String condition, StatementBlock thenBranch, Optional<Statement> elseBranch) implements Statement {
     }
 
     public record Parameter(String name, String type) {

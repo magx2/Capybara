@@ -158,7 +158,7 @@ public final class ObjectOrientedParser {
                     if (member.methodDeclaration() != null) {
                         return methodDeclaration(member.methodDeclaration());
                     }
-                    return new ObjectOriented.InitBlock();
+                    return initBlock(member.initBlock());
                 })
                 .toList();
     }
@@ -168,7 +168,7 @@ public final class ObjectOrientedParser {
                 context.NAME().getText(),
                 context.type().getText(),
                 context.visibility() == null ? "public" : context.visibility().getText(),
-                context.expression() != null
+                context.expression() == null ? java.util.Optional.empty() : java.util.Optional.of(context.expression().getText())
         );
     }
 
@@ -179,7 +179,7 @@ public final class ObjectOrientedParser {
                 context.type().getText(),
                 context.visibility() == null ? "public" : context.visibility().getText(),
                 context.methodModifier().stream().map(org.antlr.v4.runtime.RuleContext::getText).toList(),
-                context.expression() != null
+                context.methodBody() == null ? java.util.Optional.empty() : java.util.Optional.of(methodBody(context.methodBody()))
         );
     }
 
@@ -190,7 +190,60 @@ public final class ObjectOrientedParser {
                 context.type().getText(),
                 context.visibility() == null ? "public" : context.visibility().getText(),
                 context.methodModifier().stream().map(org.antlr.v4.runtime.RuleContext::getText).toList(),
-                false
+                java.util.Optional.empty()
+        );
+    }
+
+    private ObjectOriented.InitBlock initBlock(dev.capylang.parser.antlr.ObjectOrientedParser.InitBlockContext context) {
+        return new ObjectOriented.InitBlock(statementBlock(context.statementBlock()));
+    }
+
+    private ObjectOriented.MethodBody methodBody(dev.capylang.parser.antlr.ObjectOrientedParser.MethodBodyContext context) {
+        if (context.expression() != null) {
+            return new ObjectOriented.ExpressionBody(context.expression().getText());
+        }
+        return statementBlock(context.statementBlock());
+    }
+
+    private ObjectOriented.StatementBlock statementBlock(dev.capylang.parser.antlr.ObjectOrientedParser.StatementBlockContext context) {
+        return new ObjectOriented.StatementBlock(context.statement().stream().map(this::statement).toList());
+    }
+
+    private ObjectOriented.Statement statement(dev.capylang.parser.antlr.ObjectOrientedParser.StatementContext context) {
+        if (context.letStatement() != null) {
+            return letStatement(context.letStatement());
+        }
+        if (context.returnStatement() != null) {
+            return returnStatement(context.returnStatement());
+        }
+        if (context.ifStatement() != null) {
+            return ifStatement(context.ifStatement());
+        }
+        return statementBlock(context.statementBlock());
+    }
+
+    private ObjectOriented.LetStatement letStatement(dev.capylang.parser.antlr.ObjectOrientedParser.LetStatementContext context) {
+        return new ObjectOriented.LetStatement(
+                context.identifier().getText(),
+                context.type() == null ? java.util.Optional.empty() : java.util.Optional.of(context.type().getText()),
+                context.expression().getText()
+        );
+    }
+
+    private ObjectOriented.ReturnStatement returnStatement(dev.capylang.parser.antlr.ObjectOrientedParser.ReturnStatementContext context) {
+        return new ObjectOriented.ReturnStatement(context.expression().getText());
+    }
+
+    private ObjectOriented.IfStatement ifStatement(dev.capylang.parser.antlr.ObjectOrientedParser.IfStatementContext context) {
+        java.util.Optional<ObjectOriented.Statement> elseBranch = context.ifStatement() != null
+                ? java.util.Optional.of(ifStatement(context.ifStatement()))
+                : context.statementBlock().size() > 1
+                        ? java.util.Optional.of(statementBlock(context.statementBlock(1)))
+                        : java.util.Optional.empty();
+        return new ObjectOriented.IfStatement(
+                context.expression().getText(),
+                statementBlock(context.statementBlock(0)),
+                elseBranch
         );
     }
 
@@ -199,7 +252,7 @@ public final class ObjectOrientedParser {
             return List.of();
         }
         return context.parameter().stream()
-                .map(parameter -> new ObjectOriented.Parameter(parameter.NAME().getText(), parameter.type().getText()))
+                .map(parameter -> new ObjectOriented.Parameter(parameter.identifier().getText(), parameter.type().getText()))
                 .toList();
     }
 
