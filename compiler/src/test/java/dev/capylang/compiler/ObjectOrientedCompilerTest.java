@@ -11,7 +11,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class ObjectOrientedCompilerTest {
     @Test
-    void shouldReportUnsupportedObjectOrientedModules() {
+    void shouldCompileObjectOrientedModules() {
         var result = CapybaraCompiler.INSTANCE.compile(List.of(
                 new RawModule(
                         "User",
@@ -25,12 +25,14 @@ class ObjectOrientedCompilerTest {
                 )
         ), new TreeSet<>());
 
-        assertThat(result).isInstanceOf(Result.Error.class);
-        assertThat(((Result.Error<?>) result).errors())
+        assertThat(result).isInstanceOf(Result.Success.class);
+        var program = ((Result.Success<CompiledProgram>) result).value();
+        assertThat(program.modules()).isEmpty();
+        assertThat(program.objectOrientedModules())
                 .singleElement()
-                .satisfies(error -> {
-                    assertThat(error.file()).isEqualTo("/foo/boo/User.coo");
-                    assertThat(error.message()).contains("not yet supported by the compiler pipeline");
+                .satisfies(module -> {
+                    assertThat(module.name()).isEqualTo("User");
+                    assertThat(module.path()).isEqualTo("/foo/boo");
                 });
     }
 }

@@ -38,26 +38,32 @@ public class CapybaraCompiler {
             var objectOrientedModules = rawModules.stream()
                     .filter(rawModule -> rawModule.sourceKind() == SourceKind.OBJECT_ORIENTED)
                     .toList();
+            var parsedObjectOrientedModules = List.<ObjectOrientedModule>of();
             if (!objectOrientedModules.isEmpty()) {
-                var parsedObjectOrientedModules = ObjectOrientedParser.INSTANCE.parseModules(objectOrientedModules);
-                if (parsedObjectOrientedModules instanceof Result.Error<List<ObjectOrientedModule>> error) {
+                var ooParseResult = ObjectOrientedParser.INSTANCE.parseModules(objectOrientedModules);
+                if (ooParseResult instanceof Result.Error<List<ObjectOrientedModule>> error) {
                     return new Result.Error<>(error.errors());
                 }
-                return new Result.Error<>(objectOrientedModules.stream()
-                        .map(module -> new Result.Error.SingleError(
-                                0,
-                                0,
-                                module.file(),
-                                "Object-oriented `.coo` modules are parsed but not yet supported by the compiler pipeline"
-                        ))
-                        .toList());
+                parsedObjectOrientedModules = ((Result.Success<List<ObjectOrientedModule>>) ooParseResult).value();
             }
-            var program = CapybaraParser.INSTANCE.parseModule(rawModules);
+
+            var functionalModules = rawModules.stream()
+                    .filter(rawModule -> rawModule.sourceKind() == SourceKind.FUNCTIONAL)
+                    .toList();
+            if (functionalModules.isEmpty()) {
+                return Result.success(new CompiledProgram(new TreeSet<>(), parsedObjectOrientedModules));
+            }
+            var program = CapybaraParser.INSTANCE.parseModule(functionalModules);
             if (program instanceof Result.Error<Program> error) {
                 return new Result.Error<>(error.errors());
             }
-            var mergedLibraries = mergeLibraries(rawModules, libraries);
-            return compile(((Result.Success<Program>) program).value(), mergedLibraries);
+            var mergedLibraries = mergeLibraries(functionalModules, libraries);
+            var compiledProgram = compile(((Result.Success<Program>) program).value(), mergedLibraries);
+            if (compiledProgram instanceof Result.Error<CompiledProgram> error) {
+                return error;
+            }
+            var functionalProgram = ((Result.Success<CompiledProgram>) compiledProgram).value();
+            return Result.success(new CompiledProgram(functionalProgram.modules(), parsedObjectOrientedModules));
         } catch (RuntimeException e) {
             // Public boundary: source/compiler errors should not escape as exceptions.
             return new Result.Error<>(new Result.Error.SingleError(boundaryErrorMessage(e)));
