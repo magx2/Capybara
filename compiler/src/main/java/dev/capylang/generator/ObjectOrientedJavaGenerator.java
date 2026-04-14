@@ -422,6 +422,34 @@ public final class ObjectOrientedJavaGenerator {
                 });
                 code.append("\n");
             }
+            case ObjectOriented.WhileStatement whileStatement -> {
+                code.append(indent(indentLevel))
+                        .append("while (")
+                        .append(renderExpression(module, whileStatement.condition(), parentNames))
+                        .append(") {\n");
+                appendStatementBlockContents(code, module, whileStatement.body(), indentLevel + 1, parentNames);
+                code.append(indent(indentLevel)).append("}\n");
+            }
+            case ObjectOriented.DoWhileStatement doWhileStatement -> {
+                code.append(indent(indentLevel)).append("do {\n");
+                appendStatementBlockContents(code, module, doWhileStatement.body(), indentLevel + 1, parentNames);
+                code.append(indent(indentLevel))
+                        .append("} while (")
+                        .append(renderExpression(module, doWhileStatement.condition(), parentNames))
+                        .append(");\n");
+            }
+            case ObjectOriented.ForEachStatement forEachStatement -> {
+                code.append(indent(indentLevel))
+                        .append("for (")
+                        .append(forEachStatement.type().map(type -> renderType(type, false)).orElse("var"))
+                        .append(' ')
+                        .append(sanitizeIdentifier(forEachStatement.name()))
+                        .append(" : ")
+                        .append(renderExpression(module, forEachStatement.iterable(), parentNames))
+                        .append(") {\n");
+                appendStatementBlockContents(code, module, forEachStatement.body(), indentLevel + 1, parentNames);
+                code.append(indent(indentLevel)).append("}\n");
+            }
             case ObjectOriented.StatementBlock nestedBlock -> {
                 code.append(indent(indentLevel)).append("{\n");
                 appendStatementBlockContents(code, module, nestedBlock, indentLevel + 1, parentNames);

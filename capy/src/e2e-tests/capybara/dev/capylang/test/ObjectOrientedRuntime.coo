@@ -39,6 +39,40 @@ class Person(name: string): GreeterBase, Printable, BracketNaming {
         }
     }
 
+    def first_positive(values: list[int]): int {
+        for value in values {
+            if value > 0 {
+                return value
+            }
+        }
+        return 0
+    }
+
+    def first_large(values: list[int]): int {
+        foreach value: int in values {
+            if value > 10 {
+                return value
+            }
+        }
+        return 0
+    }
+
+    def while_flag(flag: bool): int {
+        while flag {
+            return 1
+        }
+        return 0
+    }
+
+    def do_once(flag: bool): int {
+        do {
+            if flag {
+                return 1
+            }
+            return 2
+        } while false
+    }
+
     def warmup(formal: bool): nothing {
         if formal {
             let label: string = this.bracket(this.name)
@@ -48,5 +82,23 @@ class Person(name: string): GreeterBase, Printable, BracketNaming {
         } else {
             let copy: string = this.name
         }
+    }
+
+    def foreach_warm(values: list[int]): nothing {
+        foreach value in values {
+            let label: string = this.bracket(this.name)
+        }
+    }
+
+    def while_warm(flag: bool): nothing {
+        while flag {
+            let label: string = this.name
+        }
+    }
+
+    def do_warm(): nothing {
+        do {
+            let label: string = this.describe(this.name)
+        } while false
     }
 }

@@ -59,4 +59,31 @@ class ObjectOrientedCompilationErrorTest {
                     assertThat(error.message()).contains("line 2");
                 });
     }
+
+    @Test
+    void shouldRejectLoopWithoutStatementBlock() {
+        var result = CapybaraCompiler.INSTANCE.compile(List.of(
+                new RawModule(
+                        "BrokenLoop",
+                        "/foo/boo",
+                        """
+                                class BrokenLoop {
+                                    def run(values: list[int]): int {
+                                        foreach value in values return value
+                                    }
+                                }
+                                """,
+                        SourceKind.OBJECT_ORIENTED
+                )
+        ), new TreeSet<>());
+
+        assertThat(result).isInstanceOf(Result.Error.class);
+        assertThat(((Result.Error<?>) result).errors())
+                .singleElement()
+                .satisfies(error -> {
+                    assertThat(error.file()).isEqualTo("/foo/boo/BrokenLoop.coo");
+                    assertThat(error.message()).contains("line 3:32");
+                    assertThat(error.message()).contains("missing '{' at 'return'");
+                });
+    }
 }

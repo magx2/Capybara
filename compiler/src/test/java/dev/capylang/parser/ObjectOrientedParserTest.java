@@ -258,6 +258,70 @@ class ObjectOrientedParserTest {
     }
 
     @Test
+    @DisplayName("should parse loop statements in method blocks")
+    void parseLoopStatements() {
+        var result = ObjectOrientedParser.INSTANCE.parseModule(new RawModule(
+                "Loops",
+                "/parser",
+                """
+                        class Loops {
+                            def first_positive(values: list[int]): int {
+                                for value in values {
+                                    if value > 0 {
+                                        return value
+                                    }
+                                }
+                                return 0
+                            }
+
+                            def first_large(values: list[int]): int {
+                                foreach value: int in values {
+                                    if value > 10 {
+                                        return value
+                                    }
+                                }
+                                return 0
+                            }
+
+                            def while_flag(flag: bool): int {
+                                while flag {
+                                    return 1
+                                }
+                                return 0
+                            }
+
+                            def do_once(flag: bool): int {
+                                do {
+                                    if flag {
+                                        return 1
+                                    }
+                                    return 2
+                                } while false
+                            }
+                        }
+                        """,
+                SourceKind.OBJECT_ORIENTED
+        ));
+
+        assertThat(result).isInstanceOf(Result.Success.class);
+        var module = ((Result.Success<ObjectOrientedModule>) result).value();
+        var loopsClass = (ObjectOriented.ClassDeclaration) module.objectOriented().definitions().getFirst();
+        var methods = loopsClass.members().stream()
+                .filter(ObjectOriented.MethodDeclaration.class::isInstance)
+                .map(ObjectOriented.MethodDeclaration.class::cast)
+                .toList();
+
+        assertThat(((ObjectOriented.StatementBlock) methods.get(0).body().orElseThrow()).statements().getFirst())
+                .isInstanceOf(ObjectOriented.ForEachStatement.class);
+        assertThat(((ObjectOriented.StatementBlock) methods.get(1).body().orElseThrow()).statements().getFirst())
+                .isInstanceOf(ObjectOriented.ForEachStatement.class);
+        assertThat(((ObjectOriented.StatementBlock) methods.get(2).body().orElseThrow()).statements().getFirst())
+                .isInstanceOf(ObjectOriented.WhileStatement.class);
+        assertThat(((ObjectOriented.StatementBlock) methods.get(3).body().orElseThrow()).statements().getFirst())
+                .isInstanceOf(ObjectOriented.DoWhileStatement.class);
+    }
+
+    @Test
     @DisplayName("should reject trailing bare expression after return-oriented statements")
     void rejectTrailingBareExpression() {
         var result = ObjectOrientedParser.INSTANCE.parseModule(new RawModule(
@@ -318,6 +382,28 @@ class ObjectOrientedParserTest {
                                 else {
                                     return 0
                                 }
+                            }
+                        }
+                        """,
+                SourceKind.OBJECT_ORIENTED
+        ));
+
+        assertThat(result).isInstanceOf(Result.Error.class);
+        assertThat(((Result.Error<ObjectOrientedModule>) result).errors())
+                .singleElement()
+                .satisfies(error -> assertThat(error.file()).isEqualTo("/parser/Broken.coo"));
+    }
+
+    @Test
+    @DisplayName("should reject while body without statement block")
+    void rejectWhileWithoutStatementBlock() {
+        var result = ObjectOrientedParser.INSTANCE.parseModule(new RawModule(
+                "Broken",
+                "/parser",
+                """
+                        class Broken {
+                            def run(flag: bool): int {
+                                while flag return 1
                             }
                         }
                         """,

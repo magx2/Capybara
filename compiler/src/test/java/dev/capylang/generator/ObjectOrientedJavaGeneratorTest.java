@@ -49,6 +49,40 @@ class ObjectOrientedJavaGeneratorTest {
                         let label: string = Base.label()
                         return label + " " + this.name
                     }
+
+                    def first_positive(values: list[int]): int {
+                        for value in values {
+                            if value > 0 {
+                                return value
+                            }
+                        }
+                        return 0
+                    }
+
+                    def first_large(values: list[int]): int {
+                        foreach value: int in values {
+                            if value > 10 {
+                                return value
+                            }
+                        }
+                        return 0
+                    }
+
+                    def while_flag(flag: bool): int {
+                        while flag {
+                            return 1
+                        }
+                        return 0
+                    }
+
+                    def do_once(flag: bool): int {
+                        do {
+                            if flag {
+                                return 1
+                            }
+                            return 2
+                        } while false
+                    }
                 }
                 """);
 
@@ -69,7 +103,11 @@ class ObjectOrientedJavaGeneratorTest {
                 .contains("public final class User extends Base implements Printable")
                 .contains("public String greet()")
                 .contains("return \"Hello \"+this.name;")
-                .contains("String label = super.label();");
+                .contains("String label = super.label();")
+                .contains("for (var value : values)")
+                .contains("for (int value : values)")
+                .contains("while (flag)")
+                .contains("} while (false);");
 
         var classesDir = compileGeneratedJava(generatedProgram);
         try (var classLoader = new URLClassLoader(new URL[]{classesDir.toUri().toURL()})) {
@@ -79,6 +117,12 @@ class ObjectOrientedJavaGeneratorTest {
 
             assertThat(userType.getMethod("greet").invoke(user)).isEqualTo("Hello Capy");
             assertThat(userType.getMethod("print").invoke(user)).isEqualTo("base Capy");
+            assertThat(userType.getMethod("first_positive", java.util.List.class).invoke(user, java.util.List.of(-1, 0, 3))).isEqualTo(3);
+            assertThat(userType.getMethod("first_large", java.util.List.class).invoke(user, java.util.List.of(4, 11, 15))).isEqualTo(11);
+            assertThat(userType.getMethod("while_flag", boolean.class).invoke(user, true)).isEqualTo(1);
+            assertThat(userType.getMethod("while_flag", boolean.class).invoke(user, false)).isEqualTo(0);
+            assertThat(userType.getMethod("do_once", boolean.class).invoke(user, true)).isEqualTo(1);
+            assertThat(userType.getMethod("do_once", boolean.class).invoke(user, false)).isEqualTo(2);
         }
     }
 
