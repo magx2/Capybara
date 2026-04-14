@@ -20,6 +20,7 @@ import static dev.capylang.generator.java.JavaExpressionEvaluator.evaluateExpres
 
 public final class JavaGenerator implements Generator {
     private static final Logger log = Logger.getLogger(JavaGenerator.class.getName());
+    private final ObjectOrientedJavaGenerator objectOrientedJavaGenerator = new ObjectOrientedJavaGenerator();
     private static final String METHOD_DECL_PREFIX = "__method__";
 
     @Override
@@ -31,7 +32,8 @@ public final class JavaGenerator implements Generator {
         var modules = program.modules().stream()
                 .map(module -> modules(module, timings, astBuilder))
                 .flatMap(List::stream)
-                .toList();
+                .collect(java.util.stream.Collectors.toCollection(ArrayList::new));
+        modules.addAll(time(timings::addSourceRenderNanos, () -> objectOrientedJavaGenerator.generate(program.objectOrientedModules())));
         log.info(() -> "Java generation timings: AST build="
                        + Duration.ofNanos(timings.astBuildNanos())
                        + ", Java source rendering="
@@ -977,5 +979,4 @@ public final class JavaGenerator implements Generator {
     }
 
 }
-
 

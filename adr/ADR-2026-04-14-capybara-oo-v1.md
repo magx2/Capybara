@@ -45,3 +45,16 @@ Capybara OO v1 starts with a separate frontend boundary instead of extending `Fu
   - `if` / `else`
   - nested statement blocks
 - Mutation-oriented statements such as assignment, loops, and exception control flow are postponed.
+
+## Java Backend v1
+
+- `.coo` now participates in the Java backend only.
+- The compiler keeps parsed OO modules alongside the functional linked program instead of forcing OO declarations into the functional IR.
+- Java generation is intentionally narrow in this slice:
+  - classes
+  - interfaces
+  - behavior-only traits
+  - fields on classes
+  - expression-bodied and block-bodied instance methods
+- Traits with state or init blocks remain unsupported in the Java backend.
+- JavaScript and Python generation must still reject `.coo` modules explicitly.

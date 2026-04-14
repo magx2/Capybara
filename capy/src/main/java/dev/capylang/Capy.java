@@ -1288,7 +1288,7 @@ public class Capy {
         outputModules.add(createCapyTestRuntimeModule(testFunctions));
         log.info("Created CapyTestRuntime module in " + Duration.ofNanos(System.nanoTime() - runtimeModuleStartedAt));
         log.info("Prepared compiled tests in " + Duration.ofNanos(System.nanoTime() - totalStartedAt));
-        return new CompiledProgram(outputModules);
+        return new CompiledProgram(outputModules, linkedProgram.objectOrientedModules());
     }
 
     private static List<TestFunctionRef> discoverTestFunctions(CompiledProgram linkedProgram) {
@@ -1443,10 +1443,16 @@ public class Capy {
         }
 
         var sourceModuleRefs = new TreeSet<>(sourceModules);
-        var filteredProgram = new CompiledProgram(linkedProgram.modules().stream()
-                .filter(module -> sourceModuleRefs.contains(new ModuleRef(module.name(), normalizeModulePath(module.path()))))
-                .toList());
-        var shouldCopyJavaLibResources = includeJavaLibResources && !filteredProgram.modules().isEmpty();
+        var filteredProgram = new CompiledProgram(
+                linkedProgram.modules().stream()
+                        .filter(module -> sourceModuleRefs.contains(new ModuleRef(module.name(), normalizeModulePath(module.path()))))
+                        .toList(),
+                linkedProgram.objectOrientedModules().stream()
+                        .filter(module -> sourceModuleRefs.contains(new ModuleRef(module.name(), normalizeModulePath(module.path()))))
+                        .toList()
+        );
+        var shouldCopyJavaLibResources = includeJavaLibResources
+                                         && (!filteredProgram.modules().isEmpty() || !filteredProgram.objectOrientedModules().isEmpty());
         return new GenerationInput(filteredProgram, shouldCopyJavaLibResources);
     }
 
@@ -1689,7 +1695,6 @@ public class Capy {
     record CompilationArtifacts(CompiledProgram program, List<ModuleRef> sourceModules) {
     }
 }
-
 
 
 

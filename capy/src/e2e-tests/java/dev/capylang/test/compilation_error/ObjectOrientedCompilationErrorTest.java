@@ -13,14 +13,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class ObjectOrientedCompilationErrorTest {
     @Test
-    void shouldFailFastForObjectOrientedModulesUntilPipelineExists() {
+    void shouldReportParserErrorsForMalformedObjectOrientedModules() {
         var result = CapybaraCompiler.INSTANCE.compile(List.of(
                 new RawModule(
                         "Printable",
                         "/foo/boo",
                         """
                                 interface Printable {
-                                    fun print(): string
+                                    fun print(): string =
                                 }
                                 """,
                         SourceKind.OBJECT_ORIENTED
@@ -32,7 +32,7 @@ class ObjectOrientedCompilationErrorTest {
                 .singleElement()
                 .satisfies(error -> {
                     assertThat(error.file()).isEqualTo("/foo/boo/Printable.coo");
-                    assertThat(error.message()).contains("Object-oriented `.coo` modules are parsed");
+                    assertThat(error.message()).contains("line 2");
                 });
     }
 }

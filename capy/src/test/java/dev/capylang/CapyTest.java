@@ -113,28 +113,74 @@ class CapyTest {
     }
 
     @Test
-    void shouldDiscoverObjectOrientedFilesAndReportUnsupportedCompilerPipeline() throws IOException {
+    void shouldCompileGenerateObjectOrientedFilesToJava() throws IOException {
         var sourceDir = Files.createDirectories(tempDir.resolve("oo-source-input"));
         Files.createDirectories(sourceDir.resolve("foo"));
         Files.writeString(sourceDir.resolve("foo").resolve("Main.coo"), """
-                class Main {
-                    fun greet(): string = "hello"
+                class Main(name: string) {
+                    field name: string = name
+
+                    fun greet(): string = "hello " + this.name
                 }
                 """);
-        var outputDir = Files.createDirectories(tempDir.resolve("oo-source-output"));
-        var stdout = new ByteArrayOutputStream();
+        var generatedDir = tempDir.resolve("oo-source-generated");
+        var linkedDir = tempDir.resolve("oo-source-linked");
         var stderr = new ByteArrayOutputStream();
 
-        var exitCode = Capy.execute(
-                new String[]{"compile", "-i", sourceDir.toString(), "-o", outputDir.toString()},
-                new PrintStream(stdout),
+        var exitCode = Capy.compileGenerate(
+                OutputType.JAVA,
+                sourceDir,
+                generatedDir,
+                linkedDir,
+                null,
+                null,
+                new TreeSet<>(),
+                false,
+                false,
+                "test-version",
                 new PrintStream(stderr)
         );
 
-        assertNotEquals(0, exitCode);
-        assertTrue(stderr.toString().contains("Main.coo"));
-        assertTrue(stderr.toString().contains("not yet supported by the compiler pipeline"));
-        assertFalse(Files.exists(outputDir.resolve("foo").resolve("Main.json")));
+        assertEquals(0, exitCode);
+        assertEquals("", stderr.toString());
+        assertTrue(Files.exists(generatedDir.resolve("foo").resolve("Main.java")));
+        assertTrue(Files.readString(generatedDir.resolve("foo").resolve("Main.java")).contains("hello "));
+        assertTrue(Files.exists(linkedDir.resolve("program.json")));
+    }
+
+    @Test
+    void shouldCompileGenerateMixedFunctionalAndObjectOrientedFiles() throws IOException {
+        var sourceDir = Files.createDirectories(tempDir.resolve("mixed-oo-functional-input"));
+        Files.createDirectories(sourceDir.resolve("foo"));
+        Files.writeString(sourceDir.resolve("foo").resolve("Main.cfun"), "fun main(): int = 1\n");
+        Files.writeString(sourceDir.resolve("foo").resolve("User.coo"), """
+                class User(name: string) {
+                    field name: string = name
+                    fun greet(): string = "hi " + this.name
+                }
+                """);
+        var generatedDir = tempDir.resolve("mixed-oo-functional-generated");
+        var linkedDir = tempDir.resolve("mixed-oo-functional-linked");
+        var stderr = new ByteArrayOutputStream();
+
+        var exitCode = Capy.compileGenerate(
+                OutputType.JAVA,
+                sourceDir,
+                generatedDir,
+                linkedDir,
+                null,
+                null,
+                new TreeSet<>(),
+                false,
+                false,
+                "test-version",
+                new PrintStream(stderr)
+        );
+
+        assertEquals(0, exitCode);
+        assertEquals("", stderr.toString());
+        assertTrue(Files.exists(generatedDir.resolve("foo").resolve("Main.java")));
+        assertTrue(Files.exists(generatedDir.resolve("foo").resolve("User.java")));
     }
 
     @Test
