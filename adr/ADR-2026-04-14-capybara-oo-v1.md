@@ -38,6 +38,10 @@ Capybara OO v1 starts with a separate frontend boundary instead of extending `Fu
 
 - `.coo` methods support either `= expression` bodies or brace-delimited statement blocks.
 - `.coo` reuses the functional expression core from `Functional.g4` as closely as practical.
+- `ObjectOriented.g4` should follow the same grammar architecture as `Functional.g4` where practical:
+  - shared expression layering
+  - shared qualified-type handling
+  - shared function-type notation
 - Expressions are not valid stand-alone statements in OO method blocks.
 - v1 statement set is intentionally minimal:
   - `let`

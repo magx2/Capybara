@@ -6,98 +6,41 @@ package dev.capylang.parser.antlr;
 
 program : definition+ EOF;
 
-definition
-    : classDeclaration
+definition:
+    classDeclaration
     | traitDeclaration
-    | interfaceDeclaration
-    ;
+    | interfaceDeclaration;
 
-classDeclaration
-    : docComment* classModifier* 'class' TYPE constructorParameters? inheritance? typeBody
-    ;
-
-traitDeclaration
-    : docComment* 'trait' TYPE inheritance? typeBody
-    ;
-
-interfaceDeclaration
-    : docComment* 'interface' TYPE interfaceInheritance? interfaceBody
-    ;
+classDeclaration: docComment* classModifier* 'class' TYPE constructorParameters? inheritanceClause? typeBody;
+traitDeclaration: docComment* 'trait' TYPE inheritanceClause? typeBody;
+interfaceDeclaration: docComment* 'interface' TYPE inheritanceClause? interfaceBody;
 
 classModifier
     : 'open'
     | 'abstract'
     ;
 
-inheritance
-    : ':' typeReference (',' typeReference)*
-    ;
-
-interfaceInheritance
-    : ':' typeReference (',' typeReference)*
-    ;
-
-typeBody
-    : '{' member* '}'
-    ;
-
-interfaceBody
-    : '{' interfaceMember* '}'
-    ;
-
-member
-    : fieldDeclaration
-    | methodDeclaration
-    | initBlock
-    ;
-
-interfaceMember
-    : interfaceMethodDeclaration
-    ;
-
-fieldDeclaration
-    : visibility? 'field' NAME ':' type ('=' expression)?
-    ;
-
-methodDeclaration
-    : visibility? methodModifier* 'def' NAME '(' parameters? ')' ':' type methodBody?
-    ;
-
-methodBody
-    : '=' expression
-    | statementBlock
-    ;
-
-interfaceMethodDeclaration
-    : visibility? methodModifier* 'def' NAME '(' parameters? ')' ':' type
-    ;
-
-initBlock
-    : 'init' statementBlock
-    ;
-
-statementBlock
-    : '{' statement* '}'
-    ;
-
-statement
-    : letStatement
-    | returnStatement
-    | ifStatement
-    | statementBlock
-    ;
-
-letStatement
-    : 'let' identifier (':' type)? letBindingOperator expression ';'?
-    ;
-
-returnStatement
-    : 'return' expression ';'?
-    ;
-
-ifStatement
-    : 'if' expression statementBlock ('else' (ifStatement | statementBlock))?
-    ;
+inheritanceClause: ':' qualifiedType (',' qualifiedType)*;
+typeBody: '{' memberDeclaration* '}';
+interfaceBody: '{' interfaceMemberDeclaration* '}';
+memberDeclaration: fieldDeclaration
+                 | methodDeclaration
+                 | initBlock;
+interfaceMemberDeclaration: interfaceMethodDeclaration;
+fieldDeclaration: docComment* visibility? 'field' identifier ':' type ('=' expression)?;
+methodDeclaration: docComment* visibility? methodModifier* 'def' identifier '(' parameters? ')' functionType methodBody?;
+methodBody: '=' expression
+          | statementBlock;
+interfaceMethodDeclaration: docComment* visibility? methodModifier* 'def' identifier '(' parameters? ')' functionType;
+initBlock: docComment* 'init' statementBlock;
+statementBlock: '{' statement* '}';
+statement: letStatement
+         | returnStatement
+         | ifStatement
+         | statementBlock;
+letStatement: 'let' identifier (':' type)? letBindingOperator expression ';'?;
+returnStatement: 'return' expression ';'?;
+ifStatement: 'if' expression statementBlock ('else' (ifStatement | statementBlock))?;
 
 methodModifier
     : 'open'
@@ -116,22 +59,16 @@ constructorParameters
     : '(' parameters? ')'
     ;
 
-parameters
-    : parameter (',' parameter)*
-    ;
-
-parameter
-    : identifier ':' type
-    ;
+parameters: parameter (',' parameter)*;
+parameter: identifier ':' type;
+functionType: ':' type;
 
 VISIBILITY: 'local';
 BOOL_LITERAL: 'true' | 'false';
 COLLECTION: 'list' | 'set' | 'dict';
 NAME : [_]* [a-z] [a-zA-Z0-9_]*;
 identifier: NAME | COLLECTION | 'def' | 'type' | 'byte' | 'int' | 'long' | 'double' | 'bool' | 'string' | 'float' | 'nothing' | 'any' | 'return';
-
-type
-    : COLLECTION '[' type ']'
+type: COLLECTION '[' type ']'
     | 'tuple' '[' type (COMMA type)+ ']'
     | LPAREN RPAREN FAT_ARROW type
     | LPAREN type (COMMA type)+ RPAREN FAT_ARROW type
@@ -146,10 +83,9 @@ type
     | 'any'
     | 'data'
     | 'nothing'
-    | typeReference ('[' type (',' type)* ']')?
-    ;
+    | qualifiedType ('[' type (',' type)* ']')?;
 
-typeReference: TYPE (DOT TYPE)*;
+qualifiedType: TYPE (DOT TYPE)*;
 TYPE: [_]* [A-Z][a-zA-Z0-9_]* | TYPE_FULL;
 TYPE_FULL: '/' [A-Za-z_][a-zA-Z0-9_]* ( '/' [A-Za-z_][a-zA-Z0-9_]* )+;
 INFIX_METHOD_LITERAL: '`' ('|l>' | [+\-*/\\^%$#@~!:<>|]+) '`';
@@ -247,10 +183,9 @@ functionCall
     | 'float' LPAREN argumentList? RPAREN
     | 'nothing' LPAREN argumentList? RPAREN
     | 'any' LPAREN argumentList? RPAREN
-    | TYPE DOT identifier LPAREN argumentList? RPAREN
+    | qualifiedType DOT identifier LPAREN argumentList? RPAREN
     ;
-
-value: literal | identifier | typeReference;
+value: literal | identifier | qualifiedType;
 thisExpression: 'this';
 expressionBlock: LBRACE expression RBRACE;
 argumentList: expression (COMMA expression)*;
@@ -306,7 +241,7 @@ patternType
     | 'any'
     | 'data'
     | 'nothing'
-    | typeReference ('[' type (',' type)* ']')?
+    | qualifiedType ('[' type (',' type)* ']')?
     ;
 
 constructorPattern: TYPE LBRACE fieldPatternList? RBRACE;
