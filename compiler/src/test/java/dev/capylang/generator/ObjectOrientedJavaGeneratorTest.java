@@ -46,7 +46,7 @@ class ObjectOrientedJavaGeneratorTest {
                     def greet(): string = "Hello " + this.name
 
                     override def print(): string {
-                        let label: string = super[Base].label()
+                        let label: string = Base.label()
                         return label + " " + this.name
                     }
                 }

@@ -13,6 +13,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 public final class ObjectOrientedJavaGenerator {
     private static final Set<String> JAVA_KEYWORDS = Set.of(
@@ -124,8 +125,14 @@ public final class ObjectOrientedJavaGenerator {
             code.append(renderConstructor(module, declaration, fields, initBlocks)).append("\n");
         }
 
+        var parentNames = Stream.concat(
+                        parents.classParent().stream(),
+                        parents.interfaceParents().stream()
+                )
+                .map(this::simpleTypeName)
+                .collect(Collectors.toUnmodifiableSet());
         for (int i = 0; i < methods.size(); i++) {
-            code.append(renderClassMethod(module, declaration, methods.get(i)));
+            code.append(renderClassMethod(module, declaration, methods.get(i), parentNames));
             if (i < methods.size() - 1) {
                 code.append("\n");
             }
@@ -171,7 +178,7 @@ public final class ObjectOrientedJavaGenerator {
                 code.append("        this.")
                         .append(sanitizeIdentifier(field.name()))
                         .append(" = ")
-                        .append(renderExpression(module, field.initializer().orElseThrow()))
+                        .append(renderExpression(module, field.initializer().orElseThrow(), Set.of()))
                         .append(";\n");
                 continue;
             }
@@ -185,7 +192,7 @@ public final class ObjectOrientedJavaGenerator {
         }
 
         for (var initBlock : initBlocks) {
-            appendStatementBlockContents(code, module, initBlock.body(), 2);
+            appendStatementBlockContents(code, module, initBlock.body(), 2, Set.of());
         }
         code.append("    }\n");
         return code.toString();
@@ -199,7 +206,7 @@ public final class ObjectOrientedJavaGenerator {
         }
         code.append(renderType(field.type(), false)).append(' ').append(sanitizeIdentifier(field.name()));
         if (field.initializer().isPresent() && !referencesAny(field.initializer().orElseThrow(), constructorParameterNames)) {
-            code.append(" = ").append(renderExpression(null, field.initializer().orElseThrow()));
+            code.append(" = ").append(renderExpression(null, field.initializer().orElseThrow(), Set.of()));
         }
         code.append(";");
         return code.toString();
@@ -208,7 +215,8 @@ public final class ObjectOrientedJavaGenerator {
     private String renderClassMethod(
             ObjectOrientedModule module,
             ObjectOriented.ClassDeclaration owner,
-            ObjectOriented.MethodDeclaration method
+            ObjectOriented.MethodDeclaration method,
+            Set<String> parentNames
     ) {
         var code = new StringBuilder();
         if (method.modifiers().contains("override")) {
@@ -246,7 +254,7 @@ public final class ObjectOrientedJavaGenerator {
             return code.toString();
         }
         code.append(" {\n");
-        appendMethodBody(code, module, method, 2);
+        appendMethodBody(code, module, method, 2, parentNames);
         code.append("    }\n");
         return code.toString();
     }
@@ -334,63 +342,81 @@ public final class ObjectOrientedJavaGenerator {
             return code.toString();
         }
         code.append(" {\n");
-        appendMethodBody(code, module, method, 2);
+        appendMethodBody(code, module, method, 2, Set.of());
         code.append("    }\n");
         return code.toString();
     }
 
-    private void appendMethodBody(StringBuilder code, ObjectOrientedModule module, ObjectOriented.MethodDeclaration method, int indentLevel) {
+    private void appendMethodBody(
+            StringBuilder code,
+            ObjectOrientedModule module,
+            ObjectOriented.MethodDeclaration method,
+            int indentLevel,
+            Set<String> parentNames
+    ) {
         method.body().ifPresent(body -> {
             if (body instanceof ObjectOriented.ExpressionBody expressionBody) {
                 if ("void".equals(renderType(method.returnType(), false))) {
                     code.append(indent(indentLevel))
-                            .append(renderExpression(module, expressionBody.expression()))
+                            .append(renderExpression(module, expressionBody.expression(), parentNames))
                             .append(";\n");
                     return;
                 }
                 code.append(indent(indentLevel))
                         .append("return ")
-                        .append(renderExpression(module, expressionBody.expression()))
+                        .append(renderExpression(module, expressionBody.expression(), parentNames))
                         .append(";\n");
                 return;
             }
-            appendStatementBlockContents(code, module, (ObjectOriented.StatementBlock) body, indentLevel);
+            appendStatementBlockContents(code, module, (ObjectOriented.StatementBlock) body, indentLevel, parentNames);
         });
     }
 
-    private void appendStatementBlockContents(StringBuilder code, ObjectOrientedModule module, ObjectOriented.StatementBlock block, int indentLevel) {
+    private void appendStatementBlockContents(
+            StringBuilder code,
+            ObjectOrientedModule module,
+            ObjectOriented.StatementBlock block,
+            int indentLevel,
+            Set<String> parentNames
+    ) {
         for (var statement : block.statements()) {
-            appendStatement(code, module, statement, indentLevel);
+            appendStatement(code, module, statement, indentLevel, parentNames);
         }
     }
 
-    private void appendStatement(StringBuilder code, ObjectOrientedModule module, ObjectOriented.Statement statement, int indentLevel) {
+    private void appendStatement(
+            StringBuilder code,
+            ObjectOrientedModule module,
+            ObjectOriented.Statement statement,
+            int indentLevel,
+            Set<String> parentNames
+    ) {
         switch (statement) {
             case ObjectOriented.LetStatement letStatement -> code.append(indent(indentLevel))
                     .append(letStatement.type().map(type -> renderType(type, false)).orElse("var"))
                     .append(' ')
                     .append(sanitizeIdentifier(letStatement.name()))
                     .append(" = ")
-                    .append(renderExpression(module, letStatement.expression()))
+                    .append(renderExpression(module, letStatement.expression(), parentNames))
                     .append(";\n");
             case ObjectOriented.ReturnStatement returnStatement -> code.append(indent(indentLevel))
                     .append("return ")
-                    .append(renderExpression(module, returnStatement.expression()))
+                    .append(renderExpression(module, returnStatement.expression(), parentNames))
                     .append(";\n");
             case ObjectOriented.IfStatement ifStatement -> {
                 code.append(indent(indentLevel))
                         .append("if (")
-                        .append(renderExpression(module, ifStatement.condition()))
+                        .append(renderExpression(module, ifStatement.condition(), parentNames))
                         .append(") {\n");
-                appendStatementBlockContents(code, module, ifStatement.thenBranch(), indentLevel + 1);
+                appendStatementBlockContents(code, module, ifStatement.thenBranch(), indentLevel + 1, parentNames);
                 code.append(indent(indentLevel)).append('}');
                 ifStatement.elseBranch().ifPresent(elseBranch -> {
                     if (elseBranch instanceof ObjectOriented.IfStatement nestedIf) {
                         code.append(" else ");
-                        appendInlineIf(code, module, nestedIf, indentLevel);
+                        appendInlineIf(code, module, nestedIf, indentLevel, parentNames);
                     } else {
                         code.append(" else {\n");
-                        appendStatementBlockContents(code, module, (ObjectOriented.StatementBlock) elseBranch, indentLevel + 1);
+                        appendStatementBlockContents(code, module, (ObjectOriented.StatementBlock) elseBranch, indentLevel + 1, parentNames);
                         code.append(indent(indentLevel)).append('}');
                     }
                 });
@@ -398,25 +424,31 @@ public final class ObjectOrientedJavaGenerator {
             }
             case ObjectOriented.StatementBlock nestedBlock -> {
                 code.append(indent(indentLevel)).append("{\n");
-                appendStatementBlockContents(code, module, nestedBlock, indentLevel + 1);
+                appendStatementBlockContents(code, module, nestedBlock, indentLevel + 1, parentNames);
                 code.append(indent(indentLevel)).append("}\n");
             }
         }
     }
 
-    private void appendInlineIf(StringBuilder code, ObjectOrientedModule module, ObjectOriented.IfStatement statement, int indentLevel) {
+    private void appendInlineIf(
+            StringBuilder code,
+            ObjectOrientedModule module,
+            ObjectOriented.IfStatement statement,
+            int indentLevel,
+            Set<String> parentNames
+    ) {
         code.append("if (")
-                .append(renderExpression(module, statement.condition()))
+                .append(renderExpression(module, statement.condition(), parentNames))
                 .append(") {\n");
-        appendStatementBlockContents(code, module, statement.thenBranch(), indentLevel + 1);
+        appendStatementBlockContents(code, module, statement.thenBranch(), indentLevel + 1, parentNames);
         code.append(indent(indentLevel)).append('}');
         statement.elseBranch().ifPresent(elseBranch -> {
             if (elseBranch instanceof ObjectOriented.IfStatement nestedIf) {
                 code.append(" else ");
-                appendInlineIf(code, module, nestedIf, indentLevel);
+                appendInlineIf(code, module, nestedIf, indentLevel, parentNames);
             } else {
                 code.append(" else {\n");
-                appendStatementBlockContents(code, module, (ObjectOriented.StatementBlock) elseBranch, indentLevel + 1);
+                appendStatementBlockContents(code, module, (ObjectOriented.StatementBlock) elseBranch, indentLevel + 1, parentNames);
                 code.append(indent(indentLevel)).append('}');
             }
         });
@@ -446,7 +478,7 @@ public final class ObjectOrientedJavaGenerator {
         return new ParentKinds(classParent, List.copyOf(interfaceParents));
     }
 
-    private String renderExpression(ObjectOrientedModule module, String expression) {
+    private String renderExpression(ObjectOrientedModule module, String expression, Set<String> parentNames) {
         var trimmed = expression.trim();
         if (trimmed.startsWith("match ")) {
             throw unsupported(module, "`match` expressions are not supported by the Java backend in v1");
@@ -457,15 +489,18 @@ public final class ObjectOrientedJavaGenerator {
             throw unsupported(module, "Expression `" + preview(trimmed) + "` is not supported by the Java backend in v1");
         }
         if (trimmed.startsWith("if ")) {
-            return renderIfExpression(module, trimmed);
+            return renderIfExpression(module, trimmed, parentNames);
         }
         if ("???".equals(trimmed)) {
             return "null";
         }
-        return trimmed.replaceAll("super\\s*\\[[^]]+]\\s*\\.", "super.");
+        for (var parentName : parentNames) {
+            trimmed = trimmed.replaceAll("(^|[^A-Za-z0-9_])" + Pattern.quote(parentName) + "\\s*\\.", "$1super.");
+        }
+        return trimmed;
     }
 
-    private String renderIfExpression(ObjectOrientedModule module, String expression) {
+    private String renderIfExpression(ObjectOrientedModule module, String expression, Set<String> parentNames) {
         var thenIndex = findTopLevelKeyword(expression, " then ");
         var elseIndex = findTopLevelKeyword(expression, " else ");
         if (thenIndex < 0 || elseIndex < 0 || elseIndex <= thenIndex) {
@@ -474,7 +509,7 @@ public final class ObjectOrientedJavaGenerator {
         var condition = expression.substring("if ".length(), thenIndex).trim();
         var thenBranch = expression.substring(thenIndex + " then ".length(), elseIndex).trim();
         var elseBranch = expression.substring(elseIndex + " else ".length()).trim();
-        return "((" + renderExpression(module, condition) + ") ? (" + renderExpression(module, thenBranch) + ") : (" + renderExpression(module, elseBranch) + "))";
+        return "((" + renderExpression(module, condition, parentNames) + ") ? (" + renderExpression(module, thenBranch, parentNames) + ") : (" + renderExpression(module, elseBranch, parentNames) + "))";
     }
 
     private int findTopLevelKeyword(String value, String keyword) {
@@ -555,6 +590,12 @@ public final class ObjectOrientedJavaGenerator {
             return String.join(".", normalized);
         }
         return name;
+    }
+
+    private String simpleTypeName(String name) {
+        var reference = renderTypeReference(name);
+        var separator = reference.lastIndexOf('.');
+        return separator >= 0 ? reference.substring(separator + 1) : reference;
     }
 
     private String renderClassVisibility(String visibility) {
