@@ -17,6 +17,8 @@ class Person(name: string): GreeterBase, Printable, BracketNaming {
 
     def greet(): string = this.describe(this.name)
 
+    def ping(): nothing = this.describe(this.name)
+
     override def print(): string {
         let label: string = GreeterBase.describe(this.name)
         return label + "!"
@@ -27,6 +29,24 @@ class Person(name: string): GreeterBase, Printable, BracketNaming {
             return this.bracket(this.name)
         } else {
             return this.name
+        }
+    }
+
+    def nested_label(): string {
+        {
+            let label: string = this.describe(this.name)
+            return label
+        }
+    }
+
+    def warmup(formal: bool): nothing {
+        if formal {
+            let label: string = this.bracket(this.name)
+            {
+                let copy: string = label
+            }
+        } else {
+            let copy: string = this.name
         }
     }
 }
