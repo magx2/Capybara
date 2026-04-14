@@ -26,6 +26,15 @@ class ObjectOrientedParserTest {
                         trait Named {
                             field name: string = "unknown"
                             fun display_name(): string = name
+                            fun normalize(values: list[int]): int {
+                                let scaled: list[int] = values | value => value * 2
+                                if size(scaled) > 0 {
+                                    return scaled[0]
+                                } else {
+                                    return match values with
+                                    case _ -> 0
+                                }
+                            }
                         }
 
                         open class User(name: string): Named, Printable {
@@ -51,6 +60,25 @@ class ObjectOrientedParserTest {
                 .orElseThrow();
         assertThat(userDeclaration.constructorParameters()).extracting(ObjectOriented.Parameter::name).containsExactly("name");
         assertThat(userDeclaration.parents()).extracting(ObjectOriented.TypeReference::name).containsExactly("Named", "Printable");
+
+        var namedDeclaration = module.objectOriented().definitions().stream()
+                .filter(ObjectOriented.TraitDeclaration.class::isInstance)
+                .map(ObjectOriented.TraitDeclaration.class::cast)
+                .findFirst()
+                .orElseThrow();
+        var normalizeMethod = namedDeclaration.members().stream()
+                .filter(ObjectOriented.MethodDeclaration.class::isInstance)
+                .map(ObjectOriented.MethodDeclaration.class::cast)
+                .filter(method -> method.name().equals("normalize"))
+                .findFirst()
+                .orElseThrow();
+        assertThat(normalizeMethod.body()).hasValueSatisfying(body -> {
+            assertThat(body).isInstanceOf(ObjectOriented.StatementBlock.class);
+            var block = (ObjectOriented.StatementBlock) body;
+            assertThat(block.statements()).hasSize(2);
+            assertThat(block.statements().getFirst()).isInstanceOf(ObjectOriented.LetStatement.class);
+            assertThat(block.statements().get(1)).isInstanceOf(ObjectOriented.IfStatement.class);
+        });
     }
 
     @Test
@@ -71,5 +99,31 @@ class ObjectOrientedParserTest {
         assertThat(((Result.Error<ObjectOrientedModule>) result).errors())
                 .singleElement()
                 .satisfies(error -> assertThat(error.file()).isEqualTo("/parser/Broken.coo"));
+    }
+
+    @Test
+    @DisplayName("should reject bare expression statements in method blocks")
+    void rejectBareExpressionStatements() {
+        var result = ObjectOrientedParser.INSTANCE.parseModule(new RawModule(
+                "Broken",
+                "/parser",
+                """
+                        class Broken {
+                            fun run(): int {
+                                foo()
+                                return 1
+                            }
+                        }
+                        """,
+                SourceKind.OBJECT_ORIENTED
+        ));
+
+        assertThat(result).isInstanceOf(Result.Error.class);
+        assertThat(((Result.Error<ObjectOrientedModule>) result).errors())
+                .singleElement()
+                .satisfies(error -> {
+                    assertThat(error.file()).isEqualTo("/parser/Broken.coo");
+                    assertThat(error.message()).contains("line 3");
+                });
     }
 }
