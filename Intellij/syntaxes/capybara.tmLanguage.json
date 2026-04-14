@@ -130,7 +130,7 @@
       "patterns": [
         {
           "name": "keyword.control.capybara",
-          "match": "\\b(fun|def|type|enum|data|single|const|local|match|with|constructor|case|when|if|then|else|let|from|import|except|class|trait|interface|field|open|abstract|override|final|private|public|init|super)\\b"
+          "match": "\\b(fun|def|type|enum|data|single|const|local|match|with|constructor|case|when|if|then|else|let|return|this|from|import|except|class|trait|interface|field|open|abstract|override|final|private|public|init|super)\\b"
         },
         {
           "name": "keyword.operator.constructor.capybara",
@@ -138,7 +138,7 @@
         },
         {
           "name": "keyword.operator.word.capybara",
-          "match": "\\b(this|is_empty|size|to_int|to_long|to_double|to_float|to_bool)\\b"
+          "match": "\\b(is_empty|size|to_int|to_long|to_double|to_float|to_bool)\\b"
         },
         {
           "name": "support.type.primitive.capybara",
@@ -384,5 +384,4 @@
     }
   }
 }
-
 
