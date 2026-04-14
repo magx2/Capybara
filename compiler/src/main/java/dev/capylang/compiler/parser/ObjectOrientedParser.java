@@ -124,8 +124,8 @@ public final class ObjectOrientedParser {
         return new ObjectOriented.ClassDeclaration(
                 context.TYPE().getText(),
                 parameters(context.constructorParameters() == null ? null : context.constructorParameters().parameters()),
-                typeReferences(context.inheritance() == null ? null : context.inheritance().typeReference()),
-                members(context.typeBody().member()),
+                typeReferences(context.inheritanceClause() == null ? null : context.inheritanceClause().qualifiedType()),
+                members(context.typeBody().memberDeclaration()),
                 context.classModifier().stream().map(org.antlr.v4.runtime.RuleContext::getText).toList()
         );
     }
@@ -133,23 +133,23 @@ public final class ObjectOrientedParser {
     private ObjectOriented.TraitDeclaration traitDeclaration(dev.capylang.parser.antlr.ObjectOrientedParser.TraitDeclarationContext context) {
         return new ObjectOriented.TraitDeclaration(
                 context.TYPE().getText(),
-                typeReferences(context.inheritance() == null ? null : context.inheritance().typeReference()),
-                members(context.typeBody().member())
+                typeReferences(context.inheritanceClause() == null ? null : context.inheritanceClause().qualifiedType()),
+                members(context.typeBody().memberDeclaration())
         );
     }
 
     private ObjectOriented.InterfaceDeclaration interfaceDeclaration(dev.capylang.parser.antlr.ObjectOrientedParser.InterfaceDeclarationContext context) {
-        var members = context.interfaceBody().interfaceMember().stream()
+        var members = context.interfaceBody().interfaceMemberDeclaration().stream()
                 .<ObjectOriented.MemberDeclaration>map(interfaceMember -> methodDeclaration(interfaceMember.interfaceMethodDeclaration()))
                 .toList();
         return new ObjectOriented.InterfaceDeclaration(
                 context.TYPE().getText(),
-                typeReferences(context.interfaceInheritance() == null ? null : context.interfaceInheritance().typeReference()),
+                typeReferences(context.inheritanceClause() == null ? null : context.inheritanceClause().qualifiedType()),
                 members
         );
     }
 
-    private List<ObjectOriented.MemberDeclaration> members(List<dev.capylang.parser.antlr.ObjectOrientedParser.MemberContext> members) {
+    private List<ObjectOriented.MemberDeclaration> members(List<dev.capylang.parser.antlr.ObjectOrientedParser.MemberDeclarationContext> members) {
         return members.stream()
                 .<ObjectOriented.MemberDeclaration>map(member -> {
                     if (member.fieldDeclaration() != null) {
@@ -165,7 +165,7 @@ public final class ObjectOrientedParser {
 
     private ObjectOriented.FieldDeclaration fieldDeclaration(dev.capylang.parser.antlr.ObjectOrientedParser.FieldDeclarationContext context) {
         return new ObjectOriented.FieldDeclaration(
-                context.NAME().getText(),
+                context.identifier().getText(),
                 context.type().getText(),
                 context.visibility() == null ? "public" : context.visibility().getText(),
                 context.expression() == null ? java.util.Optional.empty() : java.util.Optional.of(context.expression().getText())
@@ -174,9 +174,9 @@ public final class ObjectOrientedParser {
 
     private ObjectOriented.MethodDeclaration methodDeclaration(dev.capylang.parser.antlr.ObjectOrientedParser.MethodDeclarationContext context) {
         return new ObjectOriented.MethodDeclaration(
-                context.NAME().getText(),
+                context.identifier().getText(),
                 parameters(context.parameters()),
-                context.type().getText(),
+                context.functionType().type().getText(),
                 context.visibility() == null ? "public" : context.visibility().getText(),
                 context.methodModifier().stream().map(org.antlr.v4.runtime.RuleContext::getText).toList(),
                 context.methodBody() == null ? java.util.Optional.empty() : java.util.Optional.of(methodBody(context.methodBody()))
@@ -185,9 +185,9 @@ public final class ObjectOrientedParser {
 
     private ObjectOriented.MethodDeclaration methodDeclaration(dev.capylang.parser.antlr.ObjectOrientedParser.InterfaceMethodDeclarationContext context) {
         return new ObjectOriented.MethodDeclaration(
-                context.NAME().getText(),
+                context.identifier().getText(),
                 parameters(context.parameters()),
-                context.type().getText(),
+                context.functionType().type().getText(),
                 context.visibility() == null ? "public" : context.visibility().getText(),
                 context.methodModifier().stream().map(org.antlr.v4.runtime.RuleContext::getText).toList(),
                 java.util.Optional.empty()
@@ -256,7 +256,7 @@ public final class ObjectOrientedParser {
                 .toList();
     }
 
-    private List<ObjectOriented.TypeReference> typeReferences(List<dev.capylang.parser.antlr.ObjectOrientedParser.TypeReferenceContext> contexts) {
+    private List<ObjectOriented.TypeReference> typeReferences(List<dev.capylang.parser.antlr.ObjectOrientedParser.QualifiedTypeContext> contexts) {
         if (contexts == null) {
             return List.of();
         }
