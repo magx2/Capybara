@@ -1,7 +1,7 @@
 {
   "scopeName": "source.capybara",
   "name": "Capybara",
-  "fileTypes": ["cfun"],
+  "fileTypes": ["cfun", "coo"],
   "patterns": [
     { "include": "#comments" },
     { "include": "#strings" },
@@ -130,7 +130,7 @@
       "patterns": [
         {
           "name": "keyword.control.capybara",
-          "match": "\\b(fun|type|enum|data|single|const|local|match|with|constructor|case|when|if|then|else|let|from|import|except)\\b"
+          "match": "\\b(fun|type|enum|data|single|const|local|match|with|constructor|case|when|if|then|else|let|from|import|except|class|trait|interface|field|open|abstract|override|final|private|public|init|super)\\b"
         },
         {
           "name": "keyword.operator.constructor.capybara",
@@ -212,7 +212,11 @@
         },
         {
           "name": "entity.name.type.private.capybara",
-          "match": "\\b(type|enum|data|single)\\s+(__[A-Za-z0-9_]*)"
+          "match": "\\b(type|enum|data|single|class|trait|interface)\\s+(__[A-Za-z0-9_]*)"
+        },
+        {
+          "name": "entity.name.type.capybara",
+          "match": "\\b(class|trait|interface)\\s+(_*[A-Z][A-Za-z0-9_]*)"
         },
         {
           "name": "entity.name.function.private.capybara",
@@ -380,7 +384,6 @@
     }
   }
 }
-
 
 
 

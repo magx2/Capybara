@@ -159,3 +159,5 @@ fun pop on list[T](list: list[T]): Option[Tuple[T, list[T]]] =
 ### Object-oriented part
 
 Extension: `.coo`
+
+Status: frontend scaffold only in this patch. `.coo` files are discovered, parsed, and highlighted, but the compiler still rejects them with an explicit unsupported-pipeline diagnostic until OO semantic analysis and backend lowering land.

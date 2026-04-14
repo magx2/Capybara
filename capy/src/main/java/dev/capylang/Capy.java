@@ -21,6 +21,7 @@ import dev.capylang.compiler.expression.CompiledInfixExpression;
 import dev.capylang.compiler.expression.CompiledNewList;
 import dev.capylang.compiler.parser.RawModule;
 import dev.capylang.compiler.parser.InfixOperator;
+import dev.capylang.compiler.parser.SourceKind;
 import dev.capylang.generator.Generator;
 import dev.capylang.generator.GeneratedProgram;
 
@@ -74,7 +75,6 @@ public class Capy {
     private static final String MODULE_FILE = "capy.yml";
     private static final String VERSION_RESOURCE = "/capybara-version.txt";
     private static final String JAVA_LIB_RESOURCE_DIR = "/java-lib-src";
-    private static final String CAPYBARA_SOURCE_EXTENSION = ".cfun";
     private static final ModuleRef CAP_TEST_RUNTIME_MODULE = new ModuleRef("CapyTestRuntime", "capy/test");
     private static final int EXIT_SUCCESS = 0;
     private static final int EXIT_USAGE = 1;
@@ -960,9 +960,7 @@ public class Capy {
 
     private static String suiteNameFromTestFile(String fileName) {
         var normalized = fileName.replace('\\', '/');
-        if (normalized.endsWith(".cfun")) {
-            normalized = normalized.substring(0, normalized.length() - ".cfun".length());
-        }
+        normalized = SourceKind.stripKnownExtension(normalized);
         while (normalized.startsWith("/")) {
             normalized = normalized.substring(1);
         }
@@ -1595,11 +1593,14 @@ public class Capy {
         log.info("Building module from file: " + sourceFile.path());
         var startedAt = System.nanoTime();
         var fileName = sourceFile.path().getFileName().toString();
-        var fileNameWithoutExtension = fileName.substring(0, fileName.lastIndexOf('.'));
+        var sourceKind = SourceKind.fromFileName(fileName)
+                .orElseThrow(() -> new IllegalArgumentException("Unsupported Capybara source file: " + fileName));
+        var fileNameWithoutExtension = SourceKind.stripKnownExtension(fileName);
         var module = new RawModule(
                 fileNameWithoutExtension,
                 findModulePath(sourceFile),
-                readFile(sourceFile.path())
+                readFile(sourceFile.path()),
+                sourceKind
         );
         var duration = Duration.ofNanos(System.nanoTime() - startedAt);
         log.info("Built module from file: " + sourceFile.path() + " in " + duration);
@@ -1619,7 +1620,7 @@ public class Capy {
     }
 
     private static boolean isCapybaraSourceFile(Path path) {
-        return path.getFileName().toString().endsWith(CAPYBARA_SOURCE_EXTENSION);
+        return SourceKind.fromPath(path).isPresent();
     }
 
     private static String findModulePath(SourceFile sourceFile) {
@@ -1688,7 +1689,6 @@ public class Capy {
     record CompilationArtifacts(CompiledProgram program, List<ModuleRef> sourceModules) {
     }
 }
-
 
 
 
