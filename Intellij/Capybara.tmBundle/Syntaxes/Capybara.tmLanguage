@@ -9,6 +9,7 @@
   <key>fileTypes</key>
   <array>
     <string>cfun</string>
+    <string>coo</string>
   </array>
   <key>patterns</key>
   <array>
@@ -59,7 +60,7 @@
         <dict><key>name</key><string>constant.character.escape.capybara</string><key>match</key><string>\\.</string></dict>
       </array>
     </dict>
-    <dict><key>name</key><string>keyword.control.capybara</string><key>match</key><string>\b(fun|type|enum|data|single|const|local|match|with|constructor|case|when|if|then|else|let|from|import|except)\b</string></dict>
+    <dict><key>name</key><string>keyword.control.capybara</string><key>match</key><string>\b(fun|type|enum|data|single|const|local|match|with|constructor|case|when|if|then|else|let|from|import|except|class|trait|interface|field|open|abstract|override|final|private|public|init|super)\b</string></dict>
     <dict><key>name</key><string>keyword.operator.constructor.capybara</string><key>match</key><string>(?&lt;=\bconstructor\s*\{[^\n]*)\*(?=\s*\{)</string></dict>
     <dict><key>name</key><string>keyword.other.capybara</string><key>match</key><string>\\b(this|is_empty|size|to_int|to_long|to_double|to_float|to_bool)\\b</string></dict>
     <dict><key>name</key><string>support.type.primitive.capybara</string><key>match</key><string>\b(byte|int|long|float|double|bool|string|any|data|nothing|list|set|dict|tuple)\b</string></dict>
@@ -98,8 +99,11 @@
       </dict>
     </dict>
     <dict><key>name</key><string>entity.name.type.capybara</string><key>match</key><string>\b_*[A-Z][A-Za-z0-9_]*\b</string></dict>
-    <dict><key>name</key><string>entity.name.type.private.capybara</string><key>match</key><string>\b(private)\s+(type|enum|data|single)\s+([A-Za-z_][A-Za-z0-9_]*)</string></dict>
-    <dict><key>name</key><string>entity.name.function.private.capybara</string><key>match</key><string>\b(private)\s+(fun)\s+([A-Za-z_][A-Za-z0-9_]*)</string></dict>
+    <dict><key>name</key><string>entity.name.type.private.capybara</string><key>match</key><string>(private)s+(type|enum|data|single|class|trait|interface)s+([A-Za-z_][A-Za-z0-9_]*)</string></dict>
+    <dict><key>name</key><string>entity.name.type.private.capybara</string><key>match</key><string>(type|enum|data|single|class|trait|interface)s+(__[A-Za-z0-9_]*)</string></dict>
+    <dict><key>name</key><string>entity.name.type.capybara</string><key>match</key><string>(class|trait|interface)s+(_*[A-Z][A-Za-z0-9_]*)</string></dict>
+    <dict><key>name</key><string>entity.name.function.private.capybara</string><key>match</key><string>(private)s+(fun)s+([A-Za-z_][A-Za-z0-9_]*)</string></dict>
+    <dict><key>name</key><string>entity.name.function.private.capybara</string><key>match</key><string>funs+(__[A-Za-z0-9_]+)</string></dict>
     <dict><key>name</key><string>entity.name.function.capybara</string><key>match</key><string>\bfun\s+([A-Za-z_][A-Za-z0-9_]*)</string></dict>
     <dict><key>name</key><string>meta.function.owner-generic.capybara</string><key>match</key><string>\b(fun)\s+(_*[A-Z][A-Za-z0-9_]*\[[^\]]+\])\.(?:`[^`]+`|[A-Za-z_][A-Za-z0-9_]*)</string></dict>
     <dict><key>name</key><string>meta.function.owner-infix.capybara</string><key>match</key><string>\b(fun)\s+(_*[A-Z][A-Za-z0-9_]*)\.([^]+)</string></dict>
@@ -202,7 +206,6 @@
   </array>
 </dict>
 </plist>
-
 
 
 

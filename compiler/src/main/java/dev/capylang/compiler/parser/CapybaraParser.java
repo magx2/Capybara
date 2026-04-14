@@ -111,7 +111,7 @@ public class CapybaraParser {
                 return new Result.Error<>(parserErrors);
             }
             var definitions = new java.util.LinkedHashSet<>(parsedDefinitions);
-            return Result.success(new Module(module.name(), module.path(), new Functional(definitions), parsedSource.imports()));
+            return Result.success(new Module(module.name(), module.path(), new Functional(definitions), parsedSource.imports(), module.sourceKind()));
         } catch (RuntimeException e) {
             return new Result.Error<>(formatParserException(module, e));
         } finally {
@@ -387,11 +387,7 @@ public class CapybaraParser {
     }
 
     private static String moduleFile(RawModule module) {
-        var path = module.path().replace('\\', '/');
-        if (!path.startsWith("/")) {
-            path = "/" + path;
-        }
-        return "%s/%s.cfun".formatted(path, module.name());
+        return module.file();
     }
 
     private record ParsedSource(String source, List<ImportDeclaration> imports) {
@@ -3251,5 +3247,4 @@ public class CapybaraParser {
     }
 
 }
-
 

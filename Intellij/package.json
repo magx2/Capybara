@@ -12,10 +12,12 @@
         "id": "capybara",
         "aliases": [
           "Capybara",
-          "capybara"
+          "capybara",
+          "coo"
         ],
         "extensions": [
-          ".cfun"
+          ".cfun",
+          ".coo"
         ]
       }
     ],

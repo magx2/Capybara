@@ -113,6 +113,31 @@ class CapyTest {
     }
 
     @Test
+    void shouldDiscoverObjectOrientedFilesAndReportUnsupportedCompilerPipeline() throws IOException {
+        var sourceDir = Files.createDirectories(tempDir.resolve("oo-source-input"));
+        Files.createDirectories(sourceDir.resolve("foo"));
+        Files.writeString(sourceDir.resolve("foo").resolve("Main.coo"), """
+                class Main {
+                    fun greet(): string = "hello"
+                }
+                """);
+        var outputDir = Files.createDirectories(tempDir.resolve("oo-source-output"));
+        var stdout = new ByteArrayOutputStream();
+        var stderr = new ByteArrayOutputStream();
+
+        var exitCode = Capy.execute(
+                new String[]{"compile", "-i", sourceDir.toString(), "-o", outputDir.toString()},
+                new PrintStream(stdout),
+                new PrintStream(stderr)
+        );
+
+        assertNotEquals(0, exitCode);
+        assertTrue(stderr.toString().contains("Main.coo"));
+        assertTrue(stderr.toString().contains("not yet supported by the compiler pipeline"));
+        assertFalse(Files.exists(outputDir.resolve("foo").resolve("Main.json")));
+    }
+
+    @Test
     void shouldCompileGenerateWithProvidedCompilerVersion() throws IOException {
         var sourceDir = Files.createDirectories(tempDir.resolve("compile-generate-direct-source"));
         Files.createDirectories(sourceDir.resolve("foo"));
@@ -753,5 +778,3 @@ class CapyTest {
         }
     }
 }
-
-

@@ -35,6 +35,23 @@ public class CapybaraCompiler {
 
     public Result<CompiledProgram> compile(Collection<RawModule> rawModules, SortedSet<CompiledModule> libraries) {
         try {
+            var objectOrientedModules = rawModules.stream()
+                    .filter(rawModule -> rawModule.sourceKind() == SourceKind.OBJECT_ORIENTED)
+                    .toList();
+            if (!objectOrientedModules.isEmpty()) {
+                var parsedObjectOrientedModules = ObjectOrientedParser.INSTANCE.parseModules(objectOrientedModules);
+                if (parsedObjectOrientedModules instanceof Result.Error<List<ObjectOrientedModule>> error) {
+                    return new Result.Error<>(error.errors());
+                }
+                return new Result.Error<>(objectOrientedModules.stream()
+                        .map(module -> new Result.Error.SingleError(
+                                0,
+                                0,
+                                module.file(),
+                                "Object-oriented `.coo` modules are parsed but not yet supported by the compiler pipeline"
+                        ))
+                        .toList());
+            }
             var program = CapybaraParser.INSTANCE.parseModule(rawModules);
             if (program instanceof Result.Error<Program> error) {
                 return new Result.Error<>(error.errors());
@@ -3375,7 +3392,7 @@ public class CapybaraCompiler {
     }
 
     private String moduleSourceFile(Module module) {
-        return module.path().replace('\\', '/') + "/" + module.name() + ".cfun";
+        return module.sourceKind().moduleFile(module.path(), module.name());
     }
 
     private dev.capylang.compiler.expression.CompiledExpression enrichNothing(

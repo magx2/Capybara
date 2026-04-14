@@ -1,12 +1,12 @@
 ﻿# IntelliJ ❤️ Capy
 
-This folder contains a TextMate grammar for Capybara (`*.cfun`) that can be imported into IntelliJ IDEA.
+This folder contains a TextMate grammar for Capybara (`*.cfun`, `*.coo`) that can be imported into IntelliJ IDEA.
 
 ## Install in IntelliJ
 
 1. Open `Settings` -> `Editor` -> `TextMate Bundles`.
 2. Click `+` and select this folder: `Intellij ❤️ Capy`.
-3. Apply changes and reopen any `.cfun` file.
+3. Apply changes and reopen any `.cfun` or `.coo` file.
 
 ## Included
 
