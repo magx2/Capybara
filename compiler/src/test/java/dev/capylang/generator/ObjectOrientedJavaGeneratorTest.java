@@ -33,19 +33,19 @@ class ObjectOrientedJavaGeneratorTest {
     void shouldGenerateAndRunJavaForObjectOrientedClasses() throws Exception {
         var program = compileProgram("""
                 open class Base {
-                    open fun label(): string = "base"
+                    open def label(): string = "base"
                 }
 
                 interface Printable {
-                    fun print(): string
+                    def print(): string
                 }
 
                 class User(name: string): Base, Printable {
                     field name: string = name
 
-                    fun greet(): string = "Hello " + this.name
+                    def greet(): string = "Hello " + this.name
 
-                    override fun print(): string {
+                    override def print(): string {
                         let label: string = super[Base].label()
                         return label + " " + this.name
                     }

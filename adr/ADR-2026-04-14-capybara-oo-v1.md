@@ -17,7 +17,7 @@ Capybara OO v1 starts with a separate frontend boundary instead of extending `Fu
 - `.cfun` remains the functional language and keeps using `Functional.g4`.
 - `.coo` is the object-oriented source extension and will use `ObjectOriented.g4`.
 - Source handling must become extension-aware before OO semantics land.
-- OO syntax uses `fun`, not `def`, to stay aligned with Capybara's existing declaration style.
+- OO syntax uses `def`, while functional `.cfun` keeps `fun`.
 - This first slice only adds `.coo` discovery, parsing, editor support, and extension-correct diagnostics.
 - The compiler must fail explicitly for `.coo` modules until the OO semantic and backend pipeline exists.
 

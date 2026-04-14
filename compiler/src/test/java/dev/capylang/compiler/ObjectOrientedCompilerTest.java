@@ -18,7 +18,7 @@ class ObjectOrientedCompilerTest {
                         "/foo/boo",
                         """
                                 class User {
-                                    fun greet(): string = "hello"
+                                    def greet(): string = "hello"
                                 }
                                 """,
                         SourceKind.OBJECT_ORIENTED
