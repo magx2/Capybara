@@ -219,6 +219,15 @@ public final class ObjectOrientedParser {
         if (context.ifStatement() != null) {
             return ifStatement(context.ifStatement());
         }
+        if (context.whileStatement() != null) {
+            return whileStatement(context.whileStatement());
+        }
+        if (context.doWhileStatement() != null) {
+            return doWhileStatement(context.doWhileStatement());
+        }
+        if (context.forEachStatement() != null) {
+            return forEachStatement(context.forEachStatement());
+        }
         return statementBlock(context.statementBlock());
     }
 
@@ -244,6 +253,29 @@ public final class ObjectOrientedParser {
                 context.expression().getText(),
                 statementBlock(context.statementBlock(0)),
                 elseBranch
+        );
+    }
+
+    private ObjectOriented.WhileStatement whileStatement(dev.capylang.parser.antlr.ObjectOrientedParser.WhileStatementContext context) {
+        return new ObjectOriented.WhileStatement(
+                context.expression().getText(),
+                statementBlock(context.statementBlock())
+        );
+    }
+
+    private ObjectOriented.DoWhileStatement doWhileStatement(dev.capylang.parser.antlr.ObjectOrientedParser.DoWhileStatementContext context) {
+        return new ObjectOriented.DoWhileStatement(
+                statementBlock(context.statementBlock()),
+                context.expression().getText()
+        );
+    }
+
+    private ObjectOriented.ForEachStatement forEachStatement(dev.capylang.parser.antlr.ObjectOrientedParser.ForEachStatementContext context) {
+        return new ObjectOriented.ForEachStatement(
+                context.identifier().getText(),
+                context.type() == null ? java.util.Optional.empty() : java.util.Optional.of(context.type().getText()),
+                context.expression().getText(),
+                statementBlock(context.statementBlock())
         );
     }
 

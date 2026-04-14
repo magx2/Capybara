@@ -37,10 +37,16 @@ statementBlock: '{' statement* '}';
 statement: letStatement
          | returnStatement
          | ifStatement
+         | whileStatement
+         | doWhileStatement
+         | forEachStatement
          | statementBlock;
 letStatement: 'let' identifier (':' type)? letBindingOperator expression ';'?;
 returnStatement: 'return' expression ';'?;
 ifStatement: 'if' expression statementBlock ('else' (ifStatement | statementBlock))?;
+whileStatement: 'while' expression statementBlock;
+doWhileStatement: 'do' statementBlock 'while' expression ';'?;
+forEachStatement: ('for' | 'foreach') identifier (':' type)? 'in' expression statementBlock;
 
 methodModifier
     : 'open'
