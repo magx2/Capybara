@@ -1,4 +1,4 @@
-# ADR-0001: Capybara OO v1 Frontend Boundary
+# ADR-2026-04-14: Capybara OO v1 Frontend Boundary
 
 - Status: proposed
 - Deciders: Codex, repository maintainers
