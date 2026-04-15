@@ -117,10 +117,8 @@ class CapyTest {
         var sourceDir = Files.createDirectories(tempDir.resolve("oo-source-input"));
         Files.createDirectories(sourceDir.resolve("foo"));
         Files.writeString(sourceDir.resolve("foo").resolve("Main.coo"), """
-                class Main(name: string) {
-                    field name: string = name
-
-                    def greet(): string = "hello " + this.name
+                class Main {
+                    def main(args: list[string]): int = args.size()
                 }
                 """);
         var generatedDir = tempDir.resolve("oo-source-generated");
@@ -144,7 +142,9 @@ class CapyTest {
         assertEquals(0, exitCode);
         assertEquals("", stderr.toString());
         assertTrue(Files.exists(generatedDir.resolve("foo").resolve("Main.java")));
-        assertTrue(Files.readString(generatedDir.resolve("foo").resolve("Main.java")).contains("hello "));
+        var generatedMain = Files.readString(generatedDir.resolve("foo").resolve("Main.java"));
+        assertTrue(generatedMain.contains("public static int main(java.util.List<String> args)"));
+        assertTrue(generatedMain.contains("public static void main(java.lang.String[] args)"));
         assertTrue(Files.exists(linkedDir.resolve("program.json")));
     }
 
