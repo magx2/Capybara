@@ -60,6 +60,8 @@ class ObjectOrientedRuntimeTest {
         assertThat(person.second_name(new String[]{"zero", "one", "two"})).isEqualTo("one");
         assertThat(person.first_id(new int[]{9, 8, 7})).isEqualTo(9);
         assertThat(person.copy_people(people)).isSameAs(people);
+        assertThat(person.names()).containsExactly("zero", "one");
+        assertThat(person.slots(4)).hasSize(4);
     }
 
     @Test

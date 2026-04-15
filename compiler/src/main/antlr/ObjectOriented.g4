@@ -116,6 +116,8 @@ expressionNoLet
     | reduceExpression
     | functionReference
     | functionCall
+    | arrayWithValues
+    | sizedArray
     | new_list
     | new_dict
     | tupleLiteral
@@ -155,6 +157,8 @@ expressionNoLetNoPipe
     | lambdaExpression
     | functionReference
     | functionCall
+    | arrayWithValues
+    | sizedArray
     | new_list
     | new_dict
     | tupleLiteral
@@ -181,6 +185,9 @@ expressionNoLetNoPipe
 indexNoPipeLiteral: MINUS? INT_LITERAL;
 sliceIndexNoPipeLiteral: MINUS? INT_LITERAL;
 tupleLiteral: LPAREN expression (COMMA expression)+ RPAREN;
+arrayCreationType: simpleType ('[' ']')+;
+arrayWithValues: arrayCreationType LBRACE (expression (COMMA expression)* COMMA?)? RBRACE;
+sizedArray: simpleType LBRACK expression RBRACK;
 
 ifExpression: 'if' expression 'then' expression 'else' expression;
 functionReference: COLON identifier;

@@ -438,6 +438,41 @@ class ObjectOrientedParserTest {
     }
 
     @Test
+    @DisplayName("should parse array creation expressions")
+    void parseArrayCreationExpressions() {
+        var result = ObjectOrientedParser.INSTANCE.parseModule(new RawModule(
+                "ArrayCreation",
+                "/parser",
+                """
+                        class ArrayCreation {
+                            def names(): string[] = string[]{"zero", "one"}
+
+                            def slots(size: int): int[] = int[size]
+                        }
+                        """,
+                SourceKind.OBJECT_ORIENTED
+        ));
+
+        assertThat(result).isInstanceOf(Result.Success.class);
+        var module = ((Result.Success<ObjectOrientedModule>) result).value();
+        var methods = module.objectOriented().definitions().stream()
+                .filter(ObjectOriented.ClassDeclaration.class::isInstance)
+                .map(ObjectOriented.ClassDeclaration.class::cast)
+                .flatMap(type -> type.members().stream())
+                .filter(ObjectOriented.MethodDeclaration.class::isInstance)
+                .map(ObjectOriented.MethodDeclaration.class::cast)
+                .toList();
+
+        assertThat(methods)
+                .extracting(ObjectOriented.MethodDeclaration::name)
+                .containsExactly("names", "slots");
+        assertThat(methods.get(0).body()).hasValueSatisfying(body ->
+                assertThat(((ObjectOriented.ExpressionBody) body).expression()).isEqualTo("string[]{\"zero\",\"one\"}"));
+        assertThat(methods.get(1).body()).hasValueSatisfying(body ->
+                assertThat(((ObjectOriented.ExpressionBody) body).expression()).isEqualTo("int[size]"));
+    }
+
+    @Test
     @DisplayName("should reject return without expression")
     void rejectReturnWithoutExpression() {
         var result = ObjectOrientedParser.INSTANCE.parseModule(new RawModule(

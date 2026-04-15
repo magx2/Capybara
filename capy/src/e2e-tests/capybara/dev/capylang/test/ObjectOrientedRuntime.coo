@@ -51,6 +51,10 @@ class Person(name: string): GreeterBase, Printable, BracketNaming {
 
     def copy_people(values: Person[]): Person[] = values
 
+    def names(): string[] = string[]{"zero", "one"}
+
+    def slots(size: int): int[] = int[size]
+
     def first_positive(values: list[int]): int {
         for value in values {
             if value > 0 {
