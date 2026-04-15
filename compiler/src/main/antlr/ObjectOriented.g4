@@ -77,7 +77,7 @@ VISIBILITY: 'local';
 BOOL_LITERAL: 'true' | 'false';
 COLLECTION: 'list' | 'set' | 'dict';
 NAME : [_]* [a-z] [a-zA-Z0-9_]*;
-identifier: NAME | COLLECTION | 'def' | 'type' | 'byte' | 'int' | 'long' | 'double' | 'bool' | 'string' | 'float' | 'nothing' | 'any' | 'return';
+identifier: NAME | COLLECTION | 'def' | 'type' | 'byte' | 'int' | 'long' | 'double' | 'bool' | 'string' | 'float' | 'void' | 'any' | 'return';
 type: COLLECTION '[' type ']'
     | 'tuple' '[' type (COMMA type)+ ']'
     | LPAREN RPAREN FAT_ARROW type
@@ -92,7 +92,7 @@ type: COLLECTION '[' type ']'
     | 'float'
     | 'any'
     | 'data'
-    | 'nothing'
+    | 'void'
     | qualifiedType ('[' type (',' type)* ']')?;
 
 qualifiedType: TYPE (DOT TYPE)*;
@@ -191,7 +191,7 @@ functionCall
     | 'bool' LPAREN argumentList? RPAREN
     | 'string' LPAREN argumentList? RPAREN
     | 'float' LPAREN argumentList? RPAREN
-    | 'nothing' LPAREN argumentList? RPAREN
+    | 'void' LPAREN argumentList? RPAREN
     | 'any' LPAREN argumentList? RPAREN
     | qualifiedType DOT identifier LPAREN argumentList? RPAREN
     ;
@@ -250,7 +250,7 @@ patternType
     | 'float'
     | 'any'
     | 'data'
-    | 'nothing'
+    | 'void'
     | qualifiedType ('[' type (',' type)* ']')?
     ;
 
