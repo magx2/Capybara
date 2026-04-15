@@ -45,6 +45,11 @@ public class CapybaraCompiler {
                     return new Result.Error<>(error.errors());
                 }
                 parsedObjectOrientedModules = ((Result.Success<List<ObjectOrientedModule>>) ooParseResult).value();
+                var ooValidationResult = ObjectOrientedValidator.INSTANCE.validate(parsedObjectOrientedModules);
+                if (ooValidationResult instanceof Result.Error<List<ObjectOrientedModule>> error) {
+                    return new Result.Error<>(error.errors());
+                }
+                parsedObjectOrientedModules = ((Result.Success<List<ObjectOrientedModule>>) ooValidationResult).value();
             }
 
             var functionalModules = rawModules.stream()

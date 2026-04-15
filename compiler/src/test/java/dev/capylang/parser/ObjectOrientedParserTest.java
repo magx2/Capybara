@@ -258,6 +258,46 @@ class ObjectOrientedParserTest {
     }
 
     @Test
+    @DisplayName("should parse mutable local declarations and assignments")
+    void parseMutableLocalDeclarations() {
+        var result = ObjectOrientedParser.INSTANCE.parseModule(new RawModule(
+                "MutableLocals",
+                "/parser",
+                """
+                        class MutableLocals {
+                            def mutable(): string {
+                                def x = "a"
+                                x = "2"
+                                return x
+                            }
+                        }
+                        """,
+                SourceKind.OBJECT_ORIENTED
+        ));
+
+        assertThat(result).isInstanceOf(Result.Success.class);
+        var module = ((Result.Success<ObjectOrientedModule>) result).value();
+        var mutableMethod = module.objectOriented().definitions().stream()
+                .filter(ObjectOriented.ClassDeclaration.class::isInstance)
+                .map(ObjectOriented.ClassDeclaration.class::cast)
+                .flatMap(type -> type.members().stream())
+                .filter(ObjectOriented.MethodDeclaration.class::isInstance)
+                .map(ObjectOriented.MethodDeclaration.class::cast)
+                .filter(method -> method.name().equals("mutable"))
+                .findFirst()
+                .orElseThrow();
+
+        assertThat(mutableMethod.body()).hasValueSatisfying(body -> {
+            assertThat(body).isInstanceOf(ObjectOriented.StatementBlock.class);
+            var block = (ObjectOriented.StatementBlock) body;
+            assertThat(block.statements()).hasSize(3);
+            assertThat(block.statements().get(0)).isInstanceOf(ObjectOriented.MutableVariableStatement.class);
+            assertThat(block.statements().get(1)).isInstanceOf(ObjectOriented.AssignmentStatement.class);
+            assertThat(block.statements().get(2)).isInstanceOf(ObjectOriented.ReturnStatement.class);
+        });
+    }
+
+    @Test
     @DisplayName("should parse loop statements in method blocks")
     void parseLoopStatements() {
         var result = ObjectOrientedParser.INSTANCE.parseModule(new RawModule(
@@ -343,7 +383,8 @@ class ObjectOrientedParserTest {
                 .singleElement()
                 .satisfies(error -> {
                     assertThat(error.file()).isEqualTo("/parser/Broken.coo");
-                    assertThat(error.message()).contains("line 4");
+                    assertThat(error.message()).contains("line 5:4");
+                    assertThat(error.message()).contains("expecting '='");
                 });
     }
 

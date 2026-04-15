@@ -86,4 +86,33 @@ class ObjectOrientedCompilationErrorTest {
                     assertThat(error.message()).contains("missing '{' at 'return'");
                 });
     }
+
+    @Test
+    void shouldRejectAssigningToImmutableLetLocal() {
+        var result = CapybaraCompiler.INSTANCE.compile(List.of(
+                new RawModule(
+                        "Mutable",
+                        "/foo/boo",
+                        """
+                                class Mutable {
+                                    def mutable(): string {
+                                        let x = "a"
+                                        x = "2"
+                                        return x
+                                    }
+                                }
+                                """,
+                        SourceKind.OBJECT_ORIENTED
+                )
+        ), new TreeSet<>());
+
+        assertThat(result).isInstanceOf(Result.Error.class);
+        assertThat(((Result.Error<?>) result).errors())
+                .singleElement()
+                .satisfies(error -> {
+                    assertThat(error.file()).isEqualTo("/foo/boo/Mutable.coo");
+                    assertThat(error.message()).contains("immutable local `x`");
+                    assertThat(error.message()).contains("use `def` for mutable locals");
+                });
+    }
 }

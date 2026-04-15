@@ -213,6 +213,12 @@ public final class ObjectOrientedParser {
         if (context.letStatement() != null) {
             return letStatement(context.letStatement());
         }
+        if (context.mutableVariableStatement() != null) {
+            return mutableVariableStatement(context.mutableVariableStatement());
+        }
+        if (context.assignmentStatement() != null) {
+            return assignmentStatement(context.assignmentStatement());
+        }
         if (context.returnStatement() != null) {
             return returnStatement(context.returnStatement());
         }
@@ -235,6 +241,21 @@ public final class ObjectOrientedParser {
         return new ObjectOriented.LetStatement(
                 context.identifier().getText(),
                 context.type() == null ? java.util.Optional.empty() : java.util.Optional.of(context.type().getText()),
+                context.expression().getText()
+        );
+    }
+
+    private ObjectOriented.MutableVariableStatement mutableVariableStatement(dev.capylang.parser.antlr.ObjectOrientedParser.MutableVariableStatementContext context) {
+        return new ObjectOriented.MutableVariableStatement(
+                context.identifier().getText(),
+                context.type() == null ? java.util.Optional.empty() : java.util.Optional.of(context.type().getText()),
+                context.expression().getText()
+        );
+    }
+
+    private ObjectOriented.AssignmentStatement assignmentStatement(dev.capylang.parser.antlr.ObjectOrientedParser.AssignmentStatementContext context) {
+        return new ObjectOriented.AssignmentStatement(
+                context.identifier().getText(),
                 context.expression().getText()
         );
     }

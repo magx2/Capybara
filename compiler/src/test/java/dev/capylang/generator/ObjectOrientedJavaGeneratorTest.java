@@ -45,6 +45,12 @@ class ObjectOrientedJavaGeneratorTest {
 
                     def greet(): string = "Hello " + this.name
 
+                    def mutable(): string {
+                        def x = "a"
+                        x = "2"
+                        return x
+                    }
+
                     override def print(): string {
                         let label: string = Base.label()
                         return label + " " + this.name
@@ -103,6 +109,9 @@ class ObjectOrientedJavaGeneratorTest {
                 .contains("public final class User extends Base implements Printable")
                 .contains("public String greet()")
                 .contains("return \"Hello \"+this.name;")
+                .contains("var x = \"a\";")
+                .contains("x = \"2\";")
+                .contains("final String label = super.label();")
                 .contains("String label = super.label();")
                 .contains("for (var value : values)")
                 .contains("for (int value : values)")
@@ -116,6 +125,7 @@ class ObjectOrientedJavaGeneratorTest {
             var user = constructor.newInstance("Capy");
 
             assertThat(userType.getMethod("greet").invoke(user)).isEqualTo("Hello Capy");
+            assertThat(userType.getMethod("mutable").invoke(user)).isEqualTo("2");
             assertThat(userType.getMethod("print").invoke(user)).isEqualTo("base Capy");
             assertThat(userType.getMethod("first_positive", java.util.List.class).invoke(user, java.util.List.of(-1, 0, 3))).isEqualTo(3);
             assertThat(userType.getMethod("first_large", java.util.List.class).invoke(user, java.util.List.of(4, 11, 15))).isEqualTo(11);

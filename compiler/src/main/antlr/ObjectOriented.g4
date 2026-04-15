@@ -35,6 +35,8 @@ interfaceMethodDeclaration: docComment* visibility? methodModifier* 'def' identi
 initBlock: docComment* 'init' statementBlock;
 statementBlock: '{' statement* '}';
 statement: letStatement
+         | mutableVariableStatement
+         | assignmentStatement
          | returnStatement
          | ifStatement
          | whileStatement
@@ -42,6 +44,8 @@ statement: letStatement
          | forEachStatement
          | statementBlock;
 letStatement: 'let' identifier (':' type)? letBindingOperator expression ';'?;
+mutableVariableStatement: 'def' identifier (':' type)? letBindingOperator expression ';'?;
+assignmentStatement: identifier ASSIGN expression ';'?;
 returnStatement: 'return' expression ';'?;
 ifStatement: 'if' expression statementBlock ('else' (ifStatement | statementBlock))?;
 whileStatement: 'while' expression statementBlock;
