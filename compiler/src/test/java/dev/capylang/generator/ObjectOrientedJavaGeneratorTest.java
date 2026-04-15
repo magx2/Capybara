@@ -89,6 +89,12 @@ class ObjectOrientedJavaGeneratorTest {
                             return 2
                         } while false
                     }
+
+                    def second_name(values: string[]): string = values[1]
+
+                    def first_id(values: int[]): int = values[0]
+
+                    def copy_users(values: User[]): User[] = values
                 }
                 """);
 
@@ -112,7 +118,9 @@ class ObjectOrientedJavaGeneratorTest {
                 .contains("var x = \"a\";")
                 .contains("x = \"2\";")
                 .contains("final String label = super.label();")
-                .contains("String label = super.label();")
+                .contains("public String second_name(String[] values)")
+                .contains("public int first_id(int[] values)")
+                .contains("public User[] copy_users(User[] values)")
                 .contains("for (var value : values)")
                 .contains("for (int value : values)")
                 .contains("while (flag)")
@@ -127,6 +135,11 @@ class ObjectOrientedJavaGeneratorTest {
             assertThat(userType.getMethod("greet").invoke(user)).isEqualTo("Hello Capy");
             assertThat(userType.getMethod("mutable").invoke(user)).isEqualTo("2");
             assertThat(userType.getMethod("print").invoke(user)).isEqualTo("base Capy");
+            assertThat(userType.getMethod("second_name", String[].class).invoke(user, (Object) new String[]{"A", "B", "C"})).isEqualTo("B");
+            assertThat(userType.getMethod("first_id", int[].class).invoke(user, (Object) new int[]{7, 8, 9})).isEqualTo(7);
+            var sameArray = java.lang.reflect.Array.newInstance(userType, 1);
+            java.lang.reflect.Array.set(sameArray, 0, user);
+            assertThat(userType.getMethod("copy_users", sameArray.getClass()).invoke(user, sameArray)).isSameAs(sameArray);
             assertThat(userType.getMethod("first_positive", java.util.List.class).invoke(user, java.util.List.of(-1, 0, 3))).isEqualTo(3);
             assertThat(userType.getMethod("first_large", java.util.List.class).invoke(user, java.util.List.of(4, 11, 15))).isEqualTo(11);
             assertThat(userType.getMethod("while_flag", boolean.class).invoke(user, true)).isEqualTo(1);

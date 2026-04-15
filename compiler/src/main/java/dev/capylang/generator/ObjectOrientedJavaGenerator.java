@@ -707,6 +707,9 @@ public final class ObjectOrientedJavaGenerator {
 
     private String renderType(String type, boolean boxed) {
         var trimmed = type.trim();
+        if (trimmed.endsWith("[]")) {
+            return renderType(trimmed.substring(0, trimmed.length() - 2), false) + "[]";
+        }
         if (trimmed.startsWith("list[") && trimmed.endsWith("]")) {
             return "java.util.List<" + renderType(innerType(trimmed), true) + ">";
         }

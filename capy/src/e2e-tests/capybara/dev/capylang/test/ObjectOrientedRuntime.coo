@@ -45,6 +45,12 @@ class Person(name: string): GreeterBase, Printable, BracketNaming {
         }
     }
 
+    def second_name(values: string[]): string = values[1]
+
+    def first_id(values: int[]): int = values[0]
+
+    def copy_people(values: Person[]): Person[] = values
+
     def first_positive(values: list[int]): int {
         for value in values {
             if value > 0 {
