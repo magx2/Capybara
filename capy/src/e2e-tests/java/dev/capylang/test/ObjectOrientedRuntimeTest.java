@@ -53,6 +53,16 @@ class ObjectOrientedRuntimeTest {
     }
 
     @Test
+    void arrayTypesCompileAndUseJavaArraySemantics() {
+        var person = new Person("Capy");
+        var people = new Person[]{person, new Person("Bara")};
+
+        assertThat(person.second_name(new String[]{"zero", "one", "two"})).isEqualTo("one");
+        assertThat(person.first_id(new int[]{9, 8, 7})).isEqualTo(9);
+        assertThat(person.copy_people(people)).isSameAs(people);
+    }
+
+    @Test
     void voidMethodsCompileAndExecuteForExpressionAndBlockBodies() throws Exception {
         var person = new Person("Capy");
 

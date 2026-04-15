@@ -78,11 +78,15 @@ BOOL_LITERAL: 'true' | 'false';
 COLLECTION: 'list' | 'set' | 'dict';
 NAME : [_]* [a-z] [a-zA-Z0-9_]*;
 identifier: NAME | COLLECTION | 'def' | 'type' | 'byte' | 'int' | 'long' | 'double' | 'bool' | 'string' | 'float' | 'void' | 'any' | 'return';
-type: COLLECTION '[' type ']'
-    | 'tuple' '[' type (COMMA type)+ ']'
-    | LPAREN RPAREN FAT_ARROW type
+type: functionTypeLiteral | arrayOrSimpleType;
+functionTypeLiteral
+    : LPAREN RPAREN FAT_ARROW type
     | LPAREN type (COMMA type)+ RPAREN FAT_ARROW type
-    | type FAT_ARROW type
+    | arrayOrSimpleType FAT_ARROW type
+    ;
+arrayOrSimpleType: simpleType ('[' ']')*;
+simpleType: COLLECTION '[' type ']'
+    | 'tuple' '[' type (COMMA type)+ ']'
     | 'byte'
     | 'int'
     | 'long'

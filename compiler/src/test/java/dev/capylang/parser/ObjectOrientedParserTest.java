@@ -389,6 +389,55 @@ class ObjectOrientedParserTest {
     }
 
     @Test
+    @DisplayName("should parse array types in fields and method signatures")
+    void parseArrayTypes() {
+        var result = ObjectOrientedParser.INSTANCE.parseModule(new RawModule(
+                "Arrays",
+                "/parser",
+                """
+                        class Arrays(values: string[], ids: int[]) {
+                            field values: string[] = values
+                            field ids: int[] = ids
+
+                            def second_name(input: string[]): string = input[1]
+                            def first_id(input: int[]): int = input[0]
+                            def copy_people(input: Person[]): Person[] = input
+                        }
+
+                        class Person(name: string) {
+                            field name: string = name
+                        }
+                        """,
+                SourceKind.OBJECT_ORIENTED
+        ));
+
+        assertThat(result).isInstanceOf(Result.Success.class);
+        var module = ((Result.Success<ObjectOrientedModule>) result).value();
+        var arrays = module.objectOriented().definitions().stream()
+                .filter(ObjectOriented.ClassDeclaration.class::isInstance)
+                .map(ObjectOriented.ClassDeclaration.class::cast)
+                .filter(type -> type.name().equals("Arrays"))
+                .findFirst()
+                .orElseThrow();
+
+        assertThat(arrays.constructorParameters())
+                .extracting(ObjectOriented.Parameter::type)
+                .containsExactly("string[]", "int[]");
+        assertThat(arrays.members().stream()
+                .filter(ObjectOriented.FieldDeclaration.class::isInstance)
+                .map(ObjectOriented.FieldDeclaration.class::cast)
+                .map(ObjectOriented.FieldDeclaration::type)
+                .toList())
+                .containsExactly("string[]", "int[]");
+        assertThat(arrays.members().stream()
+                .filter(ObjectOriented.MethodDeclaration.class::isInstance)
+                .map(ObjectOriented.MethodDeclaration.class::cast)
+                .map(ObjectOriented.MethodDeclaration::returnType)
+                .toList())
+                .containsExactly("string", "int", "Person[]");
+    }
+
+    @Test
     @DisplayName("should reject return without expression")
     void rejectReturnWithoutExpression() {
         var result = ObjectOrientedParser.INSTANCE.parseModule(new RawModule(
