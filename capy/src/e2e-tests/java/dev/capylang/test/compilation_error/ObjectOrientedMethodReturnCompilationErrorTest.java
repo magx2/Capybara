@@ -34,7 +34,7 @@ class ObjectOrientedMethodReturnCompilationErrorTest {
                 .singleElement()
                 .satisfies(error -> {
                     assertThat(error.file()).isEqualTo("/foo/boo/InvalidReturn.coo");
-                    assertThat(error.message()).contains("mismatched input");
+                    assertThat(error.message()).contains("no viable alternative");
                 });
     }
 

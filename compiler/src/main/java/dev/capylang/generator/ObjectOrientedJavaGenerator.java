@@ -725,7 +725,7 @@ public final class ObjectOrientedJavaGenerator {
             case "bool" -> boxed ? "Boolean" : "boolean";
             case "string" -> "String";
             case "any" -> "Object";
-            case "nothing" -> "void";
+            case "void" -> "void";
             default -> renderTypeReference(trimmed);
         };
     }
