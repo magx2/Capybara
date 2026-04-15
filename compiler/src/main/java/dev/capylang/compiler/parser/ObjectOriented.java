@@ -18,7 +18,7 @@ public record ObjectOriented(List<TypeDeclaration> definitions) {
     public sealed interface MethodBody permits ExpressionBody, StatementBlock {
     }
 
-    public sealed interface Statement permits LetStatement, ReturnStatement, IfStatement, WhileStatement, DoWhileStatement, ForEachStatement, StatementBlock {
+    public sealed interface Statement permits LetStatement, MutableVariableStatement, AssignmentStatement, ReturnStatement, IfStatement, WhileStatement, DoWhileStatement, ForEachStatement, StatementBlock {
     }
 
     public record ClassDeclaration(
@@ -72,6 +72,12 @@ public record ObjectOriented(List<TypeDeclaration> definitions) {
     }
 
     public record LetStatement(String name, Optional<String> type, String expression) implements Statement {
+    }
+
+    public record MutableVariableStatement(String name, Optional<String> type, String expression) implements Statement {
+    }
+
+    public record AssignmentStatement(String name, String expression) implements Statement {
     }
 
     public record ReturnStatement(String expression) implements Statement {

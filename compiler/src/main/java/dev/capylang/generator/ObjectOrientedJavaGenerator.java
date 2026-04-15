@@ -393,11 +393,24 @@ public final class ObjectOrientedJavaGenerator {
     ) {
         switch (statement) {
             case ObjectOriented.LetStatement letStatement -> code.append(indent(indentLevel))
+                    .append("final ")
                     .append(letStatement.type().map(type -> renderType(type, false)).orElse("var"))
                     .append(' ')
                     .append(sanitizeIdentifier(letStatement.name()))
                     .append(" = ")
                     .append(renderExpression(module, letStatement.expression(), parentNames))
+                    .append(";\n");
+            case ObjectOriented.MutableVariableStatement mutableVariableStatement -> code.append(indent(indentLevel))
+                    .append(mutableVariableStatement.type().map(type -> renderType(type, false)).orElse("var"))
+                    .append(' ')
+                    .append(sanitizeIdentifier(mutableVariableStatement.name()))
+                    .append(" = ")
+                    .append(renderExpression(module, mutableVariableStatement.expression(), parentNames))
+                    .append(";\n");
+            case ObjectOriented.AssignmentStatement assignmentStatement -> code.append(indent(indentLevel))
+                    .append(sanitizeIdentifier(assignmentStatement.name()))
+                    .append(" = ")
+                    .append(renderExpression(module, assignmentStatement.expression(), parentNames))
                     .append(";\n");
             case ObjectOriented.ReturnStatement returnStatement -> code.append(indent(indentLevel))
                     .append("return ")

@@ -11,4 +11,7 @@ public record ObjectOrientedModule(
         List<ImportDeclaration> imports,
         SourceKind sourceKind
 ) {
+    public String moduleFile() {
+        return sourceKind.moduleFile(path, name);
+    }
 }

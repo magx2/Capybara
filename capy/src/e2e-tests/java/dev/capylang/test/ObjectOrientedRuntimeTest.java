@@ -11,6 +11,7 @@ class ObjectOrientedRuntimeTest {
         var person = new Person("Capy");
 
         assertThat(person.greet()).isEqualTo("hello Capy");
+        assertThat(person.mutable()).isEqualTo("2");
         assertThat(person.print()).isEqualTo("hello Capy!");
     }
 
