@@ -45,10 +45,32 @@ Capybara OO v1 starts with a separate frontend boundary instead of extending `Fu
 - Expressions are not valid stand-alone statements in OO method blocks.
 - v1 statement set is intentionally minimal:
   - `let`
+  - mutable local `def`
+  - assignment
   - `return`
   - `if` / `else`
+  - `for` / `foreach`
+  - `while`
+  - `do` / `while`
+  - `throw`
+  - `try` / `catch`
   - nested statement blocks
-- Mutation-oriented statements such as assignment, loops, and exception control flow are postponed.
+
+## Exceptions v1
+
+- Capybara OO adopts the smallest common denominator shared by Java, Python, and JavaScript:
+  - `throw expression`
+  - `try { ... } catch error { ... }`
+- `try` / `catch` is statement-only in v1.
+- `catch` binds one immutable local exception variable.
+- `finally` is postponed.
+- Checked exceptions and `throws` declarations are postponed.
+- Java lowering is the reference implementation:
+  - `throw` lowers through `dev.capylang.CapybaraException.wrap(...)`
+  - `catch` lowers to `catch (RuntimeException error)`
+- Functional `Result.Error` remains a value-level error representation, not an exception.
+- There is no implicit compiler conversion between thrown OO exceptions and functional `Result.Error`.
+- If interop is needed, it must stay explicit at library or user-code boundaries rather than becoming hidden control flow.
 
 ## Java Backend v1
 

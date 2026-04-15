@@ -60,9 +60,19 @@ public final class ObjectOrientedValidator {
                 case ObjectOriented.LetStatement letStatement -> scope.declareImmutable(letStatement.name());
                 case ObjectOriented.MutableVariableStatement mutableVariableStatement -> scope.declareMutable(mutableVariableStatement.name());
                 case ObjectOriented.AssignmentStatement assignmentStatement -> validateAssignment(module, owner, assignmentStatement, scope, errors);
+                case ObjectOriented.ThrowStatement ignored -> {
+                }
                 case ObjectOriented.IfStatement ifStatement -> {
                     validateBlock(module, owner, ifStatement.thenBranch(), scope, errors);
                     ifStatement.elseBranch().ifPresent(elseBranch -> validateNestedStatement(module, owner, elseBranch, scope, errors));
+                }
+                case ObjectOriented.TryCatchStatement tryCatchStatement -> {
+                    validateBlock(module, owner, tryCatchStatement.tryBlock(), scope, errors);
+                    for (var catchClause : tryCatchStatement.catches()) {
+                        var catchScope = scope.child();
+                        catchScope.declareImmutable(catchClause.name());
+                        validateBlock(module, owner, catchClause.body(), catchScope, errors);
+                    }
                 }
                 case ObjectOriented.WhileStatement whileStatement -> validateBlock(module, owner, whileStatement.body(), scope, errors);
                 case ObjectOriented.DoWhileStatement doWhileStatement -> validateBlock(module, owner, doWhileStatement.body(), scope, errors);
@@ -98,9 +108,19 @@ public final class ObjectOrientedValidator {
                 loopScope.declareImmutable(forEachStatement.name());
                 validateBlock(module, owner, forEachStatement.body(), loopScope, errors);
             }
+            case ObjectOriented.TryCatchStatement tryCatchStatement -> {
+                validateBlock(module, owner, tryCatchStatement.tryBlock(), scope, errors);
+                for (var catchClause : tryCatchStatement.catches()) {
+                    var catchScope = scope.child();
+                    catchScope.declareImmutable(catchClause.name());
+                    validateBlock(module, owner, catchClause.body(), catchScope, errors);
+                }
+            }
             case ObjectOriented.AssignmentStatement assignmentStatement -> validateAssignment(module, owner, assignmentStatement, scope, errors);
             case ObjectOriented.LetStatement letStatement -> scope.declareImmutable(letStatement.name());
             case ObjectOriented.MutableVariableStatement mutableVariableStatement -> scope.declareMutable(mutableVariableStatement.name());
+            case ObjectOriented.ThrowStatement ignored -> {
+            }
             case ObjectOriented.ReturnStatement ignored -> {
             }
         }

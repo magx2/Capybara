@@ -125,6 +125,10 @@ public final class ObjectOrientedJavaGenerator {
             code.append(renderConstructor(module, declaration, fields, initBlocks)).append("\n");
         }
 
+        if (usesThrowSupport(declaration)) {
+            code.append(renderThrowHelper()).append("\n");
+        }
+
         var parentNames = Stream.concat(
                         parents.classParent().stream(),
                         parents.interfaceParents().stream()
@@ -301,6 +305,9 @@ public final class ObjectOrientedJavaGenerator {
                     .append(declaration.parents().stream().map(parent -> renderTypeReference(parent.name())).collect(Collectors.joining(", ")));
         }
         code.append(" {\n");
+        if (usesThrowSupport(declaration)) {
+            code.append(renderThrowHelper()).append("\n");
+        }
         for (var member : declaration.members()) {
             code.append(renderTraitMethod(module, declaration.name(), (ObjectOriented.MethodDeclaration) member));
         }
@@ -420,6 +427,10 @@ public final class ObjectOrientedJavaGenerator {
                     .append(" = ")
                     .append(renderExpression(module, assignmentStatement.expression(), parentNames))
                     .append(";\n");
+            case ObjectOriented.ThrowStatement throwStatement -> code.append(indent(indentLevel))
+                    .append("throw capybara$toException(")
+                    .append(renderExpression(module, throwStatement.expression(), parentNames))
+                    .append(");\n");
             case ObjectOriented.ReturnStatement returnStatement -> code.append(indent(indentLevel))
                     .append("return ")
                     .append(renderExpression(module, returnStatement.expression(), parentNames))
@@ -441,6 +452,19 @@ public final class ObjectOrientedJavaGenerator {
                         code.append(indent(indentLevel)).append('}');
                     }
                 });
+                code.append("\n");
+            }
+            case ObjectOriented.TryCatchStatement tryCatchStatement -> {
+                code.append(indent(indentLevel)).append("try {\n");
+                appendStatementBlockContents(code, module, tryCatchStatement.tryBlock(), indentLevel + 1, parentNames);
+                code.append(indent(indentLevel)).append("}");
+                for (var catchClause : tryCatchStatement.catches()) {
+                    code.append(" catch (java.lang.RuntimeException ")
+                            .append(sanitizeIdentifier(catchClause.name()))
+                            .append(") {\n");
+                    appendStatementBlockContents(code, module, catchClause.body(), indentLevel + 1, parentNames);
+                    code.append(indent(indentLevel)).append("}");
+                }
                 code.append("\n");
             }
             case ObjectOriented.WhileStatement whileStatement -> {
@@ -553,11 +577,16 @@ public final class ObjectOrientedJavaGenerator {
                 case ObjectOriented.LetStatement letStatement -> expressions.add(letStatement.expression());
                 case ObjectOriented.MutableVariableStatement mutableVariableStatement -> expressions.add(mutableVariableStatement.expression());
                 case ObjectOriented.AssignmentStatement assignmentStatement -> expressions.add(assignmentStatement.expression());
+                case ObjectOriented.ThrowStatement throwStatement -> expressions.add(throwStatement.expression());
                 case ObjectOriented.ReturnStatement returnStatement -> expressions.add(returnStatement.expression());
                 case ObjectOriented.IfStatement ifStatement -> {
                     expressions.add(ifStatement.condition());
                     collectExpressions(ifStatement.thenBranch(), expressions);
                     ifStatement.elseBranch().ifPresent(elseBranch -> collectExpressions(elseBranch, expressions));
+                }
+                case ObjectOriented.TryCatchStatement tryCatchStatement -> {
+                    collectExpressions(tryCatchStatement.tryBlock(), expressions);
+                    tryCatchStatement.catches().forEach(catchClause -> collectExpressions(catchClause.body(), expressions));
                 }
                 case ObjectOriented.WhileStatement whileStatement -> {
                     expressions.add(whileStatement.condition());
@@ -596,9 +625,14 @@ public final class ObjectOrientedJavaGenerator {
                 expressions.add(forEachStatement.iterable());
                 collectExpressions(forEachStatement.body(), expressions);
             }
+            case ObjectOriented.TryCatchStatement tryCatchStatement -> {
+                collectExpressions(tryCatchStatement.tryBlock(), expressions);
+                tryCatchStatement.catches().forEach(catchClause -> collectExpressions(catchClause.body(), expressions));
+            }
             case ObjectOriented.LetStatement letStatement -> expressions.add(letStatement.expression());
             case ObjectOriented.MutableVariableStatement mutableVariableStatement -> expressions.add(mutableVariableStatement.expression());
             case ObjectOriented.AssignmentStatement assignmentStatement -> expressions.add(assignmentStatement.expression());
+            case ObjectOriented.ThrowStatement throwStatement -> expressions.add(throwStatement.expression());
             case ObjectOriented.ReturnStatement returnStatement -> expressions.add(returnStatement.expression());
         }
     }
@@ -606,6 +640,60 @@ public final class ObjectOrientedJavaGenerator {
     private String renderJavaEntrypointWrapper() {
         return "    public static void main(java.lang.String[] args) {\n"
                + "        System.exit(main(java.util.List.of(args)));\n"
+               + "    }\n";
+    }
+
+    private boolean usesThrowSupport(ObjectOriented.TypeDeclaration declaration) {
+        return declaration.members().stream().anyMatch(this::containsThrow);
+    }
+
+    private boolean containsThrow(ObjectOriented.MemberDeclaration member) {
+        return switch (member) {
+            case ObjectOriented.FieldDeclaration ignored -> false;
+            case ObjectOriented.MethodDeclaration method -> method.body().stream().anyMatch(this::containsThrow);
+            case ObjectOriented.InitBlock initBlock -> containsThrow(initBlock.body());
+        };
+    }
+
+    private boolean containsThrow(ObjectOriented.MethodBody methodBody) {
+        return switch (methodBody) {
+            case ObjectOriented.ExpressionBody ignored -> false;
+            case ObjectOriented.StatementBlock statementBlock -> containsThrow(statementBlock);
+        };
+    }
+
+    private boolean containsThrow(ObjectOriented.StatementBlock block) {
+        return block.statements().stream().anyMatch(this::containsThrow);
+    }
+
+    private boolean containsThrow(ObjectOriented.Statement statement) {
+        return switch (statement) {
+            case ObjectOriented.ThrowStatement ignored -> true;
+            case ObjectOriented.IfStatement ifStatement ->
+                    containsThrow(ifStatement.thenBranch()) || ifStatement.elseBranch().stream().anyMatch(this::containsThrow);
+            case ObjectOriented.TryCatchStatement tryCatchStatement ->
+                    containsThrow(tryCatchStatement.tryBlock())
+                    || tryCatchStatement.catches().stream().anyMatch(catchClause -> containsThrow(catchClause.body()));
+            case ObjectOriented.WhileStatement whileStatement -> containsThrow(whileStatement.body());
+            case ObjectOriented.DoWhileStatement doWhileStatement -> containsThrow(doWhileStatement.body());
+            case ObjectOriented.ForEachStatement forEachStatement -> containsThrow(forEachStatement.body());
+            case ObjectOriented.StatementBlock nestedBlock -> containsThrow(nestedBlock);
+            case ObjectOriented.LetStatement letStatement -> false;
+            case ObjectOriented.MutableVariableStatement mutableVariableStatement -> false;
+            case ObjectOriented.AssignmentStatement assignmentStatement -> false;
+            case ObjectOriented.ReturnStatement returnStatement -> false;
+        };
+    }
+
+    private String renderThrowHelper() {
+        return "    private static java.lang.RuntimeException capybara$toException(java.lang.Object value) {\n"
+               + "        if (value instanceof java.lang.RuntimeException runtimeException) {\n"
+               + "            return runtimeException;\n"
+               + "        }\n"
+               + "        if (value instanceof java.lang.Throwable throwable) {\n"
+               + "            return new java.lang.RuntimeException(throwable.getMessage(), throwable);\n"
+               + "        }\n"
+               + "        return new java.lang.RuntimeException(java.lang.String.valueOf(value));\n"
                + "    }\n";
     }
 
