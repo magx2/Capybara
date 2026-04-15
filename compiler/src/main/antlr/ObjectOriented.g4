@@ -37,8 +37,10 @@ statementBlock: '{' statement* '}';
 statement: letStatement
          | mutableVariableStatement
          | assignmentStatement
+         | throwStatement
          | returnStatement
          | ifStatement
+         | tryCatchStatement
          | whileStatement
          | doWhileStatement
          | forEachStatement
@@ -46,8 +48,11 @@ statement: letStatement
 letStatement: 'let' identifier (':' type)? letBindingOperator expression ';'?;
 mutableVariableStatement: 'def' identifier (':' type)? letBindingOperator expression ';'?;
 assignmentStatement: identifier ASSIGN expression ';'?;
+throwStatement: 'throw' expression ';'?;
 returnStatement: 'return' expression ';'?;
 ifStatement: 'if' expression statementBlock ('else' (ifStatement | statementBlock))?;
+tryCatchStatement: 'try' statementBlock catchClause+;
+catchClause: 'catch' identifier statementBlock;
 whileStatement: 'while' expression statementBlock;
 doWhileStatement: 'do' statementBlock 'while' expression ';'?;
 forEachStatement: ('for' | 'foreach') identifier (':' type)? 'in' expression statementBlock;
@@ -77,7 +82,7 @@ VISIBILITY: 'local';
 BOOL_LITERAL: 'true' | 'false';
 COLLECTION: 'list' | 'set' | 'dict';
 NAME : [_]* [a-z] [a-zA-Z0-9_]*;
-identifier: NAME | COLLECTION | 'def' | 'type' | 'byte' | 'int' | 'long' | 'double' | 'bool' | 'string' | 'float' | 'void' | 'any' | 'return';
+identifier: NAME | COLLECTION | 'def' | 'type' | 'byte' | 'int' | 'long' | 'double' | 'bool' | 'string' | 'float' | 'void' | 'any' | 'return' | 'catch';
 type: functionTypeLiteral | arrayOrSimpleType;
 functionTypeLiteral
     : LPAREN RPAREN FAT_ARROW type

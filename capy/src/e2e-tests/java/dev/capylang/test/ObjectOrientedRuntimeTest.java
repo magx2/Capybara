@@ -65,6 +65,15 @@ class ObjectOrientedRuntimeTest {
     }
 
     @Test
+    void exceptionsSupportThrowAndTryCatchAcrossGeneratedJava() {
+        var person = new Person("Capy");
+
+        assertThat(person.recover(false)).isEqualTo("ok");
+        assertThat(person.recover(true)).isEqualTo("boom");
+        assertThat(person.catch_index(new String[]{"zero"})).isEqualTo("ArrayIndexOutOfBoundsException");
+    }
+
+    @Test
     void voidMethodsCompileAndExecuteForExpressionAndBlockBodies() throws Exception {
         var person = new Person("Capy");
 

@@ -99,6 +99,25 @@ class ObjectOrientedJavaGeneratorTest {
                     def names(): string[] = string[]{"zero", "one"}
 
                     def slots(size: int): int[] = int[size]
+
+                    def recover(flag: bool): string {
+                        try {
+                            if flag {
+                                throw "boom"
+                            }
+                            return "ok"
+                        } catch error {
+                            return error.getMessage()
+                        }
+                    }
+
+                    def catch_index(values: string[]): string {
+                        try {
+                            return values[3]
+                        } catch error {
+                            return error.getClass().getSimpleName()
+                        }
+                    }
                 }
                 """);
 
@@ -127,6 +146,8 @@ class ObjectOrientedJavaGeneratorTest {
                 .contains("public User[] copy_users(User[] values)")
                 .contains("return new String[]{\"zero\", \"one\"};")
                 .contains("return new int[size];")
+                .contains("throw capybara$toException(\"boom\");")
+                .contains("catch (java.lang.RuntimeException error)")
                 .contains("for (var value : values)")
                 .contains("for (int value : values)")
                 .contains("while (flag)")
@@ -148,6 +169,9 @@ class ObjectOrientedJavaGeneratorTest {
             assertThat(userType.getMethod("copy_users", sameArray.getClass()).invoke(user, sameArray)).isSameAs(sameArray);
             assertThat((String[]) userType.getMethod("names").invoke(user)).containsExactly("zero", "one");
             assertThat((int[]) userType.getMethod("slots", int.class).invoke(user, 3)).hasSize(3);
+            assertThat(userType.getMethod("recover", boolean.class).invoke(user, false)).isEqualTo("ok");
+            assertThat(userType.getMethod("recover", boolean.class).invoke(user, true)).isEqualTo("boom");
+            assertThat(userType.getMethod("catch_index", String[].class).invoke(user, (Object) new String[]{"A"})).isEqualTo("ArrayIndexOutOfBoundsException");
             assertThat(userType.getMethod("first_positive", java.util.List.class).invoke(user, java.util.List.of(-1, 0, 3))).isEqualTo(3);
             assertThat(userType.getMethod("first_large", java.util.List.class).invoke(user, java.util.List.of(4, 11, 15))).isEqualTo(11);
             assertThat(userType.getMethod("while_flag", boolean.class).invoke(user, true)).isEqualTo(1);

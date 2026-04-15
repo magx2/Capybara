@@ -55,6 +55,25 @@ class Person(name: string): GreeterBase, Printable, BracketNaming {
 
     def slots(size: int): int[] = int[size]
 
+    def recover(flag: bool): string {
+        try {
+            if flag {
+                throw "boom"
+            }
+            return "ok"
+        } catch error {
+            return error.getMessage()
+        }
+    }
+
+    def catch_index(values: string[]): string {
+        try {
+            return values[3]
+        } catch error {
+            return error.getClass().getSimpleName()
+        }
+    }
+
     def first_positive(values: list[int]): int {
         for value in values {
             if value > 0 {

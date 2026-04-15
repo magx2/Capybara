@@ -115,4 +115,63 @@ class ObjectOrientedCompilationErrorTest {
                     assertThat(error.message()).contains("use `def` for mutable locals");
                 });
     }
+
+    @Test
+    void shouldRejectTryWithoutCatchClause() {
+        var result = CapybaraCompiler.INSTANCE.compile(List.of(
+                new RawModule(
+                        "BrokenTry",
+                        "/foo/boo",
+                        """
+                                class BrokenTry {
+                                    def run(): string {
+                                        try {
+                                            throw "boom"
+                                        }
+                                    }
+                                }
+                                """,
+                        SourceKind.OBJECT_ORIENTED
+                )
+        ), new TreeSet<>());
+
+        assertThat(result).isInstanceOf(Result.Error.class);
+        assertThat(((Result.Error<?>) result).errors())
+                .singleElement()
+                .satisfies(error -> {
+                    assertThat(error.file()).isEqualTo("/foo/boo/BrokenTry.coo");
+                    assertThat(error.message()).contains("expecting 'catch'");
+                });
+    }
+
+    @Test
+    void shouldRejectAssigningToCatchVariable() {
+        var result = CapybaraCompiler.INSTANCE.compile(List.of(
+                new RawModule(
+                        "BrokenCatch",
+                        "/foo/boo",
+                        """
+                                class BrokenCatch {
+                                    def run(): string {
+                                        try {
+                                            throw "boom"
+                                        } catch error {
+                                            error = "again"
+                                            return error
+                                        }
+                                    }
+                                }
+                                """,
+                        SourceKind.OBJECT_ORIENTED
+                )
+        ), new TreeSet<>());
+
+        assertThat(result).isInstanceOf(Result.Error.class);
+        assertThat(((Result.Error<?>) result).errors())
+                .singleElement()
+                .satisfies(error -> {
+                    assertThat(error.file()).isEqualTo("/foo/boo/BrokenCatch.coo");
+                    assertThat(error.message()).contains("immutable local `error`");
+                });
+    }
 }

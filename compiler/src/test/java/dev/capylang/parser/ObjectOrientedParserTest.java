@@ -362,6 +362,56 @@ class ObjectOrientedParserTest {
     }
 
     @Test
+    @DisplayName("should parse throw and try catch statements")
+    void parseExceptionStatements() {
+        var result = ObjectOrientedParser.INSTANCE.parseModule(new RawModule(
+                "Exceptions",
+                "/parser",
+                """
+                        class Exceptions {
+                            def recover(flag: bool): string {
+                                try {
+                                    if flag {
+                                        throw "boom"
+                                    }
+                                    return "ok"
+                                } catch error {
+                                    return error.getMessage()
+                                }
+                            }
+                        }
+                        """,
+                SourceKind.OBJECT_ORIENTED
+        ));
+
+        assertThat(result).isInstanceOf(Result.Success.class);
+        var module = ((Result.Success<ObjectOrientedModule>) result).value();
+        var recoverMethod = module.objectOriented().definitions().stream()
+                .filter(ObjectOriented.ClassDeclaration.class::isInstance)
+                .map(ObjectOriented.ClassDeclaration.class::cast)
+                .flatMap(type -> type.members().stream())
+                .filter(ObjectOriented.MethodDeclaration.class::isInstance)
+                .map(ObjectOriented.MethodDeclaration.class::cast)
+                .filter(method -> method.name().equals("recover"))
+                .findFirst()
+                .orElseThrow();
+
+        assertThat(recoverMethod.body()).hasValueSatisfying(body -> {
+            assertThat(body).isInstanceOf(ObjectOriented.StatementBlock.class);
+            var block = (ObjectOriented.StatementBlock) body;
+            assertThat(block.statements()).singleElement().isInstanceOf(ObjectOriented.TryCatchStatement.class);
+            var tryCatch = (ObjectOriented.TryCatchStatement) block.statements().getFirst();
+            assertThat(tryCatch.tryBlock().statements()).hasSize(2);
+            assertThat(tryCatch.tryBlock().statements().getFirst()).isInstanceOf(ObjectOriented.IfStatement.class);
+            assertThat(tryCatch.tryBlock().statements().get(1)).isInstanceOf(ObjectOriented.ReturnStatement.class);
+            assertThat(tryCatch.catches()).singleElement().satisfies(catchClause -> {
+                assertThat(catchClause.name()).isEqualTo("error");
+                assertThat(catchClause.body().statements()).singleElement().isInstanceOf(ObjectOriented.ReturnStatement.class);
+            });
+        });
+    }
+
+    @Test
     @DisplayName("should reject trailing bare expression after return-oriented statements")
     void rejectTrailingBareExpression() {
         var result = ObjectOrientedParser.INSTANCE.parseModule(new RawModule(
@@ -482,6 +532,30 @@ class ObjectOrientedParserTest {
                         class Broken {
                             def run(): int {
                                 return
+                            }
+                        }
+                        """,
+                SourceKind.OBJECT_ORIENTED
+        ));
+
+        assertThat(result).isInstanceOf(Result.Error.class);
+        assertThat(((Result.Error<ObjectOrientedModule>) result).errors())
+                .singleElement()
+                .satisfies(error -> assertThat(error.file()).isEqualTo("/parser/Broken.coo"));
+    }
+
+    @Test
+    @DisplayName("should reject try without catch clauses")
+    void rejectTryWithoutCatch() {
+        var result = ObjectOrientedParser.INSTANCE.parseModule(new RawModule(
+                "Broken",
+                "/parser",
+                """
+                        class Broken {
+                            def run(): string {
+                                try {
+                                    throw "boom"
+                                }
                             }
                         }
                         """,

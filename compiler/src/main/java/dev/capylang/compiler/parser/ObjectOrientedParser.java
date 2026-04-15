@@ -219,11 +219,17 @@ public final class ObjectOrientedParser {
         if (context.assignmentStatement() != null) {
             return assignmentStatement(context.assignmentStatement());
         }
+        if (context.throwStatement() != null) {
+            return throwStatement(context.throwStatement());
+        }
         if (context.returnStatement() != null) {
             return returnStatement(context.returnStatement());
         }
         if (context.ifStatement() != null) {
             return ifStatement(context.ifStatement());
+        }
+        if (context.tryCatchStatement() != null) {
+            return tryCatchStatement(context.tryCatchStatement());
         }
         if (context.whileStatement() != null) {
             return whileStatement(context.whileStatement());
@@ -260,6 +266,10 @@ public final class ObjectOrientedParser {
         );
     }
 
+    private ObjectOriented.ThrowStatement throwStatement(dev.capylang.parser.antlr.ObjectOrientedParser.ThrowStatementContext context) {
+        return new ObjectOriented.ThrowStatement(context.expression().getText());
+    }
+
     private ObjectOriented.ReturnStatement returnStatement(dev.capylang.parser.antlr.ObjectOrientedParser.ReturnStatementContext context) {
         return new ObjectOriented.ReturnStatement(context.expression().getText());
     }
@@ -274,6 +284,20 @@ public final class ObjectOrientedParser {
                 context.expression().getText(),
                 statementBlock(context.statementBlock(0)),
                 elseBranch
+        );
+    }
+
+    private ObjectOriented.TryCatchStatement tryCatchStatement(dev.capylang.parser.antlr.ObjectOrientedParser.TryCatchStatementContext context) {
+        return new ObjectOriented.TryCatchStatement(
+                statementBlock(context.statementBlock()),
+                context.catchClause().stream().map(this::catchClause).toList()
+        );
+    }
+
+    private ObjectOriented.CatchClause catchClause(dev.capylang.parser.antlr.ObjectOrientedParser.CatchClauseContext context) {
+        return new ObjectOriented.CatchClause(
+                context.identifier().getText(),
+                statementBlock(context.statementBlock())
         );
     }
 
