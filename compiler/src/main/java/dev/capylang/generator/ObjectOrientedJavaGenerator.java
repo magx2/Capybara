@@ -219,6 +219,7 @@ public final class ObjectOrientedJavaGenerator {
             Set<String> parentNames
     ) {
         var code = new StringBuilder();
+        var javaEntrypoint = isJavaEntrypoint(method);
         if (method.modifiers().contains("override")) {
             code.append("    @Override\n");
         }
@@ -243,6 +244,10 @@ public final class ObjectOrientedJavaGenerator {
             }
             code.append("abstract ");
         }
+        if (javaEntrypoint) {
+            ensureEntrypointCompatible(module, owner, method, parentNames);
+            code.append("static ");
+        }
         code.append(renderType(method.returnType(), false))
                 .append(' ')
                 .append(sanitizeIdentifier(method.name()))
@@ -256,6 +261,9 @@ public final class ObjectOrientedJavaGenerator {
         code.append(" {\n");
         appendMethodBody(code, module, method, 2, parentNames);
         code.append("    }\n");
+        if (javaEntrypoint) {
+            code.append("\n").append(renderJavaEntrypointWrapper());
+        }
         return code.toString();
     }
 
@@ -493,6 +501,112 @@ public final class ObjectOrientedJavaGenerator {
                 code.append(indent(indentLevel)).append('}');
             }
         });
+    }
+
+    private boolean isJavaEntrypoint(ObjectOriented.MethodDeclaration method) {
+        return method.name().equals("main")
+               && method.returnType().equals("int")
+               && method.parameters().size() == 1
+               && method.parameters().getFirst().type().equals("list[string]")
+               && method.body().isPresent()
+               && !method.modifiers().contains("abstract");
+    }
+
+    private void ensureEntrypointCompatible(
+            ObjectOrientedModule module,
+            ObjectOriented.ClassDeclaration owner,
+            ObjectOriented.MethodDeclaration method,
+            Set<String> parentNames
+    ) {
+        if (referencesThis(method) || referencesParents(method, parentNames)) {
+            throw unsupported(module, "Entrypoint method `" + owner.name() + ".main` cannot use instance state or parent-qualified calls");
+        }
+    }
+
+    private boolean referencesThis(ObjectOriented.MethodDeclaration method) {
+        return methodExpressions(method).stream().anyMatch(expression -> expression.contains("this"));
+    }
+
+    private boolean referencesParents(ObjectOriented.MethodDeclaration method, Set<String> parentNames) {
+        return methodExpressions(method).stream()
+                .anyMatch(expression -> parentNames.stream().anyMatch(parent -> expression.contains(parent + ".")));
+    }
+
+    private List<String> methodExpressions(ObjectOriented.MethodDeclaration method) {
+        return method.body().stream()
+                .flatMap(body -> switch (body) {
+                    case ObjectOriented.ExpressionBody expressionBody -> Stream.of(expressionBody.expression());
+                    case ObjectOriented.StatementBlock statementBlock -> collectExpressions(statementBlock).stream();
+                })
+                .toList();
+    }
+
+    private List<String> collectExpressions(ObjectOriented.StatementBlock block) {
+        var expressions = new ArrayList<String>();
+        collectExpressions(block, expressions);
+        return List.copyOf(expressions);
+    }
+
+    private void collectExpressions(ObjectOriented.StatementBlock block, List<String> expressions) {
+        for (var statement : block.statements()) {
+            switch (statement) {
+                case ObjectOriented.LetStatement letStatement -> expressions.add(letStatement.expression());
+                case ObjectOriented.MutableVariableStatement mutableVariableStatement -> expressions.add(mutableVariableStatement.expression());
+                case ObjectOriented.AssignmentStatement assignmentStatement -> expressions.add(assignmentStatement.expression());
+                case ObjectOriented.ReturnStatement returnStatement -> expressions.add(returnStatement.expression());
+                case ObjectOriented.IfStatement ifStatement -> {
+                    expressions.add(ifStatement.condition());
+                    collectExpressions(ifStatement.thenBranch(), expressions);
+                    ifStatement.elseBranch().ifPresent(elseBranch -> collectExpressions(elseBranch, expressions));
+                }
+                case ObjectOriented.WhileStatement whileStatement -> {
+                    expressions.add(whileStatement.condition());
+                    collectExpressions(whileStatement.body(), expressions);
+                }
+                case ObjectOriented.DoWhileStatement doWhileStatement -> {
+                    collectExpressions(doWhileStatement.body(), expressions);
+                    expressions.add(doWhileStatement.condition());
+                }
+                case ObjectOriented.ForEachStatement forEachStatement -> {
+                    expressions.add(forEachStatement.iterable());
+                    collectExpressions(forEachStatement.body(), expressions);
+                }
+                case ObjectOriented.StatementBlock nestedBlock -> collectExpressions(nestedBlock, expressions);
+            }
+        }
+    }
+
+    private void collectExpressions(ObjectOriented.Statement statement, List<String> expressions) {
+        switch (statement) {
+            case ObjectOriented.StatementBlock block -> collectExpressions(block, expressions);
+            case ObjectOriented.IfStatement ifStatement -> {
+                expressions.add(ifStatement.condition());
+                collectExpressions(ifStatement.thenBranch(), expressions);
+                ifStatement.elseBranch().ifPresent(elseBranch -> collectExpressions(elseBranch, expressions));
+            }
+            case ObjectOriented.WhileStatement whileStatement -> {
+                expressions.add(whileStatement.condition());
+                collectExpressions(whileStatement.body(), expressions);
+            }
+            case ObjectOriented.DoWhileStatement doWhileStatement -> {
+                collectExpressions(doWhileStatement.body(), expressions);
+                expressions.add(doWhileStatement.condition());
+            }
+            case ObjectOriented.ForEachStatement forEachStatement -> {
+                expressions.add(forEachStatement.iterable());
+                collectExpressions(forEachStatement.body(), expressions);
+            }
+            case ObjectOriented.LetStatement letStatement -> expressions.add(letStatement.expression());
+            case ObjectOriented.MutableVariableStatement mutableVariableStatement -> expressions.add(mutableVariableStatement.expression());
+            case ObjectOriented.AssignmentStatement assignmentStatement -> expressions.add(assignmentStatement.expression());
+            case ObjectOriented.ReturnStatement returnStatement -> expressions.add(returnStatement.expression());
+        }
+    }
+
+    private String renderJavaEntrypointWrapper() {
+        return "    public static void main(java.lang.String[] args) {\n"
+               + "        System.exit(main(java.util.List.of(args)));\n"
+               + "    }\n";
     }
 
     private String renderParameters(List<ObjectOriented.Parameter> parameters) {

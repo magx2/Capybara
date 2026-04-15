@@ -149,6 +149,48 @@ class ObjectOrientedJavaGeneratorTest {
                 .hasMessageContaining("Trait fields are not supported");
     }
 
+    @Test
+    void shouldGenerateJavaEntrypointForObjectOrientedMainMethod() throws Exception {
+        var program = compileProgram("""
+                class Main {
+                    def main(args: list[string]): int = args.size()
+                }
+                """);
+
+        var generatedProgram = new JavaGenerator().generate(program);
+        var mainModule = generatedProgram.modules().stream()
+                .filter(module -> module.relativePath().endsWith("Main.java"))
+                .findFirst()
+                .orElseThrow();
+
+        assertThat(mainModule.code())
+                .contains("public static int main(java.util.List<String> args)")
+                .contains("public static void main(java.lang.String[] args)")
+                .contains("System.exit(main(java.util.List.of(args)));");
+
+        var classesDir = compileGeneratedJava(generatedProgram);
+        try (var classLoader = new URLClassLoader(new URL[]{classesDir.toUri().toURL()})) {
+            var mainType = classLoader.loadClass("foo.boo.Main");
+            assertThat(mainType.getMethod("main", java.util.List.class).invoke(null, java.util.List.of("a", "b"))).isEqualTo(2);
+            assertThat(mainType.getMethod("main", String[].class).getReturnType()).isEqualTo(void.class);
+        }
+    }
+
+    @Test
+    void shouldRejectObjectOrientedMainEntrypointThatUsesInstanceState() {
+        var program = compileProgram("""
+                class Main(name: string) {
+                    field name: string = name
+
+                    def main(args: list[string]): int = size(args) + size(this.name)
+                }
+                """);
+
+        assertThatThrownBy(() -> new JavaGenerator().generate(program))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Entrypoint method `Main.main` cannot use instance state");
+    }
+
     private CompiledProgram compileProgram(String source) {
         var result = CapybaraCompiler.INSTANCE.compile(List.of(
                 new RawModule("User", "/foo/boo", source, SourceKind.OBJECT_ORIENTED)
