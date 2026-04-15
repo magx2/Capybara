@@ -95,6 +95,10 @@ class ObjectOrientedJavaGeneratorTest {
                     def first_id(values: int[]): int = values[0]
 
                     def copy_users(values: User[]): User[] = values
+
+                    def names(): string[] = string[]{"zero", "one"}
+
+                    def slots(size: int): int[] = int[size]
                 }
                 """);
 
@@ -121,6 +125,8 @@ class ObjectOrientedJavaGeneratorTest {
                 .contains("public String second_name(String[] values)")
                 .contains("public int first_id(int[] values)")
                 .contains("public User[] copy_users(User[] values)")
+                .contains("return new String[]{\"zero\", \"one\"};")
+                .contains("return new int[size];")
                 .contains("for (var value : values)")
                 .contains("for (int value : values)")
                 .contains("while (flag)")
@@ -140,6 +146,8 @@ class ObjectOrientedJavaGeneratorTest {
             var sameArray = java.lang.reflect.Array.newInstance(userType, 1);
             java.lang.reflect.Array.set(sameArray, 0, user);
             assertThat(userType.getMethod("copy_users", sameArray.getClass()).invoke(user, sameArray)).isSameAs(sameArray);
+            assertThat((String[]) userType.getMethod("names").invoke(user)).containsExactly("zero", "one");
+            assertThat((int[]) userType.getMethod("slots", int.class).invoke(user, 3)).hasSize(3);
             assertThat(userType.getMethod("first_positive", java.util.List.class).invoke(user, java.util.List.of(-1, 0, 3))).isEqualTo(3);
             assertThat(userType.getMethod("first_large", java.util.List.class).invoke(user, java.util.List.of(4, 11, 15))).isEqualTo(11);
             assertThat(userType.getMethod("while_flag", boolean.class).invoke(user, true)).isEqualTo(1);

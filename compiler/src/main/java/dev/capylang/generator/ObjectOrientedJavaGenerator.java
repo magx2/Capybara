@@ -638,6 +638,14 @@ public final class ObjectOrientedJavaGenerator {
         if (trimmed.startsWith("match ")) {
             throw unsupported(module, "`match` expressions are not supported by the Java backend in v1");
         }
+        var arrayWithValues = renderArrayWithValues(module, trimmed, parentNames);
+        if (arrayWithValues.isPresent()) {
+            return arrayWithValues.orElseThrow();
+        }
+        var sizedArray = renderSizedArray(module, trimmed, parentNames);
+        if (sizedArray.isPresent()) {
+            return sizedArray.orElseThrow();
+        }
         if (trimmed.contains("=>") || trimmed.contains("|>") || trimmed.contains("|-") || trimmed.contains("|*")
             || trimmed.contains(".and.") || trimmed.contains(".or.") || trimmed.contains(".xor.") || trimmed.contains(".nand.")
             || trimmed.startsWith("[") || trimmed.startsWith("{")) {
@@ -653,6 +661,44 @@ public final class ObjectOrientedJavaGenerator {
             trimmed = trimmed.replaceAll("(^|[^A-Za-z0-9_])" + Pattern.quote(parentName) + "\\s*\\.", "$1super.");
         }
         return trimmed;
+    }
+
+    private Optional<String> renderArrayWithValues(ObjectOrientedModule module, String expression, Set<String> parentNames) {
+        if (!expression.endsWith("}")) {
+            return Optional.empty();
+        }
+        var braceIndex = findTopLevelChar(expression, '{');
+        if (braceIndex < 0) {
+            return Optional.empty();
+        }
+        var type = expression.substring(0, braceIndex).trim();
+        if (!type.endsWith("[]")) {
+            return Optional.empty();
+        }
+        var valuesSource = expression.substring(braceIndex + 1, expression.length() - 1).trim();
+        var values = splitTopLevel(valuesSource).stream()
+                .map(value -> renderExpression(module, value, parentNames))
+                .collect(Collectors.joining(", "));
+        return Optional.of("new " + renderType(type, false) + "{" + values + "}");
+    }
+
+    private Optional<String> renderSizedArray(ObjectOrientedModule module, String expression, Set<String> parentNames) {
+        if (!expression.endsWith("]")) {
+            return Optional.empty();
+        }
+        var sizeBracketIndex = findTopLevelChar(expression, '[');
+        if (sizeBracketIndex < 0) {
+            return Optional.empty();
+        }
+        var type = expression.substring(0, sizeBracketIndex).trim();
+        if (type.isBlank() || type.endsWith("[]") || !isTypeLikePrefix(type)) {
+            return Optional.empty();
+        }
+        var sizeExpression = expression.substring(sizeBracketIndex + 1, expression.length() - 1).trim();
+        if (sizeExpression.isBlank()) {
+            return Optional.empty();
+        }
+        return Optional.of("new " + renderType(type, false) + "[" + renderExpression(module, sizeExpression, parentNames) + "]");
     }
 
     private String renderIfExpression(ObjectOrientedModule module, String expression, Set<String> parentNames) {
@@ -703,6 +749,104 @@ public final class ObjectOrientedJavaGenerator {
             }
         }
         return -1;
+    }
+
+    private int findTopLevelChar(String value, char target) {
+        var parens = 0;
+        var brackets = 0;
+        var braces = 0;
+        char stringDelimiter = 0;
+        for (int i = 0; i < value.length(); i++) {
+            var current = value.charAt(i);
+            if (stringDelimiter != 0) {
+                if (current == '\\') {
+                    i++;
+                    continue;
+                }
+                if (current == stringDelimiter) {
+                    stringDelimiter = 0;
+                }
+                continue;
+            }
+            if (current == '"' || current == '\'') {
+                stringDelimiter = current;
+                continue;
+            }
+            if (parens == 0 && brackets == 0 && braces == 0 && current == target) {
+                return i;
+            }
+            switch (current) {
+                case '(' -> parens++;
+                case ')' -> parens--;
+                case '[' -> brackets++;
+                case ']' -> brackets--;
+                case '{' -> braces++;
+                case '}' -> braces--;
+                default -> {
+                }
+            }
+        }
+        return -1;
+    }
+
+    private List<String> splitTopLevel(String value) {
+        if (value.isBlank()) {
+            return List.of();
+        }
+        var result = new ArrayList<String>();
+        var current = new StringBuilder();
+        var parens = 0;
+        var brackets = 0;
+        var braces = 0;
+        char stringDelimiter = 0;
+        for (int i = 0; i < value.length(); i++) {
+            var ch = value.charAt(i);
+            if (stringDelimiter != 0) {
+                current.append(ch);
+                if (ch == '\\' && i + 1 < value.length()) {
+                    current.append(value.charAt(++i));
+                    continue;
+                }
+                if (ch == stringDelimiter) {
+                    stringDelimiter = 0;
+                }
+                continue;
+            }
+            if (ch == '"' || ch == '\'') {
+                stringDelimiter = ch;
+                current.append(ch);
+                continue;
+            }
+            switch (ch) {
+                case '(' -> parens++;
+                case ')' -> parens--;
+                case '[' -> brackets++;
+                case ']' -> brackets--;
+                case '{' -> braces++;
+                case '}' -> braces--;
+                case ',' -> {
+                    if (parens == 0 && brackets == 0 && braces == 0) {
+                        result.add(current.toString().trim());
+                        current.setLength(0);
+                        continue;
+                    }
+                }
+                default -> {
+                }
+            }
+            current.append(ch);
+        }
+        if (!current.isEmpty()) {
+            result.add(current.toString().trim());
+        }
+        return result;
+    }
+
+    private boolean isTypeLikePrefix(String value) {
+        return switch (value) {
+            case "byte", "int", "long", "double", "float", "bool", "string", "any", "data", "void" -> true;
+            default -> value.startsWith("/") || Character.isUpperCase(value.charAt(0)) || value.startsWith("_");
+        };
     }
 
     private String renderType(String type, boolean boxed) {
