@@ -1,0 +1,13 @@
+class SharedInteractor {
+    def invoke_fp_function(name: string): string =
+        SharedInterop.petText(SharedInterop.makeDog(name))
+
+    def create_fp_data(name: string): SharedPet =
+        SharedDog { name: name }
+
+    def match_fp_type(pet_name: string): string {
+        let pet: SharedPet = SharedDog { name: pet_name }
+        return match pet with
+        case SharedDog { name } -> ("dog:" + name)
+    }
+}

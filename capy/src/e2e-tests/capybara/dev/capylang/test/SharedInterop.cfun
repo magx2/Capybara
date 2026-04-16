@@ -1,0 +1,10 @@
+type SharedPet = SharedDog | SharedCat
+data SharedDog { name: string }
+data SharedCat { age: int }
+
+fun make_dog(name: string): SharedDog = SharedDog { name: name }
+
+fun pet_text(pet: SharedPet): string =
+    match pet with
+    case SharedDog { name } -> "dog:" + name
+    case SharedCat { age } -> "cat:" + age
