@@ -16,6 +16,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public final class ObjectOrientedJavaGenerator {
+    private static final Pattern SIMPLE_TYPE_REFERENCE = Pattern.compile("\\b_*[A-Z][A-Za-z0-9_]*\\b");
     private static final Set<String> JAVA_KEYWORDS = Set.of(
             "abstract", "assert", "boolean", "break", "byte", "case", "catch", "char", "class",
             "const", "continue", "default", "do", "double", "else", "enum", "extends", "final",
@@ -154,17 +155,127 @@ public final class ObjectOrientedJavaGenerator {
     }
 
     private void appendImports(StringBuilder code, ObjectOrientedModule module) {
-        var imports = module.imports().stream()
+        var imports = Stream.concat(
+                        module.imports().stream()
                 .flatMap(importDeclaration -> importDeclaration.symbols().stream()
                         .filter(symbol -> !"*".equals(symbol))
                         .filter(symbol -> !importDeclaration.excludedSymbols().contains(symbol))
                         .filter(symbol -> !symbol.isBlank())
                         .filter(symbol -> Character.isUpperCase(symbol.charAt(0)))
-                        .map(symbol -> renderImportedSymbolReference(module, importDeclaration.moduleName(), symbol)))
+                        .map(symbol -> renderImportedSymbolReference(module, importDeclaration.moduleName(), symbol))),
+                        inferSameModuleImports(module).stream()
+                )
                 .distinct()
                 .sorted()
                 .toList();
         imports.forEach(importRef -> code.append("import ").append(importRef).append(";\n"));
+    }
+
+    private List<String> inferSameModuleImports(ObjectOrientedModule module) {
+        var localDefinitions = module.objectOriented().definitions().stream()
+                .map(ObjectOriented.TypeDeclaration::name)
+                .collect(Collectors.toUnmodifiableSet());
+        var explicitlyImportedSymbols = module.imports().stream()
+                .flatMap(importDeclaration -> importDeclaration.symbols().stream())
+                .filter(symbol -> !"*".equals(symbol))
+                .filter(symbol -> !symbol.isBlank())
+                .collect(Collectors.toUnmodifiableSet());
+        var ownerReference = normalizePackageName(module.path()) + "." + module.name();
+        return referencedTypeTokens(module).stream()
+                .filter(symbol -> !localDefinitions.contains(symbol))
+                .filter(symbol -> !module.name().equals(symbol))
+                .filter(symbol -> !explicitlyImportedSymbols.contains(symbol))
+                .map(symbol -> ownerReference + "." + symbol)
+                .distinct()
+                .sorted()
+                .toList();
+    }
+
+    private Set<String> referencedTypeTokens(ObjectOrientedModule module) {
+        var references = new HashSet<String>();
+        for (var definition : module.objectOriented().definitions()) {
+            definition.parents().forEach(parent -> collectTypeTokens(parent.name(), references));
+            for (var member : definition.members()) {
+                switch (member) {
+                    case ObjectOriented.FieldDeclaration field -> {
+                        collectTypeTokens(field.type(), references);
+                        field.initializer().ifPresent(initializer -> collectTypeTokens(initializer, references));
+                    }
+                    case ObjectOriented.MethodDeclaration method -> {
+                        method.parameters().forEach(parameter -> collectTypeTokens(parameter.type(), references));
+                        collectTypeTokens(method.returnType(), references);
+                        method.body().ifPresent(body -> collectTypeTokens(body, references));
+                    }
+                    case ObjectOriented.InitBlock initBlock -> collectTypeTokens(initBlock.body(), references);
+                }
+            }
+        }
+        return Set.copyOf(references);
+    }
+
+    private void collectTypeTokens(ObjectOriented.MethodBody body, Set<String> references) {
+        switch (body) {
+            case ObjectOriented.ExpressionBody expressionBody -> collectTypeTokens(expressionBody.expression(), references);
+            case ObjectOriented.StatementBlock statementBlock -> collectTypeTokens(statementBlock, references);
+        }
+    }
+
+    private void collectTypeTokens(ObjectOriented.StatementBlock block, Set<String> references) {
+        block.statements().forEach(statement -> collectTypeTokens(statement, references));
+    }
+
+    private void collectTypeTokens(ObjectOriented.Statement statement, Set<String> references) {
+        switch (statement) {
+            case ObjectOriented.LetStatement letStatement -> {
+                letStatement.type().ifPresent(type -> collectTypeTokens(type, references));
+                collectTypeTokens(letStatement.expression(), references);
+            }
+            case ObjectOriented.MutableVariableStatement mutableVariableStatement -> {
+                mutableVariableStatement.type().ifPresent(type -> collectTypeTokens(type, references));
+                collectTypeTokens(mutableVariableStatement.expression(), references);
+            }
+            case ObjectOriented.AssignmentStatement assignmentStatement -> collectTypeTokens(assignmentStatement.expression(), references);
+            case ObjectOriented.ThrowStatement throwStatement -> collectTypeTokens(throwStatement.expression(), references);
+            case ObjectOriented.ReturnStatement returnStatement -> collectTypeTokens(returnStatement.expression(), references);
+            case ObjectOriented.IfStatement ifStatement -> {
+                collectTypeTokens(ifStatement.condition(), references);
+                collectTypeTokens(ifStatement.thenBranch(), references);
+                ifStatement.elseBranch().ifPresent(elseBranch -> collectTypeTokens(elseBranch, references));
+            }
+            case ObjectOriented.TryCatchStatement tryCatchStatement -> {
+                collectTypeTokens(tryCatchStatement.tryBlock(), references);
+                tryCatchStatement.catches().forEach(catchClause -> collectTypeTokens(catchClause.body(), references));
+            }
+            case ObjectOriented.WhileStatement whileStatement -> {
+                collectTypeTokens(whileStatement.condition(), references);
+                collectTypeTokens(whileStatement.body(), references);
+            }
+            case ObjectOriented.DoWhileStatement doWhileStatement -> {
+                collectTypeTokens(doWhileStatement.body(), references);
+                collectTypeTokens(doWhileStatement.condition(), references);
+            }
+            case ObjectOriented.ForEachStatement forEachStatement -> {
+                forEachStatement.type().ifPresent(type -> collectTypeTokens(type, references));
+                collectTypeTokens(forEachStatement.iterable(), references);
+                collectTypeTokens(forEachStatement.body(), references);
+            }
+            case ObjectOriented.StatementBlock nestedBlock -> collectTypeTokens(nestedBlock, references);
+        }
+    }
+
+    private void collectTypeTokens(String source, Set<String> references) {
+        var withoutStringLiterals = source.replaceAll("\"(?:[^\"\\\\]|\\\\.)*\"", " ");
+        var matcher = SIMPLE_TYPE_REFERENCE.matcher(withoutStringLiterals);
+        while (matcher.find()) {
+            var start = matcher.start();
+            var end = matcher.end();
+            var previous = start > 0 ? withoutStringLiterals.charAt(start - 1) : '\0';
+            var next = end < withoutStringLiterals.length() ? withoutStringLiterals.charAt(end) : '\0';
+            if (previous == '.' || next == '.') {
+                continue;
+            }
+            references.add(matcher.group());
+        }
     }
 
     private String renderImportedSymbolReference(ObjectOrientedModule module, String moduleName, String symbol) {
