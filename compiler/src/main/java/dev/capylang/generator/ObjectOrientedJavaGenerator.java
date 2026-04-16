@@ -25,6 +25,7 @@ public final class ObjectOrientedJavaGenerator {
             "throw", "throws", "transient", "try", "void", "volatile", "while", "true", "false",
             "null", "record", "sealed", "permits", "var", "yield"
     );
+    private int syntheticCounter = 0;
 
     public List<GeneratedModule> generate(List<ObjectOrientedModule> modules) {
         return modules.stream()
@@ -64,6 +65,10 @@ public final class ObjectOrientedJavaGenerator {
         var packageName = normalizePackageName(module.path());
         if (!packageName.isBlank()) {
             code.append("package ").append(packageName).append(";\n\n");
+        }
+        appendImports(code, module);
+        if (!module.imports().isEmpty()) {
+            code.append("\n");
         }
         code.append("@javax.annotation.processing.Generated(\"Capybara Compiler\")\n");
         code.append(switch (declaration) {
@@ -128,6 +133,9 @@ public final class ObjectOrientedJavaGenerator {
         if (usesThrowSupport(declaration)) {
             code.append(renderThrowHelper()).append("\n");
         }
+        if (usesMatchSupport(declaration)) {
+            code.append(renderMatchHelper()).append("\n");
+        }
 
         var parentNames = Stream.concat(
                         parents.classParent().stream(),
@@ -143,6 +151,27 @@ public final class ObjectOrientedJavaGenerator {
         }
         code.append("}\n");
         return code.toString();
+    }
+
+    private void appendImports(StringBuilder code, ObjectOrientedModule module) {
+        var imports = module.imports().stream()
+                .flatMap(importDeclaration -> importDeclaration.symbols().stream()
+                        .filter(symbol -> !"*".equals(symbol))
+                        .filter(symbol -> !importDeclaration.excludedSymbols().contains(symbol))
+                        .filter(symbol -> !symbol.isBlank())
+                        .filter(symbol -> Character.isUpperCase(symbol.charAt(0)))
+                        .map(symbol -> renderImportedSymbolReference(module, importDeclaration.moduleName(), symbol)))
+                .distinct()
+                .sorted()
+                .toList();
+        imports.forEach(importRef -> code.append("import ").append(importRef).append(";\n"));
+    }
+
+    private String renderImportedSymbolReference(ObjectOrientedModule module, String moduleName, String symbol) {
+        var ownerReference = moduleName.startsWith("/")
+                ? renderTypeReference(moduleName)
+                : normalizePackageName(module.path()) + "." + moduleName;
+        return ownerReference + "." + symbol;
     }
 
     private boolean requiresConstructor(
@@ -307,6 +336,9 @@ public final class ObjectOrientedJavaGenerator {
         code.append(" {\n");
         if (usesThrowSupport(declaration)) {
             code.append(renderThrowHelper()).append("\n");
+        }
+        if (usesMatchSupport(declaration)) {
+            code.append(renderMatchHelper()).append("\n");
         }
         for (var member : declaration.members()) {
             code.append(renderTraitMethod(module, declaration.name(), (ObjectOriented.MethodDeclaration) member));
@@ -697,6 +729,39 @@ public final class ObjectOrientedJavaGenerator {
                + "    }\n";
     }
 
+    private boolean usesMatchSupport(ObjectOriented.TypeDeclaration declaration) {
+        return declaration.members().stream().anyMatch(this::containsMatch);
+    }
+
+    private boolean containsMatch(ObjectOriented.MemberDeclaration member) {
+        return switch (member) {
+            case ObjectOriented.FieldDeclaration field -> field.initializer().stream().anyMatch(this::containsMatch);
+            case ObjectOriented.MethodDeclaration method -> method.body().stream().anyMatch(this::containsMatch);
+            case ObjectOriented.InitBlock initBlock -> containsMatch(initBlock.body());
+        };
+    }
+
+    private boolean containsMatch(ObjectOriented.MethodBody methodBody) {
+        return switch (methodBody) {
+            case ObjectOriented.ExpressionBody expressionBody -> containsMatch(expressionBody.expression());
+            case ObjectOriented.StatementBlock statementBlock -> containsMatch(statementBlock);
+        };
+    }
+
+    private boolean containsMatch(ObjectOriented.StatementBlock block) {
+        return collectExpressions(block).stream().anyMatch(this::containsMatch);
+    }
+
+    private boolean containsMatch(String expression) {
+        return expression.trim().startsWith("match");
+    }
+
+    private String renderMatchHelper() {
+        return "    private static <T, R> R capybara$match(T value, java.util.function.Function<T, R> matcher) {\n"
+               + "        return matcher.apply(value);\n"
+               + "    }\n";
+    }
+
     private String renderParameters(List<ObjectOriented.Parameter> parameters) {
         return parameters.stream()
                 .map(parameter -> renderType(parameter.type(), false) + " " + sanitizeIdentifier(parameter.name()))
@@ -723,12 +788,16 @@ public final class ObjectOrientedJavaGenerator {
 
     private String renderExpression(ObjectOrientedModule module, String expression, Set<String> parentNames) {
         var trimmed = expression.trim();
-        if (trimmed.startsWith("match ")) {
-            throw unsupported(module, "`match` expressions are not supported by the Java backend in v1");
+        if (trimmed.startsWith("match")) {
+            return renderMatchExpression(module, trimmed, parentNames);
         }
         var arrayWithValues = renderArrayWithValues(module, trimmed, parentNames);
         if (arrayWithValues.isPresent()) {
             return arrayWithValues.orElseThrow();
+        }
+        var dataCreation = renderDataCreation(module, trimmed, parentNames);
+        if (dataCreation.isPresent()) {
+            return dataCreation.orElseThrow();
         }
         var sizedArray = renderSizedArray(module, trimmed, parentNames);
         if (sizedArray.isPresent()) {
@@ -749,6 +818,199 @@ public final class ObjectOrientedJavaGenerator {
             trimmed = trimmed.replaceAll("(^|[^A-Za-z0-9_])" + Pattern.quote(parentName) + "\\s*\\.", "$1super.");
         }
         return trimmed;
+    }
+
+    private Optional<String> renderDataCreation(ObjectOrientedModule module, String expression, Set<String> parentNames) {
+        if (!expression.endsWith("}")) {
+            return Optional.empty();
+        }
+        var braceIndex = findTopLevelChar(expression, '{');
+        if (braceIndex < 0) {
+            return Optional.empty();
+        }
+        var type = expression.substring(0, braceIndex).trim();
+        if (type.isBlank() || type.endsWith("[]") || !isTypeLikePrefix(type)) {
+            return Optional.empty();
+        }
+        var body = expression.substring(braceIndex + 1, expression.length() - 1).trim();
+        var arguments = splitTopLevel(body).stream()
+                .map(assignment -> renderDataCreationArgument(module, assignment, parentNames))
+                .collect(Collectors.joining(", "));
+        return Optional.of("new " + renderType(type, false) + "(" + arguments + ")");
+    }
+
+    private String renderDataCreationArgument(ObjectOrientedModule module, String assignment, Set<String> parentNames) {
+        var colonIndex = findTopLevelChar(assignment, ':');
+        if (colonIndex < 0) {
+            return renderExpression(module, assignment, parentNames);
+        }
+        return renderExpression(module, assignment.substring(colonIndex + 1).trim(), parentNames);
+    }
+
+    private String renderMatchExpression(ObjectOrientedModule module, String expression, Set<String> parentNames) {
+        var withIndex = findTopLevelToken(expression, "with", "match".length());
+        if (withIndex < 0) {
+            throw unsupported(module, "Unable to lower `match` expression `" + preview(expression) + "`");
+        }
+        var matchedExpression = expression.substring("match".length(), withIndex).trim();
+        var casesSource = expression.substring(withIndex + "with".length()).trim();
+        var matchCases = splitMatchCases(casesSource);
+        if (matchCases.isEmpty()) {
+            throw unsupported(module, "Match expression `" + preview(expression) + "` must contain at least one case");
+        }
+        var matchVar = "__capybaraMatch" + syntheticCounter++;
+        var code = new StringBuilder();
+        code.append("capybara$match(")
+                .append(renderExpression(module, matchedExpression, parentNames))
+                .append(", ")
+                .append(matchVar)
+                .append(" -> switch (")
+                .append(matchVar)
+                .append(") {\n");
+        for (var matchCase : matchCases) {
+            code.append(renderMatchCase(module, matchCase, matchVar, parentNames));
+        }
+        code.append("        default -> throw new java.lang.IllegalStateException(\"Non-exhaustive match: \" + ").append(matchVar).append(");\n")
+                .append("    })");
+        return code.toString();
+    }
+
+    private String renderMatchCase(ObjectOrientedModule module, String matchCase, String matchVar, Set<String> parentNames) {
+        if (!matchCase.startsWith("case")) {
+            throw unsupported(module, "Unsupported match branch `" + preview(matchCase) + "`");
+        }
+        var arrowIndex = findTopLevelToken(matchCase, "->", "case".length());
+        if (arrowIndex < 0) {
+            throw unsupported(module, "Unsupported match branch `" + preview(matchCase) + "`");
+        }
+        var pattern = matchCase.substring("case".length(), arrowIndex).trim();
+        var body = matchCase.substring(arrowIndex + "->".length()).trim();
+        var braceIndex = findTopLevelChar(pattern, '{');
+        var code = new StringBuilder();
+        if (braceIndex < 0) {
+            var typeName = pattern;
+            code.append("        case ").append(renderTypeReference(typeName)).append(" ignored -> ")
+                    .append(renderExpression(module, body, parentNames))
+                    .append(";\n");
+            return code.toString();
+        }
+
+        var typeName = pattern.substring(0, braceIndex).trim();
+        var bindingsSource = pattern.substring(braceIndex + 1, pattern.length() - 1).trim();
+        var boundValue = "__capybaraCase" + syntheticCounter++;
+        code.append("        case ").append(renderTypeReference(typeName)).append(" ").append(boundValue).append(" -> {\n");
+        for (var binding : splitTopLevel(bindingsSource)) {
+            var bindingName = binding.trim();
+            if (bindingName.isBlank()) {
+                continue;
+            }
+            code.append("        var ")
+                    .append(sanitizeIdentifier(bindingName))
+                    .append(" = ")
+                    .append(boundValue)
+                    .append(".")
+                    .append(sanitizeIdentifier(bindingName))
+                    .append("();\n");
+        }
+        code.append("            yield ").append(renderExpression(module, body, parentNames)).append(";\n")
+                .append("        }\n");
+        return code.toString();
+    }
+
+    private List<String> splitMatchCases(String casesSource) {
+        var normalized = casesSource.replace("\r", "");
+        var indexes = new ArrayList<Integer>();
+        for (int i = 0; i < normalized.length(); i++) {
+            if (startsWithTopLevelToken(normalized, i, "case")) {
+                indexes.add(i);
+            }
+        }
+        if (indexes.isEmpty()) {
+            return List.of();
+        }
+        var cases = new ArrayList<String>();
+        for (int i = 0; i < indexes.size(); i++) {
+            var start = indexes.get(i);
+            var end = i + 1 < indexes.size() ? indexes.get(i + 1) : normalized.length();
+            cases.add(normalized.substring(start, end).trim());
+        }
+        return List.copyOf(cases);
+    }
+
+    private int findTopLevelToken(String value, String token, int startAt) {
+        var parens = 0;
+        var brackets = 0;
+        var braces = 0;
+        char stringDelimiter = 0;
+        for (int i = startAt; i <= value.length() - token.length(); i++) {
+            var current = value.charAt(i);
+            if (stringDelimiter != 0) {
+                if (current == '\\') {
+                    i++;
+                    continue;
+                }
+                if (current == stringDelimiter) {
+                    stringDelimiter = 0;
+                }
+                continue;
+            }
+            if (current == '"' || current == '\'') {
+                stringDelimiter = current;
+                continue;
+            }
+            switch (current) {
+                case '(' -> parens++;
+                case ')' -> parens--;
+                case '[' -> brackets++;
+                case ']' -> brackets--;
+                case '{' -> braces++;
+                case '}' -> braces--;
+                default -> {
+                }
+            }
+            if (parens == 0 && brackets == 0 && braces == 0 && value.startsWith(token, i)) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    private boolean startsWithTopLevelToken(String value, int index, String token) {
+        if (!value.startsWith(token, index)) {
+            return false;
+        }
+        var parens = 0;
+        var brackets = 0;
+        var braces = 0;
+        char stringDelimiter = 0;
+        for (int i = 0; i < index; i++) {
+            var current = value.charAt(i);
+            if (stringDelimiter != 0) {
+                if (current == '\\') {
+                    i++;
+                    continue;
+                }
+                if (current == stringDelimiter) {
+                    stringDelimiter = 0;
+                }
+                continue;
+            }
+            if (current == '"' || current == '\'') {
+                stringDelimiter = current;
+                continue;
+            }
+            switch (current) {
+                case '(' -> parens++;
+                case ')' -> parens--;
+                case '[' -> brackets++;
+                case ']' -> brackets--;
+                case '{' -> braces++;
+                case '}' -> braces--;
+                default -> {
+                }
+            }
+        }
+        return parens == 0 && brackets == 0 && braces == 0;
     }
 
     private Optional<String> renderArrayWithValues(ObjectOrientedModule module, String expression, Set<String> parentNames) {

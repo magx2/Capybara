@@ -222,6 +222,78 @@ class ObjectOrientedJavaGeneratorTest {
     }
 
     @Test
+    void shouldGenerateAndRunMixedObjectOrientedAndFunctionalInterop() throws Exception {
+        var program = compileProgram(List.of(
+                new RawModule(
+                        "ObjectOrientedFpInterop",
+                        "/foo/boo",
+                        """
+                                type InteropPet = InteropDog | InteropCat
+                                data InteropDog { name: string }
+                                data InteropCat { age: int }
+
+                                fun make_dog(name: string): InteropDog = InteropDog { name: name }
+
+                                fun pet_text(pet: InteropPet): string =
+                                    match pet with
+                                    case InteropDog { name } -> "dog:" + name
+                                    case InteropCat { age } -> "cat:" + age
+                                """,
+                        SourceKind.FUNCTIONAL
+                ),
+                new RawModule(
+                        "PetInteractor",
+                        "/foo/boo",
+                        """
+                                from ObjectOrientedFpInterop import { InteropPet, InteropDog, InteropCat }
+
+                                class PetInteractor {
+                                    def invoke_fp_function(name: string): string =
+                                        ObjectOrientedFpInterop.petText(ObjectOrientedFpInterop.makeDog(name))
+
+                                    def create_fp_data(name: string): InteropPet =
+                                        InteropDog { name: name }
+
+                                    def match_fp_type(pet_name: string): string {
+                                        let pet: InteropPet = InteropDog { name: pet_name }
+                                        return match pet with
+                                        case InteropDog { name } -> ("dog:" + name)
+                                        case InteropCat { age } -> ("cat:" + age)
+                                    }
+                                }
+                                """,
+                        SourceKind.OBJECT_ORIENTED
+                )
+        ));
+
+        var generatedProgram = new JavaGenerator().generate(program);
+        var interactorModule = generatedProgram.modules().stream()
+                .filter(module -> module.relativePath().endsWith("PetInteractor.java"))
+                .findFirst()
+                .orElseThrow();
+
+        assertThat(interactorModule.code())
+                .contains("ObjectOrientedFpInterop.petText(ObjectOrientedFpInterop.makeDog(name))")
+                .contains("import foo.boo.ObjectOrientedFpInterop.InteropDog;")
+                .contains("return new InteropDog(name);")
+                .contains("case InteropDog __capybaraCase")
+                .contains("yield (\"dog:\"+name);");
+
+        var classesDir = compileGeneratedJava(generatedProgram);
+        try (var classLoader = new URLClassLoader(new URL[]{classesDir.toUri().toURL()})) {
+            var interactorType = classLoader.loadClass("foo.boo.PetInteractor");
+            var interopDogType = classLoader.loadClass("foo.boo.ObjectOrientedFpInterop$InteropDog");
+            var interactor = interactorType.getConstructor().newInstance();
+
+            assertThat(interactorType.getMethod("invoke_fp_function", String.class).invoke(interactor, "Capy")).isEqualTo("dog:Capy");
+            var dog = interactorType.getMethod("create_fp_data", String.class).invoke(interactor, "Bara");
+            assertThat(interopDogType.isInstance(dog)).isTrue();
+            assertThat(interopDogType.getMethod("name").invoke(dog)).isEqualTo("Bara");
+            assertThat(interactorType.getMethod("match_fp_type", String.class).invoke(interactor, "Mochi")).isEqualTo("dog:Mochi");
+        }
+    }
+
+    @Test
     void shouldRejectObjectOrientedMainEntrypointThatUsesInstanceState() {
         var program = compileProgram("""
                 class Main(name: string) {
@@ -237,9 +309,13 @@ class ObjectOrientedJavaGeneratorTest {
     }
 
     private CompiledProgram compileProgram(String source) {
-        var result = CapybaraCompiler.INSTANCE.compile(List.of(
+        return compileProgram(List.of(
                 new RawModule("User", "/foo/boo", source, SourceKind.OBJECT_ORIENTED)
-        ), new TreeSet<>());
+        ));
+    }
+
+    private CompiledProgram compileProgram(List<RawModule> modules) {
+        var result = CapybaraCompiler.INSTANCE.compile(modules, new TreeSet<>());
         if (result instanceof Result.Error<CompiledProgram> error) {
             throw new AssertionError(error.errors().toString());
         }
@@ -267,9 +343,13 @@ class ObjectOrientedJavaGeneratorTest {
         var diagnostics = new DiagnosticCollector<JavaFileObject>();
         try (var fileManager = compiler.getStandardFileManager(diagnostics, Locale.ROOT, StandardCharsets.UTF_8)) {
             var compilationUnits = fileManager.getJavaFileObjectsFromFiles(javaFiles.stream().map(Path::toFile).toList());
+            var capybaraLibClasses = Path.of("..", "lib", "capybara-lib", "build", "classes", "java", "main").normalize().toAbsolutePath();
+            var classpath = System.getProperty("java.class.path")
+                             + java.io.File.pathSeparator
+                             + capybaraLibClasses;
             var options = List.of(
                     "--release", "21",
-                    "-classpath", System.getProperty("java.class.path"),
+                    "-classpath", classpath,
                     "-d", classesDir.toString()
             );
             var success = compiler.getTask(null, fileManager, diagnostics, options, null, compilationUnits).call();

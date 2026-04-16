@@ -1,0 +1,16 @@
+from ObjectOrientedFpInterop import { InteropPet, InteropDog, InteropCat }
+
+class PetInteractor {
+    def invoke_fp_function(name: string): string =
+        ObjectOrientedFpInterop.petText(ObjectOrientedFpInterop.makeDog(name))
+
+    def create_fp_data(name: string): InteropPet =
+        InteropDog { name: name }
+
+    def match_fp_type(pet_name: string): string {
+        let pet: InteropPet = InteropDog { name: pet_name }
+        return match pet with
+        case InteropDog { name } -> ("dog:" + name)
+        case InteropCat { age } -> ("cat:" + age)
+    }
+}

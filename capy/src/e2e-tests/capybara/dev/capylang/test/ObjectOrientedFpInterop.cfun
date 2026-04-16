@@ -1,0 +1,10 @@
+type InteropPet = InteropDog | InteropCat
+data InteropDog { name: string }
+data InteropCat { age: int }
+
+fun make_dog(name: string): InteropDog = InteropDog { name: name }
+
+fun pet_text(pet: InteropPet): string =
+    match pet with
+    case InteropDog { name } -> "dog:" + name
+    case InteropCat { age } -> "cat:" + age
