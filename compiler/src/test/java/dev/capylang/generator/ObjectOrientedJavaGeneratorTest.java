@@ -294,6 +294,76 @@ class ObjectOrientedJavaGeneratorTest {
     }
 
     @Test
+    void shouldNotRequireImportsWhenObjectOrientedAndFunctionalFilesShareTheSameName() throws Exception {
+        var program = compileProgram(List.of(
+                new RawModule(
+                        "SharedInterop",
+                        "/foo/boo",
+                        """
+                                type SharedPet = SharedDog | SharedCat
+                                data SharedDog { name: string }
+                                data SharedCat { age: int }
+
+                                fun make_dog(name: string): SharedDog = SharedDog { name: name }
+
+                                fun pet_text(pet: SharedPet): string =
+                                    match pet with
+                                    case SharedDog { name } -> "dog:" + name
+                                    case _ -> "cat"
+                                """,
+                        SourceKind.FUNCTIONAL
+                ),
+                new RawModule(
+                        "SharedInterop",
+                        "/foo/boo",
+                        """
+                                class SharedInteractor {
+                                    def invoke_fp_function(name: string): string =
+                                        SharedInterop.petText(SharedInterop.makeDog(name))
+
+                                    def create_fp_data(name: string): SharedPet =
+                                        SharedDog { name: name }
+
+                                    def match_fp_type(pet_name: string): string {
+                                        let pet: SharedPet = SharedDog { name: pet_name }
+                                        return match pet with
+                                        case SharedDog { name } -> ("dog:" + name)
+                                    }
+                                }
+                                """,
+                        SourceKind.OBJECT_ORIENTED
+                )
+        ));
+
+        var generatedProgram = new JavaGenerator().generate(program);
+        var interactorModule = generatedProgram.modules().stream()
+                .filter(module -> module.relativePath().endsWith("SharedInteractor.java"))
+                .findFirst()
+                .orElseThrow();
+
+        assertThat(interactorModule.code())
+                .contains("return SharedInterop.petText(SharedInterop.makeDog(name));")
+                .contains("import foo.boo.SharedInterop.SharedDog;")
+                .contains("import foo.boo.SharedInterop.SharedPet;")
+                .contains("return new SharedDog(name);")
+                .contains("final SharedPet pet = new SharedDog(pet_name);")
+                .contains("case SharedDog __capybaraCase");
+
+        var classesDir = compileGeneratedJava(generatedProgram);
+        try (var classLoader = new URLClassLoader(new URL[]{classesDir.toUri().toURL()})) {
+            var interactorType = classLoader.loadClass("foo.boo.SharedInteractor");
+            var sharedDogType = classLoader.loadClass("foo.boo.SharedInterop$SharedDog");
+            var interactor = interactorType.getConstructor().newInstance();
+
+            assertThat(interactorType.getMethod("invoke_fp_function", String.class).invoke(interactor, "Capy")).isEqualTo("dog:Capy");
+            var dog = interactorType.getMethod("create_fp_data", String.class).invoke(interactor, "Bara");
+            assertThat(sharedDogType.isInstance(dog)).isTrue();
+            assertThat(sharedDogType.getMethod("name").invoke(dog)).isEqualTo("Bara");
+            assertThat(interactorType.getMethod("match_fp_type", String.class).invoke(interactor, "Mochi")).isEqualTo("dog:Mochi");
+        }
+    }
+
+    @Test
     void shouldRejectObjectOrientedMainEntrypointThatUsesInstanceState() {
         var program = compileProgram("""
                 class Main(name: string) {
