@@ -213,8 +213,8 @@ public final class ObjectOrientedParser {
         if (context.letStatement() != null) {
             return letStatement(context.letStatement());
         }
-        if (context.mutableVariableStatement() != null) {
-            return mutableVariableStatement(context.mutableVariableStatement());
+        if (context.defStatement() != null) {
+            return defStatement(context.defStatement());
         }
         if (context.assignmentStatement() != null) {
             return assignmentStatement(context.assignmentStatement());
@@ -251,11 +251,27 @@ public final class ObjectOrientedParser {
         );
     }
 
-    private ObjectOriented.MutableVariableStatement mutableVariableStatement(dev.capylang.parser.antlr.ObjectOrientedParser.MutableVariableStatementContext context) {
+    private ObjectOriented.Statement defStatement(dev.capylang.parser.antlr.ObjectOrientedParser.DefStatementContext context) {
+        if (context.localMethodTail() != null) {
+            return localMethodStatement(context);
+        }
+        return mutableVariableStatement(context);
+    }
+
+    private ObjectOriented.LocalMethodStatement localMethodStatement(dev.capylang.parser.antlr.ObjectOrientedParser.DefStatementContext context) {
+        return new ObjectOriented.LocalMethodStatement(
+                context.identifier().getText(),
+                parameters(context.localMethodTail().parameters()),
+                context.localMethodTail().functionType().type().getText(),
+                methodBody(context.localMethodTail().methodBody())
+        );
+    }
+
+    private ObjectOriented.MutableVariableStatement mutableVariableStatement(dev.capylang.parser.antlr.ObjectOrientedParser.DefStatementContext context) {
         return new ObjectOriented.MutableVariableStatement(
                 context.identifier().getText(),
-                context.type() == null ? java.util.Optional.empty() : java.util.Optional.of(context.type().getText()),
-                context.expression().getText()
+                context.mutableVariableTail().type() == null ? java.util.Optional.empty() : java.util.Optional.of(context.mutableVariableTail().type().getText()),
+                context.mutableVariableTail().expression().getText()
         );
     }
 

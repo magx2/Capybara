@@ -35,7 +35,7 @@ interfaceMethodDeclaration: docComment* visibility? methodModifier* 'def' identi
 initBlock: docComment* 'init' statementBlock;
 statementBlock: '{' statement* '}';
 statement: letStatement
-         | mutableVariableStatement
+         | defStatement
          | assignmentStatement
          | throwStatement
          | returnStatement
@@ -46,7 +46,9 @@ statement: letStatement
          | forEachStatement
          | statementBlock;
 letStatement: 'let' identifier (':' type)? letBindingOperator expression ';'?;
-mutableVariableStatement: 'def' identifier (':' type)? letBindingOperator expression ';'?;
+defStatement: 'def' identifier (localMethodTail | mutableVariableTail);
+localMethodTail: '(' parameters? ')' functionType methodBody;
+mutableVariableTail: (':' type)? letBindingOperator expression ';'?;
 assignmentStatement: identifier ASSIGN expression ';'?;
 throwStatement: 'throw' expression ';'?;
 returnStatement: 'return' expression ';'?;

@@ -6,9 +6,11 @@ import dev.capylang.compiler.parser.ObjectOrientedModule;
 import java.util.HashSet;
 import java.util.List;
 import java.util.TreeSet;
+import java.util.regex.Pattern;
 
 public final class ObjectOrientedValidator {
     public static final ObjectOrientedValidator INSTANCE = new ObjectOrientedValidator();
+    private static final Pattern IDENTIFIER_REFERENCE = Pattern.compile("\\b[_a-z][_A-Za-z0-9]*\\b");
 
     public Result<List<ObjectOrientedModule>> validate(List<ObjectOrientedModule> modules) {
         var errors = new TreeSet<Result.Error.SingleError>();
@@ -58,6 +60,10 @@ public final class ObjectOrientedValidator {
         for (var statement : block.statements()) {
             switch (statement) {
                 case ObjectOriented.LetStatement letStatement -> scope.declareImmutable(letStatement.name());
+                case ObjectOriented.LocalMethodStatement localMethodStatement -> {
+                    validateLocalMethod(module, owner, localMethodStatement, scope, errors);
+                    scope.declareImmutable(localMethodStatement.name());
+                }
                 case ObjectOriented.MutableVariableStatement mutableVariableStatement -> scope.declareMutable(mutableVariableStatement.name());
                 case ObjectOriented.AssignmentStatement assignmentStatement -> validateAssignment(module, owner, assignmentStatement, scope, errors);
                 case ObjectOriented.ThrowStatement ignored -> {
@@ -118,6 +124,10 @@ public final class ObjectOrientedValidator {
             }
             case ObjectOriented.AssignmentStatement assignmentStatement -> validateAssignment(module, owner, assignmentStatement, scope, errors);
             case ObjectOriented.LetStatement letStatement -> scope.declareImmutable(letStatement.name());
+            case ObjectOriented.LocalMethodStatement localMethodStatement -> {
+                validateLocalMethod(module, owner, localMethodStatement, scope, errors);
+                scope.declareImmutable(localMethodStatement.name());
+            }
             case ObjectOriented.MutableVariableStatement mutableVariableStatement -> scope.declareMutable(mutableVariableStatement.name());
             case ObjectOriented.ThrowStatement ignored -> {
             }
@@ -143,6 +153,142 @@ public final class ObjectOrientedValidator {
             case MUTABLE -> throw new IllegalStateException("unreachable");
         };
         errors.add(new Result.Error.SingleError(0, 0, module.moduleFile(), message));
+    }
+
+    private void validateLocalMethod(
+            ObjectOrientedModule module,
+            String owner,
+            ObjectOriented.LocalMethodStatement localMethodStatement,
+            Scope scope,
+            TreeSet<Result.Error.SingleError> errors
+    ) {
+        var mutableCaptures = new TreeSet<String>();
+        var localScope = scope.child();
+        localMethodStatement.parameters().forEach(parameter -> localScope.declareImmutable(parameter.name()));
+        localScope.declareImmutable(localMethodStatement.name());
+        collectMutableCaptures(localMethodStatement.body(), localScope, mutableCaptures);
+        if (!mutableCaptures.isEmpty()) {
+            errors.add(new Result.Error.SingleError(
+                    0,
+                    0,
+                    module.moduleFile(),
+                    "Local method `" + owner + "." + localMethodStatement.name() + "` cannot capture mutable locals: " + String.join(", ", mutableCaptures)
+            ));
+        }
+        if (localMethodStatement.body() instanceof ObjectOriented.StatementBlock block) {
+            validateBlock(module, owner + "." + localMethodStatement.name(), block, localScope, errors);
+        }
+    }
+
+    private void collectMutableCaptures(ObjectOriented.MethodBody body, Scope scope, TreeSet<String> mutableCaptures) {
+        switch (body) {
+            case ObjectOriented.ExpressionBody expressionBody -> collectMutableCaptures(expressionBody.expression(), scope, mutableCaptures);
+            case ObjectOriented.StatementBlock statementBlock -> collectMutableCaptures(statementBlock, scope, mutableCaptures);
+        }
+    }
+
+    private void collectMutableCaptures(ObjectOriented.StatementBlock block, Scope parentScope, TreeSet<String> mutableCaptures) {
+        var scope = parentScope.child();
+        for (var statement : block.statements()) {
+            switch (statement) {
+                case ObjectOriented.LetStatement letStatement -> {
+                    collectMutableCaptures(letStatement.expression(), scope, mutableCaptures);
+                    scope.declareImmutable(letStatement.name());
+                }
+                case ObjectOriented.LocalMethodStatement localMethodStatement -> {
+                    var localMethodScope = scope.child();
+                    localMethodStatement.parameters().forEach(parameter -> localMethodScope.declareImmutable(parameter.name()));
+                    localMethodScope.declareImmutable(localMethodStatement.name());
+                    collectMutableCaptures(localMethodStatement.body(), localMethodScope, mutableCaptures);
+                    scope.declareImmutable(localMethodStatement.name());
+                }
+                case ObjectOriented.MutableVariableStatement mutableVariableStatement -> {
+                    collectMutableCaptures(mutableVariableStatement.expression(), scope, mutableCaptures);
+                    scope.declareMutable(mutableVariableStatement.name());
+                }
+                case ObjectOriented.AssignmentStatement assignmentStatement -> collectMutableCaptures(assignmentStatement.expression(), scope, mutableCaptures);
+                case ObjectOriented.ThrowStatement throwStatement -> collectMutableCaptures(throwStatement.expression(), scope, mutableCaptures);
+                case ObjectOriented.ReturnStatement returnStatement -> collectMutableCaptures(returnStatement.expression(), scope, mutableCaptures);
+                case ObjectOriented.IfStatement ifStatement -> {
+                    collectMutableCaptures(ifStatement.condition(), scope, mutableCaptures);
+                    collectMutableCaptures(ifStatement.thenBranch(), scope, mutableCaptures);
+                    ifStatement.elseBranch().ifPresent(elseBranch -> collectMutableCaptures(elseBranch, scope, mutableCaptures));
+                }
+                case ObjectOriented.TryCatchStatement tryCatchStatement -> {
+                    collectMutableCaptures(tryCatchStatement.tryBlock(), scope, mutableCaptures);
+                    for (var catchClause : tryCatchStatement.catches()) {
+                        var catchScope = scope.child();
+                        catchScope.declareImmutable(catchClause.name());
+                        collectMutableCaptures(catchClause.body(), catchScope, mutableCaptures);
+                    }
+                }
+                case ObjectOriented.WhileStatement whileStatement -> {
+                    collectMutableCaptures(whileStatement.condition(), scope, mutableCaptures);
+                    collectMutableCaptures(whileStatement.body(), scope, mutableCaptures);
+                }
+                case ObjectOriented.DoWhileStatement doWhileStatement -> {
+                    collectMutableCaptures(doWhileStatement.body(), scope, mutableCaptures);
+                    collectMutableCaptures(doWhileStatement.condition(), scope, mutableCaptures);
+                }
+                case ObjectOriented.ForEachStatement forEachStatement -> {
+                    collectMutableCaptures(forEachStatement.iterable(), scope, mutableCaptures);
+                    var loopScope = scope.child();
+                    loopScope.declareImmutable(forEachStatement.name());
+                    collectMutableCaptures(forEachStatement.body(), loopScope, mutableCaptures);
+                }
+                case ObjectOriented.StatementBlock nestedBlock -> collectMutableCaptures(nestedBlock, scope, mutableCaptures);
+            }
+        }
+    }
+
+    private void collectMutableCaptures(ObjectOriented.Statement statement, Scope scope, TreeSet<String> mutableCaptures) {
+        switch (statement) {
+            case ObjectOriented.StatementBlock block -> collectMutableCaptures(block, scope, mutableCaptures);
+            case ObjectOriented.IfStatement ifStatement -> {
+                collectMutableCaptures(ifStatement.condition(), scope, mutableCaptures);
+                collectMutableCaptures(ifStatement.thenBranch(), scope, mutableCaptures);
+                ifStatement.elseBranch().ifPresent(elseBranch -> collectMutableCaptures(elseBranch, scope, mutableCaptures));
+            }
+            case ObjectOriented.WhileStatement whileStatement -> {
+                collectMutableCaptures(whileStatement.condition(), scope, mutableCaptures);
+                collectMutableCaptures(whileStatement.body(), scope, mutableCaptures);
+            }
+            case ObjectOriented.DoWhileStatement doWhileStatement -> {
+                collectMutableCaptures(doWhileStatement.body(), scope, mutableCaptures);
+                collectMutableCaptures(doWhileStatement.condition(), scope, mutableCaptures);
+            }
+            case ObjectOriented.ForEachStatement forEachStatement -> {
+                collectMutableCaptures(forEachStatement.iterable(), scope, mutableCaptures);
+                var loopScope = scope.child();
+                loopScope.declareImmutable(forEachStatement.name());
+                collectMutableCaptures(forEachStatement.body(), loopScope, mutableCaptures);
+            }
+            case ObjectOriented.TryCatchStatement tryCatchStatement -> {
+                collectMutableCaptures(tryCatchStatement.tryBlock(), scope, mutableCaptures);
+                for (var catchClause : tryCatchStatement.catches()) {
+                    var catchScope = scope.child();
+                    catchScope.declareImmutable(catchClause.name());
+                    collectMutableCaptures(catchClause.body(), catchScope, mutableCaptures);
+                }
+            }
+            case ObjectOriented.LetStatement letStatement -> collectMutableCaptures(letStatement.expression(), scope, mutableCaptures);
+            case ObjectOriented.LocalMethodStatement localMethodStatement -> collectMutableCaptures(localMethodStatement.body(), scope.child(), mutableCaptures);
+            case ObjectOriented.MutableVariableStatement mutableVariableStatement -> collectMutableCaptures(mutableVariableStatement.expression(), scope, mutableCaptures);
+            case ObjectOriented.AssignmentStatement assignmentStatement -> collectMutableCaptures(assignmentStatement.expression(), scope, mutableCaptures);
+            case ObjectOriented.ThrowStatement throwStatement -> collectMutableCaptures(throwStatement.expression(), scope, mutableCaptures);
+            case ObjectOriented.ReturnStatement returnStatement -> collectMutableCaptures(returnStatement.expression(), scope, mutableCaptures);
+        }
+    }
+
+    private void collectMutableCaptures(String expression, Scope scope, TreeSet<String> mutableCaptures) {
+        var withoutStrings = expression.replaceAll("\"(?:[^\"\\\\]|\\\\.)*\"", " ");
+        var matcher = IDENTIFIER_REFERENCE.matcher(withoutStrings);
+        while (matcher.find()) {
+            var name = matcher.group();
+            if (scope.resolve(name) == Resolution.MUTABLE) {
+                mutableCaptures.add(name);
+            }
+        }
     }
 
     private enum Resolution {

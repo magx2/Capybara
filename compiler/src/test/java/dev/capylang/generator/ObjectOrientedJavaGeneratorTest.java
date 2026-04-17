@@ -118,6 +118,30 @@ class ObjectOrientedJavaGeneratorTest {
                             return error.getClass().getSimpleName()
                         }
                     }
+
+                    def local_increment(x: int): int {
+                        let step: int = 1
+                        def inc(y: int): int = y + step
+                        return inc(x)
+                    }
+
+                    def parity(x: int): bool {
+                        def is_even(n: int): bool {
+                            if n == 0 {
+                                return true
+                            } else {
+                                return is_odd(n - 1)
+                            }
+                        }
+                        def is_odd(n: int): bool {
+                            if n == 0 {
+                                return false
+                            } else {
+                                return is_even(n - 1)
+                            }
+                        }
+                        return is_even(x)
+                    }
                 }
                 """);
 
@@ -151,6 +175,8 @@ class ObjectOrientedJavaGeneratorTest {
                 .contains("for (var value : values)")
                 .contains("for (int value : values)")
                 .contains("while (flag)")
+                .contains("final class __CapybaraLocalMethods")
+                .contains("__capybaraLocalMethods")
                 .contains("} while (false);");
 
         var classesDir = compileGeneratedJava(generatedProgram);
@@ -178,6 +204,9 @@ class ObjectOrientedJavaGeneratorTest {
             assertThat(userType.getMethod("while_flag", boolean.class).invoke(user, false)).isEqualTo(0);
             assertThat(userType.getMethod("do_once", boolean.class).invoke(user, true)).isEqualTo(1);
             assertThat(userType.getMethod("do_once", boolean.class).invoke(user, false)).isEqualTo(2);
+            assertThat(userType.getMethod("local_increment", int.class).invoke(user, 7)).isEqualTo(8);
+            assertThat(userType.getMethod("parity", int.class).invoke(user, 12)).isEqualTo(true);
+            assertThat(userType.getMethod("parity", int.class).invoke(user, 15)).isEqualTo(false);
         }
     }
 
