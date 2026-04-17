@@ -92,6 +92,7 @@ public final class ObjectOrientedJavaGenerator {
         var finalClass = !abstractClass && !openClass;
         var parents = classifyParents(declaration.parents(), definitionsByName);
 
+        appendDocComments(code, declaration.comments(), 0);
         code.append("public ");
         if (abstractClass) {
             code.append("abstract ");
@@ -122,7 +123,7 @@ public final class ObjectOrientedJavaGenerator {
                 .collect(Collectors.toCollection(HashSet::new));
 
         for (var field : fields) {
-            code.append("    ").append(renderFieldDeclaration(field, constructorParameterNames)).append("\n");
+            code.append(renderFieldDeclaration(field, constructorParameterNames)).append("\n");
         }
         if (!fields.isEmpty()) {
             code.append("\n");
@@ -328,7 +329,7 @@ public final class ObjectOrientedJavaGenerator {
                 code.append("        this.")
                         .append(sanitizeIdentifier(field.name()))
                         .append(" = ")
-                        .append(renderExpression(module, field.initializer().orElseThrow(), Set.of()))
+                        .append(renderExpression(module, field.initializer().orElseThrow(), Set.of(), LocalMethodBindings.empty()))
                         .append(";\n");
                 continue;
             }
@@ -342,7 +343,7 @@ public final class ObjectOrientedJavaGenerator {
         }
 
         for (var initBlock : initBlocks) {
-            appendStatementBlockContents(code, module, initBlock.body(), 2, Set.of());
+            appendStatementBlockContents(code, module, initBlock.body(), 2, Set.of(), LocalMethodBindings.empty());
         }
         code.append("    }\n");
         return code.toString();
@@ -350,13 +351,14 @@ public final class ObjectOrientedJavaGenerator {
 
     private String renderFieldDeclaration(ObjectOriented.FieldDeclaration field, Set<String> constructorParameterNames) {
         var code = new StringBuilder();
+        appendDocComments(code, field.comments(), 1);
         var visibility = renderClassVisibility(field.visibility());
         if (!visibility.isBlank()) {
             code.append(visibility).append(' ');
         }
         code.append(renderType(field.type(), false)).append(' ').append(sanitizeIdentifier(field.name()));
         if (field.initializer().isPresent() && !referencesAny(field.initializer().orElseThrow(), constructorParameterNames)) {
-            code.append(" = ").append(renderExpression(null, field.initializer().orElseThrow(), Set.of()));
+            code.append(" = ").append(renderExpression(null, field.initializer().orElseThrow(), Set.of(), LocalMethodBindings.empty()));
         }
         code.append(";");
         return code.toString();
@@ -370,6 +372,7 @@ public final class ObjectOrientedJavaGenerator {
     ) {
         var code = new StringBuilder();
         var javaEntrypoint = isJavaEntrypoint(method);
+        appendDocComments(code, method.comments(), 1);
         if (method.modifiers().contains("override")) {
             code.append("    @Override\n");
         }
@@ -419,6 +422,7 @@ public final class ObjectOrientedJavaGenerator {
 
     private String renderInterface(ObjectOrientedModule module, ObjectOriented.InterfaceDeclaration declaration) {
         var code = new StringBuilder();
+        appendDocComments(code, declaration.comments(), 0);
         code.append("public interface ").append(declaration.name());
         if (!declaration.parents().isEmpty()) {
             code.append(" extends ")
@@ -445,6 +449,7 @@ public final class ObjectOrientedJavaGenerator {
             }
         }
         var code = new StringBuilder();
+        appendDocComments(code, declaration.comments(), 0);
         code.append("public interface ").append(declaration.name());
         if (!declaration.parents().isEmpty()) {
             code.append(" extends ")
@@ -471,11 +476,21 @@ public final class ObjectOrientedJavaGenerator {
         if (!"public".equals(method.visibility())) {
             throw unsupported(module, "Interface method `" + method.name() + "` must be public");
         }
-        return "    " + renderType(method.returnType(), false) + " " + sanitizeIdentifier(method.name()) + "(" + renderParameters(method.parameters()) + ");\n";
+        var code = new StringBuilder();
+        appendDocComments(code, method.comments(), 1);
+        code.append("    ")
+                .append(renderType(method.returnType(), false))
+                .append(" ")
+                .append(sanitizeIdentifier(method.name()))
+                .append("(")
+                .append(renderParameters(method.parameters()))
+                .append(");\n");
+        return code.toString();
     }
 
     private String renderTraitMethod(ObjectOrientedModule module, String ownerName, ObjectOriented.MethodDeclaration method) {
         var code = new StringBuilder();
+        appendDocComments(code, method.comments(), 1);
         code.append("    ");
         if (method.modifiers().contains("override")) {
             throw unsupported(module, "Trait method `" + ownerName + "." + method.name() + "` cannot use `override` in the Java backend v1");
@@ -590,6 +605,7 @@ public final class ObjectOrientedJavaGenerator {
             Set<String> parentNames,
             LocalMethodBindings localMethodBindings
     ) {
+        appendDocComments(code, method.comments(), indentLevel);
         code.append(indent(indentLevel))
                 .append(renderType(method.returnType(), false))
                 .append(' ')
@@ -1519,6 +1535,14 @@ public final class ObjectOrientedJavaGenerator {
 
     private String indent(int level) {
         return "    ".repeat(level);
+    }
+
+    private void appendDocComments(StringBuilder code, List<String> comments, int indentLevel) {
+        if (comments.isEmpty()) {
+            return;
+        }
+        var indent = indent(indentLevel);
+        comments.forEach(line -> code.append(indent).append(line.isEmpty() ? "///" : "/// " + line).append("\n"));
     }
 
     private IllegalArgumentException unsupported(ObjectOrientedModule module, String message) {

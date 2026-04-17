@@ -26,21 +26,24 @@ public record ObjectOriented(List<TypeDeclaration> definitions) {
             List<Parameter> constructorParameters,
             List<TypeReference> parents,
             List<MemberDeclaration> members,
-            List<String> modifiers
+            List<String> modifiers,
+            List<String> comments
     ) implements TypeDeclaration {
     }
 
     public record TraitDeclaration(
             String name,
             List<TypeReference> parents,
-            List<MemberDeclaration> members
+            List<MemberDeclaration> members,
+            List<String> comments
     ) implements TypeDeclaration {
     }
 
     public record InterfaceDeclaration(
             String name,
             List<TypeReference> parents,
-            List<MemberDeclaration> members
+            List<MemberDeclaration> members,
+            List<String> comments
     ) implements TypeDeclaration {
     }
 
@@ -48,7 +51,8 @@ public record ObjectOriented(List<TypeDeclaration> definitions) {
             String name,
             String type,
             String visibility,
-            Optional<String> initializer
+            Optional<String> initializer,
+            List<String> comments
     ) implements MemberDeclaration {
     }
 
@@ -58,11 +62,12 @@ public record ObjectOriented(List<TypeDeclaration> definitions) {
             String returnType,
             String visibility,
             List<String> modifiers,
-            Optional<MethodBody> body
+            Optional<MethodBody> body,
+            List<String> comments
     ) implements MemberDeclaration {
     }
 
-    public record InitBlock(StatementBlock body) implements MemberDeclaration {
+    public record InitBlock(StatementBlock body, List<String> comments) implements MemberDeclaration {
     }
 
     public record ExpressionBody(String expression) implements MethodBody {
@@ -78,7 +83,8 @@ public record ObjectOriented(List<TypeDeclaration> definitions) {
             String name,
             List<Parameter> parameters,
             String returnType,
-            MethodBody body
+            MethodBody body,
+            List<String> comments
     ) implements Statement {
     }
 

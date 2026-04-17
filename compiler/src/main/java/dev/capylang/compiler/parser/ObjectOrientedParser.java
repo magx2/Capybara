@@ -126,7 +126,8 @@ public final class ObjectOrientedParser {
                 parameters(context.constructorParameters() == null ? null : context.constructorParameters().parameters()),
                 typeReferences(context.inheritanceClause() == null ? null : context.inheritanceClause().qualifiedType()),
                 members(context.typeBody().memberDeclaration()),
-                context.classModifier().stream().map(org.antlr.v4.runtime.RuleContext::getText).toList()
+                context.classModifier().stream().map(org.antlr.v4.runtime.RuleContext::getText).toList(),
+                comments(context.docComment())
         );
     }
 
@@ -134,7 +135,8 @@ public final class ObjectOrientedParser {
         return new ObjectOriented.TraitDeclaration(
                 context.TYPE().getText(),
                 typeReferences(context.inheritanceClause() == null ? null : context.inheritanceClause().qualifiedType()),
-                members(context.typeBody().memberDeclaration())
+                members(context.typeBody().memberDeclaration()),
+                comments(context.docComment())
         );
     }
 
@@ -145,7 +147,8 @@ public final class ObjectOrientedParser {
         return new ObjectOriented.InterfaceDeclaration(
                 context.TYPE().getText(),
                 typeReferences(context.inheritanceClause() == null ? null : context.inheritanceClause().qualifiedType()),
-                members
+                members,
+                comments(context.docComment())
         );
     }
 
@@ -168,7 +171,8 @@ public final class ObjectOrientedParser {
                 context.identifier().getText(),
                 context.type().getText(),
                 context.visibility() == null ? "public" : context.visibility().getText(),
-                context.expression() == null ? java.util.Optional.empty() : java.util.Optional.of(context.expression().getText())
+                context.expression() == null ? java.util.Optional.empty() : java.util.Optional.of(context.expression().getText()),
+                comments(context.docComment())
         );
     }
 
@@ -179,7 +183,8 @@ public final class ObjectOrientedParser {
                 context.functionType().type().getText(),
                 context.visibility() == null ? "public" : context.visibility().getText(),
                 context.methodModifier().stream().map(org.antlr.v4.runtime.RuleContext::getText).toList(),
-                context.methodBody() == null ? java.util.Optional.empty() : java.util.Optional.of(methodBody(context.methodBody()))
+                context.methodBody() == null ? java.util.Optional.empty() : java.util.Optional.of(methodBody(context.methodBody())),
+                comments(context.docComment())
         );
     }
 
@@ -190,12 +195,13 @@ public final class ObjectOrientedParser {
                 context.functionType().type().getText(),
                 context.visibility() == null ? "public" : context.visibility().getText(),
                 context.methodModifier().stream().map(org.antlr.v4.runtime.RuleContext::getText).toList(),
-                java.util.Optional.empty()
+                java.util.Optional.empty(),
+                comments(context.docComment())
         );
     }
 
     private ObjectOriented.InitBlock initBlock(dev.capylang.parser.antlr.ObjectOrientedParser.InitBlockContext context) {
-        return new ObjectOriented.InitBlock(statementBlock(context.statementBlock()));
+        return new ObjectOriented.InitBlock(statementBlock(context.statementBlock()), comments(context.docComment()));
     }
 
     private ObjectOriented.MethodBody methodBody(dev.capylang.parser.antlr.ObjectOrientedParser.MethodBodyContext context) {
@@ -263,7 +269,8 @@ public final class ObjectOrientedParser {
                 context.identifier().getText(),
                 parameters(context.localMethodTail().parameters()),
                 context.localMethodTail().functionType().type().getText(),
-                methodBody(context.localMethodTail().methodBody())
+                methodBody(context.localMethodTail().methodBody()),
+                comments(context.docComment())
         );
     }
 
@@ -273,6 +280,20 @@ public final class ObjectOrientedParser {
                 context.mutableVariableTail().type() == null ? java.util.Optional.empty() : java.util.Optional.of(context.mutableVariableTail().type().getText()),
                 context.mutableVariableTail().expression().getText()
         );
+    }
+
+    private List<String> comments(List<? extends org.antlr.v4.runtime.tree.ParseTree> comments) {
+        return comments.stream()
+                .map(org.antlr.v4.runtime.tree.ParseTree::getText)
+                .map(ObjectOrientedParser::stripDocComment)
+                .toList();
+    }
+
+    private static String stripDocComment(String text) {
+        if (!text.startsWith("///")) {
+            return text.trim();
+        }
+        return text.substring(3).stripLeading();
     }
 
     private ObjectOriented.AssignmentStatement assignmentStatement(dev.capylang.parser.antlr.ObjectOrientedParser.AssignmentStatementContext context) {
