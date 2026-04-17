@@ -74,7 +74,7 @@ qualifiedType: TYPE (DOT TYPE)*;
 TYPE: [_]* [A-Z][a-zA-Z0-9_]*
       | TYPE_FULL ;
 TYPE_FULL: '/' [A-Za-z_][a-zA-Z0-9_]* ( '/' [A-Za-z_][a-zA-Z0-9_]* )+;
-INFIX_METHOD_LITERAL: '`' ('|l>' | [+\-*/\\^%$#@~!:<>|]+) '`';
+INFIX_METHOD_LITERAL: '`' ('|l>' | [+\-*/\\^%$#@~!:<>|?]+) '`';
 expression: letExpression* expressionNoLet;
 letExpression: 'let' identifier (':' type)? letBindingOperator expressionNoLet ';'?;
 expressionNoPipe: letExpressionNoPipe* expressionNoLetNoPipe;

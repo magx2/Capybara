@@ -6,35 +6,55 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class RegexCollectionTest {
     @Test
-    void tildeOperator() {
-        assertThat(RegexCollection.hasFoo("xxfooyy")).isTrue();
-        assertThat(RegexCollection.hasFoo("xxbaryy")).isFalse();
+    void matchesNamed() {
+        assertThat(RegexCollection.matchesNamed("xxfooyy")).isTrue();
+        assertThat(RegexCollection.matchesNamed("xxbaryy")).isFalse();
     }
 
     @Test
-    void tildeOperatorWithFlagsLiteralParses() {
-        assertThat(RegexCollection.hasFooWithFlag("xxFooyy")).isTrue();
-        assertThat(RegexCollection.hasFooWithFlag("xxbaryy")).isFalse();
+    void matchesAliasQuestion() {
+        assertThat(RegexCollection.matchesAlias("xxfooyy")).isTrue();
+        assertThat(RegexCollection.matchesAlias("xxbaryy")).isFalse();
     }
 
     @Test
-    void tildeTildeOperator() {
-        assertThat(RegexCollection.allFoo("xxfooyy")).containsExactly("foo");
-        assertThat(RegexCollection.allFoo("xxbaryy")).isEmpty();
+    void findNamedAndAlias() {
+        assertThat(RegexCollection.findNamed("xxfooyy")).isTrue();
+        assertThat(RegexCollection.findNamed("xxbaryy")).isFalse();
+        assertThat(RegexCollection.findAlias("xxfooyy")).isTrue();
+        assertThat(RegexCollection.findAlias("xxbaryy")).isFalse();
     }
 
     @Test
-    void tildeGreaterOperator() {
-        assertThat(RegexCollection.redactOnes("a1b11")).isEqualTo("a#b##");
+    void findAllNamedAndAlias() {
+        assertThat(RegexCollection.findAllNamedCount("xxfooyy")).isEqualTo(1);
+        assertThat(RegexCollection.findAllNamedCount("xxbaryy")).isZero();
+        assertThat(RegexCollection.findAllAliasCount("xxfooyy")).isEqualTo(1);
+        assertThat(RegexCollection.findAllAliasCount("xxbaryy")).isZero();
     }
 
     @Test
-    void slashGreaterOperator() {
-        assertThat(RegexCollection.splitCsv("a,b,c")).containsExactly("a,b,c");
+    void replaceNamedAndAlias() {
+        assertThat(RegexCollection.replaceNamed("a1b11")).isEqualTo("a#b##");
+        assertThat(RegexCollection.replaceAlias("a1b11")).isEqualTo("a#b##");
+    }
+
+    @Test
+    void splitNamedAndAlias() {
+        assertThat(RegexCollection.splitNamed("a,b,c")).containsExactly("a,b,c");
+        assertThat(RegexCollection.splitAlias("a,b,c")).containsExactly("a,b,c");
     }
 
     @Test
     void escapedSlashInLiteral() {
         assertThat(RegexCollection.escapedSlashMatch()).isTrue();
+    }
+
+    @Test
+    void matchGroupsApi() {
+        assertThat(RegexCollection.firstGroupIsPattern("xxfooyy")).isTrue();
+        assertThat(RegexCollection.firstGroupIsPattern("xxbaryy")).isFalse();
+        assertThat(RegexCollection.groupsSize("xxfooyy")).isEqualTo(1);
+        assertThat(RegexCollection.groupsSize("xxbaryy")).isZero();
     }
 }

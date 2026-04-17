@@ -1,13 +1,31 @@
 from /capy/lang/Regex import { * }
+from /capy/lang/Option import { * }
+from /capy/lang/Seq import { * }
 
-fun has_foo(input: string): bool = regex/foo/ ~ input
+fun matches_named(input: string): bool = regex/foo/.matches(input)
+fun matches_alias(input: string): bool = regex/foo/ ? input
 
-fun has_foo_with_flag(input: string): bool = regex/Foo/i ~ input
+fun find_named(input: string): bool =
+    match regex/foo/.find(input) with
+    case Some { _ } -> true
+    case None -> false
 
-fun all_foo(input: string): list[string] = regex/foo/ ~~ input
+fun find_alias(input: string): bool =
+    match regex/foo/ ~ input with
+    case Some { _ } -> true
+    case None -> false
 
-fun redact_ones(input: string): string = (regex/1/ ~> "#")(input)
+fun find_all_named_count(input: string): int = regex/foo/.find_all_count(input)
 
-fun split_csv(input: string): list[string] = regex/,/ /> input
+fun find_all_alias_count(input: string): int = count_matches(regex/foo/ ~~ input)
 
-fun escaped_slash_match(): bool = regex/a\/b/ ~ "--a/b--"
+fun replace_named(input: string): string = regex/1/.replace("#")(input)
+fun replace_alias(input: string): string = (regex/1/ ~> "#")(input)
+
+fun split_named(input: string): list[string] = regex/,/.split(input)
+fun split_alias(input: string): list[string] = regex/,/ /> input
+
+fun escaped_slash_match(): bool = regex/a\/b/ ? "--a/b--"
+
+fun first_group_is_pattern(input: string): bool = regex/foo/.first_group_or_empty(input) == "foo"
+fun groups_size(input: string): int = regex/foo/.group_count(input)
