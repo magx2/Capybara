@@ -174,4 +174,33 @@ class ObjectOrientedCompilationErrorTest {
                     assertThat(error.message()).contains("immutable local `error`");
                 });
     }
+
+    @Test
+    void shouldRejectLocalMethodCapturingMutableLocal() {
+        var result = CapybaraCompiler.INSTANCE.compile(List.of(
+                new RawModule(
+                        "BrokenLocalMethod",
+                        "/foo/boo",
+                        """
+                                class BrokenLocalMethod {
+                                    def run(): int {
+                                        def total: int = 1
+                                        def inc(value: int): int = value + total
+                                        return inc(2)
+                                    }
+                                }
+                                """,
+                        SourceKind.OBJECT_ORIENTED
+                )
+        ), new TreeSet<>());
+
+        assertThat(result).isInstanceOf(Result.Error.class);
+        assertThat(((Result.Error<?>) result).errors())
+                .singleElement()
+                .satisfies(error -> {
+                    assertThat(error.file()).isEqualTo("/foo/boo/BrokenLocalMethod.coo");
+                    assertThat(error.message()).contains("cannot capture mutable locals");
+                    assertThat(error.message()).contains("total");
+                });
+    }
 }

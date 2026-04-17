@@ -298,6 +298,58 @@ class ObjectOrientedParserTest {
     }
 
     @Test
+    @DisplayName("should parse local methods inside method blocks")
+    void parseLocalMethods() {
+        var result = ObjectOrientedParser.INSTANCE.parseModule(new RawModule(
+                "LocalMethods",
+                "/parser",
+                """
+                        class LocalMethods {
+                            def parity(x: int): bool {
+                                def is_even(n: int): bool {
+                                    if n == 0 {
+                                        return true
+                                    } else {
+                                        return is_odd(n - 1)
+                                    }
+                                }
+                                def is_odd(n: int): bool {
+                                    if n == 0 {
+                                        return false
+                                    } else {
+                                        return is_even(n - 1)
+                                    }
+                                }
+                                return is_even(x)
+                            }
+                        }
+                        """,
+                SourceKind.OBJECT_ORIENTED
+        ));
+
+        assertThat(result).isInstanceOf(Result.Success.class);
+        var module = ((Result.Success<ObjectOrientedModule>) result).value();
+        var parityMethod = module.objectOriented().definitions().stream()
+                .filter(ObjectOriented.ClassDeclaration.class::isInstance)
+                .map(ObjectOriented.ClassDeclaration.class::cast)
+                .flatMap(type -> type.members().stream())
+                .filter(ObjectOriented.MethodDeclaration.class::isInstance)
+                .map(ObjectOriented.MethodDeclaration.class::cast)
+                .filter(method -> method.name().equals("parity"))
+                .findFirst()
+                .orElseThrow();
+
+        assertThat(parityMethod.body()).hasValueSatisfying(body -> {
+            assertThat(body).isInstanceOf(ObjectOriented.StatementBlock.class);
+            var block = (ObjectOriented.StatementBlock) body;
+            assertThat(block.statements()).hasSize(3);
+            assertThat(block.statements().get(0)).isInstanceOf(ObjectOriented.LocalMethodStatement.class);
+            assertThat(block.statements().get(1)).isInstanceOf(ObjectOriented.LocalMethodStatement.class);
+            assertThat(block.statements().get(2)).isInstanceOf(ObjectOriented.ReturnStatement.class);
+        });
+    }
+
+    @Test
     @DisplayName("should parse loop statements in method blocks")
     void parseLoopStatements() {
         var result = ObjectOrientedParser.INSTANCE.parseModule(new RawModule(

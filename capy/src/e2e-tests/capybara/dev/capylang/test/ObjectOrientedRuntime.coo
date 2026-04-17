@@ -45,6 +45,30 @@ class Person(name: string): GreeterBase, Printable, BracketNaming {
         }
     }
 
+    def local_increment(x: int): int {
+        let step: int = 1
+        def inc(y: int): int = y + step
+        return inc(x)
+    }
+
+    def parity(x: int): bool {
+        def is_even(n: int): bool {
+            if n == 0 {
+                return true
+            } else {
+                return is_odd(n - 1)
+            }
+        }
+        def is_odd(n: int): bool {
+            if n == 0 {
+                return false
+            } else {
+                return is_even(n - 1)
+            }
+        }
+        return is_even(x)
+    }
+
     def second_name(values: string[]): string = values[1]
 
     def first_id(values: int[]): int = values[0]

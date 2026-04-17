@@ -40,6 +40,15 @@ class ObjectOrientedRuntimeTest {
     }
 
     @Test
+    void localMethodsSupportCaptureAndRecursion() {
+        var person = new Person("Capy");
+
+        assertThat(person.local_increment(7)).isEqualTo(8);
+        assertThat(person.parity(12)).isTrue();
+        assertThat(person.parity(15)).isFalse();
+    }
+
+    @Test
     void loopsExecuteWithExpectedControlFlow() {
         var person = new Person("Capy");
 
