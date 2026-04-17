@@ -23,6 +23,8 @@ public class CapybaraParser {
     public static final CapybaraParser INSTANCE = new CapybaraParser();
     private static final String METHOD_DECL_PREFIX = "__method__";
     private static final String METHOD_INVOKE_PREFIX = "__invoke__";
+    private static final String REGEX_MODULE_NAME = "/capy/lang/Regex";
+    private static final String REGEX_FACTORY_NAME = "from_literal";
     private static final Pattern COLLECTION_LIST_PATTERN = Pattern.compile("list\\[(.+?)]");
     private static final Pattern COLLECTION_SET_PATTERN = Pattern.compile("set\\[(.+?)]");
     private static final Pattern COLLECTION_DICT_PATTERN = Pattern.compile("dict\\[(.+?)]");
@@ -2441,8 +2443,8 @@ public class CapybaraParser {
         var flags = content.substring(closingSlashIndex + 1);
         var position = SourcePosition.of(regexLiteral);
         return new FunctionCall(
-                Optional.of("/capy/lang/Regex"),
-                "from_literal",
+                Optional.of(REGEX_MODULE_NAME),
+                REGEX_FACTORY_NAME,
                 List.of(
                         new StringValue(quoteDoubleQuotedSegment(body), Optional.of(position)),
                         new StringValue(quoteDoubleQuotedSegment(flags), Optional.of(position))
@@ -3233,7 +3235,6 @@ public class CapybaraParser {
     }
 
 }
-
 
 
 
