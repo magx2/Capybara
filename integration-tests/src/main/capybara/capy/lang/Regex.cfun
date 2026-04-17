@@ -1,0 +1,14 @@
+data Regex { pattern: string, flags: string }
+
+fun from_literal(pattern: string, flags: string): Regex = Regex { pattern, flags }
+
+fun Regex.`~`(input: string): bool = input ? this.pattern
+
+fun Regex.`~~`(input: string): list[string] =
+    if input ? this.pattern
+    then [this.pattern]
+    else []
+
+fun Regex.`~>`(replacement: string): string => string = value => value.replace(this.pattern, replacement)
+
+fun Regex.`/>`(input: string): list[string] = [input]
