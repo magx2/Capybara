@@ -12,3 +12,22 @@ fun digits(number: int): int =
 fun abs(number: long): long = if number < 0 then -number else number
 
 fun abs(number: int): int = if number < 0 then -number else number
+
+/// Floor division for integers.
+///
+/// Unlike `/`, this always rounds toward negative infinity.
+/// `b` must be non-zero.
+fun floor_div(a: int, b: int): int =
+    let q = a / b
+    let r = a % b
+    if r == 0
+    then q
+    else if (r > 0 & b < 0) | (r < 0 & b > 0)
+        then q - 1
+        else q
+
+/// Floor modulo for integers.
+///
+/// Result has the same sign as divisor `b` (or is zero).
+/// `b` must be non-zero.
+fun floor_mod(a: int, b: int): int = a - floor_div(a, b) * b

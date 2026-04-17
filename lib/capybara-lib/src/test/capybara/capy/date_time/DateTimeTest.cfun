@@ -1,14 +1,25 @@
 from /capy/date_time/DateTime import { * }
 from /capy/date_time/Time import { * }
 from /capy/date_time/Date import { * }
+from /capy/date_time/Duration import { * }
 from /capy/test/Assert import { * }
-from /capy/lang/Math import { * }
 from /capy/test/CapyTest import { * }
 
+fun _at(days_since_epoch: int, seconds_since_midnight: int): DateTime =
+    let epoch_date = UNIX_DATE
+    let midnight = MIDNIGHT
+    DateTime {
+        date: epoch_date.add_days(days_since_epoch),
+        time: midnight.add_seconds(seconds_since_midnight)
+    }
+
 fun tests(): TestFile =
-    test_file('/capy/date_time/Time.cfun',
-        [_test_unix_epoch()
-        /*, _test_timestamp()*/])
+    test_file('/capy/date_time/DateTime.cfun',
+        [_test_unix_epoch()]
+        + _test_timestamp()
+        + _test_plus()
+        + _test_minus()
+        + _test_comparisons())
 
 fun _test_unix_epoch(): TestCase =
     test("unix_epoch() should return the correct DateTime for 1 January 1970 at 00:00:00",
@@ -22,16 +33,75 @@ fun _test_unix_epoch(): TestCase =
             assert_that(epoch.time.second).is_equal_to(0),
         ]))
 
-/*
 fun _test_timestamp(): list[TestCase] =
     [
-        (DateTime { date: Date { year: 1970, month: 1, day: 1 }, time: Time { hour: 0, minute: 0, second: 0 } }, 0),
-        (DateTime { date: Date { year: 1970, month: 1, day: 2 }, time: Time { hour: 0, minute: 0, second: 0 } }, 86400),
-        (DateTime { date: Date { year: 1970, month: 1, day: 1 }, time: Time { hour: 1, minute: 0, second: 0 } }, 3600),
-        (DateTime { date: Date { year: 1970, month: 1, day: 1 }, time: Time { hour: 0, minute: 1, second: 0 } }, 60),
-        (DateTime { date: Date { year: 1970, month: 1, day: 1 }, time: Time { hour: 0, minute: 0, second: 1 } }, 1),
-        (DateTime { date: Date { year: 1970, month: 1, day: 2 }, time: Time { hour: 1, minute: 0, second: 0 } }, 90000),
+        (_at(0, 0), 0L),
+        (_at(1, 0), 86400L),
+        (_at(0, 3600), 3600L),
+        (_at(0, 60), 60L),
+        (_at(0, 1), 1L),
+        (_at(-1, 86399), -1L),
+        (_at(1, 3600), 90000L),
     ] | (datetime, expected) => test(
         "{datetime}.timestamp() should return the correct Unix timestamp",
-        assert_that(datetime | dt => Success { dt.timestamp() }).succeeds(expected))
-*/
+        assert_that(datetime.timestamp()).is_equal_to(expected))
+
+fun _test_plus(): list[TestCase] =
+    let base = _at(0, 0)
+    let epoch_date = UNIX_DATE
+    let jan_31_2024 = epoch_date.add_years_months(54, 0).add_days(30)
+    [
+        ("plus with week duration", base.plus(WeekDuration { weeks: 2 }), _at(14, 0)),
+        ("plus with date duration and carry", base.plus(DateDuration { years: 0, months: 0, days: 1, hours: 1, minutes: 30, seconds: 0 }), _at(1, 5400)),
+        ("plus should clamp month day", DateTime { date: jan_31_2024, time: MIDNIGHT }.plus(DateDuration { years: 0, months: 1, days: 0, hours: 0, minutes: 0, seconds: 0 }), DateTime { date: jan_31_2024.add_years_months(0, 1), time: MIDNIGHT }),
+        ("operator + should delegate to plus", base + DateDuration { years: 0, months: 0, days: 0, hours: 25, minutes: 0, seconds: 0 }, _at(1, 3600)),
+        ("plus should handle very large hour component without overflow", base.plus(DateDuration { years: 0, months: 0, days: 0, hours: 600000, minutes: 0, seconds: 0 }), _at(25000, 0)),
+    ] | (name, actual, expected) =>
+        test(name,
+            assert_all([
+                assert_that(actual.date).is_equal_to(expected.date),
+                assert_that(actual.time).is_equal_to(expected.time),
+            ]))
+
+fun _test_minus(): list[TestCase] =
+    let base = _at(1, 0)
+    let epoch_date = UNIX_DATE
+    let mar_31_2024 = epoch_date.add_years_months(54, 2).add_days(30)
+    [
+        ("minus with week duration", base.minus(WeekDuration { weeks: 1 }), _at(-6, 0)),
+        ("minus with date duration and borrow", base.minus(DateDuration { years: 0, months: 0, days: 0, hours: 1, minutes: 0, seconds: 1 }), _at(0, 82799)),
+        ("operator - should delegate to minus", DateTime { date: mar_31_2024, time: MIDNIGHT } - DateDuration { years: 0, months: 1, days: 0, hours: 0, minutes: 0, seconds: 0 }, DateTime { date: mar_31_2024.add_years_months(0, -1), time: MIDNIGHT }),
+    ] | (name, actual, expected) =>
+        test(name,
+            assert_all([
+                assert_that(actual.date).is_equal_to(expected.date),
+                assert_that(actual.time).is_equal_to(expected.time),
+            ]))
+
+
+fun _test_comparisons(): list[TestCase] =
+    let first = _at(0, 0)
+    let second = _at(0, 1)
+    let third = _at(1, 0)
+    [
+        test("greater_than should return true when this DateTime is later",
+            assert_all([
+                assert_that(second.greater_than(first)).is_true(),
+                assert_that(first.greater_than(second)).is_false(),
+            ])),
+        test("less_than should return true when this DateTime is earlier",
+            assert_all([
+                assert_that(first.less_than(second)).is_true(),
+                assert_that(second.less_than(first)).is_false(),
+            ])),
+        test("operator > should compare DateTime values",
+            assert_all([
+                assert_that(second > first).is_true(),
+                assert_that(first > second).is_false(),
+            ])),
+        test("operator < should compare DateTime values",
+            assert_all([
+                assert_that(second < third).is_true(),
+                assert_that(third < second).is_false(),
+            ])),
+    ]

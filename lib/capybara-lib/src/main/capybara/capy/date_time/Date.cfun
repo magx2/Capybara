@@ -1,4 +1,5 @@
 from /capy/lang/Result import {*}
+from /capy/lang/Math import { * }
 
 /// Checks whether a year is a leap year in the Gregorian calendar.
 fun _leap_year(year: int): bool = (year % 4 == 0 & year % 100 != 0) | year % 400 == 0
@@ -19,6 +20,15 @@ const SEPTEMBER: int = 9
 const OCTOBER: int = 10
 const NOVEMBER: int = 11
 const DECEMBER: int = 12
+
+const __DAYS_PER_400_YEARS: int = 146097
+const __DAYS_PER_YEAR: int = 365
+const __UNIX_EPOCH_CIVIL_OFFSET_DAYS: int = 719468
+const __DAYS_PER_4_YEARS_MINUS_1: int = 1460
+const __DAYS_PER_100_YEARS_MINUS_1: int = 36524
+const __DAYS_PER_400_YEARS_MINUS_1: int = 146096
+const __MONTH_TO_DAY_NUMERATOR: int = 153
+const __MONTH_TO_DAY_BIAS: int = 2
 
 /// Calendar date represented by day, month and year.
 ///
@@ -53,3 +63,58 @@ fun Date.last_day_of_month(): Date =
     else if _days_31_month(this.month)
         then Date! { day: 31, month: this.month, year: this.year }
         else Date! { day: 30, month: this.month, year: this.year }
+
+/// Converts this date to days since Unix epoch (`1970-01-01`).
+fun Date.to_days_since_unix_epoch(): int =
+    fun __floor_div(a: int, b: int): int =
+        floor_div(a, b)
+    ---
+    let y = if this.month <= FEBRUARY then this.year - 1 else this.year
+    let era = __floor_div(y, 400)
+    let yoe = y - era * 400
+    let mp = if this.month > FEBRUARY then this.month - 3 else this.month + 9
+    let doy = __floor_div(__MONTH_TO_DAY_NUMERATOR * mp + __MONTH_TO_DAY_BIAS, 5) + this.day - 1
+    let doe = yoe * __DAYS_PER_YEAR + __floor_div(yoe, 4) - __floor_div(yoe, 100) + doy
+    era * __DAYS_PER_400_YEARS + doe - __UNIX_EPOCH_CIVIL_OFFSET_DAYS
+
+/// Converts days since Unix epoch (`1970-01-01`) to `Date`.
+fun from_days_since_unix_epoch(days_since_epoch: int): Date =
+    fun __floor_div(a: int, b: int): int =
+        floor_div(a, b)
+    ---
+    let z = days_since_epoch + __UNIX_EPOCH_CIVIL_OFFSET_DAYS
+    let era = __floor_div(z, __DAYS_PER_400_YEARS)
+    let doe = z - era * __DAYS_PER_400_YEARS
+    let yoe = __floor_div(doe - __floor_div(doe, __DAYS_PER_4_YEARS_MINUS_1) + __floor_div(doe, __DAYS_PER_100_YEARS_MINUS_1) - __floor_div(doe, __DAYS_PER_400_YEARS_MINUS_1), __DAYS_PER_YEAR)
+    let y = yoe + era * 400
+    let doy = doe - (__DAYS_PER_YEAR * yoe + __floor_div(yoe, 4) - __floor_div(yoe, 100))
+    let mp = __floor_div(5 * doy + __MONTH_TO_DAY_BIAS, __MONTH_TO_DAY_NUMERATOR)
+    let day = doy - __floor_div(__MONTH_TO_DAY_NUMERATOR * mp + __MONTH_TO_DAY_BIAS, 5) + 1
+    let month = if mp < 10 then mp + 3 else mp - 9
+    let year = if month <= FEBRUARY then y + 1 else y
+    Date! { day, month, year }
+
+/// Adds days to this date.
+fun Date.add_days(days: int): Date = from_days_since_unix_epoch(this.to_days_since_unix_epoch() + days)
+
+/// Adds years and months to this date, clamping the day to target month length.
+fun Date.add_years_months(years: int, months: int): Date =
+    fun __floor_div(a: int, b: int): int =
+        floor_div(a, b)
+    fun __floor_mod(a: int, b: int): int = a - __floor_div(a, b) * b
+    fun __min(a: int, b: int): int = if a < b then a else b
+    fun __days_in_month(year: int, month: int): int =
+        if month == APRIL | month == JUNE | month == SEPTEMBER | month == NOVEMBER
+        then 30
+        else if month == FEBRUARY
+            then if _leap_year(year) then 29 else 28
+            else 31
+    ---
+    let total_months = (this.year + years) * 12 + (this.month + months - 1)
+    let normalized_year = __floor_div(total_months, 12)
+    let normalized_month = __floor_mod(total_months, 12) + 1
+    Date! {
+        day: __min(this.day, __days_in_month(normalized_year, normalized_month)),
+        month: normalized_month,
+        year: normalized_year
+    }
