@@ -23,6 +23,10 @@ public enum InfixOperator {
     GE(">="),
     AND("&"),
     QUESTION("?"),
+    TILDE("~"),
+    TILDE_TILDE("~~"),
+    TILDE_GT("~>"),
+    DIV_GT("/>"),
     PIPE("|"),
     PIPE_MINUS("|-"),
     PIPE_FLATMAP("|*"),
@@ -72,7 +76,7 @@ public enum InfixOperator {
             case GT, LT, LE, GE -> 4;
             case EQUAL, NOTEQUAL -> 3;
             case AND -> 2;
-            case QUESTION -> 2;
+            case QUESTION, TILDE, TILDE_TILDE, TILDE_GT, DIV_GT -> 2;
             case PIPE, PIPE_MINUS, PIPE_FLATMAP, PIPE_REDUCE, PIPE_ANY, PIPE_ALL -> 1;
         };
     }

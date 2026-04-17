@@ -1,0 +1,62 @@
+from /capy/lang/Option import { * }
+from /capy/lang/Seq import { * }
+
+data Regex { pattern: string, flags: string }
+data Match { group_value: string }
+
+fun from_literal(pattern: string, flags: string): Regex = Regex { pattern, flags }
+
+fun _drop_prefix(value: string, size: int): string =
+    if size <= 0
+    then value
+    else
+        match value[0] with
+        case None -> ""
+        case Some { _ } -> _drop_prefix(value[1:], size - 1)
+
+fun _find_all(pattern: string, input: string, acc: list[Match]): list[Match] =
+    if pattern == ""
+    then acc
+    else
+        match input[0] with
+        case None -> acc
+        case Some { _ } ->
+            if input.starts_with(pattern)
+            then _find_all(pattern, _drop_prefix(input, pattern.size), acc + Match { group_value: pattern })
+            else _find_all(pattern, input[1:], acc)
+
+fun _split(pattern: string, input: string, current: string, acc: list[string]): list[string] =
+    if pattern == ""
+    then [input]
+    else
+        match input[0] with
+        case None -> acc + current
+        case Some { c } ->
+            if input.starts_with(pattern)
+            then _split(pattern, _drop_prefix(input, pattern.size), "", acc + current)
+            else _split(pattern, input[1:], current + c, acc)
+
+fun Regex.matches(input: string): bool = input ? this.pattern
+
+fun Regex.find(input: string): Option[Match] =
+    match _find_all(this.pattern, input, [])[0] with
+    case Some { value } -> Some { value }
+    case None -> None
+
+fun Regex.find_all(input: string): /capy/lang/Seq[Match] =
+    /capy/lang/Seq.to_seq(_find_all(this.pattern, input, []))
+
+fun Regex.replace(replacement: string): string => string = value => value.replace(this.pattern, replacement)
+
+fun Regex.split(input: string): list[string] =
+    _split(this.pattern, input, "", [])
+
+fun Regex.`?`(input: string): bool = this.matches(input)
+fun Regex.`~`(input: string): Option[Match] = this.find(input)
+fun Regex.`~~`(input: string): /capy/lang/Seq[Match] = this.find_all(input)
+fun Regex.`~>`(replacement: string): string => string = this.replace(replacement)
+fun Regex.`/>`(input: string): list[string] = this.split(input)
+
+fun Match.group(index: int): Option[string] = if index == 0 then Some { value: this.group_value } else None
+
+fun Match.groups(): list[Option[string]] = [Some { value: this.group_value }]

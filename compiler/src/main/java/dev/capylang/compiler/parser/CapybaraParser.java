@@ -23,6 +23,8 @@ public class CapybaraParser {
     public static final CapybaraParser INSTANCE = new CapybaraParser();
     private static final String METHOD_DECL_PREFIX = "__method__";
     private static final String METHOD_INVOKE_PREFIX = "__invoke__";
+    private static final String REGEX_MODULE_NAME = "/capy/lang/Regex";
+    private static final String REGEX_FACTORY_NAME = "from_literal";
     private static final Pattern COLLECTION_LIST_PATTERN = Pattern.compile("list\\[(.+?)]");
     private static final Pattern COLLECTION_SET_PATTERN = Pattern.compile("set\\[(.+?)]");
     private static final Pattern COLLECTION_DICT_PATTERN = Pattern.compile("dict\\[(.+?)]");
@@ -1293,6 +1295,9 @@ public class CapybaraParser {
                 if (literal.NOTHING_LITERAL() != null) {
                     return new NothingValue(position(literal.NOTHING_LITERAL()));
                 }
+                if (literal.REGEX_LITERAL() != null) {
+                    return regexLiteralExpression(literal.REGEX_LITERAL());
+                }
             }
 
             if (value.identifier() != null) {
@@ -1576,6 +1581,9 @@ public class CapybaraParser {
                 }
                 if (literal.NOTHING_LITERAL() != null) {
                     return new NothingValue(position(literal.NOTHING_LITERAL()));
+                }
+                if (literal.REGEX_LITERAL() != null) {
+                    return regexLiteralExpression(literal.REGEX_LITERAL());
                 }
             }
 
@@ -2422,6 +2430,29 @@ public class CapybaraParser {
         return interpolatedStringExpression(raw, position);
     }
 
+    private Expression regexLiteralExpression(TerminalNode regexLiteral) {
+        var raw = regexLiteral.getText();
+        var content = raw.substring("regex/".length());
+        var closingSlashIndex = content.lastIndexOf('/');
+        if (closingSlashIndex < 0) {
+            throw new IllegalStateException("Invalid regex literal: " + raw);
+        }
+        var body = content.substring(0, closingSlashIndex)
+                .replace("\\/", "/")
+                .replace("\\\\", "\\");
+        var flags = content.substring(closingSlashIndex + 1);
+        var position = SourcePosition.of(regexLiteral);
+        return new FunctionCall(
+                Optional.of(REGEX_MODULE_NAME),
+                REGEX_FACTORY_NAME,
+                List.of(
+                        new StringValue(quoteDoubleQuotedSegment(body), Optional.of(position)),
+                        new StringValue(quoteDoubleQuotedSegment(flags), Optional.of(position))
+                ),
+                Optional.of(position)
+        );
+    }
+
     private Expression interpolatedStringExpression(String raw, SourcePosition position) {
         var content = raw.substring(1, raw.length() - 1);
         var parts = new ArrayList<Expression>();
@@ -3204,9 +3235,6 @@ public class CapybaraParser {
     }
 
 }
-
-
-
 
 
 

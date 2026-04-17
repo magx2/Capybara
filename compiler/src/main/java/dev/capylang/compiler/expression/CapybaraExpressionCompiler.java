@@ -3923,6 +3923,7 @@ public class CapybaraExpressionCompiler {
             case GT, LT, EQUAL, NOTEQUAL, LE, GE -> BOOL;
             case AND, PIPE -> findLogicalType(left.type(), right.type());
             case QUESTION -> findQuestionType(left.type(), right.type());
+            case TILDE, TILDE_TILDE, TILDE_GT, DIV_GT -> null;
             case PIPE_MINUS, PIPE_FLATMAP, PIPE_REDUCE, PIPE_ANY, PIPE_ALL -> null;
         };
         if (type == null) {
