@@ -7,12 +7,6 @@ fun _days_31_month(month: int): bool = month == JANUARY | month == MARCH | month
 /// Returns `true` when the month has 30 days.
 fun _days_30_month(month: int): bool = month == APRIL | month == JUNE | month == SEPTEMBER | month == NOVEMBER
 
-fun _days_in_month(year: int, month: int): int =
-    if month == APRIL | month == JUNE | month == SEPTEMBER | month == NOVEMBER
-    then 30
-    else if month == FEBRUARY
-        then if _leap_year(year) then 29 else 28
-        else 31
 
 const JANUARY: int = 1
 const FEBRUARY: int = 2
@@ -106,12 +100,18 @@ fun Date.add_years_months(years: int, months: int): Date =
         else -(((-a) + b - 1) / b)
     fun __floor_mod(a: int, b: int): int = a - __floor_div(a, b) * b
     fun __min(a: int, b: int): int = if a < b then a else b
+    fun __days_in_month(year: int, month: int): int =
+        if month == APRIL | month == JUNE | month == SEPTEMBER | month == NOVEMBER
+        then 30
+        else if month == FEBRUARY
+            then if _leap_year(year) then 29 else 28
+            else 31
     ---
     let total_months = (this.year + years) * 12 + (this.month + months - 1)
     let normalized_year = __floor_div(total_months, 12)
     let normalized_month = __floor_mod(total_months, 12) + 1
     Date! {
-        day: __min(this.day, _days_in_month(normalized_year, normalized_month)),
+        day: __min(this.day, __days_in_month(normalized_year, normalized_month)),
         month: normalized_month,
         year: normalized_year
     }
