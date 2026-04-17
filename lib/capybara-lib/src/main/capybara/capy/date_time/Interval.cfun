@@ -27,10 +27,13 @@ data DurationEndInterval { duration: Duration, end: TimePoint }
 /// Parses an ISO 8601 time interval.
 fun from_iso_8601_interval(iso: string): Result[TimeInterval] =
     data __Parse[T] { buffer: string, value: T }
+
     fun __invalid(message: string): string = "Invalid ISO 8601 interval format: " + message
-    fun __parse_positive_digit(value: string): Result[__Parse[int]] =
+
+    fun __parse_digit(value: string, label: string): Result[__Parse[int]] =
         match value[0] with
-        case None -> Error { __invalid("unexpected end of string while parsing digits") }
+        case None -> Error { __invalid("expected digit for " + label + ", got end of string") }
+        case Some { '0' } -> Success { __Parse { buffer: value[1:], value: 0 } }
         case Some { '1' } -> Success { __Parse { buffer: value[1:], value: 1 } }
         case Some { '2' } -> Success { __Parse { buffer: value[1:], value: 2 } }
         case Some { '3' } -> Success { __Parse { buffer: value[1:], value: 3 } }
@@ -40,76 +43,79 @@ fun from_iso_8601_interval(iso: string): Result[TimeInterval] =
         case Some { '7' } -> Success { __Parse { buffer: value[1:], value: 7 } }
         case Some { '8' } -> Success { __Parse { buffer: value[1:], value: 8 } }
         case Some { '9' } -> Success { __Parse { buffer: value[1:], value: 9 } }
-        case Some { char } -> Error { __invalid("expected digit between `1` and `9`, got `" + char + "`") }
-    fun __parse_digit(value: string): Result[__Parse[int]] =
-        match value[0] with
-        case None -> Error { __invalid("unexpected end of string while parsing digits") }
-        case Some { '0' } -> Success { __Parse { buffer: value[1:], value: 0 } }
-        case Some -> __parse_positive_digit(value)
-    fun __parse_rest_digits(value: string, parsed: int): Result[__Parse[int]] =
-        match value[0] with
-        case Some { char } ->
-            if match char with
-               case '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' -> true
-               case _ -> false
-            then {
-                let parse_digit <- __parse_digit(value)
-                __parse_rest_digits(parse_digit.buffer, parsed * 10 + parse_digit.value)
-            }
-            else Success { __Parse { buffer: value, value: parsed } }
-        case _ -> Success { __Parse { buffer: value, value: parsed } }
-    fun __parse_digits(value: string): Result[__Parse[int]] =
-        let parse <- __parse_digit(value)
-        __parse_rest_digits(parse.buffer, parse.value)
-    fun __parse_exact_digits(value: string, label: string): Result[int] =
-        let parse <- __parse_digits(value)
-        if parse.buffer.is_empty
-        then Success { parse.value }
-        else Error { __invalid("expected digits for " + label + ", got `" + value + "`") }
-    fun __is_exact_digits(value: string): bool =
-        match __parse_exact_digits(value, "value") with
-        case Success -> true
-        case Error -> false
+        case Some { char } -> Error { __invalid("expected digit for " + label + ", got `" + char + "`") }
+
+    fun __parse_2_digits(value: string, label: string): Result[__Parse[int]] =
+        let tens <- __parse_digit(value, label)
+        let ones <- __parse_digit(tens.buffer, label)
+        Success { __Parse { buffer: ones.buffer, value: tens.value * 10 + ones.value } }
+
+    fun __parse_4_digits(value: string, label: string): Result[__Parse[int]] =
+        let thousands <- __parse_digit(value, label)
+        let hundreds <- __parse_digit(thousands.buffer, label)
+        let tens <- __parse_digit(hundreds.buffer, label)
+        let ones <- __parse_digit(tens.buffer, label)
+        Success { __Parse {
+            buffer: ones.buffer,
+            value: thousands.value * 1000 + hundreds.value * 100 + tens.value * 10 + ones.value
+        }}
+
+    fun __consume_symbol(value: string, expected: string, label: string): Result[string] =
+        if value.starts_with(expected)
+        then Success { value[1:] }
+        else Error { __invalid("expected `" + expected + "` after " + label) }
+
+    fun __parse_date_parts(value: string): Result[__Parse[Date]] =
+        let year <- __parse_4_digits(value, "year")
+        let after_year <- __consume_symbol(year.buffer, "-", "year")
+        let month <- __parse_2_digits(after_year, "month")
+        let after_month <- __consume_symbol(month.buffer, "-", "month")
+        let day <- __parse_2_digits(after_month, "day")
+        let parsed_date <- Date { day: day.value, month: month.value, year: year.value }
+        Success { __Parse {
+            buffer: day.buffer,
+            value: parsed_date
+        }}
+
+    fun __parse_time_parts(value: string): Result[__Parse[Time]] =
+        let hour <- __parse_2_digits(value, "hour")
+        let after_hour <- __consume_symbol(hour.buffer, ":", "hour")
+        let minute <- __parse_2_digits(after_hour, "minute")
+        let after_minute <- __consume_symbol(minute.buffer, ":", "minute")
+        let second <- __parse_2_digits(after_minute, "second")
+        let after_second <- __consume_symbol(second.buffer, "Z", "second")
+        let parsed_time <- Time { hour: hour.value, minute: minute.value, second: second.value }
+        Success { __Parse {
+            buffer: after_second,
+            value: parsed_time
+        }}
 
     fun __parse_date(value: string): Result[Date] =
-        if value.size != 10
-        then Error { __invalid("expected date in `YYYY-MM-DD` format, got `" + value + "`") }
-        else if value[4:5] != "-" | value[7:8] != "-"
-            then Error { __invalid("expected date in `YYYY-MM-DD` format, got `" + value + "`") }
-            else if !(__is_exact_digits(value[0:4]) & __is_exact_digits(value[5:7]) & __is_exact_digits(value[8:10]))
-                then Error { __invalid("expected date in `YYYY-MM-DD` format, got `" + value + "`") }
-                else {
-                    let year <- __parse_exact_digits(value[0:4], "year")
-                    let month <- __parse_exact_digits(value[5:7], "month")
-                    let day <- __parse_exact_digits(value[8:10], "day")
-                    Date { day, month, year }
-                }
+        let parsed <- __parse_date_parts(value)
+        if parsed.buffer.is_empty
+        then Success { parsed.value }
+        else Error { __invalid("expected date in `YYYY-MM-DD` format, got `" + value + "`") }
 
     fun __parse_time(value: string): Result[Time] =
-        if value.size != 9
-        then Error { __invalid("expected time in `HH:MM:SSZ` format, got `" + value + "`") }
-        else if value[2:3] != ":" | value[5:6] != ":" | value[8:9] != "Z"
-            then Error { __invalid("expected time in `HH:MM:SSZ` format, got `" + value + "`") }
-            else if !(__is_exact_digits(value[0:2]) & __is_exact_digits(value[3:5]) & __is_exact_digits(value[6:8]))
-                then Error { __invalid("expected time in `HH:MM:SSZ` format, got `" + value + "`") }
-                else {
-                    let hour <- __parse_exact_digits(value[0:2], "hour")
-                    let minute <- __parse_exact_digits(value[3:5], "minute")
-                    let second <- __parse_exact_digits(value[6:8], "second")
-                    Time { hour, minute, second }
-                }
+        let parsed <- __parse_time_parts(value)
+        if parsed.buffer.is_empty
+        then Success { parsed.value }
+        else Error { __invalid("expected time in `HH:MM:SSZ` format, got `" + value + "`") }
+
+    fun __parse_date_time(value: string): Result[DateTime] =
+        let date <- __parse_date_parts(value)
+        let after_date <- __consume_symbol(date.buffer, "T", "date")
+        let time <- __parse_time_parts(after_date)
+        if time.buffer.is_empty
+        then Success { DateTime { date: date.value, time: time.value } }
+        else Error { __invalid("expected date-time in `YYYY-MM-DDTHH:MM:SSZ` format, got `" + value + "`") }
 
     fun __parse_time_point(value: string): Result[TimePoint] =
         if value ? "T"
-        then if value.size < 11
-            then Error { __invalid("expected date-time in `YYYY-MM-DDTHH:MM:SSZ` format, got `" + value + "`") }
-            else if value[10:11] != "T"
-                then Error { __invalid("expected date-time in `YYYY-MM-DDTHH:MM:SSZ` format, got `" + value + "`") }
-                else {
-                    let date <- __parse_date(value[0:10])
-                    let time <- __parse_time(value[11:])
-                    Success { DateTimePoint { date_time: DateTime { date, time } } }
-                }
+        then {
+            let date_time <- __parse_date_time(value)
+            Success { DateTimePoint { date_time } }
+        }
         else {
             let date <- __parse_date(value)
             Success { DatePoint { date } }
@@ -136,6 +142,21 @@ fun from_iso_8601_interval(iso: string): Result[TimeInterval] =
             then true
             else __has_additional_separator(value[1:], true)
         case Some -> __has_additional_separator(value[1:], false)
+
+    fun __parse_duration_end(left: string, right: string): Result[TimeInterval] =
+        let duration <- from_iso_8601(left)
+        let end <- __parse_time_point(right)
+        Success { DurationEndInterval { duration, end } }
+
+    fun __parse_start_duration(left: string, right: string): Result[TimeInterval] =
+        let start <- __parse_time_point(left)
+        let duration <- from_iso_8601(right)
+        Success { StartDurationInterval { start, duration } }
+
+    fun __parse_start_end(left: string, right: string): Result[TimeInterval] =
+        let start <- __parse_time_point(left)
+        let end <- __parse_time_point(right)
+        Success { StartEndInterval { start, end } }
     ---
     let separator <- __find_separator(iso, "")
     let left = separator[0]
@@ -148,19 +169,7 @@ fun from_iso_8601_interval(iso: string): Result[TimeInterval] =
     else if left.starts_with("P") & right.starts_with("P")
     then Error { __invalid("an interval cannot contain duration on both sides") }
     else if left.starts_with("P")
-    then {
-        let duration <- from_iso_8601(left)
-        let end <- __parse_time_point(right)
-        Success { DurationEndInterval { duration, end } }
-    }
+    then __parse_duration_end(left, right)
     else if right.starts_with("P")
-    then {
-        let start <- __parse_time_point(left)
-        let duration <- from_iso_8601(right)
-        Success { StartDurationInterval { start, duration } }
-    }
-    else {
-        let start <- __parse_time_point(left)
-        let end <- __parse_time_point(right)
-        Success { StartEndInterval { start, end } }
-    }
+    then __parse_start_duration(left, right)
+    else __parse_start_end(left, right)
