@@ -4,12 +4,6 @@ from /capy/date_time/DateTime import { * }
 from /capy/date_time/Duration import { * }
 from /capy/lang/Result import { * }
 
-/// Interval boundary represented as either a date (`YYYY-MM-DD`) or a UTC date-time (`YYYY-MM-DDTHH:MM:SSZ`).
-type TimePoint = DatePoint | DateTimePoint
-
-data DatePoint { date: Date }
-data DateTimePoint { date_time: DateTime }
-
 /// ISO 8601 time interval representations.
 ///
 /// Supported forms:
@@ -20,9 +14,9 @@ data DateTimePoint { date_time: DateTime }
 /// The separator can be `/` (default) or `--` (by mutual agreement).
 type TimeInterval = StartEndInterval | StartDurationInterval | DurationEndInterval
 
-data StartEndInterval { start: TimePoint, end: TimePoint }
-data StartDurationInterval { start: TimePoint, duration: Duration }
-data DurationEndInterval { duration: Duration, end: TimePoint }
+data StartEndInterval { start: any, end: any }
+data StartDurationInterval { start: any, duration: Duration }
+data DurationEndInterval { duration: Duration, end: any }
 
 /// Parses an ISO 8601 time interval.
 fun from_iso_8601_interval(iso: string): Result[TimeInterval] =
@@ -110,15 +104,15 @@ fun from_iso_8601_interval(iso: string): Result[TimeInterval] =
         then Success { DateTime { date: date.value, time: time.value } }
         else Error { __invalid("expected date-time in `YYYY-MM-DDTHH:MM:SSZ` format, got `" + value + "`") }
 
-    fun __parse_time_point(value: string): Result[TimePoint] =
+    fun __parse_time_point(value: string): Result[any] =
         if value ? "T"
         then {
             let date_time <- __parse_date_time(value)
-            Success { DateTimePoint { date_time } }
+            Success { date_time }
         }
         else {
             let date <- __parse_date(value)
-            Success { DatePoint { date } }
+            Success { date }
         }
 
     fun __find_separator(value: string, left: string): Result[tuple[string, string, int]] =
