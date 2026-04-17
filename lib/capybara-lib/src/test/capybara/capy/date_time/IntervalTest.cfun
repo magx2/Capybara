@@ -1,0 +1,30 @@
+from /capy/date_time/Interval import { * }
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+
+fun tests(): TestFile =
+    let success_cases = [
+        "2007-03-01T13:00:00Z/2008-05-11T15:30:00Z",
+        "2007-03-01/2008-05-11",
+        "2007-03-01T13:00:00Z/P1Y2M10DT2H30M",
+        "P1Y2M10DT2H30M/2008-05-11T15:30:00Z",
+        "2000-01-01--2002-12-31",
+    ] | iso =>
+        test("should parse interval `" + iso + "`",
+            assert_that(from_iso_8601_interval(iso)).succeeds())
+
+    let failure_cases = [
+        "",
+        "2007-03-01",
+        "P1D/P2D",
+        "2007-03-01/",
+        "/2008-05-11",
+        "2007-03-01/2008-05-11/2009-01-01",
+        "2007-03-01--2008-05-11/2009-01-01",
+        "2007-03-01T13:00:00/2008-05-11T15:30:00Z",
+        "2007-02-30/2008-05-11",
+    ] | iso =>
+        test("should fail parsing interval `" + iso + "`",
+            assert_that(from_iso_8601_interval(iso)).fails())
+
+    test_file('/capy/date_time/Interval.cfun', success_cases + failure_cases)
