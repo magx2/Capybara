@@ -37,6 +37,7 @@ statementBlock: '{' statement* '}';
 statement: letStatement
          | defStatement
          | assignmentStatement
+         | expressionStatement
          | throwStatement
          | returnStatement
          | ifStatement
@@ -50,6 +51,14 @@ defStatement: docComment* 'def' identifier (localMethodTail | mutableVariableTai
 localMethodTail: '(' parameters? ')' functionType methodBody;
 mutableVariableTail: (':' type)? letBindingOperator expression ';'?;
 assignmentStatement: identifier ASSIGN expression ';'?;
+expressionStatement: callExpression ';'?;
+callExpression
+    : functionCall
+    | value DOT methodIdentifier LPAREN methodArgumentList? RPAREN
+    | thisExpression DOT methodIdentifier LPAREN methodArgumentList? RPAREN
+    | callExpression DOT methodIdentifier LPAREN methodArgumentList? RPAREN
+    | callExpression LPAREN argumentList? RPAREN
+    ;
 throwStatement: 'throw' expression ';'?;
 returnStatement: 'return' expression ';'?;
 ifStatement: 'if' expression statementBlock ('else' (ifStatement | statementBlock))?;

@@ -117,6 +117,34 @@ class ObjectOrientedCompilationErrorTest {
     }
 
     @Test
+    void shouldRejectNonCallExpressionStatement() {
+        var result = CapybaraCompiler.INSTANCE.compile(List.of(
+                new RawModule(
+                        "BrokenStatement",
+                        "/foo/boo",
+                        """
+                                class BrokenStatement {
+                                    def run(): int {
+                                        let value: int = 1
+                                        value
+                                        return value
+                                    }
+                                }
+                                """,
+                        SourceKind.OBJECT_ORIENTED
+                )
+        ), new TreeSet<>());
+
+        assertThat(result).isInstanceOf(Result.Error.class);
+        assertThat(((Result.Error<?>) result).errors())
+                .singleElement()
+                .satisfies(error -> {
+                    assertThat(error.file()).isEqualTo("/foo/boo/BrokenStatement.coo");
+                    assertThat(error.message()).contains("line 5");
+                });
+    }
+
+    @Test
     void shouldRejectTryWithoutCatchClause() {
         var result = CapybaraCompiler.INSTANCE.compile(List.of(
                 new RawModule(

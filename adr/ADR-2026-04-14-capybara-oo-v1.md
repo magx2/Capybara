@@ -42,11 +42,13 @@ Capybara OO v1 starts with a separate frontend boundary instead of extending `Fu
   - shared expression layering
   - shared qualified-type handling
   - shared function-type notation
-- Expressions are not valid stand-alone statements in OO method blocks.
+- Arbitrary value expressions are not valid stand-alone statements in OO method blocks.
+- Call expressions are allowed as stand-alone statements in OO method blocks to support explicit side effects.
 - v1 statement set is intentionally minimal:
   - `let`
   - mutable local `def`
   - assignment
+  - call statements
   - `return`
   - `if` / `else`
   - `for` / `foreach`
@@ -84,3 +86,15 @@ Capybara OO v1 starts with a separate frontend boundary instead of extending `Fu
   - expression-bodied and block-bodied instance methods
 - Traits with state or init blocks remain unsupported in the Java backend.
 - JavaScript and Python generation must still reject `.coo` modules explicitly.
+
+## Output v1
+
+- Capybara OO output is library-shaped, not syntax-shaped.
+- The standard stdout surface is:
+  - `/capy/io/Stdout.print(text: string): void`
+  - `/capy/io/Stdout.println(text: string): void`
+- Output is an ordinary OO side effect and does not implicitly bridge to functional `/capy/lang/Program` or `Result.Error`.
+- Java is the reference backend:
+  - `Stdout.print` lowers through `System.out.print`
+  - `Stdout.println` lowers through `System.out.println`
+- Future Python and JavaScript backends should preserve the same OO surface while mapping to their native stdout mechanisms.
