@@ -7,6 +7,22 @@ fun _days_31_month(month: int): bool = month == JANUARY | month == MARCH | month
 /// Returns `true` when the month has 30 days.
 fun _days_30_month(month: int): bool = month == APRIL | month == JUNE | month == SEPTEMBER | month == NOVEMBER
 
+fun _floor_div(a: int, b: int): int =
+    if a >= 0
+    then a / b
+    else -(((-a) + b - 1) / b)
+
+fun _floor_mod(a: int, b: int): int = a - _floor_div(a, b) * b
+
+fun _days_in_month(year: int, month: int): int =
+    if month == APRIL | month == JUNE | month == SEPTEMBER | month == NOVEMBER
+    then 30
+    else if month == FEBRUARY
+        then if _leap_year(year) then 29 else 28
+        else 31
+
+fun _min(a: int, b: int): int = if a < b then a else b
+
 const JANUARY: int = 1
 const FEBRUARY: int = 2
 const MARCH: int = 3
@@ -53,3 +69,41 @@ fun Date.last_day_of_month(): Date =
     else if _days_31_month(this.month)
         then Date! { day: 31, month: this.month, year: this.year }
         else Date! { day: 30, month: this.month, year: this.year }
+
+/// Converts this date to days since Unix epoch (`1970-01-01`).
+fun Date.to_days_since_unix_epoch(): int =
+    let y = if this.month <= FEBRUARY then this.year - 1 else this.year
+    let era = _floor_div(y, 400)
+    let yoe = y - era * 400
+    let mp = if this.month > FEBRUARY then this.month - 3 else this.month + 9
+    let doy = _floor_div(153 * mp + 2, 5) + this.day - 1
+    let doe = yoe * 365 + _floor_div(yoe, 4) - _floor_div(yoe, 100) + doy
+    era * 146097 + doe - 719468
+
+/// Converts days since Unix epoch (`1970-01-01`) to `Date`.
+fun from_days_since_unix_epoch(days_since_epoch: int): Date =
+    let z = days_since_epoch + 719468
+    let era = _floor_div(z, 146097)
+    let doe = z - era * 146097
+    let yoe = _floor_div(doe - _floor_div(doe, 1460) + _floor_div(doe, 36524) - _floor_div(doe, 146096), 365)
+    let y = yoe + era * 400
+    let doy = doe - (365 * yoe + _floor_div(yoe, 4) - _floor_div(yoe, 100))
+    let mp = _floor_div(5 * doy + 2, 153)
+    let day = doy - _floor_div(153 * mp + 2, 5) + 1
+    let month = if mp < 10 then mp + 3 else mp - 9
+    let year = if month <= FEBRUARY then y + 1 else y
+    Date! { day, month, year }
+
+/// Adds days to this date.
+fun Date.add_days(days: int): Date = from_days_since_unix_epoch(this.to_days_since_unix_epoch() + days)
+
+/// Adds years and months to this date, clamping the day to target month length.
+fun Date.add_years_months(years: int, months: int): Date =
+    let total_months = (this.year + years) * 12 + (this.month + months - 1)
+    let normalized_year = _floor_div(total_months, 12)
+    let normalized_month = _floor_mod(total_months, 12) + 1
+    Date! {
+        day: _min(this.day, _days_in_month(normalized_year, normalized_month)),
+        month: normalized_month,
+        year: normalized_year
+    }

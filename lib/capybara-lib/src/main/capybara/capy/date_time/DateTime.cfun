@@ -1,5 +1,6 @@
 from /capy/date_time/Date import { * }
 from /capy/date_time/Time import { * }
+from /capy/date_time/Duration import { * }
 
 /// Combination of a calendar date and time of day.
 data DateTime { date: Date, time: Time }
@@ -8,11 +9,38 @@ data DateTime { date: Date, time: Time }
 fun unix_epoch(): DateTime =
     DateTime { date: UNIX_DATE, time: MIDNIGHT }
 
-/*
-fun DateTime.timestamp(): int =
+fun _floor_div(a: int, b: int): int =
+    if a >= 0
+    then a / b
+    else -(((-a) + b - 1) / b)
+
+fun _plus_datetime(datetime: DateTime, duration: Duration): DateTime =
     const __seconds_in_day: int = 24 * 3600
     ---
-    let days_since_epoch = this.date.to_days() - unix_epoch() | dt => dt.date.to_days()
-    let seconds_since_midnight = this.time.to_seconds()
-    days_since_epoch * __seconds_in_day + seconds_since_midnight
-*/
+    let date_with_months = datetime.date.add_years_months(duration.years(), duration.months())
+    let delta_seconds = duration.hours() * 3600 + duration.minutes() * 60 + duration.seconds()
+    let total_seconds = datetime.time.to_seconds() + delta_seconds
+    let day_carry = _floor_div(total_seconds, __seconds_in_day)
+    DateTime {
+        date: date_with_months.add_days(duration.days() + day_carry),
+        time: datetime.time.add_seconds(delta_seconds)
+    }
+
+fun _minus_datetime(datetime: DateTime, duration: Duration): DateTime =
+    _plus_datetime(datetime, duration.negate())
+
+/// Returns Unix timestamp (seconds since `1970-01-01T00:00:00Z`).
+fun DateTime.timestamp(): int =
+    this.date.to_days_since_unix_epoch() * 86400 + this.time.to_seconds()
+
+/// Adds a `Duration` to this `DateTime`.
+fun DateTime.plus(duration: Duration): DateTime = _plus_datetime(this, duration)
+
+/// Adds a `Duration` to this `DateTime` using `+` infix syntax.
+fun DateTime.`+`(duration: Duration): DateTime = _plus_datetime(this, duration)
+
+/// Subtracts a `Duration` from this `DateTime`.
+fun DateTime.minus(duration: Duration): DateTime = _minus_datetime(this, duration)
+
+/// Subtracts a `Duration` from this `DateTime` using `-` infix syntax.
+fun DateTime.`-`(duration: Duration): DateTime = _minus_datetime(this, duration)

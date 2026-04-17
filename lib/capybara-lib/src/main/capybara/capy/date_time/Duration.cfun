@@ -349,3 +349,54 @@ fun from_iso_8601(iso: string): Result[Duration] =
             has_time_component: false
         })
     }
+
+
+/// Returns this duration with all components negated.
+fun Duration.negate(): Duration =
+    match this with
+    case WeekDuration { weeks } -> WeekDuration { weeks: 0 - weeks }
+    case DateDuration { years, months, days, hours, minutes, seconds } ->
+        DateDuration {
+            years: 0 - years,
+            months: 0 - months,
+            days: 0 - days,
+            hours: 0 - hours,
+            minutes: 0 - minutes,
+            seconds: 0 - seconds
+        }
+
+/// Returns year component (`0` for week durations).
+fun Duration.years(): int =
+    match this with
+    case WeekDuration -> 0
+    case DateDuration { years, _, _, _, _, _ } -> years
+
+/// Returns month component (`0` for week durations).
+fun Duration.months(): int =
+    match this with
+    case WeekDuration -> 0
+    case DateDuration { _, months, _, _, _, _ } -> months
+
+/// Returns day component (`weeks * 7` for week durations).
+fun Duration.days(): int =
+    match this with
+    case WeekDuration { weeks } -> weeks * 7
+    case DateDuration { _, _, days, _, _, _ } -> days
+
+/// Returns hour component (`0` for week durations).
+fun Duration.hours(): int =
+    match this with
+    case WeekDuration -> 0
+    case DateDuration { _, _, _, hours, _, _ } -> hours
+
+/// Returns minute component (`0` for week durations).
+fun Duration.minutes(): int =
+    match this with
+    case WeekDuration -> 0
+    case DateDuration { _, _, _, _, minutes, _ } -> minutes
+
+/// Returns second component (`0` for week durations).
+fun Duration.seconds(): int =
+    match this with
+    case WeekDuration -> 0
+    case DateDuration { _, _, _, _, _, seconds } -> seconds
