@@ -41,8 +41,9 @@ class RegexCollectionTest {
 
     @Test
     void splitNamedAndAlias() {
-        assertThat(RegexCollection.splitNamed("a,b,c")).containsExactly("a,b,c");
-        assertThat(RegexCollection.splitAlias("a,b,c")).containsExactly("a,b,c");
+        assertThat(RegexCollection.splitNamed("a,b,c")).containsExactly("a", "b", "c");
+        assertThat(RegexCollection.splitAlias("a,b,c")).containsExactly("a", "b", "c");
+        assertThat(RegexCollection.splitMultiChar("a--b--c")).containsExactly("a", "b", "c");
     }
 
     @Test
