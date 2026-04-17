@@ -1,6 +1,7 @@
 from /capy/date_time/Date import { * }
 from /capy/date_time/Time import { * }
 from /capy/date_time/Duration import { * }
+from /capy/lang/Math import { * }
 
 /// Combination of a calendar date and time of day.
 data DateTime { date: Date, time: Time }
@@ -20,9 +21,7 @@ fun DateTime.timestamp(): long =
 fun DateTime.plus(duration: Duration): DateTime =
     const __seconds_in_day: int = __SECONDS_IN_DAY_INT
     fun __floor_div(a: int, b: int): int =
-        if a >= 0
-        then a / b
-        else -(((-a) + b - 1) / b)
+        floor_div(a, b)
     ---
     let date_with_months = this.date.add_years_months(duration.years(), duration.months())
     let delta_seconds = duration.hours() * 3600 + duration.minutes() * 60 + duration.seconds()
@@ -37,9 +36,7 @@ fun DateTime.plus(duration: Duration): DateTime =
 fun DateTime.`+`(duration: Duration): DateTime =
     const __seconds_in_day: int = __SECONDS_IN_DAY_INT
     fun __floor_div(a: int, b: int): int =
-        if a >= 0
-        then a / b
-        else -(((-a) + b - 1) / b)
+        floor_div(a, b)
     ---
     let date_with_months = this.date.add_years_months(duration.years(), duration.months())
     let delta_seconds = duration.hours() * 3600 + duration.minutes() * 60 + duration.seconds()
