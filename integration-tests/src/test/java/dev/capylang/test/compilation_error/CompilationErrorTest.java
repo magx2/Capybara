@@ -208,23 +208,6 @@ public class CompilationErrorTest {
     }
 
     @Test
-    void shouldSurfaceRegexOperatorTypeErrors() {
-        var errors = compileProgram("""
-                        fun find_like(input: string): bool = regex/\\\\d+/ ~ input
-                        fun all_like(input: string): list[string] = regex/\\\\d+/ ~~ input
-                        fun redact(input: string): string = (regex/\\\\d+/ ~> "#")(input)
-                        fun split_like(input: string): list[string] = regex/,/ /> input
-                        """,
-                "regex_operator_type_errors");
-
-        assertThat(errors.stream().map(Result.Error.SingleError::message))
-                .anyMatch(message -> message.contains("`~` operator is not defined for `any ~ string`"))
-                .anyMatch(message -> message.contains("`~~` operator is not defined for `any ~~ string`"))
-                .anyMatch(message -> message.contains("`~>` operator is not defined for `any ~> string`"))
-                .anyMatch(message -> message.contains("`/>` operator is not defined for `any /> string`"));
-    }
-
-    @Test
     void shouldRejectIncompatibleConcreteGenericArguments() {
         var errors = compileProgram("""
                         data Box[T] { value: T }

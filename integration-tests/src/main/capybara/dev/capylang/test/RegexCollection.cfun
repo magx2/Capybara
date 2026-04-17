@@ -1,13 +1,13 @@
 from /capy/lang/Regex import { * }
 
-fun has_foo(input: string): bool = Regex { pattern: "foo", flags: "" } ~ input
+fun has_foo(input: string): bool = regex/foo/ ~ input
 
-fun has_foo_with_flag(input: string): bool = Regex { pattern: "Foo", flags: "i" } ~ input
+fun has_foo_with_flag(input: string): bool = regex/Foo/i ~ input
 
-fun all_foo(input: string): list[string] = Regex { pattern: "foo", flags: "" } ~~ input
+fun all_foo(input: string): list[string] = regex/foo/ ~~ input
 
-fun redact_ones(input: string): string = (Regex { pattern: "1", flags: "" } ~> "#")(input)
+fun redact_ones(input: string): string = (regex/1/ ~> "#")(input)
 
-fun split_csv(input: string): list[string] = Regex { pattern: ",", flags: "" } /> input
+fun split_csv(input: string): list[string] = regex/,/ /> input
 
-fun escaped_slash_match(): bool = Regex { pattern: "a/b", flags: "" } ~ "--a/b--"
+fun escaped_slash_match(): bool = regex/a\/b/ ~ "--a/b--"

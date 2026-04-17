@@ -2441,8 +2441,8 @@ public class CapybaraParser {
         var flags = content.substring(closingSlashIndex + 1);
         var position = SourcePosition.of(regexLiteral);
         return new FunctionCall(
-                Optional.empty(),
-                "/capy/lang/Regex.from_literal",
+                Optional.of("/capy/lang/Regex"),
+                "from_literal",
                 List.of(
                         new StringValue(quoteDoubleQuotedSegment(body), Optional.of(position)),
                         new StringValue(quoteDoubleQuotedSegment(flags), Optional.of(position))
@@ -3233,7 +3233,6 @@ public class CapybaraParser {
     }
 
 }
-
 
 
 

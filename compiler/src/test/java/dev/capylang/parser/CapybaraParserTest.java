@@ -292,7 +292,8 @@ class CapybaraParserTest {
         var function = findFunction("digits", module.functional());
         assertThat(function.expression()).isInstanceOf(FunctionCall.class);
         var call = (FunctionCall) function.expression();
-        assertThat(call.name()).isEqualTo("/capy/lang/Regex.from_literal");
+        assertThat(call.moduleName()).contains("/capy/lang/Regex");
+        assertThat(call.name()).isEqualTo("from_literal");
         assertThat(call.arguments()).hasSize(2);
         assertThat(call.arguments().get(0)).isInstanceOf(StringValue.class);
         assertThat(((StringValue) call.arguments().get(0)).stringValue()).isEqualTo("\"\\\\d+\"");

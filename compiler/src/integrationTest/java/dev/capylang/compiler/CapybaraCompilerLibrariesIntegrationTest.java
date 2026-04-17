@@ -39,23 +39,34 @@ class CapybaraCompilerLibrariesIntegrationTest {
     }
 
     @Test
-    void shouldSurfaceTypeErrorsForRegexOperatorsInIntegrationCompile() {
+    void shouldCompileRegexOperatorsWhenRegexLibraryProvided() {
+        var regexLibrarySource = """
+                data Regex { pattern: string, flags: string }
+                fun from_literal(pattern: string, flags: string): Regex = Regex { pattern, flags }
+                fun Regex.`~`(input: string): bool = input ? this.pattern
+                fun Regex.`~~`(input: string): list[string] =
+                    if input ? this.pattern
+                    then [this.pattern]
+                    else []
+                fun Regex.`~>`(replacement: string): string => string = value => value.replace(this.pattern, replacement)
+                fun Regex.`/>`(input: string): list[string] = [input]
+                """;
+        var libraries = compileProgram(List.of(new RawModule("Regex", "/capy/lang", regexLibrarySource)), new TreeSet<>()).modules();
+
         var consumerSource = """
+                from /capy/lang/Regex import { * }
                 fun find_like(input: string): bool = regex/\\\\d+/ ~ input
                 fun all_like(input: string): list[string] = regex/\\\\d+/ ~~ input
                 fun redact(input: string): string = (regex/\\\\d+/ ~> "#")(input)
                 fun split_like(input: string): list[string] = regex/,/ /> input
                 """;
-        var result = CapybaraCompiler.INSTANCE.compile(List.of(new RawModule("RegexConsumer", "/foo/app", consumerSource)), new TreeSet<>());
+        var generated = new JavaGenerator().generate(compileProgram(List.of(new RawModule("RegexConsumer", "/foo/app", consumerSource)), libraries));
 
-        assertThat(result).isInstanceOf(Result.Error.class);
-        var errors = ((Result.Error<CompiledProgram>) result).errors();
-        assertThat(errors).isNotEmpty();
-        assertThat(errors.stream().map(Result.Error.SingleError::message))
-                .anyMatch(message -> message.contains("`~` operator is not defined for `any ~ string`"))
-                .anyMatch(message -> message.contains("`~~` operator is not defined for `any ~~ string`"))
-                .anyMatch(message -> message.contains("`~>` operator is not defined for `any ~> string`"))
-                .anyMatch(message -> message.contains("`/>` operator is not defined for `any /> string`"));
+        assertThat(generated.modules()).hasSize(1);
+        var module = generated.modules().getFirst();
+        assertThat(module.relativePath()).isEqualTo(Path.of("foo", "app", "RegexConsumer.java"));
+        assertThat(module.code()).contains("fromLiteral(\"\\\\d+\", \"\")");
+        assertThat(module.code()).contains("fromLiteral(\",\", \"\")");
     }
 
     private static CompiledProgram compileProgram(List<RawModule> rawModules, SortedSet<CompiledModule> libraries) {
