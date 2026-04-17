@@ -90,11 +90,13 @@ Capybara OO v1 starts with a separate frontend boundary instead of extending `Fu
 ## Output v1
 
 - Capybara OO output is library-shaped, not syntax-shaped.
-- The standard stdout surface is:
-  - `/capy/io/Stdout.print(text: string): void`
-  - `/capy/io/Stdout.println(text: string): void`
+- The standard stdout owner type is `/capy/io/Stdout`.
+- Preferred usage imports its static methods:
+  - `from /capy/io/Stdout import { * }`
+  - `print(text: string): void`
+  - `println(text: string): void`
 - Output is an ordinary OO side effect and does not implicitly bridge to functional `/capy/lang/Program` or `Result.Error`.
 - Java is the reference backend:
-  - `Stdout.print` lowers through `System.out.print`
-  - `Stdout.println` lowers through `System.out.println`
+  - imported `print` lowers through `/capy/io/Stdout.print`, then `System.out.print`
+  - imported `println` lowers through `/capy/io/Stdout.println`, then `System.out.println`
 - Future Python and JavaScript backends should preserve the same OO surface while mapping to their native stdout mechanisms.

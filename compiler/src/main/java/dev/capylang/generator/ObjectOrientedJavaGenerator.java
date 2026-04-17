@@ -288,10 +288,13 @@ public final class ObjectOrientedJavaGenerator {
     }
 
     private String renderImportedSymbolReference(ObjectOrientedModule module, String moduleName, String symbol) {
-        var ownerReference = moduleName.startsWith("/")
+        return renderImportedOwnerReference(module, moduleName) + "." + symbol;
+    }
+
+    private String renderImportedOwnerReference(ObjectOrientedModule module, String moduleName) {
+        return moduleName.startsWith("/")
                 ? renderTypeReference(moduleName)
                 : normalizePackageName(module.path()) + "." + moduleName;
-        return ownerReference + "." + symbol;
     }
 
     private boolean requiresConstructor(
@@ -1048,7 +1051,45 @@ public final class ObjectOrientedJavaGenerator {
             trimmed = trimmed.replaceAll("(^|[^A-Za-z0-9_])" + Pattern.quote(parentName) + "\\s*\\.", "$1super.");
         }
         trimmed = rewriteLocalMethodCalls(trimmed, localMethodBindings);
+        trimmed = rewriteImportedFunctionCalls(module, trimmed);
         return trimmed;
+    }
+
+    private String rewriteImportedFunctionCalls(ObjectOrientedModule module, String expression) {
+        if (module == null || module.imports().isEmpty()) {
+            return expression;
+        }
+        var rewritten = expression;
+        for (var entry : importedFunctionOwners(module).entrySet().stream()
+                .sorted((left, right) -> Integer.compare(right.getKey().length(), left.getKey().length()))
+                .toList()) {
+            rewritten = rewritten.replaceAll(
+                    "(^|[^A-Za-z0-9_\\.])" + Pattern.quote(entry.getKey()) + "\\s*\\(",
+                    "$1" + Matcher.quoteReplacement(entry.getValue() + "." + entry.getKey()) + "("
+            );
+        }
+        return rewritten;
+    }
+
+    private Map<String, String> importedFunctionOwners(ObjectOrientedModule module) {
+        var owners = new LinkedHashMap<String, String>();
+        for (var importDeclaration : module.imports()) {
+            var ownerReference = renderImportedOwnerReference(module, importDeclaration.moduleName());
+            if (importDeclaration.isStarImport() && "/capy/io/Stdout".equals(importDeclaration.moduleName())) {
+                owners.put("print", ownerReference);
+                owners.put("println", ownerReference);
+            }
+            for (var symbol : importDeclaration.symbols()) {
+                if ("*".equals(symbol) || symbol.isBlank() || Character.isUpperCase(symbol.charAt(0))) {
+                    continue;
+                }
+                if (importDeclaration.excludedSymbols().contains(symbol)) {
+                    continue;
+                }
+                owners.put(symbol, ownerReference);
+            }
+        }
+        return owners;
     }
 
     private String rewriteQualifiedTypeReferences(String expression) {

@@ -1,4 +1,4 @@
-from /capy/io import { Stdout }
+from /capy/io/Stdout import { * }
 
 open class GreeterBase {
     field prefix: string = "hello"
@@ -27,15 +27,15 @@ class Person(name: string): GreeterBase, Printable, BracketNaming {
 
     def ping(): void = this.describe(this.name)
 
-    def emit_greeting(): void = Stdout.println(this.greet())
+    def emit_greeting(): void = println(this.greet())
 
     def emit_boxed_name(): void {
-        Stdout.print("[")
-        Stdout.print(this.name)
-        Stdout.println("]")
+        print("[")
+        print(this.name)
+        println("]")
     }
 
-    def emit_full_path(): void = /capy/io/Stdout.println("full")
+    def emit_star(): void = print("*")
 
     override def print(): string {
         let label: string = GreeterBase.describe(this.name)
