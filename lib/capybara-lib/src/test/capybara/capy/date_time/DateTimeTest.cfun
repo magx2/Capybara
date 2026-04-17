@@ -35,13 +35,13 @@ fun _test_unix_epoch(): TestCase =
 
 fun _test_timestamp(): list[TestCase] =
     [
-        (_at(0, 0), 0),
-        (_at(1, 0), 86400),
-        (_at(0, 3600), 3600),
-        (_at(0, 60), 60),
-        (_at(0, 1), 1),
-        (_at(-1, 86399), -1),
-        (_at(1, 3600), 90000),
+        (_at(0, 0), 0L),
+        (_at(1, 0), 86400L),
+        (_at(0, 3600), 3600L),
+        (_at(0, 60), 60L),
+        (_at(0, 1), 1L),
+        (_at(-1, 86399), -1L),
+        (_at(1, 3600), 90000L),
     ] | (datetime, expected) => test(
         "{datetime}.timestamp() should return the correct Unix timestamp",
         assert_that(datetime.timestamp()).is_equal_to(expected))
@@ -85,22 +85,22 @@ fun _test_comparisons(): list[TestCase] =
     [
         test("greater_than should return true when this DateTime is later",
             assert_all([
-                assert_that(second.greater_than(first)).is_equal_to(true),
-                assert_that(first.greater_than(second)).is_equal_to(false),
+                assert_that(second.greater_than(first)).is_true(),
+                assert_that(first.greater_than(second)).is_false(),
             ])),
         test("less_than should return true when this DateTime is earlier",
             assert_all([
-                assert_that(first.less_than(second)).is_equal_to(true),
-                assert_that(second.less_than(first)).is_equal_to(false),
+                assert_that(first.less_than(second)).is_true(),
+                assert_that(second.less_than(first)).is_false(),
             ])),
         test("operator > should compare DateTime values",
             assert_all([
-                assert_that(second > first).is_equal_to(true),
-                assert_that(first > second).is_equal_to(false),
+                assert_that(second > first).is_true(),
+                assert_that(first > second).is_false(),
             ])),
         test("operator < should compare DateTime values",
             assert_all([
-                assert_that(second < third).is_equal_to(true),
-                assert_that(third < second).is_equal_to(false),
+                assert_that(second < third).is_true(),
+                assert_that(third < second).is_false(),
             ])),
     ]

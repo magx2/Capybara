@@ -9,62 +9,65 @@ data DateTime { date: Date, time: Time }
 fun unix_epoch(): DateTime =
     DateTime { date: UNIX_DATE, time: MIDNIGHT }
 
-fun _floor_div(a: int, b: int): int =
-    if a >= 0
-    then a / b
-    else -(((-a) + b - 1) / b)
-
-
-fun _compare(left: DateTime, right: DateTime): int =
-    let left_days = left.date.to_days_since_unix_epoch()
-    let right_days = right.date.to_days_since_unix_epoch()
-    if left_days > right_days
-    then 1
-    else if left_days < right_days
-        then -1
-        else if left.time.to_seconds() > right.time.to_seconds()
-            then 1
-            else if left.time.to_seconds() < right.time.to_seconds()
-                then -1
-                else 0
-
-fun _plus_datetime(datetime: DateTime, duration: Duration): DateTime =
-    const __seconds_in_day: int = 24 * 3600
-    ---
-    let date_with_months = datetime.date.add_years_months(duration.years(), duration.months())
-    let delta_seconds = duration.hours() * 3600 + duration.minutes() * 60 + duration.seconds()
-    let total_seconds = datetime.time.to_seconds() + delta_seconds
-    let day_carry = _floor_div(total_seconds, __seconds_in_day)
-    DateTime {
-        date: date_with_months.add_days(duration.days() + day_carry),
-        time: datetime.time.add_seconds(delta_seconds)
-    }
-
-fun _minus_datetime(datetime: DateTime, duration: Duration): DateTime =
-    _plus_datetime(datetime, duration.negate())
-
 /// Returns Unix timestamp (seconds since `1970-01-01T00:00:00Z`).
-fun DateTime.timestamp(): int =
-    this.date.to_days_since_unix_epoch() * 86400 + this.time.to_seconds()
+fun DateTime.timestamp(): long =
+    this.date.to_days_since_unix_epoch() * 86400L + this.time.to_seconds()
 
 /// Adds a `Duration` to this `DateTime`.
-fun DateTime.plus(duration: Duration): DateTime = _plus_datetime(this, duration)
+fun DateTime.plus(duration: Duration): DateTime =
+    const __seconds_in_day: int = 24 * 3600
+    fun __floor_div(a: int, b: int): int =
+        if a >= 0
+        then a / b
+        else -(((-a) + b - 1) / b)
+    ---
+    let date_with_months = this.date.add_years_months(duration.years(), duration.months())
+    let delta_seconds = duration.hours() * 3600 + duration.minutes() * 60 + duration.seconds()
+    let total_seconds = this.time.to_seconds() + delta_seconds
+    let day_carry = __floor_div(total_seconds, __seconds_in_day)
+    DateTime {
+        date: date_with_months.add_days(duration.days() + day_carry),
+        time: this.time.add_seconds(delta_seconds)
+    }
 
 /// Adds a `Duration` to this `DateTime` using `+` infix syntax.
-fun DateTime.`+`(duration: Duration): DateTime = _plus_datetime(this, duration)
+fun DateTime.`+`(duration: Duration): DateTime =
+    const __seconds_in_day: int = 24 * 3600
+    fun __floor_div(a: int, b: int): int =
+        if a >= 0
+        then a / b
+        else -(((-a) + b - 1) / b)
+    ---
+    let date_with_months = this.date.add_years_months(duration.years(), duration.months())
+    let delta_seconds = duration.hours() * 3600 + duration.minutes() * 60 + duration.seconds()
+    let total_seconds = this.time.to_seconds() + delta_seconds
+    let day_carry = __floor_div(total_seconds, __seconds_in_day)
+    DateTime {
+        date: date_with_months.add_days(duration.days() + day_carry),
+        time: this.time.add_seconds(delta_seconds)
+    }
 
 /// Subtracts a `Duration` from this `DateTime`.
-fun DateTime.minus(duration: Duration): DateTime = _minus_datetime(this, duration)
+fun DateTime.minus(duration: Duration): DateTime = this.plus(duration.negate())
 
 /// Subtracts a `Duration` from this `DateTime` using `-` infix syntax.
-fun DateTime.`-`(duration: Duration): DateTime = _minus_datetime(this, duration)
-
+fun DateTime.`-`(duration: Duration): DateTime = this.plus(duration.negate())
 
 /// Returns `true` when this date-time is after `other`.
-fun DateTime.greater_than(other: DateTime): bool = _compare(this, other) > 0
+fun DateTime.greater_than(other: DateTime): bool =
+    if this.date.to_days_since_unix_epoch() > other.date.to_days_since_unix_epoch()
+    then true
+    else if this.date.to_days_since_unix_epoch() < other.date.to_days_since_unix_epoch()
+        then false
+        else this.time.to_seconds() > other.time.to_seconds()
 
 /// Returns `true` when this date-time is before `other`.
-fun DateTime.less_than(other: DateTime): bool = _compare(this, other) < 0
+fun DateTime.less_than(other: DateTime): bool =
+    if this.date.to_days_since_unix_epoch() < other.date.to_days_since_unix_epoch()
+    then true
+    else if this.date.to_days_since_unix_epoch() > other.date.to_days_since_unix_epoch()
+        then false
+        else this.time.to_seconds() < other.time.to_seconds()
 
 /// Comparison function used by `>`.
 fun DateTime.greater(other: DateTime): bool = this.greater_than(other)
