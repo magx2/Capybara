@@ -1,17 +1,31 @@
 from /capy/date_time/Interval import { * }
+from /capy/lang/Result import { * }
 from /capy/test/Assert import { * }
 from /capy/test/CapyTest import { * }
 
+fun _parsed_iso(iso: string): Assert =
+    match from_iso_8601_interval(iso) with
+    case Success { interval } -> assert_that(interval.to_iso8601_interval()).is_equal_to(iso)
+    case Error -> assert_that(false).is_true()
+
+fun _parsed_iso_with_expected_output(iso: string, expected: string): Assert =
+    match from_iso_8601_interval(iso) with
+    case Success { interval } -> assert_that(interval.to_iso8601_interval()).is_equal_to(expected)
+    case Error -> assert_that(false).is_true()
+
 fun tests(): TestFile =
     let success_cases = [
-        "2007-03-01T13:00:00Z/2008-05-11T15:30:00Z",
-        "2007-03-01/2008-05-11",
-        "2007-03-01T13:00:00Z/P1Y2M10DT2H30M",
-        "P1Y2M10DT2H30M/2008-05-11T15:30:00Z",
-        "2000-01-01--2002-12-31",
-    ] | iso =>
-        test("should parse interval `" + iso + "`",
-            assert_that(from_iso_8601_interval(iso)).succeeds())
+        test("should parse and format start/end date-time",
+            _parsed_iso("2007-03-01T13:00:00Z/2008-05-11T15:30:00Z")),
+        test("should parse and format start/end date",
+            _parsed_iso("2007-03-01/2008-05-11")),
+        test("should parse and format start/duration",
+            _parsed_iso("2007-03-01T13:00:00Z/P1Y2M10DT2H30M")),
+        test("should parse and format duration/end",
+            _parsed_iso("P1Y2M10DT2H30M/2008-05-11T15:30:00Z")),
+        test("should parse `--` separator and format canonical `/`",
+            _parsed_iso_with_expected_output("2000-01-01--2002-12-31", "2000-01-01/2002-12-31")),
+    ]
 
     let failure_cases = [
         "",
@@ -27,4 +41,11 @@ fun tests(): TestFile =
         test("should fail parsing interval `" + iso + "`",
             assert_that(from_iso_8601_interval(iso)).fails())
 
-    test_file('/capy/date_time/Interval.cfun', success_cases + failure_cases)
+    let message_cases = [
+        test("should report missing separator message",
+            assert_that(from_iso_8601_interval("2007-03-01")).fails("Invalid ISO 8601 interval format: missing interval separator (`/` or `--`)")),
+        test("should report both sides duration message",
+            assert_that(from_iso_8601_interval("P1D/P2D")).fails("Invalid ISO 8601 interval format: an interval cannot contain duration on both sides")),
+    ]
+
+    test_file('/capy/date_time/Interval.cfun', success_cases + failure_cases + message_cases)

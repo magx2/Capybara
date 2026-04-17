@@ -14,9 +14,40 @@ from /capy/lang/Result import { * }
 /// The separator can be `/` (default) or `--` (by mutual agreement).
 type TimeInterval = StartEndInterval | StartDurationInterval | DurationEndInterval
 
-data StartEndInterval { start: any, end: any }
-data StartDurationInterval { start: any, duration: Duration }
-data DurationEndInterval { duration: Duration, end: any }
+type TimePoint = DatePoint | DateTimePoint
+
+data DatePoint { date: Date }
+data DateTimePoint { date_time: DateTime }
+
+data StartEndInterval { start: TimePoint, end: TimePoint }
+data StartDurationInterval { start: TimePoint, duration: Duration }
+data DurationEndInterval { duration: Duration, end: TimePoint }
+
+fun __pad_2(value: int): string =
+    if value < 10
+    then "0" + value
+    else "" + value
+
+fun __format_date(date: Date): string =
+    date.year + "-" + __pad_2(date.month) + "-" + __pad_2(date.day)
+
+fun __format_time(time: Time): string =
+    __pad_2(time.hour) + ":" + __pad_2(time.minute) + ":" + __pad_2(time.second) + "Z"
+
+fun __format_time_point(value: TimePoint): string =
+    match value with
+    case DatePoint { date } -> __format_date(date)
+    case DateTimePoint { date_time } -> __format_date(date_time.date) + "T" + __format_time(date_time.time)
+
+/// Formats this interval as ISO 8601 (`/` separator).
+fun TimeInterval.to_iso8601_interval(): string =
+    match this with
+    case StartEndInterval { start, end } ->
+        __format_time_point(start) + "/" + __format_time_point(end)
+    case StartDurationInterval { start, duration } ->
+        __format_time_point(start) + "/" + duration.to_iso_8601()
+    case DurationEndInterval { duration, end } ->
+        duration.to_iso_8601() + "/" + __format_time_point(end)
 
 /// Parses an ISO 8601 time interval.
 fun from_iso_8601_interval(iso: string): Result[TimeInterval] =
@@ -97,15 +128,15 @@ fun from_iso_8601_interval(iso: string): Result[TimeInterval] =
         then Success { DateTime { date: date.value, time: time.value } }
         else Error { __invalid("expected date-time in `YYYY-MM-DDTHH:MM:SSZ` format, got `" + value + "`") }
 
-    fun __parse_time_point(value: string): Result[any] =
+    fun __parse_time_point(value: string): Result[TimePoint] =
         if value ? "T"
         then {
             let date_time <- __parse_date_time(value)
-            Success { date_time }
+            Success { DateTimePoint { date_time } }
         }
         else {
             let date <- __parse_date(value)
-            Success { date }
+            Success { DatePoint { date } }
         }
 
     fun __find_separator(value: string, left: string): Result[tuple[string, string, int]] =
