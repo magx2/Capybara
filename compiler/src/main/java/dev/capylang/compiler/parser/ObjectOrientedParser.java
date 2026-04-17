@@ -225,6 +225,9 @@ public final class ObjectOrientedParser {
         if (context.assignmentStatement() != null) {
             return assignmentStatement(context.assignmentStatement());
         }
+        if (context.expressionStatement() != null) {
+            return expressionStatement(context.expressionStatement());
+        }
         if (context.throwStatement() != null) {
             return throwStatement(context.throwStatement());
         }
@@ -301,6 +304,10 @@ public final class ObjectOrientedParser {
                 context.identifier().getText(),
                 context.expression().getText()
         );
+    }
+
+    private ObjectOriented.ExpressionStatement expressionStatement(dev.capylang.parser.antlr.ObjectOrientedParser.ExpressionStatementContext context) {
+        return new ObjectOriented.ExpressionStatement(context.callExpression().getText());
     }
 
     private ObjectOriented.ThrowStatement throwStatement(dev.capylang.parser.antlr.ObjectOrientedParser.ThrowStatementContext context) {

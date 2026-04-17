@@ -186,16 +186,58 @@ class ObjectOrientedParserTest {
     }
 
     @Test
-    @DisplayName("should reject bare expression statements in method blocks")
-    void rejectBareExpressionStatements() {
+    @DisplayName("should parse call statements in method blocks")
+    void parseCallStatements() {
+        var result = ObjectOrientedParser.INSTANCE.parseModule(new RawModule(
+                "Calls",
+                "/parser",
+                """
+                        from /capy/io import { Stdout }
+
+                        class Calls {
+                            def run(): void {
+                                foo()
+                                Stdout.println("hi")
+                                this.log("done")
+                            }
+
+                            def log(message: string): void = Stdout.print(message)
+                        }
+                        """,
+                SourceKind.OBJECT_ORIENTED
+        ));
+
+        assertThat(result).isInstanceOf(Result.Success.class);
+        var module = ((Result.Success<ObjectOrientedModule>) result).value();
+        var callsClass = (ObjectOriented.ClassDeclaration) module.objectOriented().definitions().getFirst();
+        var runMethod = callsClass.members().stream()
+                .filter(ObjectOriented.MethodDeclaration.class::isInstance)
+                .map(ObjectOriented.MethodDeclaration.class::cast)
+                .filter(method -> method.name().equals("run"))
+                .findFirst()
+                .orElseThrow();
+        var block = (ObjectOriented.StatementBlock) runMethod.body().orElseThrow();
+        assertThat(block.statements())
+                .extracting(Object::getClass)
+                .containsExactly(
+                        ObjectOriented.ExpressionStatement.class,
+                        ObjectOriented.ExpressionStatement.class,
+                        ObjectOriented.ExpressionStatement.class
+                );
+    }
+
+    @Test
+    @DisplayName("should reject non-call expression statements in method blocks")
+    void rejectNonCallExpressionStatements() {
         var result = ObjectOrientedParser.INSTANCE.parseModule(new RawModule(
                 "Broken",
                 "/parser",
                 """
                         class Broken {
                             def run(): int {
-                                foo()
-                                return 1
+                                let value: int = 1
+                                value
+                                return value
                             }
                         }
                         """,
@@ -207,7 +249,7 @@ class ObjectOrientedParserTest {
                 .singleElement()
                 .satisfies(error -> {
                     assertThat(error.file()).isEqualTo("/parser/Broken.coo");
-                    assertThat(error.message()).contains("line 3");
+                    assertThat(error.message()).contains("line 5");
                 });
     }
 
@@ -501,33 +543,6 @@ class ObjectOrientedParserTest {
                 assertThat(catchClause.body().statements()).singleElement().isInstanceOf(ObjectOriented.ReturnStatement.class);
             });
         });
-    }
-
-    @Test
-    @DisplayName("should reject trailing bare expression after return-oriented statements")
-    void rejectTrailingBareExpression() {
-        var result = ObjectOrientedParser.INSTANCE.parseModule(new RawModule(
-                "Broken",
-                "/parser",
-                """
-                        class Broken {
-                            def run(): int {
-                                let value: int = 1
-                                value
-                            }
-                        }
-                        """,
-                SourceKind.OBJECT_ORIENTED
-        ));
-
-        assertThat(result).isInstanceOf(Result.Error.class);
-        assertThat(((Result.Error<ObjectOrientedModule>) result).errors())
-                .singleElement()
-                .satisfies(error -> {
-                    assertThat(error.file()).isEqualTo("/parser/Broken.coo");
-                    assertThat(error.message()).contains("line 5:4");
-                    assertThat(error.message()).contains("expecting '='");
-                });
     }
 
     @Test

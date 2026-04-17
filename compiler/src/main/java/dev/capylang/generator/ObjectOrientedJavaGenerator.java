@@ -12,6 +12,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.LinkedHashMap;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -242,6 +243,7 @@ public final class ObjectOrientedJavaGenerator {
                 collectTypeTokens(mutableVariableStatement.expression(), references);
             }
             case ObjectOriented.AssignmentStatement assignmentStatement -> collectTypeTokens(assignmentStatement.expression(), references);
+            case ObjectOriented.ExpressionStatement expressionStatement -> collectTypeTokens(expressionStatement.expression(), references);
             case ObjectOriented.ThrowStatement throwStatement -> collectTypeTokens(throwStatement.expression(), references);
             case ObjectOriented.ReturnStatement returnStatement -> collectTypeTokens(returnStatement.expression(), references);
             case ObjectOriented.IfStatement ifStatement -> {
@@ -664,6 +666,9 @@ public final class ObjectOrientedJavaGenerator {
                     .append(" = ")
                     .append(renderExpression(module, assignmentStatement.expression(), parentNames, localMethodBindings))
                     .append(";\n");
+            case ObjectOriented.ExpressionStatement expressionStatement -> code.append(indent(indentLevel))
+                    .append(renderExpression(module, expressionStatement.expression(), parentNames, localMethodBindings))
+                    .append(";\n");
             case ObjectOriented.ThrowStatement throwStatement -> code.append(indent(indentLevel))
                     .append("throw capybara$toException(")
                     .append(renderExpression(module, throwStatement.expression(), parentNames, localMethodBindings))
@@ -821,6 +826,7 @@ public final class ObjectOrientedJavaGenerator {
                 }
                 case ObjectOriented.MutableVariableStatement mutableVariableStatement -> expressions.add(mutableVariableStatement.expression());
                 case ObjectOriented.AssignmentStatement assignmentStatement -> expressions.add(assignmentStatement.expression());
+                case ObjectOriented.ExpressionStatement expressionStatement -> expressions.add(expressionStatement.expression());
                 case ObjectOriented.ThrowStatement throwStatement -> expressions.add(throwStatement.expression());
                 case ObjectOriented.ReturnStatement returnStatement -> expressions.add(returnStatement.expression());
                 case ObjectOriented.IfStatement ifStatement -> {
@@ -882,6 +888,7 @@ public final class ObjectOrientedJavaGenerator {
             }
             case ObjectOriented.MutableVariableStatement mutableVariableStatement -> expressions.add(mutableVariableStatement.expression());
             case ObjectOriented.AssignmentStatement assignmentStatement -> expressions.add(assignmentStatement.expression());
+            case ObjectOriented.ExpressionStatement expressionStatement -> expressions.add(expressionStatement.expression());
             case ObjectOriented.ThrowStatement throwStatement -> expressions.add(throwStatement.expression());
             case ObjectOriented.ReturnStatement returnStatement -> expressions.add(returnStatement.expression());
         }
@@ -935,6 +942,7 @@ public final class ObjectOrientedJavaGenerator {
             case ObjectOriented.LetStatement letStatement -> false;
             case ObjectOriented.MutableVariableStatement mutableVariableStatement -> false;
             case ObjectOriented.AssignmentStatement assignmentStatement -> false;
+            case ObjectOriented.ExpressionStatement expressionStatement -> false;
             case ObjectOriented.ReturnStatement returnStatement -> false;
         };
     }
@@ -1009,7 +1017,7 @@ public final class ObjectOrientedJavaGenerator {
     }
 
     private String renderExpression(ObjectOrientedModule module, String expression, Set<String> parentNames, LocalMethodBindings localMethodBindings) {
-        var trimmed = expression.trim();
+        var trimmed = rewriteQualifiedTypeReferences(expression.trim());
         if (trimmed.startsWith("match")) {
             return renderMatchExpression(module, trimmed, parentNames, localMethodBindings);
         }
@@ -1041,6 +1049,16 @@ public final class ObjectOrientedJavaGenerator {
         }
         trimmed = rewriteLocalMethodCalls(trimmed, localMethodBindings);
         return trimmed;
+    }
+
+    private String rewriteQualifiedTypeReferences(String expression) {
+        var matcher = Pattern.compile("(?<![A-Za-z0-9_])/(?:[A-Za-z_][A-Za-z0-9_]*/)+[A-Za-z_][A-Za-z0-9_]*").matcher(expression);
+        var rewritten = new StringBuilder();
+        while (matcher.find()) {
+            matcher.appendReplacement(rewritten, Matcher.quoteReplacement(renderTypeReference(matcher.group())));
+        }
+        matcher.appendTail(rewritten);
+        return rewritten.toString();
     }
 
     private Optional<String> renderDataCreation(ObjectOrientedModule module, String expression, Set<String> parentNames, LocalMethodBindings localMethodBindings) {

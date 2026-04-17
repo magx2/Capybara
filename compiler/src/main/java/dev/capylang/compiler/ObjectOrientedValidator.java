@@ -11,6 +11,7 @@ import java.util.regex.Pattern;
 public final class ObjectOrientedValidator {
     public static final ObjectOrientedValidator INSTANCE = new ObjectOrientedValidator();
     private static final Pattern IDENTIFIER_REFERENCE = Pattern.compile("\\b[_a-z][_A-Za-z0-9]*\\b");
+    private static final Pattern CALL_EXPRESSION = Pattern.compile(".*(?:\\)|\\]|[A-Za-z_][A-Za-z0-9_]*)\\s*\\([^()]*\\)\\s*$");
 
     public Result<List<ObjectOrientedModule>> validate(List<ObjectOrientedModule> modules) {
         var errors = new TreeSet<Result.Error.SingleError>();
@@ -66,6 +67,7 @@ public final class ObjectOrientedValidator {
                 }
                 case ObjectOriented.MutableVariableStatement mutableVariableStatement -> scope.declareMutable(mutableVariableStatement.name());
                 case ObjectOriented.AssignmentStatement assignmentStatement -> validateAssignment(module, owner, assignmentStatement, scope, errors);
+                case ObjectOriented.ExpressionStatement expressionStatement -> validateExpressionStatement(module, owner, expressionStatement, errors);
                 case ObjectOriented.ThrowStatement ignored -> {
                 }
                 case ObjectOriented.IfStatement ifStatement -> {
@@ -123,6 +125,7 @@ public final class ObjectOrientedValidator {
                 }
             }
             case ObjectOriented.AssignmentStatement assignmentStatement -> validateAssignment(module, owner, assignmentStatement, scope, errors);
+            case ObjectOriented.ExpressionStatement expressionStatement -> validateExpressionStatement(module, owner, expressionStatement, errors);
             case ObjectOriented.LetStatement letStatement -> scope.declareImmutable(letStatement.name());
             case ObjectOriented.LocalMethodStatement localMethodStatement -> {
                 validateLocalMethod(module, owner, localMethodStatement, scope, errors);
@@ -180,6 +183,59 @@ public final class ObjectOrientedValidator {
         }
     }
 
+    private void validateExpressionStatement(
+            ObjectOrientedModule module,
+            String owner,
+            ObjectOriented.ExpressionStatement expressionStatement,
+            TreeSet<Result.Error.SingleError> errors
+    ) {
+        if (isCallExpression(expressionStatement.expression())) {
+            return;
+        }
+        errors.add(new Result.Error.SingleError(
+                0,
+                0,
+                module.moduleFile(),
+                "Only call expressions can be used as stand-alone statements in `" + owner + "`"
+        ));
+    }
+
+    private boolean isCallExpression(String expression) {
+        var trimmed = expression.trim();
+        if (trimmed.isBlank()) {
+            return false;
+        }
+        if (!CALL_EXPRESSION.matcher(trimmed).matches()) {
+            return false;
+        }
+        var depth = 0;
+        char stringDelimiter = 0;
+        for (int i = 0; i < trimmed.length(); i++) {
+            var current = trimmed.charAt(i);
+            if (stringDelimiter != 0) {
+                if (current == '\\') {
+                    i++;
+                    continue;
+                }
+                if (current == stringDelimiter) {
+                    stringDelimiter = 0;
+                }
+                continue;
+            }
+            if (current == '"' || current == '\'') {
+                stringDelimiter = current;
+                continue;
+            }
+            switch (current) {
+                case '(' -> depth++;
+                case ')' -> depth--;
+                default -> {
+                }
+            }
+        }
+        return depth == 0 && trimmed.endsWith(")");
+    }
+
     private void collectMutableCaptures(ObjectOriented.MethodBody body, Scope scope, TreeSet<String> mutableCaptures) {
         switch (body) {
             case ObjectOriented.ExpressionBody expressionBody -> collectMutableCaptures(expressionBody.expression(), scope, mutableCaptures);
@@ -207,6 +263,7 @@ public final class ObjectOrientedValidator {
                     scope.declareMutable(mutableVariableStatement.name());
                 }
                 case ObjectOriented.AssignmentStatement assignmentStatement -> collectMutableCaptures(assignmentStatement.expression(), scope, mutableCaptures);
+                case ObjectOriented.ExpressionStatement expressionStatement -> collectMutableCaptures(expressionStatement.expression(), scope, mutableCaptures);
                 case ObjectOriented.ThrowStatement throwStatement -> collectMutableCaptures(throwStatement.expression(), scope, mutableCaptures);
                 case ObjectOriented.ReturnStatement returnStatement -> collectMutableCaptures(returnStatement.expression(), scope, mutableCaptures);
                 case ObjectOriented.IfStatement ifStatement -> {
@@ -275,6 +332,7 @@ public final class ObjectOrientedValidator {
             case ObjectOriented.LocalMethodStatement localMethodStatement -> collectMutableCaptures(localMethodStatement.body(), scope.child(), mutableCaptures);
             case ObjectOriented.MutableVariableStatement mutableVariableStatement -> collectMutableCaptures(mutableVariableStatement.expression(), scope, mutableCaptures);
             case ObjectOriented.AssignmentStatement assignmentStatement -> collectMutableCaptures(assignmentStatement.expression(), scope, mutableCaptures);
+            case ObjectOriented.ExpressionStatement expressionStatement -> collectMutableCaptures(expressionStatement.expression(), scope, mutableCaptures);
             case ObjectOriented.ThrowStatement throwStatement -> collectMutableCaptures(throwStatement.expression(), scope, mutableCaptures);
             case ObjectOriented.ReturnStatement returnStatement -> collectMutableCaptures(returnStatement.expression(), scope, mutableCaptures);
         }

@@ -2,6 +2,9 @@ package dev.capylang.test;
 
 import org.junit.jupiter.api.Test;
 
+import java.io.ByteArrayOutputStream;
+import java.io.PrintStream;
+
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -98,5 +101,23 @@ class ObjectOrientedRuntimeTest {
         assertThatCode(() -> person.foreach_warm(java.util.List.of(1, 2, 3))).doesNotThrowAnyException();
         assertThatCode(() -> person.while_warm(false)).doesNotThrowAnyException();
         assertThatCode(person::do_warm).doesNotThrowAnyException();
+    }
+
+    @Test
+    void stdoutMethodsPrintCharactersAndLines() throws Exception {
+        var person = new Person("Capy");
+        var originalOut = System.out;
+        var out = new ByteArrayOutputStream();
+        try {
+            System.setOut(new PrintStream(out));
+            person.emit_greeting();
+            person.emit_boxed_name();
+            person.emit_full_path();
+        } finally {
+            System.setOut(originalOut);
+        }
+
+        assertThat(out.toString().replace("\r\n", "\n"))
+                .isEqualTo("hello Capy\n[Capy]\nfull\n");
     }
 }

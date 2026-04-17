@@ -11,6 +11,8 @@ import org.junit.jupiter.api.io.TempDir;
 import javax.tools.DiagnosticCollector;
 import javax.tools.JavaFileObject;
 import javax.tools.ToolProvider;
+import java.io.ByteArrayOutputStream;
+import java.io.PrintStream;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.charset.StandardCharsets;
@@ -28,6 +30,59 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class ObjectOrientedJavaGeneratorTest {
     @TempDir
     Path tempDir;
+
+    @Test
+    void shouldGenerateAndRunStdoutCallsInExpressionAndBlockMethods() throws Exception {
+        var program = compileProgram("""
+                from /capy/io import { Stdout }
+
+                class Speaker(name: string) {
+                    field name: string = name
+
+                    def emit_inline(): void = Stdout.println(this.name)
+
+                    def emit_block(): void {
+                        Stdout.print("[")
+                        Stdout.print(this.name)
+                        Stdout.println("]")
+                    }
+
+                    def emit_full_path(): void = /capy/io/Stdout.println("full")
+                }
+                """);
+
+        var generatedProgram = new JavaGenerator().generate(program);
+        var speakerModule = generatedProgram.modules().stream()
+                .filter(module -> module.relativePath().endsWith("Speaker.java"))
+                .findFirst()
+                .orElseThrow();
+
+        assertThat(speakerModule.code())
+                .contains("import capy.io.Stdout;")
+                .contains("Stdout.println(this.name);")
+                .contains("Stdout.print(\"[\");")
+                .contains("capy.io.Stdout.println(\"full\");");
+
+        var classesDir = compileGeneratedJava(generatedProgram);
+        var capybaraLibClasses = Path.of("..", "lib", "capybara-lib", "build", "classes", "java", "main").normalize().toAbsolutePath();
+        try (var classLoader = new URLClassLoader(new URL[]{classesDir.toUri().toURL(), capybaraLibClasses.toUri().toURL()})) {
+            var speakerType = classLoader.loadClass("foo.boo.Speaker");
+            var speaker = speakerType.getConstructor(String.class).newInstance("Capy");
+            var originalOut = System.out;
+            var out = new ByteArrayOutputStream();
+            try {
+                System.setOut(new PrintStream(out, true, StandardCharsets.UTF_8));
+                speakerType.getMethod("emit_inline").invoke(speaker);
+                speakerType.getMethod("emit_block").invoke(speaker);
+                speakerType.getMethod("emit_full_path").invoke(speaker);
+            } finally {
+                System.setOut(originalOut);
+            }
+
+            var normalized = out.toString(StandardCharsets.UTF_8).replace("\r\n", "\n");
+            assertThat(normalized).isEqualTo("Capy\n[Capy]\nfull\n");
+        }
+    }
 
     @Test
     void shouldGenerateAndRunJavaForObjectOrientedClasses() throws Exception {
