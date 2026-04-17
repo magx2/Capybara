@@ -192,16 +192,15 @@ class ObjectOrientedParserTest {
                 "Calls",
                 "/parser",
                 """
-                        from /capy/io import { Stdout }
+                        from /capy/io/Stdout import { * }
 
                         class Calls {
                             def run(): void {
-                                foo()
-                                Stdout.println("hi")
+                                print("hi")
                                 this.log("done")
                             }
 
-                            def log(message: string): void = Stdout.print(message)
+                            def log(message: string): void = println(message)
                         }
                         """,
                 SourceKind.OBJECT_ORIENTED
@@ -220,7 +219,6 @@ class ObjectOrientedParserTest {
         assertThat(block.statements())
                 .extracting(Object::getClass)
                 .containsExactly(
-                        ObjectOriented.ExpressionStatement.class,
                         ObjectOriented.ExpressionStatement.class,
                         ObjectOriented.ExpressionStatement.class
                 );

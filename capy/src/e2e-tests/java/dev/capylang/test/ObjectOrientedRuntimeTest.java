@@ -112,12 +112,12 @@ class ObjectOrientedRuntimeTest {
             System.setOut(new PrintStream(out));
             person.emit_greeting();
             person.emit_boxed_name();
-            person.emit_full_path();
+            person.emit_star();
         } finally {
             System.setOut(originalOut);
         }
 
         assertThat(out.toString().replace("\r\n", "\n"))
-                .isEqualTo("hello Capy\n[Capy]\nfull\n");
+                .isEqualTo("hello Capy\n[Capy]\n*");
     }
 }

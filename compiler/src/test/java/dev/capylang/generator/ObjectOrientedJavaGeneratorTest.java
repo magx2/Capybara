@@ -34,20 +34,20 @@ class ObjectOrientedJavaGeneratorTest {
     @Test
     void shouldGenerateAndRunStdoutCallsInExpressionAndBlockMethods() throws Exception {
         var program = compileProgram("""
-                from /capy/io import { Stdout }
+                from /capy/io/Stdout import { * }
 
                 class Speaker(name: string) {
                     field name: string = name
 
-                    def emit_inline(): void = Stdout.println(this.name)
+                    def emit_inline(): void = println(this.name)
 
                     def emit_block(): void {
-                        Stdout.print("[")
-                        Stdout.print(this.name)
-                        Stdout.println("]")
+                        print("[")
+                        print(this.name)
+                        println("]")
                     }
 
-                    def emit_full_path(): void = /capy/io/Stdout.println("full")
+                    def emit_star(): void = print("*")
                 }
                 """);
 
@@ -58,10 +58,10 @@ class ObjectOrientedJavaGeneratorTest {
                 .orElseThrow();
 
         assertThat(speakerModule.code())
-                .contains("import capy.io.Stdout;")
-                .contains("Stdout.println(this.name);")
-                .contains("Stdout.print(\"[\");")
-                .contains("capy.io.Stdout.println(\"full\");");
+                .doesNotContain("import static capy.io.Stdout.*;")
+                .contains("capy.io.Stdout.println(this.name);")
+                .contains("capy.io.Stdout.print(\"[\");")
+                .contains("capy.io.Stdout.print(\"*\");");
 
         var classesDir = compileGeneratedJava(generatedProgram);
         var capybaraLibClasses = Path.of("..", "lib", "capybara-lib", "build", "classes", "java", "main").normalize().toAbsolutePath();
@@ -74,13 +74,13 @@ class ObjectOrientedJavaGeneratorTest {
                 System.setOut(new PrintStream(out, true, StandardCharsets.UTF_8));
                 speakerType.getMethod("emit_inline").invoke(speaker);
                 speakerType.getMethod("emit_block").invoke(speaker);
-                speakerType.getMethod("emit_full_path").invoke(speaker);
+                speakerType.getMethod("emit_star").invoke(speaker);
             } finally {
                 System.setOut(originalOut);
             }
 
             var normalized = out.toString(StandardCharsets.UTF_8).replace("\r\n", "\n");
-            assertThat(normalized).isEqualTo("Capy\n[Capy]\nfull\n");
+            assertThat(normalized).isEqualTo("Capy\n[Capy]\n*");
         }
     }
 
