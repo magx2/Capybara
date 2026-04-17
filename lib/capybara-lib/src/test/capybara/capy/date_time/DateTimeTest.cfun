@@ -55,6 +55,7 @@ fun _test_plus(): list[TestCase] =
         ("plus with date duration and carry", base.plus(DateDuration { years: 0, months: 0, days: 1, hours: 1, minutes: 30, seconds: 0 }), _at(1, 5400)),
         ("plus should clamp month day", DateTime { date: jan_31_2024, time: MIDNIGHT }.plus(DateDuration { years: 0, months: 1, days: 0, hours: 0, minutes: 0, seconds: 0 }), DateTime { date: jan_31_2024.add_years_months(0, 1), time: MIDNIGHT }),
         ("operator + should delegate to plus", base + DateDuration { years: 0, months: 0, days: 0, hours: 25, minutes: 0, seconds: 0 }, _at(1, 3600)),
+        ("plus should handle very large hour component without overflow", base.plus(DateDuration { years: 0, months: 0, days: 0, hours: 600000, minutes: 0, seconds: 0 }), _at(25000, 0)),
     ] | (name, actual, expected) =>
         test(name,
             assert_all([
