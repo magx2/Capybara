@@ -38,6 +38,26 @@ class CapybaraCompilerLibrariesIntegrationTest {
                 .doesNotContain(Path.of("foo", "lib", "Library.java"));
     }
 
+    @Test
+    void shouldSurfaceTypeErrorsForRegexOperatorsInIntegrationCompile() {
+        var consumerSource = """
+                fun find_like(input: string): bool = regex/\\\\d+/ ~ input
+                fun all_like(input: string): list[string] = regex/\\\\d+/ ~~ input
+                fun redact(input: string): string = (regex/\\\\d+/ ~> "#")(input)
+                fun split_like(input: string): list[string] = regex/,/ /> input
+                """;
+        var result = CapybaraCompiler.INSTANCE.compile(List.of(new RawModule("RegexConsumer", "/foo/app", consumerSource)), new TreeSet<>());
+
+        assertThat(result).isInstanceOf(Result.Error.class);
+        var errors = ((Result.Error<CompiledProgram>) result).errors();
+        assertThat(errors).isNotEmpty();
+        assertThat(errors.stream().map(Result.Error.SingleError::message))
+                .anyMatch(message -> message.contains("`~` operator is not defined for `any ~ string`"))
+                .anyMatch(message -> message.contains("`~~` operator is not defined for `any ~~ string`"))
+                .anyMatch(message -> message.contains("`~>` operator is not defined for `any ~> string`"))
+                .anyMatch(message -> message.contains("`/>` operator is not defined for `any /> string`"));
+    }
+
     private static CompiledProgram compileProgram(List<RawModule> rawModules, SortedSet<CompiledModule> libraries) {
         var result = CapybaraCompiler.INSTANCE.compile(rawModules, libraries);
         if (result instanceof Result.Error<CompiledProgram> error) {
