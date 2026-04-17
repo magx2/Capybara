@@ -1293,6 +1293,9 @@ public class CapybaraParser {
                 if (literal.NOTHING_LITERAL() != null) {
                     return new NothingValue(position(literal.NOTHING_LITERAL()));
                 }
+                if (literal.REGEX_LITERAL() != null) {
+                    return regexLiteralExpression(literal.REGEX_LITERAL());
+                }
             }
 
             if (value.identifier() != null) {
@@ -1576,6 +1579,9 @@ public class CapybaraParser {
                 }
                 if (literal.NOTHING_LITERAL() != null) {
                     return new NothingValue(position(literal.NOTHING_LITERAL()));
+                }
+                if (literal.REGEX_LITERAL() != null) {
+                    return regexLiteralExpression(literal.REGEX_LITERAL());
                 }
             }
 
@@ -2422,6 +2428,29 @@ public class CapybaraParser {
         return interpolatedStringExpression(raw, position);
     }
 
+    private Expression regexLiteralExpression(TerminalNode regexLiteral) {
+        var raw = regexLiteral.getText();
+        var content = raw.substring("regex/".length());
+        var closingSlashIndex = content.lastIndexOf('/');
+        if (closingSlashIndex < 0) {
+            throw new IllegalStateException("Invalid regex literal: " + raw);
+        }
+        var body = content.substring(0, closingSlashIndex)
+                .replace("\\/", "/")
+                .replace("\\\\", "\\");
+        var flags = content.substring(closingSlashIndex + 1);
+        var position = SourcePosition.of(regexLiteral);
+        return new FunctionCall(
+                Optional.empty(),
+                "/capy/lang/Regex.from_literal",
+                List.of(
+                        new StringValue(quoteDoubleQuotedSegment(body), Optional.of(position)),
+                        new StringValue(quoteDoubleQuotedSegment(flags), Optional.of(position))
+                ),
+                Optional.of(position)
+        );
+    }
+
     private Expression interpolatedStringExpression(String raw, SourcePosition position) {
         var content = raw.substring(1, raw.length() - 1);
         var parts = new ArrayList<Expression>();
@@ -3204,7 +3233,6 @@ public class CapybaraParser {
     }
 
 }
-
 
 
 

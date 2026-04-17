@@ -159,7 +159,7 @@ argumentList: expression (',' expression)*;
 methodArgumentList: methodArgument (',' methodArgument)*;
 methodArgument: namedMethodArgument | expression;
 namedMethodArgument: identifier COLON expression;
-literal: BYTE_LITERAL | LONG_LITERAL | DOUBLE_LITERAL | INT_LITERAL | BOOL_LITERAL | STRING_LITERAL | FLOAT_LITERAL | NOTHING_LITERAL;
+literal: BYTE_LITERAL | LONG_LITERAL | DOUBLE_LITERAL | INT_LITERAL | BOOL_LITERAL | STRING_LITERAL | FLOAT_LITERAL | NOTHING_LITERAL | REGEX_LITERAL;
 BYTE_LITERAL: '0' [xX] [0-9a-fA-F]+;
 LONG_LITERAL: [0-9]+ [lL];
 DOUBLE_LITERAL: ([0-9]+ '.' [0-9]* EXPONENT? | [0-9]+ EXPONENT) [dD]?;
@@ -170,6 +170,7 @@ STRING_LITERAL
     : '"' (~["\\\r\n] | '\\' .)* '"'
     | '\'' (~['\\\r\n] | '\\' .)* '\''
     ;
+REGEX_LITERAL: 'regex/' ( '\\/' | '\\\\' | ~[/\r\n\\] )* '/' [ims]*;
 NOTHING_LITERAL: '???';
 
 matchExpression: 'match' expression 'with' matchCaseList+;
@@ -243,6 +244,10 @@ infixOperator: PLUS
              | PIPE_ANY
              | PIPE_ALL
              | QUESTION
+             | TILDE
+             | TILDE_TILDE
+             | TILDE_GT
+             | DIV_GT
              | AND
              | PIPE;
 infixOperatorNoPipe: PLUS
@@ -262,6 +267,10 @@ infixOperatorNoPipe: PLUS
                    | LE
                    | GE
                    | QUESTION
+                   | TILDE
+                   | TILDE_TILDE
+                   | TILDE_GT
+                   | DIV_GT
                    | AND;
 
 UNDERSCORE: '_';
@@ -287,6 +296,9 @@ GT : '>';
 LT : '<';
 BANG : '!';
 TILDE : '~';
+TILDE_TILDE : '~~';
+TILDE_GT : '~>';
+DIV_GT : '/>';
 QUESTION : '?';
 BITWISE_AND : '.and.';
 BITWISE_NAND : '.nand.';

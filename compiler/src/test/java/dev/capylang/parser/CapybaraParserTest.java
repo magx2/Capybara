@@ -285,6 +285,40 @@ class CapybaraParserTest {
     }
 
     @Test
+    @DisplayName("should parse regex literal into runtime factory call")
+    void parseRegexLiteral() {
+        var module = parseSuccess(new RawModule("Test", "/parser", "fun digits() = regex/\\\\d+/im"));
+
+        var function = findFunction("digits", module.functional());
+        assertThat(function.expression()).isInstanceOf(FunctionCall.class);
+        var call = (FunctionCall) function.expression();
+        assertThat(call.name()).isEqualTo("/capy/lang/Regex.from_literal");
+        assertThat(call.arguments()).hasSize(2);
+        assertThat(call.arguments().get(0)).isInstanceOf(StringValue.class);
+        assertThat(((StringValue) call.arguments().get(0)).stringValue()).isEqualTo("\"\\\\d+\"");
+        assertThat(call.arguments().get(1)).isInstanceOf(StringValue.class);
+        assertThat(((StringValue) call.arguments().get(1)).stringValue()).isEqualTo("\"im\"");
+    }
+
+    @Test
+    @DisplayName("should parse regex symbolic operators")
+    void parseRegexSymbolicOperators() {
+        var module = parseSuccess(new RawModule("Test", "/parser", """
+                fun check(v: string) = regex/\\\\d+/ ? v
+                fun find(v: string) = regex/\\\\d+/ ~ v
+                fun find_all(v: string) = regex/\\\\d+/ ~~ v
+                fun redact() = regex/\\\\d+/ ~> "#"
+                fun split(v: string) = regex/,/ /> v
+                """));
+
+        assertThat(((InfixExpression) findFunction("check", module.functional()).expression()).operator()).isEqualTo(InfixOperator.QUESTION);
+        assertThat(((InfixExpression) findFunction("find", module.functional()).expression()).operator()).isEqualTo(InfixOperator.TILDE);
+        assertThat(((InfixExpression) findFunction("find_all", module.functional()).expression()).operator()).isEqualTo(InfixOperator.TILDE_TILDE);
+        assertThat(((InfixExpression) findFunction("redact", module.functional()).expression()).operator()).isEqualTo(InfixOperator.TILDE_GT);
+        assertThat(((InfixExpression) findFunction("split", module.functional()).expression()).operator()).isEqualTo(InfixOperator.DIV_GT);
+    }
+
+    @Test
     @DisplayName("should parse lowercase private local const declaration")
     void parseLowercasePrivateLocalConstDeclaration() {
         var module = parseSuccess(new RawModule("Test", "/parser", """
