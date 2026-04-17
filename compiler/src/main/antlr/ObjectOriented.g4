@@ -46,7 +46,7 @@ statement: letStatement
          | forEachStatement
          | statementBlock;
 letStatement: 'let' identifier (':' type)? letBindingOperator expression ';'?;
-defStatement: 'def' identifier (localMethodTail | mutableVariableTail);
+defStatement: docComment* 'def' identifier (localMethodTail | mutableVariableTail);
 localMethodTail: '(' parameters? ')' functionType methodBody;
 mutableVariableTail: (':' type)? letBindingOperator expression ';'?;
 assignmentStatement: identifier ASSIGN expression ';'?;

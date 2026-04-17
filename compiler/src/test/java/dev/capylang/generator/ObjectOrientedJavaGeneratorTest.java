@@ -32,17 +32,21 @@ class ObjectOrientedJavaGeneratorTest {
     @Test
     void shouldGenerateAndRunJavaForObjectOrientedClasses() throws Exception {
         var program = compileProgram("""
+                /// Base type
                 open class Base {
                     open def label(): string = "base"
                 }
 
+                /// Printable contract
                 interface Printable {
                     def print(): string
                 }
 
+                /// User type
                 class User(name: string): Base, Printable {
                     field name: string = name
 
+                    /// Friendly greet
                     def greet(): string = "Hello " + this.name
 
                     def mutable(): string {
@@ -121,6 +125,7 @@ class ObjectOrientedJavaGeneratorTest {
 
                     def local_increment(x: int): int {
                         let step: int = 1
+                        /// Internal increment
                         def inc(y: int): int = y + step
                         return inc(x)
                     }
@@ -155,11 +160,26 @@ class ObjectOrientedJavaGeneratorTest {
                         Path.of("foo", "boo", "User.java")
                 );
         assertThat(generatedProgram.modules().stream()
+                .filter(module -> module.relativePath().endsWith("Base.java"))
+                .findFirst()
+                .orElseThrow()
+                .code())
+                .contains("/// Base type");
+        assertThat(generatedProgram.modules().stream()
+                .filter(module -> module.relativePath().endsWith("Printable.java"))
+                .findFirst()
+                .orElseThrow()
+                .code())
+                .contains("/// Printable contract");
+        assertThat(generatedProgram.modules().stream()
                 .filter(module -> module.relativePath().endsWith("User.java"))
                 .findFirst()
                 .orElseThrow()
                 .code())
                 .contains("public final class User extends Base implements Printable")
+                .contains("/// User type")
+                .contains("/// Friendly greet")
+                .contains("/// Internal increment")
                 .contains("public String greet()")
                 .contains("return \"Hello \"+this.name;")
                 .contains("var x = \"a\";")

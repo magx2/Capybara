@@ -19,6 +19,7 @@ class ObjectOrientedParserTest {
                 "User",
                 "/parser",
                 """
+                        /// Printable contract
                         interface Printable {
                             def print(): string
                         }
@@ -37,6 +38,7 @@ class ObjectOrientedParserTest {
                             }
                         }
 
+                        /// User type
                         open class User(name: string): Named, Printable {
                             field name: string = name
                             override def print(): string = "User(" + this.name + ")"
@@ -52,12 +54,15 @@ class ObjectOrientedParserTest {
         assertThat(module.objectOriented().definitions())
                 .extracting(ObjectOriented.TypeDeclaration::name)
                 .containsExactly("Printable", "Named", "User");
+        assertThat(((ObjectOriented.InterfaceDeclaration) module.objectOriented().definitions().getFirst()).comments())
+                .containsExactly("Printable contract");
 
         var userDeclaration = module.objectOriented().definitions().stream()
                 .filter(ObjectOriented.ClassDeclaration.class::isInstance)
                 .map(ObjectOriented.ClassDeclaration.class::cast)
                 .findFirst()
                 .orElseThrow();
+        assertThat(userDeclaration.comments()).containsExactly("User type");
         assertThat(userDeclaration.constructorParameters()).extracting(ObjectOriented.Parameter::name).containsExactly("name");
         assertThat(userDeclaration.parents()).extracting(ObjectOriented.TypeReference::name).containsExactly("Named", "Printable");
 
@@ -79,6 +84,41 @@ class ObjectOrientedParserTest {
             assertThat(block.statements().getFirst()).isInstanceOf(ObjectOriented.LetStatement.class);
             assertThat(block.statements().get(1)).isInstanceOf(ObjectOriented.IfStatement.class);
         });
+    }
+
+    @Test
+    @DisplayName("should parse doc comments for types methods and local methods")
+    void parseDocComments() {
+        var result = ObjectOrientedParser.INSTANCE.parseModule(new RawModule(
+                "Docs",
+                "/parser",
+                """
+                        /// User type
+                        class Docs {
+                            /// Greets user
+                            def greet(name: string): string {
+                                /// Internal formatter
+                                def format(value: string): string = "Hello " + value
+                                return format(name)
+                            }
+                        }
+                        """,
+                SourceKind.OBJECT_ORIENTED
+        ));
+
+        assertThat(result).isInstanceOf(Result.Success.class);
+        var module = ((Result.Success<ObjectOrientedModule>) result).value();
+        var docsClass = (ObjectOriented.ClassDeclaration) module.objectOriented().definitions().getFirst();
+        assertThat(docsClass.comments()).containsExactly("User type");
+        var greetMethod = docsClass.members().stream()
+                .filter(ObjectOriented.MethodDeclaration.class::isInstance)
+                .map(ObjectOriented.MethodDeclaration.class::cast)
+                .findFirst()
+                .orElseThrow();
+        assertThat(greetMethod.comments()).containsExactly("Greets user");
+        var block = (ObjectOriented.StatementBlock) greetMethod.body().orElseThrow();
+        var localMethod = (ObjectOriented.LocalMethodStatement) block.statements().getFirst();
+        assertThat(localMethod.comments()).containsExactly("Internal formatter");
     }
 
     @Test
