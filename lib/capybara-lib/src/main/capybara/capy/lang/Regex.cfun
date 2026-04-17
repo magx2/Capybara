@@ -2,7 +2,7 @@ from /capy/lang/Option import { * }
 from /capy/lang/Seq import { * }
 
 data Regex { pattern: string, flags: string }
-data Match { value: string }
+data Match { group_value: string }
 
 fun from_literal(pattern: string, flags: string): Regex = Regex { pattern, flags }
 
@@ -10,13 +10,13 @@ fun Regex.matches(input: string): bool = input ? this.pattern
 
 fun Regex.find(input: string): Option[Match] =
     if this.matches(input)
-    then Some { value: Match { value: this.pattern } }
+    then Some { value: Match { group_value: this.pattern } }
     else None
 
 fun Regex.find_all(input: string): /capy/lang/Seq[Match] =
     if this.matches(input)
-    then /capy/lang/Seq.to_seq([Match { value: this.pattern }])
-    else /capy/lang/Seq.to_seq([Match { value: "" }])
+    then /capy/lang/Seq.to_seq([Match { group_value: this.pattern }])
+    else /capy/lang/Seq.to_seq([Match { group_value: "" }])
 
 fun Regex.replace(replacement: string): string => string = value => value.replace(this.pattern, replacement)
 
@@ -29,28 +29,6 @@ fun Regex.`~~`(input: string): /capy/lang/Seq[Match] = this.find_all(input)
 fun Regex.`~>`(replacement: string): string => string = this.replace(replacement)
 fun Regex.`/>`(input: string): list[string] = this.split(input)
 
-fun Match.group(index: int): Option[string] = if index == 0 then Some { value: this.value } else None
+fun Match.group(index: int): Option[string] = if index == 0 then Some { value: this.group_value } else None
 
-fun Match.groups(): list[Option[string]] = [Some { value: this.value }]
-
-fun Regex.first_group_or_empty(input: string): string =
-    match this.find(input) with
-    case Some { value } ->
-        {
-            match value.group(0) with
-            case Some { group } -> group
-            case _ -> ""
-        }
-    case _ -> ""
-
-fun Regex.group_count(input: string): int =
-    match this.find(input) with
-    case Some { value } -> value.groups().size
-    case _ -> 0
-
-fun count_matches(matches: /capy/lang/Seq[Match]): int =
-    match matches.first() with
-    case Some { value } -> if value.value == "" then 0 else 1
-    case _ -> 0
-
-fun Regex.find_all_count(input: string): int = count_matches(this.find_all(input))
+fun Match.groups(): list[Option[string]] = [Some { value: this.group_value }]

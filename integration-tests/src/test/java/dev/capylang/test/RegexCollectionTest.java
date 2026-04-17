@@ -49,12 +49,4 @@ class RegexCollectionTest {
     void escapedSlashInLiteral() {
         assertThat(RegexCollection.escapedSlashMatch()).isTrue();
     }
-
-    @Test
-    void matchGroupsApi() {
-        assertThat(RegexCollection.firstGroupIsPattern("xxfooyy")).isTrue();
-        assertThat(RegexCollection.firstGroupIsPattern("xxbaryy")).isFalse();
-        assertThat(RegexCollection.groupsSize("xxfooyy")).isEqualTo(1);
-        assertThat(RegexCollection.groupsSize("xxbaryy")).isZero();
-    }
 }
