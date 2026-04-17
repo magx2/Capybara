@@ -14,6 +14,20 @@ fun _floor_div(a: int, b: int): int =
     then a / b
     else -(((-a) + b - 1) / b)
 
+
+fun _compare(left: DateTime, right: DateTime): int =
+    let left_days = left.date.to_days_since_unix_epoch()
+    let right_days = right.date.to_days_since_unix_epoch()
+    if left_days > right_days
+    then 1
+    else if left_days < right_days
+        then -1
+        else if left.time.to_seconds() > right.time.to_seconds()
+            then 1
+            else if left.time.to_seconds() < right.time.to_seconds()
+                then -1
+                else 0
+
 fun _plus_datetime(datetime: DateTime, duration: Duration): DateTime =
     const __seconds_in_day: int = 24 * 3600
     ---
@@ -44,3 +58,22 @@ fun DateTime.minus(duration: Duration): DateTime = _minus_datetime(this, duratio
 
 /// Subtracts a `Duration` from this `DateTime` using `-` infix syntax.
 fun DateTime.`-`(duration: Duration): DateTime = _minus_datetime(this, duration)
+
+
+/// Returns `true` when this date-time is after `other`.
+fun DateTime.greater_than(other: DateTime): bool = _compare(this, other) > 0
+
+/// Returns `true` when this date-time is before `other`.
+fun DateTime.less_than(other: DateTime): bool = _compare(this, other) < 0
+
+/// Comparison function used by `>`.
+fun DateTime.greater(other: DateTime): bool = this.greater_than(other)
+
+/// Comparison function used by `<`.
+fun DateTime.less(other: DateTime): bool = this.less_than(other)
+
+/// Returns `true` when this date-time is before `other`.
+fun DateTime.`<`(other: DateTime): bool = this.less_than(other)
+
+/// Returns `true` when this date-time is after `other`.
+fun DateTime.`>`(other: DateTime): bool = this.greater_than(other)

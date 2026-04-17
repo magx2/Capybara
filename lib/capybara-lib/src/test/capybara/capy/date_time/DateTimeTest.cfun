@@ -18,7 +18,8 @@ fun tests(): TestFile =
         [_test_unix_epoch()]
         + _test_timestamp()
         + _test_plus()
-        + _test_minus())
+        + _test_minus()
+        + _test_comparisons())
 
 fun _test_unix_epoch(): TestCase =
     test("unix_epoch() should return the correct DateTime for 1 January 1970 at 00:00:00",
@@ -75,3 +76,31 @@ fun _test_minus(): list[TestCase] =
                 assert_that(actual.date).is_equal_to(expected.date),
                 assert_that(actual.time).is_equal_to(expected.time),
             ]))
+
+
+fun _test_comparisons(): list[TestCase] =
+    let first = _at(0, 0)
+    let second = _at(0, 1)
+    let third = _at(1, 0)
+    [
+        test("greater_than should return true when this DateTime is later",
+            assert_all([
+                assert_that(second.greater_than(first)).is_equal_to(true),
+                assert_that(first.greater_than(second)).is_equal_to(false),
+            ])),
+        test("less_than should return true when this DateTime is earlier",
+            assert_all([
+                assert_that(first.less_than(second)).is_equal_to(true),
+                assert_that(second.less_than(first)).is_equal_to(false),
+            ])),
+        test("operator > should compare DateTime values",
+            assert_all([
+                assert_that(second > first).is_equal_to(true),
+                assert_that(first > second).is_equal_to(false),
+            ])),
+        test("operator < should compare DateTime values",
+            assert_all([
+                assert_that(second < third).is_equal_to(true),
+                assert_that(third < second).is_equal_to(false),
+            ])),
+    ]
