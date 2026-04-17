@@ -27,17 +27,10 @@ fun from_iso_8601_interval(iso: string): Result[TimeInterval] =
     fun __parse_digit(value: string, label: string): Result[__Parse[int]] =
         match value[0] with
         case None -> Error { __invalid("expected digit for " + label + ", got end of string") }
-        case Some { '0' } -> Success { __Parse { buffer: value[1:], value: 0 } }
-        case Some { '1' } -> Success { __Parse { buffer: value[1:], value: 1 } }
-        case Some { '2' } -> Success { __Parse { buffer: value[1:], value: 2 } }
-        case Some { '3' } -> Success { __Parse { buffer: value[1:], value: 3 } }
-        case Some { '4' } -> Success { __Parse { buffer: value[1:], value: 4 } }
-        case Some { '5' } -> Success { __Parse { buffer: value[1:], value: 5 } }
-        case Some { '6' } -> Success { __Parse { buffer: value[1:], value: 6 } }
-        case Some { '7' } -> Success { __Parse { buffer: value[1:], value: 7 } }
-        case Some { '8' } -> Success { __Parse { buffer: value[1:], value: 8 } }
-        case Some { '9' } -> Success { __Parse { buffer: value[1:], value: 9 } }
-        case Some { char } -> Error { __invalid("expected digit for " + label + ", got `" + char + "`") }
+        case Some { char } ->
+            match ("" + char).to_int() with
+            case Success { digit } -> Success { __Parse { buffer: value[1:], value: digit } }
+            case Error -> Error { __invalid("expected digit for " + label + ", got `" + char + "`") }
 
     fun __parse_2_digits(value: string, label: string): Result[__Parse[int]] =
         let tens <- __parse_digit(value, label)
