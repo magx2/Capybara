@@ -26,8 +26,27 @@ fun floor_div(a: int, b: int): int =
         then q - 1
         else q
 
+/// Floor division for long integers.
+///
+/// Unlike `/`, this always rounds toward negative infinity.
+/// `b` must be non-zero.
+fun floor_div(a: long, b: long): long =
+    let q = a / b
+    let r = a % b
+    if r == 0L
+    then q
+    else if (r > 0L & b < 0L) | (r < 0L & b > 0L)
+        then q - 1L
+        else q
+
 /// Floor modulo for integers.
 ///
 /// Result has the same sign as divisor `b` (or is zero).
 /// `b` must be non-zero.
 fun floor_mod(a: int, b: int): int = a - floor_div(a, b) * b
+
+/// Floor modulo for long integers.
+///
+/// Result has the same sign as divisor `b` (or is zero).
+/// `b` must be non-zero.
+fun floor_mod(a: long, b: long): long = a - floor_div(a, b) * b
