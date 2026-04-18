@@ -17,6 +17,7 @@ import java.io.StringWriter;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
@@ -33,6 +34,9 @@ import static dev.capylang.compiler.CompiledExpressionPrinter.printExpression;
 import static dev.capylang.compiler.PrimitiveLinkedType.ANY;
 
 class JavaExpressionEvaluatorTest {
+    private static final Object STANDARD_LIBRARY_LOCK = new Object();
+    private static Path standardLibraryClassesDir;
+
     @TempDir
     Path tempDir;
 
@@ -224,7 +228,7 @@ class JavaExpressionEvaluatorTest {
                 .collect(joining("\n"));
 
         assertThat(generated).doesNotContain("var start = System.currentTimeMillis();");
-        assertThat(generated).contains("return new TestCase(name, _execute((assert_).assertions()), ((assert_).assertions()).size(), (0-1));");
+        assertThat(generated).contains("return new TestCase(name, _execute((assert_).assertions()), ((assert_).assertions()).size(), ((long) (0-1)));");
     }
 
     @Test
@@ -787,9 +791,19 @@ class JavaExpressionEvaluatorTest {
             var output = new StringWriter();
             try (var fileManager = compiler.getStandardFileManager(diagnostics, Locale.ROOT, StandardCharsets.UTF_8)) {
                 var compilationUnits = fileManager.getJavaFileObjectsFromFiles(javaFiles.stream().map(Path::toFile).toList());
+                var classpathEntries = Stream.concat(
+                                Stream.of(System.getProperty("java.class.path")),
+                                Stream.of(
+                                                resolveRepositoryPath("lib/capybara-lib/build/classes/java/main"),
+                                                ensureStandardLibraryClasses()
+                                        )
+                                        .filter(Objects::nonNull)
+                                        .filter(Files::exists)
+                                        .map(Path::toString))
+                        .collect(joining(System.getProperty("path.separator")));
                 var options = List.of(
                         "--release", "21",
-                        "-classpath", System.getProperty("java.class.path"),
+                        "-classpath", classpathEntries,
                         "-d", classesDir.toString()
                 );
                 var success = compiler.getTask(new PrintWriter(output), fileManager, diagnostics, options, null, compilationUnits).call();
@@ -803,18 +817,112 @@ class JavaExpressionEvaluatorTest {
     }
 
     private Path resolveRepositoryPath(String relativePath) {
-        var cwd = Path.of("").toAbsolutePath().normalize();
-        var direct = cwd.resolve(relativePath).normalize();
-        if (Files.exists(direct)) {
-            return direct;
+        var current = Path.of("").toAbsolutePath().normalize();
+        while (current != null) {
+            var candidate = current.resolve(relativePath).normalize();
+            if (Files.exists(candidate)) {
+                return candidate;
+            }
+            current = current.getParent();
         }
-        var parent = cwd.getParent();
-        if (parent != null) {
-            var fromParent = parent.resolve(relativePath).normalize();
-            if (Files.exists(fromParent)) {
-                return fromParent;
+        return Paths.get(relativePath).toAbsolutePath().normalize();
+    }
+
+    private Path ensureStandardLibraryClasses() {
+        synchronized (STANDARD_LIBRARY_LOCK) {
+            if (standardLibraryClassesDir != null && Files.exists(standardLibraryClassesDir)) {
+                return standardLibraryClassesDir;
+            }
+            try {
+                var workDir = Files.createTempDirectory("capybara-lib-java-test-");
+                var generatedSourceDir = workDir.resolve("generated");
+                var classesDir = workDir.resolve("classes");
+                Files.createDirectories(generatedSourceDir);
+                Files.createDirectories(classesDir);
+
+                var sourceRoot = resolveRepositoryPath("lib/capybara-lib/src/main/capybara");
+                var rawModules = loadRawModules(sourceRoot);
+                var programResult = CapybaraCompiler.INSTANCE.compile(rawModules, new java.util.TreeSet<>());
+                if (programResult instanceof Result.Error<CompiledProgram> error) {
+                    throw new AssertionError(error.errors().stream()
+                            .map(Result.Error.SingleError::toString)
+                            .collect(joining(System.lineSeparator())));
+                }
+                var generatedProgram = new JavaGenerator().generate(((Result.Success<CompiledProgram>) programResult).value());
+                generatedProgram.modules().forEach(module -> {
+                    try {
+                        var path = generatedSourceDir.resolve(module.relativePath());
+                        Files.createDirectories(path.getParent());
+                        Files.writeString(path, module.code(), StandardCharsets.UTF_8);
+                    } catch (Exception e) {
+                        throw new AssertionError("Unable to write standard library generated source", e);
+                    }
+                });
+
+                var compiler = ToolProvider.getSystemJavaCompiler();
+                assertThat(compiler).as("system Java compiler").isNotNull();
+                var javaFiles = new java.util.ArrayList<Path>();
+                try (var files = Files.walk(generatedSourceDir)) {
+                    javaFiles.addAll(files.filter(Files::isRegularFile)
+                            .filter(path -> path.getFileName().toString().endsWith(".java"))
+                            .toList());
+                }
+                var javaSourceRoot = resolveRepositoryPath("lib/capybara-lib/src/main/java");
+                if (Files.exists(javaSourceRoot)) {
+                    try (var files = Files.walk(javaSourceRoot)) {
+                        javaFiles.addAll(files.filter(Files::isRegularFile)
+                                .filter(path -> path.getFileName().toString().endsWith(".java"))
+                                .toList());
+                    }
+                }
+
+                var diagnostics = new DiagnosticCollector<JavaFileObject>();
+                try (var fileManager = compiler.getStandardFileManager(diagnostics, Locale.ROOT, StandardCharsets.UTF_8)) {
+                    var compilationUnits = fileManager.getJavaFileObjectsFromFiles(javaFiles.stream().map(Path::toFile).toList());
+                    var options = List.of(
+                            "--release", "21",
+                            "-classpath", System.getProperty("java.class.path"),
+                            "-d", classesDir.toString()
+                    );
+                    var success = compiler.getTask(new PrintWriter(new StringWriter()), fileManager, diagnostics, options, null, compilationUnits).call();
+                    assertThat(success)
+                            .as(diagnostics.getDiagnostics().stream().map(Objects::toString).collect(joining(System.lineSeparator())))
+                            .isTrue();
+                }
+
+                standardLibraryClassesDir = classesDir;
+                return classesDir;
+            } catch (Exception e) {
+                throw new AssertionError("Unable to prepare Capybara library classes", e);
             }
         }
-        return direct;
+    }
+
+    private List<RawModule> loadRawModules(Path sourceRoot) throws Exception {
+        try (var files = Files.walk(sourceRoot)) {
+            return files.filter(Files::isRegularFile)
+                    .filter(path -> path.getFileName().toString().endsWith(".cfun"))
+                    .sorted()
+                    .map(path -> toRawModule(sourceRoot, path))
+                    .toList();
+        }
+    }
+
+    private RawModule toRawModule(Path sourceRoot, Path sourceFile) {
+        try {
+            var relativePath = sourceRoot.relativize(sourceFile);
+            var moduleName = stripExtension(relativePath.getFileName().toString());
+            var moduleParent = relativePath.getParent() == null
+                    ? "/"
+                    : "/" + relativePath.getParent().toString().replace('\\', '/');
+            return new RawModule(moduleName, moduleParent, Files.readString(sourceFile, StandardCharsets.UTF_8));
+        } catch (Exception e) {
+            throw new AssertionError("Unable to load raw module from " + sourceFile, e);
+        }
+    }
+
+    private String stripExtension(String fileName) {
+        var extensionIndex = fileName.lastIndexOf('.');
+        return extensionIndex >= 0 ? fileName.substring(0, extensionIndex) : fileName;
     }
 }

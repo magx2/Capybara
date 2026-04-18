@@ -534,6 +534,93 @@ class CapybaraCompilerLibrariesTest {
     }
 
     @Test
+    void shouldCompileTypedAssertLetsForResultAssertLambdaChains() {
+        var compiled = compileProgram(List.of(
+                new RawModule("Result", "/capy/lang", """
+                        type Result[T] = Success[T] | Error
+                        data Success[T] { value: T }
+                        data Error { message: string }
+                        """),
+                new RawModule("Assert", "/capy/test", """
+                        from /capy/lang/Result import { * }
+
+                        type Assert = TechnicalAssert | DataAssert | IntAssert | ResultAssert
+                        data TechnicalAssert { assertions: list[bool] }
+                        data DataAssert { value: data }
+                        data IntAssert { value: int }
+                        data ResultAssert[T] { value: Result[T] }
+
+                        fun assert_all(asserts: list[Assert]): Assert = TechnicalAssert { assertions: [] }
+                        fun DataAssert.is_equal_to(other: data): DataAssert = this
+                        fun IntAssert.is_equal_to(other: int): IntAssert = this
+                        fun ResultAssert[T].fails(): ResultAssert[T] = this
+                        fun ResultAssert[T].succeeds(assert_: T => Assert): ResultAssert[T] = this
+
+                        fun assert_that(value: Result[T]): ResultAssert[T] = ResultAssert { value: value }
+                        fun assert_that(value: int): IntAssert = IntAssert { value: value }
+                        fun assert_that(value: data): DataAssert = DataAssert { value: value }
+                        """),
+                new RawModule("Date", "/capy/date_time", """
+                        from /capy/lang/Result import { * }
+
+                        const JANUARY: int = 1
+
+                        data Date { day: int, month: int, year: int } with constructor {
+                            if day > 0
+                            then Success { value: * { day: day, month: month, year: year } }
+                            else Error { message: "invalid" }
+                        }
+                        """),
+                new RawModule("Consumer", "/foo/app", """
+                        from /capy/test/Assert import { * }
+                        from /capy/date_time/Date import { * }
+
+                        fun helper(day: int, is_valid: bool): Assert =
+                            let assert: Assert =
+                                if is_valid
+                                then assert_that(Date { day: day, month: JANUARY, year: 2020 })
+                                    .succeeds(date => assert_all([
+                                        assert_that(date.day).is_equal_to(day),
+                                        assert_that(date.month).is_equal_to(JANUARY),
+                                    ]))
+                                else assert_that(Date { day: day, month: JANUARY, year: 2020 }).fails()
+                            assert
+                        """)
+        ), new java.util.TreeSet<>());
+
+        assertThat(compiledFunction(compiled, "Consumer", "helper").returnType().name())
+                .isEqualTo("Assert");
+    }
+
+    @Test
+    void shouldWrapParentSubtypesIntoExpectedResultWithoutRecursiveCoercion() {
+        var compiled = compileProgram(List.of(
+                new RawModule("Result", "/capy/lang", """
+                        type Result[T] = Success[T] | Error
+                        data Success[T] { value: T }
+                        data Error { message: string }
+                        """),
+                new RawModule("Json", "/capy/serialization", """
+                        from /capy/lang/Result import { * }
+
+                        type Json = JsonObject | JsonBool
+                        data JsonObject { value: dict[Json] }
+                        data JsonBool { value: bool }
+
+                        fun deserialize(valid: bool): Result[Json] =
+                            let decoded =
+                                if valid
+                                then JsonObject { value: { : } }
+                                else JsonBool { value: true }
+                            decoded
+                        """)
+        ), new java.util.TreeSet<>());
+
+        assertThat(compiledFunction(compiled, "Json", "deserialize").returnType().name())
+                .isEqualTo("Result");
+    }
+
+    @Test
     void shouldResolveMethodsDefinedInLinkedLibraryModules() {
         var libraries = compileProgram(List.of(
                 new RawModule("FooAssert", "/foo/test", """
