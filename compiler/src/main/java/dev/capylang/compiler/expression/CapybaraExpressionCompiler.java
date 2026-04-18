@@ -1764,6 +1764,21 @@ public class CapybaraExpressionCompiler {
                     argument.position()
             );
         }
+        if (expected instanceof CompiledDataParentType
+            || expected instanceof CompiledGenericTypeParameter
+            || expected instanceof CompiledDataType) {
+            return linkExpression(argument, scope)
+                    .flatMap(linkedArgument -> {
+                        var maybeCoerced = coerceArgument(linkedArgument, expected);
+                        if (maybeCoerced == null) {
+                            return withPosition(
+                                    Result.error("Expected `" + expected + "`, got `" + linkedArgument.type() + "`"),
+                                    argument.position()
+                            );
+                        }
+                        return Result.success(maybeCoerced);
+                    });
+        }
         if (argument instanceof FunctionCall functionCall) {
             return linkFunctionCall(functionCall, scope, Optional.of(expected))
                     .flatMap(linkedArgument -> {
@@ -1865,11 +1880,15 @@ public class CapybaraExpressionCompiler {
             if (maybeCoerced != null) {
                 return Result.success(maybeCoerced);
             }
+            var linkedWasAlreadyResult = resolveSpecializedResultType(linked.type()).isPresent();
             var wrapped = ensureResultExpression(linked, expectedResultParent.orElseThrow(), argument.position());
             if (wrapped instanceof Result.Error<CompiledExpression> error) {
                 return new Result.Error<>(error.errors());
             }
             var resultCompatibleExpression = ((Result.Success<CompiledExpression>) wrapped).value();
+            if (!linkedWasAlreadyResult) {
+                return Result.success(new CoercedArgument(resultCompatibleExpression, 1));
+            }
             maybeCoerced = coerceArgument(resultCompatibleExpression, expected);
             if (maybeCoerced == null) {
                 return withPosition(
@@ -2184,6 +2203,10 @@ public class CapybaraExpressionCompiler {
             && argument.type() instanceof CompiledDataType argumentData
             && sameRawTypeName(expectedData.name(), argumentData.name())
             && areTypeParameterDescriptorsCompatible(argumentData.typeParameters(), expectedData.typeParameters())) {
+            if (!argumentData.typeParameters().equals(expectedData.typeParameters())
+                && argument instanceof CompiledNewData newData) {
+                return new CoercedArgument(rebuildNewDataForExpectedType(newData, argumentData, expectedData), 1);
+            }
             return new CoercedArgument(argument, 1);
         }
         if (argument.type() == ANY) {
@@ -2225,6 +2248,21 @@ public class CapybaraExpressionCompiler {
 
     private boolean canCoerceToExpectedType(CompiledType actualType, CompiledType expectedType) {
         return coerceArgument(new CompiledVariable("__expected__", actualType), expectedType) != null;
+    }
+
+    private CompiledNewData rebuildNewDataForExpectedType(
+            CompiledNewData newData,
+            CompiledDataType sourceType,
+            CompiledDataType expectedType
+    ) {
+        var assignmentsByName = orderedAssignmentsByName(newData, sourceType);
+        var rebuiltAssignments = expectedType.fields().stream()
+                .map(field -> new CompiledNewData.FieldAssignment(
+                        field.name(),
+                        assignmentsByName.get(field.name())
+                ))
+                .toList();
+        return new CompiledNewData(expectedType, rebuiltAssignments);
     }
 
     private boolean areTupleTypesCompatible(CompiledTupleType actual, CompiledTupleType expected) {

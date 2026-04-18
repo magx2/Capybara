@@ -216,7 +216,7 @@ public class CompilationErrorTest {
 
         assertThat(errors).hasSize(1);
         assertThat(errors.first().message())
-                .contains("expected `int`, found `long`");
+                .contains("Expected `int`, got `long`");
     }
 
     @Test

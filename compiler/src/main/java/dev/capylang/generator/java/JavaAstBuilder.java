@@ -161,6 +161,7 @@ public class JavaAstBuilder {
 
     private JavaMethod buildStaticMethod(CompiledFunction function) {
         var methodTypeParameters = methodTypeParameters(function, Set.of());
+        var expression = specializeReturnNewData(function.expression(), function.returnType());
         return new JavaMethod(
                 buildMethodName(function.name()),
                 function.name().startsWith("_"),
@@ -168,8 +169,34 @@ public class JavaAstBuilder {
                 methodTypeParameters,
                 buildJavaReturnType(function),
                 buildJavaFunctionParameters(function.parameters()),
-                function.expression(),
+                expression,
                 function.comments()
+        );
+    }
+
+    private dev.capylang.compiler.expression.CompiledExpression specializeReturnNewData(
+            dev.capylang.compiler.expression.CompiledExpression expression,
+            CompiledType returnType
+    ) {
+        if (!(returnType instanceof CompiledDataType expectedData)
+            || !(expression instanceof dev.capylang.compiler.expression.CompiledNewData newData)
+            || !(newData.type() instanceof CompiledDataType actualData)
+            || !expectedData.name().equals(actualData.name())
+            || expectedData.typeParameters().equals(actualData.typeParameters())) {
+            return expression;
+        }
+        var byName = new java.util.LinkedHashMap<String, dev.capylang.compiler.expression.CompiledExpression>();
+        for (var assignment : newData.assignments()) {
+            byName.put(assignment.name(), assignment.value());
+        }
+        return new dev.capylang.compiler.expression.CompiledNewData(
+                expectedData,
+                expectedData.fields().stream()
+                        .map(field -> new dev.capylang.compiler.expression.CompiledNewData.FieldAssignment(
+                                field.name(),
+                                byName.get(field.name())
+                        ))
+                        .toList()
         );
     }
 

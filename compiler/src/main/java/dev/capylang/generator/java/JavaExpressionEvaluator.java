@@ -1314,9 +1314,10 @@ public class JavaExpressionEvaluator {
             return evaluateExpression(let.rest(), tupleScope);
         }
         var letDeclarationType = let.declaredType().orElse(let.value().type());
+        var coercedValueExpression = coerceExpressionForExpectedType(letDeclarationType, let.value().type(), valueExSc.expression());
         var scopeExpression = shouldUseTypedLetDeclaration(let.value(), let.declaredType().isPresent())
-                ? valueExSc.scope().declareTypedValue(let.name(), javaCastType(letDeclarationType), valueExSc.expression(), let.rest())
-                : valueExSc.scope().declareValue(let.name(), valueExSc.expression(), let.rest());
+                ? valueExSc.scope().declareTypedValue(let.name(), javaCastType(letDeclarationType), coercedValueExpression, let.rest())
+                : valueExSc.scope().declareValue(let.name(), coercedValueExpression, let.rest());
         return evaluateExpression(scopeExpression.expression(), scopeExpression.scope());
     }
 
@@ -1461,6 +1462,49 @@ public class JavaExpressionEvaluator {
             case dev.capylang.compiler.CompiledGenericTypeParameter genericTypeParameter ->
                     genericTypeParameter.name();
             default -> "java.lang.Object";
+        };
+    }
+
+    private static String coerceExpressionForExpectedType(
+            dev.capylang.compiler.CompiledType expectedType,
+            dev.capylang.compiler.CompiledType actualType,
+            String expression
+    ) {
+        if (expectedType instanceof dev.capylang.compiler.PrimitiveLinkedType expectedPrimitive
+            && actualType instanceof dev.capylang.compiler.PrimitiveLinkedType actualPrimitive
+            && isImplicitNumericWidening(expectedPrimitive, actualPrimitive)) {
+            return "((" + javaPrimitiveType(expectedPrimitive) + ") " + expression + ")";
+        }
+        return expression;
+    }
+
+    private static boolean isImplicitNumericWidening(
+            dev.capylang.compiler.PrimitiveLinkedType expected,
+            dev.capylang.compiler.PrimitiveLinkedType actual
+    ) {
+        if (expected == actual) {
+            return false;
+        }
+        return (actual == dev.capylang.compiler.PrimitiveLinkedType.INT
+                && (expected == dev.capylang.compiler.PrimitiveLinkedType.LONG
+                    || expected == dev.capylang.compiler.PrimitiveLinkedType.FLOAT
+                    || expected == dev.capylang.compiler.PrimitiveLinkedType.DOUBLE))
+               || (actual == dev.capylang.compiler.PrimitiveLinkedType.LONG
+                   && (expected == dev.capylang.compiler.PrimitiveLinkedType.FLOAT
+                       || expected == dev.capylang.compiler.PrimitiveLinkedType.DOUBLE))
+               || (actual == dev.capylang.compiler.PrimitiveLinkedType.FLOAT
+                   && expected == dev.capylang.compiler.PrimitiveLinkedType.DOUBLE);
+    }
+
+    private static String javaPrimitiveType(dev.capylang.compiler.PrimitiveLinkedType type) {
+        return switch (type) {
+            case BYTE -> "byte";
+            case INT -> "int";
+            case LONG -> "long";
+            case FLOAT -> "float";
+            case DOUBLE -> "double";
+            case BOOL -> "boolean";
+            default -> throw new IllegalArgumentException("Unsupported primitive cast target: " + type);
         };
     }
 
@@ -2302,7 +2346,12 @@ public class JavaExpressionEvaluator {
                     if (value == null) {
                         throw new IllegalStateException("Missing assignment for field `" + field.name() + "` in `" + dataType.name() + "`");
                     }
-                    return value;
+                    var assignment = newData.assignments().stream()
+                            .filter(it -> it.name().equals(field.name()))
+                            .findFirst()
+                            .orElseThrow(() -> new IllegalStateException(
+                                    "Missing assignment metadata for field `" + field.name() + "` in `" + dataType.name() + "`"));
+                    return coerceExpressionForExpectedType(field.type(), assignment.value().type(), value);
                 })
                 .toList();
 
