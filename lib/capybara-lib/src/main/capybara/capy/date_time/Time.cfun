@@ -26,8 +26,7 @@ fun Time.round_to_hours(): Time = Time! { hour: this.hour, minute: 0, second: 0 
 /// Adds seconds and wraps around a 24-hour day.
 fun Time.add_seconds(seconds: int): Time =
     const __seconds_in_day: int = 24 * 3600
-    fun __normalize_day_seconds(total_seconds: int): int =
-        ((total_seconds % __seconds_in_day) + __seconds_in_day) % __seconds_in_day
+    fun __normalize_day_seconds(total_seconds: int): int = /capy/lang/Math.floor_mod(total_seconds, __seconds_in_day)
     ---
     let total_seconds = __normalize_day_seconds(this.to_seconds() + seconds)
     let new_hour = (total_seconds / 3600) % 24

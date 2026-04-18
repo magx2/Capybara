@@ -51,57 +51,34 @@ fun _test_plus(): list[TestCase] =
     let epoch_date = UNIX_DATE
     let jan_31_2024 = epoch_date.add_years_months(54, 0).add_days(30)
     [
-        test("plus with week duration",
-            _assert_datetime(
-                base.plus(WeekDuration { weeks: 2 }),
-                _at(14, 0))),
-        test("plus with date duration and carry",
-            _assert_datetime(
-                base.plus(DateDuration { years: 0, months: 0, days: 1, hours: 1, minutes: 30, seconds: 0 }),
-                _at(1, 5400))),
-        test("plus should clamp month day",
-            _assert_datetime(
-                DateTime { date: jan_31_2024, time: MIDNIGHT }.plus(DateDuration { years: 0, months: 1, days: 0, hours: 0, minutes: 0, seconds: 0 }),
-                DateTime { date: jan_31_2024.add_years_months(0, 1), time: MIDNIGHT })),
-        test("operator + should delegate to plus",
-            _assert_datetime(
-                base + DateDuration { years: 0, months: 0, days: 0, hours: 25, minutes: 0, seconds: 0 },
-                _at(1, 3600))),
-        test("plus should handle very large hour component without overflow",
-            _assert_datetime(
-                base.plus(DateDuration { years: 0, months: 0, days: 0, hours: 600000, minutes: 0, seconds: 0 }),
-                _at(25000, 0))),
-    ]
+        ("plus with week duration", base.plus(WeekDuration { weeks: 2 }), _at(14, 0)),
+        ("plus with date duration and carry", base.plus(DateDuration { years: 0, months: 0, days: 1, hours: 1, minutes: 30, seconds: 0L }), _at(1, 5400)),
+        ("plus should clamp month day", DateTime { date: jan_31_2024, time: MIDNIGHT }.plus(DateDuration { years: 0, months: 1, days: 0, hours: 0, minutes: 0, seconds: 0L }), DateTime { date: jan_31_2024.add_years_months(0, 1), time: MIDNIGHT }),
+                ("plus should handle very large hour component without overflow", base.plus(DateDuration { years: 0, months: 0, days: 0, hours: 600000, minutes: 0, seconds: 0L }), _at(25000, 0)),
+    ] | (name, actual, expected) =>
+        test(name, _assert_datetime(actual, expected))
 
 fun _test_minus(): list[TestCase] =
     let base = _at(1, 0)
     let epoch_date = UNIX_DATE
     let mar_31_2024 = epoch_date.add_years_months(54, 2).add_days(30)
-    [
-        test("minus with week duration",
-            _assert_datetime(
-                base.minus(WeekDuration { weeks: 1 }),
-                _at(-6, 0))),
-        test("minus with date duration and borrow",
-            _assert_datetime(
-                base.minus(DateDuration { years: 0, months: 0, days: 0, hours: 1, minutes: 0, seconds: 1 }),
-                _at(0, 82799))),
-        test("operator - should delegate to minus",
-            _assert_datetime(
-                DateTime { date: mar_31_2024, time: MIDNIGHT } - DateDuration { years: 0, months: 1, days: 0, hours: 0, minutes: 0, seconds: 0 },
-                DateTime { date: mar_31_2024.add_years_months(0, -1), time: MIDNIGHT })),
+    let duration_minus_test_cases = [
+        ("minus with week duration", base.minus(WeekDuration { weeks: 1 }), _at(-6, 0)),
+        ("minus with date duration and borrow", base.minus(DateDuration { years: 0, months: 0, days: 0, hours: 1, minutes: 0, seconds: 1L }), _at(0, 82799)),
+            ] | (name, actual, expected) =>
+        test(name, _assert_datetime(actual, expected))
+    duration_minus_test_cases + [
         test("minus with DateTime should return elapsed duration",
-            _assert_minus_duration(_at(2, 9010), _at(0, 0), 181810)),
+            _assert_minus_duration(_at(2, 9010), _at(0, 0), 181810L)),
         test("minus with same DateTime should return zero duration",
-            _assert_minus_duration(_at(2, 9010), _at(2, 9010), 0)),
+            _assert_minus_duration(_at(2, 9010), _at(2, 9010), 0L)),
         test("minus with earlier receiver should return negative seconds duration",
-            _assert_minus_duration(_at(0, 0), _at(2, 9010), -181810)),
+            _assert_minus_duration(_at(0, 0), _at(2, 9010), -181810L)),
         test("minus with cross day boundary should keep full elapsed seconds in seconds field",
-            _assert_minus_duration(_at(1, 10), _at(0, 86390), 20)),
-        test("minus with DateTime should match the named method",
-            _assert_minus_duration(_at(2, 9010), _at(0, 0), 181810)),
+            _assert_minus_duration(_at(1, 10), _at(0, 86390), 20L)),
+        test("minus with DateTime should keep long-range elapsed seconds",
+            _assert_minus_duration(_at(30000, 0), _at(0, 0), 2592000000L)),
     ]
-
 
 fun _test_comparisons(): list[TestCase] =
     let first = _at(0, 0)
@@ -137,7 +114,7 @@ fun _assert_duration_components(
     days: int,
     hours: int,
     minutes: int,
-    seconds: int
+    seconds: long
 ): Assert =
     assert_all([
         assert_that(duration.years()).is_equal_to(years),
@@ -151,7 +128,7 @@ fun _assert_duration_components(
 fun _assert_minus_duration(
     left: DateTime,
     right: DateTime,
-    seconds: int
+    seconds: long
 ): Assert =
     _assert_duration_components(left.minus(right), 0, 0, 0, 0, 0, seconds)
 

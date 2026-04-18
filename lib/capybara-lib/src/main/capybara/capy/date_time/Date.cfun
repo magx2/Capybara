@@ -66,32 +66,26 @@ fun Date.last_day_of_month(): Date =
 
 /// Converts this date to days since Unix epoch (`1970-01-01`).
 fun Date.to_days_since_unix_epoch(): int =
-    fun __floor_div(a: int, b: int): int =
-        floor_div(a, b)
-    ---
-    let y = if this.month <= FEBRUARY then this.year - 1 else this.year
-    let era = __floor_div(y, 400)
+    let y = if this.month <= 2 then this.year - 1 else this.year
+    let era = /capy/lang/Math.floor_div(y, 400)
     let yoe = y - era * 400
     let mp = if this.month > FEBRUARY then this.month - 3 else this.month + 9
-    let doy = __floor_div(__MONTH_TO_DAY_NUMERATOR * mp + __MONTH_TO_DAY_BIAS, 5) + this.day - 1
-    let doe = yoe * __DAYS_PER_YEAR + __floor_div(yoe, 4) - __floor_div(yoe, 100) + doy
+    let doy = /capy/lang/Math.floor_div(__MONTH_TO_DAY_NUMERATOR * mp + __MONTH_TO_DAY_BIAS, 5) + this.day - 1
+    let doe = yoe * __DAYS_PER_YEAR + /capy/lang/Math.floor_div(yoe, 4) - /capy/lang/Math.floor_div(yoe, 100) + doy
     era * __DAYS_PER_400_YEARS + doe - __UNIX_EPOCH_CIVIL_OFFSET_DAYS
 
 /// Converts days since Unix epoch (`1970-01-01`) to `Date`.
 fun from_days_since_unix_epoch(days_since_epoch: int): Date =
-    fun __floor_div(a: int, b: int): int =
-        floor_div(a, b)
-    ---
-    let z = days_since_epoch + __UNIX_EPOCH_CIVIL_OFFSET_DAYS
-    let era = __floor_div(z, __DAYS_PER_400_YEARS)
-    let doe = z - era * __DAYS_PER_400_YEARS
-    let yoe = __floor_div(doe - __floor_div(doe, __DAYS_PER_4_YEARS_MINUS_1) + __floor_div(doe, __DAYS_PER_100_YEARS_MINUS_1) - __floor_div(doe, __DAYS_PER_400_YEARS_MINUS_1), __DAYS_PER_YEAR)
-    let y = yoe + era * 400
-    let doy = doe - (__DAYS_PER_YEAR * yoe + __floor_div(yoe, 4) - __floor_div(yoe, 100))
-    let mp = __floor_div(5 * doy + __MONTH_TO_DAY_BIAS, __MONTH_TO_DAY_NUMERATOR)
-    let day = doy - __floor_div(__MONTH_TO_DAY_NUMERATOR * mp + __MONTH_TO_DAY_BIAS, 5) + 1
-    let month = if mp < 10 then mp + 3 else mp - 9
-    let year = if month <= FEBRUARY then y + 1 else y
+    let z: int = days_since_epoch + __UNIX_EPOCH_CIVIL_OFFSET_DAYS
+    let era: int = /capy/lang/Math.floor_div(z, __DAYS_PER_400_YEARS)
+    let doe: int = z - era * __DAYS_PER_400_YEARS
+    let yoe: int = /capy/lang/Math.floor_div(doe - /capy/lang/Math.floor_div(doe, __DAYS_PER_4_YEARS_MINUS_1) + /capy/lang/Math.floor_div(doe, __DAYS_PER_100_YEARS_MINUS_1) - /capy/lang/Math.floor_div(doe, __DAYS_PER_400_YEARS_MINUS_1), __DAYS_PER_YEAR)
+    let y: int = yoe + era * 400
+    let doy: int = doe - (__DAYS_PER_YEAR * yoe + /capy/lang/Math.floor_div(yoe, 4) - /capy/lang/Math.floor_div(yoe, 100))
+    let mp: int = /capy/lang/Math.floor_div(5 * doy + __MONTH_TO_DAY_BIAS, __MONTH_TO_DAY_NUMERATOR)
+    let day: int = doy - /capy/lang/Math.floor_div(__MONTH_TO_DAY_NUMERATOR * mp + __MONTH_TO_DAY_BIAS, 5) + 1
+    let month: int = if mp < 10 then mp + 3 else mp - 9
+    let year: int = if month <= FEBRUARY then y + 1 else y
     Date! { day, month, year }
 
 /// Adds days to this date.

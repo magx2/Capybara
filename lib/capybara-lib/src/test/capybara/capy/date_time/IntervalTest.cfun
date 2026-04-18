@@ -21,14 +21,14 @@ fun tests(): TestFile =
             "2007-03-01T13:00:00Z/P1Y2M10DT2H30M",
             _datetime(2007, 3, 1, 13, 0, 0),
             _datetime(2008, 5, 11, 15, 30, 0),
-            DateDuration { years: 1, months: 2, days: 10, hours: 2, minutes: 30, seconds: 0 }
+            DateDuration { years: 1, months: 2, days: 10, hours: 2, minutes: 30, seconds: 0L }
         ),
         _should_parse_interval(
             "P1Y2M10DT2H30M/2008-05-11T15:30:00Z",
             "P1Y2M10DT2H30M/2008-05-11T15:30:00Z",
             _datetime(2007, 3, 1, 13, 0, 0),
             _datetime(2008, 5, 11, 15, 30, 0),
-            DateDuration { years: 1, months: 2, days: 10, hours: 2, minutes: 30, seconds: 0 }
+            DateDuration { years: 1, months: 2, days: 10, hours: 2, minutes: 30, seconds: 0L }
         ),
         _should_parse_interval(
             "2007-03-01T13:00:00Z--2008-05-11T15:30:00Z",
@@ -42,35 +42,35 @@ fun tests(): TestFile =
             "2007-03-01T13:00:00Z/P10D",
             _datetime(2007, 3, 1, 13, 0, 0),
             _datetime(2007, 3, 11, 13, 0, 0),
-            DateDuration { years: 0, months: 0, days: 10, hours: 0, minutes: 0, seconds: 0 }
+            DateDuration { years: 0, months: 0, days: 10, hours: 0, minutes: 0, seconds: 0L }
         ),
         _should_parse_interval(
             "P10D--2007-03-11T13:00:00Z",
             "P10D/2007-03-11T13:00:00Z",
             _datetime(2007, 3, 1, 13, 0, 0),
             _datetime(2007, 3, 11, 13, 0, 0),
-            DateDuration { years: 0, months: 0, days: 10, hours: 0, minutes: 0, seconds: 0 }
+            DateDuration { years: 0, months: 0, days: 10, hours: 0, minutes: 0, seconds: 0L }
         ),
         _should_parse_interval(
             "P1D/2007-03-03T15:30:10Z",
             "P1D/2007-03-03T15:30:10Z",
             _datetime(2007, 3, 2, 15, 30, 10),
             _datetime(2007, 3, 3, 15, 30, 10),
-            DateDuration { years: 0, months: 0, days: 1, hours: 0, minutes: 0, seconds: 0 }
+            DateDuration { years: 0, months: 0, days: 1, hours: 0, minutes: 0, seconds: 0L }
         ),
         _should_parse_interval(
             "2007-03-01T13:00:00Z/P1D",
             "2007-03-01T13:00:00Z/P1D",
             _datetime(2007, 3, 1, 13, 0, 0),
             _datetime(2007, 3, 2, 13, 0, 0),
-            DateDuration { years: 0, months: 0, days: 1, hours: 0, minutes: 0, seconds: 0 }
+            DateDuration { years: 0, months: 0, days: 1, hours: 0, minutes: 0, seconds: 0L }
         ),
         _should_parse_interval(
             "2007-03-01T13:00:00Z/2007-03-03T15:30:10Z",
             "2007-03-01T13:00:00Z/2007-03-03T15:30:10Z",
             _datetime(2007, 3, 1, 13, 0, 0),
             _datetime(2007, 3, 3, 15, 30, 10),
-            DateDuration { years: 0, months: 0, days: 0, hours: 0, minutes: 0, seconds: 181810 }
+            DateDuration { years: 0, months: 0, days: 0, hours: 0, minutes: 0, seconds: 181810L }
         ),
     ]
     let failed_test_cases = {
