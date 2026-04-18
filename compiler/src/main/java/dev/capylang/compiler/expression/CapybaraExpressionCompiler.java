@@ -1221,6 +1221,13 @@ public class CapybaraExpressionCompiler {
             return Optional.empty();
         }
         var args = value.value();
+        if (supportsToInt && args.get(0).type() == LONG) {
+            return Optional.of(Result.success(new CompiledFunctionCall(
+                    METHOD_DECL_PREFIX + "Long__to_int",
+                    args,
+                    INT
+            )));
+        }
         if (supportsBoolTwoStrings || supportsStringThreeArgs) {
             var allStrings = args.stream().allMatch(argument -> argument.type() == STRING);
             if (!allStrings) {
