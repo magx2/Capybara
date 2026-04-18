@@ -51,7 +51,67 @@ fun tests(): TestFile =
     ] | (a, b, expected) =>
         test("floor_mod(" + a + ", " + b + ") should return " + expected, _test_floor_mod(a, b, expected))
 
-    test_file("/capy/lang/Math.cfun", digits_test_cases + floor_div_cases + floor_mod_cases)
+    let min_int_cases = [
+        (1, 2, 1),
+        (2, 1, 1),
+        (-5, 3, -5),
+        (4, 4, 4),
+    ] | (a, b, expected) =>
+        test("min(" + a + ", " + b + ") should return " + expected, _test_min_int(a, b, expected))
+
+    let max_int_cases = [
+        (1, 2, 2),
+        (2, 1, 2),
+        (-5, 3, 3),
+        (4, 4, 4),
+    ] | (a, b, expected) =>
+        test("max(" + a + ", " + b + ") should return " + expected, _test_max_int(a, b, expected))
+
+    let min_long_cases = [
+        (1L, 2L, 1L),
+        (2L, 1L, 1L),
+        (-5L, 3L, -5L),
+        (4L, 4L, 4L),
+    ] | (a, b, expected) =>
+        test("min(" + a + "L, " + b + "L) should return " + expected + "L", _test_min_long(a, b, expected))
+
+    let max_long_cases = [
+        (1L, 2L, 2L),
+        (2L, 1L, 2L),
+        (-5L, 3L, 3L),
+        (4L, 4L, 4L),
+    ] | (a, b, expected) =>
+        test("max(" + a + "L, " + b + "L) should return " + expected + "L", _test_max_long(a, b, expected))
+
+    let list_int_cases = [
+        test("min([3, 1, 2]) should return Some { 1 }", _test_min_values_int(1)),
+        test("min([-3, -1, -2]) should return Some { -3 }", _test_min_negative_values_int(-3)),
+        test("min([]) should return None", _test_empty_min_int()),
+        test("max([3, 1, 2]) should return Some { 3 }", _test_max_values_int(3)),
+        test("max([-3, -1, -2]) should return Some { -1 }", _test_max_negative_values_int(-1)),
+        test("max([]) should return None", _test_empty_max_int()),
+    ]
+
+    let list_long_cases = [
+        test("min([3L, 1L, 2L]) should return Some { 1L }", _test_min_values_long(1L)),
+        test("min([-3L, -1L, -2L]) should return Some { -3L }", _test_min_negative_values_long(-3L)),
+        test("min([]: list[long]) should return None", _test_empty_min_long()),
+        test("max([3L, 1L, 2L]) should return Some { 3L }", _test_max_values_long(3L)),
+        test("max([-3L, -1L, -2L]) should return Some { -1L }", _test_max_negative_values_long(-1L)),
+        test("max([]: list[long]) should return None", _test_empty_max_long()),
+    ]
+
+    let all_cases = digits_test_cases
+        + floor_div_cases
+        + floor_mod_cases
+        + min_int_cases
+        + max_int_cases
+        + min_long_cases
+        + max_long_cases
+        + list_int_cases
+        + list_long_cases
+
+    test_file("/capy/lang/Math.cfun", all_cases)
 
 fun _test_digits(number: int, expected: int): Assert = assert_that(digits(number) == expected).is_true()
 
@@ -60,3 +120,93 @@ fun _test_floor_div(a: int, b: int, expected: int): Assert =
 
 fun _test_floor_mod(a: int, b: int, expected: int): Assert =
     assert_that(floor_mod(a, b) == expected).is_true()
+
+fun _test_min_int(a: int, b: int, expected: int): Assert =
+    assert_that(min(a, b) == expected).is_true()
+
+fun _test_max_int(a: int, b: int, expected: int): Assert =
+    assert_that(max(a, b) == expected).is_true()
+
+fun _test_min_long(a: long, b: long, expected: long): Assert =
+    assert_that(min(a, b) == expected).is_true()
+
+fun _test_max_long(a: long, b: long, expected: long): Assert =
+    assert_that(max(a, b) == expected).is_true()
+
+
+
+fun _test_min_values_int(expected: int): Assert =
+    assert_that(_min_ints()).is_equal_to(Some { expected })
+
+fun _test_empty_min_int(): Assert =
+    assert_that(_min_empty_ints()).is_equal_to(None {})
+
+fun _test_max_values_int(expected: int): Assert =
+    assert_that(_max_ints()).is_equal_to(Some { expected })
+
+fun _test_empty_max_int(): Assert =
+    assert_that(_max_empty_ints()).is_equal_to(None {})
+
+fun _test_min_negative_values_int(expected: int): Assert =
+    assert_that(_min_negative_ints()).is_equal_to(Some { expected })
+
+fun _test_max_negative_values_int(expected: int): Assert =
+    assert_that(_max_negative_ints()).is_equal_to(Some { expected })
+
+
+fun _test_min_values_long(expected: long): Assert =
+    assert_that(_min_longs()).is_equal_to(Some { expected })
+
+fun _test_empty_min_long(): Assert =
+    assert_that(_min_empty_longs()).is_equal_to(None {})
+
+fun _test_max_values_long(expected: long): Assert =
+    assert_that(_max_longs()).is_equal_to(Some { expected })
+
+fun _test_empty_max_long(): Assert =
+    assert_that(_max_empty_longs()).is_equal_to(None {})
+
+fun _test_min_negative_values_long(expected: long): Assert =
+    assert_that(_min_negative_longs()).is_equal_to(Some { expected })
+
+fun _test_max_negative_values_long(expected: long): Assert =
+    assert_that(_max_negative_longs()).is_equal_to(Some { expected })
+
+
+fun _min_ints(): Option[int] = min(_ints())
+
+fun _min_empty_ints(): Option[int] = min(_empty_ints())
+
+fun _max_ints(): Option[int] = max(_ints())
+
+fun _max_empty_ints(): Option[int] = max(_empty_ints())
+
+fun _min_negative_ints(): Option[int] = min(_negative_ints())
+
+fun _max_negative_ints(): Option[int] = max(_negative_ints())
+
+
+fun _min_longs(): Option[long] = min(_longs())
+
+fun _min_empty_longs(): Option[long] = min(_empty_longs())
+
+fun _max_longs(): Option[long] = max(_longs())
+
+fun _max_empty_longs(): Option[long] = max(_empty_longs())
+
+fun _min_negative_longs(): Option[long] = min(_negative_longs())
+
+fun _max_negative_longs(): Option[long] = max(_negative_longs())
+
+
+fun _ints(): list[int] = [3, 1, 2]
+
+fun _longs(): list[long] = [3L, 1L, 2L]
+
+fun _negative_ints(): list[int] = [-3, -1, -2]
+
+fun _negative_longs(): list[long] = [-3L, -1L, -2L]
+
+fun _empty_ints(): list[int] = []
+
+fun _empty_longs(): list[long] = []
