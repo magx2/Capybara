@@ -1,0 +1,74 @@
+data Measurement { amount: long, ratio: double }
+
+data Box[T] { value: T }
+
+fun takes_long(value: long): long = value
+
+fun takes_double(value: double): double = value
+
+fun return_long(value: int): long = value
+
+fun return_double(value: float): double = value
+
+fun int_to_float(value: int): float = value
+
+fun int_to_double(value: int): double = value
+
+fun long_to_float(value: long): float = value
+
+fun long_to_double(value: long): double = value
+
+fun typed_let_long(value: int): long =
+    {
+        let widened: long = value
+        widened
+    }
+
+fun typed_let_double(value: float): double =
+    {
+        let widened: double = value
+        widened
+    }
+
+fun typed_let_float(value: int): float =
+    {
+        let widened: float = value
+        widened
+    }
+
+fun typed_let_float_from_long(value: long): float =
+    {
+        let widened: float = value
+        widened
+    }
+
+fun multiply_with_long(value: int): long = 10L * value
+
+fun invoke_long(value: int): long = takes_long(value) + 1L
+
+fun invoke_double(value: float): double = takes_double(value) + 0.5
+
+fun invoke_double_from_int(value: int): double = takes_double(value) + 0.5
+
+fun invoke_double_from_long(value: long): double = takes_double(value) + 0.5
+
+fun build_measurement(value: int, ratio: float): Measurement =
+    Measurement { amount: value, ratio: ratio }
+
+fun build_measurement_positional(value: int, ratio: float): Measurement =
+    Measurement { value, ratio }
+
+fun amount_from_measurement(value: int): long =
+    (Measurement { amount: value, ratio: 1.5f }).amount
+
+fun ratio_from_measurement(value: float): double =
+    (Measurement { amount: 1L, ratio: value }).ratio
+
+fun build_long_box(value: int): Box[long] =
+    Box { value: value }
+
+fun build_float_box(value: int): Box[float] =
+    Box { value: value }
+
+fun build_float_box_from_long(value: long): Box[float] =
+    Box { value: value }

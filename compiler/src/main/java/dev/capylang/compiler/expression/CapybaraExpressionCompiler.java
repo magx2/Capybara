@@ -2086,6 +2086,11 @@ public class CapybaraExpressionCompiler {
         if (argument.type().equals(expected)) {
             return new CoercedArgument(argument, 0);
         }
+        if (expected instanceof PrimitiveLinkedType expectedPrimitive
+            && argument.type() instanceof PrimitiveLinkedType actualPrimitive
+            && isImplicitNumericWidening(expectedPrimitive, actualPrimitive)) {
+            return new CoercedArgument(argument, 1);
+        }
         if (expected instanceof CompiledGenericTypeParameter) {
             return new CoercedArgument(argument, 1);
         }
@@ -2236,6 +2241,11 @@ public class CapybaraExpressionCompiler {
         if (!(actual instanceof GenericDataType) && !(expected instanceof GenericDataType) && actual.equals(expected)) {
             return true;
         }
+        if (actual instanceof PrimitiveLinkedType actualPrimitive
+            && expected instanceof PrimitiveLinkedType expectedPrimitive
+            && isImplicitNumericWidening(expectedPrimitive, actualPrimitive)) {
+            return true;
+        }
         if (expected instanceof CompiledList expectedList && actual instanceof CompiledList actualList) {
             if (actualList.elementType() == ANY && expectedList.elementType() != ANY) {
                 return false;
@@ -2332,7 +2342,7 @@ public class CapybaraExpressionCompiler {
                 return true;
             }
             if (isNumericPrimitive(expectedPrimitive.get()) && isNumericPrimitive(actualPrimitive.get())) {
-                return isAssignableNumericPrimitive(expectedPrimitive.get(), actualPrimitive.get());
+                return isImplicitNumericWidening(expectedPrimitive.get(), actualPrimitive.get());
             }
             return false;
         }
@@ -6636,7 +6646,7 @@ public class CapybaraExpressionCompiler {
         if (expected instanceof PrimitiveLinkedType expectedPrimitive) {
             if (actual instanceof PrimitiveLinkedType actualPrimitive) {
                 if (isNumericPrimitive(expectedPrimitive) && isNumericPrimitive(actualPrimitive)) {
-                    return !isAssignableNumericPrimitive(expectedPrimitive, actualPrimitive);
+                    return !isImplicitNumericWidening(expectedPrimitive, actualPrimitive);
                 }
                 return expectedPrimitive != actualPrimitive;
             }
@@ -6650,19 +6660,10 @@ public class CapybaraExpressionCompiler {
         return false;
     }
 
-    private boolean isAssignableNumericPrimitive(PrimitiveLinkedType expected, PrimitiveLinkedType actual) {
-        return numericRank(actual) <= numericRank(expected);
-    }
-
-    private int numericRank(PrimitiveLinkedType type) {
-        return switch (type) {
-            case BYTE -> 1;
-            case INT -> 2;
-            case LONG -> 3;
-            case FLOAT -> 4;
-            case DOUBLE -> 5;
-            default -> Integer.MAX_VALUE;
-        };
+    private boolean isImplicitNumericWidening(PrimitiveLinkedType expected, PrimitiveLinkedType actual) {
+        return (actual == INT && (expected == LONG || expected == FLOAT || expected == DOUBLE))
+               || (actual == LONG && (expected == FLOAT || expected == DOUBLE))
+               || (actual == FLOAT && expected == DOUBLE);
     }
 
     private String renderTypeForError(CompiledType type) {

@@ -3040,17 +3040,14 @@ public class CapybaraCompiler {
         if (expected == PrimitiveLinkedType.STRING || actual == PrimitiveLinkedType.STRING) {
             return false;
         }
-        return numericRank(actual) <= numericRank(expected);
-    }
-    private int numericRank(PrimitiveLinkedType type) {
-        return switch (type) {
-            case BYTE -> 0;
-            case INT -> 1;
-            case LONG -> 2;
-            case FLOAT -> 3;
-            case DOUBLE -> 4;
-            default -> Integer.MAX_VALUE;
-        };
+        return (actual == PrimitiveLinkedType.INT
+                && (expected == PrimitiveLinkedType.LONG
+                    || expected == PrimitiveLinkedType.FLOAT
+                    || expected == PrimitiveLinkedType.DOUBLE))
+               || (actual == PrimitiveLinkedType.LONG
+                   && (expected == PrimitiveLinkedType.FLOAT
+                       || expected == PrimitiveLinkedType.DOUBLE))
+               || (actual == PrimitiveLinkedType.FLOAT && expected == PrimitiveLinkedType.DOUBLE);
     }
 
     private boolean sameTypeName(String left, String right) {

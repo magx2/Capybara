@@ -577,6 +577,26 @@ class CapybaraCompilerLibrariesTest {
                 .isEqualTo(PrimitiveLinkedType.BOOL);
     }
 
+    @Test
+    void shouldPreferExactOverWidenedNumericOverload() {
+        var compiled = compileProgram(List.of(
+                new RawModule("Consumer", "/foo/app", """
+                        fun pick(value: int): int = value
+                        fun pick(value: long): long = value + 1L
+
+                        fun use_int(value: int): int = pick(value)
+                        fun use_long(value: int): long = pick(10L * value)
+                        """)
+        ), new java.util.TreeSet<>());
+
+        assertThat(compiledFunction(compiled, "Consumer", "use_int").expression())
+                .isInstanceOfSatisfying(CompiledFunctionCall.class, call ->
+                        assertThat(call.returnType()).isEqualTo(PrimitiveLinkedType.INT));
+        assertThat(compiledFunction(compiled, "Consumer", "use_long").expression())
+                .isInstanceOfSatisfying(CompiledFunctionCall.class, call ->
+                        assertThat(call.returnType()).isEqualTo(PrimitiveLinkedType.LONG));
+    }
+
     private static CompiledProgram compileProgram(List<RawModule> rawModules, SortedSet<CompiledModule> libraries) {
         var result = CapybaraCompiler.INSTANCE.compile(rawModules, libraries);
         if (result instanceof Result.Error<CompiledProgram> error) {

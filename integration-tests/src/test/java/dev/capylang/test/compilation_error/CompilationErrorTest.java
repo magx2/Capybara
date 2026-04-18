@@ -208,6 +208,32 @@ public class CompilationErrorTest {
     }
 
     @Test
+    void shouldRejectLongReturnedWhereIntIsExpected() {
+        var errors = compileProgram("""
+                        fun broken(): int = 1L
+                        """,
+                "long_to_int_not_allowed");
+
+        assertThat(errors).hasSize(1);
+        assertThat(errors.first().message())
+                .contains("expected `int`, found `long`");
+    }
+
+    @Test
+    void shouldRejectDoubleAssignedWhereFloatFieldIsExpected() {
+        var errors = compileProgram("""
+                        data Measurement { ratio: float }
+                        fun broken(): Measurement = Measurement { ratio: 1.5 }
+                        """,
+                "double_to_float_not_allowed");
+
+        assertThat(errors).hasSize(1);
+        assertThat(errors.first().message())
+                .contains("Expected `float`")
+                .contains("double");
+    }
+
+    @Test
     void shouldRejectIncompatibleConcreteGenericArguments() {
         var errors = compileProgram("""
                         data Box[T] { value: T }
