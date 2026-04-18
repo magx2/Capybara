@@ -901,7 +901,7 @@ public class CapybaraCompiler {
     private SortedSet<CompiledFunction> deduplicateFunctions(List<CompiledFunction> linkedFunctions) {
         var byKey = new LinkedHashMap<String, CompiledFunction>();
         for (var function : linkedFunctions) {
-            var parameters = function.parameters().stream().map(parameter -> parameter.type().name()).toList();
+            var parameters = function.parameters().stream().map(parameter -> String.valueOf(parameter.type())).toList();
             byKey.put(function.name() + "#" + parameters, function);
         }
         return unmodifiableSortedSet(new TreeSet<>(byKey.values()));

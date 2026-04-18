@@ -169,7 +169,7 @@ class JavaExpressionEvaluatorTest {
         assertThat(generated).contains("/// Global threshold");
         assertThat(generated).contains("public static final int");
         assertThat(generated).contains("/// Internal threshold");
-        assertThat(generated).contains("__configLocalConst0Threshold");
+        assertThat(generated).contains("__configScope").contains("LocalConst0Threshold");
         assertThat(generated).doesNotContain(" * Global threshold");
     }
 
@@ -228,7 +228,7 @@ class JavaExpressionEvaluatorTest {
                 .collect(joining("\n"));
 
         assertThat(generated).doesNotContain("var start = System.currentTimeMillis();");
-        assertThat(generated).contains("return new TestCase(name, _execute((assert_).assertions()), ((assert_).assertions()).size(), ((long) (0-1)));");
+        assertThat(generated).contains("return new TestCase(name, foo.bar.NotCapyTest._execute((assert_).assertions()), ((assert_).assertions()).size(), ((long) (0-1)));");
     }
 
     @Test

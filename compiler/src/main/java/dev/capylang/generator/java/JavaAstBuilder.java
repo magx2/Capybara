@@ -14,6 +14,15 @@ import static java.util.stream.Collectors.*;
 import static dev.capylang.generator.java.JavaAnnotation.generatedAnnotation;
 
 public class JavaAstBuilder {
+    private final Map<String, String> functionNameOverrides;
+
+    public JavaAstBuilder() {
+        this(Map.of());
+    }
+
+    public JavaAstBuilder(Map<String, String> functionNameOverrides) {
+        this.functionNameOverrides = Map.copyOf(functionNameOverrides);
+    }
     private static final java.util.regex.Pattern CONST_NAME_PATTERN = java.util.regex.Pattern.compile("^_?[A-Z_][A-Z0-9_]*$");
     private final Map<String, String> normalizedJavaClassReferenceCache = new HashMap<>();
     private final Map<String, String> normalizedRawTypeReferenceCache = new HashMap<>();
@@ -151,7 +160,7 @@ public class JavaAstBuilder {
 
     private JavaConst buildStaticConst(CompiledFunction function) {
         return new JavaConst(
-                buildMethodName(function.name()),
+                emittedFunctionName(function),
                 function.name().startsWith("_"),
                 buildJavaType(function.returnType()),
                 function.expression(),
@@ -163,7 +172,7 @@ public class JavaAstBuilder {
         var methodTypeParameters = methodTypeParameters(function, Set.of());
         var expression = specializeReturnNewData(function.expression(), function.returnType());
         return new JavaMethod(
-                buildMethodName(function.name()),
+                emittedFunctionName(function),
                 function.name().startsWith("_"),
                 function.programMain(),
                 methodTypeParameters,
@@ -202,6 +211,22 @@ public class JavaAstBuilder {
 
     private String buildMethodName(String name) {
         return normalizeJavaMethodIdentifier(name);
+    }
+
+    private String emittedFunctionName(CompiledFunction function) {
+        return functionNameOverrides.getOrDefault(signatureKey(function.name(), function.parameters().stream().map(CompiledFunction.CompiledFunctionParameter::type).toList()), buildMethodName(baseMethodName(function.name())));
+    }
+
+    private String baseMethodName(String name) {
+        if (!name.startsWith(METHOD_DECL_PREFIX)) {
+            return name;
+        }
+        var ownerSeparator = name.lastIndexOf("__");
+        return ownerSeparator >= 0 ? name.substring(ownerSeparator + 2) : name;
+    }
+
+    private static String signatureKey(String name, List<CompiledType> parameterTypes) {
+        return name + "|" + parameterTypes.stream().map(type -> String.valueOf(type)).collect(joining(","));
     }
 
     private String normalizeJavaMethodIdentifier(String rawName) {
@@ -839,7 +864,7 @@ public class JavaAstBuilder {
         var parameters = function.parameters().stream().skip(1).toList();
         var methodTypeParameters = methodTypeParameters(function, Set.copyOf(extractOwnerTypeParameters(function)));
         return new JavaMethod(
-                buildMethodName(methodName),
+                emittedFunctionName(function),
                 methodName.startsWith("_"),
                 false,
                 methodTypeParameters,
@@ -929,7 +954,7 @@ public class JavaAstBuilder {
         var parameters = function.parameters().stream().skip(1).toList();
         var methodTypeParameters = methodTypeParameters(function, Set.copyOf(extractOwnerTypeParameters(function)));
         return new JavaMethod(
-                buildMethodName(methodName),
+                emittedFunctionName(function),
                 methodName.startsWith("_"),
                 false,
                 methodTypeParameters,
