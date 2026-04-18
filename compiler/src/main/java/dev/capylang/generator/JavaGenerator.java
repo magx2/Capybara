@@ -20,14 +20,16 @@ import static dev.capylang.generator.java.JavaExpressionEvaluator.evaluateExpres
 
 public final class JavaGenerator implements Generator {
     private static final Logger log = Logger.getLogger(JavaGenerator.class.getName());
-    private final JavaAstBuilder astBuilder = new JavaAstBuilder();
     private static final String METHOD_DECL_PREFIX = "__method__";
 
     @Override
     public GeneratedProgram generate(CompiledProgram program) {
         var timings = new GenerationTimings();
+        var functionNameOverrides = buildFunctionNameOverrides(program);
+        var astBuilder = new JavaAstBuilder(functionNameOverrides);
+        JavaExpressionEvaluator.setFunctionNameOverrides(functionNameOverrides);
         var modules = program.modules().stream()
-                .map(module -> modules(module, timings))
+                .map(module -> modules(module, timings, astBuilder))
                 .flatMap(List::stream)
                 .toList();
         log.info(() -> "Java generation timings: AST build="
@@ -37,7 +39,7 @@ public final class JavaGenerator implements Generator {
         return new GeneratedProgram(modules);
     }
 
-    private List<GeneratedModule> modules(CompiledModule module, GenerationTimings timings) {
+    private List<GeneratedModule> modules(CompiledModule module, GenerationTimings timings, JavaAstBuilder astBuilder) {
         var javaClass = time(timings::addAstBuildNanos, () -> astBuilder.build(module));
         if (!hasTypeOrDataNameConflictWithFile(javaClass)) {
             return List.of(new GeneratedModule(
@@ -84,6 +86,92 @@ public final class JavaGenerator implements Generator {
             ));
         }
         return List.copyOf(compiled);
+    }
+
+
+    private java.util.Map<String, String> buildFunctionNameOverrides(CompiledProgram program) {
+        var overrides = new java.util.LinkedHashMap<String, String>();
+        var collisions = new java.util.LinkedHashMap<String, java.util.List<dev.capylang.compiler.CompiledFunction>>();
+        for (var module : program.modules()) {
+            for (var function : module.functions()) {
+                var ownerKey = function.name().startsWith(METHOD_DECL_PREFIX)
+                        ? function.name().substring(0, Math.max(function.name().lastIndexOf("__"), METHOD_DECL_PREFIX.length()))
+                        : module.name();
+                var baseName = baseMethodName(function.name());
+                var erasedSignature = function.parameters().stream()
+                        .map(parameter -> erasedJavaType(parameter.type()))
+                        .collect(joining(","));
+                collisions.computeIfAbsent(ownerKey + "|" + baseName + "|" + erasedSignature, ignored -> new java.util.ArrayList<>()).add(function);
+            }
+        }
+        for (var entry : collisions.entrySet()) {
+            var functions = entry.getValue();
+            if (functions.size() < 2) {
+                continue;
+            }
+            for (var function : functions) {
+                var emittedName = baseMethodName(function.name()) + "__" + function.parameters().stream()
+                        .map(parameter -> sanitizeOverloadSuffix(String.valueOf(parameter.type())))
+                        .collect(joining("__"));
+                var parameterTypes = function.parameters().stream().map(dev.capylang.compiler.CompiledFunction.CompiledFunctionParameter::type).toList();
+                overrides.put(signatureKey(function.name(), parameterTypes), emittedName);
+                if (!function.name().startsWith(METHOD_DECL_PREFIX)) {
+                    overrides.put(signatureKey(baseMethodName(function.name()), parameterTypes), emittedName);
+                    overrides.put(signatureKey(moduleQualifiedName(program, function), parameterTypes), emittedName);
+                }
+            }
+        }
+        return java.util.Map.copyOf(overrides);
+    }
+
+    private String moduleQualifiedName(CompiledProgram program, dev.capylang.compiler.CompiledFunction function) {
+        var ownerModule = program.modules().stream()
+                .filter(module -> module.functions().contains(function))
+                .findFirst()
+                .orElseThrow();
+        return ownerModule.name() + "." + function.name();
+    }
+
+    private static String signatureKey(String name, java.util.List<dev.capylang.compiler.CompiledType> parameterTypes) {
+        return name + "|" + parameterTypes.stream().map(type -> String.valueOf(type)).collect(joining(","));
+    }
+
+    private static String baseMethodName(String name) {
+        if (!name.startsWith(METHOD_DECL_PREFIX)) {
+            return name;
+        }
+        var idx = name.lastIndexOf("__");
+        return idx >= 0 ? name.substring(idx + 2) : name;
+    }
+
+    private static String sanitizeOverloadSuffix(String typeName) {
+        var sanitized = typeName.replaceAll("[^A-Za-z0-9]+", "_").replaceAll("_+", "_");
+        if (sanitized.startsWith("_")) {
+            sanitized = sanitized.substring(1);
+        }
+        if (sanitized.endsWith("_")) {
+            sanitized = sanitized.substring(0, sanitized.length() - 1);
+        }
+        return sanitized.toLowerCase();
+    }
+
+    private static String erasedJavaType(dev.capylang.compiler.CompiledType type) {
+        return switch (type) {
+            case dev.capylang.compiler.CollectionLinkedType.CompiledList ignored -> "java.util.List";
+            case dev.capylang.compiler.CollectionLinkedType.CompiledSet ignored -> "java.util.Set";
+            case dev.capylang.compiler.CollectionLinkedType.CompiledDict ignored -> "java.util.Map";
+            case dev.capylang.compiler.CompiledTupleType ignored -> "java.util.List";
+            case dev.capylang.compiler.CompiledFunctionType functionType -> functionType.argumentType() == dev.capylang.compiler.PrimitiveLinkedType.NOTHING
+                    ? "java.util.function.Supplier"
+                    : "java.util.function.Function";
+            case dev.capylang.compiler.PrimitiveLinkedType primitive -> primitive.name();
+            case dev.capylang.compiler.CompiledGenericTypeParameter ignored -> "java.lang.Object";
+            case dev.capylang.compiler.GenericDataType genericDataType -> {
+                var name = genericDataType.name();
+                var idx = name.indexOf('[');
+                yield idx > 0 ? name.substring(0, idx) : name;
+            }
+        };
     }
 
     private <T> T time(java.util.function.LongConsumer recorder, Supplier<T> action) {

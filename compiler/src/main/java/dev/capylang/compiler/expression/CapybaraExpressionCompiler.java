@@ -539,7 +539,7 @@ public class CapybaraExpressionCompiler {
             if (expectedType.isPresent() && !canCoerceToExpectedType(returnType, expectedType.orElseThrow())) {
                 continue;
             }
-            if (isBetterResolvedCall(candidate, resolved.coercions(), best)) {
+            if (isBetterResolvedCall(candidate, resolved.arguments(), resolved.coercions(), returnType, expectedType, best)) {
                 best = new ResolvedFunctionCall(candidate, resolved.arguments(), resolved.coercions(), returnType);
             }
         }
@@ -686,7 +686,7 @@ public class CapybaraExpressionCompiler {
             if (expectedType.isPresent() && !canCoerceToExpectedType(returnType, expectedType.orElseThrow())) {
                 continue;
             }
-            if (isBetterResolvedCall(candidate, resolved.coercions(), best)) {
+            if (isBetterResolvedCall(candidate, resolved.arguments(), resolved.coercions(), returnType, expectedType, best)) {
                 best = new ResolvedFunctionCall(candidate, resolved.arguments(), resolved.coercions(), returnType);
             }
         }
@@ -709,7 +709,7 @@ public class CapybaraExpressionCompiler {
             );
         }
         return Result.success(new CompiledFunctionCall(
-                functionCall.name(),
+                resolvedFunctionName(best.signature()),
                 best.arguments(),
                 best.returnType()
         ));
@@ -896,7 +896,7 @@ public class CapybaraExpressionCompiler {
             if (expectedType.isPresent() && !canCoerceToExpectedType(returnType, expectedType.orElseThrow())) {
                 continue;
             }
-            if (isBetterResolvedCall(candidate, resolved.coercions(), best)) {
+            if (isBetterResolvedCall(candidate, resolved.arguments(), resolved.coercions(), returnType, expectedType, best)) {
                 best = new ResolvedFunctionCall(candidate, resolved.arguments(), resolved.coercions(), returnType);
             }
         }
@@ -1975,6 +1975,80 @@ public class CapybaraExpressionCompiler {
         return Result.success(best.expression());
     }
 
+    private String resolvedFunctionName(FunctionSignature signature) {
+        if (signature.name().contains(".")
+            || signature.name().startsWith(METHOD_DECL_PREFIX)
+            || signature.name().contains("__local_")
+            || signature.visibility() != null) {
+            return signature.name();
+        }
+        var ownerModule = functionSignaturesByModule.entrySet().stream()
+                .filter(entry -> currentSourceModuleName.isEmpty() || !entry.getKey().equals(currentSourceModuleName.orElseThrow()))
+                .filter(entry -> entry.getValue().stream().anyMatch(candidate -> candidate.name().equals(signature.name())
+                        && candidate.parameterTypes().equals(signature.parameterTypes())
+                        && candidate.returnType().equals(signature.returnType())))
+                .map(Map.Entry::getKey)
+                .findFirst();
+        if (ownerModule.isEmpty()) {
+            return signature.name();
+        }
+        var ownerModuleName = ownerModule.orElseThrow();
+        var ownerFunctions = functionSignaturesByModule.getOrDefault(ownerModuleName, List.of());
+        var emittedName = hasErasedSignatureCollision(ownerFunctions, signature)
+                ? overloadedJavaFunctionName(signature)
+                : signature.name();
+        return moduleClassNameByModuleName.getOrDefault(ownerModuleName, ownerModuleName) + "." + emittedName;
+    }
+
+    private boolean hasErasedSignatureCollision(List<FunctionSignature> signatures, FunctionSignature target) {
+        var targetErasedSignature = target.parameterTypes().stream()
+                .map(this::erasedJavaType)
+                .toList();
+        return signatures.stream()
+                .filter(candidate -> candidate.name().equals(target.name()))
+                .filter(candidate -> !candidate.parameterTypes().equals(target.parameterTypes()))
+                .anyMatch(candidate -> candidate.parameterTypes().stream()
+                        .map(this::erasedJavaType)
+                        .toList()
+                        .equals(targetErasedSignature));
+    }
+
+    private String overloadedJavaFunctionName(FunctionSignature signature) {
+        return signature.name() + "__" + signature.parameterTypes().stream()
+                .map(type -> sanitizeOverloadSuffix(String.valueOf(type)))
+                .collect(java.util.stream.Collectors.joining("__"));
+    }
+
+    private String sanitizeOverloadSuffix(String typeName) {
+        var sanitized = typeName.replaceAll("[^A-Za-z0-9]+", "_").replaceAll("_+", "_");
+        if (sanitized.startsWith("_")) {
+            sanitized = sanitized.substring(1);
+        }
+        if (sanitized.endsWith("_")) {
+            sanitized = sanitized.substring(0, sanitized.length() - 1);
+        }
+        return sanitized.toLowerCase();
+    }
+
+    private String erasedJavaType(CompiledType type) {
+        return switch (type) {
+            case CompiledList ignored -> "java.util.List";
+            case CompiledSet ignored -> "java.util.Set";
+            case CompiledDict ignored -> "java.util.Map";
+            case CompiledTupleType ignored -> "java.util.List";
+            case CompiledFunctionType functionType -> functionType.argumentType() == NOTHING
+                    ? "java.util.function.Supplier"
+                    : "java.util.function.Function";
+            case PrimitiveLinkedType primitive -> primitive.name();
+            case CompiledGenericTypeParameter ignored -> "java.lang.Object";
+            case GenericDataType genericDataType -> {
+                var name = genericDataType.name();
+                var idx = name.indexOf('[');
+                yield idx > 0 ? name.substring(0, idx) : name;
+            }
+        };
+    }
+
     private Result<CompiledExpression> linkFunctionReference(FunctionReference functionReference, Scope scope) {
         var candidates = functionsByName(functionSignatures, functionReference.name());
         if (candidates.isEmpty()) {
@@ -2001,7 +2075,7 @@ public class CapybaraExpressionCompiler {
             callArguments.add(new CompiledVariable(argumentName, candidate.parameterTypes().get(i)));
         }
 
-        CompiledExpression expression = new CompiledFunctionCall(candidate.name(), List.copyOf(callArguments), candidate.returnType());
+        CompiledExpression expression = new CompiledFunctionCall(resolvedFunctionName(candidate), List.copyOf(callArguments), candidate.returnType());
         var nestedType = candidate.returnType();
         for (int i = argumentNames.size() - 1; i >= 0; i--) {
             var functionType = new CompiledFunctionType(candidate.parameterTypes().get(i), nestedType);
@@ -2028,14 +2102,14 @@ public class CapybaraExpressionCompiler {
             coercions += coerced.coercions();
         }
 
-        CompiledExpression expression = new CompiledFunctionCall(candidate.name(), List.copyOf(callArguments), candidate.returnType());
+        CompiledExpression expression = new CompiledFunctionCall(resolvedFunctionName(candidate), List.copyOf(callArguments), candidate.returnType());
         var returnCoerced = coerceArgument(expression, expectedShape.returnType());
         if (returnCoerced == null) {
             if (candidate.returnType() != ANY) {
                 return null;
             }
             // First linking pass can expose unknown return type (ANY); keep expected return so relinking can refine it.
-            expression = new CompiledFunctionCall(candidate.name(), List.copyOf(callArguments), expectedShape.returnType());
+            expression = new CompiledFunctionCall(resolvedFunctionName(candidate), List.copyOf(callArguments), expectedShape.returnType());
             coercions += 1;
         } else {
             expression = returnCoerced.expression();
@@ -2994,15 +3068,49 @@ public class CapybaraExpressionCompiler {
         return candidate.message().length() >= current.message().length() ? candidate : current;
     }
 
-    private boolean isBetterResolvedCall(FunctionSignature candidate, int coercions, ResolvedFunctionCall currentBest) {
+    private boolean isBetterResolvedCall(
+            FunctionSignature candidate,
+            List<CompiledExpression> arguments,
+            int coercions,
+            CompiledType returnType,
+            Optional<CompiledType> expectedReturnType,
+            ResolvedFunctionCall currentBest
+    ) {
         if (currentBest == null) {
             return true;
+        }
+        var candidateExactReturn = hasExactReturnMatch(returnType, expectedReturnType);
+        var currentExactReturn = hasExactReturnMatch(currentBest.returnType(), expectedReturnType);
+        if (candidateExactReturn != currentExactReturn) {
+            return candidateExactReturn;
         }
         if (coercions < currentBest.coercions()) {
             return true;
         }
-        return coercions == currentBest.coercions()
-               && isSignatureMoreSpecific(candidate, currentBest.signature());
+        if (coercions > currentBest.coercions()) {
+            return false;
+        }
+        var candidateExactParameters = exactParameterMatches(candidate, arguments);
+        var currentExactParameters = exactParameterMatches(currentBest.signature(), currentBest.arguments());
+        if (candidateExactParameters != currentExactParameters) {
+            return candidateExactParameters > currentExactParameters;
+        }
+        return isSignatureMoreSpecific(candidate, currentBest.signature());
+    }
+
+    private boolean hasExactReturnMatch(CompiledType returnType, Optional<CompiledType> expectedReturnType) {
+        return expectedReturnType.isPresent() && returnType.equals(expectedReturnType.orElseThrow());
+    }
+
+    private int exactParameterMatches(FunctionSignature candidate, List<CompiledExpression> arguments) {
+        var count = 0;
+        var max = Math.min(candidate.parameterTypes().size(), arguments.size());
+        for (var i = 0; i < max; i++) {
+            if (candidate.parameterTypes().get(i).equals(arguments.get(i).type())) {
+                count++;
+            }
+        }
+        return count;
     }
 
     private boolean isSignatureMoreSpecific(FunctionSignature candidate, FunctionSignature currentBest) {
@@ -3370,7 +3478,7 @@ public class CapybaraExpressionCompiler {
                     coerced.coercions(),
                     resolveReturnType(candidate, List.of(coerced.expression()))
             );
-            if (isBetterResolvedCall(candidate, resolved.coercions(), best)) {
+            if (isBetterResolvedCall(candidate, resolved.arguments(), resolved.coercions(), resolved.returnType(), Optional.empty(), best)) {
                 best = resolved;
             }
         }

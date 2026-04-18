@@ -16,6 +16,11 @@ import static java.lang.System.lineSeparator;
 
 @SuppressWarnings("SwitchStatementWithTooFewBranches")
 public class JavaExpressionEvaluator {
+    private static volatile java.util.Map<String, String> FUNCTION_NAME_OVERRIDES = java.util.Map.of();
+
+    public static void setFunctionNameOverrides(java.util.Map<String, String> functionNameOverrides) {
+        FUNCTION_NAME_OVERRIDES = java.util.Map.copyOf(functionNameOverrides);
+    }
     private static final java.util.concurrent.atomic.AtomicLong OPTION_CASE_VAR_COUNTER =
             new java.util.concurrent.atomic.AtomicLong();
     private static final java.util.concurrent.atomic.AtomicLong MATCH_BINDING_COUNTER =
@@ -191,7 +196,7 @@ public class JavaExpressionEvaluator {
             if ("end_with".equals(methodName)) {
                 methodName = "ends_with";
             }
-            var normalizedMethodName = normalizeJavaMethodName(methodName);
+            var normalizedMethodName = emittedMethodName(functionCall);
             var receiver = args.get(0);
             var typedReceiver = maybeCastGenericMethodReceiver(functionCall, receiver, normalizedMethodName);
             if (functionCall.name().contains("Long__to_int")
@@ -250,8 +255,8 @@ public class JavaExpressionEvaluator {
                 yield "((float) java.lang.Math.sqrt(" + args.get(0) + "))";
             }
             default -> isConstCall(functionCall)
-                    ? normalizeFunctionCallTarget(functionCall.name(), scope)
-                    : normalizeFunctionCallTarget(functionCall.name(), scope) + "(" + String.join(", ", args) + ")";
+                    ? normalizeFunctionCallTarget(functionCall, scope)
+                    : normalizeFunctionCallTarget(functionCall, scope) + "(" + String.join(", ", args) + ")";
         };
         return current.addExpression(expression);
     }
@@ -2514,17 +2519,70 @@ public class JavaExpressionEvaluator {
         return candidate;
     }
 
-    private static String normalizeFunctionCallTarget(String target, Scope scope) {
+    private static String normalizeFunctionCallTarget(CompiledFunctionCall functionCall, Scope scope) {
+        var target = functionCall.name();
+        var emittedMethodName = emittedMethodName(functionCall);
         var lastDot = target.lastIndexOf('.');
         if (lastDot < 0) {
             if (scope.moduleHelperClass().isPresent()) {
-                return scope.moduleHelperClass().get() + "." + normalizeJavaMethodName(target);
+                return scope.moduleHelperClass().get() + "." + emittedMethodName;
             }
-            return normalizeJavaMethodName(target);
+            return emittedMethodName;
         }
         var qualifier = target.substring(0, lastDot);
-        var methodName = target.substring(lastDot + 1);
-        return normalizeJavaQualifier(qualifier) + "." + normalizeJavaMethodName(methodName);
+        return normalizeJavaQualifier(qualifier) + "." + emittedMethodName;
+    }
+
+    private static String emittedMethodName(CompiledFunctionCall functionCall) {
+        var parameterTypes = functionCall.arguments().stream().map(CompiledExpression::type).toList();
+        var key = signatureKey(functionCall.name(), parameterTypes);
+        if (FUNCTION_NAME_OVERRIDES.containsKey(key)) {
+            return FUNCTION_NAME_OVERRIDES.get(key);
+        }
+        var parameterSignature = parameterTypes.stream()
+                .map(type -> String.valueOf(type))
+                .collect(java.util.stream.Collectors.joining(","));
+        var simpleMethodName = simpleMethodName(functionCall.name());
+        var overrideBySimpleName = FUNCTION_NAME_OVERRIDES.entrySet().stream()
+                .filter(entry -> simpleMethodName(keyName(entry.getKey())).equals(simpleMethodName))
+                .filter(entry -> keyParameterSignature(entry.getKey()).equals(parameterSignature))
+                .map(java.util.Map.Entry::getValue)
+                .findFirst();
+        if (overrideBySimpleName.isPresent()) {
+            return overrideBySimpleName.get();
+        }
+        var methodName = simpleMethodName;
+        if (methodName.contains("__compiled")) {
+            return methodName;
+        }
+        if ("end_with".equals(methodName)) {
+            methodName = "ends_with";
+        }
+        return normalizeJavaMethodName(methodName);
+    }
+
+    private static String keyName(String signatureKey) {
+        var separator = signatureKey.indexOf('|');
+        return separator >= 0 ? signatureKey.substring(0, separator) : signatureKey;
+    }
+
+    private static String keyParameterSignature(String signatureKey) {
+        var separator = signatureKey.indexOf('|');
+        return separator >= 0 ? signatureKey.substring(separator + 1) : "";
+    }
+
+    private static String simpleMethodName(String target) {
+        var lastDot = target.lastIndexOf('.');
+        var methodName = lastDot >= 0 ? target.substring(lastDot + 1) : target;
+        if (methodName.startsWith(METHOD_DECL_PREFIX)) {
+            var idx = methodName.lastIndexOf("__");
+            methodName = idx >= 0 && idx + 2 < methodName.length() ? methodName.substring(idx + 2) : methodName;
+        }
+        return methodName;
+    }
+
+    private static String signatureKey(String name, java.util.List<dev.capylang.compiler.CompiledType> parameterTypes) {
+        return name + "|" + parameterTypes.stream().map(type -> String.valueOf(type)).collect(java.util.stream.Collectors.joining(","));
     }
 
     private static String normalizeJavaQualifier(String qualifier) {
