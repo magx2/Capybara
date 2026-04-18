@@ -1,3 +1,5 @@
+from /capy/lang/Option import { * }
+
 fun digits(number: int): int =
     fun __digits(number: int, acc: int): int =
         if number < 10
@@ -50,3 +52,67 @@ fun floor_mod(a: int, b: int): int = a - floor_div(a, b) * b
 /// Result has the same sign as divisor `b` (or is zero).
 /// `b` must be non-zero.
 fun floor_mod(a: long, b: long): long = a - floor_div(a, b) * b
+
+/// Returns the smaller of two integers.
+fun min(a: int, b: int): int = if a < b then a else b
+
+/// Returns the smallest integer in `values`.
+///
+/// Returns `None` when the list is empty.
+fun min(values: list[int]): Option[int] =
+    fun __min(min: int, values: list[int]): int =
+        match values[0] with
+        case None -> min
+        case Some { v } -> if min < v then __min(min, values[1:]) else __min(v, values[1:])
+    ---
+    match values[0] with
+    case None -> None {}
+    case Some { v } -> Some { __min(v, values[1:]) }
+
+/// Returns the greater of two integers.
+fun max(a: int, b: int): int = if a > b then a else b
+
+/// Returns the greatest integer in `values`.
+///
+/// Returns `None` when the list is empty.
+fun max(values: list[int]): Option[int] =
+    fun __max(max: int, values: list[int]): int =
+        match values[0] with
+        case None -> max
+        case Some { v } -> if max < v then __max(v, values[1:]) else __max(max, values[1:])
+    ---
+    match values[0] with
+    case None -> None {}
+    case Some { v } -> Some { __max(v, values[1:]) }
+
+/// Returns the smaller of two long integers.
+fun min(a: long, b: long): long = if a < b then a else b
+
+/// Returns the smallest long integer in `values`.
+///
+/// Returns `None` when the list is empty.
+fun min(values: list[long]): Option[long] =
+    fun __min(min: long, values: list[long]): long =
+        match values[0] with
+        case None -> min
+        case Some { v } -> if min < v then __min(min, values[1:]) else __min(v, values[1:])
+    ---
+    match values[0] with
+    case None -> None {}
+    case Some { v } -> Some { __min(v, values[1:]) }
+
+/// Returns the greater of two long integers.
+fun max(a: long, b: long): long = if a > b then a else b
+
+/// Returns the greatest long integer in `values`.
+///
+/// Returns `None` when the list is empty.
+fun max(values: list[long]): Option[long] =
+    fun __max(max: long, values: list[long]): long =
+        match values[0] with
+        case None -> max
+        case Some { v } -> if max < v then __max(v, values[1:]) else __max(max, values[1:])
+    ---
+    match values[0] with
+    case None -> None {}
+    case Some { v } -> Some { __max(v, values[1:]) }
