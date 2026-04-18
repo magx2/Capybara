@@ -67,7 +67,7 @@ fun _test_minus(): list[TestCase] =
     let base = _at(1, 0)
     let epoch_date = UNIX_DATE
     let mar_31_2024 = epoch_date.add_years_months(54, 2).add_days(30)
-    [
+    let duration_minus_test_cases = [
         ("minus with week duration", base.minus(WeekDuration { weeks: 1 }), _at(-6, 0)),
         ("minus with date duration and borrow", base.minus(DateDuration { years: 0, months: 0, days: 0, hours: 1, minutes: 0, seconds: 1 }), _at(0, 82799)),
         ("operator - should delegate to minus", DateTime { date: mar_31_2024, time: MIDNIGHT } - DateDuration { years: 0, months: 1, days: 0, hours: 0, minutes: 0, seconds: 0 }, DateTime { date: mar_31_2024.add_years_months(0, -1), time: MIDNIGHT }),
@@ -77,6 +77,18 @@ fun _test_minus(): list[TestCase] =
                 assert_that(actual.date).is_equal_to(expected.date),
                 assert_that(actual.time).is_equal_to(expected.time),
             ]))
+    duration_minus_test_cases + [
+        test("minus with DateTime should return elapsed duration",
+            _assert_minus_duration(_at(2, 9010), _at(0, 0), 181810)),
+        test("minus with same DateTime should return zero duration",
+            _assert_minus_duration(_at(2, 9010), _at(2, 9010), 0)),
+        test("minus with earlier receiver should return negative seconds duration",
+            _assert_minus_duration(_at(0, 0), _at(2, 9010), -181810)),
+        test("minus with cross day boundary should keep full elapsed seconds in seconds field",
+            _assert_minus_duration(_at(1, 10), _at(0, 86390), 20)),
+        test("operator - with DateTime should delegate to minus",
+            _assert_duration_components(_at(2, 9010) - _at(0, 0), 181810)),
+    ]
 
 
 fun _test_comparisons(): list[TestCase] =
@@ -105,3 +117,28 @@ fun _test_comparisons(): list[TestCase] =
                 assert_that(third < second).is_false(),
             ])),
     ]
+
+fun _assert_duration_components(
+    duration: Duration,
+    years: int,
+    months: int,
+    days: int,
+    hours: int,
+    minutes: int,
+    seconds: int
+): Assert =
+    assert_all([
+        assert_that(duration.years()).is_equal_to(years),
+        assert_that(duration.months()).is_equal_to(months),
+        assert_that(duration.days()).is_equal_to(days),
+        assert_that(duration.hours()).is_equal_to(hours),
+        assert_that(duration.minutes()).is_equal_to(minutes),
+        assert_that(duration.seconds()).is_equal_to(seconds),
+    ])
+
+fun _assert_minus_duration(
+    left: DateTime,
+    right: DateTime,
+    seconds: int
+): Assert =
+    _assert_duration_components(left.minus(right), 0, 0, 0, 0, 0, seconds)
