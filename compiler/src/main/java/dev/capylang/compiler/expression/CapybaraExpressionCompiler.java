@@ -1230,12 +1230,44 @@ public class CapybaraExpressionCompiler {
             return Optional.empty();
         }
         var args = value.value();
-        if (supportsToInt && args.get(0).type() == LONG) {
-            return Optional.of(Result.success(new CompiledFunctionCall(
-                    METHOD_DECL_PREFIX + "Long__to_int",
-                    args,
-                    INT
-            )));
+        if (supportsToInt) {
+            if (args.get(0).type() == LONG) {
+                return Optional.of(Result.success(new CompiledFunctionCall(
+                        METHOD_DECL_PREFIX + "Long__to_int",
+                        args,
+                        INT
+                )));
+            }
+            if (args.get(0).type() == FLOAT) {
+                return Optional.of(Result.success(new CompiledFunctionCall(
+                        METHOD_DECL_PREFIX + "Float__to_int",
+                        args,
+                        INT
+                )));
+            }
+            if (args.get(0).type() == DOUBLE) {
+                return Optional.of(Result.success(new CompiledFunctionCall(
+                        METHOD_DECL_PREFIX + "Double__to_int",
+                        args,
+                        INT
+                )));
+            }
+        }
+        if (supportsToLong) {
+            if (args.get(0).type() == FLOAT) {
+                return Optional.of(Result.success(new CompiledFunctionCall(
+                        METHOD_DECL_PREFIX + "Float__to_long",
+                        args,
+                        LONG
+                )));
+            }
+            if (args.get(0).type() == DOUBLE) {
+                return Optional.of(Result.success(new CompiledFunctionCall(
+                        METHOD_DECL_PREFIX + "Double__to_long",
+                        args,
+                        LONG
+                )));
+            }
         }
         if (supportsBoolTwoStrings || supportsStringThreeArgs) {
             var allStrings = args.stream().allMatch(argument -> argument.type() == STRING);

@@ -1,1 +1,5 @@
 fun long_to_int(value: long): int = value.to_int()
+fun float_to_int(value: float): int = value.to_int()
+fun double_to_int(value: double): int = value.to_int()
+fun float_to_long(value: float): long = value.to_long()
+fun double_to_long(value: double): long = value.to_long()
