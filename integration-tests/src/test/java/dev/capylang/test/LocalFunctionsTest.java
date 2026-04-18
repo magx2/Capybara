@@ -25,4 +25,10 @@ class LocalFunctionsTest {
         assertThat(LocalFunctions.localWithLet(0)).isEqualTo(1);
         assertThat(LocalFunctions.localWithLet(10)).isEqualTo(11);
     }
+
+    @Test
+    void sameLocalFunctionNameCanBeReusedInDifferentOuterFunctions() {
+        assertThat(LocalFunctions.maxLocal(2, 5)).isEqualTo(5);
+        assertThat(LocalFunctions.minLocal(2, 5)).isEqualTo(2);
+    }
 }

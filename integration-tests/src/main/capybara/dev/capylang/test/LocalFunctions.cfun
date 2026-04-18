@@ -24,3 +24,15 @@ fun local_with_let(x: int): int =
         z
     ---
     __inc(x)
+
+fun max_local(x: int, y: int): int =
+    fun __compare(a: int, b: int): int =
+        if a > b then a else b
+    ---
+    __compare(x, y)
+
+fun min_local(x: int, y: int): int =
+    fun __compare(a: int, b: int): int =
+        if a < b then a else b
+    ---
+    __compare(x, y)

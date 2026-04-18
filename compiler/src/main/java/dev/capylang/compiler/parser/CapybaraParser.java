@@ -552,6 +552,9 @@ public class CapybaraParser {
         var localConstNameMap = new java.util.LinkedHashMap<String, String>();
         var localFunctionPositions = new java.util.LinkedHashMap<String, java.util.List<Token>>();
         var localConstPositions = new java.util.LinkedHashMap<String, java.util.List<Token>>();
+        var localScopePrefix = "__" + methodName
+                + "__scope_" + functionDeclarationContext.start.getLine()
+                + "_" + functionDeclarationContext.start.getCharPositionInLine();
         var localFunctionIndex = 0;
         var localTypeIndex = 0;
         var localConstIndex = 0;
@@ -570,7 +573,7 @@ public class CapybaraParser {
                 }
                 localFunctionNameMap.put(
                         localName,
-                        "__" + methodName + "__local_fun_" + localFunctionIndex + "_" + localName.substring(2)
+                        localScopePrefix + "__local_fun_" + localFunctionIndex + "_" + localName.substring(2)
                 );
                 localFunctionIndex++;
             }
@@ -585,7 +588,7 @@ public class CapybaraParser {
                 }
                 localTypeNameMap.put(
                         localTypeName,
-                        "__" + methodName + "__local_type_" + localTypeIndex + "_" + localTypeName.substring(2)
+                        localScopePrefix + "__local_type_" + localTypeIndex + "_" + localTypeName.substring(2)
                 );
                 localTypeIndex++;
             }
@@ -600,7 +603,7 @@ public class CapybaraParser {
                 }
                 localTypeNameMap.put(
                         localDataName,
-                        "__" + methodName + "__local_type_" + localTypeIndex + "_" + localDataName.substring(2)
+                        localScopePrefix + "__local_type_" + localTypeIndex + "_" + localDataName.substring(2)
                 );
                 localTypeIndex++;
             }
@@ -616,7 +619,7 @@ public class CapybaraParser {
                 }
                 localConstNameMap.put(
                         localConstName,
-                        "__" + methodName + "__local_const_" + localConstIndex + "_" + localConstName.substring(2)
+                        localScopePrefix + "__local_const_" + localConstIndex + "_" + localConstName.substring(2)
                 );
                 localConstIndex++;
             }

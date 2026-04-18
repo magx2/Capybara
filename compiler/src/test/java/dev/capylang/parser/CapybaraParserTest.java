@@ -329,7 +329,7 @@ class CapybaraParserTest {
                     __white_space ? x
                 """));
 
-        var localConst = findFunction("__foo__local_const_0_white_space", module.functional());
+        var localConst = findFunction("__foo__scope_1_0__local_const_0_white_space", module.functional());
         assertThat(localConst.parameters()).isEmpty();
         assertThat(localConst.returnType()).contains(new CollectionType.SetType(PrimitiveType.STRING));
 
@@ -337,7 +337,7 @@ class CapybaraParserTest {
         assertThat(function.expression()).isInstanceOf(InfixExpression.class);
         var expression = (InfixExpression) function.expression();
         assertThat(expression.left()).isInstanceOf(FunctionCall.class);
-        assertThat(((FunctionCall) expression.left()).name()).isEqualTo("__foo__local_const_0_white_space");
+        assertThat(((FunctionCall) expression.left()).name()).isEqualTo("__foo__scope_1_0__local_const_0_white_space");
     }
 
     @Test
@@ -478,7 +478,7 @@ class CapybaraParserTest {
                     __accumulate(n, 0)
                 """));
 
-        var localFunction = findFunction("__accumulate__local_fun_0_accumulate", module.functional());
+        var localFunction = findFunction("__accumulate__scope_1_0__local_fun_0_accumulate", module.functional());
         assertThat(localFunction.comments()).containsExactly("Internal accumulate");
     }
 
@@ -497,7 +497,7 @@ class CapybaraParserTest {
                 """));
 
         var globalConst = findFunction("THRESHOLD", module.functional());
-        var localConst = findFunction("__config__local_const_0_threshold", module.functional());
+        var localConst = findFunction("__config__scope_4_0__local_const_0_threshold", module.functional());
 
         assertThat(globalConst.comments()).containsExactly("Global threshold");
         assertThat(localConst.comments()).containsExactly("Internal threshold");
