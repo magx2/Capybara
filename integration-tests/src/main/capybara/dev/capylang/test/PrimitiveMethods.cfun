@@ -1,0 +1,1 @@
+fun long_to_int(value: long): int = value.to_int()

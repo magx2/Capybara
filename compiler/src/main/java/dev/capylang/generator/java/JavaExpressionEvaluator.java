@@ -194,6 +194,9 @@ public class JavaExpressionEvaluator {
             var normalizedMethodName = normalizeJavaMethodName(methodName);
             var receiver = args.get(0);
             var typedReceiver = maybeCastGenericMethodReceiver(functionCall, receiver, normalizedMethodName);
+            if (functionCall.name().contains("Long__to_int")) {
+                return current.addExpression("((int) " + receiver + ")");
+            }
             if ("to_int".equals(methodName)) {
                 return current.addExpression(buildNumericStringParseResult(
                         functionCall.type(),
