@@ -97,11 +97,11 @@ public final class JavaGenerator implements Generator {
                 var ownerKey = function.name().startsWith(METHOD_DECL_PREFIX)
                         ? function.name().substring(0, Math.max(function.name().lastIndexOf("__"), METHOD_DECL_PREFIX.length()))
                         : module.name();
-                var baseName = baseMethodName(function.name());
+                var normalizedBaseName = normalizeJavaMethodIdentifier(baseMethodName(function.name()));
                 var erasedSignature = function.parameters().stream()
                         .map(parameter -> erasedJavaType(parameter.type()))
                         .collect(joining(","));
-                collisions.computeIfAbsent(ownerKey + "|" + baseName + "|" + erasedSignature, ignored -> new java.util.ArrayList<>()).add(function);
+                collisions.computeIfAbsent(ownerKey + "|" + normalizedBaseName + "|" + erasedSignature, ignored -> new java.util.ArrayList<>()).add(function);
             }
         }
         for (var entry : collisions.entrySet()) {
@@ -109,15 +109,32 @@ public final class JavaGenerator implements Generator {
             if (functions.size() < 2) {
                 continue;
             }
+            var canonicalNamedFunction = canonicalNamedFunction(functions);
+            var mixedRawNames = functions.stream()
+                    .map(function -> baseMethodName(function.name()))
+                    .distinct()
+                    .count() > 1;
             for (var function : functions) {
-                var emittedName = baseMethodName(function.name()) + "__" + function.parameters().stream()
-                        .map(parameter -> sanitizeOverloadSuffix(String.valueOf(parameter.type())))
-                        .collect(joining("__"));
+                var rawBaseName = baseMethodName(function.name());
+                var normalizedBaseName = normalizeJavaMethodIdentifier(rawBaseName);
+                var overloadSuffix = overloadSuffix(function);
+                var legacyEmittedName = normalizedBaseName + overloadSuffix;
+                var namedCanonical = canonicalNamedFunction.filter(named -> named == function).isPresent();
+                var emittedName = mixedRawNames
+                        ? (namedCanonical
+                                ? normalizedBaseName
+                                : normalizedBaseName + "__" + methodVariantSuffix(rawBaseName) + overloadSuffix)
+                        : legacyEmittedName;
                 var parameterTypes = function.parameters().stream().map(dev.capylang.compiler.CompiledFunction.CompiledFunctionParameter::type).toList();
                 overrides.put(signatureKey(function.name(), parameterTypes), emittedName);
                 if (!function.name().startsWith(METHOD_DECL_PREFIX)) {
-                    overrides.put(signatureKey(baseMethodName(function.name()), parameterTypes), emittedName);
                     overrides.put(signatureKey(moduleQualifiedName(program, function), parameterTypes), emittedName);
+                }
+                if (mixedRawNames || !function.name().startsWith(METHOD_DECL_PREFIX)) {
+                    overrides.put(signatureKey(baseMethodName(function.name()), parameterTypes), emittedName);
+                }
+                if (!emittedName.equals(legacyEmittedName)) {
+                    overrides.put(signatureKey(legacyEmittedName, parameterTypes), emittedName);
                 }
             }
         }
@@ -142,6 +159,157 @@ public final class JavaGenerator implements Generator {
         }
         var idx = name.lastIndexOf("__");
         return idx >= 0 ? name.substring(idx + 2) : name;
+    }
+
+    private static java.util.Optional<dev.capylang.compiler.CompiledFunction> canonicalNamedFunction(
+            java.util.List<dev.capylang.compiler.CompiledFunction> functions
+    ) {
+        return functions.stream()
+                .filter(function -> isNamedIdentifier(baseMethodName(function.name())))
+                .findFirst();
+    }
+
+    private static boolean isNamedIdentifier(String value) {
+        return value.chars().allMatch(ch -> Character.isLetterOrDigit(ch) || ch == '_');
+    }
+
+    private static String overloadSuffix(dev.capylang.compiler.CompiledFunction function) {
+        var suffix = function.parameters().stream()
+                .map(parameter -> sanitizeOverloadSuffix(String.valueOf(parameter.type())))
+                .collect(joining("__"));
+        return suffix.isBlank() ? "" : "__" + suffix;
+    }
+
+    private static String methodVariantSuffix(String rawBaseName) {
+        var prefix = rawBaseName.chars().allMatch(ch -> Character.isLetterOrDigit(ch) || ch == '_') ? "name" : "op";
+        return prefix + "_" + sanitizeMethodNameVariant(rawBaseName);
+    }
+
+    private static String sanitizeMethodNameVariant(String rawName) {
+        var builder = new StringBuilder();
+        for (var i = 0; i < rawName.length(); i++) {
+            var ch = rawName.charAt(i);
+            if (Character.isLetterOrDigit(ch)) {
+                builder.append(Character.toLowerCase(ch));
+            } else if (ch == '_') {
+                builder.append('_');
+            } else {
+                if (!builder.isEmpty() && builder.charAt(builder.length() - 1) != '_') {
+                    builder.append('_');
+                }
+                builder.append(symbolName(ch));
+                builder.append('_');
+            }
+        }
+        var sanitized = builder.toString().replaceAll("_+", "_");
+        if (sanitized.startsWith("_")) {
+            sanitized = sanitized.substring(1);
+        }
+        if (sanitized.endsWith("_")) {
+            sanitized = sanitized.substring(0, sanitized.length() - 1);
+        }
+        return sanitized.isBlank() ? "generated" : sanitized;
+    }
+
+    private static String normalizeJavaMethodIdentifier(String rawName) {
+        var leadingUnderscores = countLeadingUnderscores(rawName);
+        var suffix = rawName.substring(leadingUnderscores);
+        var normalized = normalizeJavaIdentifier(suffix, false);
+        if (leadingUnderscores == 0) {
+            return normalized;
+        }
+        return "_".repeat(leadingUnderscores) + normalized;
+    }
+
+    private static int countLeadingUnderscores(String value) {
+        var count = 0;
+        while (count < value.length() && value.charAt(count) == '_') {
+            count++;
+        }
+        return count;
+    }
+
+    private static String normalizeJavaIdentifier(String name, boolean upperCamel) {
+        var parts = java.util.stream.Stream.of(name.split("[^A-Za-z0-9]+"))
+                .filter(part -> !part.isEmpty())
+                .toList();
+
+        var base = new StringBuilder();
+        if (parts.isEmpty()) {
+            base.append(encodeSymbolicIdentifier(name, upperCamel));
+        } else {
+            for (var i = 0; i < parts.size(); i++) {
+                var part = parts.get(i);
+                if (i == 0 && !upperCamel) {
+                    base.append(Character.toLowerCase(part.charAt(0)));
+                } else {
+                    base.append(Character.toUpperCase(part.charAt(0)));
+                }
+                if (part.length() > 1) {
+                    base.append(part.substring(1));
+                }
+            }
+        }
+
+        var identifier = base.toString();
+        if (!Character.isJavaIdentifierStart(identifier.charAt(0))) {
+            identifier = (upperCamel ? "T" : "v") + identifier;
+        }
+        return switch (identifier) {
+            case "abstract", "assert", "boolean", "break", "byte", "case", "catch", "char", "class",
+                    "const", "continue", "default", "do", "double", "else", "enum", "extends", "final",
+                    "finally", "float", "for", "goto", "if", "implements", "import", "instanceof", "int",
+                    "interface", "long", "native", "new", "package", "private", "protected", "public",
+                    "return", "short", "static", "strictfp", "super", "switch", "synchronized", "this",
+                    "throw", "throws", "transient", "try", "void", "volatile", "while", "true", "false",
+                    "null", "record", "sealed", "permits", "var", "yield" -> identifier + "_";
+            default -> identifier;
+        };
+    }
+
+    private static String encodeSymbolicIdentifier(String raw, boolean upperCamel) {
+        var parts = new java.util.ArrayList<String>(raw.length());
+        for (var i = 0; i < raw.length(); i++) {
+            parts.add(symbolName(raw.charAt(i)));
+        }
+        if (parts.isEmpty()) {
+            return upperCamel ? "Generated" : "generated";
+        }
+        var result = new StringBuilder();
+        for (var i = 0; i < parts.size(); i++) {
+            var part = parts.get(i);
+            if (i == 0 && !upperCamel) {
+                result.append(part);
+            } else {
+                result.append(Character.toUpperCase(part.charAt(0)));
+                if (part.length() > 1) {
+                    result.append(part.substring(1));
+                }
+            }
+        }
+        return result.toString();
+    }
+
+    private static String symbolName(char symbol) {
+        return switch (symbol) {
+            case '+' -> "plus";
+            case '-' -> "minus";
+            case '*' -> "star";
+            case '/' -> "slash";
+            case '\\' -> "backslash";
+            case '^' -> "power";
+            case '%' -> "mod";
+            case '$' -> "dollar";
+            case '#' -> "hash";
+            case '@' -> "at";
+            case '~' -> "tilde";
+            case '!' -> "bang";
+            case ':' -> "colon";
+            case '<' -> "less";
+            case '>' -> "greater";
+            case '|' -> "pipe";
+            default -> "op" + Integer.toHexString(symbol);
+        };
     }
 
     private static String sanitizeOverloadSuffix(String typeName) {
