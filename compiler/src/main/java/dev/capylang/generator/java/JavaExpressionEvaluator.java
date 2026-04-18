@@ -194,8 +194,14 @@ public class JavaExpressionEvaluator {
             var normalizedMethodName = normalizeJavaMethodName(methodName);
             var receiver = args.get(0);
             var typedReceiver = maybeCastGenericMethodReceiver(functionCall, receiver, normalizedMethodName);
-            if (functionCall.name().contains("Long__to_int")) {
+            if (functionCall.name().contains("Long__to_int")
+                || functionCall.name().contains("Float__to_int")
+                || functionCall.name().contains("Double__to_int")) {
                 return current.addExpression("((int) " + receiver + ")");
+            }
+            if (functionCall.name().contains("Float__to_long")
+                || functionCall.name().contains("Double__to_long")) {
+                return current.addExpression("((long) " + receiver + ")");
             }
             if ("to_int".equals(methodName)) {
                 return current.addExpression(buildNumericStringParseResult(
