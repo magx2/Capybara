@@ -1,0 +1,21 @@
+from /capy/lang/Result import { * }
+
+const MAX_INT_VALUE: int = 2147483647
+const MIN_INT_VALUE: int = -2147483648
+
+const MAX_LONG_VALUE: long = 9223372036854775807L
+const MIN_LONG_VALUE: long = -9223372036854775808L
+
+fun clamp_long_to_int(value: long): int =
+    if value > MAX_INT_VALUE
+    then MAX_INT_VALUE
+    else if value < MIN_INT_VALUE
+    then MIN_INT_VALUE
+    else value.to_int()
+
+fun safe_long_to_int(value: long): Result[int] =
+    if value > MAX_INT_VALUE
+    then Error { "long value `{value}` is greater than max int value" }
+    else if value < MIN_INT_VALUE
+    then Error { "long value `{value}` is smaller than min int value" }
+    else Success { value.to_int() }

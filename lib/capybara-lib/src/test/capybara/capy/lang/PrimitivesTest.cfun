@@ -1,0 +1,38 @@
+from /capy/test/Assert import { * }
+from /capy/lang/Primitives import { * }
+from /capy/test/CapyTest import { * }
+
+fun tests(): TestFile =
+    test_file("/capy/lang/Primitives.cfun", [
+        test("MAX_INT_VALUE should match int max", assert_that(MAX_INT_VALUE).is_equal_to(2147483647)),
+        test("MIN_INT_VALUE should match int min", assert_that(MIN_INT_VALUE).is_equal_to(-2147483648)),
+        test("MAX_LONG_VALUE should match long max", assert_that(MAX_LONG_VALUE).is_equal_to(9223372036854775807L)),
+        test("MIN_LONG_VALUE should match long min", assert_that(MIN_LONG_VALUE).is_equal_to(-9223372036854775808L)),
+        test("clamp_long_to_int(0L) should return 0", _should_clamp(0L, 0)),
+        test("clamp_long_to_int(1L) should return 1", _should_clamp(1L, 1)),
+        test("clamp_long_to_int(-1L) should return -1", _should_clamp(-1L, -1)),
+        test("clamp_long_to_int(MAX_INT_VALUE) should return MAX_INT_VALUE", _should_clamp(MAX_INT_VALUE, MAX_INT_VALUE)),
+        test("clamp_long_to_int(MIN_INT_VALUE) should return MIN_INT_VALUE", _should_clamp(MIN_INT_VALUE, MIN_INT_VALUE)),
+        test("clamp_long_to_int(2147483648L) should return MAX_INT_VALUE", _should_clamp(2147483648L, MAX_INT_VALUE)),
+        test("clamp_long_to_int(-2147483649L) should return MIN_INT_VALUE", _should_clamp(-2147483649L, MIN_INT_VALUE)),
+        test("clamp_long_to_int(MAX_LONG_VALUE) should return MAX_INT_VALUE", _should_clamp(MAX_LONG_VALUE, MAX_INT_VALUE)),
+        test("clamp_long_to_int(MIN_LONG_VALUE) should return MIN_INT_VALUE", _should_clamp(MIN_LONG_VALUE, MIN_INT_VALUE)),
+        test("safe_long_to_int(0L) should succeed with 0", _should_safely_convert(0L, 0)),
+        test("safe_long_to_int(1L) should succeed with 1", _should_safely_convert(1L, 1)),
+        test("safe_long_to_int(-1L) should succeed with -1", _should_safely_convert(-1L, -1)),
+        test("safe_long_to_int(MAX_INT_VALUE) should succeed with MAX_INT_VALUE", _should_safely_convert(MAX_INT_VALUE, MAX_INT_VALUE)),
+        test("safe_long_to_int(MIN_INT_VALUE) should succeed with MIN_INT_VALUE", _should_safely_convert(MIN_INT_VALUE, MIN_INT_VALUE)),
+        test("safe_long_to_int(2147483648L) should fail", _should_fail_safe_conversion(2147483648L, "long value is greater than max int value")),
+        test("safe_long_to_int(MAX_LONG_VALUE) should fail", _should_fail_safe_conversion(MAX_LONG_VALUE, "long value is greater than max int value")),
+        test("safe_long_to_int(-2147483649L) should fail", _should_fail_safe_conversion(-2147483649L, "long value is smaller than min int value")),
+        test("safe_long_to_int(MIN_LONG_VALUE) should fail", _should_fail_safe_conversion(MIN_LONG_VALUE, "long value is smaller than min int value")),
+    ])
+
+fun _should_clamp(value: long, expected: int): Assert =
+    assert_that(clamp_long_to_int(value)).is_equal_to(expected)
+
+fun _should_safely_convert(value: long, expected: int): Assert =
+    assert_that(safe_long_to_int(value)).succeeds(expected)
+
+fun _should_fail_safe_conversion(value: long, expected_message: string): Assert =
+    assert_that(safe_long_to_int(value)).fails(expected_message)
