@@ -2,6 +2,7 @@ from /capy/date_time/Date import { * }
 from /capy/date_time/Time import { * }
 from /capy/date_time/Duration import { * }
 from /capy/lang/Math import { * }
+from /capy/lang/Result import { * }
 
 /// Combination of a calendar date and time of day.
 data DateTime { date: Date, time: Time }
@@ -88,6 +89,16 @@ fun DateTime.minus(duration: Duration): DateTime = this.plus(duration.negate())
 
 /// Subtracts a `Duration` from this `DateTime` using `-` infix syntax.
 fun DateTime.`-`(duration: Duration): DateTime = this.plus(duration.negate())
+
+/// Returns the duration from `other` to this `DateTime`.
+fun DateTime.minus(other: DateTime): Duration =
+    let total_seconds = this.timestamp() - other.timestamp()
+    match ("" + total_seconds).to_int() with
+    case Success { seconds } -> DateDuration { years: 0, months: 0, days: 0, hours: 0, minutes: 0, seconds }
+    case Error -> ZERO
+
+/// Returns the duration from `other` to this `DateTime` using `-` infix syntax.
+fun DateTime.`-`(other: DateTime): Duration = this.minus(other)
 
 /// Returns `true` when this date-time is after `other`.
 fun DateTime.greater_than(other: DateTime): bool =
