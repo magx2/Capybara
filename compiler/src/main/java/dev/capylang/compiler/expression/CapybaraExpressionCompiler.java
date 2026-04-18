@@ -8,6 +8,7 @@ import dev.capylang.compiler.parser.*;
 
 import java.math.BigInteger;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Logger;
 
 import static dev.capylang.compiler.CapybaraTypeCompiler.linkType;
@@ -20,6 +21,8 @@ public class CapybaraExpressionCompiler {
     private static final String METHOD_INVOKE_PREFIX = "__invoke__";
     private static final String DICT_PIPE_ARGS_SEPARATOR = "::";
     private static final String TUPLE_PIPE_ARGS_SEPARATOR = ";;";
+    private static final Map<String, String> NORMALIZED_TYPE_ALIAS_CACHE = new ConcurrentHashMap<>();
+    private static final Map<String, String> SIMPLE_RAW_TYPE_NAME_CACHE = new ConcurrentHashMap<>();
 
     public static final class LinkCache {
         private final Map<String, GenericDataType> fallbackDataTypesBySuffix;
@@ -29,6 +32,7 @@ public class CapybaraExpressionCompiler {
         private final IdentityHashMap<List<FunctionSignature>, SignatureIndex> signatureIndexes = new IdentityHashMap<>();
         private final Map<String, Set<String>> methodOwnerCandidatesBySimpleType;
         private final Map<String, Set<String>> subtypeParentOwnerCandidatesBySimpleType;
+        private final Map<String, CompiledDataParentType> parentTypesByRawName;
         private final CompiledDataParentType optionType;
         private final CompiledDataParentType resultType;
 
@@ -36,8 +40,18 @@ public class CapybaraExpressionCompiler {
             this.fallbackDataTypesBySuffix = buildFallbackDataTypesBySuffix(dataTypes);
             this.methodOwnerCandidatesBySimpleType = buildMethodOwnerCandidatesBySimpleType(dataTypes);
             this.subtypeParentOwnerCandidatesBySimpleType = buildSubtypeParentOwnerCandidatesBySimpleType(dataTypes);
+            this.parentTypesByRawName = buildParentTypesByRawName(dataTypes);
             this.optionType = findParentType(dataTypes, CapybaraExpressionCompiler::isOptionTypeKeyStatic, "Option");
             this.resultType = findParentType(dataTypes, CapybaraExpressionCompiler::isResultTypeKeyStatic, "Result");
+        }
+
+        private static Map<String, CompiledDataParentType> buildParentTypesByRawName(Map<String, GenericDataType> dataTypes) {
+            var parentTypesByRawName = new HashMap<String, CompiledDataParentType>();
+            dataTypes.values().stream()
+                    .filter(CompiledDataParentType.class::isInstance)
+                    .map(CompiledDataParentType.class::cast)
+                    .forEach(parentType -> parentTypesByRawName.putIfAbsent(normalizeTypeAlias(parentType.name()), parentType));
+            return Map.copyOf(parentTypesByRawName);
         }
     }
 
@@ -1111,12 +1125,7 @@ public class CapybaraExpressionCompiler {
             CompiledDataType actualData,
             CompiledDataParentType expectedParent
     ) {
-        var canonicalParent = dataTypes.values().stream()
-                .filter(CompiledDataParentType.class::isInstance)
-                .map(CompiledDataParentType.class::cast)
-                .filter(parentType -> sameRawTypeName(parentType.name(), expectedParent.name()))
-                .findFirst()
-                .orElse(expectedParent);
+        var canonicalParent = linkCache.parentTypesByRawName.getOrDefault(normalizeTypeAlias(expectedParent.name()), expectedParent);
         var rawSubtype = canonicalParent.subTypes().stream()
                 .filter(subType -> sameRawTypeName(subType.name(), actualData.name()))
                 .findFirst();
@@ -2440,11 +2449,11 @@ public class CapybaraExpressionCompiler {
         if (!expectedParentType.subTypes().isEmpty()) {
             return false;
         }
-        return dataTypes.values().stream()
-                .filter(CompiledDataParentType.class::isInstance)
-                .map(CompiledDataParentType.class::cast)
-                .filter(parentType -> sameRawTypeName(parentType.name(), expectedParentType.name()))
-                .flatMap(parentType -> parentType.subTypes().stream())
+        var canonicalParent = linkCache.parentTypesByRawName.get(normalizeTypeAlias(expectedParentType.name()));
+        if (canonicalParent == null) {
+            return false;
+        }
+        return canonicalParent.subTypes().stream()
                 .anyMatch(subType -> sameRawTypeName(subType.name(), candidate.name()));
     }
 
@@ -2456,12 +2465,14 @@ public class CapybaraExpressionCompiler {
     }
 
     private static String normalizeTypeAlias(String typeName) {
-        var withoutGenerics = stripGenericSuffix(typeName);
-        return withoutGenerics
-                .replace("/capy/lang/Option", "/cap/lang/Option")
-                .replace(".capy.lang.Option", ".cap.lang.Option")
-                .replace("/capy/lang/Result", "/cap/lang/Result")
-                .replace(".capy.lang.Result", ".cap.lang.Result");
+        return NORMALIZED_TYPE_ALIAS_CACHE.computeIfAbsent(typeName, key -> {
+            var withoutGenerics = stripGenericSuffix(key);
+            return withoutGenerics
+                    .replace("/capy/lang/Option", "/cap/lang/Option")
+                    .replace(".capy.lang.Option", ".cap.lang.Option")
+                    .replace("/capy/lang/Result", "/cap/lang/Result")
+                    .replace(".capy.lang.Result", ".cap.lang.Result");
+        });
     }
 
     private static String stripGenericSuffix(String typeName) {
@@ -2470,10 +2481,12 @@ public class CapybaraExpressionCompiler {
     }
 
     private static String simpleRawTypeName(String typeName) {
-        var slash = typeName.lastIndexOf('/');
-        var dot = typeName.lastIndexOf('.');
-        var idx = Math.max(slash, dot);
-        return idx >= 0 ? typeName.substring(idx + 1) : typeName;
+        return SIMPLE_RAW_TYPE_NAME_CACHE.computeIfAbsent(typeName, key -> {
+            var slash = key.lastIndexOf('/');
+            var dot = key.lastIndexOf('.');
+            var idx = Math.max(slash, dot);
+            return idx >= 0 ? key.substring(idx + 1) : key;
+        });
     }
 
     private Result<CompiledExpression> linkIfExpression(IfExpression ifExpression, Scope scope) {
