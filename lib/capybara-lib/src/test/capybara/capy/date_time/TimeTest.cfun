@@ -35,11 +35,10 @@ fun _test_time(hour: int, minute: int, second: int, is_valid: bool): TestCase =
         if is_valid
         then assert_that(Time { hour, minute, second })
             .succeeds(time =>
-                assert_all([
-                    assert_that(time.hour).is_equal_to(hour),
-                    assert_that(time.minute).is_equal_to(minute),
-                    assert_that(time.second).is_equal_to(second),
-                ]))
+                assert_that(time)
+                    .has_hour(hour)
+                    .has_minute(minute)
+                    .has_second(second))
         else assert_that(Time { hour, minute, second }).fails()
     test("Time \{ hour: {hour}, minute: {minute}, second: {second} } should " + (if is_valid then "succeed" else "fail"), assert)
 
@@ -75,22 +74,20 @@ fun _test_round_to_minutes(): TestCase =
         "Time \{hour: 23, minute: 59, seconds: 59}.round_to_minutes() should return Time \{hour: 23, minute: 59, seconds: 0}",
         assert_that(Time { hour: 23, minute: 59, second: 59 })
             .succeeds(time =>
-                assert_all([
-                    assert_that(time.round_to_minutes().hour).is_equal_to(23),
-                    assert_that(time.round_to_minutes().minute).is_equal_to(59),
-                    assert_that(time.round_to_minutes().second).is_equal_to(0),
-                ])))
+                assert_that(time.round_to_minutes())
+                    .has_hour(23)
+                    .has_minute(59)
+                    .has_second(0)))
 
 fun _test_round_to_hours(): TestCase =
     test(
         "Time \{hour: 23, minute: 59, seconds: 59}.round_to_hours() should return Time \{hour: 23, minute: 0, seconds: 0}",
         assert_that(Time { hour: 23, minute: 59, second: 59 })
             .succeeds(time =>
-                assert_all([
-                    assert_that(time.round_to_hours().hour).is_equal_to(23),
-                    assert_that(time.round_to_hours().minute).is_equal_to(0),
-                    assert_that(time.round_to_hours().second).is_equal_to(0),
-                ])))
+                assert_that(time.round_to_hours())
+                    .has_hour(23)
+                    .has_minute(0)
+                    .has_second(0)))
 
 fun _test_add_seconds(): list[TestCase] =
     [
@@ -109,11 +106,7 @@ fun _test_add_seconds(): list[TestCase] =
         "Time \{ hour: {hour}, minute: {minute}, second: {second} }.add_seconds({seconds_to_add}) should return expected time",
         assert_that(Time { hour, minute, second })
             .succeeds(time =>
-                assert_all([
-                    assert_that(time.add_seconds(seconds_to_add).hour).is_equal_to(expected_hour),
-                    assert_that(time.add_seconds(seconds_to_add).minute).is_equal_to(expected_minute),
-                    assert_that(time.add_seconds(seconds_to_add).second).is_equal_to(expected_second),
-                ])))
+                assert_that(time.add_seconds(seconds_to_add)).is_equal_to(_time_test_value(expected_hour, expected_minute, expected_second))))
 
 fun _test_add_minutes(): list[TestCase] =
     [
@@ -130,11 +123,7 @@ fun _test_add_minutes(): list[TestCase] =
         "Time \{ hour: {hour}, minute: {minute}, second: {second} }.add_minutes({minutes_to_add}) should return expected time",
         assert_that(Time { hour, minute, second })
             .succeeds(time =>
-                assert_all([
-                    assert_that(time.add_minutes(minutes_to_add).hour).is_equal_to(expected_hour),
-                    assert_that(time.add_minutes(minutes_to_add).minute).is_equal_to(expected_minute),
-                    assert_that(time.add_minutes(minutes_to_add).second).is_equal_to(expected_second),
-                ])))
+                assert_that(time.add_minutes(minutes_to_add)).is_equal_to(_time_test_value(expected_hour, expected_minute, expected_second))))
 
 fun _test_add_hours(): list[TestCase] =
     [
@@ -147,8 +136,9 @@ fun _test_add_hours(): list[TestCase] =
         "Time \{ hour: {hour}, minute: {minute}, second: {second} }.add_hours({hours_to_add}) should return expected time",
         assert_that(Time { hour, minute, second })
             .succeeds(time =>
-                assert_all([
-                    assert_that(time.add_hours(hours_to_add).hour).is_equal_to(expected_hour),
-                    assert_that(time.add_hours(hours_to_add).minute).is_equal_to(expected_minute),
-                    assert_that(time.add_hours(hours_to_add).second).is_equal_to(expected_second),
-                ])))
+                assert_that(time.add_hours(hours_to_add)).is_equal_to(_time_test_value(expected_hour, expected_minute, expected_second))))
+
+fun _time_test_value(hour: int, minute: int, second: int): Time =
+    match Time { hour: hour, minute: minute, second: second } with
+    case Success { value } -> value
+    case Error -> MIDNIGHT

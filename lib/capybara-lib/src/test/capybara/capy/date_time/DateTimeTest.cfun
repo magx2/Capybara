@@ -25,14 +25,13 @@ fun tests(): TestFile =
 fun _test_unix_epoch(): TestCase =
     test("unix_epoch() should return the correct DateTime for 1 January 1970 at 00:00:00",
         let epoch = unix_epoch()
-        assert_all([
-            assert_that(epoch.date.year).is_equal_to(1970),
-            assert_that(epoch.date.month).is_equal_to(1),
-            assert_that(epoch.date.day).is_equal_to(1),
-            assert_that(epoch.time.hour).is_equal_to(0),
-            assert_that(epoch.time.minute).is_equal_to(0),
-            assert_that(epoch.time.second).is_equal_to(0),
-        ]))
+        assert_that(epoch)
+            .has_year(1970)
+            .has_month(1)
+            .has_day(1)
+            .has_hour(0)
+            .has_minute(0)
+            .has_second(0))
 
 fun _test_timestamp(): list[TestCase] =
     [
@@ -52,35 +51,17 @@ fun _test_plus(): list[TestCase] =
     let jan_31_2024 = epoch_date.add_years_months(54, 0).add_days(30)
     [
         test("plus should add ISO 8601 week durations as whole calendar weeks",
-            _assert_datetime(
-                _at(0, 0).plus(WeekDuration { weeks: 2 }),
-                _at(14, 0)
-            )),
+            assert_that(_at(0, 0).plus(WeekDuration { weeks: 2 })).is_equal_to(_at(14, 0))),
         test("plus should apply calendar units before clock carry",
-            _assert_datetime(
-                _at(0, 0).plus(DateDuration { years: 0, months: 0, days: 1, hours: 1, minutes: 30, seconds: 0 }),
-                _at(1, 5400)
-            )),
+            assert_that(_at(0, 0).plus(DateDuration { years: 0, months: 0, days: 1, hours: 1, minutes: 30, seconds: 0 })).is_equal_to(_at(1, 5400))),
         test("plus should clamp month-end dates per ISO 8601 calendar arithmetic",
-            _assert_datetime(
-                DateTime { date: jan_31_2024, time: MIDNIGHT }.plus(DateDuration { years: 0, months: 1, days: 0, hours: 0, minutes: 0, seconds: 0 }),
-                DateTime { date: jan_31_2024.add_years_months(0, 1), time: MIDNIGHT }
-            )),
+            assert_that(DateTime { date: jan_31_2024, time: MIDNIGHT }.plus(DateDuration { years: 0, months: 1, days: 0, hours: 0, minutes: 0, seconds: 0 })).is_equal_to(DateTime { date: jan_31_2024.add_years_months(0, 1), time: MIDNIGHT })),
         test("operator + should delegate to plus",
-            _assert_datetime(
-                _at(0, 0) + DateDuration { years: 0, months: 0, days: 0, hours: 25, minutes: 0, seconds: 0 },
-                _at(1, 3600)
-            )),
+            assert_that(_at(0, 0) + DateDuration { years: 0, months: 0, days: 0, hours: 25, minutes: 0, seconds: 0 }).is_equal_to(_at(1, 3600))),
         test("plus should normalize negative clock components across midnight",
-            _assert_datetime(
-                _at(1, 1800).plus(DateDuration { years: 0, months: 0, days: 0, hours: -1, minutes: 0, seconds: 0 }),
-                _at(0, 84600)
-            )),
+            assert_that(_at(1, 1800).plus(DateDuration { years: 0, months: 0, days: 0, hours: -1, minutes: 0, seconds: 0 })).is_equal_to(_at(0, 84600))),
         test("plus should handle large hour components without overflowing the intra-day clock",
-            _assert_datetime(
-                _at(0, 0).plus(DateDuration { years: 0, months: 0, days: 0, hours: 600000, minutes: 0, seconds: 0 }),
-                _at(25000, 0)
-            )),
+            assert_that(_at(0, 0).plus(DateDuration { years: 0, months: 0, days: 0, hours: 600000, minutes: 0, seconds: 0 })).is_equal_to(_at(25000, 0))),
     ]
 
 fun _test_minus_duration(): list[TestCase] =
@@ -88,25 +69,13 @@ fun _test_minus_duration(): list[TestCase] =
     let mar_31_2024 = epoch_date.add_years_months(54, 2).add_days(30)
     [
         test("minus should subtract ISO 8601 week durations as whole calendar weeks",
-            _assert_datetime(
-                _at(14, 0).minus(WeekDuration { weeks: 2 }),
-                _at(0, 0)
-            )),
+            assert_that(_at(14, 0).minus(WeekDuration { weeks: 2 })).is_equal_to(_at(0, 0))),
         test("minus should apply calendar subtraction before clock normalization",
-            _assert_datetime(
-                _at(1, 1800).minus(DateDuration { years: 0, months: 0, days: 0, hours: 1, minutes: 0, seconds: 0 }),
-                _at(0, 84600)
-            )),
+            assert_that(_at(1, 1800).minus(DateDuration { years: 0, months: 0, days: 0, hours: 1, minutes: 0, seconds: 0 })).is_equal_to(_at(0, 84600))),
         test("minus should clamp month-end dates per ISO 8601 calendar arithmetic",
-            _assert_datetime(
-                DateTime { date: mar_31_2024, time: MIDNIGHT }.minus(DateDuration { years: 0, months: 1, days: 0, hours: 0, minutes: 0, seconds: 0 }),
-                DateTime { date: mar_31_2024.add_years_months(0, -1), time: MIDNIGHT }
-            )),
+            assert_that(DateTime { date: mar_31_2024, time: MIDNIGHT }.minus(DateDuration { years: 0, months: 1, days: 0, hours: 0, minutes: 0, seconds: 0 })).is_equal_to(DateTime { date: mar_31_2024.add_years_months(0, -1), time: MIDNIGHT })),
         test("operator - should delegate to minus",
-            _assert_datetime(
-                _at(1, 3600) - DateDuration { years: 0, months: 0, days: 0, hours: 25, minutes: 0, seconds: 0 },
-                _at(0, 0)
-            )),
+            assert_that(_at(1, 3600) - DateDuration { years: 0, months: 0, days: 0, hours: 25, minutes: 0, seconds: 0 }).is_equal_to(_at(0, 0))),
     ]
 
 
@@ -122,7 +91,9 @@ fun _test_minus_datetime(): list[TestCase] =
             let start = _at(10, 30)
             let finish = _at(12, 7325)
             let duration = finish.minus(start)
-            _assert_datetime(start.plus(duration), finish)),
+            assert_that(start.plus(duration))
+                .has_date(finish.date)
+                .has_time(finish.time)),
     ]
 
 fun _test_comparisons(): list[TestCase] =
@@ -130,14 +101,14 @@ fun _test_comparisons(): list[TestCase] =
     let second = _at(0, 1)
     let third = _at(1, 0)
     [
-        test("greater_than should return true when this DateTime is later",
+        test("DateTimeAssert.is_greater_than should assert later instants",
             assert_all([
-                assert_that(second.greater_than(first)).is_true(),
-                assert_that(first.greater_than(second)).is_false(),
+                assert_that(second).is_greater_than(first),
+                assert_that(first > second).is_false(),
             ])),
-        test("less_than should return true when this DateTime is earlier",
+        test("DateTimeAssert.is_less_than should assert earlier instants",
             assert_all([
-                assert_that(first.less_than(second)).is_true(),
+                assert_that(first).is_less_than(second),
                 assert_that(second.less_than(first)).is_false(),
             ])),
         test("operator > should compare DateTime values",
@@ -152,12 +123,3 @@ fun _test_comparisons(): list[TestCase] =
             ])),
     ]
 
-fun _assert_datetime(actual: DateTime, expected: DateTime): Assert =
-    assert_all([
-        assert_that(actual.date.year).is_equal_to(expected.date.year),
-        assert_that(actual.date.month).is_equal_to(expected.date.month),
-        assert_that(actual.date.day).is_equal_to(expected.date.day),
-        assert_that(actual.time.hour).is_equal_to(expected.time.hour),
-        assert_that(actual.time.minute).is_equal_to(expected.time.minute),
-        assert_that(actual.time.second).is_equal_to(expected.time.second),
-    ])

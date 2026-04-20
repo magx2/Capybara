@@ -12,14 +12,44 @@ fun tests(): TestFile =
         "P2W" : WeekDuration { weeks: 2 },
     } |> [], (acc, iso, expected) => acc + test("should round-trip {iso}",
         assert_all([
-            assert_that(from_iso_8601(iso)).succeeds(expected),
+            assert_that(from_iso_8601(iso)).succeeds(duration =>
+                assert_all([
+                    assert_that(duration).is_equal_to(expected),
+                    assert_that(duration).has_years(expected.years()),
+                    assert_that(duration).has_months(expected.months()),
+                    assert_that(duration).has_days(expected.days()),
+                    assert_that(duration).has_hours(expected.hours()),
+                    assert_that(duration).has_minutes(expected.minutes()),
+                    assert_that(duration).has_seconds(expected.seconds()),
+                ])),
             assert_that(expected.to_iso_8601()).is_equal_to(iso),
         ]))
     let parse_only_test_cases = [
         ("PT36H", DateDuration { years: 0, months: 0, days: 0, hours: 36, minutes: 0, seconds: 0 }),
         ("P00030604T123005", DateDuration { years: 3, months: 6, days: 4, hours: 12, minutes: 30, seconds: 5 }),
         ("P0003-06-04T12:30:05", DateDuration { years: 3, months: 6, days: 4, hours: 12, minutes: 30, seconds: 5 }),
-    ] | (iso, expected) => test("should parse {iso}", assert_that(from_iso_8601(iso)).succeeds(expected))
+    ] | (iso, expected) => test("should parse {iso}",
+        assert_that(from_iso_8601(iso)).succeeds(duration =>
+            assert_all([
+                assert_that(duration).is_equal_to(expected),
+                assert_that(duration).has_years(expected.years()),
+                assert_that(duration).has_months(expected.months()),
+                assert_that(duration).has_days(expected.days()),
+                assert_that(duration).has_hours(expected.hours()),
+                assert_that(duration).has_minutes(expected.minutes()),
+                assert_that(duration).has_seconds(expected.seconds()),
+            ])))
+    let week_component_test_cases = [
+        test("should expose week-only duration components",
+            assert_that(WeekDuration { weeks: 2 })
+                .has_weeks(2)
+                .has_years(0)
+                .has_months(0)
+                .has_days(14)
+                .has_hours(0)
+                .has_minutes(0)
+                .has_seconds(0)),
+    ]
     let failed_test_cases = [
         "P",
         "PT",
@@ -31,4 +61,4 @@ fun tests(): TestFile =
         "P1D2Y",
         "P0003-13-04T12:30:05",
     ] | iso => test("should fail parsing {iso}", assert_that(from_iso_8601(iso)).fails())
-    test_file("/capy/date_time/Duration.cfun", round_trip_test_cases + parse_only_test_cases + failed_test_cases)
+    test_file("/capy/date_time/Duration.cfun", round_trip_test_cases + parse_only_test_cases + week_component_test_cases + failed_test_cases)
