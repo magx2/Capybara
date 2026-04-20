@@ -12,64 +12,64 @@ fun tests(): TestFile =
         _should_parse_interval(
             "2007-03-01T13:00:00Z/2008-05-11T15:30:00Z",
             "2007-03-01T13:00:00Z/2008-05-11T15:30:00Z",
-            _datetime(2007, 3, 1, 13, 0, 0),
-            _datetime(2008, 5, 11, 15, 30, 0),
+            _interval_datetime(2007, 3, 1, 13, 0, 0),
+            _interval_datetime(2008, 5, 11, 15, 30, 0),
             DateDuration { years: 0, months: 0, days: 437, hours: 2, minutes: 30, seconds: 0 }
         ),
         _should_parse_interval(
             "2007-03-01T13:00:00Z/P1Y2M10DT2H30M",
             "2007-03-01T13:00:00Z/P1Y2M10DT2H30M",
-            _datetime(2007, 3, 1, 13, 0, 0),
-            _datetime(2008, 5, 11, 15, 30, 0),
+            _interval_datetime(2007, 3, 1, 13, 0, 0),
+            _interval_datetime(2008, 5, 11, 15, 30, 0),
             DateDuration { years: 1, months: 2, days: 10, hours: 2, minutes: 30, seconds: 0 }
         ),
         _should_parse_interval(
             "P1Y2M10DT2H30M/2008-05-11T15:30:00Z",
             "P1Y2M10DT2H30M/2008-05-11T15:30:00Z",
-            _datetime(2007, 3, 1, 13, 0, 0),
-            _datetime(2008, 5, 11, 15, 30, 0),
+            _interval_datetime(2007, 3, 1, 13, 0, 0),
+            _interval_datetime(2008, 5, 11, 15, 30, 0),
             DateDuration { years: 1, months: 2, days: 10, hours: 2, minutes: 30, seconds: 0 }
         ),
         _should_parse_interval(
             "2007-03-01T13:00:00Z--2008-05-11T15:30:00Z",
             "2007-03-01T13:00:00Z/2008-05-11T15:30:00Z",
-            _datetime(2007, 3, 1, 13, 0, 0),
-            _datetime(2008, 5, 11, 15, 30, 0),
+            _interval_datetime(2007, 3, 1, 13, 0, 0),
+            _interval_datetime(2008, 5, 11, 15, 30, 0),
             DateDuration { years: 0, months: 0, days: 437, hours: 2, minutes: 30, seconds: 0 }
         ),
         _should_parse_interval(
             "2007-03-01T13:00:00Z--P10D",
             "2007-03-01T13:00:00Z/P10D",
-            _datetime(2007, 3, 1, 13, 0, 0),
-            _datetime(2007, 3, 11, 13, 0, 0),
+            _interval_datetime(2007, 3, 1, 13, 0, 0),
+            _interval_datetime(2007, 3, 11, 13, 0, 0),
             DateDuration { years: 0, months: 0, days: 10, hours: 0, minutes: 0, seconds: 0 }
         ),
         _should_parse_interval(
             "P10D--2007-03-11T13:00:00Z",
             "P10D/2007-03-11T13:00:00Z",
-            _datetime(2007, 3, 1, 13, 0, 0),
-            _datetime(2007, 3, 11, 13, 0, 0),
+            _interval_datetime(2007, 3, 1, 13, 0, 0),
+            _interval_datetime(2007, 3, 11, 13, 0, 0),
             DateDuration { years: 0, months: 0, days: 10, hours: 0, minutes: 0, seconds: 0 }
         ),
         _should_parse_interval(
             "P1D/2007-03-03T15:30:10Z",
             "P1D/2007-03-03T15:30:10Z",
-            _datetime(2007, 3, 2, 15, 30, 10),
-            _datetime(2007, 3, 3, 15, 30, 10),
+            _interval_datetime(2007, 3, 2, 15, 30, 10),
+            _interval_datetime(2007, 3, 3, 15, 30, 10),
             DateDuration { years: 0, months: 0, days: 1, hours: 0, minutes: 0, seconds: 0 }
         ),
         _should_parse_interval(
             "2007-03-01T13:00:00Z/P1D",
             "2007-03-01T13:00:00Z/P1D",
-            _datetime(2007, 3, 1, 13, 0, 0),
-            _datetime(2007, 3, 2, 13, 0, 0),
+            _interval_datetime(2007, 3, 1, 13, 0, 0),
+            _interval_datetime(2007, 3, 2, 13, 0, 0),
             DateDuration { years: 0, months: 0, days: 1, hours: 0, minutes: 0, seconds: 0 }
         ),
         _should_parse_interval(
             "2007-03-01T13:00:00Z/2007-03-03T15:30:10Z",
             "2007-03-01T13:00:00Z/2007-03-03T15:30:10Z",
-            _datetime(2007, 3, 1, 13, 0, 0),
-            _datetime(2007, 3, 3, 15, 30, 10),
+            _interval_datetime(2007, 3, 1, 13, 0, 0),
+            _interval_datetime(2007, 3, 3, 15, 30, 10),
             DateDuration { years: 0, months: 0, days: 2, hours: 2, minutes: 30, seconds: 10 }
         ),
     ]
@@ -101,34 +101,25 @@ fun _should_parse_interval(
             .succeeds(interval =>
                 assert_all([
                     assert_that(interval.to_iso_8601()).is_equal_to(canonical),
-                    assert_that(interval.start().date.year).is_equal_to(start.date.year),
-                    assert_that(interval.start().date.month).is_equal_to(start.date.month),
-                    assert_that(interval.start().date.day).is_equal_to(start.date.day),
-                    assert_that(interval.start().time.hour).is_equal_to(start.time.hour),
-                    assert_that(interval.start().time.minute).is_equal_to(start.time.minute),
-                    assert_that(interval.start().time.second).is_equal_to(start.time.second),
-                    assert_that(interval.end().date.year).is_equal_to(end.date.year),
-                    assert_that(interval.end().date.month).is_equal_to(end.date.month),
-                    assert_that(interval.end().date.day).is_equal_to(end.date.day),
-                    assert_that(interval.end().time.hour).is_equal_to(end.time.hour),
-                    assert_that(interval.end().time.minute).is_equal_to(end.time.minute),
-                    assert_that(interval.end().time.second).is_equal_to(end.time.second),
-                    assert_that(interval.duration().to_iso_8601()).is_equal_to(duration.to_iso_8601()),
+                    assert_that(interval)
+                        .has_start(start)
+                        .has_end(end)
+                        .has_duration(duration),
                 ])))
 
-fun _date(year: int, month: int, day: int): Date =
+fun _interval_date(year: int, month: int, day: int): Date =
     match Date { day: day, month: month, year: year } with
     case Success { value } -> value
     case Error -> UNIX_DATE
 
-fun _time(hour: int, minute: int, second: int): Time =
+fun _interval_time(hour: int, minute: int, second: int): Time =
     match Time { hour: hour, minute: minute, second: second } with
     case Success { value } -> value
     case Error -> MIDNIGHT
 
-fun _datetime(year: int, month: int, day: int, hour: int, minute: int, second: int): DateTime =
+fun _interval_datetime(year: int, month: int, day: int, hour: int, minute: int, second: int): DateTime =
     DateTime {
-        date: _date(year, month, day),
-        time: _time(hour, minute, second)
+        date: _interval_date(year, month, day),
+        time: _interval_time(hour, minute, second)
     }
 
