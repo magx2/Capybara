@@ -52,6 +52,30 @@ fun DateTime.minus(duration: Duration): DateTime = this.plus(duration.negate())
 /// Subtracts a `Duration` from this `DateTime`.
 fun DateTime.`-`(duration: Duration): DateTime = this.minus(duration)
 
+/// Returns the duration from `other` to this `DateTime`.
+fun DateTime.minus(other: DateTime): Duration =
+    fun __positive_duration_from_seconds(total_seconds: long): Duration =
+        let seconds_in_day = 1L * _SECONDS_IN_DAY
+        let days = floor_div(total_seconds, seconds_in_day)
+        let remainder_after_days = floor_mod(total_seconds, seconds_in_day)
+        let hours = floor_div(remainder_after_days, 3600)
+        let remainder_after_hours = floor_mod(remainder_after_days, 3600)
+        let minutes = floor_div(remainder_after_hours, 60)
+        let seconds = floor_mod(remainder_after_hours, 60)
+        DateDuration {
+            years: 0,
+            months: 0,
+            days: clamp_long_to_int(days),
+            hours: clamp_long_to_int(hours),
+            minutes: clamp_long_to_int(minutes),
+            seconds: clamp_long_to_int(seconds)
+        }
+    ---
+    let delta = this.timestamp() - other.timestamp()
+    if delta < 0L
+    then __positive_duration_from_seconds(0L - delta).negate()
+    else __positive_duration_from_seconds(delta)
+
 /// Returns `true` when this date-time is after `other`.
 fun DateTime.greater_than(other: DateTime): bool =
     if this.date.to_days_since_unix_epoch() > other.date.to_days_since_unix_epoch()

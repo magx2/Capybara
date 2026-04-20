@@ -18,7 +18,8 @@ fun tests(): TestFile =
         [_test_unix_epoch()]
         + _test_timestamp()
         + _test_plus()
-        + _test_minus()
+        + _test_minus_duration()
+        + _test_minus_datetime()
         + _test_comparisons())
 
 fun _test_unix_epoch(): TestCase =
@@ -82,7 +83,7 @@ fun _test_plus(): list[TestCase] =
             )),
     ]
 
-fun _test_minus(): list[TestCase] =
+fun _test_minus_duration(): list[TestCase] =
     let epoch_date = UNIX_DATE
     let mar_31_2024 = epoch_date.add_years_months(54, 2).add_days(30)
     [
@@ -106,6 +107,22 @@ fun _test_minus(): list[TestCase] =
                 _at(1, 3600) - DateDuration { years: 0, months: 0, days: 0, hours: 25, minutes: 0, seconds: 0 },
                 _at(0, 0)
             )),
+    ]
+
+
+fun _test_minus_datetime(): list[TestCase] =
+    [
+        test("minus(DateTime) should return a canonical positive elapsed duration",
+            assert_that(_at(1, 3661).minus(_at(0, 0)).to_iso_8601()).is_equal_to("P1DT1H1M1S")),
+        test("minus(DateTime) should return a negated canonical elapsed duration when this is earlier",
+            assert_that(_at(0, 0).minus(_at(1, 3661)).to_iso_8601()).is_equal_to("P-1DT-1H-1M-1S")),
+        test("minus(DateTime) should return zero duration for identical instants",
+            assert_that(_at(3, 42).minus(_at(3, 42)).to_iso_8601()).is_equal_to("PT0S")),
+        test("minus(DateTime) should produce a duration that plus can reapply",
+            let start = _at(10, 30)
+            let finish = _at(12, 7325)
+            let duration = finish.minus(start)
+            _assert_datetime(start.plus(duration), finish)),
     ]
 
 fun _test_comparisons(): list[TestCase] =
