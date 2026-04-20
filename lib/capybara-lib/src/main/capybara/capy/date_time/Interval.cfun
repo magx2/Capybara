@@ -49,27 +49,6 @@ fun Interval.to_iso_8601(): string =
     case DateTimeStartDuration { start, duration } -> _datetime_to_iso_8601(start) + "/" + duration.to_iso_8601()
     case DateTimeDurationEnd { duration, end } -> duration.to_iso_8601() + "/" + _datetime_to_iso_8601(end)
 
-/// Returns the interval start date-time.
-fun Interval.start(): DateTime =
-    match this with
-    case DateTimeStartEnd { start, _ } -> start
-    case DateTimeStartDuration { start, _ } -> start
-    case DateTimeDurationEnd { duration, end } -> end.minus(duration)
-
-/// Returns the interval end date-time.
-fun Interval.end(): DateTime =
-    match this with
-    case DateTimeStartEnd { _, end } -> end
-    case DateTimeStartDuration { start, duration } -> start.plus(duration)
-    case DateTimeDurationEnd { _, end } -> end
-
-/// Returns the interval duration.
-fun Interval.duration(): Duration =
-    match this with
-    case DateTimeStartEnd { start, end } -> end.minus(start)
-    case DateTimeStartDuration { _, duration } -> duration
-    case DateTimeDurationEnd { duration, _ } -> duration
-
 fun _parse_digit(value: string, invalid: string => string): Result[int] =
     match value[0] with
     case None -> Error { invalid("unexpected end of string while parsing digits") }

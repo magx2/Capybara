@@ -5,21 +5,20 @@ from /capy/test/CapyTest import { * }
 fun tests(): TestFile =
     let round_trip_test_cases = {
         "PT0S" : ZERO,
-        "P3Y6M4DT12H30M5S" : DateDuration { years: 3, months: 6, days: 4, hours: 12, minutes: 30, seconds: 5L },
-        "P123Y4M5DT6H7M8S" : DateDuration { years: 123, months: 4, days: 5, hours: 6, minutes: 7, seconds: 8L },
-        "P4Y" : DateDuration { years: 4, months: 0, days: 0, hours: 0, minutes: 0, seconds: 0L },
-        "P23DT23H" : DateDuration { years: 0, months: 0, days: 23, hours: 23, minutes: 0, seconds: 0L },
+        "P3Y6M4DT12H30M5S" : DateDuration { years: 3, months: 6, days: 4, hours: 12, minutes: 30, seconds: 5 },
+        "P123Y4M5DT6H7M8S" : DateDuration { years: 123, months: 4, days: 5, hours: 6, minutes: 7, seconds: 8 },
+        "P4Y" : DateDuration { years: 4, months: 0, days: 0, hours: 0, minutes: 0, seconds: 0 },
+        "P23DT23H" : DateDuration { years: 0, months: 0, days: 23, hours: 23, minutes: 0, seconds: 0 },
         "P2W" : WeekDuration { weeks: 2 },
-        "PT2147483648S" : DateDuration { years: 0, months: 0, days: 0, hours: 0, minutes: 0, seconds: 2147483648L },
     } |> [], (acc, iso, expected) => acc + test("should round-trip {iso}",
         assert_all([
             assert_that(from_iso_8601(iso)).succeeds(expected),
             assert_that(expected.to_iso_8601()).is_equal_to(iso),
         ]))
     let parse_only_test_cases = [
-        ("PT36H", DateDuration { years: 0, months: 0, days: 0, hours: 36, minutes: 0, seconds: 0L }),
-        ("P00030604T123005", DateDuration { years: 3, months: 6, days: 4, hours: 12, minutes: 30, seconds: 5L }),
-        ("P0003-06-04T12:30:05", DateDuration { years: 3, months: 6, days: 4, hours: 12, minutes: 30, seconds: 5L }),
+        ("PT36H", DateDuration { years: 0, months: 0, days: 0, hours: 36, minutes: 0, seconds: 0 }),
+        ("P00030604T123005", DateDuration { years: 3, months: 6, days: 4, hours: 12, minutes: 30, seconds: 5 }),
+        ("P0003-06-04T12:30:05", DateDuration { years: 3, months: 6, days: 4, hours: 12, minutes: 30, seconds: 5 }),
     ] | (iso, expected) => test("should parse {iso}", assert_that(from_iso_8601(iso)).succeeds(expected))
     let failed_test_cases = [
         "P",
