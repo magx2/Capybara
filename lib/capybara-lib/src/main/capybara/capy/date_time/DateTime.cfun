@@ -12,12 +12,45 @@ data DateTime { date: Date, time: Time }
 fun unix_epoch(): DateTime = DateTime { date: UNIX_DATE, time: MIDNIGHT }
 
 const _SECONDS_IN_DAY: int = 24 * 3600
-
-fun _duration_from_seconds(total_seconds: int): Duration =
-    DateDuration { years: 0, months: 0, days: 0, hours: 0, minutes: 0, seconds: total_seconds }
+const _MINUTES_IN_DAY: int = 24 * 60
 
 /// Returns Unix timestamp (seconds since `1970-01-01T00:00:00Z`).
-fun DateTime.timestamp(): long = this.date.to_days_since_unix_epoch() * _SECONDS_IN_DAY + this.time.to_seconds()
+fun DateTime.timestamp(): long =
+    1L * this.date.to_days_since_unix_epoch() * _SECONDS_IN_DAY + 1L * this.time.to_seconds()
+
+/// Adds a `Duration` to this `DateTime`.
+fun DateTime.plus(duration: Duration): DateTime =
+    let years = duration.years()
+    let months = duration.months()
+    let days = duration.days()
+    let hours = duration.hours()
+    let minutes = duration.minutes()
+    let seconds = duration.seconds()
+    let date_with_months = this.date.add_years_months(years, months)
+    let days_from_hours = floor_div(hours, 24)
+    let days_from_minutes = floor_div(minutes, _MINUTES_IN_DAY)
+    let days_from_seconds = floor_div(seconds, _SECONDS_IN_DAY)
+    let remainder_hours = floor_mod(hours, 24)
+    let remainder_minutes = floor_mod(minutes, _MINUTES_IN_DAY)
+    let remainder_seconds = floor_mod(seconds, _SECONDS_IN_DAY)
+    let intra_day_seconds = remainder_hours * 3600 + remainder_minutes * 60 + remainder_seconds
+    let shifted_seconds = this.time.to_seconds() + intra_day_seconds
+    let extra_days = floor_div(shifted_seconds, _SECONDS_IN_DAY)
+    let normalized_seconds = floor_mod(shifted_seconds, _SECONDS_IN_DAY)
+    let midnight = MIDNIGHT
+    DateTime {
+        date: date_with_months.add_days(days + days_from_hours + days_from_minutes + days_from_seconds + extra_days),
+        time: midnight.add_seconds(normalized_seconds)
+    }
+
+/// Adds a `Duration` to this `DateTime`.
+fun DateTime.`+`(duration: Duration): DateTime = this.plus(duration)
+
+/// Subtracts a `Duration` from this `DateTime`.
+fun DateTime.minus(duration: Duration): DateTime = this.plus(duration.negate())
+
+/// Subtracts a `Duration` from this `DateTime`.
+fun DateTime.`-`(duration: Duration): DateTime = this.minus(duration)
 
 /// Returns `true` when this date-time is after `other`.
 fun DateTime.greater_than(other: DateTime): bool =
