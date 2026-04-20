@@ -14,7 +14,7 @@ fun tests(): TestFile =
             "2007-03-01T13:00:00Z/2008-05-11T15:30:00Z",
             _datetime(2007, 3, 1, 13, 0, 0),
             _datetime(2008, 5, 11, 15, 30, 0),
-            DateDuration { years: 0, months: 0, days: 0, hours: 0, minutes: 0, seconds: 37765800 }
+            DateDuration { years: 0, months: 0, days: 437, hours: 2, minutes: 30, seconds: 0 }
         ),
         _should_parse_interval(
             "2007-03-01T13:00:00Z/P1Y2M10DT2H30M",
@@ -35,7 +35,7 @@ fun tests(): TestFile =
             "2007-03-01T13:00:00Z/2008-05-11T15:30:00Z",
             _datetime(2007, 3, 1, 13, 0, 0),
             _datetime(2008, 5, 11, 15, 30, 0),
-            DateDuration { years: 0, months: 0, days: 0, hours: 0, minutes: 0, seconds: 37765800 }
+            DateDuration { years: 0, months: 0, days: 437, hours: 2, minutes: 30, seconds: 0 }
         ),
         _should_parse_interval(
             "2007-03-01T13:00:00Z--P10D",
@@ -70,7 +70,7 @@ fun tests(): TestFile =
             "2007-03-01T13:00:00Z/2007-03-03T15:30:10Z",
             _datetime(2007, 3, 1, 13, 0, 0),
             _datetime(2007, 3, 3, 15, 30, 10),
-            DateDuration { years: 0, months: 0, days: 0, hours: 0, minutes: 0, seconds: 181810 }
+            DateDuration { years: 0, months: 0, days: 2, hours: 2, minutes: 30, seconds: 10 }
         ),
     ]
     let failed_test_cases = {
@@ -101,22 +101,20 @@ fun _should_parse_interval(
             .succeeds(interval =>
                 assert_all([
                     assert_that(interval.to_iso_8601()).is_equal_to(canonical),
-                ] +
-                    {
-                        match interval with
-                        case DateTimeStartEnd {dtStart, dtEnd} -> [
-                            assert_that(dtStart).is_equal_to(start),
-                            assert_that(dtEnd).is_equal_to(end),
-                        ]
-                        case DateTimeStartDuration {dtStart, dtDuration} -> [
-                            assert_that(dtStart).is_equal_to(start),
-                            assert_that(dtDuration).is_equal_to(duration),
-                        ]
-                        case DateTimeDurationEnd {dtDuration, dtEnd} -> [
-                            assert_that(dtEnd).is_equal_to(end),
-                            assert_that(dtDuration).is_equal_to(duration),
-                        ]
-                    })))
+                    assert_that(interval.start().date.year).is_equal_to(start.date.year),
+                    assert_that(interval.start().date.month).is_equal_to(start.date.month),
+                    assert_that(interval.start().date.day).is_equal_to(start.date.day),
+                    assert_that(interval.start().time.hour).is_equal_to(start.time.hour),
+                    assert_that(interval.start().time.minute).is_equal_to(start.time.minute),
+                    assert_that(interval.start().time.second).is_equal_to(start.time.second),
+                    assert_that(interval.end().date.year).is_equal_to(end.date.year),
+                    assert_that(interval.end().date.month).is_equal_to(end.date.month),
+                    assert_that(interval.end().date.day).is_equal_to(end.date.day),
+                    assert_that(interval.end().time.hour).is_equal_to(end.time.hour),
+                    assert_that(interval.end().time.minute).is_equal_to(end.time.minute),
+                    assert_that(interval.end().time.second).is_equal_to(end.time.second),
+                    assert_that(interval.duration().to_iso_8601()).is_equal_to(duration.to_iso_8601()),
+                ])))
 
 fun _date(year: int, month: int, day: int): Date =
     match Date { day: day, month: month, year: year } with
@@ -133,3 +131,4 @@ fun _datetime(year: int, month: int, day: int, hour: int, minute: int, second: i
         date: _date(year, month, day),
         time: _time(hour, minute, second)
     }
+
