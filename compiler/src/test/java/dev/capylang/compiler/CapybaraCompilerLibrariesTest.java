@@ -4,8 +4,8 @@ import dev.capylang.compiler.expression.CompiledFunctionCall;
 import dev.capylang.compiler.expression.CompiledLetExpression;
 import dev.capylang.compiler.expression.CompiledMatchExpression;
 import dev.capylang.compiler.expression.CompiledNewData;
-import org.junit.jupiter.api.Test;
 import dev.capylang.compiler.parser.RawModule;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.SortedSet;
@@ -682,6 +682,44 @@ class CapybaraCompilerLibrariesTest {
         assertThat(compiledFunction(compiled, "Consumer", "use_long").expression())
                 .isInstanceOfSatisfying(CompiledFunctionCall.class, call ->
                         assertThat(call.returnType()).isEqualTo(PrimitiveLinkedType.LONG));
+    }
+
+    @Test
+    void shouldRejectSubtypeFieldTypeThatDoesNotMatchParentMemberType() {
+        var error = compileFailure(List.of(
+                new RawModule("Consumer", "/foo/app", """
+                        type Duration { seconds: long } = DateDuration
+                        data DateDuration { seconds: int }
+                        """)
+        ));
+
+        assertThat(error.message())
+                .contains("Field `seconds` in subtype `DateDuration`")
+                .contains("must match parent type `Duration`")
+                .contains("LONG")
+                .contains("INT");
+    }
+
+    @Test
+    void shouldRejectTypeMethodThatConflictsWithSubtypeFieldGetterType() {
+        var error = compileFailure(List.of(
+                new RawModule("Consumer", "/foo/app", """
+                        type Duration = DateDuration | WeekDuration
+                        data DateDuration { seconds: int }
+                        data WeekDuration { weeks: int }
+
+                        fun Duration.seconds(): long =
+                            match this with
+                            case DateDuration { seconds } -> seconds
+                            case WeekDuration -> 0L
+                        """)
+        ));
+
+        assertThat(error.message())
+                .contains("/foo/app/Consumer.cfun")
+                .contains("fun Duration.seconds(): long =")
+                .contains("Field getter `DateDuration.seconds` returns `INT`, but this method returns `LONG`")
+                .contains("Conflicting declaration: data `DateDuration` at /foo/app/Consumer.cfun:2:0");
     }
 
     private static CompiledProgram compileProgram(List<RawModule> rawModules, SortedSet<CompiledModule> libraries) {

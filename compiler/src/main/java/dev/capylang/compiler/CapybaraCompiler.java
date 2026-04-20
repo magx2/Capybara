@@ -11,18 +11,14 @@ import dev.capylang.compiler.parser.Module;
 
 import java.io.IOException;
 import java.net.URI;
-import java.nio.file.FileSystemAlreadyExistsException;
-import java.nio.file.FileSystemNotFoundException;
-import java.nio.file.Files;
-import java.nio.file.Paths;
-import java.nio.file.Path;
+import java.nio.file.*;
 import java.time.Duration;
 import java.util.*;
 import java.util.logging.Logger;
 import java.util.stream.Stream;
 
-import static java.util.Collections.unmodifiableSortedSet;
 import static java.util.Collections.unmodifiableSortedMap;
+import static java.util.Collections.unmodifiableSortedSet;
 import static java.util.function.Function.identity;
 import static java.util.stream.Collectors.toMap;
 
@@ -313,6 +309,10 @@ public class CapybaraCompiler {
         if (result instanceof Result.Success<CompiledProgram> success) {
             var postValidation = validateResultReturningTypeConstructors(program, success.value());
             if (postValidation instanceof Result.Error<Void> error) {
+                return new Result.Error<>(error.errors());
+            }
+            var getterCompatibilityValidation = validateMethodGetterCompatibility(program, success.value());
+            if (getterCompatibilityValidation instanceof Result.Error<Void> error) {
                 return new Result.Error<>(error.errors());
             }
         }
@@ -804,6 +804,171 @@ public class CapybaraCompiler {
                && type.typeParameters().isEmpty()
                && type.extendedTypes().isEmpty()
                && !type.singleton();
+    }
+
+
+    private Result<Void> validateMethodGetterCompatibility(Program program, CompiledProgram compiledProgram) {
+        var modulesByName = compiledProgram.modules().stream()
+                .collect(toMap(CompiledModule::name, identity(), (first, second) -> first));
+        for (var module : program.modules()) {
+            var compiledModule = modulesByName.get(module.name());
+            if (compiledModule == null) {
+                continue;
+            }
+            var validation = validateMethodGetterCompatibility(
+                    module,
+                    List.copyOf(compiledModule.functions()),
+                    moduleSourceFile(module)
+            );
+            if (validation instanceof Result.Error<Void> error) {
+                return error;
+            }
+        }
+        return new Result.Success<>(null);
+    }
+
+    private Result<Void> validateMethodGetterCompatibility(
+            Module module,
+            List<CompiledFunction> compiledFunctions,
+            String moduleSourceFile
+    ) {
+        var parserFunctionsByKey = module.functional().definitions().stream()
+                .filter(Function.class::isInstance)
+                .map(Function.class::cast)
+                .collect(toMap(
+                        function -> functionKey(function.name(), function.parameters().size()),
+                        identity(),
+                        (first, second) -> first
+                ));
+        var declarationsByName = module.functional().definitions().stream()
+                .filter(definition -> definition instanceof DataDeclaration || definition instanceof TypeDeclaration)
+                .collect(toMap(
+                        definition -> switch (definition) {
+                            case DataDeclaration dataDeclaration -> dataDeclaration.name();
+                            case TypeDeclaration typeDeclaration -> typeDeclaration.name();
+                            default -> throw new IllegalStateException("Unexpected definition: " + definition);
+                        },
+                        identity(),
+                        (first, second) -> first
+                ));
+        for (var function : compiledFunctions) {
+            var validation = validateMethodGetterCompatibility(function, parserFunctionsByKey, declarationsByName, moduleSourceFile);
+            if (validation instanceof Result.Error<Void> error) {
+                return error;
+            }
+        }
+        return new Result.Success<>(null);
+    }
+
+    private Result<Void> validateMethodGetterCompatibility(
+            CompiledFunction function,
+            Map<String, Function> parserFunctionsByKey,
+            Map<String, Definition> declarationsByName,
+            String moduleSourceFile
+    ) {
+        var ownerTypeName = methodOwnerType(function.name());
+        var methodName = methodSimpleName(function.name());
+        if (ownerTypeName.isEmpty() || methodName.isEmpty() || function.parameters().size() != 1) {
+            return new Result.Success<>(null);
+        }
+
+        var parserFunction = parserFunctionsByKey.get(functionKey(function.name(), function.parameters().size()));
+        if (parserFunction == null) {
+            return new Result.Success<>(null);
+        }
+
+        var ownerType = function.parameters().getFirst().type();
+        if (ownerType instanceof CompiledDataType dataType) {
+            return conflictingField(dataType.fields(), methodName.get())
+                    .filter(field -> !field.type().equals(function.returnType()))
+                    .<Result<Void>>map(field -> methodGetterConflictError(
+                            parserFunction,
+                            ownerTypeName.get(),
+                            methodName.get(),
+                            function.returnType(),
+                            dataType.name(),
+                            field,
+                            declarationsByName.get(dataType.name()),
+                            moduleSourceFile
+                    ))
+                    .orElseGet(() -> new Result.Success<>(null));
+        }
+        if (ownerType instanceof CompiledDataParentType parentType) {
+            for (var subType : parentType.subTypes()) {
+                var conflict = conflictingField(subType.fields(), methodName.get())
+                        .filter(field -> !field.type().equals(function.returnType()));
+                if (conflict.isPresent()) {
+                    return methodGetterConflictError(
+                            parserFunction,
+                            ownerTypeName.get(),
+                            methodName.get(),
+                            function.returnType(),
+                            subType.name(),
+                            conflict.get(),
+                            declarationsByName.get(subType.name()),
+                            moduleSourceFile
+                    );
+                }
+            }
+        }
+        return new Result.Success<>(null);
+    }
+
+    private Result<Void> methodGetterConflictError(
+            Function methodFunction,
+            String ownerTypeName,
+            String methodName,
+            CompiledType methodReturnType,
+            String conflictingSubtypeName,
+            CompiledDataType.CompiledField field,
+            Definition conflictingDeclaration,
+            String moduleSourceFile
+    ) {
+        var normalizedFile = normalizeFile(moduleSourceFile);
+        var methodLine = methodDeclarationErrorLine(methodFunction);
+        var methodColumn = methodDeclarationErrorColumn(methodFunction);
+        var functionPreview = formatFunctionHeader(methodFunction) + " =";
+        var pointerIndent = methodDeclarationPointerIndent(methodFunction, functionPreview);
+        var conflictLocation = declarationLocation(conflictingDeclaration, normalizedFile);
+        var pointer = " ".repeat(Math.max(pointerIndent, 0))
+                      + "^ Field getter `" + conflictingSubtypeName + "." + field.name() + "` returns `" + field.type() + "`,"
+                      + " but this method returns `" + methodReturnType + "`. Conflicting declaration: " + conflictLocation;
+        var message = "error: mismatched types\n"
+                      + " --> " + normalizedFile + ":" + methodLine + ":" + methodColumn + "\n"
+                      + functionPreview + "\n"
+                      + pointer + "\n";
+        return new Result.Error<>(List.of(new Result.Error.SingleError(methodLine, methodColumn, normalizedFile, message)));
+    }
+
+    private String declarationLocation(Definition definition, String fallbackFile) {
+        if (definition instanceof DataDeclaration dataDeclaration) {
+            return sourceLocation(fallbackFile, dataDeclaration.position(), "data `" + dataDeclaration.name() + "`");
+        }
+        if (definition instanceof TypeDeclaration typeDeclaration) {
+            return sourceLocation(fallbackFile, typeDeclaration.position(), "type `" + typeDeclaration.name() + "`");
+        }
+        return sourceLocation(fallbackFile, Optional.empty(), "declaration");
+    }
+
+    private String sourceLocation(String file, Optional<SourcePosition> position, String label) {
+        var sourcePosition = position.orElse(SourcePosition.EMPTY);
+        if (sourcePosition == SourcePosition.EMPTY) {
+            return label + " in " + file;
+        }
+        return label + " at " + file + ":" + sourcePosition.line() + ":" + sourcePosition.column();
+    }
+
+    private String functionKey(String name, int parameterCount) {
+        return name + "#" + parameterCount;
+    }
+
+    private Optional<CompiledDataType.CompiledField> conflictingField(
+            List<CompiledDataType.CompiledField> fields,
+            String fieldName
+    ) {
+        return fields.stream()
+                .filter(field -> field.name().equals(fieldName))
+                .findFirst();
     }
 
     private boolean isQualifiedExternalPlaceholder(CompiledDataParentType type) {
@@ -2078,6 +2243,18 @@ public class CapybaraCompiler {
             return Optional.empty();
         }
         return Optional.of(functionName.substring(METHOD_DECL_PREFIX.length(), separatorIndex));
+    }
+
+
+    private Optional<String> methodSimpleName(String functionName) {
+        if (!functionName.startsWith(METHOD_DECL_PREFIX)) {
+            return Optional.empty();
+        }
+        var separatorIndex = functionName.indexOf("__", METHOD_DECL_PREFIX.length());
+        if (separatorIndex < 0 || separatorIndex + 2 > functionName.length()) {
+            return Optional.empty();
+        }
+        return Optional.of(functionName.substring(separatorIndex + 2));
     }
 
     private Result<CompiledFunction> normalizeInfixOperatorErrors(
@@ -4934,45 +5111,60 @@ public class CapybaraCompiler {
                 .stream()
                 .map(field -> linkField(field, genericTypes, knownDataTypes))
                 .collect(new ResultCollectionCollector<>())
-                .map(fields -> {
-                    var inheritedSubtypes = subTypes.stream()
-                            .map(subType -> new CompiledDataType(
-                                    subType.name(),
-                                    mergeParentFields(fields, subType.fields()),
-                                    subType.typeParameters(),
-                                    subType.extendedTypes(),
-                                    subType.comments(),
-                                    subType.visibility(),
-                                    subType.singleton()
-                            ))
-                            .toList();
-                    return new CompiledDataParentType(
-                            typeDeclaration.name(),
-                            fields,
-                            inheritedSubtypes,
-                            typeDeclaration.typeParameters(),
-                            typeDeclaration.comments(),
-                            typeDeclaration.visibility(),
-                            false
-                    );
-                });
+                .flatMap(fields -> subTypes.stream()
+                        .map(subType -> mergeParentFields(typeDeclaration.name(), fields, subType))
+                        .collect(new ResultCollectionCollector<>())
+                        .map(inheritedSubtypes -> new CompiledDataParentType(
+                                typeDeclaration.name(),
+                                fields,
+                                inheritedSubtypes,
+                                typeDeclaration.typeParameters(),
+                                typeDeclaration.comments(),
+                                typeDeclaration.visibility(),
+                                false
+                        )));
     }
 
-    private List<CompiledDataType.CompiledField> mergeParentFields(
+    private Result<CompiledDataType> mergeParentFields(
+            String parentTypeName,
             List<CompiledDataType.CompiledField> parentFields,
-            List<CompiledDataType.CompiledField> childFields
+            CompiledDataType childType
     ) {
         var merged = new ArrayList<CompiledDataType.CompiledField>(parentFields);
-        var childFieldNames = childFields.stream()
-                .map(CompiledDataType.CompiledField::name)
-                .collect(java.util.stream.Collectors.toSet());
+        var childFieldsByName = childType.fields().stream()
+                .collect(java.util.stream.Collectors.toMap(
+                        CompiledDataType.CompiledField::name,
+                        java.util.function.Function.identity(),
+                        (first, second) -> second,
+                        java.util.LinkedHashMap::new
+                ));
         for (var parentField : parentFields) {
-            if (childFieldNames.contains(parentField.name())) {
-                merged.removeIf(field -> field.name().equals(parentField.name()));
+            var childField = childFieldsByName.get(parentField.name());
+            if (childField == null) {
+                continue;
             }
+            if (!parentField.type().equals(childField.type())) {
+                return Result.error("Field `%s` in subtype `%s` must match parent type `%s` field type `%s`, but was `%s`"
+                        .formatted(
+                                parentField.name(),
+                                childType.name(),
+                                parentTypeName,
+                                parentField.type(),
+                                childField.type()
+                        ));
+            }
+            merged.removeIf(field -> field.name().equals(parentField.name()));
         }
-        merged.addAll(childFields);
-        return List.copyOf(merged);
+        merged.addAll(childType.fields());
+        return Result.success(new CompiledDataType(
+                childType.name(),
+                List.copyOf(merged),
+                childType.typeParameters(),
+                childType.extendedTypes(),
+                childType.comments(),
+                childType.visibility(),
+                childType.singleton()
+        ));
     }
 
     private Result<CompiledDataType.CompiledField> linkField(
