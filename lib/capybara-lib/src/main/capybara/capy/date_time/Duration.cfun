@@ -31,11 +31,11 @@ type Duration = DateDuration | WeekDuration
 ///
 /// Example:
 /// ```cfun
-/// DateDuration { years: 3, months: 6, days: 4, hours: 12, minutes: 30, seconds: 5L }
+/// DateDuration { years: 3, months: 6, days: 4, hours: 12, minutes: 30, seconds: 5 }
 /// ```
 data DateDuration {
     years: int, months: int, days: int,
-    hours: int, minutes: int, seconds: long
+    hours: int, minutes: int, seconds: int
 }
 
 /// ISO 8601 week-only duration.
@@ -50,14 +50,14 @@ data DateDuration {
 /// ```
 data WeekDuration { weeks: int }
 
-const ZERO: Duration = DateDuration { years: 0, months: 0, days: 0, hours: 0, minutes: 0, seconds: 0L }
+const ZERO: Duration = DateDuration { years: 0, months: 0, days: 0, hours: 0, minutes: 0, seconds: 0 }
 
 /// Formats this duration as a canonical ISO 8601 string.
 ///
 /// Examples:
 /// ```cfun
 /// ZERO.to_iso_8601() == "PT0S"
-/// DateDuration { years: 3, months: 6, days: 4, hours: 12, minutes: 30, seconds: 5L }.to_iso_8601() == "P3Y6M4DT12H30M5S"
+/// DateDuration { years: 3, months: 6, days: 4, hours: 12, minutes: 30, seconds: 5 }.to_iso_8601() == "P3Y6M4DT12H30M5S"
 /// WeekDuration { weeks: 2 }.to_iso_8601() == "P2W"
 /// ```
 ///
@@ -102,7 +102,7 @@ fun from_iso_8601(iso: string): Result[Duration] =
         days: int,
         hours: int,
         minutes: int,
-        seconds: long
+        seconds: int
     }
     data __DurationParse {
         buffer: string,
@@ -146,24 +146,6 @@ fun from_iso_8601(iso: string): Result[Duration] =
     fun __parse_digits(value: string): Result[__Parse[int]] =
         let parse <- __parse_digit(value)
         __parse_rest_digits(parse.buffer, parse.value)
-    fun __parse_single_digit_long(value: string): Result[__Parse[long]] =
-        let parse <- __parse_digit(value)
-        Success { __Parse { buffer: parse.buffer, value: parse.value + 0L } }
-    fun __parse_rest_long_digits(value: string, parsed: long): Result[__Parse[long]] =
-        match value[0] with
-        case Some { char } ->
-            if match char with
-               case '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' -> true
-               case _ -> false
-            then {
-                let parse_digit <- __parse_single_digit_long(value)
-                __parse_rest_long_digits(parse_digit.buffer, parsed * 10L + parse_digit.value)
-            }
-            else Success { __Parse { buffer: value, value: parsed } }
-        case _ -> Success { __Parse { buffer: value, value: parsed } }
-    fun __parse_long_digits(value: string): Result[__Parse[long]] =
-        let parse <- __parse_single_digit_long(value)
-        __parse_rest_long_digits(parse.buffer, parse.value)
     fun __parse_exact_digits(value: string, label: string): Result[int] =
         let parse <- __parse_digits(value)
         if parse.buffer.is_empty
@@ -213,7 +195,7 @@ fun from_iso_8601(iso: string): Result[Duration] =
         then Error { __invalid("combined duration hour component must be between 0 and 23") }
         else if parts.minutes < 0 | parts.minutes > 59
         then Error { __invalid("combined duration minute component must be between 0 and 59") }
-        else if parts.seconds < 0L | parts.seconds > 59L
+        else if parts.seconds < 0 | parts.seconds > 59
         then Error { __invalid("combined duration second component must be between 0 and 59") }
         else Success { __to_duration(parts) }
     fun __parse_combined_basic(value: string): Result[Duration] =
@@ -230,7 +212,7 @@ fun from_iso_8601(iso: string): Result[Duration] =
             days,
             hours,
             minutes,
-            seconds: seconds + 0L
+            seconds
         })
     fun __parse_combined_extended(value: string): Result[Duration] =
         let years <- __parse_exact_digits(value[0:4], "years")
@@ -246,7 +228,7 @@ fun from_iso_8601(iso: string): Result[Duration] =
             days,
             hours,
             minutes,
-            seconds: seconds + 0L
+            seconds
         })
     fun __has_non_week_components(parts: __Parts): bool =
         parts.years != 0
@@ -289,7 +271,7 @@ fun from_iso_8601(iso: string): Result[Duration] =
         else if designator == "H"
         then parts.with(hours: amount)
         else parts
-    fun __apply_seconds_component(parse: __DurationParse, seconds: long): Result[__DurationParse] =
+    fun __apply_seconds_component(parse: __DurationParse, seconds: int): Result[__DurationParse] =
         let order <- __component_order(parse.in_time, "S")
         if order <= parse.previous_order
         then Error { __invalid("components must appear in ISO 8601 order and may not repeat") }
@@ -346,27 +328,27 @@ fun from_iso_8601(iso: string): Result[Duration] =
                 case _ -> false)
             then Error { __invalid("expected digit or `T`, got `" + char + "`") }
             else {
-                let parse_long_number <- __parse_long_digits(parse.buffer)
-                match parse_long_number.buffer[0] with
-                case None -> Error { __invalid("missing designator after `" + parse_long_number.value + "`") }
+                let parse_number <- __parse_digits(parse.buffer)
+                match parse_number.buffer[0] with
+                case None -> Error { __invalid("missing designator after `" + parse_number.value + "`") }
                 case Some { designator } -> {
                     if designator == 'S'
                     then {
                         let next_parse <- __apply_seconds_component(__DurationParse {
-                            buffer: parse_long_number.buffer[1:],
+                            buffer: parse_number.buffer[1:],
                             value: parse.value,
                             in_time: parse.in_time,
                             previous_order: parse.previous_order,
                             has_component: parse.has_component,
                             has_time_component: parse.has_time_component
-                        }, parse_long_number.value)
+                        }, parse_number.value)
                         __parse_designator_duration(next_parse)
                     }
                     else {
-                        match ("" + parse_long_number.value).to_int() with
+                        match ("" + parse_number.value).to_int() with
                         case Success { amount } -> {
                             let next_parse <- __apply_component(__DurationParse {
-                                buffer: parse_long_number.buffer[1:],
+                                buffer: parse_number.buffer[1:],
                                 value: parse.value,
                                 in_time: parse.in_time,
                                 previous_order: parse.previous_order,
@@ -392,7 +374,7 @@ fun from_iso_8601(iso: string): Result[Duration] =
         then __parse_combined_extended(duration)
         else __parse_designator_duration(__DurationParse {
             buffer: duration,
-            value: __Parts { years: 0, months: 0, weeks: 0, days: 0, hours: 0, minutes: 0, seconds: 0L },
+            value: __Parts { years: 0, months: 0, weeks: 0, days: 0, hours: 0, minutes: 0, seconds: 0 },
             in_time: false,
             previous_order: 0,
             has_component: false,
@@ -412,7 +394,7 @@ fun Duration.negate(): Duration =
             days: 0 - days,
             hours: 0 - hours,
             minutes: 0 - minutes,
-            seconds: 0L - seconds
+            seconds: 0 - seconds
         }
 
 /// Returns year component (`0` for week durations).
@@ -446,7 +428,7 @@ fun Duration.minutes(): int =
     case DateDuration { _, _, _, _, minutes, _ } -> minutes
 
 /// Returns second component (`0` for week durations).
-fun Duration.seconds(): long =
+fun Duration.seconds(): int =
     match this with
-    case WeekDuration -> 0L
+    case WeekDuration -> 0
     case DateDuration { _, _, _, _, _, seconds } -> seconds

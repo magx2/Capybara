@@ -3,6 +3,7 @@ from /capy/date_time/Time import { * }
 from /capy/date_time/Duration import { * }
 from /capy/lang/Math import { * }
 from /capy/lang/Result import { * }
+from /capy/lang/Primitives import { * }
 
 /// Combination of a calendar date and time of day.
 data DateTime { date: Date, time: Time }
@@ -12,49 +13,11 @@ fun unix_epoch(): DateTime = DateTime { date: UNIX_DATE, time: MIDNIGHT }
 
 const _SECONDS_IN_DAY: int = 24 * 3600
 
-fun _duration_from_seconds(total_seconds: long): Duration =
+fun _duration_from_seconds(total_seconds: int): Duration =
     DateDuration { years: 0, months: 0, days: 0, hours: 0, minutes: 0, seconds: total_seconds }
 
 /// Returns Unix timestamp (seconds since `1970-01-01T00:00:00Z`).
-fun DateTime.timestamp(): long =
-    this.date.to_days_since_unix_epoch() * (_SECONDS_IN_DAY + 0L) + this.time.to_seconds() + 0L
-
-/// Adds a `Duration` to this `DateTime`.
-fun DateTime.plus(duration: Duration): DateTime =
-    const __minutes_in_day: int = 24 * 60
-    ---
-    let date_with_months = this.date.add_years_months(duration.years(), duration.months())
-
-    let days_from_hours: int = /capy/lang/Math.floor_div(duration.hours(), 24)
-    let days_from_minutes: int = /capy/lang/Math.floor_div(duration.minutes(), __minutes_in_day)
-    let days_from_seconds: int = /capy/lang/Primitives.clamp_long_to_int(/capy/lang/Math.floor_div(duration.seconds(), _SECONDS_IN_DAY + 0L))
-
-    let remainder_hours: int = /capy/lang/Math.floor_mod(duration.hours(), 24)
-    let remainder_minutes: int = /capy/lang/Math.floor_mod(duration.minutes(), __minutes_in_day)
-    let remainder_seconds: int = /capy/lang/Primitives.clamp_long_to_int(/capy/lang/Math.floor_mod(duration.seconds(), _SECONDS_IN_DAY + 0L))
-
-    let intra_day_seconds: int = remainder_hours * 3600 + remainder_minutes * 60 + remainder_seconds
-    let total_seconds: long = this.time.to_seconds() + intra_day_seconds
-    let day_carry_from_clock: int = /capy/lang/Primitives.clamp_long_to_int(/capy/lang/Math.floor_div(total_seconds, _SECONDS_IN_DAY + 0L))
-
-    let normalized_day_delta =
-        duration.days()
-        + days_from_hours
-        + days_from_minutes
-        + days_from_seconds
-        + day_carry_from_clock
-
-    DateTime {
-        date: date_with_months.add_days(normalized_day_delta),
-        time: this.time.add_seconds(intra_day_seconds)
-    }
-
-
-/// Subtracts a `Duration` from this `DateTime`.
-fun DateTime.minus(duration: Duration): DateTime = this.plus(duration.negate())
-
-/// Returns the duration from `other` to this `DateTime`.
-fun DateTime.minus(other: DateTime): Duration = _duration_from_seconds(this.timestamp() - other.timestamp())
+fun DateTime.timestamp(): long = this.date.to_days_since_unix_epoch() * _SECONDS_IN_DAY + this.time.to_seconds()
 
 /// Returns `true` when this date-time is after `other`.
 fun DateTime.greater_than(other: DateTime): bool =
