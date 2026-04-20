@@ -1,6 +1,11 @@
 from /capy/lang/Option import { * }
 from /capy/lang/Result import { * }
 from /capy/lang/Seq import { * }
+from /capy/date_time/Date import { * }
+from /capy/date_time/Time import { * }
+from /capy/date_time/DateTime import { * }
+from /capy/date_time/Duration import { * }
+from /capy/date_time/Interval import { * }
 
 data Assertion { result: bool, message: string, type: string }
 
@@ -8,6 +13,7 @@ type Assert { assertions: list[() => Assertion] } =
     _TechnicalAssert
     | StringAssert | IntAssert | LongAssert | DoubleAssert | FloatAssert | BoolAssert
     | DataAssert | OptionAssert | ResultAssert
+    | DateAssert | TimeAssert | DateTimeAssert | DurationAssert | IntervalAssert
     | ListAssert | SetAssert | DictAssert | SeqAssert
 
 fun Assert.failed(): bool = this.assertions | supplier => supplier().result |any? r => !r
@@ -24,6 +30,11 @@ data BoolAssert { value: bool }
 data DataAssert { value: data }
 data OptionAssert[T] { value: /capy/lang/Option[T] }
 data ResultAssert[T] { value: /capy/lang/Result[T] }
+data DateAssert { value: Date }
+data TimeAssert { value: Time }
+data DateTimeAssert { value: DateTime }
+data DurationAssert { value: Duration }
+data IntervalAssert { value: Interval }
 data ListAssert[T] { value: list[T] }
 data SetAssert[T] { value: set[T] }
 data DictAssert[T] { value: dict[T] }
@@ -298,6 +309,349 @@ fun ResultAssert[T].fails(message: string): ResultAssert[T] =
         assertions: this.assertions + () => assertion
     }
 
+fun DateAssert.is_equal_to(other: Date): DateAssert =
+    let assertion = Assertion {
+        result: this.value == other,
+        message: "Expected date:\n" + this.value + "\nto be equal to:\n" + other,
+        type: 'DateAssert.is_equal_to'
+    }
+    DateAssert {
+        value: this.value,
+        assertions: this.assertions + () => assertion
+    }
+
+fun DateAssert.has_day(other: int): DateAssert =
+    let assertion = Assertion {
+        result: this.value.day == other,
+        message: "Expected date day:\n" + this.value.day + "\nto be equal to:\n" + other,
+        type: 'DateAssert.has_day'
+    }
+    DateAssert {
+        value: this.value,
+        assertions: this.assertions + () => assertion
+    }
+
+fun DateAssert.has_month(other: int): DateAssert =
+    let assertion = Assertion {
+        result: this.value.month == other,
+        message: "Expected date month:\n" + this.value.month + "\nto be equal to:\n" + other,
+        type: 'DateAssert.has_month'
+    }
+    DateAssert {
+        value: this.value,
+        assertions: this.assertions + () => assertion
+    }
+
+fun DateAssert.has_year(other: int): DateAssert =
+    let assertion = Assertion {
+        result: this.value.year == other,
+        message: "Expected date year:\n" + this.value.year + "\nto be equal to:\n" + other,
+        type: 'DateAssert.has_year'
+    }
+    DateAssert {
+        value: this.value,
+        assertions: this.assertions + () => assertion
+    }
+
+fun TimeAssert.is_equal_to(other: Time): TimeAssert =
+    let assertion = Assertion {
+        result: this.value == other,
+        message: "Expected time:\n" + this.value + "\nto be equal to:\n" + other,
+        type: 'TimeAssert.is_equal_to'
+    }
+    TimeAssert {
+        value: this.value,
+        assertions: this.assertions + () => assertion
+    }
+
+fun TimeAssert.has_hour(other: int): TimeAssert =
+    let assertion = Assertion {
+        result: this.value.hour == other,
+        message: "Expected time hour:\n" + this.value.hour + "\nto be equal to:\n" + other,
+        type: 'TimeAssert.has_hour'
+    }
+    TimeAssert {
+        value: this.value,
+        assertions: this.assertions + () => assertion
+    }
+
+fun TimeAssert.has_minute(other: int): TimeAssert =
+    let assertion = Assertion {
+        result: this.value.minute == other,
+        message: "Expected time minute:\n" + this.value.minute + "\nto be equal to:\n" + other,
+        type: 'TimeAssert.has_minute'
+    }
+    TimeAssert {
+        value: this.value,
+        assertions: this.assertions + () => assertion
+    }
+
+fun TimeAssert.has_second(other: int): TimeAssert =
+    let assertion = Assertion {
+        result: this.value.second == other,
+        message: "Expected time second:\n" + this.value.second + "\nto be equal to:\n" + other,
+        type: 'TimeAssert.has_second'
+    }
+    TimeAssert {
+        value: this.value,
+        assertions: this.assertions + () => assertion
+    }
+
+fun DateTimeAssert.is_equal_to(other: DateTime): DateTimeAssert =
+    let assertion = Assertion {
+        result: this.value == other,
+        message: "Expected date-time:\n" + this.value + "\nto be equal to:\n" + other,
+        type: 'DateTimeAssert.is_equal_to'
+    }
+    DateTimeAssert {
+        value: this.value,
+        assertions: this.assertions + () => assertion
+    }
+
+fun DateTimeAssert.has_date(other: Date): DateTimeAssert =
+    let assertion = Assertion {
+        result: this.value.date == other,
+        message: "Expected date-time date:\n" + this.value.date + "\nto be equal to:\n" + other,
+        type: 'DateTimeAssert.has_date'
+    }
+    DateTimeAssert {
+        value: this.value,
+        assertions: this.assertions + () => assertion
+    }
+
+fun DateTimeAssert.has_time(other: Time): DateTimeAssert =
+    let assertion = Assertion {
+        result: this.value.time == other,
+        message: "Expected date-time time:\n" + this.value.time + "\nto be equal to:\n" + other,
+        type: 'DateTimeAssert.has_time'
+    }
+    DateTimeAssert {
+        value: this.value,
+        assertions: this.assertions + () => assertion
+    }
+
+fun DateTimeAssert.has_year(other: int): DateTimeAssert =
+    let assertion = Assertion {
+        result: this.value.date.year == other,
+        message: "Expected date-time year:\n" + this.value.date.year + "\nto be equal to:\n" + other,
+        type: 'DateTimeAssert.has_year'
+    }
+    DateTimeAssert {
+        value: this.value,
+        assertions: this.assertions + () => assertion
+    }
+
+fun DateTimeAssert.has_month(other: int): DateTimeAssert =
+    let assertion = Assertion {
+        result: this.value.date.month == other,
+        message: "Expected date-time month:\n" + this.value.date.month + "\nto be equal to:\n" + other,
+        type: 'DateTimeAssert.has_month'
+    }
+    DateTimeAssert {
+        value: this.value,
+        assertions: this.assertions + () => assertion
+    }
+
+fun DateTimeAssert.has_day(other: int): DateTimeAssert =
+    let assertion = Assertion {
+        result: this.value.date.day == other,
+        message: "Expected date-time day:\n" + this.value.date.day + "\nto be equal to:\n" + other,
+        type: 'DateTimeAssert.has_day'
+    }
+    DateTimeAssert {
+        value: this.value,
+        assertions: this.assertions + () => assertion
+    }
+
+fun DateTimeAssert.has_hour(other: int): DateTimeAssert =
+    let assertion = Assertion {
+        result: this.value.time.hour == other,
+        message: "Expected date-time hour:\n" + this.value.time.hour + "\nto be equal to:\n" + other,
+        type: 'DateTimeAssert.has_hour'
+    }
+    DateTimeAssert {
+        value: this.value,
+        assertions: this.assertions + () => assertion
+    }
+
+fun DateTimeAssert.has_minute(other: int): DateTimeAssert =
+    let assertion = Assertion {
+        result: this.value.time.minute == other,
+        message: "Expected date-time minute:\n" + this.value.time.minute + "\nto be equal to:\n" + other,
+        type: 'DateTimeAssert.has_minute'
+    }
+    DateTimeAssert {
+        value: this.value,
+        assertions: this.assertions + () => assertion
+    }
+
+fun DateTimeAssert.has_second(other: int): DateTimeAssert =
+    let assertion = Assertion {
+        result: this.value.time.second == other,
+        message: "Expected date-time second:\n" + this.value.time.second + "\nto be equal to:\n" + other,
+        type: 'DateTimeAssert.has_second'
+    }
+    DateTimeAssert {
+        value: this.value,
+        assertions: this.assertions + () => assertion
+    }
+
+fun DateTimeAssert.is_greater_than(other: DateTime): DateTimeAssert =
+    let assertion = Assertion {
+        result: this.value.greater_than(other),
+        message: "Expected date-time:\n" + this.value + "\nto be greater than:\n" + other,
+        type: 'DateTimeAssert.is_greater_than'
+    }
+    DateTimeAssert {
+        value: this.value,
+        assertions: this.assertions + () => assertion
+    }
+
+fun DateTimeAssert.is_less_than(other: DateTime): DateTimeAssert =
+    let assertion = Assertion {
+        result: this.value.less_than(other),
+        message: "Expected date-time:\n" + this.value + "\nto be less than:\n" + other,
+        type: 'DateTimeAssert.is_less_than'
+    }
+    DateTimeAssert {
+        value: this.value,
+        assertions: this.assertions + () => assertion
+    }
+
+fun DurationAssert.is_equal_to(other: Duration): DurationAssert =
+    let assertion = Assertion {
+        result: this.value == other,
+        message: "Expected duration:\n" + this.value.to_iso_8601() + "\nto be equal to:\n" + other.to_iso_8601(),
+        type: 'DurationAssert.is_equal_to'
+    }
+    DurationAssert {
+        value: this.value,
+        assertions: this.assertions + () => assertion
+    }
+
+fun DurationAssert.has_years(other: int): DurationAssert =
+    let assertion = Assertion {
+        result: this.value.years() == other,
+        message: "Expected duration years:\n" + this.value.years() + "\nto be equal to:\n" + other,
+        type: 'DurationAssert.has_years'
+    }
+    DurationAssert {
+        value: this.value,
+        assertions: this.assertions + () => assertion
+    }
+
+fun DurationAssert.has_months(other: int): DurationAssert =
+    let assertion = Assertion {
+        result: this.value.months() == other,
+        message: "Expected duration months:\n" + this.value.months() + "\nto be equal to:\n" + other,
+        type: 'DurationAssert.has_months'
+    }
+    DurationAssert {
+        value: this.value,
+        assertions: this.assertions + () => assertion
+    }
+
+fun DurationAssert.has_days(other: int): DurationAssert =
+    let assertion = Assertion {
+        result: this.value.days() == other,
+        message: "Expected duration days:\n" + this.value.days() + "\nto be equal to:\n" + other,
+        type: 'DurationAssert.has_days'
+    }
+    DurationAssert {
+        value: this.value,
+        assertions: this.assertions + () => assertion
+    }
+
+fun DurationAssert.has_hours(other: int): DurationAssert =
+    let assertion = Assertion {
+        result: this.value.hours() == other,
+        message: "Expected duration hours:\n" + this.value.hours() + "\nto be equal to:\n" + other,
+        type: 'DurationAssert.has_hours'
+    }
+    DurationAssert {
+        value: this.value,
+        assertions: this.assertions + () => assertion
+    }
+
+fun DurationAssert.has_minutes(other: int): DurationAssert =
+    let assertion = Assertion {
+        result: this.value.minutes() == other,
+        message: "Expected duration minutes:\n" + this.value.minutes() + "\nto be equal to:\n" + other,
+        type: 'DurationAssert.has_minutes'
+    }
+    DurationAssert {
+        value: this.value,
+        assertions: this.assertions + () => assertion
+    }
+
+fun DurationAssert.has_seconds(other: int): DurationAssert =
+    let assertion = Assertion {
+        result: this.value.seconds() == other,
+        message: "Expected duration seconds:\n" + this.value.seconds() + "\nto be equal to:\n" + other,
+        type: 'DurationAssert.has_seconds'
+    }
+    DurationAssert {
+        value: this.value,
+        assertions: this.assertions + () => assertion
+    }
+
+fun DurationAssert.has_weeks(other: int): DurationAssert =
+    let assertion = Assertion {
+        result: match this.value with
+            case WeekDuration { weeks } -> weeks == other
+            case _ -> false,
+        message: "Expected duration weeks:\n" + this.value.to_iso_8601() + "\nto have weeks:\n" + other,
+        type: 'DurationAssert.has_weeks'
+    }
+    DurationAssert {
+        value: this.value,
+        assertions: this.assertions + () => assertion
+    }
+
+fun IntervalAssert.is_equal_to(other: Interval): IntervalAssert =
+    let assertion = Assertion {
+        result: this.value.to_iso_8601() == other.to_iso_8601(),
+        message: "Expected interval:\n" + this.value.to_iso_8601() + "\nto be equal to:\n" + other.to_iso_8601(),
+        type: 'IntervalAssert.is_equal_to'
+    }
+    IntervalAssert {
+        value: this.value,
+        assertions: this.assertions + () => assertion
+    }
+
+fun IntervalAssert.has_start(other: DateTime): IntervalAssert =
+    let assertion = Assertion {
+        result: this.value.start() == other,
+        message: "Expected interval start:\n" + this.value.start() + "\nto be equal to:\n" + other,
+        type: 'IntervalAssert.has_start'
+    }
+    IntervalAssert {
+        value: this.value,
+        assertions: this.assertions + () => assertion
+    }
+
+fun IntervalAssert.has_end(other: DateTime): IntervalAssert =
+    let assertion = Assertion {
+        result: this.value.end() == other,
+        message: "Expected interval end:\n" + this.value.end() + "\nto be equal to:\n" + other,
+        type: 'IntervalAssert.has_end'
+    }
+    IntervalAssert {
+        value: this.value,
+        assertions: this.assertions + () => assertion
+    }
+
+fun IntervalAssert.has_duration(other: Duration): IntervalAssert =
+    let assertion = Assertion {
+        result: this.value.duration() == other,
+        message: "Expected interval duration:\n" + this.value.duration().to_iso_8601() + "\nto be equal to:\n" + other.to_iso_8601(),
+        type: 'IntervalAssert.has_duration'
+    }
+    IntervalAssert {
+        value: this.value,
+        assertions: this.assertions + () => assertion
+    }
+
 fun ListAssert[T].is_equal_to(other: list[T]): ListAssert[T] =
     let assertion = Assertion {
         result: this.value == other,
@@ -535,6 +889,11 @@ fun assert_that(value: long) = LongAssert { value: value, assertions: [] }
 fun assert_that(value: double) = DoubleAssert { value: value, assertions: [] }
 fun assert_that(value: float) = FloatAssert { value: value, assertions: [] }
 fun assert_that(value: bool) = BoolAssert { value: value, assertions: [] }
+fun assert_that(value: Date) = DateAssert { value: value, assertions: [] }
+fun assert_that(value: Time) = TimeAssert { value: value, assertions: [] }
+fun assert_that(value: DateTime) = DateTimeAssert { value: value, assertions: [] }
+fun assert_that(value: Duration) = DurationAssert { value: value, assertions: [] }
+fun assert_that(value: Interval) = IntervalAssert { value: value, assertions: [] }
 fun assert_that(value: list[T]): ListAssert[T] = ListAssert { value: value, assertions: [] }
 fun assert_that(value: set[T]): SetAssert[T] = SetAssert { value: value, assertions: [] }
 fun assert_that(value: dict[T]): DictAssert[T] = DictAssert { value: value, assertions: [] }
