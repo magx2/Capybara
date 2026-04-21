@@ -39,7 +39,17 @@ class CompileGenerateE2ETest {
 
         assertThat(exitCode).isZero();
         assertThat(errors.toString()).isBlank();
-        assertThat(Files.walk(generatedOutput).anyMatch(path -> path.toString().endsWith(".java"))).isTrue();
-        assertThat(Files.walk(linkedOutput).anyMatch(Files::isRegularFile)).isTrue();
+        boolean hasGeneratedJava;
+        try (var generatedFiles = Files.walk(generatedOutput)) {
+            hasGeneratedJava = generatedFiles.anyMatch(path -> path.toString().endsWith(".java"));
+        }
+
+        boolean hasLinkedFiles;
+        try (var linkedFiles = Files.walk(linkedOutput)) {
+            hasLinkedFiles = linkedFiles.anyMatch(Files::isRegularFile);
+        }
+
+        assertThat(hasGeneratedJava).isTrue();
+        assertThat(hasLinkedFiles).isTrue();
     }
 }
