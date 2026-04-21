@@ -43,3 +43,60 @@ fun Time.add_seconds(seconds: int): Time =
 fun Time.add_minutes(minutes: int): Time = this.add_seconds(minutes * SECONDS_IN_MINUTE)
 /// Adds hours and wraps around a 24-hour day.
 fun Time.add_hours(hours: int): Time = this.add_seconds(hours * SECONDS_IN_HOUR)
+
+/// Formats this time as an ISO 8601 extended time.
+fun Time.to_iso_8601(): string =
+    fun __pad_left(value: string, size: int): string =
+        if value.size >= size
+        then value
+        else __pad_left("0" + value, size)
+    ---
+    __pad_left("" + this.hour, 2)
+    + ":"
+    + __pad_left("" + this.minute, 2)
+    + ":"
+    + __pad_left("" + this.second, 2)
+
+/// Parses an ISO 8601 time in basic or extended complete form.
+fun from_iso_8601(iso: string): Result[Time] =
+    data __Parse[T] { buffer: string, value: T }
+    fun __invalid(message: string): string = "Invalid ISO 8601 time format: " + message
+    fun __parse_single_digit(value: string): Result[__Parse[int]] =
+        match value[0] with
+        case None -> Error { __invalid("unexpected end of string while parsing digits") }
+        case Some { char } ->
+            match ("" + char).to_int() with
+            case Success { digit } -> Success { __Parse { buffer: value[1:], value: digit } }
+            case Error -> Error { __invalid("expected digit, got `" + char + "`") }
+    fun __parse_rest_digits(value: string, parsed: int): Result[__Parse[int]] =
+        if value.is_empty
+        then Success { __Parse { buffer: value, value: parsed } }
+        else
+            match __parse_single_digit(value) with
+            case Success { next } -> __parse_rest_digits(next.buffer, parsed * 10 + next.value)
+            case Error -> Success { __Parse { buffer: value, value: parsed } }
+    fun __parse_digits(value: string): Result[__Parse[int]] =
+        let parse <- __parse_single_digit(value)
+        __parse_rest_digits(parse.buffer, parse.value)
+    fun __parse_exact_digits(value: string, label: string): Result[int] =
+        let parse <- __parse_digits(value)
+        if parse.buffer.is_empty
+        then Success { parse.value }
+        else Error { __invalid("expected digits for " + label + ", got `" + value + "`") }
+    fun __parse_parts(hour_part: string, minute_part: string, second_part: string): Result[Time] = {
+        let hour <- __parse_exact_digits(hour_part, "hour")
+        let minute <- __parse_exact_digits(minute_part, "minute")
+        let second <- __parse_exact_digits(second_part, "second")
+        match Time { hour, minute, second } with
+        case Success { time } -> Success { time }
+        case Error { message } -> Error { __invalid(message) }
+    }
+    ---
+    let value = if iso.starts_with("T") then iso[1:] else iso
+    if value.size == 8
+    then if value[2:3] == ":" & value[5:6] == ":"
+        then __parse_parts(value[0:2], value[3:5], value[6:8])
+        else Error { __invalid("expected time in `HH:MM:SS`, `HHMMSS`, `THH:MM:SS`, or `THHMMSS` format, got `" + iso + "`") }
+    else if value.size == 6
+        then __parse_parts(value[0:2], value[2:4], value[4:6])
+        else Error { __invalid("expected time in `HH:MM:SS`, `HHMMSS`, `THH:MM:SS`, or `THHMMSS` format, got `" + iso + "`") }

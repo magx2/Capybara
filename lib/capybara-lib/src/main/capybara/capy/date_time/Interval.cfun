@@ -1,6 +1,4 @@
-from /capy/date_time/Date import { * }
 from /capy/date_time/DateTime import { * }
-from /capy/date_time/Time import { * }
 from /capy/date_time/Duration import { * }
 from /capy/lang/Regex import { * }
 from /capy/lang/Result import { * }
@@ -15,39 +13,12 @@ data DateTimeStartEnd { start: DateTime, end: DateTime }
 data DateTimeStartDuration { start: DateTime, duration: Duration }
 data DateTimeDurationEnd { duration: Duration, end: DateTime }
 
-fun _pad_left(value: string, size: int): string =
-    if value.size >= size
-    then value
-    else _pad_left("0" + value, size)
-
-fun _year_to_iso_8601(year: int): string =
-    if year < 0
-    then "-" + _pad_left("" + (0 - year), 4)
-    else _pad_left("" + year, 4)
-
-fun _date_to_iso_8601(date: Date): string =
-    _year_to_iso_8601(date.year)
-    + "-"
-    + _pad_left("" + date.month, 2)
-    + "-"
-    + _pad_left("" + date.day, 2)
-
-fun _time_to_iso_8601(time: Time): string =
-    _pad_left("" + time.hour, 2)
-    + ":"
-    + _pad_left("" + time.minute, 2)
-    + ":"
-    + _pad_left("" + time.second, 2)
-
-fun _datetime_to_iso_8601(datetime: DateTime): string =
-    _date_to_iso_8601(datetime.date) + "T" + _time_to_iso_8601(datetime.time) + "Z"
-
 /// Formats this interval as canonical ISO 8601 using `/` as the separator.
 fun Interval.to_iso_8601(): string =
     match this with
-    case DateTimeStartEnd { start, end } -> _datetime_to_iso_8601(start) + "/" + _datetime_to_iso_8601(end)
-    case DateTimeStartDuration { start, duration } -> _datetime_to_iso_8601(start) + "/" + duration.to_iso_8601()
-    case DateTimeDurationEnd { duration, end } -> duration.to_iso_8601() + "/" + _datetime_to_iso_8601(end)
+    case DateTimeStartEnd { start, end } -> start.to_iso_8601() + "/" + end.to_iso_8601()
+    case DateTimeStartDuration { start, duration } -> start.to_iso_8601() + "/" + duration.to_iso_8601()
+    case DateTimeDurationEnd { duration, end } -> duration.to_iso_8601() + "/" + end.to_iso_8601()
 
 /// Returns the interval start date-time.
 fun Interval.start(): DateTime =
@@ -70,14 +41,6 @@ fun Interval.duration(): Duration =
     case DateTimeStartDuration { _, duration } -> duration
     case DateTimeDurationEnd { duration, _ } -> duration
 
-fun _parse_digit(value: string, invalid: string => string): Result[int] =
-    match value[0] with
-    case None -> Error { invalid("unexpected end of string while parsing digits") }
-    case Some { char } ->
-        match ("" + char).to_int() with
-        case Success { digit } -> Success { digit }
-        case Error -> Error { invalid("expected digit, got `" + char + "`") }
-
 /// Parses an ISO 8601 interval in one of these forms:
 /// - `<start>/<end>`
 /// - `<start>/<duration>`
@@ -85,32 +48,9 @@ fun _parse_digit(value: string, invalid: string => string): Result[int] =
 ///
 /// Also accepts `--` as an alternate input separator and canonicalizes back to `/`.
 fun from_iso_8601(iso: string): Result[Interval] =
-    data __Parse[T] { buffer: string, value: T }
     data __Split { left: string, right: string }
     data __SplitScan { left: string, right: string, seen_separator: bool }
     fun __invalid(message: string): string = "Invalid ISO 8601 interval format: " + message
-    fun __parse_single_digit(value: string): Result[__Parse[int]] =
-        match value[0] with
-        case None -> Error { __invalid("unexpected end of string while parsing digits") }
-        case Some { char } ->
-            match ("" + char).to_int() with
-            case Success { digit } -> Success { __Parse { buffer: value[1:], value: digit } }
-            case Error -> Error { __invalid("expected digit, got `" + char + "`") }
-    fun __parse_rest_digits(value: string, parsed: int): Result[__Parse[int]] =
-        if value.is_empty
-        then Success { __Parse { buffer: value, value: parsed } }
-        else
-            match __parse_single_digit(value) with
-            case Success { next } -> __parse_rest_digits(next.buffer, parsed * 10 + next.value)
-            case Error -> Success { __Parse { buffer: value, value: parsed } }
-    fun __parse_digits(value: string): Result[__Parse[int]] =
-        let parse <- __parse_single_digit(value)
-        __parse_rest_digits(parse.buffer, parse.value)
-    fun __parse_exact_digits(value: string, label: string): Result[int] =
-        let parse <- __parse_digits(value)
-        if parse.buffer.is_empty
-        then Success { parse.value }
-        else Error { __invalid("expected digits for " + label + ", got `" + value + "`") }
     fun __drop_prefix(value: string, size: int): string =
         if size <= 0
         then value
@@ -154,74 +94,27 @@ fun from_iso_8601(iso: string): Result[Interval] =
         else if has_slash & has_dash
         then Error { __invalid("expected exactly one interval separator") }
         else Error { __invalid("expected `/` or `--` separator") }
-    fun __parse_date(value: string): Result[Date] =
-        if value.size != 10
-        then Error { __invalid("expected date in `YYYY-MM-DD` format, got `" + value + "`") }
-        else if value[4:5] != "-"
-        then Error { __invalid("expected date in `YYYY-MM-DD` format, got `" + value + "`") }
-        else if value[7:8] != "-"
-        then Error { __invalid("expected date in `YYYY-MM-DD` format, got `" + value + "`") }
-        else {
-            let year <- __parse_exact_digits(value[0:4], "year")
-            let month <- __parse_exact_digits(value[5:7], "month")
-            let day <- __parse_exact_digits(value[8:10], "day")
-            match Date { day, month, year } with
-            case Success { date } -> Success { date }
-            case Error { message } -> Error { __invalid(message) }
-        }
-    fun __parse_time(value: string): Result[Time] =
-        if value.size != 8
-        then Error { __invalid("expected time in `HH:MM:SS` format, got `" + value + "`") }
-        else if value[2:3] != ":"
-        then Error { __invalid("expected time in `HH:MM:SS` format, got `" + value + "`") }
-        else if value[5:6] != ":"
-        then Error { __invalid("expected time in `HH:MM:SS` format, got `" + value + "`") }
-        else {
-            let hour <- __parse_exact_digits(value[0:2], "hour")
-            let minute <- __parse_exact_digits(value[3:5], "minute")
-            let second <- __parse_exact_digits(value[6:8], "second")
-            match Time { hour, minute, second } with
-            case Success { time } -> Success { time }
-            case Error { message } -> Error { __invalid(message) }
-        }
     fun __parse_datetime(value: string): Result[DateTime] =
-        if value.size != 20
-        then Error { __invalid("expected UTC date-time `YYYY-MM-DDTHH:MM:SSZ`, got `" + value + "`") }
-        else if value[10:11] != "T"
-        then Error { __invalid("expected UTC date-time `YYYY-MM-DDTHH:MM:SSZ`, got `" + value + "`") }
-        else if value[19:20] != "Z"
-        then Error { __invalid("expected UTC date-time `YYYY-MM-DDTHH:MM:SSZ`, got `" + value + "`") }
-        else {
-            let date <- __parse_date(value[0:10])
-            let time <- __parse_time(value[11:19])
-            Success { DateTime { date, time } }
-        }
-    fun __parse_start_end(split: __Split): Result[Interval] =
-        if split.left.size == 20 & split.right.size == 20
-        then {
-            let start <- __parse_datetime(split.left)
-            let end <- __parse_datetime(split.right)
-            if start.greater_than(end)
-            then Error { __invalid("interval start must not be after interval end") }
-            else Success { DateTimeStartEnd { start, end } }
-        }
-        else Error { __invalid("interval endpoints must be UTC date-times") }
-    fun __parse_start_duration(split: __Split): Result[Interval] =
+        match /capy/date_time/DateTime.from_iso_8601(value) with
+        case Success { datetime } -> Success { datetime }
+        case Error -> Error { __invalid("interval endpoints must be UTC date-times") }
+    fun __parse_start_end(split: __Split): Result[Interval] = {
+        let start <- __parse_datetime(split.left)
+        let end <- __parse_datetime(split.right)
+        if start.greater_than(end)
+        then Error { __invalid("interval start must not be after interval end") }
+        else Success { DateTimeStartEnd { start, end } }
+    }
+    fun __parse_start_duration(split: __Split): Result[Interval] = {
         let duration <- /capy/date_time/Duration.from_iso_8601(split.right)
-        if split.left.size == 20
-        then {
-            let start <- __parse_datetime(split.left)
-            Success { DateTimeStartDuration { start, duration } }
-        }
-        else Error { __invalid("interval endpoints must be UTC date-times") }
-    fun __parse_duration_end(split: __Split): Result[Interval] =
+        let start <- __parse_datetime(split.left)
+        Success { DateTimeStartDuration { start, duration } }
+    }
+    fun __parse_duration_end(split: __Split): Result[Interval] = {
         let duration <- /capy/date_time/Duration.from_iso_8601(split.left)
-        if split.right.size == 20
-        then {
-            let end <- __parse_datetime(split.right)
-            Success { DateTimeDurationEnd { duration, end } }
-        }
-        else Error { __invalid("interval endpoints must be UTC date-times") }
+        let end <- __parse_datetime(split.right)
+        Success { DateTimeDurationEnd { duration, end } }
+    }
     ---
     let split <- __split_interval(iso)
     if split.left.starts_with("P") & split.right.starts_with("P")

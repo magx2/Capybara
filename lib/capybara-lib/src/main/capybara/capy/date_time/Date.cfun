@@ -109,3 +109,71 @@ fun Date.add_years_months(years: int, months: int): Date =
         month: normalized_month,
         year: normalized_year
     }
+
+/// Formats this date as an ISO 8601 calendar date.
+fun Date.to_iso_8601(): string =
+    fun __pad_left(value: string, size: int): string =
+        if value.size >= size
+        then value
+        else __pad_left("0" + value, size)
+    fun __year_to_iso_8601(year: int): string =
+        if year < 0
+        then "-" + __pad_left("" + (0 - year), 4)
+        else if year > 9999
+            then "+" + year
+            else __pad_left("" + year, 4)
+    ---
+    __year_to_iso_8601(this.year)
+    + "-"
+    + __pad_left("" + this.month, 2)
+    + "-"
+    + __pad_left("" + this.day, 2)
+
+/// Parses an ISO 8601 calendar date in basic or extended complete form.
+fun from_iso_8601(iso: string): Result[Date] =
+    data __Parse[T] { buffer: string, value: T }
+    fun __invalid(message: string): string = "Invalid ISO 8601 date format: " + message
+    fun __parse_single_digit(value: string): Result[__Parse[int]] =
+        match value[0] with
+        case None -> Error { __invalid("unexpected end of string while parsing digits") }
+        case Some { char } ->
+            match ("" + char).to_int() with
+            case Success { digit } -> Success { __Parse { buffer: value[1:], value: digit } }
+            case Error -> Error { __invalid("expected digit, got `" + char + "`") }
+    fun __parse_rest_digits(value: string, parsed: int): Result[__Parse[int]] =
+        if value.is_empty
+        then Success { __Parse { buffer: value, value: parsed } }
+        else
+            match __parse_single_digit(value) with
+            case Success { next } -> __parse_rest_digits(next.buffer, parsed * 10 + next.value)
+            case Error -> Success { __Parse { buffer: value, value: parsed } }
+    fun __parse_digits(value: string): Result[__Parse[int]] =
+        let parse <- __parse_single_digit(value)
+        __parse_rest_digits(parse.buffer, parse.value)
+    fun __parse_exact_digits(value: string, label: string): Result[int] =
+        let parse <- __parse_digits(value)
+        if parse.buffer.is_empty
+        then Success { parse.value }
+        else Error { __invalid("expected digits for " + label + ", got `" + value + "`") }
+    ---
+    if iso.size == 10
+    then if iso[4:5] == "-" & iso[7:8] == "-"
+        then {
+            let year <- __parse_exact_digits(iso[0:4], "year")
+            let month <- __parse_exact_digits(iso[5:7], "month")
+            let day <- __parse_exact_digits(iso[8:10], "day")
+            match Date { day, month, year } with
+            case Success { date } -> Success { date }
+            case Error { message } -> Error { __invalid(message) }
+        }
+        else Error { __invalid("expected date in `YYYY-MM-DD` or `YYYYMMDD` format, got `" + iso + "`") }
+    else if iso.size == 8
+        then {
+            let year <- __parse_exact_digits(iso[0:4], "year")
+            let month <- __parse_exact_digits(iso[4:6], "month")
+            let day <- __parse_exact_digits(iso[6:8], "day")
+            match Date { day, month, year } with
+            case Success { date } -> Success { date }
+            case Error { message } -> Error { __invalid(message) }
+        }
+        else Error { __invalid("expected date in `YYYY-MM-DD` or `YYYYMMDD` format, got `" + iso + "`") }
