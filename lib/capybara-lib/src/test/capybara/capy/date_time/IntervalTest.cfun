@@ -17,11 +17,25 @@ fun tests(): TestFile =
             DateDuration { years: 0, months: 0, days: 437, hours: 2, minutes: 30, seconds: 0 }
         ),
         _should_parse_interval(
+            "20070301T130000Z/20080511T153000Z",
+            "2007-03-01T13:00:00Z/2008-05-11T15:30:00Z",
+            _interval_datetime(2007, 3, 1, 13, 0, 0),
+            _interval_datetime(2008, 5, 11, 15, 30, 0),
+            DateDuration { years: 0, months: 0, days: 437, hours: 2, minutes: 30, seconds: 0 }
+        ),
+        _should_parse_interval(
             "2007-03-01T13:00:00Z/P1Y2M10DT2H30M",
             "2007-03-01T13:00:00Z/P1Y2M10DT2H30M",
             _interval_datetime(2007, 3, 1, 13, 0, 0),
             _interval_datetime(2008, 5, 11, 15, 30, 0),
             DateDuration { years: 1, months: 2, days: 10, hours: 2, minutes: 30, seconds: 0 }
+        ),
+        _should_parse_interval(
+            "2007-03-01T14:00:00+01:00/P1D",
+            "2007-03-01T13:00:00Z/P1D",
+            _interval_datetime(2007, 3, 1, 13, 0, 0),
+            _interval_datetime(2007, 3, 2, 13, 0, 0),
+            DateDuration { years: 0, months: 0, days: 1, hours: 0, minutes: 0, seconds: 0 }
         ),
         _should_parse_interval(
             "P1Y2M10DT2H30M/2008-05-11T15:30:00Z",
@@ -81,7 +95,6 @@ fun tests(): TestFile =
         "2007-03-01/2007-03-01T13:00:00Z" : "Invalid ISO 8601 interval format: interval endpoints must be UTC date-times",
         "2007-03-01/P1DT2H" : "Invalid ISO 8601 interval format: interval endpoints must be UTC date-times",
         "2008-05-11T15:30:00Z/2007-03-01T13:00:00Z" : "Invalid ISO 8601 interval format: interval start must not be after interval end",
-        "2007-03-01T13:00:00+01:00/P1D" : "Invalid ISO 8601 interval format: interval endpoints must be UTC date-times",
         "2007-03-01--2007-03-02--P1D" : "Invalid ISO 8601 interval format: expected exactly one interval separator",
     } |> [], (acc, iso, expected_message) =>
         acc + test("should fail parsing {iso}",
@@ -122,4 +135,3 @@ fun _interval_datetime(year: int, month: int, day: int, hour: int, minute: int, 
         date: _interval_date(year, month, day),
         time: _interval_time(hour, minute, second)
     }
-

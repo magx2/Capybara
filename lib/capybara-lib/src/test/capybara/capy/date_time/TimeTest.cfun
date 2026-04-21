@@ -28,7 +28,10 @@ fun tests(): TestFile =
         + _test_round_to_hours()
         + _test_add_seconds()
         + _test_add_minutes()
-        + _test_add_hours())
+        + _test_add_hours()
+        + _time_test_to_iso_8601()
+        + _time_test_from_iso_8601_success()
+        + _time_test_from_iso_8601_failure())
 
 fun _test_time(hour: int, minute: int, second: int, is_valid: bool): TestCase =
     let assert: Assert =
@@ -137,6 +140,36 @@ fun _test_add_hours(): list[TestCase] =
         assert_that(Time { hour, minute, second })
             .succeeds(time =>
                 assert_that(time.add_hours(hours_to_add)).is_equal_to(_time_test_value(expected_hour, expected_minute, expected_second))))
+
+fun _time_test_to_iso_8601(): TestCase =
+    test(
+        "Time.to_iso_8601() should format full precision extended time",
+        assert_that(Time { hour: 13, minute: 47, second: 30 } | t => Success { t.to_iso_8601() }).succeeds("13:47:30"))
+
+fun _time_test_from_iso_8601_success(): list[TestCase] =
+    [
+        ("13:47:30", 13, 47, 30),
+        ("134730", 13, 47, 30),
+        ("T13:47:30", 13, 47, 30),
+        ("T134730", 13, 47, 30),
+    ] | (iso, hour, minute, second) => test(
+        "Time.from_iso_8601 should parse {iso}",
+        assert_that(/capy/date_time/Time.from_iso_8601(iso)).succeeds(time =>
+            assert_that(time)
+                .has_hour(hour)
+                .has_minute(minute)
+                .has_second(second)))
+
+fun _time_test_from_iso_8601_failure(): list[TestCase] =
+    [
+        "24:00:00",
+        "13:47",
+        "13:47:60",
+        "13:47:30Z",
+        "13-47-30",
+    ] | iso => test(
+        "Time.from_iso_8601 should fail for {iso}",
+        assert_that(/capy/date_time/Time.from_iso_8601(iso)).fails())
 
 fun _time_test_value(hour: int, minute: int, second: int): Time =
     match Time { hour: hour, minute: minute, second: second } with

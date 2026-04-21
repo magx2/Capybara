@@ -15,12 +15,14 @@ fun _at(days_since_epoch: int, seconds_since_midnight: int): DateTime =
 
 fun tests(): TestFile =
     test_file('/capy/date_time/DateTime.cfun',
-        [_test_unix_epoch()]
+        [_test_unix_epoch(), _datetime_test_to_iso_8601()]
         + _test_timestamp()
         + _test_plus()
         + _test_minus_duration()
         + _test_minus_datetime()
-        + _test_comparisons())
+        + _test_comparisons()
+        + _datetime_test_from_iso_8601_success()
+        + _datetime_test_from_iso_8601_failure())
 
 fun _test_unix_epoch(): TestCase =
     test("UNIX_EPOCH should return the correct DateTime for 1 January 1970 at 00:00:00",
@@ -32,6 +34,10 @@ fun _test_unix_epoch(): TestCase =
             .has_hour(0)
             .has_minute(0)
             .has_second(0))
+
+fun _datetime_test_to_iso_8601(): TestCase =
+    test("DateTime.to_iso_8601 should format canonical UTC date-time",
+        assert_that(_at(1, 3661).to_iso_8601()).is_equal_to("1970-01-02T01:01:01Z"))
 
 fun _test_timestamp(): list[TestCase] =
     [
@@ -78,7 +84,6 @@ fun _test_minus_duration(): list[TestCase] =
             assert_that(_at(1, 3600) - DateDuration { years: 0, months: 0, days: 0, hours: 25, minutes: 0, seconds: 0 }).is_equal_to(_at(0, 0))),
     ]
 
-
 fun _test_minus_datetime(): list[TestCase] =
     [
         test("minus(DateTime) should return a canonical positive elapsed duration",
@@ -123,3 +128,32 @@ fun _test_comparisons(): list[TestCase] =
             ])),
     ]
 
+fun _datetime_test_from_iso_8601_success(): list[TestCase] =
+    [
+        ("1970-01-01T00:00:00Z", _at(0, 0)),
+        ("19700101T000000Z", _at(0, 0)),
+        ("1970-01-01T02:30:00+02:30", _at(0, 0)),
+        ("1970-01-01T02:00:00+02", _at(0, 0)),
+        ("19700101T020000+0200", _at(0, 0)),
+        ("1969-12-31T21:00:00-03:00", _at(0, 0)),
+    ] | (iso, expected) => test(
+        "DateTime.from_iso_8601 should parse {iso}",
+        assert_that(/capy/date_time/DateTime.from_iso_8601(iso)).succeeds(datetime =>
+            assert_all([
+                assert_that(datetime).has_date(expected.date),
+                assert_that(datetime).has_time(expected.time),
+                assert_that(datetime.to_iso_8601()).is_equal_to(expected.to_iso_8601()),
+            ])))
+
+fun _datetime_test_from_iso_8601_failure(): list[TestCase] =
+    [
+        "1970-01-01T00:00:00",
+        "1970-01-01 00:00:00Z",
+        "1970-01-01T00:00:00+00:61",
+        "1970-01-01T00:00:00-00:00",
+        "1970-01-01T00:00:00+24:00",
+        "1970-01-01T000000Z",
+        "19700101T00:00:00Z",
+    ] | iso => test(
+        "DateTime.from_iso_8601 should fail for {iso}",
+        assert_that(/capy/date_time/DateTime.from_iso_8601(iso)).fails())
