@@ -4,6 +4,7 @@ from /capy/date_time/Duration import { * }
 from /capy/lang/Math import { * }
 from /capy/lang/Result import { * }
 from /capy/lang/Primitives import { * }
+from /capy/lang/Option import { * }
 
 /// Combination of a UTC calendar date and time of day.
 data DateTime { date: Date, time: Time }
@@ -92,91 +93,16 @@ fun DateTime.`<`(other: DateTime): bool = this.less_than(other)
 fun DateTime.`>`(other: DateTime): bool = this.greater_than(other)
 
 /// Formats this date-time as a canonical UTC ISO 8601 string.
-fun DateTime.to_iso_8601(): string = this.date.to_iso_8601() + "T" + this.time.to_iso_8601() + "Z"
+fun DateTime.to_iso_8601(): string =
+    this.date.to_iso_8601()
+    + "T"
+    + this.time.to_iso_8601()
 
 /// Parses a UTC ISO 8601 date-time in basic or extended form.
 fun from_iso_8601(iso: string): Result[DateTime] =
-    data __Parse[T] { buffer: string, value: T }
     data __Split { left: string, right: string }
     data __SplitScan { left: string, right: string, seen_separator: bool }
-    data __ZoneParse { buffer: string, offset_minutes: int }
     fun __invalid(message: string): string = "Invalid ISO 8601 date-time format: " + message
-    fun __drop_prefix(value: string, size: int): string =
-        if size <= 0
-        then value
-        else
-            match value[0] with
-            case None -> ""
-            case Some { _ } -> __drop_prefix(value[1:], size - 1)
-    fun __take_prefix(value: string, size: int): string =
-        if size <= 0
-        then ""
-        else
-            match value[0] with
-            case None -> ""
-            case Some { char } -> ("" + char) + __take_prefix(value[1:], size - 1)
-    fun __slice(value: string, start: int, size: int): string = __take_prefix(__drop_prefix(value, start), size)
-    fun __parse_single_digit(value: string): Result[__Parse[int]] =
-        match value[0] with
-        case None -> Error { __invalid("unexpected end of string while parsing digits") }
-        case Some { char } ->
-            match ("" + char).to_int() with
-            case Success { digit } -> Success { __Parse { buffer: value[1:], value: digit } }
-            case Error -> Error { __invalid("expected digit, got `" + char + "`") }
-    fun __parse_rest_digits(value: string, parsed: int): Result[__Parse[int]] =
-        if value.is_empty
-        then Success { __Parse { buffer: value, value: parsed } }
-        else
-            match __parse_single_digit(value) with
-            case Success { next } -> __parse_rest_digits(next.buffer, parsed * 10 + next.value)
-            case Error -> Success { __Parse { buffer: value, value: parsed } }
-    fun __parse_digits(value: string): Result[__Parse[int]] =
-        let parse <- __parse_single_digit(value)
-        __parse_rest_digits(parse.buffer, parse.value)
-    fun __parse_exact_digits(value: string, label: string): Result[int] =
-        let parse <- __parse_digits(value)
-        if parse.buffer.is_empty
-        then Success { parse.value }
-        else Error { __invalid("expected digits for " + label + ", got `" + value + "`") }
-    fun __parse_offset(sign: string, hour_part: string, minute_part: string): Result[int] = {
-        let hours <- __parse_exact_digits(hour_part, "offset hour")
-        let minutes <- __parse_exact_digits(minute_part, "offset minute")
-        if hours > 23
-        then Error { __invalid("offset hour must be between 00 and 23") }
-        else if minutes > 59
-            then Error { __invalid("offset minute must be between 00 and 59") }
-            else if sign == "-" & hours == 0 & minutes == 0
-                then Error { __invalid("negative zero offset is not allowed") }
-                else {
-                    let direction = if sign == "-" then 0 - 1 else 1
-                    Success { direction * (hours * MINUTES_IN_HOUR + minutes) }
-                }
-    }
-    fun __parse_zone(value: string): Result[__ZoneParse] =
-        if value.is_empty
-        then Error { __invalid("expected UTC designator `Z` or numeric offset") }
-        else if __slice(value, value.size - 1, 1) == "Z"
-            then Success { __ZoneParse { buffer: __take_prefix(value, value.size - 1), offset_minutes: 0 } }
-            else if value.size >= 6
-                & (__slice(value, value.size - 6, 1) == "+" | __slice(value, value.size - 6, 1) == "-")
-                & __slice(value, value.size - 3, 1) == ":"
-                then {
-                    let offset_minutes <- __parse_offset(__slice(value, value.size - 6, 1), __slice(value, value.size - 5, 2), __slice(value, value.size - 2, 2))
-                    Success { __ZoneParse { buffer: __take_prefix(value, value.size - 6), offset_minutes } }
-                }
-                else if value.size >= 5
-                    & (__slice(value, value.size - 5, 1) == "+" | __slice(value, value.size - 5, 1) == "-")
-                    then {
-                        let offset_minutes <- __parse_offset(__slice(value, value.size - 5, 1), __slice(value, value.size - 4, 2), __slice(value, value.size - 2, 2))
-                        Success { __ZoneParse { buffer: __take_prefix(value, value.size - 5), offset_minutes } }
-                    }
-                    else if value.size >= 3
-                        & (__slice(value, value.size - 3, 1) == "+" | __slice(value, value.size - 3, 1) == "-")
-                        then {
-                            let offset_minutes <- __parse_offset(__slice(value, value.size - 3, 1), __slice(value, value.size - 2, 2), "00")
-                            Success { __ZoneParse { buffer: __take_prefix(value, value.size - 3), offset_minutes } }
-                        }
-                        else Error { __invalid("expected UTC designator `Z` or numeric offset") }
     fun __scan_split(value: string, scan: __SplitScan): Result[__Split] =
         if value.is_empty
         then if !scan.seen_separator
@@ -208,31 +134,37 @@ fun from_iso_8601(iso: string): Result[DateTime] =
         then value[4:5] == "-" & value[7:8] == "-"
         else false
     fun __is_extended_time(value: string): bool =
-        if value.size == 8
+        if value.size >= 8
         then value[2:3] == ":" & value[5:6] == ":"
         else false
-    fun __parse_local_datetime(value: string): Result[DateTime] = {
-        let split <- __scan_split(value, __SplitScan { left: "", right: "", seen_separator: false })
-        let date_is_extended = __is_extended_date(split.left)
-        let time_is_extended = __is_extended_time(split.right)
-        if date_is_extended != time_is_extended
-        then Error { __invalid("date and time must use the same basic or extended format") }
-        else {
-            let date <- /capy/date_time/Date.from_iso_8601(split.left)
-            let time <- /capy/date_time/Time.from_iso_8601(split.right)
-            Success { DateTime { date, time } }
-        }
-    }
     ---
-    let zone <- __parse_zone(iso)
-    let local_datetime <- __parse_local_datetime(zone.buffer)
-    Success {
-        local_datetime.plus(DateDuration {
-            years: 0,
-            months: 0,
-            days: 0,
-            hours: 0,
-            minutes: 0 - zone.offset_minutes,
-            seconds: 0
-        })
+    let split <- __scan_split(iso, __SplitScan { left: "", right: "", seen_separator: false })
+    let date_is_extended = __is_extended_date(split.left)
+    let time_is_extended = __is_extended_time(split.right)
+    if date_is_extended != time_is_extended
+    then Error { __invalid("date and time must use the same basic or extended format") }
+    else {
+        let date <- /capy/date_time/Date.from_iso_8601(split.left)
+        let time_with_offset <- /capy/date_time/Time.from_iso_8601(split.right)
+        match time_with_offset.offset_minutes with
+        case None -> Error { __invalid("expected UTC designator `Z` or numeric offset") }
+        case Some { offset_minutes } -> {
+            let utc_time <- Time {
+                hour: time_with_offset.hour,
+                minute: time_with_offset.minute,
+                second: time_with_offset.second,
+                offset_minutes: None {}
+            }
+            let local_datetime = DateTime { date, time: utc_time }
+            Success {
+                local_datetime.plus(DateDuration {
+                    years: 0,
+                    months: 0,
+                    days: 0,
+                    hours: 0,
+                    minutes: 0 - offset_minutes,
+                    seconds: 0
+                })
+            }
+        }
     }

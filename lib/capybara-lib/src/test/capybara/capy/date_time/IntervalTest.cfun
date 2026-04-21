@@ -126,7 +126,7 @@ fun _interval_date(year: int, month: int, day: int): Date =
     case Error -> UNIX_DATE
 
 fun _interval_time(hour: int, minute: int, second: int): Time =
-    match Time { hour: hour, minute: minute, second: second } with
+    match Time { hour: hour, minute: minute, second: second, offset_minutes: None {} } with
     case Success { value } -> value
     case Error -> MIDNIGHT
 
