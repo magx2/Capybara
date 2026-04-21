@@ -3,20 +3,27 @@ from /capy/lang/Result import {*}
 /// Clock time represented in 24-hour format.
 /// The constructor validates `hour`, `minute`, and `second` ranges.
 data Time { hour: int, minute: int, second: int } with constructor {
-    if hour < 0 | hour > 23
-        | minute < 0 | minute > 59
-        | second < 0 | second > 59
+    if hour < 0 | hour > HOURS_IN_DAY - 1
+        | minute < 0 | minute > MINUTES_IN_HOUR - 1
+        | second < 0 | second > SECONDS_IN_MINUTE - 1
     then Error { "Invalid time `{hour}:{minute}:{second}`!" }
     else Success {* { hour, minute, second }}
 }
+
+const HOURS_IN_DAY: int = 24
+const MINUTES_IN_HOUR: int = 60
+const SECONDS_IN_MINUTE: int = 60
+const SECONDS_IN_HOUR: int = MINUTES_IN_HOUR * SECONDS_IN_MINUTE
+const MINUTES_IN_DAY: int = HOURS_IN_DAY * MINUTES_IN_HOUR
+const SECONDS_IN_DAY: int = HOURS_IN_DAY * SECONDS_IN_HOUR
 
 const MIDNIGHT: Time = Time! { hour: 0, minute: 0, second: 0 }
 const NOON: Time = Time! { hour: 12, minute: 0, second: 0 }
 
 /// Converts this time to seconds since midnight.
-fun Time.to_seconds(): int = this.hour * 3600 + this.minute * 60 + this.second
+fun Time.to_seconds(): int = this.hour * SECONDS_IN_HOUR + this.minute * SECONDS_IN_MINUTE + this.second
 /// Converts this time to minutes since midnight, truncating seconds.
-fun Time.to_minutes(): int = this.hour * 60 + this.minute
+fun Time.to_minutes(): int = this.hour * MINUTES_IN_HOUR + this.minute
 /// Returns the hour component.
 fun Time.to_hours(): int = this.hour
 /// Returns a new time with seconds set to `0`.
@@ -25,15 +32,14 @@ fun Time.round_to_minutes(): Time = Time! { hour: this.hour, minute: this.minute
 fun Time.round_to_hours(): Time = Time! { hour: this.hour, minute: 0, second: 0 }
 /// Adds seconds and wraps around a 24-hour day.
 fun Time.add_seconds(seconds: int): Time =
-    const __seconds_in_day: int = 24 * 3600
-    fun __normalize_day_seconds(total_seconds: int): int = /capy/lang/Math.floor_mod(total_seconds, __seconds_in_day)
+    fun __normalize_day_seconds(total_seconds: int): int = /capy/lang/Math.floor_mod(total_seconds, SECONDS_IN_DAY)
     ---
     let total_seconds = __normalize_day_seconds(this.to_seconds() + seconds)
-    let new_hour = (total_seconds / 3600) % 24
-    let new_minute = (total_seconds / 60) % 60
-    let new_second = total_seconds % 60
+    let new_hour = (total_seconds / SECONDS_IN_HOUR) % HOURS_IN_DAY
+    let new_minute = (total_seconds / SECONDS_IN_MINUTE) % MINUTES_IN_HOUR
+    let new_second = total_seconds % SECONDS_IN_MINUTE
     Time! { hour: new_hour, minute: new_minute, second: new_second }
 /// Adds minutes and wraps around a 24-hour day.
-fun Time.add_minutes(minutes: int): Time = this.add_seconds(minutes * 60)
+fun Time.add_minutes(minutes: int): Time = this.add_seconds(minutes * SECONDS_IN_MINUTE)
 /// Adds hours and wraps around a 24-hour day.
-fun Time.add_hours(hours: int): Time = this.add_seconds(hours * 3600)
+fun Time.add_hours(hours: int): Time = this.add_seconds(hours * SECONDS_IN_HOUR)

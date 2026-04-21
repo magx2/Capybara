@@ -11,12 +11,8 @@ data DateTime { date: Date, time: Time }
 /// Returns the Unix epoch date-time (`1970-01-01 00:00:00`).
 fun unix_epoch(): DateTime = DateTime { date: UNIX_DATE, time: MIDNIGHT }
 
-const _SECONDS_IN_DAY: int = 24 * 3600
-const _MINUTES_IN_DAY: int = 24 * 60
-
 /// Returns Unix timestamp (seconds since `1970-01-01T00:00:00Z`).
-fun DateTime.timestamp(): long =
-    1L * this.date.to_days_since_unix_epoch() * _SECONDS_IN_DAY + 1L * this.time.to_seconds()
+fun DateTime.timestamp(): long = 1L * this.date.to_days_since_unix_epoch() * SECONDS_IN_DAY + this.time.to_seconds()
 
 /// Adds a `Duration` to this `DateTime`.
 fun DateTime.plus(duration: Duration): DateTime =
@@ -27,16 +23,16 @@ fun DateTime.plus(duration: Duration): DateTime =
     let minutes = duration.minutes()
     let seconds = duration.seconds()
     let date_with_months = this.date.add_years_months(years, months)
-    let days_from_hours = floor_div(hours, 24)
-    let days_from_minutes = floor_div(minutes, _MINUTES_IN_DAY)
-    let days_from_seconds = floor_div(seconds, _SECONDS_IN_DAY)
-    let remainder_hours = floor_mod(hours, 24)
-    let remainder_minutes = floor_mod(minutes, _MINUTES_IN_DAY)
-    let remainder_seconds = floor_mod(seconds, _SECONDS_IN_DAY)
-    let intra_day_seconds = remainder_hours * 3600 + remainder_minutes * 60 + remainder_seconds
+    let days_from_hours = floor_div(hours, HOURS_IN_DAY)
+    let days_from_minutes = floor_div(minutes, MINUTES_IN_DAY)
+    let days_from_seconds = floor_div(seconds, SECONDS_IN_DAY)
+    let remainder_hours = floor_mod(hours, HOURS_IN_DAY)
+    let remainder_minutes = floor_mod(minutes, MINUTES_IN_DAY)
+    let remainder_seconds = floor_mod(seconds, SECONDS_IN_DAY)
+    let intra_day_seconds = remainder_hours * SECONDS_IN_HOUR + remainder_minutes * SECONDS_IN_MINUTE + remainder_seconds
     let shifted_seconds = this.time.to_seconds() + intra_day_seconds
-    let extra_days = floor_div(shifted_seconds, _SECONDS_IN_DAY)
-    let normalized_seconds = floor_mod(shifted_seconds, _SECONDS_IN_DAY)
+    let extra_days = floor_div(shifted_seconds, SECONDS_IN_DAY)
+    let normalized_seconds = floor_mod(shifted_seconds, SECONDS_IN_DAY)
     let midnight = MIDNIGHT
     DateTime {
         date: date_with_months.add_days(days + days_from_hours + days_from_minutes + days_from_seconds + extra_days),
@@ -55,13 +51,12 @@ fun DateTime.`-`(duration: Duration): DateTime = this.minus(duration)
 /// Returns the duration from `other` to this `DateTime`.
 fun DateTime.minus(other: DateTime): Duration =
     fun __positive_duration_from_seconds(total_seconds: long): Duration =
-        let seconds_in_day = 1L * _SECONDS_IN_DAY
-        let days = floor_div(total_seconds, seconds_in_day)
-        let remainder_after_days = floor_mod(total_seconds, seconds_in_day)
-        let hours = floor_div(remainder_after_days, 3600)
-        let remainder_after_hours = floor_mod(remainder_after_days, 3600)
-        let minutes = floor_div(remainder_after_hours, 60)
-        let seconds = floor_mod(remainder_after_hours, 60)
+        let days = floor_div(total_seconds, SECONDS_IN_DAY)
+        let remainder_after_days = floor_mod(total_seconds, SECONDS_IN_DAY)
+        let hours = floor_div(remainder_after_days, SECONDS_IN_HOUR)
+        let remainder_after_hours = floor_mod(remainder_after_days, SECONDS_IN_HOUR)
+        let minutes = floor_div(remainder_after_hours, SECONDS_IN_MINUTE)
+        let seconds = floor_mod(remainder_after_hours, SECONDS_IN_MINUTE)
         DateDuration {
             years: 0,
             months: 0,
