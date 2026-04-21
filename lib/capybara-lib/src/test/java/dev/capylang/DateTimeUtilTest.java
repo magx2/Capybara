@@ -34,6 +34,25 @@ class DateTimeUtilTest {
         assertThat(DateTimeUtil.fromJavaLocalTime(javaTime)).isEqualTo(capyTime);
     }
 
+
+    @ParameterizedTest
+    @MethodSource("fractionalLocalTimes")
+    void shouldTruncateSubSecondPrecisionWhenConvertingFromJavaLocalTime(LocalTime javaTime, Time expected) {
+        assertThat(DateTimeUtil.fromJavaLocalTime(javaTime)).isEqualTo(expected);
+    }
+
+    @ParameterizedTest
+    @MethodSource("fractionalOffsetTimes")
+    void shouldTruncateSubSecondPrecisionWhenConvertingFromJavaOffsetTime(OffsetTime javaTime, Time expected) {
+        assertThat(DateTimeUtil.fromJavaOffsetTime(javaTime)).isEqualTo(expected);
+    }
+
+    @ParameterizedTest
+    @MethodSource("fractionalLocalDateTimes")
+    void shouldTruncateSubSecondPrecisionWhenConvertingFromJavaLocalDateTime(LocalDateTime javaDateTime, DateTime expected) {
+        assertThat(DateTimeUtil.fromJavaLocalDateTime(javaDateTime)).isEqualTo(expected);
+    }
+
     @ParameterizedTest
     @MethodSource("offsetTimeCases")
     void shouldConvertTimeToAndFromJavaOffsetTime(Time capyTime, OffsetTime javaTime) {
@@ -159,6 +178,43 @@ class DateTimeUtilTest {
         return Stream.of(
                 Arguments.of(ZoneOffset.ofHoursMinutesSeconds(5, 30, 45)),
                 Arguments.of(ZoneOffset.ofHoursMinutesSeconds(-3, -15, -30))
+        );
+    }
+
+
+
+    private static Stream<Arguments> fractionalLocalTimes() {
+        return Stream.of(
+                Arguments.of(
+                        LocalTime.of(13, 15, 45, 123_456_789),
+                        new Time(13, 15, 45, Optional.empty())
+                ),
+                Arguments.of(
+                        LocalTime.of(13, 15, 45, 999_999_999),
+                        new Time(13, 15, 45, Optional.empty())
+                )
+        );
+    }
+
+    private static Stream<Arguments> fractionalOffsetTimes() {
+        return Stream.of(
+                Arguments.of(
+                        OffsetTime.of(13, 15, 45, 500_000_000, ZoneOffset.ofHoursMinutes(5, 30)),
+                        new Time(13, 15, 45, Optional.of(330))
+                ),
+                Arguments.of(
+                        OffsetTime.of(8, 0, 1, 1, ZoneOffset.ofHours(-4)),
+                        new Time(8, 0, 1, Optional.of(-240))
+                )
+        );
+    }
+
+    private static Stream<Arguments> fractionalLocalDateTimes() {
+        return Stream.of(
+                Arguments.of(
+                        LocalDateTime.of(2026, 4, 21, 13, 15, 45, 700_000_000),
+                        new DateTime(new Date(21, 4, 2026), new Time(13, 15, 45, Optional.empty()))
+                )
         );
     }
 

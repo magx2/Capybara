@@ -11,6 +11,7 @@ import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.time.OffsetTime;
 import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
 import java.util.Optional;
 
 public final class DateTimeUtil {
@@ -36,8 +37,14 @@ public final class DateTimeUtil {
         return LocalTime.of(time.hour(), time.minute(), time.second());
     }
 
+    /**
+     * Converts Java {@link LocalTime} to Capy {@link Time}.
+     * <p>
+     * Capy time precision is whole seconds, so sub-second nanos are explicitly truncated.
+     */
     public static Time fromJavaLocalTime(LocalTime time) {
-        return new Time(time.getHour(), time.getMinute(), time.getSecond(), Optional.empty());
+        var truncated = time.truncatedTo(ChronoUnit.SECONDS);
+        return new Time(truncated.getHour(), truncated.getMinute(), truncated.getSecond(), Optional.empty());
     }
 
     public static OffsetTime toJavaOffsetTime(Time time) {
@@ -47,6 +54,11 @@ public final class DateTimeUtil {
         return OffsetTime.of(toJavaLocalTime(time), offset);
     }
 
+    /**
+     * Converts Java {@link OffsetTime} to Capy {@link Time}.
+     * <p>
+     * Capy time precision is whole seconds, so sub-second nanos are explicitly truncated.
+     */
     public static Time fromJavaOffsetTime(OffsetTime time) {
         var totalSeconds = time.getOffset().getTotalSeconds();
         if (Math.floorMod(totalSeconds, TimeModule.sECONDSINMINUTE) != 0) {
@@ -55,7 +67,8 @@ public final class DateTimeUtil {
             );
         }
         var offsetMinutes = Math.floorDiv(totalSeconds, TimeModule.sECONDSINMINUTE);
-        return new Time(time.getHour(), time.getMinute(), time.getSecond(), Optional.of(offsetMinutes));
+        var truncated = time.toLocalTime().truncatedTo(ChronoUnit.SECONDS);
+        return new Time(truncated.getHour(), truncated.getMinute(), truncated.getSecond(), Optional.of(offsetMinutes));
     }
 
     public static LocalDateTime toJavaLocalDateTime(DateTime dateTime) {
