@@ -88,9 +88,7 @@ public final class DateTimeUtil {
     }
 
     private static Optional<Integer> offsetMinutes(Time time) {
-        if (time.offset_minutes().isEmpty()) {
-            return Optional.empty();
-        }
-        return Optional.of((Integer) time.offset_minutes().orElseThrow());
+        return OptionUtil.toJavaOptional(OptionUtil.toCapyOption(time.offset_minutes()))
+                .map(Integer.class::cast);
     }
 }
