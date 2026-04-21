@@ -36,6 +36,10 @@ plugins {
     id 'buildlogic.java-library-conventions'
 }
 
+dependencies {
+    testImplementation 'org.assertj:assertj-core:3.27.6'
+}
+
 class CapyRuntimeBridge implements Closeable {
     private final URLClassLoader classLoader
     private final def readLinkedProgramMethod
