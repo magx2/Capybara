@@ -321,7 +321,7 @@ fun DateAssert.is_equal_to(other: Date): DateAssert =
     }
 
 fun DateAssert.is_equal_to(day: int, month: int, year: int): DateAssert =
-    this.is_equal_to(Date! { day, month, year })
+    this.has_day(day).has_month(month).has_year(year)
 
 fun DateAssert.has_day(other: int): DateAssert =
     let assertion = Assertion {
@@ -368,7 +368,7 @@ fun TimeAssert.is_equal_to(other: Time): TimeAssert =
     }
 
 fun TimeAssert.is_equal_to(hour: int, minute: int, second: int): TimeAssert =
-    this.is_equal_to(Time! { hour, minute, second })
+    this.has_hour(hour).has_minute(minute).has_second(second)
 
 fun TimeAssert.has_hour(other: int): TimeAssert =
     let assertion = Assertion {
@@ -426,7 +426,7 @@ fun DateTimeAssert.has_date(other: Date): DateTimeAssert =
     }
 
 fun DateTimeAssert.has_date(day: int, month: int, year: int): DateTimeAssert =
-    this.has_date(Date! { day, month, year })
+    this.has_day(day).has_month(month).has_year(year)
 
 fun DateTimeAssert.has_time(other: Time): DateTimeAssert =
     let assertion = Assertion {
@@ -440,7 +440,7 @@ fun DateTimeAssert.has_time(other: Time): DateTimeAssert =
     }
 
 fun DateTimeAssert.has_time(hour: int, minute: int, second: int): DateTimeAssert =
-    this.has_time(Time! { hour, minute, second })
+    this.has_hour(hour).has_minute(minute).has_second(second)
 
 fun DateTimeAssert.has_year(other: int): DateTimeAssert =
     let assertion = Assertion {
