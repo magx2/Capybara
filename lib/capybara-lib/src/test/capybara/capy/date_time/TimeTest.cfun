@@ -171,7 +171,9 @@ fun _time_test_from_iso_8601_success(): list[TestCase] =
         ("13:47:30+00", _time_test_value(13, 47, 30, Some { 0 })),
         ("13:47:30+01:30", _time_test_value(13, 47, 30, Some { 90 })),
         ("134730+0130", _time_test_value(13, 47, 30, Some { 90 })),
+        ("13:47:30+14:00", _time_test_value(13, 47, 30, Some { 840 })),
         ("13:47:30-05", _time_test_value(13, 47, 30, Some { -300 })),
+        ("134730-1130", _time_test_value(13, 47, 30, Some { -690 })),
         ("T134730+02", _time_test_value(13, 47, 30, Some { 120 })),
     ] | (iso, expected) => test(
         "Time.from_iso_8601 should parse {iso}",
@@ -184,8 +186,12 @@ fun _time_test_from_iso_8601_failure(): list[TestCase] =
         "13:47:60",
         "13-47-30",
         "13:47:30-00:00",
+        "13:47:30-0000",
+        "13:47:30-00",
         "13:47:30+00:61",
         "13:47:30+24:00",
+        "13:47:30+01:6",
+        "13:47:30+0A:00",
         "13:47:30+",
     ] | iso => test(
         "Time.from_iso_8601 should fail for {iso}",

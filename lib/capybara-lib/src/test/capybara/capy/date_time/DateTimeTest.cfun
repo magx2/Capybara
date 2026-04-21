@@ -2,6 +2,7 @@ from /capy/date_time/DateTime import { * }
 from /capy/date_time/Time import { * }
 from /capy/date_time/Date import { * }
 from /capy/date_time/Duration import { * }
+from /capy/lang/Option import { * }
 from /capy/test/Assert import { * }
 from /capy/test/CapyTest import { * }
 
@@ -139,12 +140,17 @@ fun _datetime_test_from_iso_8601_success(): list[TestCase] =
         ("1970-01-01T02:00:00+02", _at(0, 0)),
         ("19700101T020000+0200", _at(0, 0)),
         ("1969-12-31T21:00:00-03:00", _at(0, 0)),
+        ("1970-01-01T00:30:00+01:00", _at(-1, 84600)),
+        ("1970-01-01T23:30:00-01:00", _at(1, 1800)),
+        ("1970-01-01T14:00:00+14:00", _at(0, 0)),
+        ("1970-01-01T00:30:00-11:30", _at(0, 43200)),
     ] | (iso, expected) => test(
         "DateTime.from_iso_8601 should parse {iso}",
         assert_that(/capy/date_time/DateTime.from_iso_8601(iso)).succeeds(datetime =>
             assert_all([
                 assert_that(datetime).has_date(expected.date),
                 assert_that(datetime).has_time(expected.time),
+                assert_that(datetime.time).has_offset_minutes(None {}),
                 assert_that(datetime.to_iso_8601()).is_equal_to(expected.to_iso_8601()),
             ])))
 
@@ -154,7 +160,10 @@ fun _datetime_test_from_iso_8601_failure(): list[TestCase] =
         "1970-01-01 00:00:00Z",
         "1970-01-01T00:00:00+00:61",
         "1970-01-01T00:00:00-00:00",
+        "1970-01-01T00:00:00-0000",
+        "1970-01-01T00:00:00-00",
         "1970-01-01T00:00:00+24:00",
+        "1970-01-01T00:00:00+01:6",
         "1970-01-01T000000Z",
         "19700101T00:00:00Z",
     ] | iso => test(
