@@ -26,10 +26,9 @@ fun DateTime.plus(duration: Duration): DateTime =
     let intra_day_seconds = remainder_hours * SECONDS_IN_HOUR + remainder_minutes * SECONDS_IN_MINUTE + remainder_seconds
     let shifted_seconds = this.time.to_seconds() + intra_day_seconds
     let extra_days = floor_div(shifted_seconds, SECONDS_IN_DAY)
-    let normalized_seconds = floor_mod(shifted_seconds, SECONDS_IN_DAY)
     DateTime {
         date: date_with_months.add_days(duration.days() + days_from_hours + days_from_minutes + days_from_seconds + extra_days),
-        time: MIDNIGHT.add_seconds(normalized_seconds)
+        time: this.time.add_seconds(intra_day_seconds)
     }
 
 /// Adds a `Duration` to this `DateTime`.
