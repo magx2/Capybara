@@ -16,7 +16,8 @@ fun _at(days_since_epoch: int, seconds_since_midnight: int): DateTime =
 
 fun tests(): TestFile =
     test_file('/capy/date_time/DateTime.cfun',
-        [_test_unix_epoch(), _datetime_test_to_iso_8601()]
+        [_test_unix_epoch()]
+        + _datetime_test_to_iso_8601()
         + _test_timestamp()
         + _test_plus()
         + _test_minus_duration()
@@ -36,9 +37,17 @@ fun _test_unix_epoch(): TestCase =
             .has_minute(0)
             .has_second(0))
 
-fun _datetime_test_to_iso_8601(): TestCase =
-    test("DateTime.to_iso_8601 should format canonical UTC date-time",
-        assert_that(_at(1, 3661).to_iso_8601()).is_equal_to("1970-01-02T01:01:01Z"))
+fun _datetime_test_to_iso_8601(): list[TestCase] =
+    let offset_time =
+        match Time { hour: 13, minute: 0, second: 0, offset_minutes: Some { 60 } } with
+        case Success { time } -> time
+        case Error -> MIDNIGHT
+    [
+        test("DateTime.to_iso_8601 should format canonical UTC date-time",
+            assert_that(_at(1, 3661).to_iso_8601()).is_equal_to("1970-01-02T01:01:01Z")),
+        test("DateTime.to_iso_8601 should normalize offset-bearing time to UTC",
+            assert_that(DateTime { date: UNIX_DATE, time: offset_time }.to_iso_8601()).is_equal_to("1970-01-01T12:00:00Z")),
+    ]
 
 fun _test_timestamp(): list[TestCase] =
     [
