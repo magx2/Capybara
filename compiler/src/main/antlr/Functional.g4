@@ -46,7 +46,7 @@ fieldDeclaration: identifier ':' type
                 | SPREAD TYPE;
 genericTypeDeclaration: TYPE ('[' TYPE (',' TYPE)* ']')?;
 
-VISIBILITY: 'local';
+VISIBILITY: 'local' | 'private';
 BOOL_LITERAL: 'true' | 'false';
 COLLECTION: 'list' | 'set' | 'dict';
 NAME : [_]* [a-z] [a-zA-Z0-9_]*;

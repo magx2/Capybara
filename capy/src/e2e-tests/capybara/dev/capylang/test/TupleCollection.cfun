@@ -17,11 +17,11 @@ fun tuple_slice_to_minus_1(): tuple[int, string] = (1, "foo", 5.0)[:-1]
 
 fun tuple_slice_on_var(t: tuple[int, string, double]): tuple[string, double] = t[1:]
 
-fun _plus_one(x: int): int = x + 1
+private fun plus_one(x: int): int = x + 1
 
-fun _times_two(x: int): int = x * 2
+private fun times_two(x: int): int = x * 2
 
-fun tuple_with_functions(): tuple[int => int, int => int] = (:_plus_one, :_times_two)
+fun tuple_with_functions(): tuple[int => int, int => int] = (:plus_one, :times_two)
 
 fun tuple_with_functions_apply_first(x: int): int =
     let funs: tuple[int => int, int => int] = tuple_with_functions()

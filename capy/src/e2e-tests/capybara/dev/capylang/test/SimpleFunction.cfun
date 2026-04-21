@@ -37,9 +37,9 @@ fun static_list(): list[int] = [1,2,3]
 
 fun foo(x: int): int = x + 1
 
-fun _foo(x: int): int = x + 2
+private fun hidden_foo(x: int): int = x + 2
 
-fun call_private_and_public(x: int): int = foo(x) + _foo(x)
+fun call_private_and_public(x: int): int = foo(x) + hidden_foo(x)
 
 fun typed_let_string(): string =
     {

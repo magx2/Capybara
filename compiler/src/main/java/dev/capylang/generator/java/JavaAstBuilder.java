@@ -161,7 +161,7 @@ public class JavaAstBuilder {
     private JavaConst buildStaticConst(CompiledFunction function) {
         return new JavaConst(
                 emittedFunctionName(function),
-                function.name().startsWith("_"),
+                function.name().startsWith("_") || function.visibility() == Visibility.PRIVATE,
                 buildJavaType(function.returnType()),
                 function.expression(),
                 function.comments()
@@ -173,7 +173,7 @@ public class JavaAstBuilder {
         var expression = specializeReturnNewData(function.expression(), function.returnType());
         return new JavaMethod(
                 emittedFunctionName(function),
-                function.name().startsWith("_"),
+                function.name().startsWith("_") || function.visibility() == Visibility.PRIVATE,
                 function.programMain(),
                 methodTypeParameters,
                 buildJavaReturnType(function),
@@ -865,7 +865,7 @@ public class JavaAstBuilder {
         var methodTypeParameters = methodTypeParameters(function, Set.copyOf(extractOwnerTypeParameters(function)));
         return new JavaMethod(
                 emittedFunctionName(function),
-                methodName.startsWith("_"),
+                methodName.startsWith("_") || function.visibility() == Visibility.PRIVATE,
                 false,
                 methodTypeParameters,
                 buildJavaReturnType(function),
@@ -933,7 +933,7 @@ public class JavaAstBuilder {
                 : type.typeParameters();
         return new JavaRecord(
                 buildClassName(type.name()),
-                type.name().startsWith("_"),
+                type.name().startsWith("_") || type.visibility() == Visibility.PRIVATE,
                 type.comments(),
                 implementInterfaces,
                 fields,
@@ -955,7 +955,7 @@ public class JavaAstBuilder {
         var methodTypeParameters = methodTypeParameters(function, Set.copyOf(extractOwnerTypeParameters(function)));
         return new JavaMethod(
                 emittedFunctionName(function),
-                methodName.startsWith("_"),
+                methodName.startsWith("_") || function.visibility() == Visibility.PRIVATE,
                 false,
                 methodTypeParameters,
                 buildJavaReturnType(function),
