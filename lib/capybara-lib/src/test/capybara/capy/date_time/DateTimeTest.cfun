@@ -3,6 +3,7 @@ from /capy/date_time/Time import { * }
 from /capy/date_time/Date import { * }
 from /capy/date_time/Duration import { * }
 from /capy/lang/Option import { * }
+from /capy/lang/Result import { * }
 from /capy/test/Assert import { * }
 from /capy/test/CapyTest import { * }
 
