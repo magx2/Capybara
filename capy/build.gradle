@@ -1,7 +1,112 @@
+import org.gradle.api.DefaultTask
+import org.gradle.api.GradleException
 import org.gradle.api.artifacts.component.ProjectComponentIdentifier
+import org.gradle.api.file.ConfigurableFileCollection
+import org.gradle.api.file.DirectoryProperty
+import org.gradle.api.provider.Property
+import org.gradle.api.tasks.Classpath
+import org.gradle.api.tasks.Input
+import org.gradle.api.tasks.InputDirectory
+import org.gradle.api.tasks.InputFiles
+import org.gradle.api.tasks.OutputDirectory
+import org.gradle.api.tasks.PathSensitive
+import org.gradle.api.tasks.PathSensitivity
+import org.gradle.api.tasks.TaskAction
+
+import java.io.ByteArrayOutputStream
+import java.io.PrintStream
+import java.net.URL
+import java.net.URLClassLoader
+import java.nio.file.Files
+import java.nio.file.Path
+import java.util.TreeSet
 
 plugins {
     id 'buildlogic.java-application-conventions'
+}
+
+abstract class InProcessCapybaraCompileTask extends DefaultTask {
+    @Classpath
+    abstract ConfigurableFileCollection getRuntimeClasspath()
+
+    @InputDirectory
+    @PathSensitive(PathSensitivity.RELATIVE)
+    abstract DirectoryProperty getInputDir()
+
+    @InputFiles
+    @PathSensitive(PathSensitivity.RELATIVE)
+    abstract ConfigurableFileCollection getAdditionalInputDirs()
+
+    @OutputDirectory
+    abstract DirectoryProperty getLinkedOutputDir()
+
+    @OutputDirectory
+    abstract DirectoryProperty getGeneratedOutputDir()
+
+    @Input
+    abstract Property<Boolean> getIncludeJavaLibResources()
+
+    @Input
+    abstract Property<String> getCompilerVersion()
+
+    @TaskAction
+    void compileCapybara() {
+        def errors = new ByteArrayOutputStream()
+        def runtimeUrls = runtimeClasspath.files.collect { it.toURI().toURL() } as URL[]
+        URLClassLoader classLoader = new URLClassLoader(runtimeUrls, ClassLoader.getPlatformClassLoader())
+        try {
+            def capyClass = Class.forName('dev.capylang.Capy', true, classLoader)
+            def readLinkedProgram = capyClass.getDeclaredMethod('readLinkedProgram', Path, Boolean.TYPE)
+            readLinkedProgram.accessible = true
+            def outputTypeClass = Class.forName('dev.capylang.compiler.OutputType', true, classLoader)
+            def outputType = outputTypeClass.enumConstants.find { it.name() == 'JAVA' }
+            def compileGenerate = capyClass.getMethod(
+                    'compileGenerate',
+                    outputTypeClass,
+                    Path,
+                    Path,
+                    Path,
+                    Path,
+                    Path,
+                    TreeSet,
+                    Boolean.TYPE,
+                    Boolean.TYPE,
+                    String,
+                    PrintStream
+            )
+
+            def libraries = new TreeSet()
+            additionalInputDirs.files.each { libraryDir ->
+                Path libraryPath = libraryDir.toPath()
+                if (Files.notExists(libraryPath) || !Files.isDirectory(libraryPath)) {
+                    return
+                }
+                def program = readLinkedProgram.invoke(null, libraryPath, false)
+                libraries.addAll(program.modules())
+            }
+
+            def exitCode = compileGenerate.invoke(
+                    null,
+                    outputType,
+                    inputDir.get().asFile.toPath(),
+                    generatedOutputDir.get().asFile.toPath(),
+                    linkedOutputDir.get().asFile.toPath(),
+                    null,
+                    null,
+                    libraries,
+                    false,
+                    includeJavaLibResources.getOrElse(true),
+                    compilerVersion.get(),
+                    new PrintStream(errors)
+            ) as Integer
+            if (exitCode != 0) {
+                def message = errors.toString().trim()
+                throw new GradleException(message ?: "Capybara compile failed with exit code ${exitCode}")
+            }
+        } finally {
+            classLoader.close()
+        }
+    }
 }
 
 dependencies {
@@ -9,6 +114,8 @@ dependencies {
     implementation 'com.fasterxml.jackson.core:jackson-databind:2.19.0'
     implementation 'com.fasterxml.jackson.datatype:jackson-datatype-jdk8:2.19.0'
     implementation 'org.yaml:snakeyaml:2.4'
+
+    testImplementation 'org.assertj:assertj-core:3.27.6'
 }
 
 def capybaraVersion = project.version.toString()
@@ -17,7 +124,47 @@ def capyClassesDir = layout.buildDirectory.dir('classes/java/main')
 def capyResourcesDir = layout.buildDirectory.dir('resources/main')
 def compilerClassesDir = project(':compiler').layout.buildDirectory.dir('classes/java/main')
 def compilerResourcesDir = project(':compiler').layout.buildDirectory.dir('resources/main')
+def capybaraLibClassesDir = project(':lib:capybara-lib').layout.buildDirectory.dir('classes/java/main')
+def capybaraLibResourcesDir = project(':lib:capybara-lib').layout.buildDirectory.dir('resources/main')
+def capybaraLibLinkedDir = project(':lib:capybara-lib').layout.buildDirectory.dir('generated/sources/capybara/linked/main')
 def testRuntimeDependencies = configurations.testRuntimeClasspath.incoming.artifactView {
+    componentFilter { componentIdentifier -> !(componentIdentifier instanceof ProjectComponentIdentifier) }
+}.files
+
+def e2eTestCapybaraSourceDir = layout.projectDirectory.dir('src/e2e-tests/capybara')
+def e2eTestGeneratedJavaDir = layout.buildDirectory.dir('generated/sources/capybara/java/e2e-tests')
+def e2eTestLinkedOutputDir = layout.buildDirectory.dir('generated/sources/capybara/linked/e2e-tests')
+def capyRuntimeDependencies = configurations.runtimeClasspath.incoming.artifactView {
+    componentFilter { componentIdentifier -> !(componentIdentifier instanceof ProjectComponentIdentifier) }
+}.files
+def capyRuntimeClasspath = files(
+        capyClassesDir,
+        capyResourcesDir,
+        compilerClassesDir,
+        compilerResourcesDir,
+        capyRuntimeDependencies
+)
+
+sourceSets {
+    e2eTests {
+        java.srcDir e2eTestGeneratedJavaDir
+        java.srcDir file('src/e2e-tests/java')
+        resources.srcDir file('src/e2e-tests/resources')
+        compileClasspath += sourceSets.main.output + configurations.testRuntimeClasspath
+        runtimeClasspath += output + compileClasspath
+    }
+}
+
+configurations {
+    e2eTestsImplementation.extendsFrom testImplementation
+    e2eTestsRuntimeOnly.extendsFrom testRuntimeOnly
+}
+
+dependencies {
+    e2eTestsImplementation project(':lib:capybara-lib')
+}
+
+def e2eTestsRuntimeDependencies = configurations.e2eTestsRuntimeClasspath.incoming.artifactView {
     componentFilter { componentIdentifier -> !(componentIdentifier instanceof ProjectComponentIdentifier) }
 }.files
 
@@ -44,6 +191,50 @@ test {
             compilerResourcesDir,
             testRuntimeDependencies
     )
+}
+
+tasks.register('e2eTests', Test) {
+    description = 'Runs e2e tests.'
+    group = 'verification'
+    dependsOn ':compiler:classes'
+    dependsOn ':lib:capybara-lib:classes'
+    dependsOn tasks.named('compileE2eTestsJava')
+    testClassesDirs = sourceSets.e2eTests.output.classesDirs
+    classpath = files(
+            sourceSets.e2eTests.output,
+            sourceSets.main.output,
+            compilerClassesDir,
+            compilerResourcesDir,
+            capybaraLibClassesDir,
+            capybaraLibResourcesDir,
+            e2eTestsRuntimeDependencies
+    )
+    shouldRunAfter test
+    useJUnitPlatform()
+}
+
+check {
+    dependsOn tasks.named('e2eTests')
+}
+
+tasks.register('linkCapybaraE2eSources', InProcessCapybaraCompileTask) {
+    group = 'build'
+    description = 'Compiles e2e-test Capybara files and generates Java in one pass without launching a separate JVM.'
+    dependsOn project(':lib:capybara-lib').tasks.named('linkCapybaraLinked')
+    dependsOn ':capy:classes'
+    dependsOn ':compiler:classes'
+
+    runtimeClasspath.from(capyRuntimeClasspath)
+    inputDir.set(e2eTestCapybaraSourceDir)
+    additionalInputDirs.from(capybaraLibLinkedDir)
+    linkedOutputDir.set(e2eTestLinkedOutputDir)
+    generatedOutputDir.set(e2eTestGeneratedJavaDir)
+    includeJavaLibResources.set(false)
+    compilerVersion.set(project.version.toString())
+}
+
+tasks.named('compileE2eTestsJava') {
+    dependsOn tasks.named('linkCapybaraE2eSources')
 }
 
 jar {
