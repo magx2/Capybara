@@ -1124,7 +1124,7 @@ public class CapybaraCompiler {
     ) {
         var key = signatureVisibilityCacheKey(currentModulePath, ownerModule, signatures);
         return compileCache.visibleSignaturesByScope.computeIfAbsent(key, ignored -> signatures.stream()
-                .filter(signature -> signature.visibility() == null || isVisibleFromModule(currentModulePath, ownerModule.path()))
+                .filter(signature -> isVisibleFromModule(currentModulePath, ownerModule.path(), signature.visibility()))
                 .toList());
     }
 
@@ -1137,8 +1137,7 @@ public class CapybaraCompiler {
         var key = visibilityCacheKey(currentModulePath, ownerModule);
         return compileCache.visibleTypesByScope.computeIfAbsent(key, ignored -> {
             var filteredTypes = types.entrySet().stream()
-                    .filter(entry -> entry.getValue().visibility() == null
-                                     || isVisibleFromModule(currentModulePath, ownerModule.path()))
+                    .filter(entry -> isVisibleFromModule(currentModulePath, ownerModule.path(), entry.getValue().visibility()))
                     .collect(java.util.stream.Collectors.toMap(
                             Map.Entry::getKey,
                             Map.Entry::getValue,
@@ -1196,6 +1195,18 @@ public class CapybaraCompiler {
         var current = normalizeModulePath(currentModulePath);
         var owner = normalizeModulePath(ownerModulePath);
         return current.equals(owner) || current.startsWith(owner + "/");
+    }
+
+    private boolean isVisibleFromModule(String currentModulePath, String ownerModulePath, Visibility visibility) {
+        if (visibility == null) {
+            return true;
+        }
+        var current = normalizeModulePath(currentModulePath);
+        var owner = normalizeModulePath(ownerModulePath);
+        return switch (visibility) {
+            case LOCAL -> isVisibleFromModule(current, owner);
+            case PRIVATE -> current.equals(owner);
+        };
     }
 
     private String normalizeModulePath(String modulePath) {

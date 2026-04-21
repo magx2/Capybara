@@ -28,6 +28,7 @@ class LocalVisibilityCompilationErrorTest {
                     local const LOCAL_OFFSET: int = 5
                     local type LocalValue = LocalNumber
                     local data LocalNumber { value: int }
+                    private fun private_add(x: int): int = x + 2
                     fun public_value(x: int): int = local_add(x) + LOCAL_OFFSET
                     """
     );
@@ -37,11 +38,12 @@ class LocalVisibilityCompilationErrorTest {
     void compilationError(
             String moduleName,
             String code,
+            String modulePath,
             List<ImportDeclaration> imports,
             String expectedFile,
             String errorMessageFragment
     ) {
-        var errors = compileProgram(code, moduleName, imports);
+        var errors = compileProgram(code, moduleName, modulePath, imports);
 
         assertThat(errors).hasSize(1);
         var error = errors.first();
@@ -58,6 +60,7 @@ class LocalVisibilityCompilationErrorTest {
                                 fun foo(): int =
                                     1
                                 """,
+                        "/foo/boo",
                         List.of(new ImportDeclaration(SUPPORT_MODULE_IMPORT, List.of("local_add"), List.of())),
                         "/foo/boo/local_function_not_visible_from_parent_package.cfun",
                         "imports unknown symbol `local_add` from module `" + SUPPORT_MODULE_IMPORT + "`"
@@ -68,9 +71,21 @@ class LocalVisibilityCompilationErrorTest {
                                 fun foo(): int =
                                     1
                                 """,
+                        "/foo/boo",
                         List.of(new ImportDeclaration(SUPPORT_MODULE_IMPORT, List.of("LocalNumber"), List.of())),
                         "/foo/boo/local_type_not_visible_from_parent_package.cfun",
                         "imports unknown symbol `LocalNumber` from module `" + SUPPORT_MODULE_IMPORT + "`"
+                ),
+                Arguments.of(
+                        "private_function_not_visible_from_sibling_module",
+                        """
+                                fun foo(): int =
+                                    1
+                                """,
+                        "/foo/boo/internal/child",
+                        List.of(new ImportDeclaration(SUPPORT_MODULE_IMPORT, List.of("private_add"), List.of())),
+                        "/foo/boo/internal/child/private_function_not_visible_from_sibling_module.cfun",
+                        "imports unknown symbol `private_add` from module `" + SUPPORT_MODULE_IMPORT + "`"
                 )
         );
     }
@@ -78,13 +93,14 @@ class LocalVisibilityCompilationErrorTest {
     private static SortedSet<Result.Error.SingleError> compileProgram(
             String fun,
             String moduleName,
+            String modulePath,
             List<ImportDeclaration> imports
     ) {
         var rawModules = new ArrayList<RawModule>();
         rawModules.add(LOCAL_SUPPORT_MODULE);
         rawModules.add(new RawModule(
                 moduleName,
-                "/foo/boo",
+                modulePath,
                 prependImports(imports, fun)
         ));
         var programResult = CapybaraCompiler.INSTANCE.compile(rawModules, new java.util.TreeSet<>());
