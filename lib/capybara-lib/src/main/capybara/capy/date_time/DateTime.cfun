@@ -16,27 +16,20 @@ fun DateTime.timestamp(): long = 1L * this.date.to_days_since_unix_epoch() * SEC
 
 /// Adds a `Duration` to this `DateTime`.
 fun DateTime.plus(duration: Duration): DateTime =
-    let years = duration.years()
-    let months = duration.months()
-    let days = duration.days()
-    let hours = duration.hours()
-    let minutes = duration.minutes()
-    let seconds = duration.seconds()
-    let date_with_months = this.date.add_years_months(years, months)
-    let days_from_hours = floor_div(hours, HOURS_IN_DAY)
-    let days_from_minutes = floor_div(minutes, MINUTES_IN_DAY)
-    let days_from_seconds = floor_div(seconds, SECONDS_IN_DAY)
-    let remainder_hours = floor_mod(hours, HOURS_IN_DAY)
-    let remainder_minutes = floor_mod(minutes, MINUTES_IN_DAY)
-    let remainder_seconds = floor_mod(seconds, SECONDS_IN_DAY)
+    let date_with_months = this.date.add_years_months(duration.years(), duration.months())
+    let days_from_hours = floor_div(duration.hours(), HOURS_IN_DAY)
+    let days_from_minutes = floor_div(duration.minutes(), MINUTES_IN_DAY)
+    let days_from_seconds = floor_div(duration.seconds(), SECONDS_IN_DAY)
+    let remainder_hours = floor_mod(duration.hours(), HOURS_IN_DAY)
+    let remainder_minutes = floor_mod(duration.minutes(), MINUTES_IN_DAY)
+    let remainder_seconds = floor_mod(duration.seconds(), SECONDS_IN_DAY)
     let intra_day_seconds = remainder_hours * SECONDS_IN_HOUR + remainder_minutes * SECONDS_IN_MINUTE + remainder_seconds
     let shifted_seconds = this.time.to_seconds() + intra_day_seconds
     let extra_days = floor_div(shifted_seconds, SECONDS_IN_DAY)
     let normalized_seconds = floor_mod(shifted_seconds, SECONDS_IN_DAY)
-    let midnight = MIDNIGHT
     DateTime {
-        date: date_with_months.add_days(days + days_from_hours + days_from_minutes + days_from_seconds + extra_days),
-        time: midnight.add_seconds(normalized_seconds)
+        date: date_with_months.add_days(duration.days() + days_from_hours + days_from_minutes + days_from_seconds + extra_days),
+        time: MIDNIGHT.add_seconds(normalized_seconds)
     }
 
 /// Adds a `Duration` to this `DateTime`.
