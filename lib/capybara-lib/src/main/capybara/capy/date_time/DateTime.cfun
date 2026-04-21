@@ -8,8 +8,8 @@ from /capy/lang/Primitives import { * }
 /// Combination of a calendar date and time of day.
 data DateTime { date: Date, time: Time }
 
-/// Returns the Unix epoch date-time (`1970-01-01 00:00:00`).
-fun unix_epoch(): DateTime = DateTime { date: UNIX_DATE, time: MIDNIGHT }
+/// Unix epoch date-time (`1970-01-01 00:00:00`).
+const UNIX_EPOCH: DateTime = DateTime { date: UNIX_DATE, time: MIDNIGHT }
 
 /// Returns Unix timestamp (seconds since `1970-01-01T00:00:00Z`).
 fun DateTime.timestamp(): long = 1L * this.date.to_days_since_unix_epoch() * SECONDS_IN_DAY + this.time.to_seconds()
