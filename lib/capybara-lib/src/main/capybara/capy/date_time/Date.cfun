@@ -155,25 +155,64 @@ fun from_iso_8601(iso: string): Result[Date] =
         if parse.buffer.is_empty
         then Success { parse.value }
         else Error { __invalid("expected digits for " + label + ", got `" + value + "`") }
+    fun __drop_prefix(value: string, size: int): string =
+        if size <= 0
+        then value
+        else
+            match value[0] with
+            case None -> ""
+            case Some { _ } -> __drop_prefix(value[1:], size - 1)
+    fun __take_prefix(value: string, size: int): string =
+        if size <= 0
+        then ""
+        else
+            match value[0] with
+            case None -> ""
+            case Some { char } -> ("" + char) + __take_prefix(value[1:], size - 1)
+    fun __slice(value: string, start: int, size: int): string = __take_prefix(__drop_prefix(value, start), size)
+    fun __parse_year(value: string): Result[int] =
+        if value.is_empty
+        then Error { __invalid("expected year") }
+        else if value.starts_with("+")
+            then if value.size < 5
+                then Error { __invalid("expected expanded year, got `" + value + "`") }
+                else {
+                    let year <- __parse_exact_digits(value[1:], "year")
+                    Success { year }
+                }
+            else if value.starts_with("-")
+                then if value.size < 5
+                    then Error { __invalid("expected expanded year, got `" + value + "`") }
+                    else {
+                        let year <- __parse_exact_digits(value[1:], "year")
+                        Success { 0 - year }
+                    }
+                else if value.size < 4
+                    then Error { __invalid("expected four-digit year, got `" + value + "`") }
+                    else __parse_exact_digits(value, "year")
+    fun __parse_date(year_part: string, month_part: string, day_part: string): Result[Date] = {
+        let year <- __parse_year(year_part)
+        let month <- __parse_exact_digits(month_part, "month")
+        let day <- __parse_exact_digits(day_part, "day")
+        match Date { day, month, year } with
+        case Success { date } -> Success { date }
+        case Error { message } -> Error { __invalid(message) }
+    }
     ---
-    if iso.size == 10
-    then if iso[4:5] == "-" & iso[7:8] == "-"
-        then {
-            let year <- __parse_exact_digits(iso[0:4], "year")
-            let month <- __parse_exact_digits(iso[5:7], "month")
-            let day <- __parse_exact_digits(iso[8:10], "day")
-            match Date { day, month, year } with
-            case Success { date } -> Success { date }
-            case Error { message } -> Error { __invalid(message) }
-        }
-        else Error { __invalid("expected date in `YYYY-MM-DD` or `YYYYMMDD` format, got `" + iso + "`") }
-    else if iso.size == 8
-        then {
-            let year <- __parse_exact_digits(iso[0:4], "year")
-            let month <- __parse_exact_digits(iso[4:6], "month")
-            let day <- __parse_exact_digits(iso[6:8], "day")
-            match Date { day, month, year } with
-            case Success { date } -> Success { date }
-            case Error { message } -> Error { __invalid(message) }
-        }
+    let extended_year_end = iso.size - 6
+    let extended_month_start = iso.size - 5
+    let extended_month_end = iso.size - 3
+    let extended_day_start = iso.size - 2
+    let basic_year_end = iso.size - 4
+    let basic_month_start = iso.size - 4
+    let basic_month_end = iso.size - 2
+    let basic_day_start = iso.size - 2
+    let is_extended = iso.size >= 10
+        & __slice(iso, extended_year_end, 1) == "-"
+        & __slice(iso, extended_month_end, 1) == "-"
+    let is_basic = iso.size >= 8
+    if is_extended
+    then __parse_date(__take_prefix(iso, extended_year_end), __slice(iso, extended_month_start, 2), __slice(iso, extended_day_start, 2))
+    else if is_basic
+        then __parse_date(__take_prefix(iso, basic_year_end), __slice(iso, basic_month_start, 2), __slice(iso, basic_day_start, 2))
         else Error { __invalid("expected date in `YYYY-MM-DD` or `YYYYMMDD` format, got `" + iso + "`") }

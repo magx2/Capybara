@@ -85,6 +85,8 @@ fun _test_leap_year(): list[TestCase] =
 fun _date_test_to_iso_8601(): list[TestCase] =
     [
         (7, JANUARY, 2000, "2000-01-07"),
+        (7, JANUARY, -1, "-0001-01-07"),
+        (7, JANUARY, 10000, "+10000-01-07"),
     ] | (day, month, year, expected) => test(
         "Date.to_iso_8601() should format {day}/{month}/{year}",
         assert_that(Date { day, month, year } | d => Success { d.to_iso_8601() }).succeeds(expected))
@@ -93,6 +95,8 @@ fun _date_test_from_iso_8601_success(): list[TestCase] =
     [
         ("2000-01-07", 7, JANUARY, 2000),
         ("20000107", 7, JANUARY, 2000),
+        ("-0001-01-07", 7, JANUARY, -1),
+        ("+10000-01-07", 7, JANUARY, 10000),
     ] | (iso, day, month, year) => test(
         "Date.from_iso_8601 should parse {iso}",
         assert_that(/capy/date_time/Date.from_iso_8601(iso)).succeeds(date =>
