@@ -2543,11 +2543,7 @@ public class JavaExpressionEvaluator {
                 .map(type -> String.valueOf(type))
                 .collect(java.util.stream.Collectors.joining(","));
         var simpleMethodName = simpleMethodName(functionCall.name());
-        var overrideBySimpleName = FUNCTION_NAME_OVERRIDES.entrySet().stream()
-                .filter(entry -> simpleMethodName(keyName(entry.getKey())).equals(simpleMethodName))
-                .filter(entry -> keyParameterSignature(entry.getKey()).equals(parameterSignature))
-                .map(java.util.Map.Entry::getValue)
-                .findFirst();
+        var overrideBySimpleName = findOverrideBySimpleName(functionCall.name(), parameterSignature);
         if (overrideBySimpleName.isPresent()) {
             return overrideBySimpleName.get();
         }
@@ -2566,9 +2562,36 @@ public class JavaExpressionEvaluator {
         return separator >= 0 ? signatureKey.substring(0, separator) : signatureKey;
     }
 
+    static Optional<String> findOverrideBySimpleName(String targetName, String parameterSignature) {
+        var simpleMethodName = simpleMethodName(targetName);
+        var qualifier = qualifierName(targetName);
+        var candidates = FUNCTION_NAME_OVERRIDES.entrySet().stream()
+                .filter(entry -> simpleMethodName(keyName(entry.getKey())).equals(simpleMethodName))
+                .filter(entry -> keyParameterSignature(entry.getKey()).equals(parameterSignature))
+                .toList();
+        if (qualifier != null) {
+            var qualifiedMatch = candidates.stream()
+                    .filter(entry -> java.util.Objects.equals(qualifierName(keyName(entry.getKey())), qualifier))
+                    .map(java.util.Map.Entry::getValue)
+                    .findFirst();
+            if (qualifiedMatch.isPresent()) {
+                return qualifiedMatch;
+            }
+        }
+        return candidates.stream()
+                .filter(entry -> qualifierName(keyName(entry.getKey())) == null)
+                .map(java.util.Map.Entry::getValue)
+                .findFirst();
+    }
+
     private static String keyParameterSignature(String signatureKey) {
         var separator = signatureKey.indexOf('|');
         return separator >= 0 ? signatureKey.substring(separator + 1) : "";
+    }
+
+    private static String qualifierName(String target) {
+        var lastDot = target.lastIndexOf('.');
+        return lastDot >= 0 ? target.substring(0, lastDot) : null;
     }
 
     private static String simpleMethodName(String target) {

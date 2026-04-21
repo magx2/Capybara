@@ -25,6 +25,8 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.logging.Handler;
 import java.util.logging.Level;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.logging.Logger;
 import java.util.stream.Stream;
 
@@ -109,6 +111,34 @@ class JavaExpressionEvaluatorTest {
                 .flatMap(Collection::stream)
                 .filter(f -> f.name().equals(name))
                 .findAny();
+    }
+
+    @Test
+    void shouldPreferQualifierWhenFallingBackToOverrideBySimpleName() {
+        var overrides = new LinkedHashMap<String, String>();
+        overrides.put("other.Module.choose|CompiledList[elementType=INT]", "choose_other");
+        overrides.put("target.Module.choose|CompiledList[elementType=INT]", "choose_target");
+        JavaExpressionEvaluator.setFunctionNameOverrides(Map.copyOf(overrides));
+
+        var resolved = JavaExpressionEvaluator.findOverrideBySimpleName(
+                "target.Module.choose",
+                "CompiledList[elementType=INT]");
+
+        assertThat(resolved).contains("choose_target");
+    }
+
+    @Test
+    void shouldFallBackToUnqualifiedOverrideWhenQualifiedEntryIsMissing() {
+        var overrides = new LinkedHashMap<String, String>();
+        overrides.put("choose|CompiledList[elementType=INT]", "choose_target");
+        overrides.put("other.Module.choose|CompiledList[elementType=INT]", "choose_other");
+        JavaExpressionEvaluator.setFunctionNameOverrides(Map.copyOf(overrides));
+
+        var resolved = JavaExpressionEvaluator.findOverrideBySimpleName(
+                "target.Module.choose",
+                "CompiledList[elementType=INT]");
+
+        assertThat(resolved).contains("choose_target");
     }
 
     @Test
