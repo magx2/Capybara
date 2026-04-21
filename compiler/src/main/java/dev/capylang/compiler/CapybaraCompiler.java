@@ -1124,7 +1124,7 @@ public class CapybaraCompiler {
     ) {
         var key = signatureVisibilityCacheKey(currentModulePath, ownerModule, signatures);
         return compileCache.visibleSignaturesByScope.computeIfAbsent(key, ignored -> signatures.stream()
-                .filter(signature -> signature.visibility() != Visibility.LOCAL || isVisibleFromModule(currentModulePath, ownerModule.path()))
+                .filter(signature -> isVisibleFromModule(currentModulePath, ownerModule.path(), signature.visibility()))
                 .toList());
     }
 
@@ -1137,8 +1137,7 @@ public class CapybaraCompiler {
         var key = visibilityCacheKey(currentModulePath, ownerModule);
         return compileCache.visibleTypesByScope.computeIfAbsent(key, ignored -> {
             var filteredTypes = types.entrySet().stream()
-                    .filter(entry -> entry.getValue().visibility() != Visibility.LOCAL
-                                     || isVisibleFromModule(currentModulePath, ownerModule.path()))
+                    .filter(entry -> isVisibleFromModule(currentModulePath, ownerModule.path(), entry.getValue().visibility()))
                     .collect(java.util.stream.Collectors.toMap(
                             Map.Entry::getKey,
                             Map.Entry::getValue,
@@ -1196,6 +1195,18 @@ public class CapybaraCompiler {
         var current = normalizeModulePath(currentModulePath);
         var owner = normalizeModulePath(ownerModulePath);
         return current.equals(owner) || current.startsWith(owner + "/");
+    }
+
+    private boolean isVisibleFromModule(String currentModulePath, String ownerModulePath, Visibility visibility) {
+        if (visibility == null) {
+            return true;
+        }
+        var current = normalizeModulePath(currentModulePath);
+        var owner = normalizeModulePath(ownerModulePath);
+        return switch (visibility) {
+            case LOCAL -> isVisibleFromModule(current, owner);
+            case PRIVATE -> current.equals(owner);
+        };
     }
 
     private String normalizeModulePath(String modulePath) {
@@ -3890,17 +3901,17 @@ public class CapybaraCompiler {
     }
 
     private String restorePrivateTypeNameForDisplay(String typeName) {
-        return replacePrivateLocalNamesInText(typeName, "__local_type_");
+        return replacePrivateLocalNamesInText(typeName, "__local_type_", true);
     }
 
     private String toUserPrivateTypeName(String typeName) {
         var marker = "__local_type_";
-        return toUserPrivateLocalName(typeName, marker);
+        return toUserPrivateLocalName(typeName, marker, true);
     }
 
     private String restorePrivateFunctionNameForDisplay(String functionName) {
-        var restoredLocalFunction = toUserPrivateLocalName(functionName, "__local_fun_");
-        return toUserPrivateLocalName(restoredLocalFunction, "__local_const_");
+        var restoredLocalFunction = toUserPrivateLocalName(functionName, "__local_fun_", false);
+        return toUserPrivateLocalName(restoredLocalFunction, "__local_const_", true);
     }
 
     private String displayFunctionName(String functionName) {
@@ -3919,12 +3930,12 @@ public class CapybaraCompiler {
             var separator = expectedFoundMatcher.group(2) == null ? ", got `" : ", but got `";
             message = "Expected `" + expected + "`" + separator + got + "`";
         }
-        var restoredLocalFunctions = replacePrivateLocalNamesInText(message, "__local_fun_");
-        var restoredLocalConsts = replacePrivateLocalNamesInText(restoredLocalFunctions, "__local_const_");
-        return replacePrivateLocalNamesInText(restoredLocalConsts, "__local_type_");
+        var restoredLocalFunctions = replacePrivateLocalNamesInText(message, "__local_fun_", false);
+        var restoredLocalConsts = replacePrivateLocalNamesInText(restoredLocalFunctions, "__local_const_", true);
+        return replacePrivateLocalNamesInText(restoredLocalConsts, "__local_type_", true);
     }
 
-    private String replacePrivateLocalNamesInText(String text, String marker) {
+    private String replacePrivateLocalNamesInText(String text, String marker, boolean withPrivatePrefix) {
         var normalized = new StringBuilder(text.length());
         var cursor = 0;
         while (cursor < text.length()) {
@@ -3952,7 +3963,10 @@ public class CapybaraCompiler {
                 continue;
             }
             normalized.append(text, cursor, qualifiedNameStart);
-            normalized.append("__").append(localSuffix.substring(underscoreIndex + 1));
+            if (withPrivatePrefix) {
+                normalized.append("__");
+            }
+            normalized.append(localSuffix.substring(underscoreIndex + 1));
             cursor = localSuffixEnd;
         }
         return normalized.toString();
@@ -3973,7 +3987,7 @@ public class CapybaraCompiler {
         return Character.isLetterOrDigit(c) || c == '_';
     }
 
-    private String toUserPrivateLocalName(String name, String marker) {
+    private String toUserPrivateLocalName(String name, String marker, boolean withPrivatePrefix) {
         var idx = name.indexOf(marker);
         if (idx < 0) {
             return name;
@@ -3986,7 +4000,7 @@ public class CapybaraCompiler {
         if (underscoreIdx < 0 || underscoreIdx + 1 >= suffix.length()) {
             return name;
         }
-        return "__" + suffix.substring(underscoreIdx + 1);
+        return (withPrivatePrefix ? "__" : "") + suffix.substring(underscoreIdx + 1);
     }
 
     private String privateTypeEscapingFunctionSignatureMessage(

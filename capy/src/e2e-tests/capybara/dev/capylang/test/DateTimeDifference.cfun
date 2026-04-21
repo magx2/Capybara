@@ -3,7 +3,7 @@ from /capy/date_time/Date import { * }
 from /capy/date_time/Time import { * }
 from /capy/date_time/Duration import { * }
 
-fun _at(days_since_epoch: int, seconds_since_midnight: int): DateTime =
+private fun at(days_since_epoch: int, seconds_since_midnight: int): DateTime =
     let epoch_date = UNIX_DATE
     let midnight = MIDNIGHT
     DateTime {
@@ -12,12 +12,12 @@ fun _at(days_since_epoch: int, seconds_since_midnight: int): DateTime =
     }
 
 fun forward_difference_iso(): string =
-    _at(1, 3661).minus(_at(0, 0)).to_iso_8601()
+    at(1, 3661).minus(at(0, 0)).to_iso_8601()
 
 fun backward_difference_iso(): string =
-    _at(0, 0).minus(_at(1, 3661)).to_iso_8601()
+    at(0, 0).minus(at(1, 3661)).to_iso_8601()
 
 fun difference_round_trips(): bool =
-    let start = _at(10, 30)
-    let finish = _at(12, 7325)
+    let start = at(10, 30)
+    let finish = at(12, 7325)
     start.plus(finish.minus(start)) == finish

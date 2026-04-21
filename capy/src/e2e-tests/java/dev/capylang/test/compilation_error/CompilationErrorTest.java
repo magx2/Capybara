@@ -1260,17 +1260,17 @@ public class CompilationErrorTest {
                 Arguments.of(
                         "local_function_error_restores_private_names",
                         """
-                                fun parse_semver(version: string): int =
-                                    data __Parse[T] { value: T }
-                                    fun __parse_digits(parse: __Parse[Option[int]]): __Parse[int] = parse.value
-                                    ---
-                                    0
+                                    fun parse_semver(version: string): int =
+                                        data __Parse[T] { value: T }
+                                        fun parse_digits(parse: __Parse[Option[int]]): __Parse[int] = parse.value
+                                        ---
+                                        0
                                 """,
-                        new Position(3, "    fun __parse_digits(parse: __Parse[Option[int]]): __Parse[int] = "),
+                        new Position(3, 70),
                         """
                                 error: mismatched types
                                  --> /foo/boo/local_function_error_restores_private_names.cfun:%d:%d
-                                fun __parse_digits(parse: __Parse[Option[int]]): __Parse[int] = parse.value
+                                fun parse_digits(parse: __Parse[Option[int]]): __Parse[int] = parse.value
                                 %3$s^ Expected `__Parse[int]`, got `Option[int]`
                                 """
                 )

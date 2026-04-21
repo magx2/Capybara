@@ -1,5 +1,6 @@
 package dev.capylang.compiler;
 
 public enum Visibility {
-    LOCAL
+    LOCAL,
+    PRIVATE
 }

@@ -1,6 +1,6 @@
 const PI: double = 3.14
 const E: double = 2.
-const _HIDDEN: int = 11
+private const HIDDEN: int = 11
 const BYTE_V: byte = 0x1A
 const INT_V: int = 42
 const LONG_V: long = 97387717187L
@@ -21,7 +21,7 @@ const ANIMAL_TYPE: Animal = Cat { age: 7 }
 
 fun pi_plus_e(): double = PI + E
 
-fun uses_private_const(): int = _HIDDEN + 1
+fun uses_private_const(): int = HIDDEN + 1
 
 fun local_consts(x: int): int =
     const __BASE = 10

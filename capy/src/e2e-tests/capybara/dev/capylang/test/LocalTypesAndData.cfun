@@ -5,7 +5,7 @@ fun foo_me(name: string): string =
     data __Foo { foo: string }
     data __Boo { boo: string }
     data __Unknown { unkn: string }
-    fun __name(value: __Name): string =
+    fun name(value: __Name): string =
         match value with
         case __Foo { foo } -> foo
         case __Boo { boo } -> boo
@@ -16,7 +16,7 @@ fun foo_me(name: string): string =
         case "foo" -> __Foo { "xyz" }
         case "boo" -> __Boo { "zyx" }
         case _ -> __Unknown { name }
-    __name(x)
+    name(x)
 
 fun local_data_with_imported_result(v: int): string =
     data __Entry { key: string, value: Result[int] }
@@ -28,26 +28,26 @@ fun local_data_with_imported_result(v: int): string =
 
 fun local_data_used_in_local_function(v: int): string =
     data __Parse[T] { value: T }
-    fun __unwrap(parse: __Parse[int]): string =
+    fun unwrap(parse: __Parse[int]): string =
         "value:" + parse.value
     ---
-    __unwrap(__Parse { v })
+    unwrap(__Parse { v })
 
 fun local_generic_data_used_in_local_function_return_type(v: int): string =
     data __Parse[T] { value: T }
-    fun __parse(value: int): Result[__Parse[int]] =
+    fun parse(value: int): Result[__Parse[int]] =
         Success { __Parse { value } }
     ---
-    match __parse(v) with
+    match parse(v) with
     case Success { value } -> "value:" + value.value
     case Error { message } -> "error:" + message
 
 fun local_generic_data_field_access_followed_by_index(buffer: string): string =
     data __Parse[T] { buffer: string, value: T }
-    fun __parse(value: string): Result[__Parse[int]] =
+    fun parse(value: string): Result[__Parse[int]] =
         Success { __Parse { buffer: value, value: 1 } }
     ---
-    match (__parse(buffer) | parse =>
+    match (parse(buffer) | parse =>
         match parse.buffer[0] with
         case Some { value } -> Success { value }
         case None -> Error { "" }) with

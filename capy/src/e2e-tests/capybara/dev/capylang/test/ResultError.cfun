@@ -20,12 +20,12 @@ fun flatmap_untyped_result(): Result[string] =
     let result: Result = Success { "success_value" }
     result |* value => Success { Success { "mapped_" + value } }
 
-fun _append_dict_entry(acc: Result[string], key: string, value: int): Result[string] =
+private fun append_dict_entry(acc: Result[string], key: string, value: int): Result[string] =
     acc | text => Success { value: text + key + ":" + value + "," }
 
-fun _empty_result(): Result[string] = Success { value: "" }
+private fun empty_result(): Result[string] = Success { value: "" }
 
 fun dict_reduce_then_map(d: dict[int]): Result[string] =
     d
-        |> _empty_result(), (acc, k, v) => _append_dict_entry(acc, k, v)
+        |> empty_result(), (acc, k, v) => append_dict_entry(acc, k, v)
         | text => Success { value: text + "done" }

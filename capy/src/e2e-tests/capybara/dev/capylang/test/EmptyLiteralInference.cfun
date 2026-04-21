@@ -2,26 +2,26 @@ from /capy/test/Assert import { * }
 from /capy/test/CapyTest import { * }
 
 fun reverse_ints(values: list[int]): list[int] =
-    fun __rev(left: list[int], acc: list[int]): list[int] =
+    fun rev(left: list[int], acc: list[int]): list[int] =
         if left.size == 0
         then acc
         else
             match left[0] with
-            case Some { v } -> __rev(left[1:], [v] + acc)
+            case Some { v } -> rev(left[1:], [v] + acc)
             case None -> acc
     ---
-    __rev(values, [])
+    rev(values, [])
 
 fun duplicate_strings(values: list[string]): list[string] =
-    fun __dup(left: list[string], acc: list[string]): list[string] =
+    fun dup(left: list[string], acc: list[string]): list[string] =
         if left.size == 0
         then acc
         else
             match left[0] with
-            case Some { v } -> __dup(left[1:], acc + [v, v])
+            case Some { v } -> dup(left[1:], acc + [v, v])
             case None -> acc
     ---
-    __dup(values, [])
+    dup(values, [])
 
 fun empty_list_of_type_param(v: T): list[T] =
     []

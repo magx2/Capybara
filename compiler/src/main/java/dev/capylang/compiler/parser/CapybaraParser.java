@@ -452,7 +452,7 @@ public class CapybaraParser {
                 context.docComment().stream()
                         .map(comment -> stripDocComment(comment.getText()))
                         .toList(),
-                context.VISIBILITY() != null ? dev.capylang.compiler.Visibility.LOCAL : null,
+                visibility(context.VISIBILITY()),
                 position(context)
         );
     }
@@ -469,7 +469,7 @@ public class CapybaraParser {
                 context.docComment().stream()
                         .map(comment -> stripDocComment(comment.getText()))
                         .toList(),
-                context.VISIBILITY() != null ? dev.capylang.compiler.Visibility.LOCAL : null,
+                visibility(context.VISIBILITY()),
                 position(context)
         );
     }
@@ -496,6 +496,7 @@ public class CapybaraParser {
     }
 
     private Function constDeclaration(FunctionalParser.ConstDeclarationContext context) {
+        var visibility = visibility(context.VISIBILITY());
         var name = context.TYPE().getText();
         validateConstName(name);
         var constExpression = expressionNoLet(context.expressionNoLet());
@@ -507,7 +508,7 @@ public class CapybaraParser {
                 context.docComment().stream()
                         .map(comment -> stripDocComment(comment.getText()))
                         .toList(),
-                context.VISIBILITY() != null ? dev.capylang.compiler.Visibility.LOCAL : null,
+                visibility,
                 position(context)
         );
     }
@@ -527,6 +528,7 @@ public class CapybaraParser {
     }
 
     private List<Definition> functionDeclaration(dev.capylang.parser.antlr.FunctionalParser.FunctionDeclarationContext functionDeclarationContext) {
+        var visibility = visibility(functionDeclarationContext.VISIBILITY());
         var functionNameDeclaration = functionDeclarationContext.functionNameDeclaration();
         var methodOwner = functionNameDeclaration.genericTypeDeclaration();
         var methodName = functionName(functionNameDeclaration);
@@ -563,17 +565,17 @@ public class CapybaraParser {
             if (localFunction != null) {
                 var localNameToken = localFunction.NAME().getSymbol();
                 var localName = localNameToken.getText();
-                if (!localName.startsWith("__")) {
-                    throw new IllegalStateException("Local function name has to start with `__`: " + localName);
-                }
                 var occurrences = localFunctionPositions.computeIfAbsent(localName, ignored -> new java.util.ArrayList<>());
                 occurrences.add(localNameToken);
                 if (localFunctionNameMap.containsKey(localName)) {
                     continue;
                 }
+                var normalizedLocalName = localName.startsWith("__")
+                        ? localName.substring(2)
+                        : localName;
                 localFunctionNameMap.put(
                         localName,
-                        localScopePrefix + "__local_fun_" + localFunctionIndex + "_" + localName.substring(2)
+                        localScopePrefix + "__local_fun_" + localFunctionIndex + "_" + normalizedLocalName
                 );
                 localFunctionIndex++;
             }
@@ -700,7 +702,7 @@ public class CapybaraParser {
                 functionDeclarationContext.docComment().stream()
                         .map(comment -> stripDocComment(comment.getText()))
                         .toList(),
-                functionDeclarationContext.VISIBILITY() != null ? dev.capylang.compiler.Visibility.LOCAL : null,
+                visibility,
                 position(functionDeclarationContext)
         );
         var allDefinitions = new java.util.ArrayList<Definition>(1 + extractedLocalDefinitions.size());
@@ -2794,6 +2796,17 @@ public class CapybaraParser {
         return context.getText();
     }
 
+    private static dev.capylang.compiler.Visibility visibility(TerminalNode visibility) {
+        if (visibility == null) {
+            return null;
+        }
+        return switch (visibility.getText()) {
+            case "local" -> dev.capylang.compiler.Visibility.LOCAL;
+            case "private" -> dev.capylang.compiler.Visibility.PRIVATE;
+            default -> throw new IllegalStateException("Unknown visibility: " + visibility.getText());
+        };
+    }
+
     private static String functionName(FunctionalParser.FunctionNameDeclarationContext context) {
         if (context.identifier() != null) {
             return identifier(context.identifier());
@@ -3238,11 +3251,5 @@ public class CapybaraParser {
     }
 
 }
-
-
-
-
-
-
 
 
