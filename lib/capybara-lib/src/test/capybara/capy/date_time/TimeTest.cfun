@@ -2,6 +2,7 @@ from /capy/date_time/Time import { * }
 from /capy/test/Assert import { * }
 from /capy/lang/Math import { * }
 from /capy/lang/Result import { * }
+from /capy/lang/Option import { * }
 from /capy/test/CapyTest import { * }
 
 fun tests(): TestFile =
@@ -33,16 +34,23 @@ fun tests(): TestFile =
         + _time_test_from_iso_8601_success()
         + _time_test_from_iso_8601_failure())
 
+fun _local_time(hour: int, minute: int, second: int): Result[Time] =
+    Time { hour, minute, second, offset_minutes: None {} }
+
+fun _offset_time(hour: int, minute: int, second: int, offset_minutes: int): Result[Time] =
+    Time { hour, minute, second, offset_minutes: Some { offset_minutes } }
+
 fun _test_time(hour: int, minute: int, second: int, is_valid: bool): TestCase =
     let assert: Assert =
         if is_valid
-        then assert_that(Time { hour, minute, second })
+        then assert_that(_local_time(hour, minute, second))
             .succeeds(time =>
                 assert_that(time)
                     .has_hour(hour)
                     .has_minute(minute)
-                    .has_second(second))
-        else assert_that(Time { hour, minute, second }).fails()
+                    .has_second(second)
+                    .has_offset_minutes(None {}))
+        else assert_that(_local_time(hour, minute, second)).fails()
     test("Time \{ hour: {hour}, minute: {minute}, second: {second} } should " + (if is_valid then "succeed" else "fail"), assert)
 
 fun _test_to_seconds(): list[TestCase] =
@@ -52,7 +60,7 @@ fun _test_to_seconds(): list[TestCase] =
         (3, 0, 0, 10800),
     ] | (hour, minute, second, expected) => test(
         "Time \{ hour: {hour}, minute: {minute}, second: {second} }.to_seconds() should return the {expected} seconds",
-        assert_that(Time { hour, minute, second } | t => Success { t.to_seconds() }).succeeds(expected))
+        assert_that(_local_time(hour, minute, second) | t => Success { t.to_seconds() }).succeeds(expected))
 
 fun _test_to_minutes(): list[TestCase] =
     [
@@ -61,7 +69,7 @@ fun _test_to_minutes(): list[TestCase] =
         (3, 0, 0, 180),
     ] | (hour, minute, second, expected) => test(
         "Time \{ hour: {hour}, minute: {minute}, second: {second} }.to_minutes() should return the {expected} minutes",
-        assert_that(Time { hour, minute, second } | t => Success { t.to_minutes() }).succeeds(expected))
+        assert_that(_local_time(hour, minute, second) | t => Success { t.to_minutes() }).succeeds(expected))
 
 fun _test_to_hours(): list[TestCase] =
     [
@@ -70,36 +78,36 @@ fun _test_to_hours(): list[TestCase] =
         (3, 0, 0, 3),
     ] | (hour, minute, second, expected) => test(
         "Time \{ hour: {hour}, minute: {minute}, second: {second} }.to_hours() should return the {expected} hours",
-        assert_that(Time { hour, minute, second } | t => Success { t.to_hours() }).succeeds(expected))
+        assert_that(_local_time(hour, minute, second) | t => Success { t.to_hours() }).succeeds(expected))
 
 fun _test_round_to_minutes(): TestCase =
     test(
-        "Time \{hour: 23, minute: 59, seconds: 59}.round_to_minutes() should return Time \{hour: 23, minute: 59, seconds: 0}",
-        assert_that(Time { hour: 23, minute: 59, second: 59 })
+        "Time \{hour: 23, minute: 59, seconds: 59}.round_to_minutes() should preserve offset and zero seconds",
+        assert_that(_offset_time(23, 59, 59, 90))
             .succeeds(time =>
                 assert_that(time.round_to_minutes())
                     .has_hour(23)
                     .has_minute(59)
-                    .has_second(0)))
+                    .has_second(0)
+                    .has_offset_minutes(Some { 90 })))
 
 fun _test_round_to_hours(): TestCase =
     test(
-        "Time \{hour: 23, minute: 59, seconds: 59}.round_to_hours() should return Time \{hour: 23, minute: 0, seconds: 0}",
-        assert_that(Time { hour: 23, minute: 59, second: 59 })
+        "Time \{hour: 23, minute: 59, seconds: 59}.round_to_hours() should preserve offset and zero minutes",
+        assert_that(_offset_time(23, 59, 59, -300))
             .succeeds(time =>
                 assert_that(time.round_to_hours())
                     .has_hour(23)
                     .has_minute(0)
-                    .has_second(0)))
+                    .has_second(0)
+                    .has_offset_minutes(Some { -300 })))
 
 fun _test_add_seconds(): list[TestCase] =
     [
-        // plus
         (23, 59, 59, 1, 0, 0, 0),
         (23, 59, 59, 60, 0, 0, 59),
         (23, 59, 59, 3600, 0, 59, 59),
         (23, 59, 59, 3661, 1, 1, 0),
-        // minus
         (23, 59, 59, -1, 23, 59, 58),
         (0, 0, 0, -1, 23, 59, 59),
         (0, 0, 0, -60, 23, 59, 0),
@@ -107,71 +115,83 @@ fun _test_add_seconds(): list[TestCase] =
         (0, 0, 0, -3661, 22, 58, 59),
     ] | (hour, minute, second, seconds_to_add, expected_hour, expected_minute, expected_second) => test(
         "Time \{ hour: {hour}, minute: {minute}, second: {second} }.add_seconds({seconds_to_add}) should return expected time",
-        assert_that(Time { hour, minute, second })
+        assert_that(_offset_time(hour, minute, second, 330))
             .succeeds(time =>
-                assert_that(time.add_seconds(seconds_to_add)).is_equal_to(_time_test_value(expected_hour, expected_minute, expected_second))))
+                assert_that(time.add_seconds(seconds_to_add))
+                    .is_equal_to(_time_test_value(expected_hour, expected_minute, expected_second, Some { 330 }))))
 
 fun _test_add_minutes(): list[TestCase] =
     [
-        // plus
         (23, 59, 59, 1, 0, 0, 59),
         (23, 59, 59, 60, 0, 59, 59),
         (23, 59, 59, 61, 1, 0, 59),
-        // minus
         (23, 59, 59, -1, 23, 58, 59),
         (0, 0, 0, -1, 23, 59, 0),
         (0, 0, 0, -60, 23, 0, 0),
         (0, 0, 0, -61, 22, 59, 0),
     ] | (hour, minute, second, minutes_to_add, expected_hour, expected_minute, expected_second) => test(
         "Time \{ hour: {hour}, minute: {minute}, second: {second} }.add_minutes({minutes_to_add}) should return expected time",
-        assert_that(Time { hour, minute, second })
+        assert_that(_offset_time(hour, minute, second, -300))
             .succeeds(time =>
-                assert_that(time.add_minutes(minutes_to_add)).is_equal_to(_time_test_value(expected_hour, expected_minute, expected_second))))
+                assert_that(time.add_minutes(minutes_to_add))
+                    .is_equal_to(_time_test_value(expected_hour, expected_minute, expected_second, Some { -300 }))))
 
 fun _test_add_hours(): list[TestCase] =
     [
-        // plus
         (23, 59, 59, 1, 0, 59, 59),
-        // minus
         (23, 59, 59, -1, 22, 59, 59),
         (0, 0, 0, -1, 23, 0, 0),
     ] | (hour, minute, second, hours_to_add, expected_hour, expected_minute, expected_second) => test(
         "Time \{ hour: {hour}, minute: {minute}, second: {second} }.add_hours({hours_to_add}) should return expected time",
-        assert_that(Time { hour, minute, second })
+        assert_that(_offset_time(hour, minute, second, 0))
             .succeeds(time =>
-                assert_that(time.add_hours(hours_to_add)).is_equal_to(_time_test_value(expected_hour, expected_minute, expected_second))))
+                assert_that(time.add_hours(hours_to_add))
+                    .is_equal_to(_time_test_value(expected_hour, expected_minute, expected_second, Some { 0 }))))
 
-fun _time_test_to_iso_8601(): TestCase =
-    test(
-        "Time.to_iso_8601() should format full precision extended time",
-        assert_that(Time { hour: 13, minute: 47, second: 30 } | t => Success { t.to_iso_8601() }).succeeds("13:47:30"))
+fun _time_test_to_iso_8601(): list[TestCase] =
+    [
+        (_time_test_value(13, 47, 30, None {}), "13:47:30"),
+        (_time_test_value(13, 47, 30, Some { 0 }), "13:47:30Z"),
+        (_time_test_value(13, 47, 30, Some { 90 }), "13:47:30+01:30"),
+        (_time_test_value(13, 47, 30, Some { -300 }), "13:47:30-05:00"),
+    ] | (time, expected) => test(
+        "Time.to_iso_8601() should format {expected}",
+        assert_that(time.to_iso_8601()).is_equal_to(expected))
 
 fun _time_test_from_iso_8601_success(): list[TestCase] =
     [
-        ("13:47:30", 13, 47, 30),
-        ("134730", 13, 47, 30),
-        ("T13:47:30", 13, 47, 30),
-        ("T134730", 13, 47, 30),
-    ] | (iso, hour, minute, second) => test(
+        ("13:47:30", _time_test_value(13, 47, 30, None {})),
+        ("134730", _time_test_value(13, 47, 30, None {})),
+        ("T13:47:30", _time_test_value(13, 47, 30, None {})),
+        ("T134730", _time_test_value(13, 47, 30, None {})),
+        ("13:47:30Z", _time_test_value(13, 47, 30, Some { 0 })),
+        ("134730Z", _time_test_value(13, 47, 30, Some { 0 })),
+        ("13:47:30+00:00", _time_test_value(13, 47, 30, Some { 0 })),
+        ("134730+0000", _time_test_value(13, 47, 30, Some { 0 })),
+        ("13:47:30+00", _time_test_value(13, 47, 30, Some { 0 })),
+        ("13:47:30+01:30", _time_test_value(13, 47, 30, Some { 90 })),
+        ("134730+0130", _time_test_value(13, 47, 30, Some { 90 })),
+        ("13:47:30-05", _time_test_value(13, 47, 30, Some { -300 })),
+        ("T134730+02", _time_test_value(13, 47, 30, Some { 120 })),
+    ] | (iso, expected) => test(
         "Time.from_iso_8601 should parse {iso}",
-        assert_that(/capy/date_time/Time.from_iso_8601(iso)).succeeds(time =>
-            assert_that(time)
-                .has_hour(hour)
-                .has_minute(minute)
-                .has_second(second)))
+        assert_that(/capy/date_time/Time.from_iso_8601(iso)).succeeds(expected))
 
 fun _time_test_from_iso_8601_failure(): list[TestCase] =
     [
         "24:00:00",
         "13:47",
         "13:47:60",
-        "13:47:30Z",
         "13-47-30",
+        "13:47:30-00:00",
+        "13:47:30+00:61",
+        "13:47:30+24:00",
+        "13:47:30+",
     ] | iso => test(
         "Time.from_iso_8601 should fail for {iso}",
         assert_that(/capy/date_time/Time.from_iso_8601(iso)).fails())
 
-fun _time_test_value(hour: int, minute: int, second: int): Time =
-    match Time { hour: hour, minute: minute, second: second } with
+fun _time_test_value(hour: int, minute: int, second: int, offset_minutes: Option[int]): Time =
+    match Time { hour: hour, minute: minute, second: second, offset_minutes: offset_minutes } with
     case Success { value } -> value
     case Error -> MIDNIGHT
