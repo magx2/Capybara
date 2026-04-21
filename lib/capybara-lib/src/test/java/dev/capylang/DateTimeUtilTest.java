@@ -17,6 +17,7 @@ import java.util.Optional;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class DateTimeUtilTest {
     @ParameterizedTest
@@ -60,6 +61,37 @@ class DateTimeUtilTest {
         var timeWithoutOffset = new Time(capyTime.hour(), capyTime.minute(), capyTime.second(), Optional.empty());
 
         assertThat(DateTimeUtil.toJavaOffsetTime(timeWithoutOffset).getOffset()).isEqualTo(ZoneOffset.UTC);
+    }
+
+
+    @ParameterizedTest
+    @MethodSource("capyOffsetsOutsideJavaRange")
+    void shouldFailWhenCapyOffsetIsOutsideJavaZoneOffsetRange(int offsetMinutes) {
+        var capyTime = new Time(10, 0, 0, Optional.of(offsetMinutes));
+
+        assertThatThrownBy(() -> DateTimeUtil.toJavaOffsetTime(capyTime))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("out of Java ZoneOffset range");
+
+        var capyDateTime = new DateTime(new Date(21, 4, 2026), capyTime);
+        assertThatThrownBy(() -> DateTimeUtil.toJavaOffsetDateTime(capyDateTime))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("out of Java ZoneOffset range");
+    }
+
+    @ParameterizedTest
+    @MethodSource("javaOffsetsWithSecondPrecision")
+    void shouldFailWhenJavaOffsetContainsSecondPrecision(ZoneOffset offset) {
+        var offsetTime = OffsetTime.of(13, 15, 45, 0, offset);
+
+        assertThatThrownBy(() -> DateTimeUtil.fromJavaOffsetTime(offsetTime))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("second precision");
+
+        var offsetDateTime = OffsetDateTime.of(2026, 4, 21, 13, 15, 45, 0, offset);
+        assertThatThrownBy(() -> DateTimeUtil.fromJavaOffsetDateTime(offsetDateTime))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("second precision");
     }
 
     private static Stream<Arguments> dateCases() {
@@ -114,4 +146,20 @@ class DateTimeUtilTest {
                 )
         );
     }
+
+
+    private static Stream<Arguments> capyOffsetsOutsideJavaRange() {
+        return Stream.of(
+                Arguments.of(18 * 60 + 1),
+                Arguments.of(-(18 * 60 + 1))
+        );
+    }
+
+    private static Stream<Arguments> javaOffsetsWithSecondPrecision() {
+        return Stream.of(
+                Arguments.of(ZoneOffset.ofHoursMinutesSeconds(5, 30, 45)),
+                Arguments.of(ZoneOffset.ofHoursMinutesSeconds(-3, -15, -30))
+        );
+    }
+
 }

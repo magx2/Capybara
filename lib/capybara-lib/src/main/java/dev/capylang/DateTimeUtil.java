@@ -14,6 +14,8 @@ import java.time.ZoneOffset;
 import java.util.Optional;
 
 public final class DateTimeUtil {
+    private static final int JAVA_MAX_OFFSET_MINUTES = 18 * TimeModule.mINUTESINHOUR;
+
     private DateTimeUtil() {
     }
 
@@ -40,13 +42,19 @@ public final class DateTimeUtil {
 
     public static OffsetTime toJavaOffsetTime(Time time) {
         var offset = offsetMinutes(time)
-                .map(minutes -> ZoneOffset.ofTotalSeconds(Math.multiplyExact(minutes, TimeModule.sECONDSINMINUTE)))
+                .map(DateTimeUtil::toJavaZoneOffset)
                 .orElseGet(() -> ZoneOffset.UTC);
         return OffsetTime.of(toJavaLocalTime(time), offset);
     }
 
     public static Time fromJavaOffsetTime(OffsetTime time) {
-        var offsetMinutes = Math.floorDiv(time.getOffset().getTotalSeconds(), TimeModule.sECONDSINMINUTE);
+        var totalSeconds = time.getOffset().getTotalSeconds();
+        if (Math.floorMod(totalSeconds, TimeModule.sECONDSINMINUTE) != 0) {
+            throw new IllegalArgumentException(
+                    "Java offset with second precision is unsupported: " + time.getOffset()
+            );
+        }
+        var offsetMinutes = Math.floorDiv(totalSeconds, TimeModule.sECONDSINMINUTE);
         return new Time(time.getHour(), time.getMinute(), time.getSecond(), Optional.of(offsetMinutes));
     }
 
@@ -70,6 +78,13 @@ public final class DateTimeUtil {
                 fromJavaLocalDate(dateTime.toLocalDate()),
                 fromJavaOffsetTime(dateTime.toOffsetTime())
         );
+    }
+
+    private static ZoneOffset toJavaZoneOffset(int minutes) {
+        if (minutes < -JAVA_MAX_OFFSET_MINUTES || minutes > JAVA_MAX_OFFSET_MINUTES) {
+            throw new IllegalArgumentException("Capy offset out of Java ZoneOffset range: " + minutes + " minutes");
+        }
+        return ZoneOffset.ofTotalSeconds(Math.multiplyExact(minutes, TimeModule.sECONDSINMINUTE));
     }
 
     private static Optional<Integer> offsetMinutes(Time time) {
