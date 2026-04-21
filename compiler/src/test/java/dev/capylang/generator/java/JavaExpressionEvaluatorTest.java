@@ -94,7 +94,11 @@ class JavaExpressionEvaluatorTest {
     }
 
     private static CompiledProgram compileProgram(String name, String path, String source) {
-        var programResult = CapybaraCompiler.INSTANCE.compile(List.of(new RawModule(name, path, source)), new java.util.TreeSet<>());
+        return compileProgram(List.of(new RawModule(name, path, source)));
+    }
+
+    private static CompiledProgram compileProgram(List<RawModule> modules) {
+        var programResult = CapybaraCompiler.INSTANCE.compile(modules, new java.util.TreeSet<>());
         if (programResult instanceof Result.Error<CompiledProgram> er) {
             throw new AssertionError(er.errors()
                     .stream()
@@ -152,6 +156,39 @@ class JavaExpressionEvaluatorTest {
         var error = (Result.Error<CompiledProgram>) programResult;
         assertThat(error.errors().stream().map(Result.Error.SingleError::message).collect(joining(",")))
                 .contains("dict keys must be of type `STRING`");
+    }
+
+    @Test
+    void shouldKeepQualifiedOverrideOwnershipPerModule() {
+        var program = compileProgram(List.of(
+                new RawModule("Left", "/alpha", """
+                        fun choose(values: list[int]): int = 100 + values.size
+                        fun choose(values: list[long]): int = 200 + values.size
+                        """),
+                new RawModule("Right", "/beta", """
+                        fun choose(values: list[int]): int = 300 + values.size
+                        fun choose(values: list[long]): int = 400 + values.size
+                        """),
+                new RawModule("Main", "/app", """
+                        fun ints(): list[int] = [1, 2, 3]
+                        fun longs(): list[long] = [1L, 2L, 3L]
+                        fun left_choice(): int = /alpha/Left.choose(ints())
+                        fun left_choice_long(): int = /alpha/Left.choose(longs())
+                        fun right_choice(): int = /beta/Right.choose(ints())
+                        fun right_choice_long(): int = /beta/Right.choose(longs())
+                        """)
+        ));
+
+        var generated = new JavaGenerator().generate(program).modules().stream()
+                .filter(module -> module.relativePath().equals(java.nio.file.Path.of("app", "Main.java")))
+                .map(dev.capylang.generator.GeneratedModule::code)
+                .findFirst()
+                .orElseThrow();
+
+        assertThat(generated).contains("return alpha.Left.choose__compiledlist_elementtype_int(app.Main.ints());");
+        assertThat(generated).contains("return alpha.Left.choose__compiledlist_elementtype_long(app.Main.longs());");
+        assertThat(generated).contains("return beta.Right.choose__compiledlist_elementtype_int(app.Main.ints());");
+        assertThat(generated).contains("return beta.Right.choose__compiledlist_elementtype_long(app.Main.longs());");
     }
 
     @Test

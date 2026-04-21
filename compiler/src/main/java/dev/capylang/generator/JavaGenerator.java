@@ -92,8 +92,10 @@ public final class JavaGenerator implements Generator {
     private java.util.Map<String, String> buildFunctionNameOverrides(CompiledProgram program) {
         var overrides = new java.util.LinkedHashMap<String, String>();
         var collisions = new java.util.LinkedHashMap<String, java.util.List<dev.capylang.compiler.CompiledFunction>>();
+        var ownerModuleNames = new java.util.IdentityHashMap<dev.capylang.compiler.CompiledFunction, String>();
         for (var module : program.modules()) {
             for (var function : module.functions()) {
+                ownerModuleNames.put(function, module.name());
                 var ownerKey = function.name().startsWith(METHOD_DECL_PREFIX)
                         ? function.name().substring(0, Math.max(function.name().lastIndexOf("__"), METHOD_DECL_PREFIX.length()))
                         : module.name();
@@ -128,7 +130,7 @@ public final class JavaGenerator implements Generator {
                 var parameterTypes = function.parameters().stream().map(dev.capylang.compiler.CompiledFunction.CompiledFunctionParameter::type).toList();
                 overrides.put(signatureKey(function.name(), parameterTypes), emittedName);
                 if (!function.name().startsWith(METHOD_DECL_PREFIX)) {
-                    overrides.put(signatureKey(moduleQualifiedName(program, function), parameterTypes), emittedName);
+                    overrides.put(signatureKey(moduleQualifiedName(ownerModuleNames, function), parameterTypes), emittedName);
                 }
                 if (mixedRawNames || !function.name().startsWith(METHOD_DECL_PREFIX)) {
                     overrides.put(signatureKey(baseMethodName(function.name()), parameterTypes), emittedName);
@@ -141,12 +143,15 @@ public final class JavaGenerator implements Generator {
         return java.util.Map.copyOf(overrides);
     }
 
-    private String moduleQualifiedName(CompiledProgram program, dev.capylang.compiler.CompiledFunction function) {
-        var ownerModule = program.modules().stream()
-                .filter(module -> module.functions().contains(function))
-                .findFirst()
-                .orElseThrow();
-        return ownerModule.name() + "." + function.name();
+    private String moduleQualifiedName(
+            java.util.IdentityHashMap<dev.capylang.compiler.CompiledFunction, String> ownerModuleNames,
+            dev.capylang.compiler.CompiledFunction function
+    ) {
+        var ownerModuleName = ownerModuleNames.get(function);
+        if (ownerModuleName == null) {
+            throw new IllegalStateException("Missing owner module for function: " + function.name());
+        }
+        return ownerModuleName + "." + function.name();
     }
 
     private static String signatureKey(String name, java.util.List<dev.capylang.compiler.CompiledType> parameterTypes) {
