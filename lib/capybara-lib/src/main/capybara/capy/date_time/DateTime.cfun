@@ -94,9 +94,19 @@ fun DateTime.`>`(other: DateTime): bool = this.greater_than(other)
 
 /// Formats this date-time as a canonical UTC ISO 8601 string.
 fun DateTime.to_iso_8601(): string =
+    fun __utc_time_to_iso_8601(time: Time): string =
+        match Time {
+            hour: time.hour,
+            minute: time.minute,
+            second: time.second,
+            offset_minutes: Some { 0 }
+        } with
+        case Success { utc_time } -> utc_time.to_iso_8601()
+        case Error -> time.to_iso_8601()
+    ---
     this.date.to_iso_8601()
     + "T"
-    + this.time.to_iso_8601()
+    + __utc_time_to_iso_8601(this.time)
 
 /// Parses a UTC ISO 8601 date-time in basic or extended form.
 fun from_iso_8601(iso: string): Result[DateTime] =
