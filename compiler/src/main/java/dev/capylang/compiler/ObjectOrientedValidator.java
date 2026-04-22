@@ -205,11 +205,12 @@ public final class ObjectOrientedValidator {
         if (trimmed.isBlank()) {
             return false;
         }
-        if (!CALL_EXPRESSION.matcher(trimmed).matches()) {
+        if (!trimmed.endsWith(")")) {
             return false;
         }
         var depth = 0;
         char stringDelimiter = 0;
+        var outerCallOpenParen = -1;
         for (int i = 0; i < trimmed.length(); i++) {
             var current = trimmed.charAt(i);
             if (stringDelimiter != 0) {
@@ -227,13 +228,29 @@ public final class ObjectOrientedValidator {
                 continue;
             }
             switch (current) {
-                case '(' -> depth++;
-                case ')' -> depth--;
+                case '(' -> {
+                    if (depth == 0) {
+                        outerCallOpenParen = i;
+                    }
+                    depth++;
+                }
+                case ')' -> {
+                    depth--;
+                    if (depth < 0) {
+                        return false;
+                    }
+                }
                 default -> {
                 }
             }
         }
-        return depth == 0 && trimmed.endsWith(")");
+        if (depth != 0 || outerCallOpenParen <= 0) {
+            return false;
+        }
+        var callee = trimmed.substring(0, outerCallOpenParen).trim();
+        return callee.endsWith(")")
+               || callee.endsWith("]")
+               || IDENTIFIER_REFERENCE.matcher(callee).matches();
     }
 
     private void collectMutableCaptures(ObjectOriented.MethodBody body, Scope scope, TreeSet<String> mutableCaptures) {

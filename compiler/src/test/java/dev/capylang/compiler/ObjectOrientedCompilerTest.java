@@ -35,4 +35,31 @@ class ObjectOrientedCompilerTest {
                     assertThat(module.path()).isEqualTo("/foo/boo");
                 });
     }
+
+
+    @Test
+    void shouldAllowNestedCallsAsStandAloneStatements() {
+        var result = CapybaraCompiler.INSTANCE.compile(List.of(
+                new RawModule(
+                        "User",
+                        "/foo/boo",
+                        """
+                                class User {
+                                    def format(name: string): string = name
+
+                                    def print(value: string): void {
+                                    }
+
+                                    def greet(name: string): void {
+                                        print(format(name))
+                                    }
+                                }
+                                """,
+                        SourceKind.OBJECT_ORIENTED
+                )
+        ), new TreeSet<>());
+
+        assertThat(result).isInstanceOf(Result.Success.class);
+    }
+
 }
