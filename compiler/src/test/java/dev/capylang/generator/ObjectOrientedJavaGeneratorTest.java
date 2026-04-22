@@ -467,6 +467,60 @@ class ObjectOrientedJavaGeneratorTest {
         }
     }
 
+
+    @Test
+    void shouldUseRootModuleOwnerReferencesWithoutLeadingDot() throws Exception {
+        var program = compileProgram(List.of(
+                new RawModule(
+                        "SharedInterop",
+                        "",
+                        """
+                                type SharedPet = SharedDog | SharedCat
+                                data SharedDog { name: string }
+                                data SharedCat { age: int }
+
+                                fun make_dog(name: string): SharedDog = SharedDog { name: name }
+
+                                fun pet_text(pet: SharedPet): string =
+                                    match pet with
+                                    case SharedDog { name } -> "dog:" + name
+                                    case _ -> "cat"
+                                """,
+                        SourceKind.FUNCTIONAL
+                ),
+                new RawModule(
+                        "RootConsumer",
+                        "",
+                        """
+                                from SharedInterop import { SharedPet, SharedDog }
+
+                                class RootConsumer {
+                                    def invoke_fp_function(name: string): string =
+                                        SharedInterop.petText(SharedInterop.makeDog(name))
+
+                                    def create_fp_data(name: string): SharedPet =
+                                        SharedDog { name: name }
+                                }
+                                """,
+                        SourceKind.OBJECT_ORIENTED
+                )
+        ));
+
+        var generatedProgram = new JavaGenerator().generate(program);
+        var consumerModule = generatedProgram.modules().stream()
+                .filter(module -> module.relativePath().endsWith("RootConsumer.java"))
+                .findFirst()
+                .orElseThrow();
+
+        assertThat(consumerModule.code())
+                .contains("import SharedInterop.SharedDog;")
+                .contains("import SharedInterop.SharedPet;")
+                .contains("return SharedInterop.petText(SharedInterop.makeDog(name));")
+                .doesNotContain("import .SharedInterop")
+                .doesNotContain(".SharedInterop.petText");
+
+    }
+
     @Test
     void shouldRejectObjectOrientedMainEntrypointThatUsesInstanceState() {
         var program = compileProgram("""
