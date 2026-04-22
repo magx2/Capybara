@@ -183,7 +183,7 @@ public final class ObjectOrientedJavaGenerator {
                 .filter(symbol -> !"*".equals(symbol))
                 .filter(symbol -> !symbol.isBlank())
                 .collect(Collectors.toUnmodifiableSet());
-        var ownerReference = normalizePackageName(module.path()) + "." + module.name();
+        var ownerReference = renderOwnerReference(normalizePackageName(module.path()), module.name());
         return referencedTypeTokens(module).stream()
                 .filter(symbol -> !localDefinitions.contains(symbol))
                 .filter(symbol -> !module.name().equals(symbol))
@@ -294,7 +294,11 @@ public final class ObjectOrientedJavaGenerator {
     private String renderImportedOwnerReference(ObjectOrientedModule module, String moduleName) {
         return moduleName.startsWith("/")
                 ? renderTypeReference(moduleName)
-                : normalizePackageName(module.path()) + "." + moduleName;
+                : renderOwnerReference(normalizePackageName(module.path()), moduleName);
+    }
+
+    private String renderOwnerReference(String packageName, String ownerName) {
+        return packageName.isBlank() ? ownerName : packageName + "." + ownerName;
     }
 
     private boolean requiresConstructor(
