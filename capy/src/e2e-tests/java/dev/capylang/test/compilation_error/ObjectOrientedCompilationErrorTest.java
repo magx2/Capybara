@@ -1,7 +1,9 @@
 package dev.capylang.test.compilation_error;
 
 import dev.capylang.compiler.CapybaraCompiler;
+import dev.capylang.compiler.CompiledProgram;
 import dev.capylang.compiler.Result;
+import dev.capylang.generator.JavaGenerator;
 import dev.capylang.compiler.parser.RawModule;
 import dev.capylang.compiler.parser.SourceKind;
 import org.junit.jupiter.api.Test;
@@ -10,6 +12,7 @@ import java.util.List;
 import java.util.TreeSet;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class ObjectOrientedCompilationErrorTest {
     @Test
@@ -231,4 +234,51 @@ class ObjectOrientedCompilationErrorTest {
                     assertThat(error.message()).contains("total");
                 });
     }
+
+    @Test
+    void shouldRejectEntrypointClassThatRequiresConstructor() {
+        var result = CapybaraCompiler.INSTANCE.compile(List.of(
+                new RawModule(
+                        "Main",
+                        "/foo/boo",
+                        """
+                                class Main(name: string) {
+                                    def main(args: list[string]): int = args.size()
+                                }
+                                """,
+                        SourceKind.OBJECT_ORIENTED
+                )
+        ), new TreeSet<>());
+
+        assertThat(result).isInstanceOf(Result.Success.class);
+        var program = ((Result.Success<CompiledProgram>) result).value();
+        assertThatThrownBy(() -> new JavaGenerator().generate(program))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Entrypoint class `Main` cannot declare constructor state or init blocks");
+    }
+
+    @Test
+    void shouldRejectEntrypointMethodThatUsesInstanceState() {
+        var result = CapybaraCompiler.INSTANCE.compile(List.of(
+                new RawModule(
+                        "Main",
+                        "/foo/boo",
+                        """
+                                class Main {
+                                    def helper(): int = 1
+
+                                    def main(args: list[string]): int = args.size() + this.helper()
+                                }
+                                """,
+                        SourceKind.OBJECT_ORIENTED
+                )
+        ), new TreeSet<>());
+
+        assertThat(result).isInstanceOf(Result.Success.class);
+        var program = ((Result.Success<CompiledProgram>) result).value();
+        assertThatThrownBy(() -> new JavaGenerator().generate(program))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Entrypoint method `Main.main` cannot use instance state");
+    }
+
 }

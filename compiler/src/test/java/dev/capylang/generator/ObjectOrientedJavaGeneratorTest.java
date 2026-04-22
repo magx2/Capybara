@@ -315,7 +315,8 @@ class ObjectOrientedJavaGeneratorTest {
         assertThat(mainModule.code())
                 .contains("public static int main(java.util.List<String> args)")
                 .contains("public static void main(java.lang.String[] args)")
-                .contains("System.exit(main(java.util.List.of(args)));");
+                .contains("System.exit(main(java.util.List.of(args)));")
+                .doesNotContain("public Main(");
 
         var classesDir = compileGeneratedJava(generatedProgram);
         try (var classLoader = new URLClassLoader(new URL[]{classesDir.toUri().toURL()})) {
@@ -323,6 +324,20 @@ class ObjectOrientedJavaGeneratorTest {
             assertThat(mainType.getMethod("main", java.util.List.class).invoke(null, java.util.List.of("a", "b"))).isEqualTo(2);
             assertThat(mainType.getMethod("main", String[].class).getReturnType()).isEqualTo(void.class);
         }
+    }
+
+
+    @Test
+    void shouldRejectObjectOrientedMainEntrypointThatRequiresConstructor() {
+        var program = compileProgram("""
+                class Main(name: string) {
+                    def main(args: list[string]): int = args.size()
+                }
+                """);
+
+        assertThatThrownBy(() -> new JavaGenerator().generate(program))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Entrypoint class `Main` cannot declare constructor state or init blocks");
     }
 
     @Test
@@ -551,10 +566,10 @@ class ObjectOrientedJavaGeneratorTest {
     @Test
     void shouldRejectObjectOrientedMainEntrypointThatUsesInstanceState() {
         var program = compileProgram("""
-                class Main(name: string) {
-                    field name: string = name
+                class Main {
+                    def helper(): int = 1
 
-                    def main(args: list[string]): int = size(args) + size(this.name)
+                    def main(args: list[string]): int = size(args) + this.helper()
                 }
                 """);
 
