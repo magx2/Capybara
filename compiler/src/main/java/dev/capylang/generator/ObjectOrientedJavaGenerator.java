@@ -119,6 +119,7 @@ public final class ObjectOrientedJavaGenerator {
                 .filter(ObjectOriented.InitBlock.class::isInstance)
                 .map(ObjectOriented.InitBlock.class::cast)
                 .toList();
+        var requiresConstructor = requiresConstructor(declaration, fields, initBlocks);
         var constructorParameterNames = declaration.constructorParameters().stream()
                 .map(ObjectOriented.Parameter::name)
                 .collect(Collectors.toCollection(HashSet::new));
@@ -130,7 +131,7 @@ public final class ObjectOrientedJavaGenerator {
             code.append("\n");
         }
 
-        if (requiresConstructor(declaration, fields, initBlocks)) {
+        if (requiresConstructor) {
             code.append(renderConstructor(module, declaration, fields, initBlocks)).append("\n");
         }
 
@@ -383,6 +384,9 @@ public final class ObjectOrientedJavaGenerator {
     ) {
         var code = new StringBuilder();
         var javaEntrypoint = isJavaEntrypoint(method);
+        if (javaEntrypoint) {
+            ensureEntrypointCompatible(module, owner, method, parentNames);
+        }
         appendDocComments(code, method.comments(), 1);
         if (method.modifiers().contains("override")) {
             code.append("    @Override\n");
@@ -409,7 +413,6 @@ public final class ObjectOrientedJavaGenerator {
             code.append("abstract ");
         }
         if (javaEntrypoint) {
-            ensureEntrypointCompatible(module, owner, method, parentNames);
             code.append("static ");
         }
         code.append(renderType(method.returnType(), false))
@@ -794,6 +797,17 @@ public final class ObjectOrientedJavaGenerator {
             ObjectOriented.MethodDeclaration method,
             Set<String> parentNames
     ) {
+        var fields = owner.members().stream()
+                .filter(ObjectOriented.FieldDeclaration.class::isInstance)
+                .map(ObjectOriented.FieldDeclaration.class::cast)
+                .toList();
+        var initBlocks = owner.members().stream()
+                .filter(ObjectOriented.InitBlock.class::isInstance)
+                .map(ObjectOriented.InitBlock.class::cast)
+                .toList();
+        if (requiresConstructor(owner, fields, initBlocks)) {
+            throw unsupported(module, "Entrypoint class `" + owner.name() + "` cannot declare constructor state or init blocks");
+        }
         if (referencesThis(method) || referencesParents(method, parentNames)) {
             throw unsupported(module, "Entrypoint method `" + owner.name() + ".main` cannot use instance state or parent-qualified calls");
         }
