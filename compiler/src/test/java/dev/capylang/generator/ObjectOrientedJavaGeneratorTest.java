@@ -521,6 +521,33 @@ class ObjectOrientedJavaGeneratorTest {
 
     }
 
+
+    @Test
+    void shouldIgnoreSingleQuotedLiteralsDuringInferredImportScan() throws Exception {
+        var program = compileProgram(List.of(
+                new RawModule(
+                        "LiteralConsumer",
+                        "/foo/boo",
+                        """
+                                class LiteralConsumer {
+                                    def label(): string = 'SharedDog'
+                                }
+                                """,
+                        SourceKind.OBJECT_ORIENTED
+                )
+        ));
+
+        var generatedProgram = new JavaGenerator().generate(program);
+        var consumerModule = generatedProgram.modules().stream()
+                .filter(module -> module.relativePath().endsWith("LiteralConsumer.java"))
+                .findFirst()
+                .orElseThrow();
+
+        assertThat(consumerModule.code())
+                .doesNotContain("import foo.boo.LiteralConsumer.SharedDog;")
+                .doesNotContain("import SharedDog;");
+    }
+
     @Test
     void shouldRejectObjectOrientedMainEntrypointThatUsesInstanceState() {
         var program = compileProgram("""

@@ -273,7 +273,9 @@ public final class ObjectOrientedJavaGenerator {
     }
 
     private void collectTypeTokens(String source, Set<String> references) {
-        var withoutStringLiterals = source.replaceAll("\"(?:[^\"\\\\]|\\\\.)*\"", " ");
+        var withoutStringLiterals = source
+                .replaceAll("\"(?:[^\"\\\\]|\\\\.)*\"", " ")
+                .replaceAll("'(?:[^'\\\\]|\\\\.)*'", " ");
         var matcher = SIMPLE_TYPE_REFERENCE.matcher(withoutStringLiterals);
         while (matcher.find()) {
             var start = matcher.start();
