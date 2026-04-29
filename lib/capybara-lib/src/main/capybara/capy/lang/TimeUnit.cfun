@@ -12,87 +12,87 @@ data Week { value: long }
 fun TimeUnit.to_nano_seconds(): NanoSecond =
     match this with
     case NanoSecond { value } -> NanoSecond { value }
-    case MicroSecond { value } -> NanoSecond { value: value * 1_000L }
-    case MilliSecond { value } -> NanoSecond { value: value * 1_000_000L }
-    case Second { value } -> NanoSecond { value: value * 1_000_000_000L }
-    case Minute { value } -> NanoSecond { value: value * 60L * 1_000_000_000L }
-    case Hour { value } -> NanoSecond { value: value * 60L * 60L * 1_000_000_000L }
-    case Day { value } -> NanoSecond { value: value * 24L * 60L * 60L * 1_000_000_000L }
-    case Week { value } -> NanoSecond { value: value * 7L * 24L * 60L * 60L * 1_000_000_000L }
+    case MicroSecond { value } -> NanoSecond { value: value * 1_000 }
+    case MilliSecond { value } -> NanoSecond { value: value * 1_000_000 }
+    case Second { value } -> NanoSecond { value: value * 1_000_000_000 }
+    case Minute { value } -> NanoSecond { value: value * 60 * 1_000_000_000 }
+    case Hour { value } -> NanoSecond { value: value * 60 * 60 * 1_000_000_000 }
+    case Day { value } -> NanoSecond { value: value * 24 * 60 * 60 * 1_000_000_000 }
+    case Week { value } -> NanoSecond { value: value * 7 * 24 * 60 * 60 * 1_000_000_000 }
 
 fun TimeUnit.to_micro_seconds(): MicroSecond =
     match this with
-    case NanoSecond { value } -> MicroSecond { value: value / 1_000L }
+    case NanoSecond { value } -> MicroSecond { value: value / 1_000 }
     case MicroSecond { value } -> MicroSecond { value }
-    case MilliSecond { value } -> MicroSecond { value: value * 1_000L }
-    case Second { value } -> MicroSecond { value: value * 1_000_000L }
-    case Minute { value } -> MicroSecond { value: value * 60L * 1_000_000L }
-    case Hour { value } -> MicroSecond { value: value * 60L * 60L * 1_000_000L }
-    case Day { value } -> MicroSecond { value: value * 24L * 60L * 60L * 1_000_000L }
-    case Week { value } -> MicroSecond { value: value * 7L * 24L * 60L * 60L * 1_000_000L }
+    case MilliSecond { value } -> MicroSecond { value: value * 1_000 }
+    case Second { value } -> MicroSecond { value: value * 1_000_000 }
+    case Minute { value } -> MicroSecond { value: value * 60 * 1_000_000 }
+    case Hour { value } -> MicroSecond { value: value * 60 * 60 * 1_000_000 }
+    case Day { value } -> MicroSecond { value: value * 24 * 60 * 60 * 1_000_000 }
+    case Week { value } -> MicroSecond { value: value * 7 * 24 * 60 * 60 * 1_000_000 }
 
 fun TimeUnit.to_milli_seconds():  MilliSecond =
     match this with
-    case NanoSecond { value } -> MilliSecond { value: value / 1_000_000L }
-    case MicroSecond { value } -> MilliSecond { value: value / 1_000L }
+    case NanoSecond { value } -> MilliSecond { value: value / 1_000_000 }
+    case MicroSecond { value } -> MilliSecond { value: value / 1_000 }
     case MilliSecond { value } -> MilliSecond { value }
-    case Second { value } -> MilliSecond { value: value * 1_000L }
-    case Minute { value } -> MilliSecond { value: value * 60L * 1_000L }
-    case Hour { value } -> MilliSecond { value: value * 60L * 60L * 1_000L }
-    case Day { value } -> MilliSecond { value: value * 24L * 60L * 60L * 1_000L }
-    case Week { value } -> MilliSecond { value: value * 7L * 24L * 60L * 60L * 1_000L }
+    case Second { value } -> MilliSecond { value: value * 1_000 }
+    case Minute { value } -> MilliSecond { value: value * 60 * 1_000 }
+    case Hour { value } -> MilliSecond { value: value * 60 * 60 * 1_000 }
+    case Day { value } -> MilliSecond { value: value * 24 * 60 * 60 * 1_000 }
+    case Week { value } -> MilliSecond { value: value * 7 * 24 * 60 * 60 * 1_000 }
 
 fun TimeUnit.to_seconds(): Second =
     match this with
-    case NanoSecond { value } -> Second { value: value / 1_000_000_000L }
-    case MicroSecond { value } -> Second { value: value / 1_000_000L }
-    case MilliSecond { value } -> Second { value: value / 1_000L }
+    case NanoSecond { value } -> Second { value: value / 1_000_000_000 }
+    case MicroSecond { value } -> Second { value: value / 1_000_000 }
+    case MilliSecond { value } -> Second { value: value / 1_000 }
     case Second { value } -> Second { value }
-    case Minute { value } -> Second { value: value * 60L }
-    case Hour { value } -> Second { value: value * 60L * 60L }
-    case Day { value } -> Second { value: value * 24L * 60L * 60L }
-    case Week { value } -> Second { value: value * 7L * 24L * 60L * 60L }
+    case Minute { value } -> Second { value: value * 60 }
+    case Hour { value } -> Second { value: value * 60 * 60 }
+    case Day { value } -> Second { value: value * 24 * 60 * 60 }
+    case Week { value } -> Second { value: value * 7 *  24 * 60 * 60 }
 
 fun TimeUnit.to_minutes(): Minute =
     match this with
-    case NanoSecond { value } -> Minute { value: value / (60L * 1_000_000_000L) }
-    case MicroSecond { value } -> Minute { value: value / (60L * 1_000_000L) }
-    case MilliSecond { value } -> Minute { value: value / (60L * 1_000L) }
-    case Second { value } -> Minute { value: value / 60L }
+    case NanoSecond { value } -> Minute { value: value / (60 * 1_000_000_000) }
+    case MicroSecond { value } -> Minute { value: value / (60 * 1_000_000) }
+    case MilliSecond { value } -> Minute { value: value / (60 * 1_000) }
+    case Second { value } -> Minute { value: value / 60 }
     case Minute { value } -> Minute { value }
-    case Hour { value } -> Minute { value: value * 60L }
-    case Day { value } -> Minute { value: value * 24L * 60L }
-    case Week { value } -> Minute { value: value * 7L * 24L * 60L }
+    case Hour { value } -> Minute { value: value * 60 }
+    case Day { value } -> Minute { value: value * 24 * 60 }
+    case Week { value } -> Minute { value: value * 7 * 24 * 60 }
 
 fun TimeUnit.to_hours(): Hour =
     match this with
-    case NanoSecond { value } -> Hour { value: value / (60L * 60L * 1_000_000_000L) }
-    case MicroSecond { value } -> Hour { value: value / (60L * 60L * 1_000_000L) }
-    case MilliSecond { value } -> Hour { value: value / (60L * 60L * 1_000L) }
-    case Second { value } -> Hour { value: value / (60L * 60L) }
-    case Minute { value } -> Hour { value: value / 60L }
+    case NanoSecond { value } -> Hour { value: value / (60 * 60 * 1_000_000_000) }
+    case MicroSecond { value } -> Hour { value: value / (60 * 60 * 1_000_000) }
+    case MilliSecond { value } -> Hour { value: value / (60 * 60 * 1_000) }
+    case Second { value } -> Hour { value: value / (60 * 60) }
+    case Minute { value } -> Hour { value: value / 60 }
     case Hour { value } -> Hour { value }
-    case Day { value } -> Hour { value: value * 24L }
-    case Week { value } -> Hour { value: value * 7L * 24L }
+    case Day { value } -> Hour { value: value * 24 }
+    case Week { value } -> Hour { value: value * 7 * 24 }
 
 fun TimeUnit.to_days(): Day =
     match this with
-    case NanoSecond { value } -> Day { value: value / (24L * 60L * 60L * 1_000_000_000L) }
-    case MicroSecond { value } -> Day { value: value / (24L * 60L * 60L * 1_000_000L) }
-    case MilliSecond { value } -> Day { value: value / (24L * 60L * 60L * 1_000L) }
-    case Second { value } -> Day { value: value / (24L * 60L * 60L) }
-    case Minute { value } -> Day { value: value / (24L * 60L) }
-    case Hour { value } -> Day { value: value / 24L }
+    case NanoSecond { value } -> Day { value: value / (24 * 60 * 60 * 1_000_000_000) }
+    case MicroSecond { value } -> Day { value: value / (24 * 60 * 60 * 1_000_000) }
+    case MilliSecond { value } -> Day { value: value / (24 * 60 * 60 * 1_000) }
+    case Second { value } -> Day { value: value / (24 * 60 * 60) }
+    case Minute { value } -> Day { value: value / (24 * 60) }
+    case Hour { value } -> Day { value: value / 24 }
     case Day { value } -> Day { value }
-    case Week { value } -> Day { value: value * 7L }
+    case Week { value } -> Day { value: value * 7 }
 
 fun TimeUnit.to_weeks(): Week =
     match this with
-    case NanoSecond { value } -> Week { value: value / (7L * 24L * 60L * 60L * 1_000_000_000L) }
-    case MicroSecond { value } -> Week { value: value / (7L * 24L * 60L * 60L * 1_000_000L) }
-    case MilliSecond { value } -> Week { value: value / (7L * 24L * 60L * 60L * 1_000L) }
-    case Second { value } -> Week { value: value / (7L * 24L * 60L * 60L) }
-    case Minute { value } -> Week { value: value / (7L * 24L * 60L) }
-    case Hour { value } -> Week { value: value / (7L * 24L) }
-    case Day { value } -> Week { value: value / 7L }
+    case NanoSecond { value } -> Week { value: value / (7 * 24 * 60 * 60 * 1_000_000_000) }
+    case MicroSecond { value } -> Week { value: value / (7 * 24 * 60 * 60 * 1_000_000) }
+    case MilliSecond { value } -> Week { value: value / (7 * 24 * 60 * 60 * 1_000) }
+    case Second { value } -> Week { value: value / (7 * 24 * 60 * 60) }
+    case Minute { value } -> Week { value: value / (7 * 24 * 60) }
+    case Hour { value } -> Week { value: value / (7 * 24) }
+    case Day { value } -> Week { value: value / 7 }
     case Week { value } -> Week { value }

@@ -36,6 +36,8 @@ public class ValueNameRewriter {
             case CompiledMatchExpression linkedMatchExpression ->
                     rewriteValueInLinkedMatchExpression(name, uniqueName, linkedMatchExpression);
             case CompiledNothingValue linkedNothingValue -> linkedNothingValue;
+            case CompiledNumericWidening linkedNumericWidening ->
+                    rewriteValueInLinkedNumericWidening(name, uniqueName, linkedNumericWidening);
             case CompiledPipeAllExpression linkedPipeAllExpression ->
                     rewriteValueInLinkedPipeAllExpression(name, uniqueName, linkedPipeAllExpression);
             case CompiledPipeAnyExpression linkedPipeAnyExpression ->
@@ -104,6 +106,17 @@ public class ValueNameRewriter {
                 expression.operator(),
                 rewriteValueInExpression(name, uniqueName, expression.right()),
                 expression.type());
+    }
+
+    private static CompiledExpression rewriteValueInLinkedNumericWidening(
+            String name,
+            String uniqueName,
+            CompiledNumericWidening expression
+    ) {
+        return new CompiledNumericWidening(
+                rewriteValueInExpression(name, uniqueName, expression.expression()),
+                expression.type()
+        );
     }
 
     private static CompiledExpression rewriteValueInLinkedIndexExpression(

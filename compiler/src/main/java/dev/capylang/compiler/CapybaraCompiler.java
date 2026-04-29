@@ -3546,6 +3546,11 @@ public class CapybaraCompiler {
                           + ": the function `" + functionName + "` is not yet implemented";
                 yield new dev.capylang.compiler.expression.CompiledNothingValue(value.position(), message);
             }
+            case dev.capylang.compiler.expression.CompiledNumericWidening value ->
+                    new dev.capylang.compiler.expression.CompiledNumericWidening(
+                            enrichNothing(value.expression(), functionName, moduleSourceFile),
+                            value.type()
+                    );
             case dev.capylang.compiler.expression.CompiledPipeAllExpression value ->
                     new dev.capylang.compiler.expression.CompiledPipeAllExpression(
                             enrichNothing(value.source(), functionName, moduleSourceFile),

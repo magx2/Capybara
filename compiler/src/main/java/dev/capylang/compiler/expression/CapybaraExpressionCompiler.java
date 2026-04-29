@@ -2275,7 +2275,7 @@ public class CapybaraExpressionCompiler {
         if (expected instanceof PrimitiveLinkedType expectedPrimitive
             && argument.type() instanceof PrimitiveLinkedType actualPrimitive
             && isImplicitNumericWidening(expectedPrimitive, actualPrimitive)) {
-            return new CoercedArgument(argument, 1);
+            return new CoercedArgument(widenNumericExpression(argument, expectedPrimitive), 1);
         }
         if (expected instanceof CompiledGenericTypeParameter) {
             return new CoercedArgument(argument, 1);
@@ -2408,6 +2408,35 @@ public class CapybaraExpressionCompiler {
 
     private boolean canCoerceToExpectedType(CompiledType actualType, CompiledType expectedType) {
         return coerceArgument(new CompiledVariable("__expected__", actualType), expectedType) != null;
+    }
+
+    private static CompiledExpression widenNumericExpression(CompiledExpression expression, PrimitiveLinkedType expected) {
+        if (expression.type().equals(expected)) {
+            return expression;
+        }
+        if (!(expression.type() instanceof PrimitiveLinkedType actual)
+            || !isNumericPrimitive(actual)
+            || !isImplicitNumericWidening(expected, actual)) {
+            return expression;
+        }
+        if (expression instanceof CompiledInfixExpression infixExpression
+            && isArithmeticOperator(infixExpression.operator())) {
+            return new CompiledInfixExpression(
+                    widenNumericExpression(infixExpression.left(), expected),
+                    infixExpression.operator(),
+                    widenNumericExpression(infixExpression.right(), expected),
+                    expected
+            );
+        }
+        if (expression instanceof CompiledIfExpression ifExpression) {
+            return new CompiledIfExpression(
+                    ifExpression.condition(),
+                    widenNumericExpression(ifExpression.thenBranch(), expected),
+                    widenNumericExpression(ifExpression.elseBranch(), expected),
+                    expected
+            );
+        }
+        return new CompiledNumericWidening(expression, expected);
     }
 
     private CompiledNewData rebuildNewDataForExpectedType(
@@ -4185,7 +4214,20 @@ public class CapybaraExpressionCompiler {
             var op = operator.symbol();
             return withPosition(Result.error("Cannot apply `" + op + "` to `" + left.type() + "` and `" + right.type() + "`"), position);
         }
+        if (isArithmeticOperator(operator)
+            && type instanceof PrimitiveLinkedType targetPrimitive
+            && isNumericPrimitive(targetPrimitive)) {
+            left = widenNumericExpression(left, targetPrimitive);
+            right = widenNumericExpression(right, targetPrimitive);
+        }
         return Result.success(new CompiledInfixExpression(left, operator, right, type));
+    }
+
+    private static boolean isArithmeticOperator(InfixOperator operator) {
+        return switch (operator) {
+            case PLUS, MINUS, MUL, DIV, MOD, POWER -> true;
+            default -> false;
+        };
     }
 
     private Optional<Result<CompiledExpression>> tryLinkMinLiteralExpression(InfixExpression expression) {
@@ -7018,7 +7060,7 @@ public class CapybaraExpressionCompiler {
         return false;
     }
 
-    private boolean isImplicitNumericWidening(PrimitiveLinkedType expected, PrimitiveLinkedType actual) {
+    private static boolean isImplicitNumericWidening(PrimitiveLinkedType expected, PrimitiveLinkedType actual) {
         return (actual == INT && (expected == LONG || expected == FLOAT || expected == DOUBLE))
                || (actual == LONG && (expected == FLOAT || expected == DOUBLE))
                || (actual == FLOAT && expected == DOUBLE);

@@ -35,6 +35,7 @@ public class CompiledExpressionPrinter {
             case CompiledMatchExpression linkedMatchExpression ->
                     printLinkedMatchExpression(linkedMatchExpression, level);
             case CompiledNothingValue linkedNothingValue -> printLinkedNothingValue(linkedNothingValue, level);
+            case CompiledNumericWidening linkedNumericWidening -> printLinkedNumericWidening(linkedNumericWidening, level);
             case CompiledPipeAllExpression linkedPipeAllExpression -> printLinkedPipeAllExpression(linkedPipeAllExpression, level);
             case CompiledPipeAnyExpression linkedPipeAnyExpression -> printLinkedPipeAnyExpression(linkedPipeAnyExpression, level);
             case CompiledPipeFlatMapExpression linkedPipeFlatMapExpression -> printLinkedPipeFlatMapExpression(linkedPipeFlatMapExpression, level);
@@ -111,6 +112,11 @@ public class CompiledExpressionPrinter {
 
     private static String printLinkedLongValue(CompiledLongValue linkedLongValue, int level) {
         return linkedLongValue.longValue();
+    }
+
+    private static String printLinkedNumericWidening(CompiledNumericWidening linkedNumericWidening, int level) {
+        return "(" + linkedNumericWidening.type().name().toLowerCase(java.util.Locale.ROOT)
+               + ") " + printExpression(linkedNumericWidening.expression(), level);
     }
 
     private static String printLinkedLambdaExpression(CompiledLambdaExpression linkedLambdaExpression, int level) {
