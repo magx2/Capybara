@@ -161,11 +161,12 @@ methodArgument: namedMethodArgument | expression;
 namedMethodArgument: identifier COLON expression;
 literal: BYTE_LITERAL | LONG_LITERAL | DOUBLE_LITERAL | INT_LITERAL | BOOL_LITERAL | STRING_LITERAL | FLOAT_LITERAL | NOTHING_LITERAL | REGEX_LITERAL;
 BYTE_LITERAL: '0' [xX] [0-9a-fA-F]+;
-LONG_LITERAL: [0-9]+ [lL];
+LONG_LITERAL: DECIMAL_DIGITS [lL];
 DOUBLE_LITERAL: ([0-9]+ '.' [0-9]* EXPONENT? | [0-9]+ EXPONENT) [dD]?;
 FLOAT_LITERAL: ([0-9]+ '.' [0-9]* EXPONENT? | [0-9]+ EXPONENT) [fF];
-INT_LITERAL: [0-9]+;
-fragment EXPONENT: [eE] [+\-]? [0-9]+;
+INT_LITERAL: DECIMAL_DIGITS;
+fragment EXPONENT: [eE] [+\-]? DECIMAL_DIGITS;
+fragment DECIMAL_DIGITS: [0-9] ([0-9_]* [0-9])?;
 STRING_LITERAL
     : '"' (~["\\\r\n] | '\\' .)* '"'
     | '\'' (~['\\\r\n] | '\\' .)* '\''

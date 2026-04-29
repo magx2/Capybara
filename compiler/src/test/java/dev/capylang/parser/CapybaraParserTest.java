@@ -284,6 +284,24 @@ class CapybaraParserTest {
         assertThat(function.expression()).isInstanceOf(FloatValue.class);
     }
 
+
+    @Test
+    @DisplayName("should parse underscored int and long literals")
+    void parseUnderscoredIntAndLongLiterals() {
+        var module = parseSuccess(new RawModule("Test", "/parser", """
+                fun i(): int = 100_000
+                fun l(): long = 9_738_771_718_7L
+                """));
+
+        var intFunction = findFunction("i", module.functional());
+        assertThat(intFunction.expression()).isInstanceOf(IntValue.class);
+        assertThat(((IntValue) intFunction.expression()).intValue()).isEqualTo("100_000");
+
+        var longFunction = findFunction("l", module.functional());
+        assertThat(longFunction.expression()).isInstanceOf(LongValue.class);
+        assertThat(((LongValue) longFunction.expression()).longValue()).isEqualTo("9_738_771_718_7L");
+    }
+
     @Test
     @DisplayName("should parse regex literal into runtime factory call")
     void parseRegexLiteral() {
