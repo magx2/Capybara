@@ -45,4 +45,11 @@ class ConstsTest {
         assertThat(Consts.dogDataName()).isEqualTo("Rex");
         assertThat(Consts.animalTypeText()).isEqualTo("cat:7");
     }
+    @Test
+    void underscoredNumericLiterals() {
+        assertThat(Consts.underscoredIntLiteral()).isEqualTo(100_000);
+        assertThat(Consts.underscoredLongLiteral()).isEqualTo(97_387_717_187L);
+        assertThat(Consts.underscoredLiteralsSum()).isEqualTo(97_387_817_187L);
+    }
+
 }

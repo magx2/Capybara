@@ -49,3 +49,10 @@ fun animal_type_text(): string =
     match ANIMAL_TYPE with
     case Dog { name } -> "dog:" + name
     case Cat { age } -> "cat:" + age
+
+
+fun underscored_int_literal(): int = 100_000
+
+fun underscored_long_literal(): long = 9_738_771_718_7L
+
+fun underscored_literals_sum(): long = underscored_int_literal() + underscored_long_literal()

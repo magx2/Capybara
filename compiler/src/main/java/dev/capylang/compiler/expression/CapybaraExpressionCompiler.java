@@ -4733,7 +4733,8 @@ public class CapybaraExpressionCompiler {
 
     private Result<CompiledExpression> linkIntValue(IntValue intValue, Scope scope) {
         try {
-            var parsed = new BigInteger(intValue.intValue(), 10);
+            var normalized = intValue.intValue().replace("_", "");
+            var parsed = new BigInteger(normalized, 10);
             if (parsed.compareTo(BigInteger.valueOf(Integer.MIN_VALUE)) < 0
                 || parsed.compareTo(BigInteger.valueOf(Integer.MAX_VALUE)) > 0) {
                 return withPosition(Result.error("Int literal out of range: `" + intValue.intValue() + "`"), intValue.position());
@@ -4750,6 +4751,7 @@ public class CapybaraExpressionCompiler {
             var normalized = raw.endsWith("l") || raw.endsWith("L")
                     ? raw.substring(0, raw.length() - 1)
                     : raw;
+            normalized = normalized.replace("_", "");
             var parsed = new BigInteger(normalized, 10);
             if (parsed.compareTo(BigInteger.valueOf(Long.MIN_VALUE)) < 0
                 || parsed.compareTo(BigInteger.valueOf(Long.MAX_VALUE)) > 0) {
