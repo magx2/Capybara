@@ -2,100 +2,100 @@ from /capy/lang/Effect import { * }
 from /capy/lang/Option import { * }
 
 /// Writes a string to standard output without a trailing newline and returns the consumed value.
-fun print(text: string): Effect[string] = delay(() => text)
+fun print(text: string): Effect[string] = ???
 
 /// Writes a byte to standard output without a trailing newline and returns the consumed value.
-fun print(text: byte): Effect[byte] = delay(() => text)
+fun print(text: byte): Effect[byte] = ???
 
 /// Writes an int to standard output without a trailing newline and returns the consumed value.
-fun print(text: int): Effect[int] = delay(() => text)
+fun print(text: int): Effect[int] = ???
 
 /// Writes a long to standard output without a trailing newline and returns the consumed value.
-fun print(text: long): Effect[long] = delay(() => text)
+fun print(text: long): Effect[long] = ???
 
 /// Writes a float to standard output without a trailing newline and returns the consumed value.
-fun print(text: float): Effect[float] = delay(() => text)
+fun print(text: float): Effect[float] = ???
 
 /// Writes a double to standard output without a trailing newline and returns the consumed value.
-fun print(text: double): Effect[double] = delay(() => text)
+fun print(text: double): Effect[double] = ???
 
 /// Writes a bool to standard output without a trailing newline and returns the consumed value.
-fun print(text: bool): Effect[bool] = delay(() => text)
+fun print(text: bool): Effect[bool] = ???
 
 /// Writes bytes to standard output without a trailing newline and returns the consumed value.
-fun print(text: list[byte]): Effect[list[byte]] = delay(() => text)
+fun print(text: list[byte]): Effect[list[byte]] = ???
 
 /// Writes a string to standard output followed by a newline and returns the consumed value.
-fun println(text: string): Effect[string] = delay(() => text)
+fun println(text: string): Effect[string] = ???
 
 /// Writes a byte to standard output followed by a newline and returns the consumed value.
-fun println(text: byte): Effect[byte] = delay(() => text)
+fun println(text: byte): Effect[byte] = ???
 
 /// Writes an int to standard output followed by a newline and returns the consumed value.
-fun println(text: int): Effect[int] = delay(() => text)
+fun println(text: int): Effect[int] = ???
 
 /// Writes a long to standard output followed by a newline and returns the consumed value.
-fun println(text: long): Effect[long] = delay(() => text)
+fun println(text: long): Effect[long] = ???
 
 /// Writes a float to standard output followed by a newline and returns the consumed value.
-fun println(text: float): Effect[float] = delay(() => text)
+fun println(text: float): Effect[float] = ???
 
 /// Writes a double to standard output followed by a newline and returns the consumed value.
-fun println(text: double): Effect[double] = delay(() => text)
+fun println(text: double): Effect[double] = ???
 
 /// Writes a bool to standard output followed by a newline and returns the consumed value.
-fun println(text: bool): Effect[bool] = delay(() => text)
+fun println(text: bool): Effect[bool] = ???
 
 /// Writes bytes to standard output followed by a newline and returns the consumed value.
-fun println(text: list[byte]): Effect[list[byte]] = delay(() => text)
+fun println(text: list[byte]): Effect[list[byte]] = ???
 
 /// Writes a string to standard error without a trailing newline and returns the consumed value.
-fun print_error(text: string): Effect[string] = delay(() => text)
+fun print_error(text: string): Effect[string] = ???
 
 /// Writes a byte to standard error without a trailing newline and returns the consumed value.
-fun print_error(text: byte): Effect[byte] = delay(() => text)
+fun print_error(text: byte): Effect[byte] = ???
 
 /// Writes an int to standard error without a trailing newline and returns the consumed value.
-fun print_error(text: int): Effect[int] = delay(() => text)
+fun print_error(text: int): Effect[int] = ???
 
 /// Writes a long to standard error without a trailing newline and returns the consumed value.
-fun print_error(text: long): Effect[long] = delay(() => text)
+fun print_error(text: long): Effect[long] = ???
 
 /// Writes a float to standard error without a trailing newline and returns the consumed value.
-fun print_error(text: float): Effect[float] = delay(() => text)
+fun print_error(text: float): Effect[float] = ???
 
 /// Writes a double to standard error without a trailing newline and returns the consumed value.
-fun print_error(text: double): Effect[double] = delay(() => text)
+fun print_error(text: double): Effect[double] = ???
 
 /// Writes a bool to standard error without a trailing newline and returns the consumed value.
-fun print_error(text: bool): Effect[bool] = delay(() => text)
+fun print_error(text: bool): Effect[bool] = ???
 
 /// Writes bytes to standard error without a trailing newline and returns the consumed value.
-fun print_error(text: list[byte]): Effect[list[byte]] = delay(() => text)
+fun print_error(text: list[byte]): Effect[list[byte]] = ???
 
 /// Writes a string to standard error followed by a newline and returns the consumed value.
-fun println_error(text: string): Effect[string] = delay(() => text)
+fun println_error(text: string): Effect[string] = ???
 
 /// Writes a byte to standard error followed by a newline and returns the consumed value.
-fun println_error(text: byte): Effect[byte] = delay(() => text)
+fun println_error(text: byte): Effect[byte] = ???
 
 /// Writes an int to standard error followed by a newline and returns the consumed value.
-fun println_error(text: int): Effect[int] = delay(() => text)
+fun println_error(text: int): Effect[int] = ???
 
 /// Writes a long to standard error followed by a newline and returns the consumed value.
-fun println_error(text: long): Effect[long] = delay(() => text)
+fun println_error(text: long): Effect[long] = ???
 
 /// Writes a float to standard error followed by a newline and returns the consumed value.
-fun println_error(text: float): Effect[float] = delay(() => text)
+fun println_error(text: float): Effect[float] = ???
 
 /// Writes a double to standard error followed by a newline and returns the consumed value.
-fun println_error(text: double): Effect[double] = delay(() => text)
+fun println_error(text: double): Effect[double] = ???
 
 /// Writes a bool to standard error followed by a newline and returns the consumed value.
-fun println_error(text: bool): Effect[bool] = delay(() => text)
+fun println_error(text: bool): Effect[bool] = ???
 
 /// Writes bytes to standard error followed by a newline and returns the consumed value.
-fun println_error(text: list[byte]): Effect[list[byte]] = delay(() => text)
+fun println_error(text: list[byte]): Effect[list[byte]] = ???
 
 /// Reads one line from standard input, or None at end of input.
-fun read_line(): Effect[Option[string]] = delay(() => None {})
+fun read_line(): Effect[Option[string]] = ???
