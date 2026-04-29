@@ -106,6 +106,7 @@ public class JavaExpressionEvaluator {
             case CompiledLongValue longValue -> evaluateLongValue(longValue, scope);
             case CompiledMatchExpression matchExpression -> evaluateMatchExpression(matchExpression, scope);
             case CompiledNothingValue nothingValue -> evaluateNothingValue(nothingValue, scope);
+            case CompiledNumericWidening numericWidening -> evaluateNumericWidening(numericWidening, scope);
             case CompiledPipeAllExpression pipeAllExpression -> evaluatePipeMatchExpression(pipeAllExpression.source(), pipeAllExpression.argumentName(), pipeAllExpression.predicate(), scope, "allMatch");
             case CompiledPipeAnyExpression pipeAnyExpression -> evaluatePipeMatchExpression(pipeAnyExpression.source(), pipeAnyExpression.argumentName(), pipeAnyExpression.predicate(), scope, "anyMatch");
             case CompiledPipeFlatMapExpression pipeFlatMapExpression -> evaluatePipeFlatMapExpression(pipeFlatMapExpression, scope);
@@ -302,7 +303,7 @@ public class JavaExpressionEvaluator {
 
         var conditionBoolean = toBooleanExpression(condition.expression(), expression.condition().type());
         return elseExSc.scope()
-                .addExpression("(%s) ? (%s) : (%s)".formatted(
+                .addExpression("((%s) ? (%s) : (%s))".formatted(
                         conditionBoolean,
                         then.expression(),
                         elseExSc.expression()));
@@ -645,6 +646,15 @@ public class JavaExpressionEvaluator {
 
     private static Scope evaluateLongValue(CompiledLongValue longValue, Scope scope) {
         return scope.addExpression(longValue.longValue());
+    }
+
+    private static Scope evaluateNumericWidening(CompiledNumericWidening numericWidening, Scope scope) {
+        var source = evaluateExpression(numericWidening.expression(), scope).popExpression();
+        return source.scope().addExpression(coerceExpressionForExpectedType(
+                numericWidening.type(),
+                numericWidening.expression().type(),
+                source.expression()
+        ));
     }
 
     private static Scope evaluateLambdaExpression(CompiledLambdaExpression lambdaExpression, Scope scope) {

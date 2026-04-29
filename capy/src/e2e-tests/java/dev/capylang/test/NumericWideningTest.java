@@ -21,6 +21,15 @@ class NumericWideningTest {
     }
 
     @Test
+    void shouldEvaluateIntArithmeticSubexpressionsInWidenedLongContext() {
+        assertThat(NumericWidening.multiplyLongChain()).isEqualTo(1_000_000_000_000_000_000L);
+        assertThat(NumericWidening.divideLongByGroupedIntChain(120_000_000_000L)).isEqualTo(2L);
+        assertThat(NumericWidening.multiplyLongByGroupedIntChain(2L)).isEqualTo(120_000_000_000L);
+        assertThat(NumericWidening.divideLongByGroupedIntChainBranch(120_000_000_000L, true)).isEqualTo(2L);
+        assertThat(NumericWidening.divideLongByGroupedIntChainBranch(120L, false)).isEqualTo(2L);
+    }
+
+    @Test
     void shouldWidenFloatToDoubleForReturnTypeAndInvocation() throws NoSuchMethodException {
         assertThat(NumericWidening.returnDouble(1.25f)).isEqualTo(1.25d);
         assertThat(NumericWidening.typedLetDouble(1.25f)).isEqualTo(1.25d);

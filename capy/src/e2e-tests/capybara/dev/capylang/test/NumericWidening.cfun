@@ -44,6 +44,15 @@ fun typed_let_float_from_long(value: long): float =
 
 fun multiply_with_long(value: int): long = 10L * value
 
+fun multiply_long_chain(): long = 1L * 1_000_000 * 100_000_000 * 10_000
+
+fun divide_long_by_grouped_int_chain(value: long): long = value / (60 * 1_000_000_000)
+
+fun multiply_long_by_grouped_int_chain(value: long): long = value * (60 * 1_000_000_000)
+
+fun divide_long_by_grouped_int_chain_branch(value: long, large: bool): long =
+    value / (if large then 60 * 1_000_000_000 else 60)
+
 fun invoke_long(value: int): long = takes_long(value) + 1L
 
 fun invoke_double(value: float): double = takes_double(value) + 0.5

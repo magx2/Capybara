@@ -266,7 +266,7 @@ class JavaExpressionEvaluatorTest {
 
         assertThat(generated).doesNotContain("System.currentTimeMillis()");
         assertThat(generated).contains("execute((assert_).assertions())");
-        assertThat(generated).contains("((long) (0-1))");
+        assertThat(generated).contains("(((long) 0)-((long) 1))");
     }
 
     @Test
@@ -294,7 +294,7 @@ class JavaExpressionEvaluatorTest {
                 .collect(joining("\n"));
 
         assertThat(generated).doesNotContain("var start = System.currentTimeMillis();");
-        assertThat(generated).contains("return new TestCase(name, foo.bar.NotCapyTest.execute((assert_).assertions()), ((assert_).assertions()).size(), ((long) (0-1)));");
+        assertThat(generated).contains("return new TestCase(name, foo.bar.NotCapyTest.execute((assert_).assertions()), ((assert_).assertions()).size(), (((long) 0)-((long) 1)));");
     }
 
     @Test
@@ -627,7 +627,7 @@ class JavaExpressionEvaluatorTest {
                 .map(dev.capylang.generator.GeneratedModule::code)
                 .collect(joining("\n"));
 
-        assertThat(generated).contains("((\"Date should be \")+((is_valid) ? (\"valid\") : (\"invalid\")))");
+        assertThat(generated).contains("((\"Date should be \")+(((is_valid) ? (\"valid\") : (\"invalid\"))))");
     }
 
     @Test
@@ -686,7 +686,7 @@ class JavaExpressionEvaluatorTest {
                                 var a_j1 = (x*2);
                                 var a_j2 = (x*x);
                                 var a_j3 = (x/2);
-                                return ((a_j1>2)) ? ((("I'm happy ")+(java.lang.String.valueOf(a_j2)))) : ((("I'm not happy ")+(java.lang.String.valueOf(a_j3))));"""
+                                return (((a_j1>2)) ? ((("I'm happy ")+(java.lang.String.valueOf(a_j2)))) : ((("I'm not happy ")+(java.lang.String.valueOf(a_j3)))));"""
                 ),
                 Arguments.of(
                         "wild_infix",
@@ -702,7 +702,7 @@ class JavaExpressionEvaluatorTest {
                                 """,
                         """
                                 var x = (a*2);
-                                var x_j1 = ((b!=0)) ? (b) : (1);
+                                var x_j1 = (((b!=0)) ? (b) : (1));
                                 return ((x-1)/(x_j1*2));"""
                 ),
                 Arguments.of(
@@ -724,7 +724,7 @@ class JavaExpressionEvaluatorTest {
                         """
                                 var x = (a*2);
                                 var x_j1 = (b*3);
-                                return ((a>0)) ? ((x+1)) : ((x_j1-1));"""
+                                return (((a>0)) ? ((x+1)) : ((x_j1-1)));"""
                 ),
                 Arguments.of(
                         "wild_infix_single_side_let",
