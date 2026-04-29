@@ -303,6 +303,17 @@ class CapybaraParserTest {
     }
 
     @Test
+    @DisplayName("should parse native expression literal")
+    void parseNativeExpressionLiteral() {
+        var module = parseSuccess(new RawModule("Test", "/parser", "fun generated(): int = <native>"));
+
+        var function = findFunction("generated", module.functional());
+
+        assertThat(function.expression()).isInstanceOf(NothingValue.class);
+        assertThat(((NothingValue) function.expression()).literal()).isEqualTo("<native>");
+    }
+
+    @Test
     @DisplayName("should parse regex literal into runtime factory call")
     void parseRegexLiteral() {
         var module = parseSuccess(new RawModule("Test", "/parser", "fun digits() = regex/\\\\d+/im"));

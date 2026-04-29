@@ -159,7 +159,7 @@ argumentList: expression (',' expression)*;
 methodArgumentList: methodArgument (',' methodArgument)*;
 methodArgument: namedMethodArgument | expression;
 namedMethodArgument: identifier COLON expression;
-literal: BYTE_LITERAL | LONG_LITERAL | DOUBLE_LITERAL | INT_LITERAL | BOOL_LITERAL | STRING_LITERAL | FLOAT_LITERAL | NOTHING_LITERAL | REGEX_LITERAL;
+literal: BYTE_LITERAL | LONG_LITERAL | DOUBLE_LITERAL | INT_LITERAL | BOOL_LITERAL | STRING_LITERAL | FLOAT_LITERAL | NOTHING_LITERAL | NATIVE_LITERAL | REGEX_LITERAL;
 BYTE_LITERAL: '0' [xX] [0-9a-fA-F]+;
 LONG_LITERAL: DECIMAL_DIGITS [lL];
 DOUBLE_LITERAL: ([0-9]+ '.' [0-9]* EXPONENT? | [0-9]+ EXPONENT) [dD]?;
@@ -173,6 +173,7 @@ STRING_LITERAL
     ;
 REGEX_LITERAL: 'regex/' ( '\\/' | '\\\\' | ~[/\r\n\\] )* '/' [ims]*;
 NOTHING_LITERAL: '???';
+NATIVE_LITERAL: '<native>';
 
 matchExpression: 'match' expression 'with' matchCaseList+;
 matchCaseList: matchCase (',' matchCase)*;

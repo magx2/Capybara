@@ -153,6 +153,10 @@
           "match": "\\?\\?\\?"
         },
         {
+          "name": "constant.language.native.capybara",
+          "match": "<native>"
+        },
+        {
           "name": "punctuation.separator.local-definitions.capybara",
           "match": "---"
         }

@@ -3,9 +3,9 @@ from /capy/lang/Effect import { * }
 /// Returns an effect that reads the current system time in milliseconds since the Unix epoch.
 ///
 /// The value is captured when the effect is run.
-fun current_millis(): Effect[long] = ???
+fun current_millis(): Effect[long] = <native>
 
 /// Returns an effect that reads the current monotonic JVM time in nanoseconds.
 ///
 /// Use this for measuring elapsed durations, not for wall-clock timestamps.
-fun nano_time(): Effect[long] = ???
+fun nano_time(): Effect[long] = <native>

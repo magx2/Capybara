@@ -2925,7 +2925,7 @@ public class CapybaraCompiler {
             case InfixExpression infixExpression -> formatExpressionPreview(infixExpression.left())
                                                     + previewOperator(infixExpression.operator().symbol())
                                                     + formatExpressionPreview(infixExpression.right());
-            case NothingValue ignored -> "???";
+            case NothingValue value -> value.literal();
             case IfExpression ifExpression -> "if " + formatExpressionPreview(ifExpression.condition())
                                               + " then " + formatExpressionPreview(ifExpression.thenBranch())
                                               + " else " + formatExpressionPreview(ifExpression.elseBranch());
@@ -3539,8 +3539,11 @@ public class CapybaraCompiler {
                 var line = value.position().map(SourcePosition::line).orElse(-1);
                 var column = value.position().map(SourcePosition::column).orElse(-1);
                 var normalizedFile = moduleSourceFile.startsWith("/") ? moduleSourceFile : "/" + moduleSourceFile;
-                var message = "line " + line + ", column " + column + ", file " + normalizedFile
-                              + ": the function `" + functionName + "` is not yet implemented";
+                var message = value.message().contains("`<native>`")
+                        ? "line " + line + ", column " + column + ", file " + normalizedFile
+                          + ": native expression in function `" + functionName + "` must be replaced by code generation"
+                        : "line " + line + ", column " + column + ", file " + normalizedFile
+                          + ": the function `" + functionName + "` is not yet implemented";
                 yield new dev.capylang.compiler.expression.CompiledNothingValue(value.position(), message);
             }
             case dev.capylang.compiler.expression.CompiledPipeAllExpression value ->
