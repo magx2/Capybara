@@ -1,0 +1,43 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+
+fun tests(): TestFile =
+    test_file("/capy/test/DecimalAssertTest.cfun", [
+        test("should assert int decimals", should_assert_int_decimals()),
+        test("should assert long decimals", should_assert_long_decimals()),
+        test("should assert double decimals", should_assert_double_decimals()),
+    ])
+
+fun should_assert_int_decimals(): Assert =
+    assert_all([
+        assert_that(10).is_greater_than(9),
+        assert_that(10).is_less_than(11),
+        assert_that(10).is_greater_or_equals_than(10),
+        assert_that(10).is_less_or_equals_than(10),
+        assert_that(0).is_zero(),
+        assert_that(1).is_one(),
+        assert_that(10).is_between(9, 11),
+    ])
+
+fun should_assert_long_decimals(): Assert =
+    assert_all([
+        assert_that(10L).is_greater_than(9L),
+        assert_that(10L).is_less_than(11L),
+        assert_that(10L).is_greater_or_equals_than(10L),
+        assert_that(10L).is_less_or_equals_than(10L),
+        assert_that(0L).is_zero(),
+        assert_that(1L).is_one(),
+        assert_that(10L).is_between(9L, 11L),
+    ])
+
+fun should_assert_double_decimals(): Assert =
+    assert_all([
+        assert_that(10.5).is_greater_than(9.5),
+        assert_that(10.5).is_less_than(11.5),
+        assert_that(10.5).is_greater_or_equals_than(10.5),
+        assert_that(10.5).is_less_or_equals_than(10.5),
+        assert_that(10.5).is_equal_to(10.51, 0.02),
+        assert_that(0.0).is_zero(),
+        assert_that(1.0).is_one(),
+        assert_that(10.5).is_between(9.5, 11.5),
+    ])

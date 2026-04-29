@@ -99,6 +99,43 @@ fun IntAssert.is_equal_to(other: int): IntAssert =
         assertions: this.assertions + () => assertion
     }
 
+fun IntAssert.is_greater_than(other: int): IntAssert =
+    let assertion = Assertion {
+        result: this.value > other,
+        message: "Expected int:\n" + this.value + "\nto be greater than:\n" + other,
+        type: 'IntAssert.is_greater_than'
+    }
+    IntAssert { value: this.value, assertions: this.assertions + () => assertion }
+
+fun IntAssert.is_less_than(other: int): IntAssert =
+    let assertion = Assertion {
+        result: this.value < other,
+        message: "Expected int:\n" + this.value + "\nto be less than:\n" + other,
+        type: 'IntAssert.is_less_than'
+    }
+    IntAssert { value: this.value, assertions: this.assertions + () => assertion }
+
+fun IntAssert.is_greater_or_equals_than(other: int): IntAssert =
+    let assertion = Assertion {
+        result: this.value >= other,
+        message: "Expected int:\n" + this.value + "\nto be greater than or equal to:\n" + other,
+        type: 'IntAssert.is_greater_or_equals_than'
+    }
+    IntAssert { value: this.value, assertions: this.assertions + () => assertion }
+
+fun IntAssert.is_less_or_equals_than(other: int): IntAssert =
+    let assertion = Assertion {
+        result: this.value <= other,
+        message: "Expected int:\n" + this.value + "\nto be less than or equal to:\n" + other,
+        type: 'IntAssert.is_less_or_equals_than'
+    }
+    IntAssert { value: this.value, assertions: this.assertions + () => assertion }
+
+fun IntAssert.is_zero(): IntAssert = this.is_equal_to(0)
+fun IntAssert.is_one(): IntAssert = this.is_equal_to(1)
+fun IntAssert.is_between(start: int, end: int): IntAssert =
+    this.is_greater_or_equals_than(start).is_less_or_equals_than(end)
+
 fun LongAssert.is_equal_to(other: long): LongAssert =
     let assertion = Assertion {
         result: this.value == other,
@@ -109,6 +146,43 @@ fun LongAssert.is_equal_to(other: long): LongAssert =
         value: this.value,
         assertions: this.assertions + () => assertion
     }
+
+fun LongAssert.is_greater_than(other: long): LongAssert =
+    let assertion = Assertion {
+        result: this.value > other,
+        message: "Expected long:\n" + this.value + "\nto be greater than:\n" + other,
+        type: 'LongAssert.is_greater_than'
+    }
+    LongAssert { value: this.value, assertions: this.assertions + () => assertion }
+
+fun LongAssert.is_less_than(other: long): LongAssert =
+    let assertion = Assertion {
+        result: this.value < other,
+        message: "Expected long:\n" + this.value + "\nto be less than:\n" + other,
+        type: 'LongAssert.is_less_than'
+    }
+    LongAssert { value: this.value, assertions: this.assertions + () => assertion }
+
+fun LongAssert.is_greater_or_equals_than(other: long): LongAssert =
+    let assertion = Assertion {
+        result: this.value >= other,
+        message: "Expected long:\n" + this.value + "\nto be greater than or equal to:\n" + other,
+        type: 'LongAssert.is_greater_or_equals_than'
+    }
+    LongAssert { value: this.value, assertions: this.assertions + () => assertion }
+
+fun LongAssert.is_less_or_equals_than(other: long): LongAssert =
+    let assertion = Assertion {
+        result: this.value <= other,
+        message: "Expected long:\n" + this.value + "\nto be less than or equal to:\n" + other,
+        type: 'LongAssert.is_less_or_equals_than'
+    }
+    LongAssert { value: this.value, assertions: this.assertions + () => assertion }
+
+fun LongAssert.is_zero(): LongAssert = this.is_equal_to(0L)
+fun LongAssert.is_one(): LongAssert = this.is_equal_to(1L)
+fun LongAssert.is_between(start: long, end: long): LongAssert =
+    this.is_greater_or_equals_than(start).is_less_or_equals_than(end)
 
 fun DoubleAssert.is_equal_to(other: double): DoubleAssert =
     let assertion = Assertion {
@@ -121,6 +195,54 @@ fun DoubleAssert.is_equal_to(other: double): DoubleAssert =
         assertions: this.assertions + () => assertion
     }
 
+fun DoubleAssert.is_equal_to(other: double, epsilon: double): DoubleAssert =
+    let assertion = Assertion {
+        result: if this.value >= other - epsilon then this.value <= other + epsilon else false,
+        message: "Expected double:\n" + this.value + "\nto be equal to:\n" + other + "\nwithin epsilon:\n" + epsilon,
+        type: 'DoubleAssert.is_equal_to'
+    }
+    DoubleAssert {
+        value: this.value,
+        assertions: this.assertions + () => assertion
+    }
+
+fun DoubleAssert.is_greater_than(other: double): DoubleAssert =
+    let assertion = Assertion {
+        result: this.value > other,
+        message: "Expected double:\n" + this.value + "\nto be greater than:\n" + other,
+        type: 'DoubleAssert.is_greater_than'
+    }
+    DoubleAssert { value: this.value, assertions: this.assertions + () => assertion }
+
+fun DoubleAssert.is_less_than(other: double): DoubleAssert =
+    let assertion = Assertion {
+        result: this.value < other,
+        message: "Expected double:\n" + this.value + "\nto be less than:\n" + other,
+        type: 'DoubleAssert.is_less_than'
+    }
+    DoubleAssert { value: this.value, assertions: this.assertions + () => assertion }
+
+fun DoubleAssert.is_greater_or_equals_than(other: double): DoubleAssert =
+    let assertion = Assertion {
+        result: this.value >= other,
+        message: "Expected double:\n" + this.value + "\nto be greater than or equal to:\n" + other,
+        type: 'DoubleAssert.is_greater_or_equals_than'
+    }
+    DoubleAssert { value: this.value, assertions: this.assertions + () => assertion }
+
+fun DoubleAssert.is_less_or_equals_than(other: double): DoubleAssert =
+    let assertion = Assertion {
+        result: this.value <= other,
+        message: "Expected double:\n" + this.value + "\nto be less than or equal to:\n" + other,
+        type: 'DoubleAssert.is_less_or_equals_than'
+    }
+    DoubleAssert { value: this.value, assertions: this.assertions + () => assertion }
+
+fun DoubleAssert.is_zero(): DoubleAssert = this.is_equal_to(0.0)
+fun DoubleAssert.is_one(): DoubleAssert = this.is_equal_to(1.0)
+fun DoubleAssert.is_between(start: double, end: double): DoubleAssert =
+    this.is_greater_or_equals_than(start).is_less_or_equals_than(end)
+
 fun FloatAssert.is_equal_to(other: float): FloatAssert =
     let assertion = Assertion {
         result: this.value == other,
@@ -131,6 +253,67 @@ fun FloatAssert.is_equal_to(other: float): FloatAssert =
         value: this.value,
         assertions: this.assertions + () => assertion
     }
+
+fun FloatAssert.is_equal_to(other: float, epsilon: float): FloatAssert =
+    let assertion = Assertion {
+        result: if this.value >= other - epsilon then this.value <= other + epsilon else false,
+        message: "Expected float:\n" + this.value + "\nto be equal to:\n" + other + "\nwithin epsilon:\n" + epsilon,
+        type: 'FloatAssert.is_equal_to'
+    }
+    FloatAssert {
+        value: this.value,
+        assertions: this.assertions + () => assertion
+    }
+
+fun FloatAssert.is_greater_than(other: float): FloatAssert =
+    let assertion = Assertion {
+        result: this.value > other,
+        message: "Expected float:\n" + this.value + "\nto be greater than:\n" + other,
+        type: 'FloatAssert.is_greater_than'
+    }
+    FloatAssert { value: this.value, assertions: this.assertions + () => assertion }
+
+fun FloatAssert.is_less_than(other: float): FloatAssert =
+    let assertion = Assertion {
+        result: this.value < other,
+        message: "Expected float:\n" + this.value + "\nto be less than:\n" + other,
+        type: 'FloatAssert.is_less_than'
+    }
+    FloatAssert { value: this.value, assertions: this.assertions + () => assertion }
+
+fun FloatAssert.is_greater_or_equals_than(other: float): FloatAssert =
+    let assertion = Assertion {
+        result: this.value >= other,
+        message: "Expected float:\n" + this.value + "\nto be greater than or equal to:\n" + other,
+        type: 'FloatAssert.is_greater_or_equals_than'
+    }
+    FloatAssert { value: this.value, assertions: this.assertions + () => assertion }
+
+fun FloatAssert.is_less_or_equals_than(other: float): FloatAssert =
+    let assertion = Assertion {
+        result: this.value <= other,
+        message: "Expected float:\n" + this.value + "\nto be less than or equal to:\n" + other,
+        type: 'FloatAssert.is_less_or_equals_than'
+    }
+    FloatAssert { value: this.value, assertions: this.assertions + () => assertion }
+
+fun FloatAssert.is_zero(): FloatAssert =
+    let assertion = Assertion {
+        result: this.value == 0,
+        message: "Expected float:\n" + this.value + "\nto be equal to:\n0",
+        type: 'FloatAssert.is_zero'
+    }
+    FloatAssert { value: this.value, assertions: this.assertions + () => assertion }
+
+fun FloatAssert.is_one(): FloatAssert =
+    let assertion = Assertion {
+        result: this.value == 1,
+        message: "Expected float:\n" + this.value + "\nto be equal to:\n1",
+        type: 'FloatAssert.is_one'
+    }
+    FloatAssert { value: this.value, assertions: this.assertions + () => assertion }
+fun FloatAssert.is_between(start: float, end: float): FloatAssert =
+    this.is_greater_or_equals_than(start).is_less_or_equals_than(end)
 
 fun BoolAssert.is_equal_to(other: bool): BoolAssert =
     let assertion = Assertion {
