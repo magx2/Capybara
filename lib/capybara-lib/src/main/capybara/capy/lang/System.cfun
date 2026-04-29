@@ -1,0 +1,6 @@
+from /capy/lang/Effect import { * }
+
+/// Returns an effect that reads the current system time in milliseconds since the Unix epoch.
+///
+/// The value is captured when the effect is run.
+fun current_millis(): Effect[long] = ???
