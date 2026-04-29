@@ -1,6 +1,7 @@
 package dev.capylang.test;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.parallel.ResourceLock;
 
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
@@ -8,6 +9,7 @@ import java.io.PrintStream;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThat;
 
+@ResourceLock("java.lang.System.out")
 class ObjectOrientedRuntimeTest {
     @Test
     void classMethodsUseConstructorStateAndInheritedBehavior() {

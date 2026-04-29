@@ -1,0 +1,62 @@
+from /capy/io/Console import { * }
+from /capy/lang/Effect import { * }
+from /capy/lang/Option import { * }
+
+fun emit_all(): Effect[string] =
+    let out_printed <- print("out")
+    let out_line_printed <- println(" line")
+    let err_printed <- print_error("err")
+    println_error(" line")
+
+fun emit_primitives(byte_value: byte): Effect[bool] =
+    let out_byte <- print(byte_value)
+    let out_sep1 <- print("|")
+    let out_int <- print(8)
+    let out_sep2 <- print("|")
+    let out_long <- print(9L)
+    let out_sep3 <- print("|")
+    let out_float <- print(1.5f)
+    let out_sep4 <- print("|")
+    let out_double <- print(2.5d)
+    let out_sep5 <- print("|")
+    let out_bool <- println(true)
+    let out_line_byte <- println(byte_value)
+    let out_line_int <- println(8)
+    let out_line_long <- println(9L)
+    let out_line_float <- println(1.5f)
+    let out_line_double <- println(2.5d)
+    let out_line_bool <- println(false)
+    let err_byte <- print_error(byte_value)
+    let err_sep1 <- print_error("|")
+    let err_int <- print_error(8)
+    let err_sep2 <- print_error("|")
+    let err_long <- print_error(9L)
+    let err_sep3 <- print_error("|")
+    let err_float <- print_error(1.5f)
+    let err_sep4 <- print_error("|")
+    let err_double <- print_error(2.5d)
+    let err_sep5 <- print_error("|")
+    let err_bool <- println_error(true)
+    let err_line_byte <- println_error(byte_value)
+    let err_line_int <- println_error(8)
+    let err_line_long <- println_error(9L)
+    let err_line_float <- println_error(1.5f)
+    let err_line_double <- println_error(2.5d)
+    println_error(false)
+
+fun emit_byte_lists(bytes: list[byte]): Effect[list[byte]] =
+    let out_bytes <- print(bytes)
+    let out_line_bytes <- println(bytes)
+    let err_bytes <- print_error(bytes)
+    println_error(bytes)
+
+fun read_one(): Effect[string] =
+    read_line().map(line => _line_or_eof(line))
+
+fun read_eof_marker(): Effect[string] =
+    read_line().map(line => _line_or_eof(line))
+
+fun _line_or_eof(line: Option[string]): string =
+    match line with
+    case Some { value } -> value
+    case None -> "EOF"
