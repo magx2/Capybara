@@ -5,6 +5,7 @@ from /capy/date_time/Duration import { * }
 from /capy/lang/Option import { * }
 from /capy/lang/Result import { * }
 from /capy/test/Assert import { * }
+from /capy/lang/Effect import { * }
 from /capy/test/CapyTest import { * }
 
 fun _at(days_since_epoch: int, seconds_since_midnight: int): DateTime =
@@ -15,7 +16,7 @@ fun _at(days_since_epoch: int, seconds_since_midnight: int): DateTime =
         time: midnight.add_seconds(seconds_since_midnight)
     }
 
-fun tests(): TestFile =
+fun tests(): Effect[TestFile] =
     test_file('/capy/date_time/DateTime.cfun',
         [_test_unix_epoch()]
         + _datetime_test_to_iso_8601()

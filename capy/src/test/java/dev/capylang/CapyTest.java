@@ -539,13 +539,14 @@ class CapyTest {
         Files.createDirectories(testSourceDir.resolve("bar"));
         Files.writeString(testSourceDir.resolve("bar").resolve("TestModule.cfun"), """
                 from /capy/test/Assert import { * }
+                from /capy/lang/Effect import { * }
                 from /capy/test/CapyTest import { * }
                 from /foo/Lib import { forty_two }
 
                 fun works(): Assert =
                     assert_that(forty_two()).is_equal_to(42)
 
-                fun tests(): TestFile =
+                fun tests(): Effect[TestFile] =
                     test_file("/bar/TestModule.cfun", [
                         test("works", works())
                     ])
@@ -614,13 +615,14 @@ class CapyTest {
         Files.createDirectories(testSourceDir.resolve("bar"));
         Files.writeString(testSourceDir.resolve("bar").resolve("TestModule.cfun"), """
                 from /capy/test/Assert import { * }
+                from /capy/lang/Effect import { * }
                 from /capy/test/CapyTest import { * }
                 from /foo/Lib import { forty_two }
 
                 fun works(): Assert =
                     assert_that(forty_two()).is_equal_to(42)
 
-                fun tests(): TestFile =
+                fun tests(): Effect[TestFile] =
                     test_file("/bar/TestModule.cfun", [
                         test("works", works())
                     ])
@@ -665,13 +667,14 @@ class CapyTest {
         Files.createDirectories(testSourceDir.resolve("bar"));
         Files.writeString(testSourceDir.resolve("bar").resolve("TestModule.cfun"), """
                 from /capy/test/Assert import { * }
+                from /capy/lang/Effect import { * }
                 from /capy/test/CapyTest import { * }
                 from /foo/Lib import { forty_two }
 
                 fun works(): Assert =
                     assert_that(forty_two()).is_equal_to(42)
 
-                fun tests(): TestFile =
+                fun tests(): Effect[TestFile] =
                     test_file("/bar/TestModule.cfun", [
                         test("works", works())
                     ])
@@ -705,12 +708,13 @@ class CapyTest {
         Files.createDirectories(sourceDir.resolve("foo"));
         Files.writeString(sourceDir.resolve("foo").resolve("TestModule.cfun"), """
                 from /capy/test/Assert import { * }
+                from /capy/lang/Effect import { * }
                 from /capy/test/CapyTest import { * }
 
                 fun works(): Assert =
                     assert_that(1).is_equal_to(1)
 
-                fun tests(): TestFile =
+                fun tests(): Effect[TestFile] =
                     test_file("/foo/TestModule.cfun", [
                         test("works", works())
                     ])

@@ -1,11 +1,12 @@
 from /capy/date_time/Time import { * }
 from /capy/test/Assert import { * }
+from /capy/lang/Effect import { * }
 from /capy/lang/Math import { * }
 from /capy/lang/Result import { * }
 from /capy/lang/Option import { * }
 from /capy/test/CapyTest import { * }
 
-fun tests(): TestFile =
+fun tests(): Effect[TestFile] =
     let test_cases = [
         // valid times
         (0, 0, 0, true),

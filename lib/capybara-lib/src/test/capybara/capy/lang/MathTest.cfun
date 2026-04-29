@@ -1,8 +1,9 @@
 from /capy/test/Assert import { * }
+from /capy/lang/Effect import { * }
 from /capy/lang/Math import { * }
 from /capy/test/CapyTest import { * }
 
-fun tests(): TestFile =
+fun tests(): Effect[TestFile] =
     let digits_test_cases = [
         (0, 1),
         (1, 1),

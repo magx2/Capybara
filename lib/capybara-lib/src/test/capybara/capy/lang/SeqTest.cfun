@@ -1,8 +1,9 @@
 from /capy/test/Assert import { * }
+from /capy/lang/Effect import { * }
 from /capy/lang/Seq import { * }
 from /capy/test/CapyTest import { * }
 
-fun tests(): TestFile =
+fun tests(): Effect[TestFile] =
     test_file("/capy/lang/SeqTest", [
         test("should assert finite sequence", should_assert_finite_sequence()),
         test("should assert empty sequence", should_assert_empty_sequence()),

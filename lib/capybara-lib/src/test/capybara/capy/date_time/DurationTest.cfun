@@ -1,8 +1,9 @@
 from /capy/date_time/Duration import { * }
 from /capy/test/Assert import { * }
+from /capy/lang/Effect import { * }
 from /capy/test/CapyTest import { * }
 
-fun tests(): TestFile =
+fun tests(): Effect[TestFile] =
     let round_trip_test_cases = {
         "PT0S" : ZERO,
         "P3Y6M4DT12H30M5S" : DateDuration { years: 3, months: 6, days: 4, hours: 12, minutes: 30, seconds: 5 },

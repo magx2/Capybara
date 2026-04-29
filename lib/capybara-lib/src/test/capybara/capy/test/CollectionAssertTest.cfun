@@ -1,7 +1,8 @@
 from /capy/test/Assert import { * }
+from /capy/lang/Effect import { * }
 from /capy/test/CapyTest import { * }
 
-fun tests(): TestFile =
+fun tests(): Effect[TestFile] =
     test_file("/capy/test/CollectionAssertTest.cfun", [
         test("should assert list", should_assert_list()),
         test("should assert empty list", should_assert_empty_list()),

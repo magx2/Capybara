@@ -5,9 +5,10 @@ from /capy/date_time/Duration import { * }
 from /capy/date_time/Time import { * }
 from /capy/lang/Result import { * }
 from /capy/test/Assert import { * }
+from /capy/lang/Effect import { * }
 from /capy/test/CapyTest import { * }
 
-fun tests(): TestFile =
+fun tests(): Effect[TestFile] =
     let success_test_cases = [
         _should_parse_interval(
             "2007-03-01T13:00:00Z/2008-05-11T15:30:00Z",
