@@ -1,0 +1,125 @@
+from /capy/test/Assert import { * }
+from /capy/lang/Effect import { * }
+from /capy/lang/Result import { * }
+from /capy/lang/TimeUnit import { * }
+from /capy/test/CapyTest import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/capy/lang/TimeUnit.cfun", [
+        test("to_nano_seconds should convert each time unit", () => should_convert_to_nano_seconds()),
+        test("to_micro_seconds should convert each time unit", () => should_convert_to_micro_seconds()),
+        test("to_milli_seconds should convert each time unit", () => should_convert_to_milli_seconds()),
+        test("to_seconds should convert each time unit", () => should_convert_to_seconds()),
+        test("to_minutes should convert each time unit", () => should_convert_to_minutes()),
+        test("to_hours should convert each time unit", () => should_convert_to_hours()),
+        test("to_days should convert each time unit", () => should_convert_to_days()),
+        test("to_weeks should convert each time unit", () => should_convert_to_weeks()),
+        test("smaller-to-larger conversions should truncate fractional units", () => should_truncate_fractional_units()),
+    ])
+
+private fun should_convert_to_nano_seconds(): Assert =
+    assert_all([
+        assert_that(NanoSecond { value: 2L }.to_nano_seconds()).is_equal_to(NanoSecond { value: 2L }),
+        assert_that(MicroSecond { value: 2L }.to_nano_seconds()).is_equal_to(NanoSecond { value: 2000L }),
+        assert_that(MilliSecond { value: 2L }.to_nano_seconds()).is_equal_to(NanoSecond { value: 2000000L }),
+        assert_that(Second { value: 2L }.to_nano_seconds()).is_equal_to(NanoSecond { value: 2000000000L }),
+        assert_that(Minute { value: 2L }.to_nano_seconds()).is_equal_to(NanoSecond { value: 120000000000L }),
+        assert_that(Hour { value: 2L }.to_nano_seconds()).is_equal_to(NanoSecond { value: 7200000000000L }),
+        assert_that(Day { value: 2L }.to_nano_seconds()).is_equal_to(NanoSecond { value: 172800000000000L }),
+        assert_that(Week { value: 2L }.to_nano_seconds()).is_equal_to(NanoSecond { value: 1209600000000000L }),
+    ])
+
+private fun should_convert_to_micro_seconds(): Assert =
+    assert_all([
+        assert_that(NanoSecond { value: 2000L }.to_micro_seconds()).is_equal_to(MicroSecond { value: 2L }),
+        assert_that(MicroSecond { value: 2L }.to_micro_seconds()).is_equal_to(MicroSecond { value: 2L }),
+        assert_that(MilliSecond { value: 2L }.to_micro_seconds()).is_equal_to(MicroSecond { value: 2000L }),
+        assert_that(Second { value: 2L }.to_micro_seconds()).is_equal_to(MicroSecond { value: 2000000L }),
+        assert_that(Minute { value: 2L }.to_micro_seconds()).is_equal_to(MicroSecond { value: 120000000L }),
+        assert_that(Hour { value: 2L }.to_micro_seconds()).is_equal_to(MicroSecond { value: 7200000000L }),
+        assert_that(Day { value: 2L }.to_micro_seconds()).is_equal_to(MicroSecond { value: 172800000000L }),
+        assert_that(Week { value: 2L }.to_micro_seconds()).is_equal_to(MicroSecond { value: 1209600000000L }),
+    ])
+
+private fun should_convert_to_milli_seconds(): Assert =
+    assert_all([
+        assert_that(NanoSecond { value: 2000000L }.to_milli_seconds()).is_equal_to(MilliSecond { value: 2L }),
+        assert_that(MicroSecond { value: 2000L }.to_milli_seconds()).is_equal_to(MilliSecond { value: 2L }),
+        assert_that(MilliSecond { value: 2L }.to_milli_seconds()).is_equal_to(MilliSecond { value: 2L }),
+        assert_that(Second { value: 2L }.to_milli_seconds()).is_equal_to(MilliSecond { value: 2000L }),
+        assert_that(Minute { value: 2L }.to_milli_seconds()).is_equal_to(MilliSecond { value: 120000L }),
+        assert_that(Hour { value: 2L }.to_milli_seconds()).is_equal_to(MilliSecond { value: 7200000L }),
+        assert_that(Day { value: 2L }.to_milli_seconds()).is_equal_to(MilliSecond { value: 172800000L }),
+        assert_that(Week { value: 2L }.to_milli_seconds()).is_equal_to(MilliSecond { value: 1209600000L }),
+    ])
+
+private fun should_convert_to_seconds(): Assert =
+    assert_all([
+        assert_that(NanoSecond { value: 2000000000L }.to_seconds()).is_equal_to(Second { value: 2L }),
+        assert_that(MicroSecond { value: 2000000L }.to_seconds()).is_equal_to(Second { value: 2L }),
+        assert_that(MilliSecond { value: 2000L }.to_seconds()).is_equal_to(Second { value: 2L }),
+        assert_that(Second { value: 2L }.to_seconds()).is_equal_to(Second { value: 2L }),
+        assert_that(Minute { value: 2L }.to_seconds()).is_equal_to(Second { value: 120L }),
+        assert_that(Hour { value: 2L }.to_seconds()).is_equal_to(Second { value: 7200L }),
+        assert_that(Day { value: 2L }.to_seconds()).is_equal_to(Second { value: 172800L }),
+        assert_that(Week { value: 2L }.to_seconds()).is_equal_to(Second { value: 1209600L }),
+    ])
+
+private fun should_convert_to_minutes(): Assert =
+    assert_all([
+        assert_that(NanoSecond { value: 120000000000L }.to_minutes()).is_equal_to(Minute { value: 2L }),
+        assert_that(MicroSecond { value: 120000000L }.to_minutes()).is_equal_to(Minute { value: 2L }),
+        assert_that(MilliSecond { value: 120000L }.to_minutes()).is_equal_to(Minute { value: 2L }),
+        assert_that(Second { value: 120L }.to_minutes()).is_equal_to(Minute { value: 2L }),
+        assert_that(Minute { value: 2L }.to_minutes()).is_equal_to(Minute { value: 2L }),
+        assert_that(Hour { value: 2L }.to_minutes()).is_equal_to(Minute { value: 120L }),
+        assert_that(Day { value: 2L }.to_minutes()).is_equal_to(Minute { value: 2880L }),
+        assert_that(Week { value: 2L }.to_minutes()).is_equal_to(Minute { value: 20160L }),
+    ])
+
+private fun should_convert_to_hours(): Assert =
+    assert_all([
+        assert_that(NanoSecond { value: 7200000000000L }.to_hours()).is_equal_to(Hour { value: 2L }),
+        assert_that(MicroSecond { value: 7200000000L }.to_hours()).is_equal_to(Hour { value: 2L }),
+        assert_that(MilliSecond { value: 7200000L }.to_hours()).is_equal_to(Hour { value: 2L }),
+        assert_that(Second { value: 7200L }.to_hours()).is_equal_to(Hour { value: 2L }),
+        assert_that(Minute { value: 120L }.to_hours()).is_equal_to(Hour { value: 2L }),
+        assert_that(Hour { value: 2L }.to_hours()).is_equal_to(Hour { value: 2L }),
+        assert_that(Day { value: 2L }.to_hours()).is_equal_to(Hour { value: 48L }),
+        assert_that(Week { value: 2L }.to_hours()).is_equal_to(Hour { value: 336L }),
+    ])
+
+private fun should_convert_to_days(): Assert =
+    assert_all([
+        assert_that(NanoSecond { value: 172800000000000L }.to_days()).is_equal_to(Day { value: 2L }),
+        assert_that(MicroSecond { value: 172800000000L }.to_days()).is_equal_to(Day { value: 2L }),
+        assert_that(MilliSecond { value: 172800000L }.to_days()).is_equal_to(Day { value: 2L }),
+        assert_that(Second { value: 172800L }.to_days()).is_equal_to(Day { value: 2L }),
+        assert_that(Minute { value: 2880L }.to_days()).is_equal_to(Day { value: 2L }),
+        assert_that(Hour { value: 48L }.to_days()).is_equal_to(Day { value: 2L }),
+        assert_that(Day { value: 2L }.to_days()).is_equal_to(Day { value: 2L }),
+        assert_that(Week { value: 2L }.to_days()).is_equal_to(Day { value: 14L }),
+    ])
+
+private fun should_convert_to_weeks(): Assert =
+    assert_all([
+        assert_that(NanoSecond { value: 1209600000000000L }.to_weeks()).is_equal_to(Week { value: 2L }),
+        assert_that(MicroSecond { value: 1209600000000L }.to_weeks()).is_equal_to(Week { value: 2L }),
+        assert_that(MilliSecond { value: 1209600000L }.to_weeks()).is_equal_to(Week { value: 2L }),
+        assert_that(Second { value: 1209600L }.to_weeks()).is_equal_to(Week { value: 2L }),
+        assert_that(Minute { value: 20160L }.to_weeks()).is_equal_to(Week { value: 2L }),
+        assert_that(Hour { value: 336L }.to_weeks()).is_equal_to(Week { value: 2L }),
+        assert_that(Day { value: 14L }.to_weeks()).is_equal_to(Week { value: 2L }),
+        assert_that(Week { value: 2L }.to_weeks()).is_equal_to(Week { value: 2L }),
+    ])
+
+private fun should_truncate_fractional_units(): Assert =
+    assert_all([
+        assert_that(NanoSecond { value: 1999L }.to_micro_seconds()).is_equal_to(MicroSecond { value: 1L }),
+        assert_that(MicroSecond { value: 1999L }.to_milli_seconds()).is_equal_to(MilliSecond { value: 1L }),
+        assert_that(MilliSecond { value: 1999L }.to_seconds()).is_equal_to(Second { value: 1L }),
+        assert_that(Second { value: 119L }.to_minutes()).is_equal_to(Minute { value: 1L }),
+        assert_that(Minute { value: 119L }.to_hours()).is_equal_to(Hour { value: 1L }),
+        assert_that(Hour { value: 47L }.to_days()).is_equal_to(Day { value: 1L }),
+        assert_that(Day { value: 13L }.to_weeks()).is_equal_to(Week { value: 1L }),
+    ])
