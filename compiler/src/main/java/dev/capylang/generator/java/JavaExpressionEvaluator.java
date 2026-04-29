@@ -16,10 +16,11 @@ import static java.lang.System.lineSeparator;
 
 @SuppressWarnings("SwitchStatementWithTooFewBranches")
 public class JavaExpressionEvaluator {
-    private static volatile java.util.Map<String, String> FUNCTION_NAME_OVERRIDES = java.util.Map.of();
+    private static final ThreadLocal<java.util.Map<String, String>> FUNCTION_NAME_OVERRIDES =
+            ThreadLocal.withInitial(java.util.Map::of);
 
     public static void setFunctionNameOverrides(java.util.Map<String, String> functionNameOverrides) {
-        FUNCTION_NAME_OVERRIDES = java.util.Map.copyOf(functionNameOverrides);
+        FUNCTION_NAME_OVERRIDES.set(java.util.Map.copyOf(functionNameOverrides));
     }
     private static final java.util.concurrent.atomic.AtomicLong OPTION_CASE_VAR_COUNTER =
             new java.util.concurrent.atomic.AtomicLong();
@@ -2570,8 +2571,9 @@ public class JavaExpressionEvaluator {
     private static String emittedMethodName(CompiledFunctionCall functionCall) {
         var parameterTypes = functionCall.arguments().stream().map(CompiledExpression::type).toList();
         var key = signatureKey(functionCall.name(), parameterTypes);
-        if (FUNCTION_NAME_OVERRIDES.containsKey(key)) {
-            return FUNCTION_NAME_OVERRIDES.get(key);
+        var functionNameOverrides = functionNameOverrides();
+        if (functionNameOverrides.containsKey(key)) {
+            return functionNameOverrides.get(key);
         }
         var parameterSignature = parameterTypes.stream()
                 .map(type -> String.valueOf(type))
@@ -2599,7 +2601,7 @@ public class JavaExpressionEvaluator {
     static Optional<String> findOverrideBySimpleName(String targetName, String parameterSignature) {
         var simpleMethodName = simpleMethodName(targetName);
         var qualifier = qualifierName(targetName);
-        var candidates = FUNCTION_NAME_OVERRIDES.entrySet().stream()
+        var candidates = functionNameOverrides().entrySet().stream()
                 .filter(entry -> simpleMethodName(keyName(entry.getKey())).equals(simpleMethodName))
                 .filter(entry -> keyParameterSignature(entry.getKey()).equals(parameterSignature))
                 .toList();
@@ -2616,6 +2618,10 @@ public class JavaExpressionEvaluator {
                 .filter(entry -> qualifierName(keyName(entry.getKey())) == null)
                 .map(java.util.Map.Entry::getValue)
                 .findFirst();
+    }
+
+    private static java.util.Map<String, String> functionNameOverrides() {
+        return FUNCTION_NAME_OVERRIDES.get();
     }
 
     private static String keyParameterSignature(String signatureKey) {

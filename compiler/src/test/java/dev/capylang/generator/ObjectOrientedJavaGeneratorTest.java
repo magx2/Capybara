@@ -7,6 +7,7 @@ import dev.capylang.compiler.parser.RawModule;
 import dev.capylang.compiler.parser.SourceKind;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.api.parallel.ResourceLock;
 
 import javax.tools.DiagnosticCollector;
 import javax.tools.JavaFileObject;
@@ -27,6 +28,7 @@ import static java.util.stream.Collectors.joining;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+@ResourceLock("java.lang.System.out")
 class ObjectOrientedJavaGeneratorTest {
     @TempDir
     Path tempDir;

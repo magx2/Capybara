@@ -1,6 +1,7 @@
 package dev.capylang.test;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.parallel.ResourceLock;
 
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
@@ -9,6 +10,7 @@ import java.util.Arrays;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+@ResourceLock("java.lang.System.out")
 class MainProgramTest {
     @Test
     void generatedMainHasJavaEntryPointSignature() throws Exception {

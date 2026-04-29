@@ -815,6 +815,9 @@ public final class JavaGenerator implements Generator {
         if (isCapyDateTimeClockNowMethod(ownerPackage, ownerName, method)) {
             return mapCapyDateTimeClockNowMethod(method, visibility, methodTypeParameters);
         }
+        if (isCapyIoConsoleMethod(ownerPackage, ownerName, method)) {
+            return mapCapyIoConsoleMethod(method, visibility, methodTypeParameters);
+        }
         if (isCapyTestTimedMethod(ownerPackage, ownerName, method)) {
             var nameParameter = method.parameters().get(0).generatedName();
             var assertParameter = method.parameters().get(1).generatedName();
@@ -844,6 +847,33 @@ public final class JavaGenerator implements Generator {
         return mapJavaDoc(method.comments())
                + visibility + "static " + methodTypeParameters + method.returnType() + " " + mapMethodName(method.name()) + "() {\n"
                + "return capy.lang.Effect.delay(() -> dev.capylang.DateTimeUtil.fromJavaOffsetDateTime(java.time.OffsetDateTime.now(java.time.ZoneOffset.UTC)));\n"
+               + "}\n";
+    }
+
+    private boolean isCapyIoConsoleMethod(String ownerPackage, String ownerName, JavaMethod method) {
+        if (!"capy.io".equals(ownerPackage) || !"Console".equals(ownerName) || !isEffectTypeReference(method.returnType().toString())) {
+            return false;
+        }
+        var methodName = mapMethodName(method.name());
+        return switch (methodName) {
+            case "print", "println", "printError", "printlnError" ->
+                    method.parameters().size() == 1;
+            case "readLine" -> method.parameters().isEmpty();
+            default -> false;
+        };
+    }
+
+    private String mapCapyIoConsoleMethod(JavaMethod method, String visibility, String methodTypeParameters) {
+        var methodName = mapMethodName(method.name());
+        var runtimeCall = switch (methodName) {
+            case "print", "println", "printError", "printlnError" ->
+                    "dev.capylang.ConsoleUtil." + methodName + "(" + method.parameters().getFirst().generatedName() + ")";
+            case "readLine" -> "dev.capylang.ConsoleUtil.readLine()";
+            default -> throw new IllegalStateException("Unsupported Console method: " + methodName);
+        };
+        return mapJavaDoc(method.comments())
+               + visibility + "static " + methodTypeParameters + method.returnType() + " " + methodName + "(" + mapFunctionParameters(method.parameters()) + ") {\n"
+               + "return capy.lang.Effect.delay(() -> " + runtimeCall + ");\n"
                + "}\n";
     }
 
