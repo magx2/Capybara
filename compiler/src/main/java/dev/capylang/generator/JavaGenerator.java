@@ -943,25 +943,24 @@ public final class JavaGenerator implements Generator {
     }
 
     private String mapJavaProgramMainMethod(JavaMethod method) {
-        var rewrittenParameters = method.parameters().isEmpty()
-                ? method.parameters()
-                : List.of(new JavaMethod.JavaFunctionParameter(
-                        method.parameters().getFirst().type(),
-                        method.parameters().getFirst().sourceName(),
-                        "__capybaraArgsList"
-                ));
-        var evaluated = evaluateExpression(method.expression(), rewrittenParameters);
+        var methodTypeParameters = method.typeParameters().isEmpty()
+                ? ""
+                : method.typeParameters().stream().collect(joining(", ", "<", ">")) + " ";
+        var capybaraMainMethod = mapJavaDoc(method.comments())
+               + "public static " + methodTypeParameters + method.returnType() + " " + mapMethodName(method.name()) + "(" + mapFunctionParameters(method.parameters()) + ") {\n"
+               + evaluateExpression(method.expression(), method.parameters())
+               + "\n}\n";
         var returnsEffectProgram = isEffectProgramType(method.returnType().toString());
         var programType = returnsEffectProgram
                 ? normalizeProgramTypeReference(effectPayloadTypeReference(method.returnType().toString()))
                 : normalizeProgramTypeReference(method.returnType().toString());
         var programComputation = returnsEffectProgram
-                ? evaluated.replaceFirst("(?m)^\\s*return\\s+", "var __capybaraProgramEffect = ")
-                  + "\n" + programType + " program = __capybaraProgramEffect.unsafeRun();"
-                : evaluated.replaceFirst("(?m)^\\s*return\\s+", programType + " program = ");
+                ? programType + " program = " + mapMethodName(method.name()) + "(__capybaraArgsList).unsafeRun();"
+                : programType + " program = " + mapMethodName(method.name()) + "(__capybaraArgsList);";
         var successType = programType + ".Success";
         var failedType = programType + ".Failed";
-        return mapJavaDoc(method.comments())
+        return capybaraMainMethod
+               + "\n"
                + "public static void main(java.lang.String[] args) {\n"
                + "var __capybaraArgsList = java.util.List.of(args);\n"
                + programComputation + "\n"

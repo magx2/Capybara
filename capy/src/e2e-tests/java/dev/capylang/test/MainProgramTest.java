@@ -1,5 +1,6 @@
 package dev.capylang.test;
 
+import capy.lang.Program;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.parallel.ResourceLock;
 
@@ -7,6 +8,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.lang.reflect.Modifier;
 import java.util.Arrays;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -20,6 +22,20 @@ class MainProgramTest {
         assertThat(Modifier.isStatic(mainMethod.getModifiers())).isTrue();
         assertThat(mainMethod.getReturnType()).isEqualTo(void.class);
         assertThat(mainMethod.isVarArgs()).isFalse();
+    }
+
+    @Test
+    void generatedMainKeepsCapybaraMainFunction() throws Exception {
+        var mainMethod = MainProgram.class.getMethod("main", List.class);
+
+        assertThat(Modifier.isPublic(mainMethod.getModifiers())).isTrue();
+        assertThat(Modifier.isStatic(mainMethod.getModifiers())).isTrue();
+        assertThat(mainMethod.getReturnType()).isEqualTo(Program.class);
+
+        var program = (Program) mainMethod.invoke(null, List.of("ok"));
+
+        assertThat(program).isInstanceOf(Program.Success.class);
+        assertThat(((Program.Success) program).results()).containsExactly("ok");
     }
 
     @Test
