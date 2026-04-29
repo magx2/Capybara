@@ -47,4 +47,13 @@ class EffectBindTest {
 
         assertThat(actual).isBetween(before, after);
     }
+
+    @Test
+    void nanoTimeReturnsCurrentJvmNanoTimeEffect() {
+        var before = System.nanoTime();
+        var actual = EffectBind.nanoTimeValue().unsafeRun();
+        var after = System.nanoTime();
+
+        assertThat(actual).isBetween(before, after);
+    }
 }

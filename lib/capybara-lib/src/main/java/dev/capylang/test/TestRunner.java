@@ -20,10 +20,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
-import java.util.logging.ConsoleHandler;
-import java.util.logging.Level;
-import java.util.logging.Logger;
-import java.util.logging.SimpleFormatter;
 import javax.xml.XMLConstants;
 import javax.xml.parsers.DocumentBuilderFactory;
 import org.xml.sax.InputSource;
@@ -35,7 +31,6 @@ public class TestRunner {
     public static final String GATHER_TESTS_METHOD_NAME = "gatherTests";
     public static final String RUN_TESTS_METHOD_NAME = "runTests";
     static final String OUTPUT_MANIFEST_FILE = ".capy-test-output-manifest";
-    private static final Logger LOG = Logger.getLogger(TestRunner.class.getName());
 
     public static void main(String[] args) {
         try {
@@ -47,15 +42,10 @@ public class TestRunner {
     }
 
     public static int runTests(Arguments arguments) {
-        configureLogging(arguments.logLevel());
-        LOG.info(() -> "Starting test runner with report type `%s`, output directory `%s`, and log level `%s`"
-                .formatted(arguments.reportType(), arguments.outputDir(), arguments.logLevel().getName()));
         var capyTestRuntimeClass = loadCapyTestRuntime();
         var gatherTestsMethod = loadGatherTestsMethod(capyTestRuntimeClass);
         var testFiles = invokeGatherTests(gatherTestsMethod);
-        LOG.info(() -> "Collected `%d` test files".formatted(testFiles.size()));
         var testRun = invokeRunTests(arguments.reportType(), arguments.outputDir(), testFiles);
-        LOG.info(() -> "Generated `%d` test outputs".formatted(testRun.outputs().size()));
         var writtenFiles = toJavaRelativePathSet(testRun.written_files());
         printFailureSummary(testRun.outputs(), System.out);
         deleteStaleOutputs(arguments.outputDir(), writtenFiles);
@@ -65,7 +55,6 @@ public class TestRunner {
     public static Arguments parseArguments(String[] args) {
         Path outputDir = null;
         ReportType reportType = null;
-        Level logLevel = Level.INFO;
         for (int i = 0; i < args.length; i++) {
             switch (args[i]) {
                 case "-o", "--output-dir" -> {
@@ -80,12 +69,6 @@ public class TestRunner {
                     }
                     reportType = ReportType.valueOf(args[++i].toUpperCase(Locale.ROOT));
                 }
-                case "-ll", "--log-level" -> {
-                    if (i + 1 >= args.length) {
-                        throw new IllegalArgumentException("Missing value for " + args[i]);
-                    }
-                    logLevel = parseLogLevel(args[++i]);
-                }
                 case "-h", "--help" -> {
                     printHelp();
                     System.exit(0);
@@ -93,10 +76,10 @@ public class TestRunner {
                 default -> throw new IllegalArgumentException("Unknown argument: " + args[i]);
             }
         }
-        return new Arguments(outputDir, reportType, logLevel);
+        return new Arguments(outputDir, reportType);
     }
 
-    public record Arguments(Path outputDir, ReportType reportType, Level logLevel) {
+    public record Arguments(Path outputDir, ReportType reportType) {
         public Arguments {
             if (outputDir == null) {
                 throw new IllegalArgumentException("Output directory not specified");
@@ -110,39 +93,11 @@ public class TestRunner {
             if (reportType == null) {
                 throw new IllegalArgumentException("Report type is null");
             }
-            if (logLevel == null) {
-                throw new IllegalArgumentException("Log level is null");
-            }
         }
     }
 
     public enum ReportType {
         JUNIT
-    }
-
-    private static void configureLogging(Level logLevel) {
-        var handler = new ConsoleHandler();
-        handler.setFormatter(new SimpleFormatter());
-        LOG.setUseParentHandlers(false);
-        LOG.setLevel(logLevel);
-        handler.setLevel(logLevel);
-        for (var existingHandler : LOG.getHandlers()) {
-            LOG.removeHandler(existingHandler);
-            existingHandler.close();
-        }
-        LOG.addHandler(handler);
-    }
-
-    private static Level parseLogLevel(String value) {
-        return switch (value.toUpperCase(Locale.ROOT)) {
-            case "DEBUG" -> Level.FINE;
-            case "INFO" -> Level.INFO;
-            case "WARN" -> Level.WARNING;
-            case "ERROR" -> Level.SEVERE;
-            case "OFF" -> Level.OFF;
-            default ->
-                    throw new IllegalArgumentException("Unknown log level: " + value + ". Use DEBUG, INFO, WARN, ERROR, or OFF.");
-        };
     }
 
     private static void printHelp() {
@@ -151,7 +106,6 @@ public class TestRunner {
                 Options:
                   -o, --output-dir <dir>    Output directory for test reports (required)
                   -rt, --report-type <type> Report type (required, e.g., JUNIT)
-                  -ll, --log-level <level>  Log level: DEBUG, INFO, WARN, ERROR, OFF (optional, default INFO)
                   -h, --help                Show this help message
                 """);
     }
@@ -160,7 +114,6 @@ public class TestRunner {
         try {
             return Class.forName(CAPY_TEST_RUNTIME_CLASS, true, contextClassLoader());
         } catch (ClassNotFoundException e) {
-            LOG.log(Level.SEVERE, "Cannot load class `%s`".formatted(CAPY_TEST_RUNTIME_CLASS), e);
             throw new IllegalStateException("Cannot load class `%s`".formatted(CAPY_TEST_RUNTIME_CLASS), e);
         }
     }
@@ -169,8 +122,6 @@ public class TestRunner {
         try {
             return capyTestRuntimeClass.getMethod(GATHER_TESTS_METHOD_NAME);
         } catch (NoSuchMethodException e) {
-            LOG.log(Level.SEVERE, "Class `%s` does not have method `%s()`"
-                    .formatted(capyTestRuntimeClass.getCanonicalName(), GATHER_TESTS_METHOD_NAME), e);
             throw new IllegalStateException("Class `%s` does not have method `%s()`".formatted(capyTestRuntimeClass.getCanonicalName(), GATHER_TESTS_METHOD_NAME), e);
         }
     }
@@ -181,17 +132,13 @@ public class TestRunner {
             var root = unsafeRunEffect(result);
             if (!(root instanceof List<?> rootList)) {
                 var resultType = result == null ? "null" : result.getClass().getCanonicalName();
-                LOG.severe(() -> "Method `%s()` returned `%s` instead of `List<TestFile>` or `Effect[List<TestFile]]`"
-                        .formatted(GATHER_TESTS_METHOD_NAME, resultType));
                 throw new IllegalStateException("Method `%s()` should return `List<TestFile>` or `Effect[List<TestFile]]`, but it returned `%s`"
                         .formatted(GATHER_TESTS_METHOD_NAME, resultType));
             }
             return flattenTestValues(rootList);
         } catch (IllegalAccessException e) {
-            LOG.log(Level.SEVERE, "Method `%s()` should be public".formatted(GATHER_TESTS_METHOD_NAME), e);
             throw new IllegalStateException("Method `%s()` should be public".formatted(GATHER_TESTS_METHOD_NAME), e);
         } catch (InvocationTargetException e) {
-            LOG.log(Level.SEVERE, "Cannot invoke static method `%s()`".formatted(GATHER_TESTS_METHOD_NAME), e);
             throw new IllegalStateException("Cannot invoke static method `%s()`".formatted(GATHER_TESTS_METHOD_NAME), e);
         }
     }
@@ -256,9 +203,7 @@ public class TestRunner {
     private static List<Path> writeTestOutputs(Path outputDir, List<TestOutput> testOutputs) {
         var result = CapyTest.writeTestOutputs(PathUtil.fromJavaPath(outputDir), testOutputs).unsafeRun();
         var writtenFiles = unwrapResult(result, "Cannot write test output file");
-        var relativePaths = toJavaRelativePaths(writtenFiles);
-        relativePaths.forEach(relativePath -> LOG.fine(() -> "Wrote test output to `%s`".formatted(outputDir.resolve(relativePath))));
-        return relativePaths;
+        return toJavaRelativePaths(writtenFiles);
     }
 
     private static Set<Path> toJavaRelativePathSet(List<capy.io.Path> paths) {
@@ -285,7 +230,6 @@ public class TestRunner {
             }
             writeOutputManifest(manifestFile, expectedFiles);
         } catch (IOException e) {
-            LOG.log(Level.SEVERE, "Cannot prune stale test output files", e);
             throw new UncheckedIOException("Cannot prune stale test output files", e);
         }
     }
@@ -318,7 +262,6 @@ public class TestRunner {
     private static void deleteStaleFile(Path path) {
         try {
             Files.deleteIfExists(path);
-            LOG.fine(() -> "Deleted stale test output `%s`".formatted(path));
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
@@ -329,8 +272,6 @@ public class TestRunner {
         while (current != null && !current.equals(outputDir)) {
             try {
                 Files.deleteIfExists(current);
-                var deletedDirectory = current;
-                LOG.fine(() -> "Deleted empty test output directory `%s`".formatted(deletedDirectory));
             } catch (DirectoryNotEmptyException ignored) {
                 return;
             } catch (IOException e) {
@@ -422,7 +363,6 @@ public class TestRunner {
                 }
             }
         } catch (Exception e) {
-            LOG.log(Level.WARNING, "Cannot print failure summary for `%s`".formatted(testOutput.path()), e);
             output.printf("  %s%n", testOutput.path());
             output.println(testOutput.content());
             output.println();

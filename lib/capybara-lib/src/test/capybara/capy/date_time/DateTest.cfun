@@ -74,14 +74,14 @@ fun _test_date(day: int, month: int, year: int, is_valid: bool): Effect[TestCase
         else assert_that(Date { day, month, year }).fails()
     test(
         "Date \{ day: {day}, month: {month}, year: {year} } should be " + (if is_valid then 'valid' else 'invalid'),
-        assert)
+        () => assert)
 
 fun _test_leap_year(): list[Effect[TestCase]] =
     let leap_year = Date { day: 1, month: JANUARY, year: 2020 } | d => Success { d.leap_year() }
     let not_leap_year = Date { day: 1, month: JANUARY, year: 2019 } | d => Success { d.leap_year() }
     [
-        test('1/1/2020 should be a leap year', assert_that(leap_year).succeeds(true)),
-        test('1/1/2019 should not be a leap year', assert_that(not_leap_year).succeeds(false)) ]
+        test('1/1/2020 should be a leap year', () => assert_that(leap_year).succeeds(true)),
+        test('1/1/2019 should not be a leap year', () => assert_that(not_leap_year).succeeds(false)) ]
 
 fun _date_test_to_iso_8601(): list[Effect[TestCase]] =
     [
@@ -90,7 +90,7 @@ fun _date_test_to_iso_8601(): list[Effect[TestCase]] =
         (7, JANUARY, 10000, "+10000-01-07"),
     ] | (day, month, year, expected) => test(
         "Date.to_iso_8601() should format {day}/{month}/{year}",
-        assert_that(Date { day, month, year } | d => Success { d.to_iso_8601() }).succeeds(expected))
+        () => assert_that(Date { day, month, year } | d => Success { d.to_iso_8601() }).succeeds(expected))
 
 fun _date_test_from_iso_8601_success(): list[Effect[TestCase]] =
     [
@@ -100,7 +100,7 @@ fun _date_test_from_iso_8601_success(): list[Effect[TestCase]] =
         ("+10000-01-07", 7, JANUARY, 10000),
     ] | (iso, day, month, year) => test(
         "Date.from_iso_8601 should parse {iso}",
-        assert_that(/capy/date_time/Date.from_iso_8601(iso)).succeeds(date =>
+        () => assert_that(/capy/date_time/Date.from_iso_8601(iso)).succeeds(date =>
             assert_that(date)
                 .has_day(day)
                 .has_month(month)
@@ -115,7 +115,7 @@ fun _date_test_from_iso_8601_failure(): list[Effect[TestCase]] =
         "2000/01/07",
     ] | iso => test(
         "Date.from_iso_8601 should fail for {iso}",
-        assert_that(/capy/date_time/Date.from_iso_8601(iso)).fails())
+        () => assert_that(/capy/date_time/Date.from_iso_8601(iso)).fails())
 
 fun _date_test_value(day: int, month: int, year: int): Date =
     match Date { day: day, month: month, year: year } with

@@ -99,7 +99,7 @@ fun tests(): Effect[TestFile] =
         "2007-03-01--2007-03-02--P1D" : "Invalid ISO 8601 interval format: expected exactly one interval separator",
     } |> [], (acc, iso, expected_message) =>
         acc + test("should fail parsing {iso}",
-            assert_that(/capy/date_time/Interval.from_iso_8601(iso)).fails(expected_message))
+            () => assert_that(/capy/date_time/Interval.from_iso_8601(iso)).fails(expected_message))
 
     test_file("/capy/date_time/Interval.cfun", success_test_cases + failed_test_cases)
 
@@ -111,7 +111,7 @@ fun _should_parse_interval(
     duration: Duration
 ): Effect[TestCase] =
     test("should parse {iso}",
-        assert_that(/capy/date_time/Interval.from_iso_8601(iso))
+        () => assert_that(/capy/date_time/Interval.from_iso_8601(iso))
             .succeeds(interval =>
                 assert_all([
                     assert_that(interval.to_iso_8601()).is_equal_to(canonical),

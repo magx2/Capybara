@@ -12,7 +12,6 @@ import java.nio.file.Files;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
-import java.util.logging.Level;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -24,7 +23,7 @@ class TestRunnerTest {
 
     @Test
     void shouldWriteTestOutputAndReturnRelativePath() throws Exception {
-        var arguments = new TestRunner.Arguments(tempDir, TestRunner.ReportType.JUNIT, Level.INFO);
+        var arguments = new TestRunner.Arguments(tempDir, TestRunner.ReportType.JUNIT);
         var output = new TestOutput(relativePath("reports", "TEST-capy.lang.MathTest.xml"), "<xml/>", false);
 
         var writtenPath = TestRunner.writeTestOutputToFile(output, arguments);
@@ -67,7 +66,7 @@ class TestRunnerTest {
 
     @Test
     void shouldRemoveOldOutputsWhenCurrentRunWritesDifferentReports() throws Exception {
-        var arguments = new TestRunner.Arguments(tempDir, TestRunner.ReportType.JUNIT, Level.INFO);
+        var arguments = new TestRunner.Arguments(tempDir, TestRunner.ReportType.JUNIT);
         var staleFile = tempDir.resolve("TEST-old.xml");
         Files.writeString(staleFile, "<old/>");
         var currentOutput = new TestOutput(relativePath("TEST-new.xml"), "<new/>", false);
@@ -81,7 +80,7 @@ class TestRunnerTest {
 
     @Test
     void shouldNotRewriteIdenticalTestOutput() throws Exception {
-        var arguments = new TestRunner.Arguments(tempDir, TestRunner.ReportType.JUNIT, Level.INFO);
+        var arguments = new TestRunner.Arguments(tempDir, TestRunner.ReportType.JUNIT);
         var output = new TestOutput(relativePath("reports", "TEST-capy.lang.MathTest.xml"), "<xml/>", false);
 
         var writtenPath = TestRunner.writeTestOutputToFile(output, arguments);
@@ -97,7 +96,7 @@ class TestRunnerTest {
 
     @Test
     void shouldRewriteChangedTestOutputWhenSizeChanges() throws Exception {
-        var arguments = new TestRunner.Arguments(tempDir, TestRunner.ReportType.JUNIT, Level.INFO);
+        var arguments = new TestRunner.Arguments(tempDir, TestRunner.ReportType.JUNIT);
         var reportPath = relativePath("reports", "TEST-capy.lang.MathTest.xml");
 
         TestRunner.writeTestOutputToFile(new TestOutput(reportPath, "<xml/>", false), arguments);

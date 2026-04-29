@@ -12,7 +12,7 @@ fun tests(): Effect[TestFile] =
         "P23DT23H" : DateDuration { years: 0, months: 0, days: 23, hours: 23, minutes: 0, seconds: 0 },
         "P2W" : WeekDuration { weeks: 2 },
     } |> [], (acc, iso, expected) => acc + test("should round-trip {iso}",
-        assert_all([
+        () => assert_all([
             assert_that(/capy/date_time/Duration.from_iso_8601(iso)).succeeds(duration =>
                 assert_all([
                     assert_that(duration).is_equal_to(expected),
@@ -30,7 +30,7 @@ fun tests(): Effect[TestFile] =
         ("P00030604T123005", DateDuration { years: 3, months: 6, days: 4, hours: 12, minutes: 30, seconds: 5 }),
         ("P0003-06-04T12:30:05", DateDuration { years: 3, months: 6, days: 4, hours: 12, minutes: 30, seconds: 5 }),
     ] | (iso, expected) => test("should parse {iso}",
-        assert_that(/capy/date_time/Duration.from_iso_8601(iso)).succeeds(duration =>
+        () => assert_that(/capy/date_time/Duration.from_iso_8601(iso)).succeeds(duration =>
             assert_all([
                 assert_that(duration).is_equal_to(expected),
                 assert_that(duration).has_years(expected.years()),
@@ -42,7 +42,7 @@ fun tests(): Effect[TestFile] =
             ])))
     let week_component_test_cases = [
         test("should expose week-only duration components",
-            assert_that(WeekDuration { weeks: 2 })
+            () => assert_that(WeekDuration { weeks: 2 })
                 .has_weeks(2)
                 .has_years(0)
                 .has_months(0)
@@ -61,5 +61,5 @@ fun tests(): Effect[TestFile] =
         "P1WT2H",
         "P1D2Y",
         "P0003-13-04T12:30:05",
-    ] | iso => test("should fail parsing {iso}", assert_that(/capy/date_time/Duration.from_iso_8601(iso)).fails())
+    ] | iso => test("should fail parsing {iso}", () => assert_that(/capy/date_time/Duration.from_iso_8601(iso)).fails())
     test_file("/capy/date_time/Duration.cfun", round_trip_test_cases + parse_only_test_cases + week_component_test_cases + failed_test_cases)
