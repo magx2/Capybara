@@ -749,6 +749,28 @@ class CapyTest {
     }
 
     @Test
+    void shouldIgnoreTestsMethodReturningUnrelatedEffectClass() throws Exception {
+        var isTestMethod = Capy.class.getDeclaredMethod("isTestMethod", java.lang.reflect.Method.class);
+        isTestMethod.setAccessible(true);
+
+        var method = UnrelatedEffectProducer.class.getDeclaredMethod("tests");
+
+        assertFalse((Boolean) isTestMethod.invoke(null, method));
+    }
+
+    public static final class UnrelatedEffectProducer {
+        public static Effect tests() {
+            return new Effect();
+        }
+    }
+
+    public static final class Effect {
+        public Object unsafeRun() {
+            throw new AssertionError("Unrelated Effect should not be treated as capy.lang.Effect");
+        }
+    }
+
+    @Test
     void shouldPackageCompiledInputAndOverrideMetadata() throws IOException {
         var sourceDir = Files.createDirectories(tempDir.resolve("source"));
         Files.writeString(sourceDir.resolve("Main.cfun"), "fun main(): int = 1\n");
