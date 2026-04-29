@@ -103,7 +103,7 @@ fun JUnitFailure.`+`(other_message: string): JUnitFailure =
     }
 
 data TestOutput { path: Path, content: string, failed: bool }
-data TestRun { outputs: list[TestOutput], written_files: list[Path], failed: bool }
+data TestRun { outputs: list[TestOutput], written_files: list[Path], failure_summary: string, failed: bool }
 
 fun run_tests(rtype: ReportType, test_files: list[TestFile]): list[TestOutput] =
     match rtype with
@@ -111,17 +111,22 @@ fun run_tests(rtype: ReportType, test_files: list[TestFile]): list[TestOutput] =
 
 fun run_tests(rtype: ReportType, output_dir: Path, test_files: list[TestFile]): Effect[Result[TestRun]] =
     let outputs = run_tests(rtype, test_files)
-    write_test_outputs(output_dir, outputs).map(written_result =>
+    write_test_outputs(output_dir, outputs).flat_map(written_result =>
         match written_result with
-        case Error e -> e
+        case Error e -> pure(e)
         case Success { written_files } ->
-            Success {
-                TestRun {
-                    outputs: outputs,
-                    written_files: written_files,
-                    failed: has_failures(outputs)
+            prune_stale_outputs(output_dir, written_files).map(prune_result =>
+                match prune_result with
+                case Error e -> e
+                case Success _ -> Success {
+                    TestRun {
+                        outputs: outputs,
+                        written_files: written_files,
+                        failure_summary: failure_summary(test_files),
+                        failed: has_failures(outputs)
+                    }
                 }
-            }
+            )
     )
 
 /// Writes every test output under the given output directory and returns normalized relative paths.
@@ -169,6 +174,200 @@ private fun create_test_output_parent(path: Path): Effect[Result[Path]] =
     match path.parent() with
     case None -> pure(Success { path })
     case Some { parent } -> create_directories(parent)
+
+const OUTPUT_MANIFEST_FILE = '.capy-test-output-manifest'
+
+fun failure_summary(test_files: list[TestFile]): string =
+    let failures = test_files |> '', (acc, test_file) => acc + failure_summary_file(test_file)
+    if failures.is_empty
+    then ''
+    else '\nFailures:\n\n' + failures
+
+private fun failure_summary_file(test_file: TestFile): string =
+    test_file.test_cases |> '', (acc, test_case) =>
+        if test_case.failed()
+        then acc
+            + '  ' + test_file.file_name + ' > ' + test_case.name + '()\n'
+            + failure_summary_message(test_case)
+            + '\n\n'
+        else acc
+
+private fun failure_summary_message(test_case: TestCase): string =
+    match test_case.result with
+    case Passed -> ''
+    case Failed { message, type } -> normalize_failure_message(message)
+
+fun normalize_failure_message(message: string): string =
+    message
+        .replace('\\r\\n', '\n')
+        .replace('\\n', '\n')
+        .replace('\\r', '\n')
+        .replace('\r\n', '\n')
+        .replace('\r', '\n')
+        .replace('\\t', '\t')
+
+private fun prune_stale_outputs(output_dir: Path, expected_files: list[Path]): Effect[Result[list[Path]]] =
+    let manifest_file = output_dir / OUTPUT_MANIFEST_FILE
+    stale_output_files(output_dir, manifest_file, expected_files).flat_map(stale_result =>
+        match stale_result with
+        case Error e -> pure(e)
+        case Success { stale_files } ->
+            delete_stale_outputs(output_dir, stale_files).flat_map(delete_result =>
+                match delete_result with
+                case Error e -> pure(e)
+                case Success _ ->
+                    write_output_manifest(manifest_file, expected_files).map(manifest_result =>
+                        match manifest_result with
+                        case Error e -> e
+                        case Success _ -> Success { stale_files }
+                    )
+            )
+    )
+
+private fun stale_output_files(output_dir: Path, manifest_file: Path, expected_files: list[Path]): Effect[Result[list[Path]]] =
+    read_text(manifest_file).flat_map(manifest_result =>
+        match manifest_result with
+        case Success { content } -> pure(Success { stale_files(manifest_paths(content), expected_files) })
+        case Error _ ->
+            list_regular_files(output_dir).map(files_result =>
+                match files_result with
+                case Error e -> e
+                case Success { files } ->
+                    let relative_files = files | file => relative_to(output_dir, file)
+                    Success { stale_files(relative_files, expected_files) }
+            )
+    )
+
+private fun stale_files(files: list[Path], expected_files: list[Path]): list[Path] =
+    match files[0] with
+    case None -> []
+    case Some { file } ->
+        let normalized = file.normalize()
+        let rest = stale_files(files[1:], expected_files)
+        if path_to_manifest_line(normalized) == OUTPUT_MANIFEST_FILE | path_list_contains(expected_files, normalized)
+        then rest
+        else [normalized] + rest
+
+private fun delete_stale_outputs(output_dir: Path, stale_files: list[Path]): Effect[Result[list[Path]]] =
+    match stale_files[0] with
+    case None -> pure(Success { [] })
+    case Some { stale_file } ->
+        let output_path = output_dir / stale_file
+        delete(output_path).flat_map(delete_result =>
+            match delete_result with
+            case Error e -> pure(e)
+            case Success _ ->
+                delete_empty_parent_directories(output_path, output_dir).flat_map(parent_result =>
+                    match parent_result with
+                    case Error e -> pure(e)
+                    case Success _ ->
+                        delete_stale_outputs(output_dir, stale_files[1:]).map(rest_result =>
+                            match rest_result with
+                            case Error e -> e
+                            case Success { deleted_files } -> Success { [stale_file] + deleted_files }
+                        )
+                )
+        )
+
+private fun delete_empty_parent_directories(path: Path, output_dir: Path): Effect[Result[Path]] =
+    match path.parent() with
+    case None -> pure(Success { path })
+    case Some { parent } ->
+        if parent.normalize() == output_dir.normalize()
+        then pure(Success { output_dir })
+        else delete(parent).flat_map(delete_result =>
+            match delete_result with
+            case Success { deleted } ->
+                if deleted
+                then delete_empty_parent_directories(parent, output_dir)
+                else pure(Success { parent })
+            case Error _ -> pure(Success { parent })
+        )
+
+private fun write_output_manifest(manifest_file: Path, expected_files: list[Path]): Effect[Result[string]] =
+    write_text_if_changed(manifest_file, manifest_content(expected_files))
+
+private fun manifest_content(paths: list[Path]): string =
+    paths |> '', (acc, path) => acc + path_to_manifest_line(path.normalize()) + '\n'
+
+private fun manifest_paths(content: string): list[Path] =
+    fun lines(value: string, current: string, acc: list[string]): list[string] =
+        match value[0] with
+        case None ->
+            if current.is_empty
+            then acc
+            else acc + current
+        case Some { '\r' } -> lines(value[1:], current, acc)
+        case Some { '\n' } ->
+            if current.is_empty
+            then lines(value[1:], '', acc)
+            else lines(value[1:], '', acc + current)
+        case Some { c } -> lines(value[1:], current + c, acc)
+    ---
+    lines(content, '', []) | line => from_string(line)
+
+private fun list_regular_files(path: Path): Effect[Result[list[Path]]] =
+    list_entries(path).flat_map(entries_result =>
+        match entries_result with
+        case Error e -> pure(e)
+        case Success { entries } -> list_regular_files_from_entries(entries)
+    )
+
+private fun list_regular_files_from_entries(entries: list[Path]): Effect[Result[list[Path]]] =
+    match entries[0] with
+    case None -> pure(Success { [] })
+    case Some { entry } ->
+        is_file(entry).flat_map(file =>
+            if file
+            then list_regular_files_from_entries(entries[1:]).map(rest_result =>
+                match rest_result with
+                case Error e -> e
+                case Success { rest } -> Success { [entry] + rest }
+            )
+            else is_directory(entry).flat_map(directory =>
+                if directory
+                then list_regular_files(entry).flat_map(children_result =>
+                    match children_result with
+                    case Error e -> pure(e)
+                    case Success { children } ->
+                        list_regular_files_from_entries(entries[1:]).map(rest_result =>
+                            match rest_result with
+                            case Error e -> e
+                            case Success { rest } -> Success { children + rest }
+                        )
+                )
+                else list_regular_files_from_entries(entries[1:])
+            )
+        )
+
+private fun relative_to(base: Path, path: Path): Path =
+    from_string(path_segments_to_string(drop_prefix_segments(base.normalize().segments, path.normalize().segments)))
+
+private fun drop_prefix_segments(prefix: list[string], segments: list[string]): list[string] =
+    match prefix[0] with
+    case None -> segments
+    case Some { expected } ->
+        match segments[0] with
+        case None -> []
+        case Some { actual } ->
+            if expected == actual
+            then drop_prefix_segments(prefix[1:], segments[1:])
+            else segments
+
+private fun path_list_contains(paths: list[Path], path: Path): bool =
+    paths |any? p => p.normalize() == path.normalize()
+
+private fun path_to_manifest_line(path: Path): string =
+    path_segments_to_string(path.normalize().segments)
+
+private fun path_segments_to_string(segments: list[string]): string =
+    match segments[0] with
+    case None -> ''
+    case Some { segment } ->
+        let rest = path_segments_to_string(segments[1:])
+        if rest.is_empty
+        then segment
+        else segment + '/' + rest
 
 private fun has_failures(test_outputs: list[TestOutput]): bool = test_outputs |any? output => output.failed
 
