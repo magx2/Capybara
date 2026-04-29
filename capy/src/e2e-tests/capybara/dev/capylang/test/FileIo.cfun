@@ -1,0 +1,48 @@
+from /capy/io/IO import { * }
+from /capy/io/Path import { * }
+from /capy/lang/Effect import { * }
+from /capy/lang/Result import { * }
+
+fun read_text_file(path: Path): Effect[Result[string]] = read_text(path)
+
+fun read_lines_file(path: Path): Effect[Result[list[string]]] = read_lines(path)
+
+fun read_bytes_file(path: Path): Effect[Result[list[byte]]] = read_bytes(path)
+
+fun write_text_file(path: Path, text: string): Effect[Result[string]] = write_text(path, text)
+
+fun write_lines_file(path: Path, lines: list[string]): Effect[Result[list[string]]] = write_lines(path, lines)
+
+fun write_bytes_file(path: Path, bytes: list[byte]): Effect[Result[list[byte]]] = write_bytes(path, bytes)
+
+fun append_text_file(path: Path, text: string): Effect[Result[string]] = append_text(path, text)
+
+fun append_lines_file(path: Path, lines: list[string]): Effect[Result[list[string]]] = append_lines(path, lines)
+
+fun append_bytes_file(path: Path, bytes: list[byte]): Effect[Result[list[byte]]] = append_bytes(path, bytes)
+
+fun exists_path(path: Path): Effect[bool] = exists(path)
+
+fun is_file_path(path: Path): Effect[bool] = is_file(path)
+
+fun is_directory_path(path: Path): Effect[bool] = is_directory(path)
+
+fun file_size(path: Path): Effect[Result[long]] = size(path)
+
+fun create_file_at(path: Path): Effect[Result[Path]] = create_file(path)
+
+fun create_directory_at(path: Path): Effect[Result[Path]] = create_directory(path)
+
+fun create_directories_at(path: Path): Effect[Result[Path]] = create_directories(path)
+
+fun list_directory(path: Path): Effect[Result[list[Path]]] = list_entries(path)
+
+fun delete_path(path: Path): Effect[Result[bool]] = delete(path)
+
+fun copy_path(source: Path, target: Path): Effect[Result[Path]] = copy(source, target)
+
+fun copy_replace_path(source: Path, target: Path): Effect[Result[Path]] = copy_replace(source, target)
+
+fun move_path(source: Path, target: Path): Effect[Result[Path]] = move(source, target)
+
+fun move_replace_path(source: Path, target: Path): Effect[Result[Path]] = move_replace(source, target)
