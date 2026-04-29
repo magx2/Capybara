@@ -594,12 +594,6 @@ class CapybaraPluginTest {
     }
 
     @ParameterizedTest
-    @MethodSource("gradleLogLevels")
-    void shouldMapGradleLogLevelToCapybaraTestLogLevel(LogLevel gradleLogLevel, String expectedLogLevel) {
-        assertEquals(expectedLogLevel, CapybaraPlugin.capybaraTestLogLevel(gradleLogLevel));
-    }
-
-    @ParameterizedTest
     @MethodSource("gradleCompileLogLevels")
     void shouldMapGradleLogLevelToCapybaraCompileLogLevel(LogLevel gradleLogLevel, String expectedLogLevel) {
         assertEquals(expectedLogLevel, CapybaraPlugin.capybaraCompileLogLevel(gradleLogLevel));
@@ -613,6 +607,14 @@ class CapybaraPluginTest {
 
         assertEquals("WARNING", compileCapybara.getLogLevel().get());
         assertEquals("WARNING", compileTestCapybara.getLogLevel().get());
+    }
+
+    @Test
+    void shouldDefaultCapybaraTestLogTypeToNone() {
+        var project = newProject(List.of("check"));
+        var testCapybara = project.getTasks().named("testCapybara", CapybaraTestTask.class).get();
+
+        assertEquals("NONE", testCapybara.getLogType().get());
     }
 
     @ParameterizedTest
@@ -814,17 +816,6 @@ class CapybaraPluginTest {
 
     private Project newProject() {
         return newProject(List.of());
-    }
-
-    private static Stream<org.junit.jupiter.params.provider.Arguments> gradleLogLevels() {
-        return Stream.of(
-                arguments(LogLevel.DEBUG, "DEBUG"),
-                arguments(LogLevel.INFO, "INFO"),
-                arguments(LogLevel.LIFECYCLE, "WARN"),
-                arguments(LogLevel.WARN, "WARN"),
-                arguments(LogLevel.QUIET, "WARN"),
-                arguments(LogLevel.ERROR, "WARN")
-        );
     }
 
     private static Stream<org.junit.jupiter.params.provider.Arguments> gradleCompileLogLevels() {

@@ -245,7 +245,7 @@ public class CapybaraPlugin implements Plugin<Project> {
                         task.getRuntimeClasspath().from(mainRuntimeClasspath, testSourceSet.getOutput().getClassesDirs());
                         task.getOutputDir().set(capybaraTestResultsDir);
                         task.getReportType().set("JUNIT");
-                        task.getLogLevel().set(capybaraTestLogLevel(project.getGradle().getStartParameter().getLogLevel()));
+                        task.getLogType().set("NONE");
                         task.setEnabled(hasCapybaraTestSources);
                         if (!hasCapybaraTestSources) {
                             task.setDependsOn(java.util.List.of());
@@ -293,14 +293,6 @@ public class CapybaraPlugin implements Plugin<Project> {
                 }
             });
         }
-    }
-
-    static String capybaraTestLogLevel(LogLevel gradleLogLevel) {
-        return switch (gradleLogLevel) {
-            case DEBUG -> "DEBUG";
-            case INFO -> "INFO";
-            default -> "WARN";
-        };
     }
 
     static String capybaraCompileLogLevel(LogLevel gradleLogLevel) {
