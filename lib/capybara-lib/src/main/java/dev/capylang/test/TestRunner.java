@@ -31,17 +31,21 @@ public class TestRunner {
     public static int runTests(Arguments arguments) {
         var capyTestRuntimeClass = loadCapyTestRuntime();
         var gatherTestsMethod = loadGatherTestsMethod(capyTestRuntimeClass);
-        var testFiles = invokeGatherTests(gatherTestsMethod);
-        var testRun = invokeRunTests(arguments.reportType(), arguments.outputDir(), testFiles);
-        if (!testRun.failure_summary().isEmpty()) {
-            System.out.print(testRun.failure_summary());
+        var previousLogType = TestLog.currentLogType();
+        TestLog.setLogType(arguments.logType());
+        try {
+            var testFiles = invokeGatherTests(gatherTestsMethod);
+            var testRun = invokeRunTests(arguments.reportType(), arguments.outputDir(), testFiles);
+            return testRun.failed() ? 1 : 0;
+        } finally {
+            TestLog.setLogType(previousLogType);
         }
-        return testRun.failed() ? 1 : 0;
     }
 
     public static Arguments parseArguments(String[] args) {
         Path outputDir = null;
         ReportType reportType = null;
+        CapyTest.LogType logType = CapyTest.LogType.NONE;
         for (int i = 0; i < args.length; i++) {
             switch (args[i]) {
                 case "-o", "--output-dir" -> {
@@ -56,6 +60,12 @@ public class TestRunner {
                     }
                     reportType = ReportType.valueOf(args[++i].toUpperCase(Locale.ROOT));
                 }
+                case "-l", "--log" -> {
+                    if (i + 1 >= args.length) {
+                        throw new IllegalArgumentException("Missing value for " + args[i]);
+                    }
+                    logType = parseLogType(args[++i]);
+                }
                 case "-h", "--help" -> {
                     printHelp();
                     System.exit(0);
@@ -63,10 +73,14 @@ public class TestRunner {
                 default -> throw new IllegalArgumentException("Unknown argument: " + args[i]);
             }
         }
-        return new Arguments(outputDir, reportType);
+        return new Arguments(outputDir, reportType, logType);
     }
 
-    public record Arguments(Path outputDir, ReportType reportType) {
+    public record Arguments(Path outputDir, ReportType reportType, CapyTest.LogType logType) {
+        public Arguments(Path outputDir, ReportType reportType) {
+            this(outputDir, reportType, CapyTest.LogType.NONE);
+        }
+
         public Arguments {
             if (outputDir == null) {
                 throw new IllegalArgumentException("Output directory not specified");
@@ -79,6 +93,9 @@ public class TestRunner {
             }
             if (reportType == null) {
                 throw new IllegalArgumentException("Report type is null");
+            }
+            if (logType == null) {
+                logType = CapyTest.LogType.NONE;
             }
         }
     }
@@ -93,8 +110,17 @@ public class TestRunner {
                 Options:
                   -o, --output-dir <dir>    Output directory for test reports (required)
                   -rt, --report-type <type> Report type (required, e.g., JUNIT)
+                  -l, --log <type>          Log output type (optional, LOG, TC, TEAM_CITY)
                   -h, --help                Show this help message
                 """);
+    }
+
+    private static CapyTest.LogType parseLogType(String value) {
+        return switch (value.toUpperCase(Locale.ROOT)) {
+            case "LOG" -> CapyTest.LogType.LOG;
+            case "TC", "TEAM_CITY" -> CapyTest.LogType.TEAM_CITY;
+            default -> throw new IllegalArgumentException("Unknown log type `" + value + "`. Use LOG, TC, or TEAM_CITY.");
+        };
     }
 
     private static Class<?> loadCapyTestRuntime() {
@@ -113,7 +139,7 @@ public class TestRunner {
         }
     }
 
-    private static List<?> invokeGatherTests(Method gatherTestsMethod) {
+    private static List<CapyTest.TestFile> invokeGatherTests(Method gatherTestsMethod) {
         try {
             var result = gatherTestsMethod.invoke(null);
             var root = unsafeRunEffect(result);
@@ -122,7 +148,9 @@ public class TestRunner {
                 throw new IllegalStateException("Method `%s()` should return `List<TestFile>` or `Effect[List<TestFile]]`, but it returned `%s`"
                         .formatted(GATHER_TESTS_METHOD_NAME, resultType));
             }
-            return flattenTestValues(rootList);
+            return flattenTestValues(rootList).stream()
+                    .map(TestRunner::asTestFile)
+                    .toList();
         } catch (IllegalAccessException e) {
             throw new IllegalStateException("Method `%s()` should be public".formatted(GATHER_TESTS_METHOD_NAME), e);
         } catch (InvocationTargetException e) {
@@ -141,6 +169,15 @@ public class TestRunner {
                     .toList();
         }
         return List.of(value);
+    }
+
+    private static CapyTest.TestFile asTestFile(Object value) {
+        if (value instanceof CapyTest.TestFile testFile) {
+            return testFile;
+        }
+        var valueType = value == null ? "null" : value.getClass().getCanonicalName();
+        throw new IllegalStateException("Method `%s()` should return `TestFile` values, but it returned `%s`"
+                .formatted(GATHER_TESTS_METHOD_NAME, valueType));
     }
 
     private static Object unsafeRunEffect(Object value) {
@@ -170,8 +207,12 @@ public class TestRunner {
     }
 
     @SuppressWarnings({"rawtypes", "unchecked"})
-    private static TestRun invokeRunTests(ReportType reportType, Path outputDir, List<?> testFiles) {
-        var result = (Result<TestRun>) CapyTest.runTests(
+    private static TestRun invokeRunTests(
+            ReportType reportType,
+            Path outputDir,
+            List<CapyTest.TestFile> testFiles
+    ) {
+        var result = (Result<TestRun>) CapyTest.runTestsAndPrintSummary(
                 capy.test.CapyTest.ReportType.valueOf(reportType.name()),
                 PathUtil.fromJavaPath(outputDir),
                 (List) testFiles

@@ -3,6 +3,7 @@ from /capy/lang/Option import { None }
 from /capy/lang/Result import { * }
 from /capy/io/Path import {*}
 from /capy/io/IO import { * }
+from /capy/io/Console import { * }
 from /capy/lang/Seq import {*}
 from /capy/lang/Effect import { * }
 from /capy/date_time/Clock import { now }
@@ -14,10 +15,15 @@ data TestCase { name: string, result: TestResult, assertions_count: int, executi
 type TestResult = Passed | Failed
 single Passed
 data Failed { message: string, type: string }
+enum LogType { NONE, LOG, TEAM_CITY }
 
 fun test_file(file_name: string, test_cases: list[Effect[TestCase]]): Effect[TestFile] =
     let current <- now()
+    let log_type <- current_log_type()
+    let suite_name = test_suite_name(file_name)
+    let started <- print_test_suite_started(log_type, suite_name)
     let executed_test_cases <- execute_test_cases(test_cases)
+    let finished <- print_test_suite_finished(log_type, suite_name)
     TestFile {
         file_name: file_name,
         test_cases: executed_test_cases,
@@ -25,16 +31,23 @@ fun test_file(file_name: string, test_cases: list[Effect[TestCase]]): Effect[Tes
     }
 
 fun test(name: string, assert_supplier: () => Assert): Effect[TestCase] =
+    let log_type <- current_log_type()
+    let started <- print_test_started(log_type, name)
     let start <- nano_time()
     let assert = assert_supplier()
     let result = execute(assert.assertions)
     let end <- nano_time()
-    TestCase {
+    let test_case = TestCase {
         name: name,
         result: result,
         assertions_count: assert.assertions.size,
         execution_time: (end - start) / 1000000000.0
     }
+    let failed <- print_test_failed(log_type, test_case)
+    let finished <- print_test_finished(log_type, name)
+    test_case
+
+private fun current_log_type(): Effect[LogType] = <native>
 
 private fun execute_test_cases(test_cases: list[Effect[TestCase]]): Effect[list[TestCase]] =
     match test_cases[0] with
@@ -129,6 +142,14 @@ fun run_tests(rtype: ReportType, output_dir: Path, test_files: list[TestFile]): 
             )
     )
 
+fun run_tests_and_print_summary(rtype: ReportType, output_dir: Path, test_files: list[TestFile]): Effect[Result[TestRun]] =
+    run_tests(rtype, output_dir, test_files).flat_map(run_result =>
+        match run_result with
+        case Error e -> pure(e)
+        case Success { test_run } ->
+            print_failure_summary(test_run.failure_summary).map(summary => Success { test_run })
+    )
+
 /// Writes every test output under the given output directory and returns normalized relative paths.
 fun write_test_outputs(output_dir: Path, test_outputs: list[TestOutput]): Effect[Result[list[Path]]] =
     match test_outputs[0] with
@@ -205,6 +226,103 @@ fun normalize_failure_message(message: string): string =
         .replace('\r\n', '\n')
         .replace('\r', '\n')
         .replace('\\t', '\t')
+
+private fun print_failure_summary(summary: string): Effect[string] =
+    if summary.is_empty
+    then pure(summary)
+    else print(summary)
+
+private fun print_test_suite_started(log_type: LogType, suite_name: string): Effect[string] =
+    match log_type with
+    case NONE -> pure(suite_name)
+    case LOG -> println("Test suite started: {suite_name}")
+    case TEAM_CITY -> println("##teamcity[testSuiteStarted name='{team_city_escape(suite_name)}']")
+
+private fun print_test_suite_finished(log_type: LogType, suite_name: string): Effect[string] =
+    match log_type with
+    case NONE -> pure(suite_name)
+    case LOG -> println("Test suite finished: {suite_name}")
+    case TEAM_CITY -> println("##teamcity[testSuiteFinished name='{team_city_escape(suite_name)}']")
+
+private fun print_test_started(log_type: LogType, test_name: string): Effect[string] =
+    match log_type with
+    case NONE -> pure(test_name)
+    case LOG -> println("Test started: {test_name}")
+    case TEAM_CITY -> println("##teamcity[testStarted name='{team_city_escape(test_name)}']")
+
+private fun print_test_failed(log_type: LogType, test_case: TestCase): Effect[string] =
+    match test_case.result with
+    case Passed -> pure('')
+    case Failed { message, type } ->
+        match log_type with
+        case NONE -> pure('')
+        case LOG ->
+            println("Test failed: {test_case.name}").flat_map(printed =>
+                println(normalize_failure_message(message))
+            )
+        case TEAM_CITY ->
+            println("##teamcity[testFailed name='{team_city_escape(test_case.name)}' message='assertion failed' details='{team_city_escape(normalize_failure_message(message))}']")
+
+private fun print_test_finished(log_type: LogType, test_name: string): Effect[string] =
+    match log_type with
+    case NONE -> pure(test_name)
+    case LOG -> println("Test finished: {test_name}")
+    case TEAM_CITY -> println("##teamcity[testFinished name='{team_city_escape(test_name)}']")
+
+fun test_log_lines(test_files: list[TestFile]): list[string] =
+    test_files |> [], (acc, test_file) => acc + test_log_lines_file(test_file)
+
+private fun test_log_lines_file(test_file: TestFile): list[string] =
+    let suite_name = test_suite_name(test_file.file_name)
+    ["Test suite started: {suite_name}"]
+        + (test_file.test_cases |> [], (acc, test_case) => acc + test_log_lines_case(test_case))
+        + ["Test suite finished: {suite_name}"]
+
+private fun test_log_lines_case(test_case: TestCase): list[string] =
+    let started = "Test started: {test_case.name}"
+    let finished = "Test finished: {test_case.name}"
+    match test_case.result with
+    case Passed -> [started, finished]
+    case Failed { message, type } -> [
+        started,
+        "Test failed: {test_case.name}",
+        normalize_failure_message(message),
+        finished
+    ]
+
+fun team_city_messages(test_files: list[TestFile]): list[string] =
+    test_files |> [], (acc, test_file) => acc + team_city_messages_file(test_file)
+
+private fun team_city_messages_file(test_file: TestFile): list[string] =
+    let suite_name = team_city_escape(test_suite_name(test_file.file_name))
+    ["##teamcity[testSuiteStarted name='{suite_name}']"]
+        + (test_file.test_cases |> [], (acc, test_case) => acc + team_city_messages_case(test_case))
+        + ["##teamcity[testSuiteFinished name='{suite_name}']"]
+
+private fun team_city_messages_case(test_case: TestCase): list[string] =
+    let test_name = team_city_escape(test_case.name)
+    let started = "##teamcity[testStarted name='{test_name}']"
+    let finished = "##teamcity[testFinished name='{test_name}']"
+    match test_case.result with
+    case Passed -> [started, finished]
+    case Failed { message, type } -> [
+        started,
+        "##teamcity[testFailed name='{test_name}' message='assertion failed' details='{team_city_escape(normalize_failure_message(message))}']",
+        finished
+    ]
+
+fun team_city_escape(value: string): string =
+    match value[0] with
+    case None -> ''
+    case Some { '\'' } -> "|'" + team_city_escape(value[1:])
+    case Some { '\n' } -> '|n' + team_city_escape(value[1:])
+    case Some { '\r' } -> '|r' + team_city_escape(value[1:])
+    case Some { '|' } -> '||' + team_city_escape(value[1:])
+    case Some { '[' } -> '|[' + team_city_escape(value[1:])
+    case Some { ']' } -> '|]' + team_city_escape(value[1:])
+    case Some { c } -> c + team_city_escape(value[1:])
+
+private fun test_suite_name(file_name: string): string = file_name
 
 private fun prune_stale_outputs(output_dir: Path, expected_files: list[Path]): Effect[Result[list[Path]]] =
     let manifest_file = output_dir / OUTPUT_MANIFEST_FILE

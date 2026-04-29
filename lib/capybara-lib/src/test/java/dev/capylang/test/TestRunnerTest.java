@@ -11,14 +11,13 @@ import dev.capylang.PathUtil;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.io.ByteArrayOutputStream;
+import java.io.PrintStream;
 import java.nio.file.Files;
 import java.util.List;
 import java.util.Optional;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertInstanceOf;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 class TestRunnerTest {
     private static final String OUTPUT_MANIFEST_FILE = ".capy-test-output-manifest";
@@ -243,6 +242,123 @@ class TestRunnerTest {
         assertEquals("", summary);
     }
 
+    @Test
+    void shouldParseOptionalLogOutputType() {
+        var logArguments = TestRunner.parseArguments(new String[]{
+                "-o", tempDir.toString(),
+                "-rt", "JUNIT",
+                "-l", "LOG"
+        });
+        var teamCityArguments = TestRunner.parseArguments(new String[]{
+                "-o", tempDir.toString(),
+                "-rt", "JUNIT",
+                "--log", "TC"
+        });
+        var longTeamCityArguments = TestRunner.parseArguments(new String[]{
+                "-o", tempDir.toString(),
+                "-rt", "JUNIT",
+                "--log", "TEAM_CITY"
+        });
+
+        assertEquals(CapyTest.LogType.LOG, logArguments.logType());
+        assertEquals(CapyTest.LogType.TEAM_CITY, teamCityArguments.logType());
+        assertEquals(CapyTest.LogType.TEAM_CITY, longTeamCityArguments.logType());
+    }
+
+    @Test
+    void shouldDefaultToNoLogOutput() {
+        var arguments = TestRunner.parseArguments(new String[]{
+                "-o", tempDir.toString(),
+                "-rt", "JUNIT"
+        });
+
+        assertEquals(CapyTest.LogType.NONE, arguments.logType());
+    }
+
+    @Test
+    void shouldRenderTeamCityMessagesForTestRun() {
+        var messages = CapyTest.teamCityMessages(List.of(testFile(
+                "/capy/lang/StringTest.cfun",
+                passed("starts_with should pass"),
+                failed("starts_with should fail", "Expected string:\ncapybara\nto start with:\nbara", "assertion failed")
+        )));
+
+        assertEquals(
+                List.of(
+                        "##teamcity[testSuiteStarted name='/capy/lang/StringTest.cfun']",
+                        "##teamcity[testStarted name='starts_with should pass']",
+                        "##teamcity[testFinished name='starts_with should pass']",
+                        "##teamcity[testStarted name='starts_with should fail']",
+                        "##teamcity[testFailed name='starts_with should fail' message='assertion failed' details='Expected string:|ncapybara|nto start with:|nbara']",
+                        "##teamcity[testFinished name='starts_with should fail']",
+                        "##teamcity[testSuiteFinished name='/capy/lang/StringTest.cfun']"
+                ),
+                messages
+        );
+    }
+
+    @Test
+    void shouldRenderPlainLogLinesForTestRun() {
+        var lines = CapyTest.testLogLines(List.of(testFile(
+                "/capy/lang/StringTest.cfun",
+                failed("starts_with should fail", "Expected string:\ncapybara\nto start with:\nbara", "assertion failed")
+        )));
+
+        assertEquals(
+                List.of(
+                        "Test suite started: /capy/lang/StringTest.cfun",
+                        "Test started: starts_with should fail",
+                        "Test failed: starts_with should fail",
+                        "Expected string:\ncapybara\nto start with:\nbara",
+                        "Test finished: starts_with should fail",
+                        "Test suite finished: /capy/lang/StringTest.cfun"
+                ),
+                lines
+        );
+    }
+
+    @Test
+    void shouldEscapeTeamCityMessageValues() {
+        assertEquals("|'|||n|r|[|]", CapyTest.teamCityEscape("'|\n\r[]"));
+    }
+
+    @Test
+    void shouldPrintTeamCityMessagesWhileExecutingTestFile() {
+        var originalOut = System.out;
+        var previousLogType = TestLog.currentLogType();
+        var stdout = new ByteArrayOutputStream();
+        try {
+            System.setOut(new PrintStream(stdout));
+            TestLog.setLogType(CapyTest.LogType.TEAM_CITY);
+
+            CapyTest.testFile(
+                    "/capy/lang/StringTest.cfun",
+                    List.of(CapyTest.test("starts_with should fail", () -> {
+                        System.out.println("ASSERTION_BODY");
+                        return capy.test.Assert.assertThat("capybara").startsWith("bara");
+                    }))
+            ).unsafeRun();
+        } finally {
+            TestLog.setLogType(previousLogType);
+            System.setOut(originalOut);
+        }
+
+        var output = stdout.toString();
+        var suiteStarted = output.indexOf("##teamcity[testSuiteStarted name='/capy/lang/StringTest.cfun']");
+        var testStarted = output.indexOf("##teamcity[testStarted name='starts_with should fail']");
+        var assertionBody = output.indexOf("ASSERTION_BODY");
+        var testFailed = output.indexOf("##teamcity[testFailed name='starts_with should fail' message='assertion failed' details='Expected string:|ncapybara|nto start with:|nbara']");
+        var testFinished = output.indexOf("##teamcity[testFinished name='starts_with should fail']");
+        var suiteFinished = output.indexOf("##teamcity[testSuiteFinished name='/capy/lang/StringTest.cfun']");
+
+        assertTrue(suiteStarted >= 0);
+        assertTrue(suiteStarted < testStarted);
+        assertTrue(testStarted < assertionBody);
+        assertTrue(assertionBody < testFailed);
+        assertTrue(testFailed < testFinished);
+        assertTrue(testFinished < suiteFinished);
+    }
+
     private CapyTest.TestRun runMathTest() {
         return successValue(CapyTest.runTests(
                 CapyTest.ReportType.JUNIT,
@@ -260,7 +376,11 @@ class TestRunnerTest {
     }
 
     private static TestCase failed(String name, String message) {
-        return new TestCase(name, new CapyTest.Failed(message, "Assert.type"), 1, 0.0);
+        return failed(name, message, "Assert.type");
+    }
+
+    private static TestCase failed(String name, String message, String type) {
+        return new TestCase(name, new CapyTest.Failed(message, type), 1, 0.0);
     }
 
     private static Path relativePath(String... segments) {

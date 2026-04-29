@@ -25,7 +25,7 @@ public abstract class CapybaraTestTask extends DefaultTask {
     public abstract Property<String> getReportType();
 
     @Input
-    public abstract Property<String> getLogLevel();
+    public abstract Property<String> getLogType();
 
     @TaskAction
     public void runCapybaraTests() throws Exception {
@@ -50,8 +50,8 @@ public abstract class CapybaraTestTask extends DefaultTask {
             Method parseArguments = testRunnerClass.getMethod("parseArguments", String[].class);
             Method runTests = testRunnerClass.getMethod("runTests", argumentsClass);
 
-            var logLevel = getLogLevel().getOrElse("INFO");
-            var args = logLevel.isBlank()
+            var logType = getLogType().getOrElse("NONE");
+            var args = logType.isBlank() || "NONE".equalsIgnoreCase(logType)
                     ? new String[]{
                     "-o", outputDir.getAbsolutePath(),
                     "-rt", getReportType().get()
@@ -59,7 +59,7 @@ public abstract class CapybaraTestTask extends DefaultTask {
                     : new String[]{
                     "-o", outputDir.getAbsolutePath(),
                     "-rt", getReportType().get(),
-                    "-ll", logLevel
+                    "-l", logType
             };
 
             var parsedArguments = parseArguments.invoke(null, (Object) args);
