@@ -815,6 +815,9 @@ public final class JavaGenerator implements Generator {
         if (isCapyDateTimeClockNowMethod(ownerPackage, ownerName, method)) {
             return mapCapyDateTimeClockNowMethod(method, visibility, methodTypeParameters);
         }
+        if (isCapyLangSystemCurrentMillisMethod(ownerPackage, ownerName, method)) {
+            return mapCapyLangSystemCurrentMillisMethod(method, visibility, methodTypeParameters);
+        }
         if (isCapyIoConsoleMethod(ownerPackage, ownerName, method)) {
             return mapCapyIoConsoleMethod(method, visibility, methodTypeParameters);
         }
@@ -839,6 +842,21 @@ public final class JavaGenerator implements Generator {
         return mapJavaDoc(method.comments())
                + visibility + "static " + methodTypeParameters + method.returnType() + " " + mapMethodName(method.name()) + "() {\n"
                + "return capy.lang.Effect.delay(() -> dev.capylang.DateTimeUtil.fromJavaOffsetDateTime(java.time.OffsetDateTime.now(java.time.ZoneOffset.UTC)));\n"
+               + "}\n";
+    }
+
+    private boolean isCapyLangSystemCurrentMillisMethod(String ownerPackage, String ownerName, JavaMethod method) {
+        return "capy.lang".equals(ownerPackage)
+               && "System".equals(ownerName)
+               && "currentMillis".equals(mapMethodName(method.name()))
+               && method.parameters().isEmpty()
+               && isEffectTypeReference(method.returnType().toString());
+    }
+
+    private String mapCapyLangSystemCurrentMillisMethod(JavaMethod method, String visibility, String methodTypeParameters) {
+        return mapJavaDoc(method.comments())
+               + visibility + "static " + methodTypeParameters + method.returnType() + " " + mapMethodName(method.name()) + "() {\n"
+               + "return capy.lang.Effect.delay(java.lang.System::currentTimeMillis);\n"
                + "}\n";
     }
 

@@ -38,4 +38,13 @@ class EffectBindTest {
     void clockNowReturnsCurrentDateTimeEffect() {
         assertThat(EffectBind.clockNowIso().unsafeRun()).contains("T");
     }
+
+    @Test
+    void currentMillisReturnsCurrentJvmMillisEffect() {
+        var before = System.currentTimeMillis();
+        var actual = EffectBind.currentMillisValue().unsafeRun();
+        var after = System.currentTimeMillis();
+
+        assertThat(actual).isBetween(before, after);
+    }
 }
