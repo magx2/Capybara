@@ -13,6 +13,7 @@ class FloatAssertTest {
                 Assert.assertThat(10.5f).isLessThan(11.5f),
                 Assert.assertThat(10.5f).isGreaterOrEqualsThan(10.5f),
                 Assert.assertThat(10.5f).isLessOrEqualsThan(10.5f),
+                Assert.assertThat(10.5f).isEqualTo(10.51f, 0.02f),
                 Assert.assertThat(0f).isZero(),
                 Assert.assertThat(1f).isOne(),
                 Assert.assertThat(10.5f).isBetween(9.5f, 11.5f)

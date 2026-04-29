@@ -195,6 +195,17 @@ fun DoubleAssert.is_equal_to(other: double): DoubleAssert =
         assertions: this.assertions + () => assertion
     }
 
+fun DoubleAssert.is_equal_to(other: double, epsilon: double): DoubleAssert =
+    let assertion = Assertion {
+        result: if this.value >= other - epsilon then this.value <= other + epsilon else false,
+        message: "Expected double:\n" + this.value + "\nto be equal to:\n" + other + "\nwithin epsilon:\n" + epsilon,
+        type: 'DoubleAssert.is_equal_to'
+    }
+    DoubleAssert {
+        value: this.value,
+        assertions: this.assertions + () => assertion
+    }
+
 fun DoubleAssert.is_greater_than(other: double): DoubleAssert =
     let assertion = Assertion {
         result: this.value > other,
@@ -236,6 +247,17 @@ fun FloatAssert.is_equal_to(other: float): FloatAssert =
     let assertion = Assertion {
         result: this.value == other,
         message: "Expected float:\n" + this.value + "\nto be equal to:\n" + other,
+        type: 'FloatAssert.is_equal_to'
+    }
+    FloatAssert {
+        value: this.value,
+        assertions: this.assertions + () => assertion
+    }
+
+fun FloatAssert.is_equal_to(other: float, epsilon: float): FloatAssert =
+    let assertion = Assertion {
+        result: if this.value >= other - epsilon then this.value <= other + epsilon else false,
+        message: "Expected float:\n" + this.value + "\nto be equal to:\n" + other + "\nwithin epsilon:\n" + epsilon,
         type: 'FloatAssert.is_equal_to'
     }
     FloatAssert {
