@@ -3386,8 +3386,48 @@ public class CapybaraCompiler {
         if (!(returnType instanceof GenericDataType genericDataType)) {
             return false;
         }
+        if (isProgramType(genericDataType)) {
+            return true;
+        }
+        var typeParameters = typeParameters(genericDataType);
+        return isEffectType(genericDataType)
+               && typeParameters.size() == 1
+               && isProgramTypeDescriptor(typeParameters.getFirst());
+    }
+
+    private boolean isProgramType(GenericDataType genericDataType) {
         var normalized = normalizeQualifiedTypeName(genericDataType.name());
         return "Program".equals(genericDataType.name())
+               || normalized.equals("/capy/lang/Program")
+               || normalized.equals("/capy/lang/Program.Program")
+               || normalized.equals("/cap/lang/Program")
+               || normalized.equals("/cap/lang/Program.Program");
+    }
+
+    private boolean isEffectType(GenericDataType genericDataType) {
+        var normalized = normalizeQualifiedTypeName(genericDataType.name());
+        return "Effect".equals(genericDataType.name())
+               || normalized.equals("/capy/lang/Effect")
+               || normalized.equals("/capy/lang/Effect.Effect")
+               || normalized.equals("/cap/lang/Effect")
+               || normalized.equals("/cap/lang/Effect.Effect");
+    }
+
+    private List<String> typeParameters(GenericDataType genericDataType) {
+        return switch (genericDataType) {
+            case CompiledDataType dataType -> dataType.typeParameters();
+            case CompiledDataParentType parentType -> parentType.typeParameters();
+        };
+    }
+
+    private boolean isProgramTypeDescriptor(String descriptor) {
+        var rawType = descriptor;
+        var genericStart = rawType.indexOf('[');
+        if (genericStart >= 0) {
+            rawType = rawType.substring(0, genericStart);
+        }
+        var normalized = normalizeQualifiedTypeName(rawType);
+        return "Program".equals(rawType)
                || normalized.equals("/capy/lang/Program")
                || normalized.equals("/capy/lang/Program.Program")
                || normalized.equals("/cap/lang/Program")
@@ -3415,6 +3455,21 @@ public class CapybaraCompiler {
             case dev.capylang.compiler.expression.CompiledBooleanValue value -> value;
             case dev.capylang.compiler.expression.CompiledByteValue value -> value;
             case dev.capylang.compiler.expression.CompiledDoubleValue value -> value;
+            case dev.capylang.compiler.expression.CompiledEffectBindExpression value ->
+                    new dev.capylang.compiler.expression.CompiledEffectBindExpression(
+                            value.name(),
+                            enrichNothing(value.source(), functionName, moduleSourceFile),
+                            value.payloadType(),
+                            value.letType(),
+                            value.declaredType(),
+                            enrichNothing(value.rest(), functionName, moduleSourceFile),
+                            value.effectType()
+                    );
+            case dev.capylang.compiler.expression.CompiledEffectExpression value ->
+                    new dev.capylang.compiler.expression.CompiledEffectExpression(
+                            enrichNothing(value.body(), functionName, moduleSourceFile),
+                            value.effectType()
+                    );
             case dev.capylang.compiler.expression.CompiledFieldAccess value ->
                     new dev.capylang.compiler.expression.CompiledFieldAccess(
                             enrichNothing(value.source(), functionName, moduleSourceFile),

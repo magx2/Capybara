@@ -1,0 +1,28 @@
+from /capy/test/Assert import { * }
+from /capy/lang/Effect import { * }
+from /capy/test/CapyTest import { * }
+
+fun tests(): TestFile =
+    test_file("/capy/lang/Effect.cfun", [
+        test("should run pure value", should_run_pure_value()),
+        test("should map value", should_map_value()),
+        test("should flat map value", should_flat_map_value()),
+        test("should bind effects", should_bind_effects()),
+    ])
+
+fun should_run_pure_value(): Assert =
+    assert_that(pure(42).unsafe_run()).is_equal_to(42)
+
+fun should_map_value(): Assert =
+    assert_that(pure(2).map(x => x + 3).unsafe_run()).is_equal_to(5)
+
+fun should_flat_map_value(): Assert =
+    assert_that(pure(2).flat_map(x => pure(x + 4)).unsafe_run()).is_equal_to(6)
+
+fun should_bind_effects(): Assert =
+    assert_that(_bind_sum().unsafe_run()).is_equal_to(7)
+
+fun _bind_sum(): Effect[int] =
+    let a <- pure(3)
+    let b <- delay(() => 4)
+    a + b

@@ -413,6 +413,9 @@ public class JavaAstBuilder {
         if ("Result".equals(rawTypeName) || isResultTypeName(rawTypeName)) {
             return withTypeParametersIfGeneric(type, "capy.lang.Result");
         }
+        if ("Effect".equals(rawTypeName) || isEffectTypeName(rawTypeName)) {
+            return withTypeParametersIfGeneric(type, "capy.lang.Effect");
+        }
         if (rawTypeName.startsWith("/") && !rawTypeName.contains(".")) {
             var slashIndex = rawTypeName.lastIndexOf('/');
             if (slashIndex > 0 && slashIndex < rawTypeName.length() - 1) {
@@ -555,6 +558,9 @@ public class JavaAstBuilder {
         if ("Result".equals(rawTypeName) || isResultTypeName(rawTypeName)) {
             return "capy.lang.Result";
         }
+        if ("Effect".equals(rawTypeName) || isEffectTypeName(rawTypeName)) {
+            return "capy.lang.Effect";
+        }
         if (rawTypeName.startsWith("/") && !rawTypeName.contains(".")) {
             var slashIndex = rawTypeName.lastIndexOf('/');
             if (slashIndex > 0 && slashIndex < rawTypeName.length() - 1) {
@@ -652,6 +658,16 @@ public class JavaAstBuilder {
                || normalized.equals("/capy/lang/Result.Result")
                || normalized.endsWith("/Result")
                || normalized.endsWith("/Result.Result");
+    }
+
+    private boolean isEffectTypeName(String name) {
+        var normalized = normalizeQualifiedTypeName(name);
+        return normalized.equals("/cap/lang/Effect")
+               || normalized.equals("/cap/lang/Effect.Effect")
+               || normalized.equals("/capy/lang/Effect")
+               || normalized.equals("/capy/lang/Effect.Effect")
+               || normalized.endsWith("/Effect")
+               || normalized.endsWith("/Effect.Effect");
     }
 
     private boolean isResultErrorTypeName(String name) {

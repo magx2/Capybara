@@ -5,6 +5,8 @@ import dev.capylang.compiler.CompiledType;
 public sealed interface CompiledExpression permits CompiledBooleanValue,
         CompiledByteValue,
         CompiledDoubleValue,
+        CompiledEffectBindExpression,
+        CompiledEffectExpression,
         CompiledFieldAccess,
         CompiledFloatValue,
         CompiledFunctionCall,

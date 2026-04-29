@@ -90,6 +90,8 @@ public class JavaExpressionEvaluator {
             case CompiledBooleanValue booleanValue -> evaluateBooleanValue(booleanValue, scope);
             case CompiledByteValue byteValue -> evaluateByteValue(byteValue, scope);
             case CompiledDoubleValue doubleValue -> evaluateDoubleValue(doubleValue, scope);
+            case CompiledEffectBindExpression effectBindExpression -> evaluateEffectBindExpression(effectBindExpression, scope);
+            case CompiledEffectExpression effectExpression -> evaluateEffectExpression(effectExpression, scope);
             case CompiledFieldAccess fieldAccess -> evaluateFieldAccess(fieldAccess, scope);
             case CompiledFloatValue floatValue -> evaluateFloatValue(floatValue, scope);
             case CompiledFunctionCall functionCall -> evaluateFunctionCall(functionCall, scope);
@@ -1294,6 +1296,38 @@ public class JavaExpressionEvaluator {
 
     private static String resolveJavaLocalIdentifier(Scope scope, String identifier) {
         return scope.findValueOverride(identifier).orElseGet(() -> normalizeJavaLocalIdentifier(identifier));
+    }
+
+    private static Scope evaluateEffectExpression(CompiledEffectExpression effectExpression, Scope scope) {
+        var bodyExSc = evaluateExpression(effectExpression.body(), scope).popExpression();
+        var addedStatements = addedStatements(scope, bodyExSc.scope());
+        if (addedStatements.isEmpty()) {
+            return scope.addExpression("capy.lang.Effect.delay(() -> (" + bodyExSc.expression() + "))");
+        }
+        var statements = String.join("; ", addedStatements);
+        return scope.addExpression("capy.lang.Effect.delay(() -> { " + statements + "; return (" + bodyExSc.expression() + "); })");
+    }
+
+    private static Scope evaluateEffectBindExpression(CompiledEffectBindExpression bind, Scope scope) {
+        var sourceExSc = evaluateExpression(bind.source(), scope).popExpression();
+        var unsafeRunSource = "(" + sourceExSc.expression() + ").unsafeRun()";
+        var payloadExpression = coerceExpressionForExpectedType(bind.letType(), bind.payloadType(), unsafeRunSource);
+        var scopeExpression = sourceExSc.scope().declareTypedValue(
+                bind.name(),
+                javaCastType(bind.letType()),
+                payloadExpression,
+                bind.rest()
+        );
+        var restExSc = evaluateExpression(scopeExpression.expression(), scopeExpression.scope()).popExpression();
+        var addedStatements = addedStatements(scope, restExSc.scope());
+        var statements = String.join("; ", addedStatements);
+        return scope.addExpression(
+                "capy.lang.Effect.delay(() -> { "
+                + statements
+                + "; return (("
+                + restExSc.expression()
+                + ").unsafeRun()); })"
+        );
     }
 
     private static String terminalCollect(dev.capylang.compiler.CompiledType type) {
@@ -2674,6 +2708,11 @@ public class JavaExpressionEvaluator {
             || normalizedTypeName.endsWith("/Program.Program")
             || normalizedTypeName.endsWith("/Program")) {
             return "capy.lang.Program";
+        }
+        if ("Effect".equals(rawTypeName)
+            || normalizedTypeName.endsWith("/Effect.Effect")
+            || normalizedTypeName.endsWith("/Effect")) {
+            return "capy.lang.Effect";
         }
         if (rawTypeName.startsWith("/") && !rawTypeName.contains(".")) {
             var slashIndex = rawTypeName.lastIndexOf('/');

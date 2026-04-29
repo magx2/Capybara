@@ -812,6 +812,9 @@ public final class JavaGenerator implements Generator {
         var visibility = method.isPrivate()
                 ? (allowPrivateStaticMethods ? "private " : "")
                 : "public ";
+        if (isCapyDateTimeClockNowMethod(ownerPackage, ownerName, method)) {
+            return mapCapyDateTimeClockNowMethod(method, visibility, methodTypeParameters);
+        }
         if (isCapyTestTimedMethod(ownerPackage, ownerName, method)) {
             var nameParameter = method.parameters().get(0).generatedName();
             var assertParameter = method.parameters().get(1).generatedName();
@@ -827,6 +830,21 @@ public final class JavaGenerator implements Generator {
                + visibility + "static " + methodTypeParameters + method.returnType() + " " + mapMethodName(method.name()) + "(" + mapFunctionParameters(method.parameters()) + ") {\n"
                + evaluateExpression(method.expression(), method.parameters())
                + "\n}\n";
+    }
+
+    private boolean isCapyDateTimeClockNowMethod(String ownerPackage, String ownerName, JavaMethod method) {
+        return "capy.dateTime".equals(ownerPackage)
+               && "Clock".equals(ownerName)
+               && "now".equals(mapMethodName(method.name()))
+               && method.parameters().isEmpty()
+               && isEffectTypeReference(method.returnType().toString());
+    }
+
+    private String mapCapyDateTimeClockNowMethod(JavaMethod method, String visibility, String methodTypeParameters) {
+        return mapJavaDoc(method.comments())
+               + visibility + "static " + methodTypeParameters + method.returnType() + " " + mapMethodName(method.name()) + "() {\n"
+               + "return capy.lang.Effect.delay(() -> dev.capylang.DateTimeUtil.fromJavaOffsetDateTime(java.time.OffsetDateTime.now(java.time.ZoneOffset.UTC)));\n"
+               + "}\n";
     }
 
     private boolean isCapyTestTimedMethod(String ownerPackage, String ownerName, JavaMethod method) {
@@ -865,9 +883,15 @@ public final class JavaGenerator implements Generator {
                         method.parameters().getFirst().sourceName(),
                         "__capybaraArgsList"
                 ));
-        var programComputation = evaluateExpression(method.expression(), rewrittenParameters)
-                .replaceFirst("(?m)^\\s*return\\s+", "var program = ");
-        var programType = normalizeProgramTypeReference(method.returnType().toString());
+        var evaluated = evaluateExpression(method.expression(), rewrittenParameters);
+        var returnsEffectProgram = isEffectProgramType(method.returnType().toString());
+        var programType = returnsEffectProgram
+                ? normalizeProgramTypeReference(effectPayloadTypeReference(method.returnType().toString()))
+                : normalizeProgramTypeReference(method.returnType().toString());
+        var programComputation = returnsEffectProgram
+                ? evaluated.replaceFirst("(?m)^\\s*return\\s+", "var __capybaraProgramEffect = ")
+                  + "\n" + programType + " program = __capybaraProgramEffect.unsafeRun();"
+                : evaluated.replaceFirst("(?m)^\\s*return\\s+", programType + " program = ");
         var successType = programType + ".Success";
         var failedType = programType + ".Failed";
         return mapJavaDoc(method.comments())
@@ -893,6 +917,34 @@ public final class JavaGenerator implements Generator {
             return String.join(".", java.util.Arrays.copyOf(parts, parts.length - 1));
         }
         return typeName;
+    }
+
+    private boolean isEffectProgramType(String typeName) {
+        if (!isEffectTypeReference(typeName)) {
+            return false;
+        }
+        return isProgramTypeReference(effectPayloadTypeReference(typeName));
+    }
+
+    private boolean isEffectTypeReference(String typeName) {
+        var normalized = typeName.replace(" ", "");
+        var genericStart = normalized.indexOf('<');
+        var rawType = genericStart >= 0 ? normalized.substring(0, genericStart) : normalized;
+        return "Effect".equals(rawType) || rawType.endsWith(".Effect");
+    }
+
+    private String effectPayloadTypeReference(String typeName) {
+        var normalized = typeName.replace(" ", "");
+        var genericStart = normalized.indexOf('<');
+        if (genericStart < 0 || !normalized.endsWith(">")) {
+            return "capy.lang.Program";
+        }
+        return normalized.substring(genericStart + 1, normalized.length() - 1);
+    }
+
+    private boolean isProgramTypeReference(String typeName) {
+        var normalized = normalizeProgramTypeReference(typeName.replace(" ", ""));
+        return "Program".equals(normalized) || "capy.lang.Program".equals(normalized) || normalized.endsWith(".Program");
     }
 
     private String mapJavaDoc(List<String> comments) {
@@ -979,4 +1031,3 @@ public final class JavaGenerator implements Generator {
     }
 
 }
-
