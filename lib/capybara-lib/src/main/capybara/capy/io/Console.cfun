@@ -2,100 +2,100 @@ from /capy/lang/Effect import { * }
 from /capy/lang/Option import { * }
 
 /// Writes a string to standard output without a trailing newline and returns the consumed value.
-fun print(text: string): Effect[string] = ???
+fun print(text: string): Effect[string] = <native>
 
 /// Writes a byte to standard output without a trailing newline and returns the consumed value.
-fun print(text: byte): Effect[byte] = ???
+fun print(text: byte): Effect[byte] = <native>
 
 /// Writes an int to standard output without a trailing newline and returns the consumed value.
-fun print(text: int): Effect[int] = ???
+fun print(text: int): Effect[int] = <native>
 
 /// Writes a long to standard output without a trailing newline and returns the consumed value.
-fun print(text: long): Effect[long] = ???
+fun print(text: long): Effect[long] = <native>
 
 /// Writes a float to standard output without a trailing newline and returns the consumed value.
-fun print(text: float): Effect[float] = ???
+fun print(text: float): Effect[float] = <native>
 
 /// Writes a double to standard output without a trailing newline and returns the consumed value.
-fun print(text: double): Effect[double] = ???
+fun print(text: double): Effect[double] = <native>
 
 /// Writes a bool to standard output without a trailing newline and returns the consumed value.
-fun print(text: bool): Effect[bool] = ???
+fun print(text: bool): Effect[bool] = <native>
 
 /// Writes bytes to standard output without a trailing newline and returns the consumed value.
-fun print(text: list[byte]): Effect[list[byte]] = ???
+fun print(text: list[byte]): Effect[list[byte]] = <native>
 
 /// Writes a string to standard output followed by a newline and returns the consumed value.
-fun println(text: string): Effect[string] = ???
+fun println(text: string): Effect[string] = <native>
 
 /// Writes a byte to standard output followed by a newline and returns the consumed value.
-fun println(text: byte): Effect[byte] = ???
+fun println(text: byte): Effect[byte] = <native>
 
 /// Writes an int to standard output followed by a newline and returns the consumed value.
-fun println(text: int): Effect[int] = ???
+fun println(text: int): Effect[int] = <native>
 
 /// Writes a long to standard output followed by a newline and returns the consumed value.
-fun println(text: long): Effect[long] = ???
+fun println(text: long): Effect[long] = <native>
 
 /// Writes a float to standard output followed by a newline and returns the consumed value.
-fun println(text: float): Effect[float] = ???
+fun println(text: float): Effect[float] = <native>
 
 /// Writes a double to standard output followed by a newline and returns the consumed value.
-fun println(text: double): Effect[double] = ???
+fun println(text: double): Effect[double] = <native>
 
 /// Writes a bool to standard output followed by a newline and returns the consumed value.
-fun println(text: bool): Effect[bool] = ???
+fun println(text: bool): Effect[bool] = <native>
 
 /// Writes bytes to standard output followed by a newline and returns the consumed value.
-fun println(text: list[byte]): Effect[list[byte]] = ???
+fun println(text: list[byte]): Effect[list[byte]] = <native>
 
 /// Writes a string to standard error without a trailing newline and returns the consumed value.
-fun print_error(text: string): Effect[string] = ???
+fun print_error(text: string): Effect[string] = <native>
 
 /// Writes a byte to standard error without a trailing newline and returns the consumed value.
-fun print_error(text: byte): Effect[byte] = ???
+fun print_error(text: byte): Effect[byte] = <native>
 
 /// Writes an int to standard error without a trailing newline and returns the consumed value.
-fun print_error(text: int): Effect[int] = ???
+fun print_error(text: int): Effect[int] = <native>
 
 /// Writes a long to standard error without a trailing newline and returns the consumed value.
-fun print_error(text: long): Effect[long] = ???
+fun print_error(text: long): Effect[long] = <native>
 
 /// Writes a float to standard error without a trailing newline and returns the consumed value.
-fun print_error(text: float): Effect[float] = ???
+fun print_error(text: float): Effect[float] = <native>
 
 /// Writes a double to standard error without a trailing newline and returns the consumed value.
-fun print_error(text: double): Effect[double] = ???
+fun print_error(text: double): Effect[double] = <native>
 
 /// Writes a bool to standard error without a trailing newline and returns the consumed value.
-fun print_error(text: bool): Effect[bool] = ???
+fun print_error(text: bool): Effect[bool] = <native>
 
 /// Writes bytes to standard error without a trailing newline and returns the consumed value.
-fun print_error(text: list[byte]): Effect[list[byte]] = ???
+fun print_error(text: list[byte]): Effect[list[byte]] = <native>
 
 /// Writes a string to standard error followed by a newline and returns the consumed value.
-fun println_error(text: string): Effect[string] = ???
+fun println_error(text: string): Effect[string] = <native>
 
 /// Writes a byte to standard error followed by a newline and returns the consumed value.
-fun println_error(text: byte): Effect[byte] = ???
+fun println_error(text: byte): Effect[byte] = <native>
 
 /// Writes an int to standard error followed by a newline and returns the consumed value.
-fun println_error(text: int): Effect[int] = ???
+fun println_error(text: int): Effect[int] = <native>
 
 /// Writes a long to standard error followed by a newline and returns the consumed value.
-fun println_error(text: long): Effect[long] = ???
+fun println_error(text: long): Effect[long] = <native>
 
 /// Writes a float to standard error followed by a newline and returns the consumed value.
-fun println_error(text: float): Effect[float] = ???
+fun println_error(text: float): Effect[float] = <native>
 
 /// Writes a double to standard error followed by a newline and returns the consumed value.
-fun println_error(text: double): Effect[double] = ???
+fun println_error(text: double): Effect[double] = <native>
 
 /// Writes a bool to standard error followed by a newline and returns the consumed value.
-fun println_error(text: bool): Effect[bool] = ???
+fun println_error(text: bool): Effect[bool] = <native>
 
 /// Writes bytes to standard error followed by a newline and returns the consumed value.
-fun println_error(text: list[byte]): Effect[list[byte]] = ???
+fun println_error(text: list[byte]): Effect[list[byte]] = <native>
 
 /// Reads one line from standard input, or None at end of input.
-fun read_line(): Effect[Option[string]] = ???
+fun read_line(): Effect[Option[string]] = <native>

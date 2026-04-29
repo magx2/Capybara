@@ -231,7 +231,8 @@ public class CompiledExpressionPrinter {
     }
 
     private static String printLinkedNothingValue(CompiledNothingValue linkedNothingValue, int level) {
-        return "??? (" + linkedNothingValue.message() + linkedNothingValue.position().map(p -> " @ " + p.line() + ":" + p.column()).orElse("") + ")";
+        var literal = linkedNothingValue.message().contains("`<native>`") ? "<native>" : "???";
+        return literal + " (" + linkedNothingValue.message() + linkedNothingValue.position().map(p -> " @ " + p.line() + ":" + p.column()).orElse("") + ")";
     }
 
     private static String tabs(int level) {

@@ -7079,7 +7079,7 @@ public class CapybaraExpressionCompiler {
     }
 
     private Result<CompiledExpression> linkNothingValue(NothingValue value) {
-        return Result.success(new CompiledNothingValue(value.position(), "Encountered `???`"));
+        return Result.success(new CompiledNothingValue(value.position(), "Encountered `" + value.literal() + "`"));
     }
 
     private Result<CompiledExpression> linkValue(Value value, Scope scope) {

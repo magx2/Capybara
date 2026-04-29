@@ -1296,6 +1296,9 @@ public class CapybaraParser {
                 if (literal.NOTHING_LITERAL() != null) {
                     return new NothingValue(position(literal.NOTHING_LITERAL()));
                 }
+                if (literal.NATIVE_LITERAL() != null) {
+                    return new NothingValue(position(literal.NATIVE_LITERAL()), literal.NATIVE_LITERAL().getText());
+                }
                 if (literal.REGEX_LITERAL() != null) {
                     return regexLiteralExpression(literal.REGEX_LITERAL());
                 }
@@ -1582,6 +1585,9 @@ public class CapybaraParser {
                 }
                 if (literal.NOTHING_LITERAL() != null) {
                     return new NothingValue(position(literal.NOTHING_LITERAL()));
+                }
+                if (literal.NATIVE_LITERAL() != null) {
+                    return new NothingValue(position(literal.NATIVE_LITERAL()), literal.NATIVE_LITERAL().getText());
                 }
                 if (literal.REGEX_LITERAL() != null) {
                     return regexLiteralExpression(literal.REGEX_LITERAL());
@@ -2649,7 +2655,7 @@ public class CapybaraParser {
                     value.values().stream().map(argument -> shiftInterpolationPositions(argument, stringPosition, interpolationOffset)).toList(),
                     shiftPosition(value.position(), stringPosition, interpolationOffset)
             );
-            case NothingValue value -> new NothingValue(shiftPosition(value.position(), stringPosition, interpolationOffset));
+            case NothingValue value -> new NothingValue(shiftPosition(value.position(), stringPosition, interpolationOffset), value.literal());
             case ReduceExpression value -> new ReduceExpression(
                     shiftInterpolationPositions(value.initialValue(), stringPosition, interpolationOffset),
                     value.accumulatorName(),
@@ -3247,4 +3253,3 @@ public class CapybaraParser {
     }
 
 }
-
