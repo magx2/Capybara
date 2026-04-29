@@ -818,6 +818,9 @@ public final class JavaGenerator implements Generator {
         if (isCapyLangSystemCurrentMillisMethod(ownerPackage, ownerName, method)) {
             return mapCapyLangSystemCurrentMillisMethod(method, visibility, methodTypeParameters);
         }
+        if (isCapyLangSystemNanoTimeMethod(ownerPackage, ownerName, method)) {
+            return mapCapyLangSystemNanoTimeMethod(method, visibility, methodTypeParameters);
+        }
         if (isCapyIoConsoleMethod(ownerPackage, ownerName, method)) {
             return mapCapyIoConsoleMethod(method, visibility, methodTypeParameters);
         }
@@ -857,6 +860,21 @@ public final class JavaGenerator implements Generator {
         return mapJavaDoc(method.comments())
                + visibility + "static " + methodTypeParameters + method.returnType() + " " + mapMethodName(method.name()) + "() {\n"
                + "return capy.lang.Effect.delay(java.lang.System::currentTimeMillis);\n"
+               + "}\n";
+    }
+
+    private boolean isCapyLangSystemNanoTimeMethod(String ownerPackage, String ownerName, JavaMethod method) {
+        return "capy.lang".equals(ownerPackage)
+               && "System".equals(ownerName)
+               && "nanoTime".equals(mapMethodName(method.name()))
+               && method.parameters().isEmpty()
+               && isEffectTypeReference(method.returnType().toString());
+    }
+
+    private String mapCapyLangSystemNanoTimeMethod(JavaMethod method, String visibility, String methodTypeParameters) {
+        return mapJavaDoc(method.comments())
+               + visibility + "static " + methodTypeParameters + method.returnType() + " " + mapMethodName(method.name()) + "() {\n"
+               + "return capy.lang.Effect.delay(java.lang.System::nanoTime);\n"
                + "}\n";
     }
 

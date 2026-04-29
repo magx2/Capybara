@@ -5,21 +5,21 @@ from /capy/test/CapyTest import { * }
 
 fun tests(): Effect[TestFile] =
     test_file("/capy/lang/ResultTest.cfun", [
-        test("should map success", should_map_success()),
-        test("should map error", should_map_error()),
-        test("should map positive", should_map_positive()),
-        test("should map negative", should_map_negative()),
-        test("should flatmap success", should_flatmap_success()),
-        test("should flatmap error", should_flatmap_error()),
-        test("should flatmap positive", should_flatmap_positive()),
-        test("should flatmap negative", should_flatmap_negative()),
-        test("should flatmap zero", should_flatmap_zero()),
-        test("should return value when result succeeded", should_return_value_when_result_succeeded()),
-        test("should return other when result failed", should_return_other_when_result_failed()),
-        test("should return this result if succeeded", should_return_this_result_if_succeeded()),
-        test("should return other result if failed", should_return_other_result_if_failed()),
-        test("should reduce success result", should_reduce_success_result()),
-        test("should reduce error result", should_reduce_error_result()),
+        test("should map success", () => should_map_success()),
+        test("should map error", () => should_map_error()),
+        test("should map positive", () => should_map_positive()),
+        test("should map negative", () => should_map_negative()),
+        test("should flatmap success", () => should_flatmap_success()),
+        test("should flatmap error", () => should_flatmap_error()),
+        test("should flatmap positive", () => should_flatmap_positive()),
+        test("should flatmap negative", () => should_flatmap_negative()),
+        test("should flatmap zero", () => should_flatmap_zero()),
+        test("should return value when result succeeded", () => should_return_value_when_result_succeeded()),
+        test("should return other when result failed", () => should_return_other_when_result_failed()),
+        test("should return this result if succeeded", () => should_return_this_result_if_succeeded()),
+        test("should return other result if failed", () => should_return_other_result_if_failed()),
+        test("should reduce success result", () => should_reduce_success_result()),
+        test("should reduce error result", () => should_reduce_error_result()),
     ])
 
 fun should_map_success(): Assert =

@@ -79,7 +79,7 @@ fun concat_inferred_parent_subtype_lists(values: list[string]): OutcomeBatch =
     batch_outcomes(succeeded + failed)
 
 fun build_test_file_from_three_inferred_test_case_lists(): int =
-    let parse_test_cases = ["1.2.3"] |> [], (acc, value) => acc + test("parse {value}", assert_that(value).is_equal_to(value))
-    let to_string_test_cases = ["1.2.3"] |> [], (acc, value) => acc + test("stringify {value}", assert_that(value).is_equal_to(value))
-    let failed_test_cases = ["1"] |> [], (acc, value) => acc + test("fail {value}", assert_that(value).is_equal_to(value))
+    let parse_test_cases = ["1.2.3"] |> [], (acc, value) => acc + test("parse {value}", () => assert_that(value).is_equal_to(value))
+    let to_string_test_cases = ["1.2.3"] |> [], (acc, value) => acc + test("stringify {value}", () => assert_that(value).is_equal_to(value))
+    let failed_test_cases = ["1"] |> [], (acc, value) => acc + test("fail {value}", () => assert_that(value).is_equal_to(value))
     test_file("/dev/capylang/test/EmptyLiteralInference.cfun", parse_test_cases + to_string_test_cases + failed_test_cases).unsafe_run().test_cases.size

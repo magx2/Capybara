@@ -4,12 +4,12 @@ from /capy/test/CapyTest import { * }
 
 fun tests(): Effect[TestFile] =
     test_file("/capy/test/CollectionAssertTest.cfun", [
-        test("should assert list", should_assert_list()),
-        test("should assert empty list", should_assert_empty_list()),
-        test("should assert set", should_assert_set()),
-        test("should assert empty set", should_assert_empty_set()),
-        test("should assert dict", should_assert_dict()),
-        test("should assert empty dict", should_assert_empty_dict()),
+        test("should assert list", () => should_assert_list()),
+        test("should assert empty list", () => should_assert_empty_list()),
+        test("should assert set", () => should_assert_set()),
+        test("should assert empty set", () => should_assert_empty_set()),
+        test("should assert dict", () => should_assert_dict()),
+        test("should assert empty dict", () => should_assert_empty_dict()),
     ])
 
 fun should_assert_list(): Assert =

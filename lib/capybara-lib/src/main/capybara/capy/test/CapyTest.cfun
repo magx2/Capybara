@@ -7,9 +7,10 @@ from /capy/lang/Seq import {*}
 from /capy/lang/Effect import { * }
 from /capy/date_time/Clock import { now }
 from /capy/date_time/DateTime import { * }
+from /capy/lang/System import { nano_time }
 
 data TestFile { file_name: string, test_cases: list[TestCase], timestamp: string }
-data TestCase { name: string, result: TestResult, assertions_count: int, execution_time: long }
+data TestCase { name: string, result: TestResult, assertions_count: int, execution_time: double }
 type TestResult = Passed | Failed
 single Passed
 data Failed { message: string, type: string }
@@ -23,15 +24,16 @@ fun test_file(file_name: string, test_cases: list[Effect[TestCase]]): Effect[Tes
         timestamp: current.to_iso_8601()
     }
 
-fun test(name: string, assert: Assert): Effect[TestCase] =
-    let start <- now()
+fun test(name: string, assert_supplier: () => Assert): Effect[TestCase] =
+    let start <- nano_time()
+    let assert = assert_supplier()
     let result = execute(assert.assertions)
-    let end <- now()
+    let end <- nano_time()
     TestCase {
         name: name,
         result: result,
         assertions_count: assert.assertions.size,
-        execution_time: end.timestamp() - start.timestamp()
+        execution_time: (end - start) / 1000000000.0
     }
 
 private fun execute_test_cases(test_cases: list[Effect[TestCase]]): Effect[list[TestCase]] =
@@ -179,7 +181,7 @@ private fun junit_run_test(test_file: TestFile): TestOutput =
     let failures = test_file.test_cases | tc => tc.failed() |> 0, (acc, failed) => if failed then acc + 1 else acc
     let assertions = test_file.test_cases | tc => tc.assertions_count |> 0, (acc, count) => acc + count
     let suite_name = junit_escape_xml_attribute(test_file.file_name)
-    let time = test_file.test_cases | tc => tc.execution_time |> 0L, (acc, t) => acc + t
+    let time = test_file.test_cases | tc => tc.execution_time |> 0.0, (acc, t) => acc + t
     let content = "<testsuite name=\"{suite_name}\" tests=\"{tests}\" failures=\"{failures}\" errors=\"0\" skipped=\"0\" assertions=\"{assertions}\" time=\"{time}\" timestamp=\"{test_file.timestamp}\">"
     + (test_file.test_cases | tc => junit_run_test_case(test_file.file_name, tc) |> '', (acc, tc) => acc + tc)
     + '</testsuite>'
