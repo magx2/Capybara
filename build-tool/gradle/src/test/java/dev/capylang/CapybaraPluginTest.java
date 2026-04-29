@@ -53,13 +53,14 @@ class CapybaraPluginTest {
         var testSourceDir = Files.createDirectories(tempDir.resolve("src/test/capybara/bar"));
         Files.writeString(testSourceDir.resolve("TestModule.cfun"), """
                 from /capy/test/Assert import { * }
+                from /capy/lang/Effect import { * }
                 from /capy/test/CapyTest import { * }
                 from /foo/Lib import { forty_two }
 
                 fun works(): Assert =
                     assert_that(forty_two()).is_equal_to(42)
 
-                fun tests(): TestFile =
+                fun tests(): Effect[TestFile] =
                     test_file("/bar/TestModule.cfun", [
                         test("works", works())
                     ])
@@ -98,12 +99,13 @@ class CapybaraPluginTest {
         var testSourceDir = Files.createDirectories(tempDir.resolve("src/test/capybara/bar"));
         Files.writeString(testSourceDir.resolve("TestModule.cfun"), """
                 from /capy/test/Assert import { * }
+                from /capy/lang/Effect import { * }
                 from /capy/test/CapyTest import { * }
 
                 fun works(): Assert =
                     assert_that(42).is_equal_to(42)
 
-                fun tests(): TestFile =
+                fun tests(): Effect[TestFile] =
                     test_file("/bar/TestModule.cfun", [
                         test("works", works())
                     ])
@@ -132,13 +134,14 @@ class CapybaraPluginTest {
         var testSourceDir = Files.createDirectories(tempDir.resolve("src/test/capybara/bar"));
         Files.writeString(testSourceDir.resolve("TestModule.cfun"), """
                 from /capy/test/Assert import { * }
+                from /capy/lang/Effect import { * }
                 from /capy/test/CapyTest import { * }
                 from /foo/Lib import { forty_two }
 
                 fun works(): Assert =
                     assert_that(forty_two()).is_equal_to(42)
 
-                fun tests(): TestFile =
+                fun tests(): Effect[TestFile] =
                     test_file("/bar/TestModule.cfun", [
                         test("works", works())
                     ])
@@ -159,12 +162,13 @@ class CapybaraPluginTest {
         var testSourceDir = Files.createDirectories(tempDir.resolve("src/test/capybara/bar"));
         Files.writeString(testSourceDir.resolve("TestModule.cfun"), """
                 from /capy/test/Assert import { * }
+                from /capy/lang/Effect import { * }
                 from /capy/test/CapyTest import { * }
 
                 fun works(): Assert =
                     assert_that(42).is_equal_to(42)
 
-                fun tests(): TestFile =
+                fun tests(): Effect[TestFile] =
                     test_file("/bar/TestModule.cfun", [
                         test("works", works())
                     ])
@@ -188,12 +192,13 @@ class CapybaraPluginTest {
         var testSourceDir = Files.createDirectories(tempDir.resolve("src/test/capybara/bar"));
         Files.writeString(testSourceDir.resolve("TestModule.cfun"), """
                 from /capy/test/Assert import { * }
+                from /capy/lang/Effect import { * }
                 from /capy/test/CapyTest import { * }
 
                 fun works(): Assert =
                     assert_that(42).is_equal_to(42)
 
-                fun tests(): TestFile =
+                fun tests(): Effect[TestFile] =
                     test_file("/bar/TestModule.cfun", [
                         test("works", works())
                     ])
@@ -234,13 +239,14 @@ class CapybaraPluginTest {
         var testSourceDir = Files.createDirectories(tempDir.resolve("src/test/capybara/bar"));
         Files.writeString(testSourceDir.resolve("TestModule.cfun"), """
                 from /capy/test/Assert import { * }
+                from /capy/lang/Effect import { * }
                 from /capy/test/CapyTest import { * }
                 from /foo/Lib import { forty_two }
 
                 fun works(): Assert =
                     assert_that(forty_two()).is_equal_to(42)
 
-                fun tests(): TestFile =
+                fun tests(): Effect[TestFile] =
                     test_file("/bar/TestModule.cfun", [
                         test("works", works())
                     ])
@@ -269,13 +275,14 @@ class CapybaraPluginTest {
         var testSourceDir = Files.createDirectories(tempDir.resolve("src/test/capybara/bar"));
         Files.writeString(testSourceDir.resolve("TestModule.cfun"), """
                 from /capy/test/Assert import { * }
+                from /capy/lang/Effect import { * }
                 from /capy/test/CapyTest import { * }
                 from /foo/Lib import { forty_two }
 
                 fun works(): Assert =
                     assert_that(forty_two()).is_equal_to(42)
 
-                fun tests(): TestFile =
+                fun tests(): Effect[TestFile] =
                     test_file("/bar/TestModule.cfun", [
                         test("works", works())
                     ])
@@ -337,12 +344,13 @@ class CapybaraPluginTest {
         Files.createDirectories(testSourceDir);
         Files.writeString(testSourceDir.resolve("TestModule.cfun"), """
                 from /capy/test/Assert import { * }
+                from /capy/lang/Effect import { * }
                 from /capy/test/CapyTest import { * }
 
                 fun works(): Assert =
                     assert_that(42).is_equal_to(42)
 
-                fun tests(): TestFile =
+                fun tests(): Effect[TestFile] =
                     test_file("/bar/TestModule.cfun", [
                         test("works", works())
                     ])
@@ -414,12 +422,13 @@ class CapybaraPluginTest {
         var capybaraTestSourceDir = Files.createDirectories(tempDir.resolve("src/test/capybara/bar"));
         Files.writeString(capybaraTestSourceDir.resolve("TestModule.cfun"), """
                 from /capy/test/Assert import { * }
+                from /capy/lang/Effect import { * }
                 from /capy/test/CapyTest import { * }
 
                 fun works(): Assert =
                     assert_that(42).is_equal_to(42)
 
-                fun tests(): TestFile =
+                fun tests(): Effect[TestFile] =
                     test_file("/bar/TestModule.cfun", [
                         test("works", works())
                     ])
@@ -438,12 +447,13 @@ class CapybaraPluginTest {
         var capybaraTestSourceDir = Files.createDirectories(tempDir.resolve("src/test/capybara/bar"));
         Files.writeString(capybaraTestSourceDir.resolve("TestModule.cfun"), """
                 from /capy/test/Assert import { * }
+                from /capy/lang/Effect import { * }
                 from /capy/test/CapyTest import { * }
 
                 fun works(): Assert =
                     assert_that(42).is_equal_to(42)
 
-                fun tests(): TestFile =
+                fun tests(): Effect[TestFile] =
                     test_file("/bar/TestModule.cfun", [
                         test("works", works())
                     ])
@@ -699,12 +709,13 @@ class CapybaraPluginTest {
         var capybaraTestSourceDir = Files.createDirectories(tempDir.resolve("src/test/capybara/bar"));
         Files.writeString(capybaraTestSourceDir.resolve("TestModule.cfun"), """
                 from /capy/test/Assert import { * }
+                from /capy/lang/Effect import { * }
                 from /capy/test/CapyTest import { * }
 
                 fun works(): Assert =
                     assert_that(42).is_equal_to(42)
 
-                fun tests(): TestFile =
+                fun tests(): Effect[TestFile] =
                     test_file("/bar/TestModule.cfun", [
                         test("works", works())
                     ])

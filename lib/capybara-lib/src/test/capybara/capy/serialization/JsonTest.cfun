@@ -1,8 +1,9 @@
 from /capy/test/Assert import { * }
+from /capy/lang/Effect import { * }
 from /capy/test/CapyTest import { * }
 from /capy/serialization/Json import { * }
 
-fun tests(): TestFile =
+fun tests(): Effect[TestFile] =
     test_file("/capy/lang/Json.cfun", [
         test("should serialize simple object", test_serialize_simple_object()),
         test("should serialize empty object", test_empty()),

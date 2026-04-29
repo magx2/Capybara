@@ -181,14 +181,15 @@ public class TestRunner {
     private static List<?> invokeGatherTests(Method gatherTestsMethod) {
         try {
             var result = gatherTestsMethod.invoke(null);
-            if (!(result instanceof List<?> list)) {
+            var root = unsafeRunEffect(result);
+            if (!(root instanceof List<?> rootList)) {
                 var resultType = result == null ? "null" : result.getClass().getCanonicalName();
-                LOG.severe(() -> "Method `%s()` returned `%s` instead of `List<TestFile>`"
+                LOG.severe(() -> "Method `%s()` returned `%s` instead of `List<TestFile>` or `Effect[List<TestFile]]`"
                         .formatted(GATHER_TESTS_METHOD_NAME, resultType));
-                throw new IllegalStateException("Method `%s()` should return `List<TestFile>`, but it returned `%s`"
+                throw new IllegalStateException("Method `%s()` should return `List<TestFile>` or `Effect[List<TestFile]]`, but it returned `%s`"
                         .formatted(GATHER_TESTS_METHOD_NAME, resultType));
             }
-            return list;
+            return flattenTestValues(rootList);
         } catch (IllegalAccessException e) {
             LOG.log(Level.SEVERE, "Method `%s()` should be public".formatted(GATHER_TESTS_METHOD_NAME), e);
             throw new IllegalStateException("Method `%s()` should be public".formatted(GATHER_TESTS_METHOD_NAME), e);
@@ -196,6 +197,45 @@ public class TestRunner {
             LOG.log(Level.SEVERE, "Cannot invoke static method `%s()`".formatted(GATHER_TESTS_METHOD_NAME), e);
             throw new IllegalStateException("Cannot invoke static method `%s()`".formatted(GATHER_TESTS_METHOD_NAME), e);
         }
+    }
+
+    private static List<?> flattenTestValues(Object value) {
+        value = unsafeRunEffect(value);
+        if (value == null) {
+            return List.of();
+        }
+        if (value instanceof List<?> list) {
+            return list.stream()
+                    .flatMap(item -> flattenTestValues(item).stream())
+                    .toList();
+        }
+        return List.of(value);
+    }
+
+    private static Object unsafeRunEffect(Object value) {
+        if (value == null || !isEffectClass(value.getClass())) {
+            return value;
+        }
+        try {
+            return value.getClass().getMethod("unsafeRun").invoke(value);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException("Unable to run Capybara Effect returned by test function", e);
+        }
+    }
+
+    private static boolean isEffectClass(Class<?> type) {
+        if (type == null) {
+            return false;
+        }
+        if ("capy.lang.Effect".equals(type.getCanonicalName()) || "Effect".equals(type.getSimpleName())) {
+            return true;
+        }
+        for (var interfaceType : type.getInterfaces()) {
+            if (isEffectClass(interfaceType)) {
+                return true;
+            }
+        }
+        return isEffectClass(type.getSuperclass());
     }
 
     @SuppressWarnings({"rawtypes", "unchecked"})

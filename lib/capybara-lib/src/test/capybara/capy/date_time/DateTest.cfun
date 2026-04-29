@@ -1,10 +1,11 @@
 from /capy/date_time/Date import { * }
 from /capy/test/Assert import { * }
+from /capy/lang/Effect import { * }
 from /capy/lang/Math import { * }
 from /capy/lang/Result import { * }
 from /capy/test/CapyTest import { * }
 
-fun tests(): TestFile =
+fun tests(): Effect[TestFile] =
     let test_cases = [
         // valid dates - first day
         (1, JANUARY, 2020, true),

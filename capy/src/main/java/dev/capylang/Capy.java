@@ -866,11 +866,17 @@ public class Capy {
         return "TestSuiteResults".equals(returnType.getSimpleName())
                || "TestSuites".equals(returnType.getSimpleName())
                || "TestFile".equals(returnType.getSimpleName())
+               || isEffectClass(returnType)
                || List.class.isAssignableFrom(returnType);
     }
 
     private static List<SuiteResult> invokeTestMethod(Method method) throws InvocationTargetException, IllegalAccessException {
         var value = method.invoke(null);
+        return toSuiteResults(value);
+    }
+
+    private static List<SuiteResult> toSuiteResults(Object value) {
+        value = unsafeRunEffect(value);
         if (value == null) {
             return List.of();
         }
@@ -879,10 +885,6 @@ public class Capy {
                     .flatMap(item -> toSuiteResults(item).stream())
                     .toList();
         }
-        return toSuiteResults(value);
-    }
-
-    private static List<SuiteResult> toSuiteResults(Object value) {
         if (isSuiteResultObject(value)) {
             return List.of(toSuiteResult(value));
         }
@@ -905,6 +907,32 @@ public class Capy {
 
     private static boolean isTestFileObject(Object value) {
         return value != null && "TestFile".equals(value.getClass().getSimpleName());
+    }
+
+    private static Object unsafeRunEffect(Object value) {
+        if (value == null || !isEffectClass(value.getClass())) {
+            return value;
+        }
+        try {
+            return value.getClass().getMethod("unsafeRun").invoke(value);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException("Unable to run Capybara Effect returned by test function", e);
+        }
+    }
+
+    private static boolean isEffectClass(Class<?> type) {
+        if (type == null) {
+            return false;
+        }
+        if ("capy.lang.Effect".equals(type.getCanonicalName()) || "Effect".equals(type.getSimpleName())) {
+            return true;
+        }
+        for (var interfaceType : type.getInterfaces()) {
+            if (isEffectClass(interfaceType)) {
+                return true;
+            }
+        }
+        return isEffectClass(type.getSuperclass());
     }
 
     private static SuiteResult toSuiteResult(Object suiteResult) {
@@ -1279,7 +1307,7 @@ public class Capy {
         var testFunctions = discoverTestFunctions(linkedProgram);
         log.info("Discovered " + testFunctions.size() + " Capybara test producers in " + Duration.ofNanos(System.nanoTime() - discoverStartedAt));
         if (testFunctions.isEmpty()) {
-            throw new CliException("No Capybara functions returning TestFile or list[TestFile] were found.");
+            throw new CliException("No Capybara functions returning TestFile, list[TestFile], Effect[TestFile], or Effect[list[TestFile]] were found.");
         }
 
         var outputModules = new java.util.ArrayList<>(linkedProgram.modules());
@@ -1301,7 +1329,10 @@ public class Capy {
     }
 
     private static boolean isTestProducerType(dev.capylang.compiler.CompiledType returnType) {
-        return isTestFileType(returnType.name()) || isTestFileListType(returnType);
+        return isTestFileType(returnType.name())
+               || isTestFileListType(returnType)
+               || isEffectTestProducerType(returnType)
+               || isEffectTestFileListType(returnType);
     }
 
     private static boolean isTestFileType(String typeName) {
@@ -1315,6 +1346,58 @@ public class Capy {
                && isTestFileType(listType.elementType().name());
     }
 
+    private static boolean isEffectTestFileListType(dev.capylang.compiler.CompiledType returnType) {
+        return returnType instanceof CollectionLinkedType.CompiledList listType
+               && isEffectTestProducerType(listType.elementType());
+    }
+
+    private static boolean isEffectTestProducerType(dev.capylang.compiler.CompiledType returnType) {
+        if (!isEffectType(returnType)) {
+            return false;
+        }
+        var typeParameters = typeParameters(returnType);
+        if (typeParameters.size() != 1) {
+            return false;
+        }
+        var payload = typeParameters.getFirst();
+        return isTestFileTypeDescriptor(payload) || isTestFileListDescriptor(payload);
+    }
+
+    private static boolean isEffectType(dev.capylang.compiler.CompiledType returnType) {
+        var normalized = normalizeModulePath(returnType.name());
+        return "Effect".equals(returnType.name())
+               || normalized.endsWith("/Effect")
+               || normalized.endsWith("/Effect.Effect")
+               || normalized.endsWith(".Effect");
+    }
+
+    private static List<String> typeParameters(dev.capylang.compiler.CompiledType type) {
+        return switch (type) {
+            case dev.capylang.compiler.CompiledDataType dataType -> dataType.typeParameters();
+            case dev.capylang.compiler.CompiledDataParentType parentType -> parentType.typeParameters();
+            default -> List.of();
+        };
+    }
+
+    private static boolean isTestFileTypeDescriptor(String descriptor) {
+        var rawType = stripGenericDescriptor(descriptor);
+        return isTestFileType(rawType);
+    }
+
+    private static boolean isTestFileListDescriptor(String descriptor) {
+        var normalized = descriptor.trim();
+        if (!normalized.startsWith("list[") || !normalized.endsWith("]")) {
+            return false;
+        }
+        return isTestFileTypeDescriptor(normalized.substring("list[".length(), normalized.length() - 1));
+    }
+
+    private static String stripGenericDescriptor(String descriptor) {
+        var normalized = descriptor.trim();
+        var genericStart = normalized.indexOf('[');
+        return genericStart >= 0 ? normalized.substring(0, genericStart) : normalized;
+    }
+
     private static CompiledModule createCapyTestRuntimeModule(List<TestFunctionRef> testFunctions) {
         return new CompiledModule(
                 CAP_TEST_RUNTIME_MODULE.name(),
@@ -1322,7 +1405,7 @@ public class Capy {
                 java.util.Map.of(),
                 List.of(new CompiledFunction(
                 "gather_tests",
-                new CollectionLinkedType.CompiledList(testFileType()),
+                gatheredTestValuesType(),
                 List.of(),
                 buildGatherTestsExpression(testFunctions),
                 List.of(),
@@ -1333,11 +1416,10 @@ public class Capy {
     }
 
     private static CompiledExpression buildGatherTestsExpression(List<TestFunctionRef> testFunctions) {
-        var testFileListType = new CollectionLinkedType.CompiledList(testFileType());
         return testFunctions.stream()
                 .map(Capy::toGatherTestsExpression)
-                .reduce((left, right) -> new CompiledInfixExpression(left, InfixOperator.PLUS, right, testFileListType))
-                .orElseGet(() -> new CompiledNewList(List.of(), testFileListType));
+                .reduce((left, right) -> new CompiledInfixExpression(left, InfixOperator.PLUS, right, gatheredTestValuesType()))
+                .orElseGet(() -> new CompiledNewList(List.of(), gatheredTestValuesType()));
     }
 
     private static CompiledExpression toGatherTestsExpression(TestFunctionRef testFunction) {
@@ -1346,10 +1428,23 @@ public class Capy {
                 List.of(),
                 testFunction.function().returnType()
         );
-        if (isTestFileListType(testFunction.function().returnType())) {
-            return functionCall;
+        if (isListTestProducerType(testFunction.function().returnType())) {
+            return new CompiledInfixExpression(
+                    new CompiledNewList(List.of(), gatheredTestValuesType()),
+                    InfixOperator.PLUS,
+                    functionCall,
+                    gatheredTestValuesType()
+            );
         }
-        return new CompiledNewList(List.of(functionCall), new CollectionLinkedType.CompiledList(testFileType()));
+        return new CompiledNewList(List.of(functionCall), gatheredTestValuesType());
+    }
+
+    private static boolean isListTestProducerType(dev.capylang.compiler.CompiledType returnType) {
+        return isTestFileListType(returnType) || isEffectTestFileListType(returnType);
+    }
+
+    private static CollectionLinkedType.CompiledList gatheredTestValuesType() {
+        return new CollectionLinkedType.CompiledList(dev.capylang.compiler.PrimitiveLinkedType.ANY);
     }
 
     private static dev.capylang.compiler.CompiledDataType testFileType() {
@@ -1695,7 +1790,6 @@ public class Capy {
     record CompilationArtifacts(CompiledProgram program, List<ModuleRef> sourceModules) {
     }
 }
-
 
 
 

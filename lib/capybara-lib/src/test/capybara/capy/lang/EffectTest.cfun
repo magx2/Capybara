@@ -2,7 +2,7 @@ from /capy/test/Assert import { * }
 from /capy/lang/Effect import { * }
 from /capy/test/CapyTest import { * }
 
-fun tests(): TestFile =
+fun tests(): Effect[TestFile] =
     test_file("/capy/lang/Effect.cfun", [
         test("should run pure value", should_run_pure_value()),
         test("should map value", should_map_value()),

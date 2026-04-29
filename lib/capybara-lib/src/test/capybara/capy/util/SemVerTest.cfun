@@ -1,9 +1,10 @@
 from /capy/test/Assert import { * }
+from /capy/lang/Effect import { * }
 from /capy/test/CapyTest import { * }
 from /capy/util/SemVer import { * }
 from /capy/lang/Option import { * }
 
-fun tests(): TestFile =
+fun tests(): Effect[TestFile] =
     let test_cases = {
         "1.2.3" : SemVer { 1, 2, 3, None {}, None {} },
         "0.0.0" : SemVer { 0, 0, 0, None {}, None {} },

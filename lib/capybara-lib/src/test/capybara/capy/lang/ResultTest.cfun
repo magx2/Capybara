@@ -1,8 +1,9 @@
 from /capy/test/Assert import { * }
+from /capy/lang/Effect import { * }
 from /capy/lang/Result import { * }
 from /capy/test/CapyTest import { * }
 
-fun tests(): TestFile =
+fun tests(): Effect[TestFile] =
     test_file("/capy/lang/ResultTest.cfun", [
         test("should map success", should_map_success()),
         test("should map error", should_map_error()),

@@ -2,6 +2,9 @@ from Assert import {*}
 from /capy/lang/Option import { None }
 from /capy/io/Path import {*}
 from /capy/lang/Seq import {*}
+from /capy/lang/Effect import { * }
+from /capy/date_time/Clock import { now }
+from /capy/date_time/DateTime import { * }
 
 data TestFile { file_name: string, test_cases: list[TestCase], timestamp: string }
 data TestCase { name: string, result: TestResult, assertions_count: int, execution_time: long }
@@ -9,11 +12,12 @@ type TestResult = Passed | Failed
 single Passed
 data Failed { message: string, type: string }
 
-fun test_file(file_name: string, test_cases: list[TestCase]): TestFile =
+fun test_file(file_name: string, test_cases: list[TestCase]): Effect[TestFile] =
+    let current <- now()
     TestFile {
         file_name: file_name,
         test_cases: test_cases,
-        timestamp: '1970-01-01T00:00:00Z' // todo implement date-time in cfun
+        timestamp: current.to_iso_8601()
     }
 
 fun test(name: string, assert: Assert): TestCase =
