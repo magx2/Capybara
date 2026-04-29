@@ -73,6 +73,7 @@ public class Capy {
     private static final String PACKAGE_FILE = "capy.cbin";
     private static final String PROGRAM_FILE = "program.json";
     private static final String MODULE_FILE = "capy.yml";
+    private static final String CAPY_EFFECT_CLASS_NAME = "capy.lang.Effect";
     private static final String VERSION_RESOURCE = "/capybara-version.txt";
     private static final String JAVA_LIB_RESOURCE_DIR = "/java-lib-src";
     private static final ModuleRef CAP_TEST_RUNTIME_MODULE = new ModuleRef("CapyTestRuntime", "capy/test");
@@ -924,7 +925,7 @@ public class Capy {
         if (type == null) {
             return false;
         }
-        if ("capy.lang.Effect".equals(type.getCanonicalName()) || "Effect".equals(type.getSimpleName())) {
+        if (CAPY_EFFECT_CLASS_NAME.equals(type.getCanonicalName())) {
             return true;
         }
         for (var interfaceType : type.getInterfaces()) {
@@ -1790,7 +1791,6 @@ public class Capy {
     record CompilationArtifacts(CompiledProgram program, List<ModuleRef> sourceModules) {
     }
 }
-
 
 
 
