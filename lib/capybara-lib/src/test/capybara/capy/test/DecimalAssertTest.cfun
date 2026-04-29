@@ -1,11 +1,12 @@
 from /capy/test/Assert import { * }
+from /capy/lang/Effect import { * }
 from /capy/test/CapyTest import { * }
 
-fun tests(): TestFile =
+fun tests(): Effect[TestFile] =
     test_file("/capy/test/DecimalAssertTest.cfun", [
-        test("should assert int decimals", should_assert_int_decimals()),
-        test("should assert long decimals", should_assert_long_decimals()),
-        test("should assert double decimals", should_assert_double_decimals()),
+        test("should assert int decimals", () => should_assert_int_decimals()),
+        test("should assert long decimals", () => should_assert_long_decimals()),
+        test("should assert double decimals", () => should_assert_double_decimals()),
     ])
 
 fun should_assert_int_decimals(): Assert =
