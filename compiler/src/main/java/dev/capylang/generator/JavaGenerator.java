@@ -818,6 +818,9 @@ public final class JavaGenerator implements Generator {
         if (isCapyIoConsoleMethod(ownerPackage, ownerName, method)) {
             return mapCapyIoConsoleMethod(method, visibility, methodTypeParameters);
         }
+        if (isCapyIoIOMethod(ownerPackage, ownerName, method)) {
+            return mapCapyIoIOMethod(method, visibility, methodTypeParameters);
+        }
         if (isCapyTestTimedMethod(ownerPackage, ownerName, method)) {
             var nameParameter = method.parameters().get(0).generatedName();
             var assertParameter = method.parameters().get(1).generatedName();
@@ -874,6 +877,33 @@ public final class JavaGenerator implements Generator {
         return mapJavaDoc(method.comments())
                + visibility + "static " + methodTypeParameters + method.returnType() + " " + methodName + "(" + mapFunctionParameters(method.parameters()) + ") {\n"
                + "return capy.lang.Effect.delay(() -> " + runtimeCall + ");\n"
+               + "}\n";
+    }
+
+    private boolean isCapyIoIOMethod(String ownerPackage, String ownerName, JavaMethod method) {
+        if (!"capy.io".equals(ownerPackage) || !"IO".equals(ownerName) || !isEffectTypeReference(method.returnType().toString())) {
+            return false;
+        }
+        var methodName = mapMethodName(method.name());
+        return switch (methodName) {
+            case "readText", "readLines", "readBytes", "exists", "isFile", "isDirectory", "size",
+                 "createFile", "createDirectory", "createDirectories", "listEntries", "delete" ->
+                    method.parameters().size() == 1;
+            case "writeText", "writeLines", "writeBytes", "appendText", "appendLines", "appendBytes",
+                 "copy", "copyReplace", "move", "moveReplace" ->
+                    method.parameters().size() == 2;
+            default -> false;
+        };
+    }
+
+    private String mapCapyIoIOMethod(JavaMethod method, String visibility, String methodTypeParameters) {
+        var methodName = mapMethodName(method.name());
+        var arguments = method.parameters().stream()
+                .map(JavaMethod.JavaFunctionParameter::generatedName)
+                .collect(joining(", "));
+        return mapJavaDoc(method.comments())
+               + visibility + "static " + methodTypeParameters + method.returnType() + " " + methodName + "(" + mapFunctionParameters(method.parameters()) + ") {\n"
+               + "return capy.lang.Effect.delay(() -> dev.capylang.IOUtil." + methodName + "(" + arguments + "));\n"
                + "}\n";
     }
 

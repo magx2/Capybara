@@ -1,0 +1,69 @@
+from /capy/io/Path import { * }
+from /capy/lang/Effect import { * }
+from /capy/lang/Result import { * }
+
+/// Reads the entire file as UTF-8 text.
+fun read_text(path: Path): Effect[Result[string]] = ???
+
+/// Reads all lines from the file as UTF-8 text.
+fun read_lines(path: Path): Effect[Result[list[string]]] = ???
+
+/// Reads the entire file as bytes.
+fun read_bytes(path: Path): Effect[Result[list[byte]]] = ???
+
+/// Writes UTF-8 text to the file, replacing existing content, and returns the consumed text.
+fun write_text(path: Path, text: string): Effect[Result[string]] = ???
+
+/// Writes UTF-8 lines to the file, replacing existing content, and returns the consumed lines.
+fun write_lines(path: Path, lines: list[string]): Effect[Result[list[string]]] = ???
+
+/// Writes bytes to the file, replacing existing content, and returns the consumed bytes.
+fun write_bytes(path: Path, bytes: list[byte]): Effect[Result[list[byte]]] = ???
+
+/// Appends UTF-8 text to the file, creating the file when needed, and returns the consumed text.
+fun append_text(path: Path, text: string): Effect[Result[string]] = ???
+
+/// Appends UTF-8 lines to the file, creating the file when needed, and returns the consumed lines.
+fun append_lines(path: Path, lines: list[string]): Effect[Result[list[string]]] = ???
+
+/// Appends bytes to the file, creating the file when needed, and returns the consumed bytes.
+fun append_bytes(path: Path, bytes: list[byte]): Effect[Result[list[byte]]] = ???
+
+/// Returns true when the path exists.
+fun exists(path: Path): Effect[bool] = ???
+
+/// Returns true when the path exists and is a regular file.
+fun is_file(path: Path): Effect[bool] = ???
+
+/// Returns true when the path exists and is a directory.
+fun is_directory(path: Path): Effect[bool] = ???
+
+/// Returns the size of a file in bytes.
+fun size(path: Path): Effect[Result[long]] = ???
+
+/// Creates a new empty file and returns the created path.
+fun create_file(path: Path): Effect[Result[Path]] = ???
+
+/// Creates a single directory and returns the created path.
+fun create_directory(path: Path): Effect[Result[Path]] = ???
+
+/// Creates a directory and any missing parent directories, returning the created path.
+fun create_directories(path: Path): Effect[Result[Path]] = ???
+
+/// Lists direct child entries of a directory.
+fun list_entries(path: Path): Effect[Result[list[Path]]] = ???
+
+/// Deletes a file or empty directory and returns true when something was deleted.
+fun delete(path: Path): Effect[Result[bool]] = ???
+
+/// Copies a file and returns the target path. Fails if the target already exists.
+fun copy(source: Path, target: Path): Effect[Result[Path]] = ???
+
+/// Copies a file and returns the target path, replacing an existing target.
+fun copy_replace(source: Path, target: Path): Effect[Result[Path]] = ???
+
+/// Moves a file or directory and returns the target path. Fails if the target already exists.
+fun move(source: Path, target: Path): Effect[Result[Path]] = ???
+
+/// Moves a file or directory and returns the target path, replacing an existing target.
+fun move_replace(source: Path, target: Path): Effect[Result[Path]] = ???
