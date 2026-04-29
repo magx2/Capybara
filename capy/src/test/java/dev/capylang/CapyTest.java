@@ -548,7 +548,7 @@ class CapyTest {
 
                 fun tests(): Effect[TestFile] =
                     test_file("/bar/TestModule.cfun", [
-                        test("works", works())
+                        test("works", () => works())
                     ])
                 """);
         var generatedDir = tempDir.resolve("compile-generate-test-output");
@@ -624,7 +624,7 @@ class CapyTest {
 
                 fun tests(): Effect[TestFile] =
                     test_file("/bar/TestModule.cfun", [
-                        test("works", works())
+                        test("works", () => works())
                     ])
                 """);
 
@@ -676,7 +676,7 @@ class CapyTest {
 
                 fun tests(): Effect[TestFile] =
                     test_file("/bar/TestModule.cfun", [
-                        test("works", works())
+                        test("works", () => works())
                     ])
                 """);
 
@@ -716,7 +716,7 @@ class CapyTest {
 
                 fun tests(): Effect[TestFile] =
                     test_file("/foo/TestModule.cfun", [
-                        test("works", works())
+                        test("works", () => works())
                     ])
                 """);
         var linkedDir = Files.createDirectories(tempDir.resolve("test-linked"));

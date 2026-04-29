@@ -62,7 +62,7 @@ class CapybaraPluginTest {
 
                 fun tests(): Effect[TestFile] =
                     test_file("/bar/TestModule.cfun", [
-                        test("works", works())
+                        test("works", () => works())
                     ])
                 """);
 
@@ -107,7 +107,7 @@ class CapybaraPluginTest {
 
                 fun tests(): Effect[TestFile] =
                     test_file("/bar/TestModule.cfun", [
-                        test("works", works())
+                        test("works", () => works())
                     ])
                 """);
 
@@ -143,7 +143,7 @@ class CapybaraPluginTest {
 
                 fun tests(): Effect[TestFile] =
                     test_file("/bar/TestModule.cfun", [
-                        test("works", works())
+                        test("works", () => works())
                     ])
                 """);
 
@@ -170,7 +170,7 @@ class CapybaraPluginTest {
 
                 fun tests(): Effect[TestFile] =
                     test_file("/bar/TestModule.cfun", [
-                        test("works", works())
+                        test("works", () => works())
                     ])
                 """);
 
@@ -200,7 +200,7 @@ class CapybaraPluginTest {
 
                 fun tests(): Effect[TestFile] =
                     test_file("/bar/TestModule.cfun", [
-                        test("works", works())
+                        test("works", () => works())
                     ])
                 """);
 
@@ -248,7 +248,7 @@ class CapybaraPluginTest {
 
                 fun tests(): Effect[TestFile] =
                     test_file("/bar/TestModule.cfun", [
-                        test("works", works())
+                        test("works", () => works())
                     ])
                 """);
 
@@ -284,7 +284,7 @@ class CapybaraPluginTest {
 
                 fun tests(): Effect[TestFile] =
                     test_file("/bar/TestModule.cfun", [
-                        test("works", works())
+                        test("works", () => works())
                     ])
                 """);
 
@@ -352,7 +352,7 @@ class CapybaraPluginTest {
 
                 fun tests(): Effect[TestFile] =
                     test_file("/bar/TestModule.cfun", [
-                        test("works", works())
+                        test("works", () => works())
                     ])
                 """);
         var project = newProject();
@@ -430,7 +430,7 @@ class CapybaraPluginTest {
 
                 fun tests(): Effect[TestFile] =
                     test_file("/bar/TestModule.cfun", [
-                        test("works", works())
+                        test("works", () => works())
                     ])
                 """);
 
@@ -455,7 +455,7 @@ class CapybaraPluginTest {
 
                 fun tests(): Effect[TestFile] =
                     test_file("/bar/TestModule.cfun", [
-                        test("works", works())
+                        test("works", () => works())
                     ])
                 """);
 
@@ -717,7 +717,7 @@ class CapybaraPluginTest {
 
                 fun tests(): Effect[TestFile] =
                     test_file("/bar/TestModule.cfun", [
-                        test("works", works())
+                        test("works", () => works())
                     ])
                 """);
 
