@@ -521,13 +521,24 @@ public class JavaExpressionEvaluator {
 
     private static String evaluateListAppendExpression(CompiledInfixExpression infixExpression, String left, String right) {
         var resultElementType = infixExpression.type() instanceof dev.capylang.compiler.CollectionLinkedType.CompiledList listType
-                ? javaCastType(listType.elementType())
+                ? javaStreamElementType(listType.elementType())
                 : "java.lang.Object";
         var concat = "java.util.stream.Stream.<" + resultElementType + ">concat";
         if (infixExpression.right().type() instanceof dev.capylang.compiler.CollectionLinkedType.CompiledList) {
             return concat + "((" + left + ").stream(), (" + right + ").stream()).toList()";
         }
         return concat + "((" + left + ").stream(), java.util.stream.Stream.of(" + right + ")).toList()";
+    }
+
+    private static String javaStreamElementType(dev.capylang.compiler.CompiledType type) {
+        if (type instanceof dev.capylang.compiler.CompiledDataParentType parentType
+            && !parentType.typeParameters().isEmpty()) {
+            var mappedTypeParameters = parentType.typeParameters().stream()
+                    .map(JavaExpressionEvaluator::javaCastTypeFromDescriptor)
+                    .toList();
+            return normalizeJavaTypeReference(parentType.name()) + "<" + String.join(", ", mappedTypeParameters) + ">";
+        }
+        return javaCastType(type);
     }
 
     private static String evaluateSetAppendExpression(CompiledInfixExpression infixExpression, String left, String right) {
@@ -1097,7 +1108,7 @@ public class JavaExpressionEvaluator {
         if (expression instanceof CompiledNewList newList && newList.values().isEmpty()
             && type instanceof dev.capylang.compiler.CollectionLinkedType.CompiledList listType
             && listType.elementType() != dev.capylang.compiler.PrimitiveLinkedType.ANY) {
-            return "java.util.List.<" + javaCastType(listType.elementType()) + ">of()";
+            return "java.util.List.<" + javaStreamElementType(listType.elementType()) + ">of()";
         }
         if (expression instanceof CompiledNewSet newSet && newSet.values().isEmpty()
             && type instanceof dev.capylang.compiler.CollectionLinkedType.CompiledSet setType
@@ -2329,7 +2340,7 @@ public class JavaExpressionEvaluator {
         if (newList.values().isEmpty()
             && newList.type() instanceof dev.capylang.compiler.CollectionLinkedType.CompiledList listType
             && listType.elementType() != dev.capylang.compiler.PrimitiveLinkedType.ANY) {
-            return current.addExpression("java.util.List.<" + javaCastType(listType.elementType()) + ">of()");
+            return current.addExpression("java.util.List.<" + javaStreamElementType(listType.elementType()) + ">of()");
         }
         return current.addExpression("java.util.List.of(" + String.join(", ", values) + ")");
     }

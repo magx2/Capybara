@@ -73,7 +73,7 @@ fun Path.parent(): Option[Path] =
         Path {
             root: this.root,
             prefix: this.prefix,
-            segments: []
+            segments: this.segments[:-1]
         }
     }
 
@@ -108,7 +108,6 @@ fun Path.normalize(): Path =
         prefix: this.prefix,
         segments: __normalize_path(this.root, this.segments, [])
     }
-
 
 
 
