@@ -35,6 +35,7 @@ public class CapybaraExpressionCompiler {
         private final Map<String, CompiledDataParentType> parentTypesByRawName;
         private final CompiledDataParentType optionType;
         private final CompiledDataParentType resultType;
+        private final CompiledDataParentType effectType;
 
         public LinkCache(Map<String, GenericDataType> dataTypes) {
             this.fallbackDataTypesBySuffix = buildFallbackDataTypesBySuffix(dataTypes);
@@ -43,6 +44,7 @@ public class CapybaraExpressionCompiler {
             this.parentTypesByRawName = buildParentTypesByRawName(dataTypes);
             this.optionType = findParentType(dataTypes, CapybaraExpressionCompiler::isOptionTypeKeyStatic, "Option");
             this.resultType = findParentType(dataTypes, CapybaraExpressionCompiler::isResultTypeKeyStatic, "Result");
+            this.effectType = findParentType(dataTypes, CapybaraExpressionCompiler::isEffectTypeKeyStatic, "Effect");
         }
 
         private static Map<String, CompiledDataParentType> buildParentTypesByRawName(Map<String, GenericDataType> dataTypes) {
@@ -1712,6 +1714,9 @@ public class CapybaraExpressionCompiler {
         if (resolveSpecializedResultType(expected).isPresent()) {
             return linkArgumentForExpectedResultType(argument, scope, expected);
         }
+        if (resolveSpecializedEffectType(expected).isPresent()) {
+            return linkArgumentForExpectedEffectType(argument, scope, expected);
+        }
         if (argument instanceof IfExpression ifExpression) {
             return linkIfExpression(ifExpression, scope, expected)
                     .flatMap(linkedArgument -> {
@@ -1931,6 +1936,46 @@ public class CapybaraExpressionCompiler {
                 return Result.success(new CoercedArgument(resultCompatibleExpression, 1));
             }
             maybeCoerced = coerceArgument(resultCompatibleExpression, expected);
+            if (maybeCoerced == null) {
+                return withPosition(
+                        Result.error("Expected `" + expected + "`, got `" + linked.type() + "`"),
+                        argument.position()
+                );
+            }
+            return Result.success(maybeCoerced);
+        });
+    }
+
+    private Result<CoercedArgument> linkArgumentForExpectedEffectType(
+            Expression argument,
+            Scope scope,
+            CompiledType expected
+    ) {
+        var expectedEffectParent = resolveSpecializedEffectType(expected);
+        if (expectedEffectParent.isEmpty()) {
+            return withPosition(Result.error("Expected `Effect[...]`, got `" + expected + "`"), argument.position());
+        }
+        var linkedArgument = switch (argument) {
+            case IfExpression ifExpression -> linkIfExpression(ifExpression, scope, expected);
+            case MatchExpression matchExpression -> linkMatchExpression(matchExpression, scope, expected);
+            case LetExpression letExpression -> linkLetExpression(letExpression, scope, Optional.of(expected));
+            default -> linkExpression(argument, scope);
+        };
+        return linkedArgument.flatMap(linked -> {
+            var maybeCoerced = coerceArgument(linked, expected);
+            if (maybeCoerced != null) {
+                return Result.success(maybeCoerced);
+            }
+            var linkedWasAlreadyEffect = resolveSpecializedEffectType(linked.type()).isPresent();
+            var wrapped = ensureEffectExpression(linked, expectedEffectParent.orElseThrow(), argument.position());
+            if (wrapped instanceof Result.Error<CompiledExpression> error) {
+                return new Result.Error<>(error.errors());
+            }
+            var effectCompatibleExpression = ((Result.Success<CompiledExpression>) wrapped).value();
+            if (!linkedWasAlreadyEffect) {
+                return Result.success(new CoercedArgument(effectCompatibleExpression, 1));
+            }
+            maybeCoerced = coerceArgument(effectCompatibleExpression, expected);
             if (maybeCoerced == null) {
                 return withPosition(
                         Result.error("Expected `" + expected + "`, got `" + linked.type() + "`"),
@@ -2577,7 +2622,9 @@ public class CapybaraExpressionCompiler {
                     .replace("/capy/lang/Option", "/cap/lang/Option")
                     .replace(".capy.lang.Option", ".cap.lang.Option")
                     .replace("/capy/lang/Result", "/cap/lang/Result")
-                    .replace(".capy.lang.Result", ".cap.lang.Result");
+                    .replace(".capy.lang.Result", ".cap.lang.Result")
+                    .replace("/capy/lang/Effect", "/cap/lang/Effect")
+                    .replace(".capy.lang.Effect", ".cap.lang.Effect");
         });
     }
 
@@ -4546,6 +4593,21 @@ public class CapybaraExpressionCompiler {
         return new CompiledDataParentType(resultType.name(), resultType.fields(), resultType.subTypes(), typeParameters);
     }
 
+    private CompiledDataParentType findEffectType() {
+        return linkCache.effectType;
+    }
+
+    private CompiledDataParentType effectTypeFor(CompiledType elementType) {
+        var effectType = findEffectType();
+        if (effectType == null) {
+            return null;
+        }
+        var typeParameters = effectType.typeParameters().isEmpty()
+                ? List.<String>of()
+                : List.of(linkedTypeDescriptor(elementType));
+        return new CompiledDataParentType(effectType.name(), effectType.fields(), effectType.subTypes(), typeParameters);
+    }
+
     private boolean isResultType(CompiledType type) {
         if (!(type instanceof GenericDataType genericDataType)) {
             return false;
@@ -4580,6 +4642,60 @@ public class CapybaraExpressionCompiler {
                 .or(() -> instantiateExtendedParentFromSubtypeFields(resultSubtype, resultType)
                         .filter(CompiledDataParentType.class::isInstance)
                         .map(CompiledDataParentType.class::cast));
+    }
+
+    private boolean isEffectType(CompiledType type) {
+        if (!(type instanceof GenericDataType genericDataType)) {
+            return false;
+        }
+        var normalized = normalizeTypeName(genericDataType.name());
+        return "Effect".equals(genericDataType.name())
+               || normalized.endsWith("/Effect.Effect")
+               || normalized.endsWith("/Effect");
+    }
+
+    private Optional<CompiledDataParentType> resolveSpecializedEffectType(CompiledType type) {
+        if (type instanceof CompiledDataParentType effectParent && isEffectType(effectParent)) {
+            return Optional.of(effectParent);
+        }
+        if (!(type instanceof CompiledDataType effectSubtype)) {
+            return Optional.empty();
+        }
+        var effectType = findEffectType();
+        if (effectType == null || !isSubtypeOfParent(effectSubtype, effectType)) {
+            return Optional.empty();
+        }
+        return effectSubtype.extendedTypes().stream()
+                .map(this::parseLinkedTypeDescriptor)
+                .flatMap(Optional::stream)
+                .filter(CompiledDataParentType.class::isInstance)
+                .map(CompiledDataParentType.class::cast)
+                .filter(parentType -> sameRawTypeName(parentType.name(), effectType.name()))
+                .findFirst()
+                .or(() -> specializeParentFromSubtypeFields(effectSubtype, effectType)
+                        .filter(CompiledDataParentType.class::isInstance)
+                        .map(CompiledDataParentType.class::cast))
+                .or(() -> instantiateExtendedParentFromSubtypeFields(effectSubtype, effectType)
+                        .filter(CompiledDataParentType.class::isInstance)
+                        .map(CompiledDataParentType.class::cast));
+    }
+
+    private CompiledType effectElementType(CompiledDataParentType effectType) {
+        if (!effectType.typeParameters().isEmpty()) {
+            return parseLinkedTypeDescriptor(effectType.typeParameters().getFirst()).orElse(ANY);
+        }
+        var unsafeEffect = findSubtype("_UnsafeEffect", effectType);
+        if (unsafeEffect instanceof Result.Success<CompiledDataType> success) {
+            return success.value().fields().stream()
+                    .filter(field -> "unsafe_thunk".equals(field.name()))
+                    .map(CompiledDataType.CompiledField::type)
+                    .filter(CompiledFunctionType.class::isInstance)
+                    .map(CompiledFunctionType.class::cast)
+                    .map(CompiledFunctionType::returnType)
+                    .findFirst()
+                    .orElse(ANY);
+        }
+        return ANY;
     }
 
     private boolean isOptionType(CompiledType type) {
@@ -4644,6 +4760,10 @@ public class CapybaraExpressionCompiler {
         return isResultTypeKeyStatic(key);
     }
 
+    private boolean isEffectTypeKey(String key) {
+        return isEffectTypeKeyStatic(key);
+    }
+
     private String normalizeTypeName(String name) {
         return normalizeTypeNameStatic(name);
     }
@@ -4660,6 +4780,13 @@ public class CapybaraExpressionCompiler {
         return normalized.endsWith("/capy/lang/Result.Result")
                || normalized.endsWith("/cap/lang/Result.Result")
                || normalized.endsWith("/Result.Result");
+    }
+
+    private static boolean isEffectTypeKeyStatic(String key) {
+        var normalized = normalizeTypeNameStatic(key);
+        return normalized.endsWith("/capy/lang/Effect.Effect")
+               || normalized.endsWith("/cap/lang/Effect.Effect")
+               || normalized.endsWith("/Effect.Effect");
     }
 
     private static String normalizeTypeNameStatic(String name) {
@@ -6477,6 +6604,22 @@ public class CapybaraExpressionCompiler {
         ));
     }
 
+    private Result<CompiledExpression> ensureEffectExpression(
+            CompiledExpression expression,
+            CompiledDataParentType effectParent,
+            Optional<SourcePosition> position
+    ) {
+        if (resolveSpecializedEffectType(expression.type()).isPresent()) {
+            return Result.success(expression);
+        }
+        var valueType = effectElementType(effectParent);
+        var coerced = coerceExpressionToType(expression, valueType);
+        if (coerced.isEmpty()) {
+            return withPosition(Result.error("Cannot coerce effect result to `" + valueType + "`"), position);
+        }
+        return Result.success(new CompiledEffectExpression(coerced.orElseThrow(), effectParent));
+    }
+
     private Result<CompiledDataParentType> resultParentForExpression(
             CompiledExpression expression,
             Optional<SourcePosition> position
@@ -6490,6 +6633,21 @@ public class CapybaraExpressionCompiler {
             return Result.success(wrapped);
         }
         return withPosition(Result.error("Cannot wrap constructor result `" + expression.type() + "` into `Result`"), position);
+    }
+
+    private Result<CompiledDataParentType> effectParentForExpression(
+            CompiledExpression expression,
+            Optional<SourcePosition> position
+    ) {
+        var existing = resolveSpecializedEffectType(expression.type());
+        if (existing.isPresent()) {
+            return Result.success(existing.orElseThrow());
+        }
+        var wrapped = effectTypeFor(expression.type());
+        if (wrapped != null) {
+            return Result.success(wrapped);
+        }
+        return withPosition(Result.error("Cannot wrap expression `" + expression.type() + "` into `Effect`"), position);
     }
 
     private CompiledExpression errorResultExpression(
@@ -6957,7 +7115,7 @@ public class CapybaraExpressionCompiler {
             Optional<CompiledType> expectedType
     ) {
         if (expression.kind() == LetExpression.Kind.RESULT_BIND) {
-            return linkResultBindLetExpression(expression, scope, expectedType);
+            return linkBindLetExpression(expression, scope, expectedType);
         }
         if (expression.declaredType().isPresent()) {
             return linkTypeInScope(expression.declaredType().orElseThrow(), scope)
@@ -6995,7 +7153,7 @@ public class CapybaraExpressionCompiler {
                 });
     }
 
-    private Result<CompiledExpression> linkResultBindLetExpression(
+    private Result<CompiledExpression> linkBindLetExpression(
             LetExpression expression,
             Scope scope,
             Optional<CompiledType> expectedType
@@ -7003,73 +7161,143 @@ public class CapybaraExpressionCompiler {
         if (expression.declaredType().isPresent()) {
             return linkTypeInScope(expression.declaredType().orElseThrow(), scope)
                     .flatMap(declaredType -> {
-                        var expectedResultType = resultTypeFor(declaredType);
-                        var linkedSource = linkResultBindSourceExpression(
-                                expression.value(),
-                                scope,
-                                Optional.ofNullable(expectedResultType)
-                        );
-                        return linkedSource.flatMap(resultExpression -> {
-                            var resultParent = resolveSpecializedResultType(resultExpression.type());
-                            if (resultParent.isEmpty()) {
-                                return withPosition(
-                                        Result.error("`<-` can only be used with `Result[...]`, got `" + resultExpression.type() + "`"),
-                                        expression.value().position().or(expression::position)
+                        var linkedSource = linkResultBindSourceExpression(expression.value(), scope);
+                        if (linkedSource instanceof Result.Success<CompiledExpression> success) {
+                            var sourceExpression = success.value();
+                            var effectParent = resolveSpecializedEffectType(sourceExpression.type());
+                            if (effectParent.isPresent()) {
+                                return linkEffectBindContinuation(
+                                        expression,
+                                        scope,
+                                        sourceExpression,
+                                        effectElementType(effectParent.orElseThrow()),
+                                        declaredType,
+                                        expectedType
                                 );
                             }
-                            var successTypeResult = findSubtype("Success", resultParent.orElseThrow());
-                            if (successTypeResult instanceof Result.Error<CompiledDataType> error) {
-                                return new Result.Error<>(error.errors());
+                            var resultParent = resolveSpecializedResultType(sourceExpression.type());
+                            if (resultParent.isPresent()) {
+                                return linkResultBindContinuationForSource(
+                                        expression,
+                                        scope,
+                                        sourceExpression,
+                                        resultParent.orElseThrow(),
+                                        declaredType,
+                                        expectedType
+                                );
                             }
-                            var successType = ((Result.Success<CompiledDataType>) successTypeResult).value();
-                            var successValueField = successType.fields().stream()
-                                    .filter(field -> field.name().equals("value"))
-                                    .findFirst();
-                            if (successValueField.isEmpty()) {
-                                return withPosition(Result.error("`Result.Success` is missing `value` field"), expression.position());
-                            }
-                            return linkResultBindContinuation(
-                                    expression,
-                                    scope,
-                                    resultExpression,
-                                    resultParent.orElseThrow(),
-                                    successValueField.orElseThrow().type(),
-                                    declaredType,
-                                    expectedType
-                            );
-                        });
+                        }
+
+                        var expectedResultType = resultTypeFor(declaredType);
+                        return linkResultBindSourceExpression(expression.value(), scope, Optional.ofNullable(expectedResultType))
+                                .flatMap(resultExpression -> {
+                                    var resultParent = resolveSpecializedResultType(resultExpression.type());
+                                    if (resultParent.isEmpty()) {
+                                        return bindSourceTypeError(resultExpression, expression);
+                                    }
+                                    return linkResultBindContinuationForSource(
+                                            expression,
+                                            scope,
+                                            resultExpression,
+                                            resultParent.orElseThrow(),
+                                            declaredType,
+                                            expectedType
+                                    );
+                                });
                     });
         }
         return linkResultBindSourceExpression(expression.value(), scope)
-                .flatMap(resultExpression -> {
-                    var resultParent = resolveSpecializedResultType(resultExpression.type());
-                    if (resultParent.isEmpty()) {
-                        return withPosition(
-                                Result.error("`<-` can only be used with `Result[...]`, got `" + resultExpression.type() + "`"),
-                                expression.value().position().or(expression::position)
+                .flatMap(sourceExpression -> {
+                    var effectParent = resolveSpecializedEffectType(sourceExpression.type());
+                    if (effectParent.isPresent()) {
+                        var payloadType = effectElementType(effectParent.orElseThrow());
+                        return linkEffectBindContinuation(
+                                expression,
+                                scope,
+                                sourceExpression,
+                                payloadType,
+                                payloadType,
+                                expectedType
                         );
                     }
-                    var successTypeResult = findSubtype("Success", resultParent.orElseThrow());
-                    if (successTypeResult instanceof Result.Error<CompiledDataType> error) {
-                        return new Result.Error<>(error.errors());
+                    var resultParent = resolveSpecializedResultType(sourceExpression.type());
+                    if (resultParent.isEmpty()) {
+                        return bindSourceTypeError(sourceExpression, expression);
                     }
-                    var successType = ((Result.Success<CompiledDataType>) successTypeResult).value();
-                    var successValueField = successType.fields().stream()
-                            .filter(field -> field.name().equals("value"))
-                            .findFirst();
-                    if (successValueField.isEmpty()) {
-                        return withPosition(Result.error("`Result.Success` is missing `value` field"), expression.position());
-                    }
-                    return linkResultBindContinuation(
+                    return linkResultBindContinuationForSource(
                             expression,
                             scope,
-                            resultExpression,
+                            sourceExpression,
                             resultParent.orElseThrow(),
-                            successValueField.orElseThrow().type(),
-                            successValueField.orElseThrow().type(),
                             expectedType
                     );
                 });
+    }
+
+    private Result<CompiledExpression> bindSourceTypeError(CompiledExpression sourceExpression, LetExpression expression) {
+        return withPosition(
+                Result.error("`<-` can only be used with `Result[...]` or `Effect[...]`, got `" + sourceExpression.type() + "`"),
+                expression.value().position().or(expression::position)
+        );
+    }
+
+    private Result<CompiledExpression> linkResultBindContinuationForSource(
+            LetExpression expression,
+            Scope scope,
+            CompiledExpression resultExpression,
+            CompiledDataParentType resultParent,
+            Optional<CompiledType> expectedType
+    ) {
+        var successTypeResult = findSubtype("Success", resultParent);
+        if (successTypeResult instanceof Result.Error<CompiledDataType> error) {
+            return new Result.Error<>(error.errors());
+        }
+        var successType = ((Result.Success<CompiledDataType>) successTypeResult).value();
+        var successValueField = successType.fields().stream()
+                .filter(field -> field.name().equals("value"))
+                .findFirst();
+        if (successValueField.isEmpty()) {
+            return withPosition(Result.error("`Result.Success` is missing `value` field"), expression.position());
+        }
+        return linkResultBindContinuation(
+                expression,
+                scope,
+                resultExpression,
+                resultParent,
+                successValueField.orElseThrow().type(),
+                successValueField.orElseThrow().type(),
+                expectedType
+        );
+    }
+
+    private Result<CompiledExpression> linkResultBindContinuationForSource(
+            LetExpression expression,
+            Scope scope,
+            CompiledExpression resultExpression,
+            CompiledDataParentType resultParent,
+            CompiledType declaredType,
+            Optional<CompiledType> expectedType
+    ) {
+        var successTypeResult = findSubtype("Success", resultParent);
+        if (successTypeResult instanceof Result.Error<CompiledDataType> error) {
+            return new Result.Error<>(error.errors());
+        }
+        var successType = ((Result.Success<CompiledDataType>) successTypeResult).value();
+        var successValueField = successType.fields().stream()
+                .filter(field -> field.name().equals("value"))
+                .findFirst();
+        if (successValueField.isEmpty()) {
+            return withPosition(Result.error("`Result.Success` is missing `value` field"), expression.position());
+        }
+        return linkResultBindContinuation(
+                expression,
+                scope,
+                resultExpression,
+                resultParent,
+                successValueField.orElseThrow().type(),
+                declaredType,
+                expectedType
+        );
     }
 
     private Result<CompiledExpression> linkResultBindSourceExpression(Expression expression, Scope scope) {
@@ -7187,6 +7415,48 @@ public class CapybaraExpressionCompiler {
                 });
     }
 
+    private Result<CompiledExpression> linkEffectBindContinuation(
+            LetExpression expression,
+            Scope scope,
+            CompiledExpression effectExpression,
+            CompiledType payloadType,
+            CompiledType letType,
+            Optional<CompiledType> expectedType
+    ) {
+        var boundPayload = new CompiledVariable(expression.name(), payloadType);
+        var coercedPayload = coerceExpressionToType(boundPayload, letType);
+        if (coercedPayload.isEmpty()) {
+            return withPosition(
+                    Result.error("Expected `" + letType + "`, got `" + payloadType + "`"),
+                    expression.position()
+            );
+        }
+        return linkEffectBindRestExpression(expression.rest(), scope.add(expression.name(), letType), expectedType)
+                .flatMap(rest -> {
+                    var effectResultType = effectParentForExpression(rest, expression.position());
+                    if (effectResultType instanceof Result.Error<CompiledDataParentType> error) {
+                        return new Result.Error<>(error.errors());
+                    }
+                    var wrapped = ensureEffectExpression(
+                            rest,
+                            ((Result.Success<CompiledDataParentType>) effectResultType).value(),
+                            expression.position()
+                    );
+                    if (wrapped instanceof Result.Error<CompiledExpression> error) {
+                        return new Result.Error<>(error.errors());
+                    }
+                    return Result.success((CompiledExpression) new CompiledEffectBindExpression(
+                            expression.name(),
+                            effectExpression,
+                            payloadType,
+                            letType,
+                            expression.declaredType().isPresent() ? Optional.of(letType) : Optional.empty(),
+                            ((Result.Success<CompiledExpression>) wrapped).value(),
+                            ((Result.Success<CompiledDataParentType>) effectResultType).value()
+                    ));
+                });
+    }
+
     private Result<CompiledExpression> linkLetRestExpression(
             Expression expression,
             Scope scope,
@@ -7207,6 +7477,25 @@ public class CapybaraExpressionCompiler {
             && (expression instanceof LetExpression
                 || expression instanceof MatchExpression
                 || expression instanceof IfExpression)) {
+            return linkArgumentForExpectedType(expression, scope, expectedType.orElseThrow())
+                    .map(CoercedArgument::expression);
+        }
+        return linkExpression(expression, scope);
+    }
+
+    private Result<CompiledExpression> linkEffectBindRestExpression(
+            Expression expression,
+            Scope scope,
+            Optional<CompiledType> expectedType
+    ) {
+        if (expectedType.isPresent()
+            && (expression instanceof LetExpression
+                || expression instanceof MatchExpression
+                || expression instanceof IfExpression)) {
+            return linkArgumentForExpectedType(expression, scope, expectedType.orElseThrow())
+                    .map(CoercedArgument::expression);
+        }
+        if (expectedType.isPresent() && resolveSpecializedEffectType(expectedType.orElseThrow()).isPresent()) {
             return linkArgumentForExpectedType(expression, scope, expectedType.orElseThrow())
                     .map(CoercedArgument::expression);
         }

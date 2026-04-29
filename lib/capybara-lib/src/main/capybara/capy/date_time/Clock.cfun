@@ -1,0 +1,5 @@
+from /capy/date_time/DateTime import { * }
+from /capy/lang/Effect import { * }
+
+fun now(): Effect[DateTime] =
+    delay(() => UNIX_EPOCH)

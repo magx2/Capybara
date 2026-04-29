@@ -260,8 +260,23 @@ public class CompilationErrorTest {
 
         assertThat(errors).hasSize(1);
         assertThat(errors.first().message())
-                .contains("`<-` can only be used with `Result[...]`")
+                .contains("`<-` can only be used with `Result[...]` or `Effect[...]`")
                 .contains("`INT`");
+    }
+
+    @Test
+    void shouldRejectEffectBindInNonEffectContext() {
+        var errors = compileProgram("""
+                        from /capy/lang/Effect import { * }
+                        fun broken(): int =
+                            let value <- pure(1)
+                            value
+                        """,
+                "effect_bind_non_effect_context");
+
+        assertThat(errors).hasSize(1);
+        assertThat(errors.first().message())
+                .contains("Expected `int`, got `Effect`");
     }
 
     @Test

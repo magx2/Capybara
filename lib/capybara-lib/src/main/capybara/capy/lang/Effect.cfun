@@ -1,0 +1,25 @@
+type Effect[T] = _UnsafeEffect[T]
+
+private data _UnsafeEffect[T] { unsafe_thunk: () => T }
+
+fun pure(value: T): Effect[T] =
+    _UnsafeEffect { unsafe_thunk: () => value }
+
+fun delay(thunk: () => T): Effect[T] =
+    _UnsafeEffect { unsafe_thunk: thunk }
+
+fun Effect[T].unsafe_run(): T =
+    match this with
+    case _UnsafeEffect { unsafe_thunk } -> unsafe_thunk()
+
+fun Effect[T].map(map: T => Y): Effect[Y] =
+    delay(() => map(this.unsafe_run()))
+
+fun Effect[T].flat_map(flatmap: T => Effect[Y]): Effect[Y] =
+    delay(() => flatmap(this.unsafe_run()).unsafe_run())
+
+fun Effect[T].`|`(map: T => Y): Effect[Y] =
+    this.map(map)
+
+fun Effect[T].`|*`(flatmap: T => Effect[Y]): Effect[Y] =
+    this.flat_map(flatmap)

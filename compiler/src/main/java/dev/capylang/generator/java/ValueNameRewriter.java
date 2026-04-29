@@ -8,6 +8,13 @@ public class ValueNameRewriter {
             case CompiledBooleanValue linkedBooleanValue -> linkedBooleanValue;
             case CompiledByteValue linkedByteValue -> linkedByteValue;
             case CompiledDoubleValue linkedDoubleValue -> linkedDoubleValue;
+            case CompiledEffectBindExpression linkedEffectBindExpression ->
+                    rewriteValueInLinkedEffectBindExpression(name, uniqueName, linkedEffectBindExpression);
+            case CompiledEffectExpression linkedEffectExpression ->
+                    new CompiledEffectExpression(
+                            rewriteValueInExpression(name, uniqueName, linkedEffectExpression.body()),
+                            linkedEffectExpression.effectType()
+                    );
             case CompiledFieldAccess linkedFieldAccess -> rewriteValueInLinkedFieldAccess(name, uniqueName, linkedFieldAccess);
             case CompiledFloatValue linkedFloatValue -> linkedFloatValue;
             case CompiledFunctionCall linkedFunctionCall ->
@@ -138,6 +145,34 @@ public class ValueNameRewriter {
                 expression.value(),
                 expression.declaredType(),
                 rewriteValueInExpression(name, uniqueName, expression.rest()));
+    }
+
+    private static CompiledExpression rewriteValueInLinkedEffectBindExpression(
+            String name,
+            String uniqueName,
+            CompiledEffectBindExpression expression
+    ) {
+        if (expression.name().equals(name)) {
+            return new CompiledEffectBindExpression(
+                    uniqueName,
+                    expression.source(),
+                    expression.payloadType(),
+                    expression.letType(),
+                    expression.declaredType(),
+                    rewriteValueInExpression(name, uniqueName, expression.rest()),
+                    expression.effectType()
+            );
+        }
+
+        return new CompiledEffectBindExpression(
+                expression.name(),
+                rewriteValueInExpression(name, uniqueName, expression.source()),
+                expression.payloadType(),
+                expression.letType(),
+                expression.declaredType(),
+                rewriteValueInExpression(name, uniqueName, expression.rest()),
+                expression.effectType()
+        );
     }
 
     private static CompiledExpression rewriteValueInLinkedMatchExpression(String name, String uniqueName, CompiledMatchExpression linkedMatchExpression) {

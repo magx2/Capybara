@@ -18,6 +18,8 @@ public class CompiledExpressionPrinter {
             case CompiledBooleanValue linkedBooleanValue -> printLinkedBooleanValue(linkedBooleanValue, level);
             case CompiledByteValue linkedByteValue -> printLinkedByteValue(linkedByteValue, level);
             case CompiledDoubleValue linkedDoubleValue -> printLinkedDoubleValue(linkedDoubleValue, level);
+            case CompiledEffectBindExpression linkedEffectBindExpression -> printLinkedEffectBindExpression(linkedEffectBindExpression, level);
+            case CompiledEffectExpression linkedEffectExpression -> printLinkedEffectExpression(linkedEffectExpression, level);
             case CompiledFieldAccess linkedFieldAccess -> printLinkedFieldAccess(linkedFieldAccess, level);
             case CompiledFloatValue linkedFloatValue -> printLinkedFloatValue(linkedFloatValue, level);
             case CompiledFunctionCall linkedFunctionCall -> printLinkedFunctionCall(linkedFunctionCall, level);
@@ -120,6 +122,17 @@ public class CompiledExpressionPrinter {
     private static String printLinkedLetExpression(CompiledLetExpression linkedLetExpression, int level) {
         return LINE_BREAK + tabs(level) + "let " + linkedLetExpression.name() + " = " + printExpression(linkedLetExpression.value(), level + 1)
                + LINE_BREAK + tabs(level) + printExpression(linkedLetExpression.rest(), level + 1);
+    }
+
+    private static String printLinkedEffectExpression(CompiledEffectExpression linkedEffectExpression, int level) {
+        return LINE_BREAK + tabs(level) + "effect"
+               + printExpression(linkedEffectExpression.body(), level + 1);
+    }
+
+    private static String printLinkedEffectBindExpression(CompiledEffectBindExpression linkedEffectBindExpression, int level) {
+        return LINE_BREAK + tabs(level) + "let " + linkedEffectBindExpression.name() + " <- "
+               + printExpression(linkedEffectBindExpression.source(), level + 1)
+               + LINE_BREAK + tabs(level) + printExpression(linkedEffectBindExpression.rest(), level + 1);
     }
 
     private static String printLinkedMatchExpression(CompiledMatchExpression linkedMatchExpression, int level) {
