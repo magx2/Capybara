@@ -1,7 +1,9 @@
 package dev.capylang.test;
 
 import capy.test.CapyTest;
+import capy.lang.Result;
 import capy.test.CapyTest.TestOutput;
+import capy.test.CapyTest.TestRun;
 import dev.capylang.PathUtil;
 
 import java.io.IOException;
@@ -52,17 +54,12 @@ public class TestRunner {
         var gatherTestsMethod = loadGatherTestsMethod(capyTestRuntimeClass);
         var testFiles = invokeGatherTests(gatherTestsMethod);
         LOG.info(() -> "Collected `%d` test files".formatted(testFiles.size()));
-        var testOutputs = invokeRunTests(arguments.reportType(), testFiles);
-        LOG.info(() -> "Generated `%d` test outputs".formatted(testOutputs.size()));
-        var writtenFiles = new HashSet<Path>();
-        var hasFailures = false;
-        for (var testOutput : testOutputs) {
-            writtenFiles.add(writeTestOutputToFile(testOutput, arguments));
-            hasFailures |= testOutput.failed();
-        }
-        printFailureSummary(testOutputs, System.out);
+        var testRun = invokeRunTests(arguments.reportType(), arguments.outputDir(), testFiles);
+        LOG.info(() -> "Generated `%d` test outputs".formatted(testRun.outputs().size()));
+        var writtenFiles = toJavaRelativePathSet(testRun.written_files());
+        printFailureSummary(testRun.outputs(), System.out);
         deleteStaleOutputs(arguments.outputDir(), writtenFiles);
-        return hasFailures ? 1 : 0;
+        return testRun.failed() ? 1 : 0;
     }
 
     public static Arguments parseArguments(String[] args) {
@@ -239,25 +236,40 @@ public class TestRunner {
     }
 
     @SuppressWarnings({"rawtypes", "unchecked"})
-    private static List<TestOutput> invokeRunTests(ReportType reportType, List<?> testFiles) {
-        return CapyTest.runTests(capy.test.CapyTest.ReportType.valueOf(reportType.name()), (List) testFiles);
+    private static TestRun invokeRunTests(ReportType reportType, Path outputDir, List<?> testFiles) {
+        var result = (Result<TestRun>) CapyTest.runTests(
+                capy.test.CapyTest.ReportType.valueOf(reportType.name()),
+                PathUtil.fromJavaPath(outputDir),
+                (List) testFiles
+        ).unsafeRun();
+        return unwrapResult(result, "Cannot run Capybara tests");
     }
 
     static Path writeTestOutputToFile(TestOutput testOutput, Arguments arguments) {
-        try {
-            var javaPath = PathUtil.toJavaPath(testOutput.path());
-            var finalPath = arguments.outputDir().resolve(javaPath);
-            var parent = finalPath.getParent();
-            if (parent != null) {
-                Files.createDirectories(parent);
-            }
-            writeStringIfChanged(finalPath, testOutput.content());
-            LOG.fine(() -> "Wrote test output to `%s`".formatted(finalPath));
-            return normalizeRelativePath(arguments.outputDir().relativize(finalPath.normalize()));
-        } catch (IOException e) {
-            LOG.log(Level.SEVERE, "Cannot write test output file", e);
-            throw new UncheckedIOException("Cannot write test output file", e);
+        var writtenFiles = writeTestOutputs(arguments.outputDir(), List.of(testOutput));
+        if (writtenFiles.size() != 1) {
+            throw new IllegalStateException("Expected to write one test output file, but wrote `%d`".formatted(writtenFiles.size()));
         }
+        return writtenFiles.getFirst();
+    }
+
+    private static List<Path> writeTestOutputs(Path outputDir, List<TestOutput> testOutputs) {
+        var result = CapyTest.writeTestOutputs(PathUtil.fromJavaPath(outputDir), testOutputs).unsafeRun();
+        var writtenFiles = unwrapResult(result, "Cannot write test output file");
+        var relativePaths = toJavaRelativePaths(writtenFiles);
+        relativePaths.forEach(relativePath -> LOG.fine(() -> "Wrote test output to `%s`".formatted(outputDir.resolve(relativePath))));
+        return relativePaths;
+    }
+
+    private static Set<Path> toJavaRelativePathSet(List<capy.io.Path> paths) {
+        return new HashSet<>(toJavaRelativePaths(paths));
+    }
+
+    private static List<Path> toJavaRelativePaths(List<capy.io.Path> paths) {
+        return paths.stream()
+                .map(PathUtil::toJavaPath)
+                .map(TestRunner::normalizeRelativePath)
+                .toList();
     }
 
     static void deleteStaleOutputs(Path outputDir, Set<Path> expectedFiles) {
@@ -328,16 +340,17 @@ public class TestRunner {
         }
     }
 
-    private static void writeOutputManifest(Path manifestFile, Set<Path> expectedFiles) throws IOException {
+    private static void writeOutputManifest(Path manifestFile, Set<Path> expectedFiles) {
         var manifestContents = expectedFiles.stream()
                 .map(TestRunner::normalizeRelativePath)
                 .map(TestRunner::normalizeRelativePathString)
                 .sorted()
                 .collect(java.util.stream.Collectors.joining(System.lineSeparator()));
-        writeStringIfChanged(
-                manifestFile,
+        var result = CapyTest.writeTextIfChanged(
+                PathUtil.fromJavaPath(manifestFile),
                 manifestContents.isEmpty() ? "" : manifestContents + System.lineSeparator()
-        );
+        ).unsafeRun();
+        unwrapResult(result, "Cannot write test output manifest");
     }
 
     private static ClassLoader contextClassLoader() {
@@ -353,14 +366,17 @@ public class TestRunner {
         return path.normalize().toString().replace('\\', '/');
     }
 
-    private static void writeStringIfChanged(Path outputFile, String content) throws IOException {
-        var contentBytes = content.getBytes(StandardCharsets.UTF_8);
-        if (Files.isRegularFile(outputFile) && Files.size(outputFile) == contentBytes.length) {
-            if (java.util.Arrays.equals(Files.readAllBytes(outputFile), contentBytes)) {
-                return;
-            }
+    @SuppressWarnings("unchecked")
+    private static <T> T unwrapResult(Result<T> result, String message) {
+        if (result instanceof Result.Success<?> success) {
+            return (T) success.value();
         }
-        Files.write(outputFile, contentBytes);
+        if (result instanceof Result.Error<?> error) {
+            var cause = error.ex();
+            var detail = cause == null ? "unknown error" : cause.getMessage();
+            throw new IllegalStateException(message + ": " + detail, cause);
+        }
+        throw new IllegalStateException(message + ": unknown result type `%s`".formatted(result == null ? "null" : result.getClass().getCanonicalName()));
     }
 
     static void printFailureSummary(List<TestOutput> testOutputs, PrintStream output) {

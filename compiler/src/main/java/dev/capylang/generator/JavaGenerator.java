@@ -821,17 +821,6 @@ public final class JavaGenerator implements Generator {
         if (isCapyIoIOMethod(ownerPackage, ownerName, method)) {
             return mapCapyIoIOMethod(method, visibility, methodTypeParameters);
         }
-        if (isCapyTestTimedMethod(ownerPackage, ownerName, method)) {
-            var nameParameter = method.parameters().get(0).generatedName();
-            var assertParameter = method.parameters().get(1).generatedName();
-            return mapJavaDoc(method.comments())
-                   + visibility + "static " + methodTypeParameters + method.returnType() + " " + mapMethodName(method.name()) + "(" + mapFunctionParameters(method.parameters()) + ") {\n"
-                   + "var start = System.currentTimeMillis();\n"
-                   + "var result = _execute((" + assertParameter + ").assertions());\n"
-                   + "var delta = System.currentTimeMillis() - start;\n"
-                   + "return new TestCase(" + nameParameter + ", result, ((" + assertParameter + ").assertions()).size(), (delta/1000));\n"
-                   + "}\n";
-        }
         return mapJavaDoc(method.comments())
                + visibility + "static " + methodTypeParameters + method.returnType() + " " + mapMethodName(method.name()) + "(" + mapFunctionParameters(method.parameters()) + ") {\n"
                + evaluateExpression(method.expression(), method.parameters())
@@ -905,24 +894,6 @@ public final class JavaGenerator implements Generator {
                + visibility + "static " + methodTypeParameters + method.returnType() + " " + methodName + "(" + mapFunctionParameters(method.parameters()) + ") {\n"
                + "return capy.lang.Effect.delay(() -> dev.capylang.IOUtil." + methodName + "(" + arguments + "));\n"
                + "}\n";
-    }
-
-    private boolean isCapyTestTimedMethod(String ownerPackage, String ownerName, JavaMethod method) {
-        if (!"capy.test".equals(ownerPackage) || !"CapyTest".equals(ownerName)) {
-            return false;
-        }
-        if (!"test".equals(mapMethodName(method.name()))) {
-            return false;
-        }
-        if (!"TestCase".equals(method.returnType().toString())) {
-            return false;
-        }
-        if (method.parameters().size() != 2) {
-            return false;
-        }
-        var first = method.parameters().get(0);
-        var second = method.parameters().get(1);
-        return "java.lang.String".equals(first.type().toString()) && "Assert".equals(second.type().toString());
     }
 
     private String mapJavaRecordMethod(JavaMethod method, String helperCallOwnerName) {

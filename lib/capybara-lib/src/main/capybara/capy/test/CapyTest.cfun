@@ -1,6 +1,8 @@
 from Assert import {*}
 from /capy/lang/Option import { None }
+from /capy/lang/Result import { * }
 from /capy/io/Path import {*}
+from /capy/io/IO import { * }
 from /capy/lang/Seq import {*}
 from /capy/lang/Effect import { * }
 from /capy/date_time/Clock import { now }
@@ -12,23 +14,35 @@ type TestResult = Passed | Failed
 single Passed
 data Failed { message: string, type: string }
 
-fun test_file(file_name: string, test_cases: list[TestCase]): Effect[TestFile] =
+fun test_file(file_name: string, test_cases: list[Effect[TestCase]]): Effect[TestFile] =
     let current <- now()
+    let executed_test_cases <- execute_test_cases(test_cases)
     TestFile {
         file_name: file_name,
-        test_cases: test_cases,
+        test_cases: executed_test_cases,
         timestamp: current.to_iso_8601()
     }
 
-fun test(name: string, assert: Assert): TestCase =
+fun test(name: string, assert: Assert): Effect[TestCase] =
+    let start <- now()
+    let result = execute(assert.assertions)
+    let end <- now()
     TestCase {
         name: name,
-        result: _execute(assert.assertions),
+        result: result,
         assertions_count: assert.assertions.size,
-        execution_time:  -1
+        execution_time: end.timestamp() - start.timestamp()
     }
 
-fun _execute(assertions: list[() => Assertion]): TestResult =
+private fun execute_test_cases(test_cases: list[Effect[TestCase]]): Effect[list[TestCase]] =
+    match test_cases[0] with
+    case None -> pure([])
+    case Some { test_case } ->
+        let executed_test_case <- test_case
+        let executed_test_cases <- execute_test_cases(test_cases[1:])
+        [executed_test_case] + executed_test_cases
+
+private fun execute(assertions: list[() => Assertion]): TestResult =
     let failed_assertion = to_seq(assertions)
         | (supplier => supplier())
         .drop_until(assertion => !assertion.result)
@@ -87,23 +101,87 @@ fun JUnitFailure.`+`(other_message: string): JUnitFailure =
     }
 
 data TestOutput { path: Path, content: string, failed: bool }
+data TestRun { outputs: list[TestOutput], written_files: list[Path], failed: bool }
 
 fun run_tests(rtype: ReportType, test_files: list[TestFile]): list[TestOutput] =
     match rtype with
-    case JUNIT -> _junit_run_tests(test_files)
+    case JUNIT -> junit_run_tests(test_files)
+
+fun run_tests(rtype: ReportType, output_dir: Path, test_files: list[TestFile]): Effect[Result[TestRun]] =
+    let outputs = run_tests(rtype, test_files)
+    write_test_outputs(output_dir, outputs).map(written_result =>
+        match written_result with
+        case Error e -> e
+        case Success { written_files } ->
+            Success {
+                TestRun {
+                    outputs: outputs,
+                    written_files: written_files,
+                    failed: has_failures(outputs)
+                }
+            }
+    )
+
+/// Writes every test output under the given output directory and returns normalized relative paths.
+fun write_test_outputs(output_dir: Path, test_outputs: list[TestOutput]): Effect[Result[list[Path]]] =
+    match test_outputs[0] with
+    case None -> pure(Success { [] })
+    case Some { test_output } ->
+        write_test_output(output_dir, test_output).flat_map(current_result =>
+            match current_result with
+            case Error e -> pure(e)
+            case Success { written_path } ->
+                write_test_outputs(output_dir, test_outputs[1:]).map(rest_result =>
+                    match rest_result with
+                    case Error e -> e
+                    case Success { written_paths } -> Success { [written_path] + written_paths }
+                )
+        )
+
+/// Writes text only when the target file content is different.
+fun write_text_if_changed(path: Path, content: string): Effect[Result[string]] =
+    read_text(path).flat_map(existing =>
+        match existing with
+        case Success { existing_content } ->
+            if existing_content == content
+            then pure(Success { content })
+            else write_text(path, content)
+        case Error _ -> write_text(path, content)
+    )
+
+private fun write_test_output(output_dir: Path, test_output: TestOutput): Effect[Result[Path]] =
+    let relative_path = test_output.path.normalize()
+    let output_path = output_dir / relative_path
+    create_test_output_parent(output_path).flat_map(parent_result =>
+        match parent_result with
+        case Error e -> pure(e)
+        case Success _ ->
+            write_text_if_changed(output_path, test_output.content).map(write_result =>
+                match write_result with
+                case Error e -> e
+                case Success _ -> Success { relative_path }
+            )
+    )
+
+private fun create_test_output_parent(path: Path): Effect[Result[Path]] =
+    match path.parent() with
+    case None -> pure(Success { path })
+    case Some { parent } -> create_directories(parent)
+
+private fun has_failures(test_outputs: list[TestOutput]): bool = test_outputs |any? output => output.failed
 
 const JUNIT_PREFIX = 'TEST-'
 
-fun _junit_run_tests(test_files: list[TestFile]): list[TestOutput] = test_files | :_junit_run_test
+private fun junit_run_tests(test_files: list[TestFile]): list[TestOutput] = test_files | :junit_run_test
 
-fun _junit_run_test(test_file: TestFile): TestOutput =
+private fun junit_run_test(test_file: TestFile): TestOutput =
     let tests = test_file.test_cases.size
     let failures = test_file.test_cases | tc => tc.failed() |> 0, (acc, failed) => if failed then acc + 1 else acc
     let assertions = test_file.test_cases | tc => tc.assertions_count |> 0, (acc, count) => acc + count
-    let suite_name = _junit_escape_xml_attribute(test_file.file_name)
+    let suite_name = junit_escape_xml_attribute(test_file.file_name)
     let time = test_file.test_cases | tc => tc.execution_time |> 0L, (acc, t) => acc + t
     let content = "<testsuite name=\"{suite_name}\" tests=\"{tests}\" failures=\"{failures}\" errors=\"0\" skipped=\"0\" assertions=\"{assertions}\" time=\"{time}\" timestamp=\"{test_file.timestamp}\">"
-    + (test_file.test_cases | tc => _junit_run_test_case(test_file.file_name, tc) |> '', (acc, tc) => acc + tc)
+    + (test_file.test_cases | tc => junit_run_test_case(test_file.file_name, tc) |> '', (acc, tc) => acc + tc)
     + '</testsuite>'
     TestOutput {
         path: from_string(JUNIT_PREFIX + test_file.file_name[1:].replace('/', '.') + '.xml'),
@@ -111,25 +189,25 @@ fun _junit_run_test(test_file: TestFile): TestOutput =
         failed: failures > 0
     }
 
-fun _junit_run_test_case(file_name: string, test_case: TestCase): string =
+private fun junit_run_test_case(file_name: string, test_case: TestCase): string =
     let assertions = test_case.assertions_count
-    let escaped_name = _junit_escape_xml_attribute(test_case.name)
-    let escaped_file_name = _junit_escape_xml_attribute(file_name)
+    let escaped_name = junit_escape_xml_attribute(test_case.name)
+    let escaped_file_name = junit_escape_xml_attribute(file_name)
     "<testcase name=\"{escaped_name}\" classname=\"{escaped_file_name}\" assertions=\"{assertions}\" time=\"{test_case.execution_time}\" file=\"{escaped_file_name}\" line=\"0\">"
-    + _junit_run_test_case_message(test_case)
+    + junit_run_test_case_message(test_case)
     + '</testcase>'
 
-fun _junit_run_test_case_message(test_case: TestCase): string =
+private fun junit_run_test_case_message(test_case: TestCase): string =
     match test_case.result with
     case Passed -> ''
     case Failed { message, type } ->
-        let xml_message = _junit_escape_xml_attribute(message)
-        let xml_type = _junit_escape_xml_attribute(type)
+        let xml_message = junit_escape_xml_attribute(message)
+        let xml_type = junit_escape_xml_attribute(type)
         "<failure message=\"{xml_message}\" type=\"{xml_type}\"><![CDATA["
         + message
         + "]]></failure>"
 
-fun _junit_escape_xml_attribute(value: string): string =
+private fun junit_escape_xml_attribute(value: string): string =
     value
         .replace('&', '&amp;')
         .replace('<', '&lt;')

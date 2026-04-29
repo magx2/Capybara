@@ -28,7 +28,7 @@ fun tests(): Effect[TestFile] =
         + _datetime_test_from_iso_8601_success()
         + _datetime_test_from_iso_8601_failure())
 
-fun _test_unix_epoch(): TestCase =
+fun _test_unix_epoch(): Effect[TestCase] =
     test("UNIX_EPOCH should return the correct DateTime for 1 January 1970 at 00:00:00",
         let epoch = UNIX_EPOCH
         assert_that(epoch)
@@ -39,7 +39,7 @@ fun _test_unix_epoch(): TestCase =
             .has_minute(0)
             .has_second(0))
 
-fun _datetime_test_to_iso_8601(): list[TestCase] =
+fun _datetime_test_to_iso_8601(): list[Effect[TestCase]] =
     let offset_time =
         match Time { hour: 13, minute: 0, second: 0, offset_minutes: Some { 60 } } with
         case Success { time } -> time
@@ -51,7 +51,7 @@ fun _datetime_test_to_iso_8601(): list[TestCase] =
             assert_that(DateTime { date: UNIX_DATE, time: offset_time }.to_iso_8601()).is_equal_to("1970-01-01T12:00:00Z")),
     ]
 
-fun _test_timestamp(): list[TestCase] =
+fun _test_timestamp(): list[Effect[TestCase]] =
     [
         (_at(0, 0), 0L),
         (_at(1, 0), 86400L),
@@ -64,7 +64,7 @@ fun _test_timestamp(): list[TestCase] =
         "{datetime}.timestamp() should return the correct Unix timestamp",
         assert_that(datetime.timestamp()).is_equal_to(expected))
 
-fun _test_plus(): list[TestCase] =
+fun _test_plus(): list[Effect[TestCase]] =
     let epoch_date = UNIX_DATE
     let jan_31_2024 = epoch_date.add_years_months(54, 0).add_days(30)
     [
@@ -82,7 +82,7 @@ fun _test_plus(): list[TestCase] =
             assert_that(_at(0, 0).plus(DateDuration { years: 0, months: 0, days: 0, hours: 600000, minutes: 0, seconds: 0 })).is_equal_to(_at(25000, 0))),
     ]
 
-fun _test_minus_duration(): list[TestCase] =
+fun _test_minus_duration(): list[Effect[TestCase]] =
     let epoch_date = UNIX_DATE
     let mar_31_2024 = epoch_date.add_years_months(54, 2).add_days(30)
     [
@@ -96,7 +96,7 @@ fun _test_minus_duration(): list[TestCase] =
             assert_that(_at(1, 3600) - DateDuration { years: 0, months: 0, days: 0, hours: 25, minutes: 0, seconds: 0 }).is_equal_to(_at(0, 0))),
     ]
 
-fun _test_minus_datetime(): list[TestCase] =
+fun _test_minus_datetime(): list[Effect[TestCase]] =
     [
         test("minus(DateTime) should return a canonical positive elapsed duration",
             assert_that(_at(1, 3661).minus(_at(0, 0)).to_iso_8601()).is_equal_to("P1DT1H1M1S")),
@@ -113,7 +113,7 @@ fun _test_minus_datetime(): list[TestCase] =
                 .has_time(finish.time)),
     ]
 
-fun _test_comparisons(): list[TestCase] =
+fun _test_comparisons(): list[Effect[TestCase]] =
     let first = _at(0, 0)
     let second = _at(0, 1)
     let third = _at(1, 0)
@@ -140,7 +140,7 @@ fun _test_comparisons(): list[TestCase] =
             ])),
     ]
 
-fun _datetime_test_from_iso_8601_success(): list[TestCase] =
+fun _datetime_test_from_iso_8601_success(): list[Effect[TestCase]] =
     [
         ("1970-01-01T00:00:00Z", _at(0, 0)),
         ("19700101T000000Z", _at(0, 0)),
@@ -165,7 +165,7 @@ fun _datetime_test_from_iso_8601_success(): list[TestCase] =
                 assert_that(datetime.to_iso_8601()).is_equal_to(expected.to_iso_8601()),
             ])))
 
-fun _datetime_test_from_iso_8601_failure(): list[TestCase] =
+fun _datetime_test_from_iso_8601_failure(): list[Effect[TestCase]] =
     [
         "1970-01-01T00:00:00",
         "1970-01-01 00:00:00Z",

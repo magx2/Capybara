@@ -241,7 +241,7 @@ class JavaExpressionEvaluatorTest {
     }
 
     @Test
-    void shouldGenerateTimedCapyTestMethodForCapyTestModule() {
+    void shouldGenerateCapyTestMethodFromSourceForCapyTestModule() {
         var program = compileProgram("CapyTest", "/capy/test", """
                 data Assertion { result: bool, message: string, type: string }
                 data StringAssert { value: string, assertions: list[Assertion] }
@@ -250,11 +250,11 @@ class JavaExpressionEvaluatorTest {
                 type TestResult = Passed
                 data TestCase { name: string, result: TestResult, assertions_count: int, execution_time: long }
 
-                fun _execute(assertions: list[Assertion]): TestResult = Passed
+                private fun execute(assertions: list[Assertion]): TestResult = Passed
                 fun test(name: string, assert_: Assert): TestCase =
                     TestCase {
                         name: name,
-                        result: _execute(assert_.assertions),
+                        result: execute(assert_.assertions),
                         assertions_count: assert_.assertions.size,
                         execution_time: -1
                     }
@@ -264,14 +264,13 @@ class JavaExpressionEvaluatorTest {
                 .map(dev.capylang.generator.GeneratedModule::code)
                 .collect(joining("\n"));
 
-        assertThat(generated).contains("var start = System.currentTimeMillis();");
-        assertThat(generated).contains("var result = _execute((assert_).assertions());");
-        assertThat(generated).contains("var delta = System.currentTimeMillis() - start;");
-        assertThat(generated).contains("return new TestCase(name, result, ((assert_).assertions()).size(), (delta/1000));");
+        assertThat(generated).doesNotContain("System.currentTimeMillis()");
+        assertThat(generated).contains("execute((assert_).assertions())");
+        assertThat(generated).contains("((long) (0-1))");
     }
 
     @Test
-    void shouldNotGenerateTimedCapyTestMethodOutsideCapyTestModule() {
+    void shouldGenerateCapyTestNamedMethodFromSourceOutsideCapyTestModule() {
         var program = compileProgram("NotCapyTest", "/foo/bar", """
                 data Assertion { result: bool, message: string, type: string }
                 data StringAssert { value: string, assertions: list[Assertion] }
@@ -280,11 +279,11 @@ class JavaExpressionEvaluatorTest {
                 type TestResult = Passed
                 data TestCase { name: string, result: TestResult, assertions_count: int, execution_time: long }
 
-                fun _execute(assertions: list[Assertion]): TestResult = Passed
+                private fun execute(assertions: list[Assertion]): TestResult = Passed
                 fun test(name: string, assert_: Assert): TestCase =
                     TestCase {
                         name: name,
-                        result: _execute(assert_.assertions),
+                        result: execute(assert_.assertions),
                         assertions_count: assert_.assertions.size,
                         execution_time: -1
                     }
@@ -295,7 +294,7 @@ class JavaExpressionEvaluatorTest {
                 .collect(joining("\n"));
 
         assertThat(generated).doesNotContain("var start = System.currentTimeMillis();");
-        assertThat(generated).contains("return new TestCase(name, foo.bar.NotCapyTest._execute((assert_).assertions()), ((assert_).assertions()).size(), ((long) (0-1)));");
+        assertThat(generated).contains("return new TestCase(name, foo.bar.NotCapyTest.execute((assert_).assertions()), ((assert_).assertions()).size(), ((long) (0-1)));");
     }
 
     @Test

@@ -109,7 +109,7 @@ fun _should_parse_interval(
     start: DateTime,
     end: DateTime,
     duration: Duration
-): TestCase =
+): Effect[TestCase] =
     test("should parse {iso}",
         assert_that(/capy/date_time/Interval.from_iso_8601(iso))
             .succeeds(interval =>
