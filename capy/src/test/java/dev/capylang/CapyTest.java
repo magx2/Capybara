@@ -7,10 +7,13 @@ import org.junit.jupiter.api.io.TempDir;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.PrintStream;
+import java.net.URL;
+import java.net.URLClassLoader;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.TreeSet;
 import java.util.zip.ZipFile;
+import javax.tools.ToolProvider;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -750,12 +753,82 @@ class CapyTest {
 
     @Test
     void shouldIgnoreTestsMethodReturningUnrelatedEffectClass() throws Exception {
-        var isTestMethod = Capy.class.getDeclaredMethod("isTestMethod", java.lang.reflect.Method.class);
-        isTestMethod.setAccessible(true);
-
         var method = UnrelatedEffectProducer.class.getDeclaredMethod("tests");
 
-        assertFalse((Boolean) isTestMethod.invoke(null, method));
+        assertFalse(isTestMethod(method));
+    }
+
+    @Test
+    void shouldIgnoreTestsMethodReturningEffectWithNonTestPayload() throws Exception {
+        var producer = compileEffectProducerFixture(
+                "NonTestPayloadEffectProducer",
+                """
+                        package fixture;
+
+                        public final class NonTestPayloadEffectProducer {
+                            public static capy.lang.Effect<Integer> tests() {
+                                return null;
+                            }
+                        }
+                        """
+        );
+        var method = producer.getDeclaredMethod("tests");
+
+        assertFalse(isTestMethod(method));
+    }
+
+    @Test
+    void shouldAcceptTestsMethodReturningEffectWithTestFilePayload() throws Exception {
+        var producer = compileEffectProducerFixture(
+                "TestFilePayloadEffectProducer",
+                """
+                        package fixture;
+
+                        public final class TestFilePayloadEffectProducer {
+                            public static capy.lang.Effect<TestFile> tests() {
+                                return null;
+                            }
+
+                            public static final class TestFile {
+                            }
+                        }
+                        """
+        );
+        var method = producer.getDeclaredMethod("tests");
+
+        assertTrue(isTestMethod(method));
+    }
+
+    private Class<?> compileEffectProducerFixture(String className, String producerSource) throws Exception {
+        var sourceDir = Files.createDirectories(tempDir.resolve("effect-fixture-" + className).resolve("src"));
+        var classesDir = Files.createDirectories(tempDir.resolve("effect-fixture-" + className).resolve("classes"));
+        var effectPackageDir = Files.createDirectories(sourceDir.resolve("capy").resolve("lang"));
+        var fixturePackageDir = Files.createDirectories(sourceDir.resolve("fixture"));
+        var effectSource = effectPackageDir.resolve("Effect.java");
+        var producerFile = fixturePackageDir.resolve(className + ".java");
+        Files.writeString(effectSource, """
+                package capy.lang;
+
+                public interface Effect<T> {
+                }
+                """);
+        Files.writeString(producerFile, producerSource);
+
+        var compiler = ToolProvider.getSystemJavaCompiler();
+        if (compiler == null) {
+            throw new IllegalStateException("JDK compiler is not available");
+        }
+        var exitCode = compiler.run(null, null, null, "-d", classesDir.toString(), effectSource.toString(), producerFile.toString());
+        assertEquals(0, exitCode);
+
+        var classLoader = new URLClassLoader(new URL[]{classesDir.toUri().toURL()}, null);
+        return classLoader.loadClass("fixture." + className);
+    }
+
+    private static boolean isTestMethod(java.lang.reflect.Method method) throws Exception {
+        var isTestMethod = Capy.class.getDeclaredMethod("isTestMethod", java.lang.reflect.Method.class);
+        isTestMethod.setAccessible(true);
+        return (Boolean) isTestMethod.invoke(null, method);
     }
 
     public static final class UnrelatedEffectProducer {

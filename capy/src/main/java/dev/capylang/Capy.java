@@ -34,6 +34,8 @@ import java.io.UncheckedIOException;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
+import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.Type;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.net.URISyntaxException;
@@ -867,8 +869,38 @@ public class Capy {
         return "TestSuiteResults".equals(returnType.getSimpleName())
                || "TestSuites".equals(returnType.getSimpleName())
                || "TestFile".equals(returnType.getSimpleName())
-               || isEffectClass(returnType)
-               || List.class.isAssignableFrom(returnType);
+               || isEffectTestProducerReturnType(method)
+               || isTestFileListReturnType(method.getGenericReturnType());
+    }
+
+    private static boolean isEffectTestProducerReturnType(Method method) {
+        if (!isEffectClass(method.getReturnType())) {
+            return false;
+        }
+        if (!(method.getGenericReturnType() instanceof ParameterizedType parameterizedType)) {
+            return false;
+        }
+        var typeArguments = parameterizedType.getActualTypeArguments();
+        return typeArguments.length == 1 && isEffectTestPayloadType(typeArguments[0]);
+    }
+
+    private static boolean isEffectTestPayloadType(Type type) {
+        return isTestFileReturnType(type) || isTestFileListReturnType(type);
+    }
+
+    private static boolean isTestFileReturnType(Type type) {
+        return type instanceof Class<?> testType && "TestFile".equals(testType.getSimpleName());
+    }
+
+    private static boolean isTestFileListReturnType(Type type) {
+        if (!(type instanceof ParameterizedType parameterizedType)) {
+            return false;
+        }
+        if (!(parameterizedType.getRawType() instanceof Class<?> rawType) || !List.class.isAssignableFrom(rawType)) {
+            return false;
+        }
+        var typeArguments = parameterizedType.getActualTypeArguments();
+        return typeArguments.length == 1 && isTestFileReturnType(typeArguments[0]);
     }
 
     private static List<SuiteResult> invokeTestMethod(Method method) throws InvocationTargetException, IllegalAccessException {
@@ -1791,7 +1823,6 @@ public class Capy {
     record CompilationArtifacts(CompiledProgram program, List<ModuleRef> sourceModules) {
     }
 }
-
 
 
 
