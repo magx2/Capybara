@@ -2107,21 +2107,22 @@ public class CapybaraCompiler {
                                 .map(type -> linkType(type, dataTypes, functionGenericTypeNames, compileCache))
                                 .orElseGet(() -> Result.success(validatedExpression.type()))
                                 .flatMap(rtype -> validateFunctionReturnType(function, validatedExpression, rtype, dataTypes, moduleSourceFile)
-                                        .flatMap(finalExpression -> validateTailRecursiveFunction(
+                                        .flatMap(finalExpression -> classifyRecursion(
                                                 function,
-                                                finalExpression,
                                                 parameters,
+                                                finalExpression,
                                                 tailRecursiveSelfCallNames(function.name(), moduleSourceFile, moduleClassNameByModuleName),
                                                 moduleSourceFile
-                                        ).map(tailValidatedExpression -> new CompiledFunction(
+                                        ).map(recursion -> new CompiledFunction(
                                                 function.name(),
                                                 rtype,
                                                 parameters,
-                                                enrichNothing(tailValidatedExpression, function.name(), moduleSourceFile),
+                                                enrichNothing(finalExpression, function.name(), moduleSourceFile),
                                                 function.comments(),
                                                 function.visibility(),
                                                 isProgramMain(function.name(), rtype, parameters),
-                                                function.tailRecursive()
+                                                recursion.recursive(),
+                                                recursion.tailRecursive()
                                         )))))));
         linked = normalizeInfixOperatorErrors(linked, function, moduleSourceFile);
         linked = normalizeMatchExhaustivenessErrors(linked, function, moduleSourceFile);
@@ -2133,46 +2134,55 @@ public class CapybaraCompiler {
         return normalizeReadableFunctionErrors(linked, function, moduleSourceFile);
     }
 
-    private Result<CompiledExpression> validateTailRecursiveFunction(
+    private Result<RecursionClassification> classifyRecursion(
             Function function,
-            CompiledExpression expression,
             List<CompiledFunctionParameter> parameters,
+            CompiledExpression expression,
             Set<String> selfCallNames,
             String moduleSourceFile
     ) {
-        if (!function.tailRecursive()) {
-            return Result.success(expression);
-        }
+        var analysis = analyzeTailRecursion(selfCallNames, parameters, expression, true);
         if (methodOwnerType(function.name()).isPresent()) {
-            return tailRecursiveFunctionError(
-                    function,
-                    function.position(),
-                    moduleSourceFile,
-                    "`fun rec` is supported for functions, not type methods"
-            );
+            if (function.tailRecursive()) {
+                return tailRecursiveFunctionError(
+                        function,
+                        function.position(),
+                        moduleSourceFile,
+                        "`fun rec` is supported for functions, not type methods"
+                );
+            }
+            return Result.success(new RecursionClassification(analysis.hasSelfCall(), false));
         }
 
-        var analysis = analyzeTailRecursion(selfCallNames, parameters, expression, true);
         if (analysis.firstNonTailCall().isPresent()) {
-            return tailRecursiveFunctionError(
-                    function,
-                    function.position(),
-                    moduleSourceFile,
-                    "Recursive call to `" + displayFunctionName(function.name()) + "` is not in tail position"
-            );
+            if (function.tailRecursive()) {
+                return tailRecursiveFunctionError(
+                        function,
+                        function.position(),
+                        moduleSourceFile,
+                        "Recursive call to `" + displayFunctionName(function.name()) + "` is not in tail position"
+                );
+            }
+            return Result.success(new RecursionClassification(true, false));
         }
         if (!analysis.hasSelfCall()) {
-            return tailRecursiveFunctionError(
-                    function,
-                    function.position(),
-                    moduleSourceFile,
-                    "`fun rec` function `" + displayFunctionName(function.name()) + "` must call itself in tail position"
-            );
+            if (function.tailRecursive()) {
+                return tailRecursiveFunctionError(
+                        function,
+                        function.position(),
+                        moduleSourceFile,
+                        "`fun rec` function `" + displayFunctionName(function.name()) + "` must call itself in tail position"
+                );
+            }
+            return Result.success(new RecursionClassification(false, false));
         }
-        return Result.success(expression);
+        return Result.success(new RecursionClassification(true, true));
     }
 
-    private Result<CompiledExpression> tailRecursiveFunctionError(
+    private record RecursionClassification(boolean recursive, boolean tailRecursive) {
+    }
+
+    private <T> Result<T> tailRecursiveFunctionError(
             Function function,
             Optional<SourcePosition> position,
             String moduleSourceFile,

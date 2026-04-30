@@ -12,13 +12,14 @@ public record CompiledFunction(String name,
                              List<String> comments,
                              Visibility visibility,
                              boolean programMain,
+                             boolean recursive,
                              boolean tailRecursive) implements Comparable<CompiledFunction> {
     public CompiledFunction(String name,
                           CompiledType returnType,
                           List<CompiledFunctionParameter> parameters,
                           CompiledExpression expression,
                           List<String> comments) {
-        this(name, returnType, parameters, expression, comments, null, false, false);
+        this(name, returnType, parameters, expression, comments, null, false, false, false);
     }
 
     public CompiledFunction(String name,
@@ -27,7 +28,7 @@ public record CompiledFunction(String name,
                             CompiledExpression expression,
                             List<String> comments,
                             boolean programMain) {
-        this(name, returnType, parameters, expression, comments, null, programMain, false);
+        this(name, returnType, parameters, expression, comments, null, programMain, false, false);
     }
 
     public record CompiledFunctionParameter(String name, CompiledType type) {

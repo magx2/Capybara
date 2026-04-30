@@ -79,11 +79,12 @@ public class JavaExpressionEvaluator {
             CompiledExpression expression,
             List<JavaMethod.JavaFunctionParameter> parameters,
             List<String> selfCallNames,
+            CompiledType sourceReturnType,
             List<CompiledType> sourceParameterTypes,
             String moduleHelperClass
     ) {
         log.fine(() -> "evaluateTailRecursiveExpression: " + expression.getClass().getSimpleName() + " -> " + expression);
-        var context = new TailRecursiveContext(selfCallNames, parameters, sourceParameterTypes);
+        var context = new TailRecursiveContext(selfCallNames, parameters, sourceReturnType, sourceParameterTypes);
         var code = new StringBuilder("while (true) {\n");
         appendTailRecursiveStatement(code, expression, initialScope(parameters, moduleHelperClass), context);
         code.append("}");
@@ -134,7 +135,9 @@ public class JavaExpressionEvaluator {
 
         var evaluated = evaluateExpression(expression, scope).popExpression();
         appendStatements(code, newStatements(scope, evaluated.scope()));
-        code.append("return ").append(evaluated.expression()).append(";\n");
+        code.append("return ")
+                .append(coerceTailReturnExpression(context.returnType(), evaluated.expression()))
+                .append(";\n");
     }
 
     private static void appendTailRecursiveSelfCall(
@@ -282,6 +285,7 @@ public class JavaExpressionEvaluator {
     private record TailRecursiveContext(
             List<String> selfCallNames,
             List<JavaMethod.JavaFunctionParameter> parameters,
+            CompiledType returnType,
             List<CompiledType> parameterTypes
     ) {
     }
@@ -1743,6 +1747,26 @@ public class JavaExpressionEvaluator {
             return "((" + javaPrimitiveType(expectedPrimitive) + ") " + expression + ")";
         }
         return expression;
+    }
+
+    private static String coerceTailReturnExpression(dev.capylang.compiler.CompiledType expectedType, String expression) {
+        if (shouldCastTailReturnToExpectedType(expectedType)) {
+            return "((" + javaCastTypeForMatchCase(expectedType) + ") (" + expression + "))";
+        }
+        return expression;
+    }
+
+    private static boolean shouldCastTailReturnToExpectedType(dev.capylang.compiler.CompiledType expectedType) {
+        return switch (expectedType) {
+            case dev.capylang.compiler.CompiledDataType ignored -> true;
+            case dev.capylang.compiler.CompiledDataParentType ignored -> true;
+            case dev.capylang.compiler.CollectionLinkedType.CompiledList ignored -> true;
+            case dev.capylang.compiler.CollectionLinkedType.CompiledSet ignored -> true;
+            case dev.capylang.compiler.CollectionLinkedType.CompiledDict ignored -> true;
+            case dev.capylang.compiler.CompiledTupleType ignored -> true;
+            case dev.capylang.compiler.CompiledFunctionType ignored -> true;
+            default -> false;
+        };
     }
 
     private static boolean isImplicitNumericWidening(

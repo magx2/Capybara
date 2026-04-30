@@ -186,6 +186,7 @@ public class JavaAstBuilder {
                 methodTypeParameters,
                 buildJavaReturnType(function),
                 buildJavaFunctionParameters(function.parameters()),
+                function.returnType(),
                 function.parameters().stream()
                         .map(CompiledFunction.CompiledFunctionParameter::type)
                         .toList(),
@@ -910,6 +911,7 @@ public class JavaAstBuilder {
                 methodTypeParameters,
                 buildJavaReturnType(function),
                 buildJavaFunctionParameters(parameters),
+                function.returnType(),
                 parameters.stream()
                         .map(CompiledFunction.CompiledFunctionParameter::type)
                         .toList(),
@@ -1006,6 +1008,7 @@ public class JavaAstBuilder {
                 methodTypeParameters,
                 buildJavaReturnType(function),
                 buildJavaFunctionParameters(parameters),
+                function.returnType(),
                 parameters.stream()
                         .map(CompiledFunction.CompiledFunctionParameter::type)
                         .toList(),

@@ -1004,6 +1004,7 @@ public final class JavaGenerator implements Generator {
                 method.expression(),
                 method.parameters(),
                 method.selfCallNames(),
+                method.sourceReturnType(),
                 method.sourceParameterTypes(),
                 moduleHelperClass
         );
