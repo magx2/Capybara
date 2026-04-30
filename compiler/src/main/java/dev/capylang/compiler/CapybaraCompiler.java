@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
 import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
 import dev.capylang.compiler.CompiledFunction.CompiledFunctionParameter;
 import dev.capylang.compiler.expression.CapybaraExpressionCompiler;
+import dev.capylang.compiler.expression.*;
 import dev.capylang.compiler.parser.*;
 import dev.capylang.compiler.parser.Module;
 
@@ -2106,15 +2107,22 @@ public class CapybaraCompiler {
                                 .map(type -> linkType(type, dataTypes, functionGenericTypeNames, compileCache))
                                 .orElseGet(() -> Result.success(validatedExpression.type()))
                                 .flatMap(rtype -> validateFunctionReturnType(function, validatedExpression, rtype, dataTypes, moduleSourceFile)
-                                        .map(finalExpression -> new CompiledFunction(
+                                        .flatMap(finalExpression -> validateTailRecursiveFunction(
+                                                function,
+                                                finalExpression,
+                                                parameters,
+                                                tailRecursiveSelfCallNames(function.name(), moduleSourceFile, moduleClassNameByModuleName),
+                                                moduleSourceFile
+                                        ).map(tailValidatedExpression -> new CompiledFunction(
                                                 function.name(),
                                                 rtype,
                                                 parameters,
-                                                enrichNothing(finalExpression, function.name(), moduleSourceFile),
+                                                enrichNothing(tailValidatedExpression, function.name(), moduleSourceFile),
                                                 function.comments(),
                                                 function.visibility(),
-                                                isProgramMain(function.name(), rtype, parameters)
-                                        ))))));
+                                                isProgramMain(function.name(), rtype, parameters),
+                                                function.tailRecursive()
+                                        )))))));
         linked = normalizeInfixOperatorErrors(linked, function, moduleSourceFile);
         linked = normalizeMatchExhaustivenessErrors(linked, function, moduleSourceFile);
         linked = normalizeIntLiteralErrors(linked, function, moduleSourceFile);
@@ -2123,6 +2131,265 @@ public class CapybaraCompiler {
         var fallbackPosition = returnExpressionPosition(function.expression()).or(() -> function.position());
         linked = withPosition(linked, fallbackPosition, normalizedFile);
         return normalizeReadableFunctionErrors(linked, function, moduleSourceFile);
+    }
+
+    private Result<CompiledExpression> validateTailRecursiveFunction(
+            Function function,
+            CompiledExpression expression,
+            List<CompiledFunctionParameter> parameters,
+            Set<String> selfCallNames,
+            String moduleSourceFile
+    ) {
+        if (!function.tailRecursive()) {
+            return Result.success(expression);
+        }
+        if (methodOwnerType(function.name()).isPresent()) {
+            return tailRecursiveFunctionError(
+                    function,
+                    function.position(),
+                    moduleSourceFile,
+                    "`fun rec` is supported for functions, not type methods"
+            );
+        }
+
+        var analysis = analyzeTailRecursion(selfCallNames, parameters, expression, true);
+        if (analysis.firstNonTailCall().isPresent()) {
+            return tailRecursiveFunctionError(
+                    function,
+                    function.position(),
+                    moduleSourceFile,
+                    "Recursive call to `" + displayFunctionName(function.name()) + "` is not in tail position"
+            );
+        }
+        if (!analysis.hasSelfCall()) {
+            return tailRecursiveFunctionError(
+                    function,
+                    function.position(),
+                    moduleSourceFile,
+                    "`fun rec` function `" + displayFunctionName(function.name()) + "` must call itself in tail position"
+            );
+        }
+        return Result.success(expression);
+    }
+
+    private Result<CompiledExpression> tailRecursiveFunctionError(
+            Function function,
+            Optional<SourcePosition> position,
+            String moduleSourceFile,
+            String details
+    ) {
+        var sourcePosition = position.or(() -> function.position()).orElse(SourcePosition.EMPTY);
+        var line = Math.max(sourcePosition.line(), 1);
+        var column = Math.max(sourcePosition.column(), 0);
+        var file = normalizeFile(moduleSourceFile);
+        var functionLine = function.position().map(SourcePosition::line).orElse(line);
+        var functionPreview = functionLine == line
+                ? formatFunctionHeaderAndExpression(function, formatExpressionPreviewWithSpaces(function.expression()))
+                : formatFunctionPreviewUpToLine(function, line);
+        var message = "error: mismatched types\n"
+                      + " --> " + file + ":" + line + ":" + column + "\n"
+                      + functionPreview + "\n"
+                      + " ".repeat(Math.max(column, 0)) + "^ " + details + "\n";
+        var error = new Result.Error.SingleError(line, column, file, message);
+        return new Result.Error<>(List.of(error));
+    }
+
+    private TailRecursionAnalysis analyzeTailRecursion(
+            Set<String> selfCallNames,
+            List<CompiledFunctionParameter> parameters,
+            CompiledExpression expression,
+            boolean tailPosition
+    ) {
+        return switch (expression) {
+            case CompiledFunctionCall functionCall -> {
+                var result = TailRecursionAnalysis.empty();
+                var selfCall = isDirectSelfCall(selfCallNames, parameters, functionCall);
+                if (selfCall) {
+                    result = tailPosition
+                            ? TailRecursionAnalysis.tailCall()
+                            : TailRecursionAnalysis.nonTailCall(functionCall);
+                }
+                yield merge(result, analyzeAll(selfCallNames, parameters, functionCall.arguments(), false));
+            }
+            case CompiledIfExpression ifExpression -> merge(
+                    analyzeTailRecursion(selfCallNames, parameters, ifExpression.condition(), false),
+                    analyzeTailRecursion(selfCallNames, parameters, ifExpression.thenBranch(), tailPosition),
+                    analyzeTailRecursion(selfCallNames, parameters, ifExpression.elseBranch(), tailPosition)
+            );
+            case CompiledLetExpression letExpression -> merge(
+                    analyzeTailRecursion(selfCallNames, parameters, letExpression.value(), false),
+                    analyzeTailRecursion(selfCallNames, parameters, letExpression.rest(), tailPosition)
+            );
+            case CompiledMatchExpression matchExpression -> merge(
+                    analyzeTailRecursion(selfCallNames, parameters, matchExpression.matchWith(), false),
+                    merge(matchExpression.cases().stream()
+                            .map(matchCase -> merge(
+                                    matchCase.guard()
+                                            .map(guard -> analyzeTailRecursion(selfCallNames, parameters, guard, false))
+                                            .orElseGet(TailRecursionAnalysis::empty),
+                                    analyzeTailRecursion(selfCallNames, parameters, matchCase.expression(), tailPosition)
+                            ))
+                            .toList())
+            );
+            case CompiledFunctionInvoke functionInvoke -> merge(
+                    analyzeTailRecursion(selfCallNames, parameters, functionInvoke.function(), false),
+                    analyzeAll(selfCallNames, parameters, functionInvoke.arguments(), false)
+            );
+            case CompiledInfixExpression infixExpression -> merge(
+                    analyzeTailRecursion(selfCallNames, parameters, infixExpression.left(), false),
+                    analyzeTailRecursion(selfCallNames, parameters, infixExpression.right(), false)
+            );
+            case CompiledFieldAccess fieldAccess ->
+                    analyzeTailRecursion(selfCallNames, parameters, fieldAccess.source(), false);
+            case CompiledIndexExpression indexExpression -> merge(
+                    analyzeTailRecursion(selfCallNames, parameters, indexExpression.source(), false),
+                    analyzeTailRecursion(selfCallNames, parameters, indexExpression.index(), false)
+            );
+            case CompiledSliceExpression sliceExpression -> merge(
+                    analyzeTailRecursion(selfCallNames, parameters, sliceExpression.source(), false),
+                    sliceExpression.start()
+                            .map(start -> analyzeTailRecursion(selfCallNames, parameters, start, false))
+                            .orElseGet(TailRecursionAnalysis::empty),
+                    sliceExpression.end()
+                            .map(end -> analyzeTailRecursion(selfCallNames, parameters, end, false))
+                            .orElseGet(TailRecursionAnalysis::empty)
+            );
+            case CompiledLambdaExpression lambdaExpression ->
+                    analyzeTailRecursion(selfCallNames, parameters, lambdaExpression.expression(), false);
+            case CompiledEffectExpression effectExpression ->
+                    analyzeTailRecursion(selfCallNames, parameters, effectExpression.body(), false);
+            case CompiledEffectBindExpression effectBindExpression -> merge(
+                    analyzeTailRecursion(selfCallNames, parameters, effectBindExpression.source(), false),
+                    analyzeTailRecursion(selfCallNames, parameters, effectBindExpression.rest(), false)
+            );
+            case CompiledPipeExpression pipeExpression -> merge(
+                    analyzeTailRecursion(selfCallNames, parameters, pipeExpression.source(), false),
+                    analyzeTailRecursion(selfCallNames, parameters, pipeExpression.mapper(), false)
+            );
+            case CompiledPipeFlatMapExpression pipeFlatMapExpression -> merge(
+                    analyzeTailRecursion(selfCallNames, parameters, pipeFlatMapExpression.source(), false),
+                    analyzeTailRecursion(selfCallNames, parameters, pipeFlatMapExpression.mapper(), false)
+            );
+            case CompiledPipeFilterOutExpression pipeFilterOutExpression -> merge(
+                    analyzeTailRecursion(selfCallNames, parameters, pipeFilterOutExpression.source(), false),
+                    analyzeTailRecursion(selfCallNames, parameters, pipeFilterOutExpression.predicate(), false)
+            );
+            case CompiledPipeAllExpression pipeAllExpression -> merge(
+                    analyzeTailRecursion(selfCallNames, parameters, pipeAllExpression.source(), false),
+                    analyzeTailRecursion(selfCallNames, parameters, pipeAllExpression.predicate(), false)
+            );
+            case CompiledPipeAnyExpression pipeAnyExpression -> merge(
+                    analyzeTailRecursion(selfCallNames, parameters, pipeAnyExpression.source(), false),
+                    analyzeTailRecursion(selfCallNames, parameters, pipeAnyExpression.predicate(), false)
+            );
+            case CompiledPipeReduceExpression pipeReduceExpression -> merge(
+                    analyzeTailRecursion(selfCallNames, parameters, pipeReduceExpression.source(), false),
+                    analyzeTailRecursion(selfCallNames, parameters, pipeReduceExpression.initialValue(), false),
+                    analyzeTailRecursion(selfCallNames, parameters, pipeReduceExpression.reducerExpression(), false)
+            );
+            case CompiledNumericWidening numericWidening ->
+                    analyzeTailRecursion(selfCallNames, parameters, numericWidening.expression(), false);
+            case CompiledNewData newData -> analyzeAll(
+                    selfCallNames,
+                    parameters,
+                    newData.assignments().stream().map(CompiledNewData.FieldAssignment::value).toList(),
+                    false
+            );
+            case CompiledNewList newList -> analyzeAll(selfCallNames, parameters, newList.values(), false);
+            case CompiledNewSet newSet -> analyzeAll(selfCallNames, parameters, newSet.values(), false);
+            case CompiledNewDict newDict -> merge(newDict.entries().stream()
+                    .map(entry -> merge(
+                            analyzeTailRecursion(selfCallNames, parameters, entry.key(), false),
+                            analyzeTailRecursion(selfCallNames, parameters, entry.value(), false)
+                    ))
+                    .toList());
+            case CompiledTupleExpression tupleExpression ->
+                    analyzeAll(selfCallNames, parameters, tupleExpression.values(), false);
+            case CompiledBooleanValue ignored -> TailRecursionAnalysis.empty();
+            case CompiledByteValue ignored -> TailRecursionAnalysis.empty();
+            case CompiledDoubleValue ignored -> TailRecursionAnalysis.empty();
+            case CompiledFloatValue ignored -> TailRecursionAnalysis.empty();
+            case CompiledIntValue ignored -> TailRecursionAnalysis.empty();
+            case CompiledLongValue ignored -> TailRecursionAnalysis.empty();
+            case CompiledNothingValue ignored -> TailRecursionAnalysis.empty();
+            case CompiledStringValue ignored -> TailRecursionAnalysis.empty();
+            case CompiledVariable ignored -> TailRecursionAnalysis.empty();
+        };
+    }
+
+    private TailRecursionAnalysis analyzeAll(
+            Set<String> selfCallNames,
+            List<CompiledFunctionParameter> parameters,
+            List<CompiledExpression> expressions,
+            boolean tailPosition
+    ) {
+        return merge(expressions.stream()
+                .map(expression -> analyzeTailRecursion(selfCallNames, parameters, expression, tailPosition))
+                .toList());
+    }
+
+    private boolean isDirectSelfCall(
+            Set<String> selfCallNames,
+            List<CompiledFunctionParameter> parameters,
+            CompiledFunctionCall functionCall
+    ) {
+        if (!selfCallNames.contains(functionCall.name()) || functionCall.arguments().size() != parameters.size()) {
+            return false;
+        }
+        for (int i = 0; i < parameters.size(); i++) {
+            if (!functionCall.arguments().get(i).type().equals(parameters.get(i).type())) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private Set<String> tailRecursiveSelfCallNames(
+            String functionName,
+            String moduleSourceFile,
+            Map<String, String> moduleClassNameByModuleName
+    ) {
+        var names = new LinkedHashSet<String>();
+        names.add(functionName);
+        var qualifiedModuleName = qualifiedModuleNameFromSourceFile(moduleSourceFile);
+        if (qualifiedModuleName.startsWith("/")) {
+            qualifiedModuleName = qualifiedModuleName.substring(1);
+        }
+        var className = moduleClassNameByModuleName.get(qualifiedModuleName);
+        if (className != null) {
+            names.add(className + "." + functionName);
+        }
+        return Set.copyOf(names);
+    }
+
+    private TailRecursionAnalysis merge(TailRecursionAnalysis... analyses) {
+        return merge(List.of(analyses));
+    }
+
+    private TailRecursionAnalysis merge(List<TailRecursionAnalysis> analyses) {
+        var hasSelfCall = false;
+        Optional<CompiledFunctionCall> firstNonTailCall = Optional.empty();
+        for (var analysis : analyses) {
+            hasSelfCall = hasSelfCall || analysis.hasSelfCall();
+            if (firstNonTailCall.isEmpty()) {
+                firstNonTailCall = analysis.firstNonTailCall();
+            }
+        }
+        return new TailRecursionAnalysis(hasSelfCall, firstNonTailCall);
+    }
+
+    private record TailRecursionAnalysis(boolean hasSelfCall, Optional<CompiledFunctionCall> firstNonTailCall) {
+        private static TailRecursionAnalysis empty() {
+            return new TailRecursionAnalysis(false, Optional.empty());
+        }
+
+        private static TailRecursionAnalysis tailCall() {
+            return new TailRecursionAnalysis(true, Optional.empty());
+        }
+
+        private static TailRecursionAnalysis nonTailCall(CompiledFunctionCall call) {
+            return new TailRecursionAnalysis(true, Optional.of(call));
+        }
     }
 
     private Result<dev.capylang.compiler.expression.CompiledExpression> validateConstructorReturnType(
@@ -2546,7 +2813,7 @@ public class CapybaraCompiler {
         if (function.expression() instanceof LetExpression && expressionPosition.line() != position.line()) {
             return formatMultilineFunctionPreview(function, declaredReturnType);
         }
-        return "fun " + displayFunctionName(function.name())
+        return functionKeyword(function) + " " + displayFunctionName(function.name())
                + "(" + function.parameters().stream()
                        .map(parameter -> parameter.name() + ": " + formatParserTypeInHeader(parameter.type()))
                        .collect(java.util.stream.Collectors.joining(", "))
@@ -2566,7 +2833,8 @@ public class CapybaraCompiler {
         var methodHeaderName = methodDeclaration
                 .map(this::formatMethodDeclarationName)
                 .orElse(displayFunctionName(function.name()));
-        var header = new StringBuilder("fun ")
+        var header = new StringBuilder(functionKeyword(function))
+                .append(" ")
                 .append(methodHeaderName)
                 .append("(")
                 .append(methodParameters.stream()
@@ -2575,6 +2843,10 @@ public class CapybaraCompiler {
                 .append(")");
         function.returnType().ifPresent(type -> header.append(": ").append(formatParserTypeInHeader(type)));
         return header.toString();
+    }
+
+    private String functionKeyword(Function function) {
+        return function.tailRecursive() ? "fun rec" : "fun";
     }
 
     private int methodDeclarationErrorLine(Function function) {
@@ -2669,7 +2941,9 @@ public class CapybaraCompiler {
 
     private String formatMultilineFunctionPreview(Function function, CompiledType declaredReturnType) {
         var builder = new StringBuilder();
-        builder.append("  fun ")
+        builder.append("  ")
+                .append(functionKeyword(function))
+                .append(" ")
                 .append(displayFunctionName(function.name()))
                 .append("(")
                 .append(function.parameters().stream()
@@ -4111,7 +4385,8 @@ public class CapybaraCompiler {
     }
 
     private String formatFunctionHeaderWithRestoredPrivateTypes(Function function) {
-        var header = new StringBuilder("fun ")
+        var header = new StringBuilder(functionKeyword(function))
+                .append(" ")
                 .append(displayFunctionName(function.name()))
                 .append("(")
                 .append(function.parameters().stream()

@@ -1,0 +1,43 @@
+from /capy/lang/Result import { Result, Success, Error }
+
+fun rec sum(n: int, acc: int): int =
+    if n <= 0 then acc else sum(n - 1, acc + n)
+
+fun sum_inner(n: int): int =
+    fun rec __sum(n: int, acc: int): int =
+        if n <= 0 then acc else __sum(n - 1, acc + n)
+    ---
+    __sum(n, 0)
+
+fun rec sum_with_let(n: int, acc: int): int =
+    let next_n = n - 1
+    let next_acc = acc + n
+    if n <= 0 then acc else sum_with_let(next_n, next_acc)
+
+fun rec sum_with_match(n: int, acc: int): int =
+    match n <= 0 with
+    case true -> acc
+    case false -> sum_with_match(n - 1, acc + n)
+
+fun rec count_down_large(n: int, acc: int): int =
+    if n <= 0 then acc else count_down_large(n - 1, acc + 1)
+
+fun rec sum_present_values(values: list[int], acc: int): int =
+    match values[0] with
+    case Some { value } -> sum_present_values(values[1:], acc + value)
+    case None -> acc
+
+private fun parse_length(value: string): Result[int] =
+    if value == "bad"
+    then Error { message: "bad length" }
+    else Success { value: value.size }
+
+fun rec sum_lengths_until_error(values: list[string], acc: int): string =
+    match values[0] with
+    case Some { value } ->
+        {
+            match parse_length(value) with
+            case Success { length } -> sum_lengths_until_error(values[1:], acc + length)
+            case Error { message } -> "error:" + message + ":" + acc
+        }
+    case None -> "ok:" + acc

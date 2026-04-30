@@ -475,9 +475,9 @@ class CapybaraParserTest {
         var parser = new CapybaraParser();
         Method method = CapybaraParser.class.getDeclaredMethod("formatParserError", RawModule.class, String.class, String.class);
         method.setAccessible(true);
-        var module = new RawModule("SemVer", "/capy/util", """
+                var module = new RawModule("SemVer", "/capy/util", """
                 fun parse(): int =
-                    fun __parse_positive_digit(value: int): int = value
+                    fun rec __parse_positive_digit(value: int): int = __parse_positive_digit(value)
                     fun __parse_positive_digit(value: int): int = value + 1
                     ---
                     0
@@ -509,6 +509,46 @@ class CapybaraParserTest {
 
         var localFunction = findFunction("__accumulate__scope_1_0__local_fun_0_accumulate", module.functional());
         assertThat(localFunction.comments()).containsExactly("Internal accumulate");
+    }
+
+    @Test
+    @DisplayName("should parse tail recursive function marker")
+    void parseTailRecursiveFunctionMarker() {
+        var module = parseSuccess(new RawModule("Test", "/parser", """
+                fun rec sum(n: int, acc: int): int =
+                    if n <= 0 then acc else sum(n - 1, acc + n)
+                """));
+
+        var function = findFunction("sum", module.functional());
+        assertThat(function.tailRecursive()).isTrue();
+    }
+
+    @Test
+    @DisplayName("should parse tail recursive local function marker")
+    void parseTailRecursiveLocalFunctionMarker() {
+        var module = parseSuccess(new RawModule("Test", "/parser", """
+                fun sum(n: int): int =
+                    fun rec __sum(n: int, acc: int): int =
+                        if n <= 0 then acc else __sum(n - 1, acc + n)
+                    ---
+                    __sum(n, 0)
+                """));
+
+        var localFunction = findFunction("__sum__scope_1_0__local_fun_0_sum", module.functional());
+        assertThat(localFunction.tailRecursive()).isTrue();
+    }
+
+    @Test
+    @DisplayName("should keep rec usable as a function name and call")
+    void parseRecFunctionNameAndCall() {
+        var module = parseSuccess(new RawModule("Test", "/parser", """
+                fun rec(x: int): int = x
+                fun call_rec(x: int): int = rec(x)
+                """));
+
+        assertThat(findFunction("rec", module.functional()).tailRecursive()).isFalse();
+        var call = (FunctionCall) findFunction("call_rec", module.functional()).expression();
+        assertThat(call.name()).isEqualTo("rec");
     }
 
     @Test

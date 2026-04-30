@@ -1,6 +1,7 @@
 type InteropPet = InteropDog | InteropCat
 data InteropDog { name: string }
 data InteropCat { age: int }
+data RecInteropValue { value: int }
 
 fun make_dog(name: string): InteropDog = InteropDog { name: name }
 
@@ -8,3 +9,8 @@ fun pet_text(pet: InteropPet): string =
     match pet with
     case InteropDog { name } -> "dog:" + name
     case InteropCat { age } -> "cat:" + age
+
+fun RecInteropValue.step(delta: int): int = this.value + delta
+
+fun rec step(n: int, value: RecInteropValue, acc: int): int =
+    if n <= 0 then acc else step(n - 1, value, acc + value.step(n))

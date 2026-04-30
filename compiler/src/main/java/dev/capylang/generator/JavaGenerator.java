@@ -17,6 +17,7 @@ import java.util.logging.Logger;
 import static java.lang.String.join;
 import static java.util.stream.Collectors.joining;
 import static dev.capylang.generator.java.JavaExpressionEvaluator.evaluateExpression;
+import static dev.capylang.generator.java.JavaExpressionEvaluator.evaluateTailRecursiveExpression;
 
 public final class JavaGenerator implements Generator {
     private static final Logger log = Logger.getLogger(JavaGenerator.class.getName());
@@ -798,7 +799,7 @@ public final class JavaGenerator implements Generator {
                 : method.typeParameters().stream().collect(joining(", ", "<", ">")) + " ";
         return mapJavaDoc(method.comments())
                + prefix + " " + methodTypeParameters + method.returnType() + " " + mapMethodName(method.name()) + "(" + mapFunctionParameters(method.parameters()) + ") {\n"
-               + evaluateExpression(method.expression(), method.parameters(), helperCallOwnerName)
+               + evaluateMethodBody(method, helperCallOwnerName)
                + "\n}\n";
     }
 
@@ -832,7 +833,7 @@ public final class JavaGenerator implements Generator {
         }
         return mapJavaDoc(method.comments())
                + visibility + "static " + methodTypeParameters + method.returnType() + " " + mapMethodName(method.name()) + "(" + mapFunctionParameters(method.parameters()) + ") {\n"
-               + evaluateExpression(method.expression(), method.parameters())
+               + evaluateMethodBody(method, null)
                + "\n}\n";
     }
 
@@ -956,7 +957,7 @@ public final class JavaGenerator implements Generator {
                 : method.typeParameters().stream().collect(joining(", ", "<", ">")) + " ";
         return mapJavaDoc(method.comments())
                + (method.isPrivate() ? "private" : "public") + " " + methodTypeParameters + method.returnType() + " " + mapMethodName(method.name()) + "(" + mapFunctionParameters(method.parameters()) + ") {\n"
-               + evaluateExpression(method.expression(), method.parameters(), helperCallOwnerName)
+               + evaluateMethodBody(method, helperCallOwnerName)
                + "\n}\n";
     }
 
@@ -966,7 +967,7 @@ public final class JavaGenerator implements Generator {
                 : method.typeParameters().stream().collect(joining(", ", "<", ">")) + " ";
         var capybaraMainMethod = mapJavaDoc(method.comments())
                + "public static " + methodTypeParameters + method.returnType() + " " + mapMethodName(method.name()) + "(" + mapFunctionParameters(method.parameters()) + ") {\n"
-               + evaluateExpression(method.expression(), method.parameters())
+               + evaluateMethodBody(method, null)
                + "\n}\n";
         var returnsEffectProgram = isEffectProgramType(method.returnType().toString());
         var programType = returnsEffectProgram
@@ -993,6 +994,19 @@ public final class JavaGenerator implements Generator {
                + "default -> throw new java.lang.IllegalStateException(\"Unexpected value: \" + program);\n"
                + "}\n"
                + "}\n";
+    }
+
+    private String evaluateMethodBody(JavaMethod method, String moduleHelperClass) {
+        if (!method.tailRecursive()) {
+            return evaluateExpression(method.expression(), method.parameters(), moduleHelperClass);
+        }
+        return evaluateTailRecursiveExpression(
+                method.expression(),
+                method.parameters(),
+                method.selfCallNames(),
+                method.sourceParameterTypes(),
+                moduleHelperClass
+        );
     }
 
     private String normalizeProgramTypeReference(String typeName) {

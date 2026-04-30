@@ -9,11 +9,20 @@ public record Function(String name, List<Parameter> parameters, Optional<Type> r
                        Expression expression,
                        List<String> comments,
                        Visibility visibility,
-                       Optional<SourcePosition> position) implements Definition {
+                       Optional<SourcePosition> position,
+                       boolean tailRecursive) implements Definition {
+    public Function(String name, List<Parameter> parameters, Optional<Type> returnType,
+                    Expression expression,
+                    List<String> comments,
+                    Visibility visibility,
+                    Optional<SourcePosition> position) {
+        this(name, parameters, returnType, expression, comments, visibility, position, false);
+    }
+
     public Function(String name, List<Parameter> parameters, Optional<Type> returnType,
                     Expression expression,
                     List<String> comments,
                     Optional<SourcePosition> position) {
-        this(name, parameters, returnType, expression, comments, null, position);
+        this(name, parameters, returnType, expression, comments, null, position, false);
     }
 }
