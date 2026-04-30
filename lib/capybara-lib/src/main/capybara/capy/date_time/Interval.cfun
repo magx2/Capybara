@@ -51,14 +51,14 @@ fun from_iso_8601(iso: string): Result[Interval] =
     data __Split { left: string, right: string }
     data __SplitScan { left: string, right: string, seen_separator: bool }
     fun __invalid(message: string): string = "Invalid ISO 8601 interval format: " + message
-    fun __drop_prefix(value: string, size: int): string =
+    fun rec __drop_prefix(value: string, size: int): string =
         if size <= 0
         then value
         else
             match value[0] with
             case None -> ""
             case Some { _ } -> __drop_prefix(value[1:], size - 1)
-    fun __scan_split(separator: string, value: string, scan: __SplitScan): Result[__Split] =
+    fun rec __scan_split(separator: string, value: string, scan: __SplitScan): Result[__Split] =
         if value.is_empty
         then if !scan.seen_separator
             then Error { __invalid("expected exactly one `" + separator + "` separator") }

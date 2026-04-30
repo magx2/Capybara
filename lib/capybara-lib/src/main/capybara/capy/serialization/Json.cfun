@@ -49,7 +49,7 @@ fun deserialize(json: string): Result[JsonObject] =
 data _Parse[T] { value: T, parsing_string: string }
 fun _Parse[T].pop(): tuple[Option[string], _Parse[T]] = (this.parsing_string[0], _Parse { this.value, this.parsing_string[1:] })
 
-fun _deserialize_json(json: string): Result[_Parse[Json]] =
+fun rec _deserialize_json(json: string): Result[_Parse[Json]] =
     match json[0] with
     case None -> Error { "Expected JSON, but got end of string" }
     case Some { first_char } when _is_white_space(first_char) -> _deserialize_json(_drop_white_space(json[1:]))
@@ -64,16 +64,17 @@ fun _deserialize_json(json: string): Result[_Parse[Json]] =
         case _ -> Error { "Do not know what to do with char `" + first_char + "`!" }
 
 fun _deserialize_json_array(json: string): Result[_Parse[JsonArray]] =
-    fun __deserialize_json_array(parse: _Parse[JsonArray]): Result[_Parse[JsonArray]] =
+    fun rec __deserialize_json_array(parse: _Parse[JsonArray]): Result[_Parse[JsonArray]] =
         match parse.parsing_string[0] with
         case None -> Error { "Expected `,` or `]`, but got end of string!" }
         case Some { ']' } -> Success { parse.pop()[1] }
-        case Some { ',' } ->
-            _deserialize_json(parse.parsing_string[1:])
-                | parse_json => __deserialize_json_array(_Parse {
-                    value: parse.value + parse_json.value,
-                    parsing_string: parse_json.parsing_string
-                })
+        case Some { ',' } -> {
+            let parse_json <- _deserialize_json(parse.parsing_string[1:])
+            __deserialize_json_array(_Parse {
+                value: parse.value + parse_json.value,
+                parsing_string: parse_json.parsing_string
+            })
+        }
         case Some { v } ->  Error { "Expected `,` or `]`, but got `" + v + "`!" }
     ---
     if json.starts_with('[]')
@@ -124,7 +125,7 @@ fun _deserialize_json_bool(json: string): Result[_Parse[JsonBool]] =
     }
 
 fun _deserialize_json_number(json: string): Result[_Parse[JsonNumber]] =
-    fun __parse_number(parse: _Parse[string]): Result[_Parse[string]] =
+    fun rec __parse_number(parse: _Parse[string]): Result[_Parse[string]] =
         match parse.parsing_string[0] with
         case None -> Error { 'Expected `-[0-9]`, but got empty string!' }
         case Some { first_char } ->
@@ -178,33 +179,29 @@ fun _deserialize_json_object(json: string): Result[_Parse[JsonObject]] =
     case Some { v } -> Error { message: "Expected `{`, but got `" + v + "`."}
 
 fun _deserialize_key_values(json: string): Result[_Parse[dict[Json]]] =
-    match json[0] with
-    case None -> Error { "Expected `,` or `}`, but got empty string!" }
-    case Some { "}" } -> {
-        let empty: dict[Json] = {:}
-        Success { _Parse { empty, json[1:] } }
-    }
-    case Some { _ } ->
-        match _deserialize_key_value(_drop_white_space(json)) with
-        case Error e -> e
-        case Success { parse_key_value } ->
-            match parse_key_value.parsing_string[0] with
-            case None -> Error { "Expected `,` or `}`, but got empty string!" }
-            case Some { "," } -> {
-                _deserialize_key_values(_drop_white_space(parse_key_value.parsing_string[1:]))
-                | rest =>
-                    Success { _Parse {
-                        { parse_key_value.value.key : parse_key_value.value.value } + rest.value,
-                        rest.parsing_string
-                    }}
-            }
-            case Some { "}" } -> Success {
-                _Parse {
-                    { parse_key_value.value.key : parse_key_value.value.value },
-                    _drop_white_space(parse_key_value.parsing_string[1:])
+    fun rec __deserialize_key_values(json: string, acc: dict[Json]): Result[_Parse[dict[Json]]] =
+        match json[0] with
+        case None -> Error { "Expected `,` or `}`, but got empty string!" }
+        case Some { "}" } -> Success { _Parse { acc, json[1:] } }
+        case Some { _ } ->
+            match _deserialize_key_value(_drop_white_space(json)) with
+            case Error e -> e
+            case Success { parse_key_value } -> {
+                let next = acc + { parse_key_value.value.key : parse_key_value.value.value }
+                match parse_key_value.parsing_string[0] with
+                case None -> Error { "Expected `,` or `}`, but got empty string!" }
+                case Some { "," } -> __deserialize_key_values(_drop_white_space(parse_key_value.parsing_string[1:]), next)
+                case Some { "}" } -> Success {
+                    _Parse {
+                        next,
+                        _drop_white_space(parse_key_value.parsing_string[1:])
+                    }
                 }
+                case Some { v } -> Error { "Expected `,` or `}`, but got `" + v + "`!" }
             }
-            case Some { v } -> Error { "Expected `,` or `}`, but got `" + v + "`!" }
+    ---
+    let empty: dict[Json] = {:}
+    __deserialize_key_values(json, empty)
 
 data _KeyValue { key: string, value: Json }
 
@@ -237,7 +234,7 @@ fun _parse_string(json: string): Result[_Parse[string]] =
     /// - `\r` - carriage return
     /// - `\t` - horizontal tab
     /// - `\\uXXXX` - 4 HEX digits
-    fun __parse_string_until_quotation(parse: _Parse[string], escape: bool): Result[_Parse[string]] =
+    fun rec __parse_string_until_quotation(parse: _Parse[string], escape: bool): Result[_Parse[string]] =
         if escape
         then
             match parse.parsing_string[0] with
@@ -267,18 +264,22 @@ fun _parse_string(json: string): Result[_Parse[string]] =
     case Some { v } -> Error { message: "parse_string: Expected `\"`, but got `" + v + "`." }
     case None -> Error { message: "parse_string: Expected JSON string, got end of string." }
 
-fun _drop_white_space(s: string): string =
+fun rec _drop_white_space(s: string): string =
     match s[0] with
     case Some { c } when _is_white_space(c) -> _drop_white_space(s[1:])
     case _ -> s
 
 fun _is_white_space(s: string): bool =
     const __white_spaces = { " ", "\r", "\n", "\t" }
+    fun rec __is_white_space(s: string, white_spaces: set[string]): bool =
+        match s[0] with
+        case None -> true
+        case Some { c } ->
+            if white_spaces ? c
+            then __is_white_space(s[1:], white_spaces)
+            else false
     ---
-    match s.size with
-    case 0 -> true
-    case 1 -> __white_spaces ? s
-    case _ -> (s |all? :_is_white_space)
+    __is_white_space(s, __white_spaces)
 
 fun deserialize(dict: dict[any]): Result[JsonObject] =
     data __Entry { key: string, value: Result[Json] }

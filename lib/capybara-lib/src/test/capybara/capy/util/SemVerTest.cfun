@@ -8,6 +8,8 @@ fun tests(): Effect[TestFile] =
     let test_cases = {
         "1.2.3" : SemVer { 1, 2, 3, None {}, None {} },
         "0.0.0" : SemVer { 0, 0, 0, None {}, None {} },
+        "10.20.30" : SemVer { 10, 20, 30, None {}, None {} },
+        "100.200.300" : SemVer { 100, 200, 300, None {}, None {} },
         // pre-release
         "1.2.3-prerelease" : SemVer { 1, 2, 3, Some {'prerelease'}, None {} },
         "1.2.3-p.r.e.r.e.l.e.a.s.e" : SemVer { 1, 2, 3, Some {'p.r.e.r.e.l.e.a.s.e'}, None {} },

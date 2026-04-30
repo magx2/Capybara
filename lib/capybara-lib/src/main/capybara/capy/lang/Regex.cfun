@@ -7,34 +7,43 @@ data Match { group_value: string }
 fun from_literal(pattern: string, flags: string): Regex = Regex { pattern, flags }
 
 fun _drop_prefix(value: string, size: int): string =
-    if size <= 0
-    then value
-    else
-        match value[0] with
-        case None -> ""
-        case Some { _ } -> _drop_prefix(value[1:], size - 1)
+    fun rec __drop_prefix(value: string, size: int): string =
+        if size <= 0
+        then value
+        else
+            match value[0] with
+            case None -> ""
+            case Some { _ } -> __drop_prefix(value[1:], size - 1)
+    ---
+    __drop_prefix(value, size)
 
 fun _find_all(pattern: string, input: string, acc: list[Match]): list[Match] =
-    if pattern == ""
-    then acc
-    else
-        match input[0] with
-        case None -> acc
-        case Some { _ } ->
-            if input.starts_with(pattern)
-            then _find_all(pattern, _drop_prefix(input, pattern.size), acc + Match { group_value: pattern })
-            else _find_all(pattern, input[1:], acc)
+    fun rec __find_all(pattern: string, input: string, acc: list[Match]): list[Match] =
+        if pattern == ""
+        then acc
+        else
+            match input[0] with
+            case None -> acc
+            case Some { _ } ->
+                if input.starts_with(pattern)
+                then __find_all(pattern, _drop_prefix(input, pattern.size), acc + Match { group_value: pattern })
+                else __find_all(pattern, input[1:], acc)
+    ---
+    __find_all(pattern, input, acc)
 
 fun _split(pattern: string, input: string, current: string, acc: list[string]): list[string] =
-    if pattern == ""
-    then [input]
-    else
-        match input[0] with
-        case None -> acc + current
-        case Some { c } ->
-            if input.starts_with(pattern)
-            then _split(pattern, _drop_prefix(input, pattern.size), "", acc + current)
-            else _split(pattern, input[1:], current + c, acc)
+    fun rec __split(pattern: string, input: string, current: string, acc: list[string]): list[string] =
+        if pattern == ""
+        then [input]
+        else
+            match input[0] with
+            case None -> acc + current
+            case Some { c } ->
+                if input.starts_with(pattern)
+                then __split(pattern, _drop_prefix(input, pattern.size), "", acc + current)
+                else __split(pattern, input[1:], current + c, acc)
+    ---
+    __split(pattern, input, current, acc)
 
 fun Regex.matches(input: string): bool = input ? this.pattern
 

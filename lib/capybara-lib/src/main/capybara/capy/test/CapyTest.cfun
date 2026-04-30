@@ -312,15 +312,18 @@ private fun team_city_messages_case(test_case: TestCase): list[string] =
     ]
 
 fun team_city_escape(value: string): string =
-    match value[0] with
-    case None -> ''
-    case Some { '\'' } -> "|'" + team_city_escape(value[1:])
-    case Some { '\n' } -> '|n' + team_city_escape(value[1:])
-    case Some { '\r' } -> '|r' + team_city_escape(value[1:])
-    case Some { '|' } -> '||' + team_city_escape(value[1:])
-    case Some { '[' } -> '|[' + team_city_escape(value[1:])
-    case Some { ']' } -> '|]' + team_city_escape(value[1:])
-    case Some { c } -> c + team_city_escape(value[1:])
+    fun rec __team_city_escape(value: string, acc: string): string =
+        match value[0] with
+        case None -> acc
+        case Some { '\'' } -> __team_city_escape(value[1:], acc + "|'")
+        case Some { '\n' } -> __team_city_escape(value[1:], acc + '|n')
+        case Some { '\r' } -> __team_city_escape(value[1:], acc + '|r')
+        case Some { '|' } -> __team_city_escape(value[1:], acc + '||')
+        case Some { '[' } -> __team_city_escape(value[1:], acc + '|[')
+        case Some { ']' } -> __team_city_escape(value[1:], acc + '|]')
+        case Some { c } -> __team_city_escape(value[1:], acc + c)
+    ---
+    __team_city_escape(value, '')
 
 private fun test_suite_name(file_name: string): string = file_name
 
@@ -357,14 +360,16 @@ private fun stale_output_files(output_dir: Path, manifest_file: Path, expected_f
     )
 
 private fun stale_files(files: list[Path], expected_files: list[Path]): list[Path] =
-    match files[0] with
-    case None -> []
-    case Some { file } ->
-        let normalized = file.normalize()
-        let rest = stale_files(files[1:], expected_files)
-        if path_to_manifest_line(normalized) == OUTPUT_MANIFEST_FILE | path_list_contains(expected_files, normalized)
-        then rest
-        else [normalized] + rest
+    fun rec __stale_files(files: list[Path], expected_files: list[Path], acc: list[Path]): list[Path] =
+        match files[0] with
+        case None -> acc
+        case Some { file } ->
+            let normalized = file.normalize()
+            if path_to_manifest_line(normalized) == OUTPUT_MANIFEST_FILE | path_list_contains(expected_files, normalized)
+            then __stale_files(files[1:], expected_files, acc)
+            else __stale_files(files[1:], expected_files, acc + normalized)
+    ---
+    __stale_files(files, expected_files, [])
 
 private fun delete_stale_outputs(output_dir: Path, stale_files: list[Path]): Effect[Result[list[Path]]] =
     match stale_files[0] with
@@ -409,7 +414,7 @@ private fun manifest_content(paths: list[Path]): string =
     paths |> '', (acc, path) => acc + path_to_manifest_line(path.normalize()) + '\n'
 
 private fun manifest_paths(content: string): list[Path] =
-    fun lines(value: string, current: string, acc: list[string]): list[string] =
+    fun rec lines(value: string, current: string, acc: list[string]): list[string] =
         match value[0] with
         case None ->
             if current.is_empty
@@ -461,7 +466,7 @@ private fun list_regular_files_from_entries(entries: list[Path]): Effect[Result[
 private fun relative_to(base: Path, path: Path): Path =
     from_string(path_segments_to_string(drop_prefix_segments(base.normalize().segments, path.normalize().segments)))
 
-private fun drop_prefix_segments(prefix: list[string], segments: list[string]): list[string] =
+private fun rec drop_prefix_segments(prefix: list[string], segments: list[string]): list[string] =
     match prefix[0] with
     case None -> segments
     case Some { expected } ->
@@ -479,13 +484,14 @@ private fun path_to_manifest_line(path: Path): string =
     path_segments_to_string(path.normalize().segments)
 
 private fun path_segments_to_string(segments: list[string]): string =
-    match segments[0] with
-    case None -> ''
-    case Some { segment } ->
-        let rest = path_segments_to_string(segments[1:])
-        if rest.is_empty
-        then segment
-        else segment + '/' + rest
+    fun rec __path_segments_to_string(segments: list[string], acc: string): string =
+        match segments[0] with
+        case None -> acc
+        case Some { segment } ->
+            let next = if acc.is_empty then segment else acc + '/' + segment
+            __path_segments_to_string(segments[1:], next)
+    ---
+    __path_segments_to_string(segments, '')
 
 private fun has_failures(test_outputs: list[TestOutput]): bool = test_outputs |any? output => output.failed
 

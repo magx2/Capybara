@@ -45,7 +45,7 @@ fun powers_of_2_seq() = powers_seq(2)
 ///
 /// This method is safe to use with infinite sequences.
 fun Seq[T].take(n: int): list[T] =
-    fun __take(seq: Seq[T], n: int, list: list[T]): list[T] =
+    fun rec __take(seq: Seq[T], n: int, list: list[T]): list[T] =
         if n <=0
         then list
         else
@@ -59,7 +59,7 @@ fun Seq[T].take(n: int): list[T] =
 ///
 /// Important: calling this on an infinite sequence does not terminate.
 fun Seq[T].as_list(): list[T] =
-    fun __as_list(seq: Seq[T], list: list[T]): list[T] =
+    fun rec __as_list(seq: Seq[T], list: list[T]): list[T] =
         match seq with
         case End -> list
         case Cons { value, rest } -> __as_list(rest(), list + value)
@@ -112,7 +112,7 @@ fun Seq[T].filter(pred: T => bool): Seq[T] =
 
 /// Skips the first `n` elements of the sequence.
 fun Seq[T].drop(n: int): Seq[T] =
-    fun __drop(seq: Seq[T], n: int) =
+    fun rec __drop(seq: Seq[T], n: int) =
         if n <= 0
         then seq
         else
@@ -130,7 +130,7 @@ fun Seq[T].drop(n: int): Seq[T] =
 ///
 /// The first element that satisfies `pred` is included in the result.
 fun Seq[T].drop_until(pred: T => bool): Seq[T] =
-    fun __drop_until(seq: Seq[T], pred: T => bool) =
+    fun rec __drop_until(seq: Seq[T], pred: T => bool) =
         match seq with
         case End -> End
         case Cons { value, rest } ->
@@ -201,7 +201,7 @@ fun Seq[T].flat_map(map: T => Seq[Y]): Seq[Y] =
     __flat_map(this, map)
 
 fun Seq[T].reduce(initial: R, reducer: (R, T) => R): R =
-    fun __reduce(seq: Seq[T], acc: R, reducer: (R, T) => R): R =
+    fun rec __reduce(seq: Seq[T], acc: R, reducer: (R, T) => R): R =
         match seq with
         case End -> acc
         case Cons { value, rest } -> __reduce(rest(), reducer(acc, value), reducer)
