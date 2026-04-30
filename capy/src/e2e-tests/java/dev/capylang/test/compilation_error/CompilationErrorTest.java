@@ -208,6 +208,62 @@ public class CompilationErrorTest {
     }
 
     @Test
+    void shouldRejectRecFunctionWithNonTailRecursiveCall() {
+        var errors = compileProgram("""
+                        fun rec sum(n: int): int = n + sum(n - 1)
+                        """,
+                "rec_function_non_tail_call");
+
+        assertThat(errors).hasSize(1);
+        assertThat(errors.first().message())
+                .contains("Recursive call to `sum` is not in tail position");
+    }
+
+    @Test
+    void shouldRejectRecFunctionWithoutSelfCall() {
+        var errors = compileProgram("""
+                        fun rec sum(n: int): int = n - 1
+                        """,
+                "rec_function_without_self_call");
+
+        assertThat(errors).hasSize(1);
+        assertThat(errors.first().message())
+                .contains("`fun rec` function `sum` must call itself in tail position");
+    }
+
+    @Test
+    void shouldRejectRecLocalFunctionWithNonTailRecursiveCall() {
+        var errors = compileProgram("""
+                        fun sum(n: int): int =
+                            fun rec __sum(n: int): int = n + __sum(n - 1)
+                            ---
+                            __sum(n)
+                        """,
+                "rec_local_function_non_tail_call");
+
+        assertThat(errors).hasSize(1);
+        assertThat(errors.first().message())
+                .contains("Recursive call to `sum` is not in tail position")
+                .doesNotContain("__local_fun_");
+    }
+
+    @Test
+    void shouldRejectRecLocalFunctionWithoutSelfCall() {
+        var errors = compileProgram("""
+                        fun sum(n: int): int =
+                            fun rec __sum(n: int): int = n - 1
+                            ---
+                            __sum(n)
+                        """,
+                "rec_local_function_without_self_call");
+
+        assertThat(errors).hasSize(1);
+        assertThat(errors.first().message())
+                .contains("`fun rec` function `sum` must call itself in tail position")
+                .doesNotContain("__local_fun_");
+    }
+
+    @Test
     void shouldRejectLongReturnedWhereIntIsExpected() {
         var errors = compileProgram("""
                         fun broken(): int = 1L

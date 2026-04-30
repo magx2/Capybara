@@ -13,5 +13,6 @@ class ObjectOrientedFpInteropTest {
         assertThat(interactor.create_fp_data("Bara")).isInstanceOf(ObjectOrientedFpInterop.InteropDog.class);
         assertThat(((ObjectOrientedFpInterop.InteropDog) interactor.create_fp_data("Bara")).name()).isEqualTo("Bara");
         assertThat(interactor.match_fp_type("Mochi")).isEqualTo("dog:Mochi");
+        assertThat(interactor.invoke_rec_function(10)).isEqualTo(36);
     }
 }

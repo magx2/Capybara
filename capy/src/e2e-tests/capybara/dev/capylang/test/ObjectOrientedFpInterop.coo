@@ -1,4 +1,4 @@
-from ObjectOrientedFpInterop import { InteropPet, InteropDog, InteropCat }
+from ObjectOrientedFpInterop import { InteropPet, InteropDog, InteropCat, RecInteropValue }
 
 class PetInteractor {
     def invoke_fp_function(name: string): string =
@@ -12,5 +12,10 @@ class PetInteractor {
         return match pet with
         case InteropDog { name } -> ("dog:" + name)
         case InteropCat { age } -> ("cat:" + age)
+    }
+
+    def invoke_rec_function(seed: int): int {
+        let value: RecInteropValue = RecInteropValue { value: seed }
+        return ObjectOrientedFpInterop.step(3, value, 0)
     }
 }

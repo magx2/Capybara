@@ -14,14 +14,18 @@ definition:
     | singleDeclaration
     | constDeclaration;
 
-functionDeclaration: docComment* VISIBILITY? 'fun' functionNameDeclaration '(' parameters? ')' functionType? '=' functionBody;
+functionDeclaration: docComment* VISIBILITY? 'fun' recFunctionMarker functionNameDeclaration '(' parameters? ')' functionType? '=' functionBody
+                   | docComment* VISIBILITY? 'fun' functionNameDeclaration '(' parameters? ')' functionType? '=' functionBody;
+recFunctionMarker: REC;
 functionBody: expression
             | localDefinition+ '---' expression;
 localDefinition: localFunctionDeclaration
                | localTypeDeclaration
                | localDataDeclaration
                | localConstDeclaration;
-localFunctionDeclaration: docComment* 'fun' NAME '(' parameters? ')' functionType? '=' expression;
+localFunctionDeclaration: docComment* 'fun' recFunctionMarker localFunctionNameDeclaration '(' parameters? ')' functionType? '=' expression
+                        | docComment* 'fun' localFunctionNameDeclaration '(' parameters? ')' functionType? '=' expression;
+localFunctionNameDeclaration: NAME | REC;
 localTypeDeclaration: 'type' genericTypeDeclaration constructorClause? '=' genericTypeDeclaration (PIPE genericTypeDeclaration)*
                     | 'type' genericTypeDeclaration '{' fieldDeclarationList? '}' constructorClause? '=' genericTypeDeclaration (PIPE genericTypeDeclaration)*;
 localDataDeclaration: 'data' genericTypeDeclaration '{' fieldDeclarationList? '}' constructorClause?
@@ -49,8 +53,9 @@ genericTypeDeclaration: TYPE ('[' TYPE (',' TYPE)* ']')?;
 VISIBILITY: 'local' | 'private';
 BOOL_LITERAL: 'true' | 'false';
 COLLECTION: 'list' | 'set' | 'dict';
+REC: 'rec';
 NAME : [_]* [a-z] [a-zA-Z0-9_]*;
-identifier: NAME | COLLECTION | 'fun' | 'type' | 'byte' | 'int' | 'long' | 'double' | 'bool' | 'string' | 'float' | 'nothing' | 'any';
+identifier: NAME | REC | COLLECTION | 'fun' | 'type' | 'byte' | 'int' | 'long' | 'double' | 'bool' | 'string' | 'float' | 'nothing' | 'any';
 parameters: parameter (',' parameter)*;
 parameter: identifier ':' type;
 functionType: ':' type;
@@ -142,6 +147,7 @@ tupleLiteral: LPAREN expression (COMMA expression)+ RPAREN;
 ifExpression: 'if' expression 'then' expression 'else' expression;
 functionReference: COLON identifier;
 functionCall: NAME '(' argumentList? ')'
+            | REC '(' argumentList? ')'
             | COLLECTION '(' argumentList? ')'
             | 'fun' '(' argumentList? ')'
             | 'byte' '(' argumentList? ')'

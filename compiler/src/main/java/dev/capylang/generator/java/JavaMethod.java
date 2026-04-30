@@ -7,11 +7,15 @@ import java.util.List;
 
 public record JavaMethod(
         String name,
+        String sourceName,
         boolean isPrivate,
         boolean programMain,
+        boolean tailRecursive,
+        List<String> selfCallNames,
         List<String> typeParameters,
         JavaType returnType,
         List<JavaFunctionParameter> parameters,
+        List<dev.capylang.compiler.CompiledType> sourceParameterTypes,
         CompiledExpression expression,
         List<String> comments) implements Comparable<JavaMethod> {
     @Override

@@ -2,6 +2,7 @@ package dev.capylang.generator.java;
 
 import dev.capylang.compiler.CompiledDataParentType;
 import dev.capylang.compiler.CompiledDataType;
+import dev.capylang.compiler.CompiledType;
 import dev.capylang.compiler.expression.*;
 import dev.capylang.compiler.parser.InfixOperator;
 
@@ -31,6 +32,8 @@ public class JavaExpressionEvaluator {
     private static final java.util.concurrent.atomic.AtomicLong STRING_PARSE_VAR_COUNTER =
             new java.util.concurrent.atomic.AtomicLong();
     private static final java.util.concurrent.atomic.AtomicLong TUPLE_LET_VAR_COUNTER =
+            new java.util.concurrent.atomic.AtomicLong();
+    private static final java.util.concurrent.atomic.AtomicLong TAIL_ARGUMENT_COUNTER =
             new java.util.concurrent.atomic.AtomicLong();
     private static final Logger log = Logger.getLogger(JavaExpressionEvaluator.class.getName());
     private static final ConcurrentMap<String, String> JAVA_CAST_TYPE_CACHE = new ConcurrentHashMap<>();
@@ -67,13 +70,33 @@ public class JavaExpressionEvaluator {
             String moduleHelperClass
     ) {
         log.fine(() -> "evaluateExpression: " + expression.getClass().getSimpleName() + " -> " + expression);
+        var scope = initialScope(parameters, moduleHelperClass);
+        var evaluatedScope = evaluateExpression(expression, scope);
+        return expressionToJava(evaluatedScope);
+    }
+
+    public static String evaluateTailRecursiveExpression(
+            CompiledExpression expression,
+            List<JavaMethod.JavaFunctionParameter> parameters,
+            List<String> selfCallNames,
+            List<CompiledType> sourceParameterTypes,
+            String moduleHelperClass
+    ) {
+        log.fine(() -> "evaluateTailRecursiveExpression: " + expression.getClass().getSimpleName() + " -> " + expression);
+        var context = new TailRecursiveContext(selfCallNames, parameters, sourceParameterTypes);
+        var code = new StringBuilder("while (true) {\n");
+        appendTailRecursiveStatement(code, expression, initialScope(parameters, moduleHelperClass), context);
+        code.append("}");
+        return code.toString();
+    }
+
+    private static Scope initialScope(List<JavaMethod.JavaFunctionParameter> parameters, String moduleHelperClass) {
         var scope = moduleHelperClass == null ? Scope.EMPTY : Scope.EMPTY.withModuleHelperClass(moduleHelperClass);
         for (var parameter : parameters) {
             scope = scope.addLocalValue(parameter.sourceName())
                     .addValueOverride(parameter.sourceName(), parameter.generatedName());
         }
-        var evaluatedScope = evaluateExpression(expression, scope);
-        return expressionToJava(evaluatedScope);
+        return scope;
     }
 
     private static String expressionToJava(Scope scope) {
@@ -84,6 +107,183 @@ public class JavaExpressionEvaluator {
         }
         sb.append("return ").append(scope.getExpression()).append(';');
         return sb.toString();
+    }
+
+    private static void appendTailRecursiveStatement(
+            StringBuilder code,
+            CompiledExpression expression,
+            Scope scope,
+            TailRecursiveContext context
+    ) {
+        if (expression instanceof CompiledFunctionCall functionCall && isTailRecursiveSelfCall(functionCall, context)) {
+            appendTailRecursiveSelfCall(code, functionCall, scope, context);
+            return;
+        }
+        if (expression instanceof CompiledIfExpression ifExpression) {
+            appendTailRecursiveIf(code, ifExpression, scope, context);
+            return;
+        }
+        if (expression instanceof CompiledLetExpression letExpression) {
+            appendTailRecursiveLet(code, letExpression, scope, context);
+            return;
+        }
+        if (expression instanceof CompiledMatchExpression matchExpression) {
+            appendTailRecursiveMatch(code, matchExpression, scope, context);
+            return;
+        }
+
+        var evaluated = evaluateExpression(expression, scope).popExpression();
+        appendStatements(code, newStatements(scope, evaluated.scope()));
+        code.append("return ").append(evaluated.expression()).append(";\n");
+    }
+
+    private static void appendTailRecursiveSelfCall(
+            StringBuilder code,
+            CompiledFunctionCall functionCall,
+            Scope scope,
+            TailRecursiveContext context
+    ) {
+        var current = scope;
+        var arguments = new ArrayList<String>(functionCall.arguments().size());
+        for (var argument : functionCall.arguments()) {
+            var evaluatedArgument = evaluateExpression(argument, current).popExpression();
+            appendStatements(code, newStatements(current, evaluatedArgument.scope()));
+            current = evaluatedArgument.scope();
+            arguments.add(evaluatedArgument.expression());
+        }
+
+        var temporaryNames = new ArrayList<String>(arguments.size());
+        for (int i = 0; i < arguments.size(); i++) {
+            var temporaryName = "__capybaraTailArg" + TAIL_ARGUMENT_COUNTER.incrementAndGet();
+            temporaryNames.add(temporaryName);
+            var parameterType = context.parameterTypes().get(i);
+            var argument = functionCall.arguments().get(i);
+            code.append(javaCastType(parameterType))
+                    .append(" ")
+                    .append(temporaryName)
+                    .append(" = ")
+                    .append(coerceExpressionForExpectedType(parameterType, argument.type(), arguments.get(i)))
+                    .append(";\n");
+        }
+
+        for (int i = 0; i < temporaryNames.size(); i++) {
+            code.append(context.parameters().get(i).generatedName())
+                    .append(" = ")
+                    .append(temporaryNames.get(i))
+                    .append(";\n");
+        }
+        code.append("continue;\n");
+    }
+
+    private static void appendTailRecursiveIf(
+            StringBuilder code,
+            CompiledIfExpression expression,
+            Scope scope,
+            TailRecursiveContext context
+    ) {
+        var condition = evaluateExpression(expression.condition(), scope).popExpression();
+        appendStatements(code, newStatements(scope, condition.scope()));
+        code.append("if (")
+                .append(toBooleanExpression(condition.expression(), expression.condition().type()))
+                .append(") {\n");
+        appendTailRecursiveStatement(code, expression.thenBranch(), condition.scope(), context);
+        code.append("} else {\n");
+        appendTailRecursiveStatement(code, expression.elseBranch(), condition.scope(), context);
+        code.append("}\n");
+    }
+
+    private static void appendTailRecursiveLet(
+            StringBuilder code,
+            CompiledLetExpression let,
+            Scope scope,
+            TailRecursiveContext context
+    ) {
+        var value = evaluateExpression(let.value(), scope).popExpression();
+        appendStatements(code, newStatements(scope, value.scope()));
+        var letDeclarationType = let.declaredType().orElse(let.value().type());
+        var coercedValueExpression = coerceExpressionForExpectedType(letDeclarationType, let.value().type(), value.expression());
+        var scopeExpression = shouldUseTypedLetDeclaration(let.value(), let.declaredType().isPresent())
+                ? value.scope().declareTypedValue(let.name(), javaCastType(letDeclarationType), coercedValueExpression, let.rest())
+                : value.scope().declareValue(let.name(), coercedValueExpression, let.rest());
+        appendStatements(code, newStatements(value.scope(), scopeExpression.scope()));
+        appendTailRecursiveStatement(code, scopeExpression.expression(), scopeExpression.scope(), context);
+    }
+
+    private static void appendTailRecursiveMatch(
+            StringBuilder code,
+            CompiledMatchExpression matchExpression,
+            Scope scope,
+            TailRecursiveContext context
+    ) {
+        var matchSelectorName = "__matchValue" + MATCH_SELECTOR_COUNTER.incrementAndGet();
+        var optionMatch = isOptionType(matchExpression.matchWith().type());
+        var matchWithExSc = evaluateExpression(matchExpression.matchWith(), scope).popExpression();
+        appendStatements(code, newStatements(scope, matchWithExSc.scope()));
+        var selectorExpression = castMatchSelectorExpression(matchWithExSc.expression(), matchExpression.matchWith().type(), optionMatch);
+        var declaredValue = matchWithExSc.scope().declareValue(
+                matchSelectorName,
+                selectorExpression,
+                new CompiledVariable(matchSelectorName, matchExpression.matchWith().type())
+        );
+        appendStatements(code, newStatements(matchWithExSc.scope(), declaredValue.scope()));
+        var current = declaredValue.scope();
+        var switchTarget = current.findValueOverride(matchSelectorName).orElse(matchSelectorName);
+
+        code.append("switch (").append(switchTarget).append(") {\n");
+        for (var matchCase : matchExpression.cases()) {
+            var preparedCase = prepareMatchCase(matchExpression, matchCase, current, switchTarget, optionMatch);
+            code.append(preparedCase.casePattern()).append(" -> {\n");
+            appendTailRecursiveStatement(code, matchCase.expression(), preparedCase.branchScope(), context);
+            code.append("}\n");
+        }
+        var hasWildcard = matchExpression.cases().stream()
+                .map(CompiledMatchExpression.MatchCase::pattern)
+                .anyMatch(pattern ->
+                        pattern instanceof CompiledMatchExpression.WildcardPattern
+                        || pattern instanceof CompiledMatchExpression.WildcardBindingPattern);
+        if (optionMatch && !hasWildcard) {
+            code.append("case java.lang.Object __capybaraUnexpected -> throw new java.lang.IllegalStateException(\"Unexpected value: \" + ")
+                    .append(switchTarget)
+                    .append(");\n");
+        }
+        if (matchExpression.matchWith().type() == dev.capylang.compiler.PrimitiveLinkedType.BOOL && !hasWildcard) {
+            code.append("default -> throw new java.lang.IllegalStateException(\"Unexpected bool value: \" + ")
+                    .append(switchTarget)
+                    .append(");\n");
+        }
+        code.append("}\n");
+    }
+
+    private static boolean isTailRecursiveSelfCall(CompiledFunctionCall functionCall, TailRecursiveContext context) {
+        if (!context.selfCallNames().contains(functionCall.name())) {
+            return false;
+        }
+        if (functionCall.arguments().size() != context.parameterTypes().size()) {
+            return false;
+        }
+        for (int i = 0; i < functionCall.arguments().size(); i++) {
+            if (!functionCall.arguments().get(i).type().equals(context.parameterTypes().get(i))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static void appendStatements(StringBuilder code, List<String> statements) {
+        for (var statement : statements) {
+            code.append(statement).append(";\n");
+        }
+    }
+
+    private static List<String> newStatements(Scope before, Scope after) {
+        return after.getStatements().subList(before.getStatements().size(), after.getStatements().size());
+    }
+
+    private record TailRecursiveContext(
+            List<String> selfCallNames,
+            List<JavaMethod.JavaFunctionParameter> parameters,
+            List<CompiledType> parameterTypes
+    ) {
     }
 
     private static Scope evaluateExpression(CompiledExpression expression, Scope scope) {
@@ -1591,117 +1791,8 @@ public class JavaExpressionEvaluator {
 
         for (int caseIndex = 0; caseIndex < matchExpression.cases().size(); caseIndex++) {
             var matchCase = matchExpression.cases().get(caseIndex);
-            var branchScope = current;
-            var optionCaseVar = "__capybaraOptionCase" + OPTION_CASE_VAR_COUNTER.incrementAndGet();
-            var caseBindingNames = new java.util.HashMap<String, String>();
-            if (matchCase.pattern() instanceof CompiledMatchExpression.ConstructorPattern constructorPattern) {
-                var bindingNames = constructorPatternBindingNames(constructorPattern, caseBindingNames);
-                var bindingCastTypes = constructorBindingCastTypes(matchExpression.matchWith().type(), constructorPattern);
-                for (int i = 0; i < constructorPattern.fieldPatterns().size(); i++) {
-                    var fieldPattern = constructorPattern.fieldPatterns().get(i);
-                    var bindingName = bindingNames.get(i);
-                    if (fieldPattern instanceof CompiledMatchExpression.VariablePattern variablePattern) {
-                        branchScope = branchScope.addLocalValue(variablePattern.name());
-                        branchScope = branchScope.addValueOverride(variablePattern.name(), bindingName);
-                        var castType = bindingCastTypes.get(i);
-                        if (castType != null && !"java.lang.Object".equals(castType)) {
-                            branchScope = branchScope.addValueOverride(bindingName, "((" + castType + ") " + bindingName + ")");
-                            branchScope = branchScope.addValueOverride(variablePattern.name(), "((" + castType + ") " + bindingName + ")");
-                        }
-                    }
-                    if (fieldPattern instanceof CompiledMatchExpression.TypedPattern typedPattern) {
-                        branchScope = branchScope.addLocalValue(typedPattern.name());
-                        var typedValue = "((" + javaPatternType(typedPattern.type()) + ") " + bindingName + ")";
-                        branchScope = branchScope.addValueOverride(bindingName, typedValue);
-                        branchScope = branchScope.addValueOverride(
-                                typedPattern.name(),
-                                typedValue
-                        );
-                    }
-                }
-                if (optionMatch && isOptionSomePattern(constructorPattern.constructorName()) && constructorPattern.fieldPatterns().size() == 1) {
-                    var firstPattern = constructorPattern.fieldPatterns().getFirst();
-                    if (firstPattern instanceof CompiledMatchExpression.VariablePattern variablePattern) {
-                        var castType = optionPayloadCastType(matchExpression.matchWith().type());
-                        if (castType == null) {
-                            castType = bindingCastTypes.isEmpty() ? null : bindingCastTypes.getFirst();
-                        }
-                        var valueExpression = optionSomeBindingExpression(switchTarget + ".orElse(null)");
-                        if (castType != null && !"java.lang.Object".equals(castType)) {
-                            valueExpression = "((" + castType + ") " + valueExpression + ")";
-                        }
-                        branchScope = branchScope.addValueOverride(
-                                variablePattern.name(),
-                                valueExpression
-                        );
-                    }
-                    if (firstPattern instanceof CompiledMatchExpression.TypedPattern typedPattern) {
-                        var castType = optionPayloadCastType(matchExpression.matchWith().type());
-                        if (castType == null) {
-                            castType = javaPatternType(typedPattern.type());
-                        }
-                        branchScope = branchScope.addValueOverride(
-                                typedPattern.name(),
-                                "((" + castType + ") " + optionSomeBindingExpression(switchTarget + ".orElse(null)") + ")"
-                        );
-                    }
-                }
-                if (isResultErrorConstructor(matchExpression.matchWith().type(), constructorPattern)
-                    && constructorPattern.fieldPatterns().size() == 1
-                    && constructorPattern.fieldPatterns().getFirst() instanceof CompiledMatchExpression.VariablePattern variablePattern) {
-                    var valueName = variablePattern.name();
-                    var generatedName = caseBindingNames.getOrDefault(valueName, valueName);
-                    branchScope = branchScope.addValueOverride(valueName, "((" + generatedName + ") == null ? null : " + generatedName + ".getMessage())");
-                }
-            }
-            if (matchCase.pattern() instanceof CompiledMatchExpression.TypedPattern typedPattern) {
-                var generatedName = caseBindingNames.computeIfAbsent(
-                        typedPattern.name(),
-                        ignored -> "__capybaraMatchBinding" + MATCH_BINDING_COUNTER.incrementAndGet()
-                );
-                var typedPatternValue = generatedName;
-                if (optionMatch && isOptionSomePattern(typedPattern.type().name())) {
-                    var castType = optionPayloadCastType(matchExpression.matchWith().type());
-                    var payloadExpression = optionSomeBindingExpression(generatedName + ".orElse(null)");
-                    if (castType != null && !"java.lang.Object".equals(castType)) {
-                        payloadExpression = "((" + castType + ") " + payloadExpression + ")";
-                    }
-                    typedPatternValue = "new "
-                                        + normalizeJavaTypeReference(stripGenericSuffix(typedPattern.type().name()))
-                                        + "<>("
-                                        + payloadExpression
-                                        + ")";
-                } else if (optionMatch && isOptionNonePattern(typedPattern.type().name())) {
-                    typedPatternValue = normalizeJavaTypeReference(stripGenericSuffix(typedPattern.type().name())) + ".INSTANCE";
-                }
-                branchScope = branchScope
-                        .addLocalValue(typedPattern.name())
-                        .addValueOverride(typedPattern.name(), typedPatternValue);
-            }
-            if (matchCase.pattern() instanceof CompiledMatchExpression.TypedPattern typedPattern
-                && matchExpression.matchWith() instanceof CompiledVariable matchedVariable) {
-                var generatedName = caseBindingNames.getOrDefault(typedPattern.name(), typedPattern.name());
-                branchScope = branchScope
-                        .addValueOverride(matchedVariable.name(), generatedName);
-            }
-            if (matchCase.pattern() instanceof CompiledMatchExpression.WildcardBindingPattern wildcardBindingPattern) {
-                var generatedName = caseBindingNames.computeIfAbsent(
-                        wildcardBindingPattern.name(),
-                        ignored -> "__capybaraMatchBinding" + MATCH_BINDING_COUNTER.incrementAndGet()
-                );
-                branchScope = branchScope
-                        .addLocalValue(wildcardBindingPattern.name())
-                        .addValueOverride(wildcardBindingPattern.name(), generatedName);
-            }
-            var casePattern = matchCasePattern(matchCase.pattern(), matchExpression.matchWith().type(), optionCaseVar, caseBindingNames);
-            if (matchCase.guard().isPresent()) {
-                var guardScope = evaluateExpression(matchCase.guard().orElseThrow(), branchScope).popExpression();
-                var guardStatements = guardScope.scope().getStatements()
-                        .subList(branchScope.getStatements().size(), guardScope.scope().getStatements().size());
-                var guardExpression = wrapGuardExpression(guardStatements, guardScope.expression());
-                casePattern = appendCaseGuard(casePattern, guardExpression);
-            }
-            var expressionScope = evaluateExpression(matchCase.expression(), branchScope).popExpression();
+            var preparedCase = prepareMatchCase(matchExpression, matchCase, current, switchTarget, optionMatch);
+            var expressionScope = evaluateExpression(matchCase.expression(), preparedCase.branchScope()).popExpression();
             var caseExpression = expressionScope.expression();
             if (optionMatch) {
                 caseExpression = castMatchCaseExpression(caseExpression, matchExpression.type());
@@ -1716,13 +1807,13 @@ public class JavaExpressionEvaluator {
                 caseExpression = "((" + javaCastType(matchCase.expression().type()) + ") (" + caseExpression + "))";
             }
             var caseStatements = expressionScope.scope().getStatements()
-                    .subList(branchScope.getStatements().size(), expressionScope.scope().getStatements().size());
+                    .subList(preparedCase.branchScope().getStatements().size(), expressionScope.scope().getStatements().size());
             var caseStatementsCode = String.join(" ", caseStatements.stream()
                     .map(statement -> statement + ";")
                     .toList());
             var caseRule = caseStatements.isEmpty()
-                    ? casePattern + " -> (" + caseExpression + ");"
-                    : casePattern
+                    ? preparedCase.casePattern() + " -> (" + caseExpression + ");"
+                    : preparedCase.casePattern()
                       + " -> { " + caseStatementsCode + " yield (" + caseExpression + "); }";
             cases.add(caseRule);
         }
@@ -1743,6 +1834,122 @@ public class JavaExpressionEvaluator {
         }
 
         return current.addExpression("switch (" + switchTarget + ") { " + String.join(" ", cases) + " }");
+    }
+
+    private static PreparedMatchCase prepareMatchCase(
+            CompiledMatchExpression matchExpression,
+            CompiledMatchExpression.MatchCase matchCase,
+            Scope current,
+            String switchTarget,
+            boolean optionMatch
+    ) {
+        var branchScope = current;
+        var optionCaseVar = "__capybaraOptionCase" + OPTION_CASE_VAR_COUNTER.incrementAndGet();
+        var caseBindingNames = new java.util.HashMap<String, String>();
+        if (matchCase.pattern() instanceof CompiledMatchExpression.ConstructorPattern constructorPattern) {
+            var bindingNames = constructorPatternBindingNames(constructorPattern, caseBindingNames);
+            var bindingCastTypes = constructorBindingCastTypes(matchExpression.matchWith().type(), constructorPattern);
+            for (int i = 0; i < constructorPattern.fieldPatterns().size(); i++) {
+                var fieldPattern = constructorPattern.fieldPatterns().get(i);
+                var bindingName = bindingNames.get(i);
+                if (fieldPattern instanceof CompiledMatchExpression.VariablePattern variablePattern) {
+                    branchScope = branchScope.addLocalValue(variablePattern.name());
+                    branchScope = branchScope.addValueOverride(variablePattern.name(), bindingName);
+                    var castType = bindingCastTypes.get(i);
+                    if (castType != null && !"java.lang.Object".equals(castType)) {
+                        branchScope = branchScope.addValueOverride(bindingName, "((" + castType + ") " + bindingName + ")");
+                        branchScope = branchScope.addValueOverride(variablePattern.name(), "((" + castType + ") " + bindingName + ")");
+                    }
+                }
+                if (fieldPattern instanceof CompiledMatchExpression.TypedPattern typedPattern) {
+                    branchScope = branchScope.addLocalValue(typedPattern.name());
+                    var typedValue = "((" + javaPatternType(typedPattern.type()) + ") " + bindingName + ")";
+                    branchScope = branchScope.addValueOverride(bindingName, typedValue);
+                    branchScope = branchScope.addValueOverride(typedPattern.name(), typedValue);
+                }
+            }
+            if (optionMatch && isOptionSomePattern(constructorPattern.constructorName()) && constructorPattern.fieldPatterns().size() == 1) {
+                var firstPattern = constructorPattern.fieldPatterns().getFirst();
+                if (firstPattern instanceof CompiledMatchExpression.VariablePattern variablePattern) {
+                    var castType = optionPayloadCastType(matchExpression.matchWith().type());
+                    if (castType == null) {
+                        castType = bindingCastTypes.isEmpty() ? null : bindingCastTypes.getFirst();
+                    }
+                    var valueExpression = optionSomeBindingExpression(switchTarget + ".orElse(null)");
+                    if (castType != null && !"java.lang.Object".equals(castType)) {
+                        valueExpression = "((" + castType + ") " + valueExpression + ")";
+                    }
+                    branchScope = branchScope.addValueOverride(variablePattern.name(), valueExpression);
+                }
+                if (firstPattern instanceof CompiledMatchExpression.TypedPattern typedPattern) {
+                    var castType = optionPayloadCastType(matchExpression.matchWith().type());
+                    if (castType == null) {
+                        castType = javaPatternType(typedPattern.type());
+                    }
+                    branchScope = branchScope.addValueOverride(
+                            typedPattern.name(),
+                            "((" + castType + ") " + optionSomeBindingExpression(switchTarget + ".orElse(null)") + ")"
+                    );
+                }
+            }
+            if (isResultErrorConstructor(matchExpression.matchWith().type(), constructorPattern)
+                && constructorPattern.fieldPatterns().size() == 1
+                && constructorPattern.fieldPatterns().getFirst() instanceof CompiledMatchExpression.VariablePattern variablePattern) {
+                var valueName = variablePattern.name();
+                var generatedName = caseBindingNames.getOrDefault(valueName, valueName);
+                branchScope = branchScope.addValueOverride(valueName, "((" + generatedName + ") == null ? null : " + generatedName + ".getMessage())");
+            }
+        }
+        if (matchCase.pattern() instanceof CompiledMatchExpression.TypedPattern typedPattern) {
+            var generatedName = caseBindingNames.computeIfAbsent(
+                    typedPattern.name(),
+                    ignored -> "__capybaraMatchBinding" + MATCH_BINDING_COUNTER.incrementAndGet()
+            );
+            var typedPatternValue = generatedName;
+            if (optionMatch && isOptionSomePattern(typedPattern.type().name())) {
+                var castType = optionPayloadCastType(matchExpression.matchWith().type());
+                var payloadExpression = optionSomeBindingExpression(generatedName + ".orElse(null)");
+                if (castType != null && !"java.lang.Object".equals(castType)) {
+                    payloadExpression = "((" + castType + ") " + payloadExpression + ")";
+                }
+                typedPatternValue = "new "
+                                    + normalizeJavaTypeReference(stripGenericSuffix(typedPattern.type().name()))
+                                    + "<>("
+                                    + payloadExpression
+                                    + ")";
+            } else if (optionMatch && isOptionNonePattern(typedPattern.type().name())) {
+                typedPatternValue = normalizeJavaTypeReference(stripGenericSuffix(typedPattern.type().name())) + ".INSTANCE";
+            }
+            branchScope = branchScope
+                    .addLocalValue(typedPattern.name())
+                    .addValueOverride(typedPattern.name(), typedPatternValue);
+        }
+        if (matchCase.pattern() instanceof CompiledMatchExpression.TypedPattern typedPattern
+            && matchExpression.matchWith() instanceof CompiledVariable matchedVariable) {
+            var generatedName = caseBindingNames.getOrDefault(typedPattern.name(), typedPattern.name());
+            branchScope = branchScope.addValueOverride(matchedVariable.name(), generatedName);
+        }
+        if (matchCase.pattern() instanceof CompiledMatchExpression.WildcardBindingPattern wildcardBindingPattern) {
+            var generatedName = caseBindingNames.computeIfAbsent(
+                    wildcardBindingPattern.name(),
+                    ignored -> "__capybaraMatchBinding" + MATCH_BINDING_COUNTER.incrementAndGet()
+            );
+            branchScope = branchScope
+                    .addLocalValue(wildcardBindingPattern.name())
+                    .addValueOverride(wildcardBindingPattern.name(), generatedName);
+        }
+        var casePattern = matchCasePattern(matchCase.pattern(), matchExpression.matchWith().type(), optionCaseVar, caseBindingNames);
+        if (matchCase.guard().isPresent()) {
+            var guardScope = evaluateExpression(matchCase.guard().orElseThrow(), branchScope).popExpression();
+            var guardStatements = guardScope.scope().getStatements()
+                    .subList(branchScope.getStatements().size(), guardScope.scope().getStatements().size());
+            var guardExpression = wrapGuardExpression(guardStatements, guardScope.expression());
+            casePattern = appendCaseGuard(casePattern, guardExpression);
+        }
+        return new PreparedMatchCase(branchScope, casePattern);
+    }
+
+    private record PreparedMatchCase(Scope branchScope, String casePattern) {
     }
 
     private static String appendCaseGuard(String casePattern, String guardExpression) {

@@ -375,7 +375,7 @@ public class CapybaraParser {
 
     private List<SourcePosition> findLocalFunctionLocations(String source, String localName) {
         var locations = new ArrayList<SourcePosition>();
-        var pattern = Pattern.compile("(^|\\R)([ \\t]*)fun\\s+" + Pattern.quote(localName) + "\\s*\\(");
+        var pattern = Pattern.compile("(^|\\R)([ \\t]*)fun\\s+(?:rec\\s+)?" + Pattern.quote(localName) + "\\s*\\(");
         var matcher = pattern.matcher(source);
         while (matcher.find()) {
             var prefix = source.substring(0, matcher.start(2));
@@ -559,7 +559,7 @@ public class CapybaraParser {
         for (var localDefinition : localDefinitions) {
             var localFunction = localDefinition.localFunctionDeclaration();
             if (localFunction != null) {
-                var localNameToken = localFunction.NAME().getSymbol();
+                var localNameToken = localFunction.localFunctionNameDeclaration().start;
                 var localName = localNameToken.getText();
                 var occurrences = localFunctionPositions.computeIfAbsent(localName, ignored -> new java.util.ArrayList<>());
                 occurrences.add(localNameToken);
@@ -699,7 +699,8 @@ public class CapybaraParser {
                         .map(comment -> stripDocComment(comment.getText()))
                         .toList(),
                 visibility,
-                position(functionDeclarationContext)
+                position(functionDeclarationContext),
+                functionDeclarationContext.recFunctionMarker() != null
         );
         var allDefinitions = new java.util.ArrayList<Definition>(1 + extractedLocalDefinitions.size());
         allDefinitions.add(topLevelFunction);
@@ -713,7 +714,7 @@ public class CapybaraParser {
             java.util.Map<String, String> localTypeNameMap,
             java.util.Map<String, String> localConstNameMap
     ) {
-        var localName = context.NAME().getText();
+        var localName = context.localFunctionNameDeclaration().getText();
         var mappedName = localFunctionNameMap.get(localName);
         if (mappedName == null) {
             throw new IllegalStateException("Unknown local function mapping for: " + localName);
@@ -738,7 +739,9 @@ public class CapybaraParser {
                 context.docComment().stream()
                         .map(comment -> stripDocComment(comment.getText()))
                         .toList(),
-                position(context)
+                null,
+                position(context),
+                context.recFunctionMarker() != null
         );
     }
 
@@ -2224,9 +2227,11 @@ public class CapybaraParser {
                 ? identifier(context.identifier())
                 : context.NAME() != null
                         ? context.NAME().getText()
-                        : context.COLLECTION() != null
-                                ? context.COLLECTION().getText()
-                                : context.getChild(0).getText();
+                        : context.REC() != null
+                                ? context.REC().getText()
+                                : context.COLLECTION() != null
+                                        ? context.COLLECTION().getText()
+                                        : context.getChild(0).getText();
         return new FunctionCall(moduleName, functionName, arguments, position(context));
     }
 

@@ -130,7 +130,7 @@
       "patterns": [
         {
           "name": "keyword.control.capybara",
-          "match": "\\b(fun|def|type|enum|data|single|const|local|match|with|constructor|case|when|if|then|else|let|return|throw|try|catch|this|from|import|except|class|trait|interface|field|open|abstract|override|final|private|public|init|super|while|do|for|foreach|in)\\b"
+          "match": "\\b(fun|rec|def|type|enum|data|single|const|local|match|with|constructor|case|when|if|then|else|let|return|throw|try|catch|this|from|import|except|class|trait|interface|field|open|abstract|override|final|private|public|init|super|while|do|for|foreach|in)\\b"
         },
         {
           "name": "keyword.operator.constructor.capybara",
@@ -166,7 +166,7 @@
       "patterns": [
         {
           "name": "meta.function.documented.private.capybara",
-          "match": "((?:^\\s*///.*\\r?\\n)+)(\\s*)((?:fun|def))(\\s+)(__[A-Za-z0-9_]+)",
+          "match": "((?:^\\s*///.*\\r?\\n)+)(\\s*)((?:fun(?:\\s+rec)?|def))(\\s+)(__[A-Za-z0-9_]+)",
           "captures": {
             "1": {
               "name": "comment.block.documentation.capybara"
@@ -181,7 +181,7 @@
         },
         {
           "name": "meta.function.documented.capybara",
-          "match": "((?:^\\s*///.*\\r?\\n)+)(\\s*)((?:fun|def))(\\s+)([A-Za-z_][A-Za-z0-9_]*)",
+          "match": "((?:^\\s*///.*\\r?\\n)+)(\\s*)((?:fun(?:\\s+rec)?|def))(\\s+)([A-Za-z_][A-Za-z0-9_]*)",
           "captures": {
             "1": {
               "name": "comment.block.documentation.capybara"
@@ -224,19 +224,19 @@
         },
         {
           "name": "entity.name.function.private.capybara",
-          "match": "\\bfun\\s+(__[A-Za-z0-9_]+)"
+          "match": "\\bfun(?:\\s+rec)?\\s+(__[A-Za-z0-9_]+)"
         },
         {
           "name": "entity.name.function.capybara",
-          "match": "\\bfun\\s+([A-Za-z_][A-Za-z0-9_]*)"
+          "match": "\\bfun(?:\\s+rec)?\\s+([A-Za-z_][A-Za-z0-9_]*)"
         },
         {
           "name": "meta.function.owner-generic.capybara",
-          "match": "\\b(fun)\\s+(_*[A-Z][A-Za-z0-9_]*\\[[^\\]]+\\])\\.(?:`[^`]+`|[A-Za-z_][A-Za-z0-9_]*)"
+          "match": "\\b(fun(?:\\s+rec)?)\\s+(_*[A-Z][A-Za-z0-9_]*\\[[^\\]]+\\])\\.(?:`[^`]+`|[A-Za-z_][A-Za-z0-9_]*)"
         },
         {
           "name": "meta.function.owner-infix.capybara",
-          "match": "\\b(fun)\\s+(_*[A-Z][A-Za-z0-9_]*)\\.([^]+)"
+          "match": "\\b(fun(?:\\s+rec)?)\\s+(_*[A-Z][A-Za-z0-9_]*)\\.([^]+)"
         },
         {
           "name": "entity.name.function.private.capybara",

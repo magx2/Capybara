@@ -49,19 +49,24 @@ public class JavaAstBuilder {
     public JavaClass build(CompiledModule module) {
         var typeIndex = indexTypes(module.types());
         var functionsByOwnerPrefix = indexFunctionsByOwnerPrefix(module.functions());
+        var javaPackageName = buildJavaPackageName(module.path());
+        var javaClassName = buildClassName(module.name());
+        var qualifiedJavaClassName = javaPackageName.isBlank()
+                ? javaClassName.toString()
+                : javaPackageName + "." + javaClassName;
         var interfaces = buildInterfaces(typeIndex.dataParentTypes().stream()
                 .filter(parentType -> !parentType.enumType())
                 .collect(toCollection(TreeSet::new)), functionsByOwnerPrefix);
         var subClassToInterface = findSubClassToInterface(typeIndex.dataParentTypes(), interfaces);
         return new JavaClass(
                 sortedSetOf(generatedAnnotation()),
-                buildClassName(module.name()),
-                new JavaPackage(buildJavaPackageName(module.path())),
+                javaClassName,
+                new JavaPackage(javaPackageName),
                 module.staticImports().stream()
                         .map(staticImport -> normalizeJavaClassReference(staticImport.className()) + "." + buildJavaStaticImportMember(staticImport.memberName()))
                         .collect(toCollection(TreeSet::new)),
                 buildStaticConsts(module.functions()),
-                buildStaticMethods(module.functions()),
+                buildStaticMethods(module.functions(), qualifiedJavaClassName),
                 interfaces,
                 buildRecords(typeIndex.dataTypes(), subClassToInterface, functionsByOwnerPrefix),
                 buildEnums(typeIndex, subClassToInterface));
@@ -131,11 +136,11 @@ public class JavaAstBuilder {
         return new JavaType(normalizeJavaTypeIdentifier(name));
     }
 
-    private SortedSet<JavaMethod> buildStaticMethods(Set<CompiledFunction> functions) {
+    private SortedSet<JavaMethod> buildStaticMethods(Set<CompiledFunction> functions, String qualifiedJavaClassName) {
         return functions.stream()
                 .filter(function -> !function.name().startsWith(METHOD_DECL_PREFIX))
                 .filter(function -> !isConstFunction(function))
-                .map(this::buildStaticMethod)
+                .map(function -> buildStaticMethod(function, qualifiedJavaClassName))
                 .collect(toCollection(TreeSet::new));
     }
 
@@ -168,16 +173,22 @@ public class JavaAstBuilder {
         );
     }
 
-    private JavaMethod buildStaticMethod(CompiledFunction function) {
+    private JavaMethod buildStaticMethod(CompiledFunction function, String qualifiedJavaClassName) {
         var methodTypeParameters = methodTypeParameters(function, Set.of());
         var expression = specializeReturnNewData(function.expression(), function.returnType());
         return new JavaMethod(
                 emittedFunctionName(function),
+                function.name(),
                 function.name().startsWith("_") || function.visibility() == Visibility.PRIVATE,
                 function.programMain(),
+                function.tailRecursive(),
+                selfCallNames(function, qualifiedJavaClassName),
                 methodTypeParameters,
                 buildJavaReturnType(function),
                 buildJavaFunctionParameters(function.parameters()),
+                function.parameters().stream()
+                        .map(CompiledFunction.CompiledFunctionParameter::type)
+                        .toList(),
                 expression,
                 function.comments()
         );
@@ -215,6 +226,16 @@ public class JavaAstBuilder {
 
     private String emittedFunctionName(CompiledFunction function) {
         return functionNameOverrides.getOrDefault(signatureKey(function.name(), function.parameters().stream().map(CompiledFunction.CompiledFunctionParameter::type).toList()), buildMethodName(baseMethodName(function.name())));
+    }
+
+    private List<String> selfCallNames(CompiledFunction function, String qualifiedJavaClassName) {
+        return Stream.of(
+                        function.name(),
+                        qualifiedJavaClassName + "." + function.name(),
+                        qualifiedJavaClassName + "." + emittedFunctionName(function)
+                )
+                .distinct()
+                .toList();
     }
 
     private String baseMethodName(String name) {
@@ -881,11 +902,17 @@ public class JavaAstBuilder {
         var methodTypeParameters = methodTypeParameters(function, Set.copyOf(extractOwnerTypeParameters(function)));
         return new JavaMethod(
                 emittedFunctionName(function),
+                function.name(),
                 methodName.startsWith("_") || function.visibility() == Visibility.PRIVATE,
                 false,
+                function.tailRecursive(),
+                List.of(function.name()),
                 methodTypeParameters,
                 buildJavaReturnType(function),
                 buildJavaFunctionParameters(parameters),
+                parameters.stream()
+                        .map(CompiledFunction.CompiledFunctionParameter::type)
+                        .toList(),
                 function.expression(),
                 function.comments()
         );
@@ -971,11 +998,17 @@ public class JavaAstBuilder {
         var methodTypeParameters = methodTypeParameters(function, Set.copyOf(extractOwnerTypeParameters(function)));
         return new JavaMethod(
                 emittedFunctionName(function),
+                function.name(),
                 methodName.startsWith("_") || function.visibility() == Visibility.PRIVATE,
                 false,
+                function.tailRecursive(),
+                List.of(function.name()),
                 methodTypeParameters,
                 buildJavaReturnType(function),
                 buildJavaFunctionParameters(parameters),
+                parameters.stream()
+                        .map(CompiledFunction.CompiledFunctionParameter::type)
+                        .toList(),
                 function.expression(),
                 function.comments()
         );
