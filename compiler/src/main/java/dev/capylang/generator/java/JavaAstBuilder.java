@@ -51,9 +51,8 @@ public class JavaAstBuilder {
         var functionsByOwnerPrefix = indexFunctionsByOwnerPrefix(module.functions());
         var javaPackageName = buildJavaPackageName(module.path());
         var javaClassName = buildClassName(module.name());
-        var qualifiedJavaClassName = javaPackageName.isBlank()
-                ? javaClassName.toString()
-                : javaPackageName + "." + javaClassName;
+        var staticMethodsClassName = staticMethodsClassName(module, javaClassName.toString());
+        var staticMethodsSelfCallClassNames = staticMethodsSelfCallClassNames(module, javaPackageName, staticMethodsClassName);
         var interfaces = buildInterfaces(typeIndex.dataParentTypes().stream()
                 .filter(parentType -> !parentType.enumType())
                 .collect(toCollection(TreeSet::new)), functionsByOwnerPrefix);
@@ -66,10 +65,36 @@ public class JavaAstBuilder {
                         .map(staticImport -> normalizeJavaClassReference(staticImport.className()) + "." + buildJavaStaticImportMember(staticImport.memberName()))
                         .collect(toCollection(TreeSet::new)),
                 buildStaticConsts(module.functions()),
-                buildStaticMethods(module.functions(), qualifiedJavaClassName),
+                buildStaticMethods(module.functions(), staticMethodsSelfCallClassNames),
                 interfaces,
                 buildRecords(typeIndex.dataTypes(), subClassToInterface, functionsByOwnerPrefix),
                 buildEnums(typeIndex, subClassToInterface));
+    }
+
+    private String staticMethodsClassName(CompiledModule module, String javaClassName) {
+        var ownerType = module.types().get(module.name());
+        if (ownerType == null || ownerType instanceof CompiledDataParentType) {
+            return javaClassName;
+        }
+        return javaClassName + "Module";
+    }
+
+    private List<String> staticMethodsSelfCallClassNames(CompiledModule module, String javaPackageName, String staticMethodsClassName) {
+        var generatedClassName = javaPackageName.isBlank()
+                ? staticMethodsClassName
+                : javaPackageName + "." + staticMethodsClassName;
+        return Stream.of(generatedClassName, linkedStaticMethodsClassName(module))
+                .distinct()
+                .toList();
+    }
+
+    private String linkedStaticMethodsClassName(CompiledModule module) {
+        var className = module.path().replace('/', '.').replace('\\', '.') + "." + module.name();
+        var ownerType = module.types().get(module.name());
+        if (ownerType == null || ownerType instanceof CompiledDataParentType) {
+            return className;
+        }
+        return className + "Module";
     }
 
     private ModuleTypeIndex indexTypes(SortedMap<String, GenericDataType> types) {
@@ -136,11 +161,11 @@ public class JavaAstBuilder {
         return new JavaType(normalizeJavaTypeIdentifier(name));
     }
 
-    private SortedSet<JavaMethod> buildStaticMethods(Set<CompiledFunction> functions, String qualifiedJavaClassName) {
+    private SortedSet<JavaMethod> buildStaticMethods(Set<CompiledFunction> functions, List<String> qualifiedJavaClassNames) {
         return functions.stream()
                 .filter(function -> !function.name().startsWith(METHOD_DECL_PREFIX))
                 .filter(function -> !isConstFunction(function))
-                .map(function -> buildStaticMethod(function, qualifiedJavaClassName))
+                .map(function -> buildStaticMethod(function, qualifiedJavaClassNames))
                 .collect(toCollection(TreeSet::new));
     }
 
@@ -173,7 +198,7 @@ public class JavaAstBuilder {
         );
     }
 
-    private JavaMethod buildStaticMethod(CompiledFunction function, String qualifiedJavaClassName) {
+    private JavaMethod buildStaticMethod(CompiledFunction function, List<String> qualifiedJavaClassNames) {
         var methodTypeParameters = methodTypeParameters(function, Set.of());
         var expression = specializeReturnNewData(function.expression(), function.returnType());
         return new JavaMethod(
@@ -182,7 +207,7 @@ public class JavaAstBuilder {
                 function.name().startsWith("_") || function.visibility() == Visibility.PRIVATE,
                 function.programMain(),
                 function.tailRecursive(),
-                selfCallNames(function, qualifiedJavaClassName),
+                selfCallNames(function, qualifiedJavaClassNames),
                 methodTypeParameters,
                 buildJavaReturnType(function),
                 buildJavaFunctionParameters(function.parameters()),
@@ -229,11 +254,13 @@ public class JavaAstBuilder {
         return functionNameOverrides.getOrDefault(signatureKey(function.name(), function.parameters().stream().map(CompiledFunction.CompiledFunctionParameter::type).toList()), buildMethodName(baseMethodName(function.name())));
     }
 
-    private List<String> selfCallNames(CompiledFunction function, String qualifiedJavaClassName) {
-        return Stream.of(
-                        function.name(),
-                        qualifiedJavaClassName + "." + function.name(),
-                        qualifiedJavaClassName + "." + emittedFunctionName(function)
+    private List<String> selfCallNames(CompiledFunction function, List<String> qualifiedJavaClassNames) {
+        return Stream.concat(
+                        Stream.of(function.name()),
+                        qualifiedJavaClassNames.stream().flatMap(className -> Stream.of(
+                                className + "." + function.name(),
+                                className + "." + emittedFunctionName(function)
+                        ))
                 )
                 .distinct()
                 .toList();

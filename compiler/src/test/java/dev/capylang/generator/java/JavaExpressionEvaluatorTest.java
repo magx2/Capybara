@@ -317,6 +317,26 @@ class JavaExpressionEvaluatorTest {
     }
 
     @Test
+    void shouldRewriteQualifiedTailRecursiveCallWhenStaticMethodsUseModuleSuffix() {
+        var generatedProgram = new JavaGenerator().generate(compileProgram("Counter", "/foo/bar", """
+                data Counter { value: int }
+
+                fun rec sum(n: int, acc: int): int =
+                    if n <= 0 then acc else Counter.sum(n - 1, acc + n)
+                """));
+
+        var generated = generatedProgram.modules().stream()
+                .filter(module -> module.relativePath().equals(Path.of("foo", "bar", "CounterModule.java")))
+                .findFirst()
+                .orElseThrow()
+                .code();
+
+        assertThat(generated).contains("while (true)");
+        assertThat(generated).contains("continue;");
+        assertThat(generated).doesNotContain("return foo.bar.CounterModule.sum(");
+    }
+
+    @Test
     void shouldNotGenerateDuplicateRecordToStringWhenCapybaraDefinesToString() {
         var program = compileProgram("Pretty", "/foo/bar", """
                 data Pretty { value: string }
