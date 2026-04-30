@@ -300,10 +300,21 @@ public class JavaAstBuilder {
         if ("*".equals(memberName)) {
             return memberName;
         }
+        if (isUpperSnakeConstName(memberName)) {
+            return buildMethodName(memberName);
+        }
         if (isTypeLikeIdentifier(memberName)) {
             return buildClassName(memberName).toString();
         }
         return buildMethodName(memberName);
+    }
+
+    private boolean isUpperSnakeConstName(String name) {
+        if (!CONST_NAME_PATTERN.matcher(name).matches()) {
+            return false;
+        }
+        var index = countLeadingUnderscores(name);
+        return name.indexOf('_', index) >= 0;
     }
 
     private boolean isTypeLikeIdentifier(String name) {

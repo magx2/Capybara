@@ -114,64 +114,64 @@ fun tests(): Effect[TestFile] =
 
     test_file("/capy/lang/Math.cfun", all_cases)
 
-fun _test_digits(number: int, expected: int): Assert = assert_that(digits(number) == expected).is_true()
+fun _test_digits(number: int, expected: int): Assert = assert_that(digits(number)).is_equal_to(expected)
 
 fun _test_floor_div(a: int, b: int, expected: int): Assert =
-    assert_that(floor_div(a, b) == expected).is_true()
+    assert_that(floor_div(a, b)).is_equal_to(expected)
 
 fun _test_floor_mod(a: int, b: int, expected: int): Assert =
-    assert_that(floor_mod(a, b) == expected).is_true()
+    assert_that(floor_mod(a, b)).is_equal_to(expected)
 
 fun _test_min_int(a: int, b: int, expected: int): Assert =
-    assert_that(min(a, b) == expected).is_true()
+    assert_that(min(a, b)).is_equal_to(expected)
 
 fun _test_max_int(a: int, b: int, expected: int): Assert =
-    assert_that(max(a, b) == expected).is_true()
+    assert_that(max(a, b)).is_equal_to(expected)
 
 fun _test_min_long(a: long, b: long, expected: long): Assert =
-    assert_that(min(a, b) == expected).is_true()
+    assert_that(min(a, b)).is_equal_to(expected)
 
 fun _test_max_long(a: long, b: long, expected: long): Assert =
-    assert_that(max(a, b) == expected).is_true()
+    assert_that(max(a, b)).is_equal_to(expected)
 
 
 
 fun _test_min_values_int(expected: int): Assert =
-    assert_that(_min_ints()).is_equal_to(Some { expected })
+    assert_that(_min_ints()).contains(expected)
 
 fun _test_empty_min_int(): Assert =
     assert_that(_min_empty_ints()).is_equal_to(None {})
 
 fun _test_max_values_int(expected: int): Assert =
-    assert_that(_max_ints()).is_equal_to(Some { expected })
+    assert_that(_max_ints()).contains(expected)
 
 fun _test_empty_max_int(): Assert =
     assert_that(_max_empty_ints()).is_equal_to(None {})
 
 fun _test_min_negative_values_int(expected: int): Assert =
-    assert_that(_min_negative_ints()).is_equal_to(Some { expected })
+    assert_that(_min_negative_ints()).contains(expected)
 
 fun _test_max_negative_values_int(expected: int): Assert =
-    assert_that(_max_negative_ints()).is_equal_to(Some { expected })
+    assert_that(_max_negative_ints()).contains(expected)
 
 
 fun _test_min_values_long(expected: long): Assert =
-    assert_that(_min_longs()).is_equal_to(Some { expected })
+    assert_that(_min_longs()).contains(expected)
 
 fun _test_empty_min_long(): Assert =
     assert_that(_min_empty_longs()).is_equal_to(None {})
 
 fun _test_max_values_long(expected: long): Assert =
-    assert_that(_max_longs()).is_equal_to(Some { expected })
+    assert_that(_max_longs()).contains(expected)
 
 fun _test_empty_max_long(): Assert =
     assert_that(_max_empty_longs()).is_equal_to(None {})
 
 fun _test_min_negative_values_long(expected: long): Assert =
-    assert_that(_min_negative_longs()).is_equal_to(Some { expected })
+    assert_that(_min_negative_longs()).contains(expected)
 
 fun _test_max_negative_values_long(expected: long): Assert =
-    assert_that(_max_negative_longs()).is_equal_to(Some { expected })
+    assert_that(_max_negative_longs()).contains(expected)
 
 
 fun _min_ints(): Option[int] = min(_ints())

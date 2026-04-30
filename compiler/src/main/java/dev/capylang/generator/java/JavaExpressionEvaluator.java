@@ -206,7 +206,7 @@ public class JavaExpressionEvaluator {
         var letDeclarationType = let.declaredType().orElse(let.value().type());
         var coercedValueExpression = coerceExpressionForExpectedType(letDeclarationType, let.value().type(), value.expression());
         var scopeExpression = shouldUseTypedLetDeclaration(let.value(), let.declaredType().isPresent())
-                ? value.scope().declareTypedValue(let.name(), javaCastType(letDeclarationType), coercedValueExpression, let.rest())
+                ? value.scope().declareTypedValue(let.name(), javaLocalDeclarationType(letDeclarationType), coercedValueExpression, let.rest())
                 : value.scope().declareValue(let.name(), coercedValueExpression, let.rest());
         appendStatements(code, newStatements(value.scope(), scopeExpression.scope()));
         appendTailRecursiveStatement(code, scopeExpression.expression(), scopeExpression.scope(), context);
@@ -451,20 +451,27 @@ public class JavaExpressionEvaluator {
             if ("to_bool".equals(methodName)) {
                 return current.addExpression(buildBoolStringParseResult(functionCall.type(), receiver));
             }
-            var invokeArgs = args.size() > 1 ? String.join(", ", args.subList(1, args.size())) : "";
+            var invokeArgs = args.size() > 1
+                    ? java.util.stream.IntStream.range(1, args.size())
+                            .mapToObj(i -> coercePrimitiveCallArgument(functionCall.arguments().get(i).type(), args.get(i)))
+                            .collect(java.util.stream.Collectors.joining(", "))
+                    : "";
             return current.addExpression(typedReceiver + "." + normalizedMethodName + "(" + invokeArgs + ")");
         }
 
+        var callArgs = java.util.stream.IntStream.range(0, args.size())
+                .mapToObj(i -> coercePrimitiveCallArgument(functionCall.arguments().get(i).type(), args.get(i)))
+                .toList();
         var expression = switch (functionCall.name()) {
             case "sqrt" -> {
                 if (args.size() != 1) {
                     throw new IllegalStateException("sqrt expects exactly one argument");
                 }
-                yield "((float) java.lang.Math.sqrt(" + args.get(0) + "))";
+                yield "((float) java.lang.Math.sqrt(" + callArgs.get(0) + "))";
             }
             default -> isConstCall(functionCall)
                     ? normalizeFunctionCallTarget(functionCall, scope)
-                    : normalizeFunctionCallTarget(functionCall, scope) + "(" + String.join(", ", args) + ")";
+                    : normalizeFunctionCallTarget(functionCall, scope) + "(" + String.join(", ", callArgs) + ")";
         };
         return current.addExpression(expression);
     }
@@ -1540,7 +1547,7 @@ public class JavaExpressionEvaluator {
         var payloadExpression = coerceExpressionForExpectedType(bind.letType(), bind.payloadType(), unsafeRunSource);
         var scopeExpression = sourceExSc.scope().declareTypedValue(
                 bind.name(),
-                javaCastType(bind.letType()),
+                javaLocalDeclarationType(bind.letType()),
                 payloadExpression,
                 bind.rest()
         );
@@ -1587,7 +1594,7 @@ public class JavaExpressionEvaluator {
         var letDeclarationType = let.declaredType().orElse(let.value().type());
         var coercedValueExpression = coerceExpressionForExpectedType(letDeclarationType, let.value().type(), valueExSc.expression());
         var scopeExpression = shouldUseTypedLetDeclaration(let.value(), let.declaredType().isPresent())
-                ? valueExSc.scope().declareTypedValue(let.name(), javaCastType(letDeclarationType), coercedValueExpression, let.rest())
+                ? valueExSc.scope().declareTypedValue(let.name(), javaLocalDeclarationType(letDeclarationType), coercedValueExpression, let.rest())
                 : valueExSc.scope().declareValue(let.name(), coercedValueExpression, let.rest());
         return evaluateExpression(scopeExpression.expression(), scopeExpression.scope());
     }
@@ -1734,6 +1741,37 @@ public class JavaExpressionEvaluator {
                     genericTypeParameter.name();
             default -> "java.lang.Object";
         };
+    }
+
+    private static String javaLocalDeclarationType(dev.capylang.compiler.CompiledType type) {
+        return switch (type) {
+            case dev.capylang.compiler.PrimitiveLinkedType primitive -> switch (primitive) {
+                case BYTE -> "byte";
+                case INT -> "int";
+                case LONG -> "long";
+                case DOUBLE -> "double";
+                case STRING -> "java.lang.String";
+                case BOOL -> "boolean";
+                case FLOAT -> "float";
+                case NOTHING, ANY, DATA -> "java.lang.Object";
+            };
+            default -> javaCastType(type);
+        };
+    }
+
+    private static String coercePrimitiveCallArgument(dev.capylang.compiler.CompiledType type, String expression) {
+        if (type instanceof dev.capylang.compiler.PrimitiveLinkedType primitive) {
+            return switch (primitive) {
+                case BYTE -> "((byte) " + expression + ")";
+                case INT -> "((int) " + expression + ")";
+                case LONG -> "((long) " + expression + ")";
+                case DOUBLE -> "((double) " + expression + ")";
+                case BOOL -> "((boolean) " + expression + ")";
+                case FLOAT -> "((float) " + expression + ")";
+                case STRING, NOTHING, ANY, DATA -> expression;
+            };
+        }
+        return expression;
     }
 
     private static String coerceExpressionForExpectedType(

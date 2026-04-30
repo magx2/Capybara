@@ -1,0 +1,86 @@
+from /capy/lang/Math import { floor_mod }
+from /capy/lang/Primitives import { FLOAT_BOUND, DOUBLE_BOUND, FLOAT_BOUND_AS_FLOAT, DOUBLE_BOUND_AS_DOUBLE }
+from /capy/lang/Seq import { * }
+
+/// Returns a native random seed.
+fun seed(): Seed = <native>
+
+/// Immutable random generator state.
+data Seed { value: long }
+
+/// Random value paired with the seed to use for the next random step.
+data RandomResult[T] { value: T, seed: Seed }
+
+/// Multiplier for the linear congruential seed transition.
+private const RANDOM_MULTIPLIER: long = 6364136223846793005L
+
+/// Increment for the linear congruential seed transition.
+private const RANDOM_INCREMENT: long = 1442695040888963407L
+
+/// Returns the deterministic next seed for this seed.
+private fun Seed.next_seed(): Seed = Seed { value: this.value * RANDOM_MULTIPLIER + RANDOM_INCREMENT }
+
+/// Returns a random `long` and the next seed.
+fun Seed.random_long(): RandomResult[long] = RandomResult { value: this.value, seed: this.next_seed() }
+
+/// Returns a random `int` and the next seed.
+fun Seed.random_int(): RandomResult[int] = RandomResult { value: this.value.to_int(), seed: this.next_seed() }
+
+/// Returns a random `bool` and the next seed.
+fun Seed.random_bool(): RandomResult[bool] = RandomResult { value: this.value >= 0L, seed: this.next_seed() }
+
+/// Returns a random `double` in `[0.0, 1.0]` and the next seed.
+fun Seed.random_double(): RandomResult[double] =
+    /// Maps a seed value into the inclusive `double` unit interval.
+    fun unit_double(value: long): double =
+        floor_mod(value, DOUBLE_BOUND + 1L) / DOUBLE_BOUND_AS_DOUBLE
+    ---
+    RandomResult { value: unit_double(this.value), seed: this.next_seed() }
+
+/// Returns a random `float` in `[0.0f, 1.0f]` and the next seed.
+fun Seed.random_float(): RandomResult[float] =
+    /// Maps a seed value into the inclusive `float` unit interval.
+    fun unit_float(value: long): float =
+        floor_mod(value, FLOAT_BOUND + 1L) / FLOAT_BOUND_AS_FLOAT
+    ---
+    RandomResult { value: unit_float(this.value), seed: this.next_seed() }
+
+/// Returns an infinite sequence of random `int` values.
+fun Seed.random_ints(): Cons[int] =
+    fun next_ints(seed: Seed): Cons[int] =
+        let random = seed.random_int()
+        Cons { value: random.value, rest: () => next_ints(random.seed) }
+    ---
+    next_ints(this)
+
+/// Returns an infinite sequence of random `long` values.
+fun Seed.random_longs(): Cons[long] =
+    fun next_longs(seed: Seed): Cons[long] =
+        let random = seed.random_long()
+        Cons { value: random.value, rest: () => next_longs(random.seed) }
+    ---
+    next_longs(this)
+
+/// Returns an infinite sequence of random `bool` values.
+fun Seed.random_bools(): Cons[bool] =
+    fun next_bools(seed: Seed): Cons[bool] =
+        let random = seed.random_bool()
+        Cons { value: random.value, rest: () => next_bools(random.seed) }
+    ---
+    next_bools(this)
+
+/// Returns an infinite sequence of random `float` values in `[0.0f, 1.0f]`.
+fun Seed.random_floats(): Cons[float] =
+    fun next_floats(seed: Seed): Cons[float] =
+        let random = seed.random_float()
+        Cons { value: random.value, rest: () => next_floats(random.seed) }
+    ---
+    next_floats(this)
+
+/// Returns an infinite sequence of random `double` values in `[0.0, 1.0]`.
+fun Seed.random_doubles(): Cons[double] =
+    fun next_doubles(seed: Seed): Cons[double] =
+        let random = seed.random_double()
+        Cons { value: random.value, rest: () => next_doubles(random.seed) }
+    ---
+    next_doubles(this)

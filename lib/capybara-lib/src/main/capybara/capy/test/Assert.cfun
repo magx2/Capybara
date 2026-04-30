@@ -384,7 +384,7 @@ fun OptionAssert[T].is_equal_to(other: /capy/lang/Option[T]): OptionAssert[T] =
 fun OptionAssert[T].contains(other: T): OptionAssert[T] =
     let assertion = Assertion {
         result: match this.value with
-            case Some s -> s == other
+            case Some { value } -> value == other
             case _ -> false,
         message: "Expected option:\n" + this.value + "\nto contains:\n" + other,
         type: 'OptionAssert[T].contains'

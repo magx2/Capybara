@@ -298,6 +298,104 @@ class JavaExpressionEvaluatorTest {
     }
 
     @Test
+    void shouldGenerateNativeRandomSeedMethod() {
+        var program = compileProgram("Random", "/capy/lang", """
+                data Seed { value: long }
+
+                fun seed(): Seed = <native>
+                """);
+
+        var generated = new JavaGenerator().generate(program).modules().stream()
+                .map(dev.capylang.generator.GeneratedModule::code)
+                .collect(joining("\n"));
+
+        assertThat(generated).contains("return new Seed(java.util.concurrent.ThreadLocalRandom.current().nextLong());");
+        assertThat(generated).doesNotContain("__capybaraUnsupported");
+    }
+
+    @Test
+    void shouldPreserveSourceRandomSeedMethodWhenNotNative() {
+        var program = compileProgram("Random", "/capy/lang", """
+                data Seed { value: long }
+
+                fun seed(): Seed = Seed { value: 1L }
+                """);
+
+        var generated = new JavaGenerator().generate(program).modules().stream()
+                .map(dev.capylang.generator.GeneratedModule::code)
+                .collect(joining("\n"));
+
+        assertThat(generated).contains("return new Seed(1L);");
+        assertThat(generated).doesNotContain("ThreadLocalRandom");
+    }
+
+    @Test
+    void shouldGenerateStaticImportsForUpperSnakeConstants() {
+        var program = compileProgram(List.of(
+                new RawModule("Bounds", "/foo", """
+                        const FLOAT_BOUND: long = 16777216L
+                        """),
+                new RawModule("Consumer", "/bar", """
+                        from /foo/Bounds import { FLOAT_BOUND }
+
+                        fun value(): long = FLOAT_BOUND
+                        """)
+        ));
+
+        var generatedProgram = new JavaGenerator().generate(program);
+        var generated = generatedProgram.modules().stream()
+                .filter(module -> module.relativePath().equals(Path.of("bar", "Consumer.java")))
+                .map(dev.capylang.generator.GeneratedModule::code)
+                .findFirst()
+                .orElseThrow();
+
+        assertThat(generated).contains("import static foo.Bounds.fLOATBOUND;");
+        assertThat(generated).doesNotContain("import foo.Bounds.FLOATBOUND;");
+        assertGeneratedJavaCompiles(generatedProgram);
+    }
+
+    @Test
+    void shouldGeneratePrimitiveTypedLetDeclarations() {
+        var program = compileProgram("""
+                fun copy_double(value: double): double =
+                    let copy: double = value
+                    copy
+
+                fun copy_float(value: float): float =
+                    let copy: float = value
+                    copy
+                """);
+
+        var generated = new JavaGenerator().generate(program).modules().stream()
+                .map(dev.capylang.generator.GeneratedModule::code)
+                .collect(joining("\n"));
+
+        assertThat(generated).contains("double copy = value;");
+        assertThat(generated).contains("float copy = value;");
+        assertThat(generated).doesNotContain("java.lang.Double copy = value;");
+        assertThat(generated).doesNotContain("java.lang.Float copy = value;");
+    }
+
+    @Test
+    void shouldCoercePrimitiveFunctionCallArgumentsBeforeJavaOverloadResolution() {
+        var program = compileProgram("""
+                data Box[T] { value: T }
+
+                fun accept(value: double): string = "double"
+                fun accept(value: data): string = "data"
+
+                fun use_box(box: Box[double]): string =
+                    accept(box.value)
+                """);
+
+        var generated = new JavaGenerator().generate(program).modules().stream()
+                .map(dev.capylang.generator.GeneratedModule::code)
+                .collect(joining("\n"));
+
+        assertThat(generated).contains("accept(((double) ((java.lang.Double) ((box).value()))))");
+    }
+
+    @Test
     void shouldFullyQualifyResultReturnTypeInTopLevelRecordMethods() {
         var program = compileProgram("LocalDateModule", "/foo/bar", """
                 from /capy/lang/Result import {*}
@@ -616,7 +714,7 @@ class JavaExpressionEvaluatorTest {
                 .map(dev.capylang.generator.GeneratedModule::code)
                 .collect(joining("\n"));
 
-        assertThat(generated).contains("java.lang.Boolean assert_ =");
+        assertThat(generated).contains("boolean assert_ =");
         assertThat(generated).contains("return assert_;");
         assertThat(generated).contains(".stream().map(assert_ ->");
         assertGeneratedJavaCompiles(generatedProgram);
@@ -633,7 +731,7 @@ class JavaExpressionEvaluatorTest {
                 .map(dev.capylang.generator.GeneratedModule::code)
                 .collect(joining("\n"));
 
-        assertThat(generated).contains("java.lang.Boolean assert_j1 =");
+        assertThat(generated).contains("boolean assert_j1 =");
         assertThat(generated).contains("return assert_j1;");
         assertGeneratedJavaCompiles(generatedProgram);
     }
@@ -805,7 +903,7 @@ class JavaExpressionEvaluatorTest {
 
                                 fun double(x: int) = x * x
                                 """,
-                        "return l.stream().map(it -> (double_(it))).toList();"
+                        "return l.stream().map(it -> (double_(((int) it)))).toList();"
                 ),
                 Arguments.of(
                         "pipe_filter_out",

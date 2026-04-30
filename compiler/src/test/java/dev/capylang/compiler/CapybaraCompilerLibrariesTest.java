@@ -416,6 +416,57 @@ class CapybaraCompilerLibrariesTest {
     }
 
     @Test
+    void shouldPreferDirectOverloadsOverWrappingPlainValuesIntoResult() {
+        var compiled = compileProgram(List.of(
+                new RawModule("Result", "/capy/lang", """
+                        type Result[T] = Success[T] | Error
+                        data Success[T] { value: T }
+                        data Error { message: string }
+                        """),
+                new RawModule("Assert", "/capy/test", """
+                        from /capy/lang/Result import { * }
+
+                        data ResultAssert[T] { value: Result[T] }
+                        data DataAssert { value: data }
+                        data ListAssert[T] { value: list[T] }
+
+                        fun ResultAssert[T].is_equal_to(other: Result[T]): ResultAssert[T] = this
+                        fun DataAssert.is_equal_to(other: data): DataAssert = this
+                        fun ListAssert[T].is_equal_to(other: list[T]): ListAssert[T] = this
+
+                        fun assert_that(value: Result[T]): ResultAssert[T] = ResultAssert { value: value }
+                        fun assert_that(value: data): DataAssert = DataAssert { value: value }
+                        fun assert_that(value: list[T]): ListAssert[T] = ListAssert { value: value }
+                        """),
+                new RawModule("Consumer", "/foo/app", """
+                        from /capy/lang/Result import { * }
+                        from /capy/test/Assert import { * }
+
+                        data Seed { value: long }
+
+                        fun data_assert(seed: Seed): DataAssert = assert_that(seed)
+                        fun list_assert(values: list[int]): ListAssert[int] = assert_that(values)
+                        fun result_assert(value: Result[Seed]): ResultAssert[Seed] = assert_that(value)
+                        fun data_chain(seed: Seed): DataAssert = assert_that(seed).is_equal_to(seed)
+                        fun list_chain(values: list[int]): ListAssert[int] = assert_that(values).is_equal_to(values)
+                        """)
+        ), new java.util.TreeSet<>());
+
+        assertThat(compiledFunction(compiled, "Consumer", "data_assert").returnType().name())
+                .isEqualTo("DataAssert");
+        assertThat(compiledFunction(compiled, "Consumer", "list_assert").returnType().name())
+                .isEqualTo("ListAssert");
+        assertThat(compiledFunction(compiled, "Consumer", "result_assert").returnType().name())
+                .isEqualTo("ResultAssert");
+        assertThat(CompiledExpressionPrinter.printExpression(compiledFunction(compiled, "Consumer", "data_chain").expression(), 0))
+                .contains("__method__DataAssert__is_equal_to")
+                .doesNotContain("Success");
+        assertThat(CompiledExpressionPrinter.printExpression(compiledFunction(compiled, "Consumer", "list_chain").expression(), 0))
+                .contains("__method__ListAssert__is_equal_to")
+                .doesNotContain("Success");
+    }
+
+    @Test
     void shouldResolveAbsoluteImportsAgainstRelativeModulePaths() {
         var compiled = compileProgram(List.of(
                 new RawModule("Result", "capy/lang", """
