@@ -12,17 +12,19 @@ Without a dedicated marker, recursive intent and optimization expectations are i
 
 ## Decision
 
-Capybara treats `fun rec` as a compiler-verified direct tail-recursion contract.
+Capybara detects direct self-recursion for every function. It treats `fun rec` as a compiler-verified direct tail-recursion contract.
 
 - `rec` is declaration-local and only meaningful with `fun`.
-- The compiler validates direct tail-recursive shape for the declared function body.
-- Violations are rejected at compile time instead of silently compiling as ordinary recursion.
-- Java lowering for valid `fun rec` functions uses loop-style code generation rather than stack-growing self-calls.
+- The compiler records whether each function is directly recursive.
+- Functions whose direct self-recursive calls are all in tail position may use loop-style Java lowering, even without the `rec` marker.
+- `fun rec` validates direct tail-recursive shape for the declared function body.
+- `fun rec` violations are rejected at compile time instead of silently compiling as ordinary recursion.
+- Non-tail recursive functions without `rec` remain valid recursive functions and keep ordinary call-style Java lowering.
 
 ## Consequences
 
 Recursive performance intent is explicit in source, and invalid non-tail forms fail early.
 
-Java backend behavior becomes more predictable for approved tail-recursive declarations, with stack usage aligned to loop lowering.
+Java backend behavior becomes more predictable for tail-recursive functions, with stack usage aligned to loop lowering when the compiler can prove the direct self-recursive shape.
 
-This ADR does not broaden recursion semantics beyond direct tail recursion and does not change non-`rec` function behavior.
+This ADR does not broaden recursion semantics beyond direct self-recursion. The `rec` keyword remains the source-level assertion that recursion must be tail-recursive.

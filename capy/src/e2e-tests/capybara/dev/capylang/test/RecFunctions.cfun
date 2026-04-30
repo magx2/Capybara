@@ -19,8 +19,29 @@ fun rec sum_with_match(n: int, acc: int): int =
     case true -> acc
     case false -> sum_with_match(n - 1, acc + n)
 
-fun rec count_down_large(n: int, acc: int): int =
-    if n <= 0 then acc else count_down_large(n - 1, acc + 1)
+fun rec factorial_large(n: int, acc: int): int =
+    if n <= 1 then acc else factorial_large(n - 1, acc * n)
+
+fun unmarked_tail_sum(n: int, acc: int): int =
+    if n <= 0 then acc else unmarked_tail_sum(n - 1, acc + n)
+
+fun unmarked_tail_factorial_large(n: int, acc: int): int =
+    if n <= 1 then acc else unmarked_tail_factorial_large(n - 1, acc * n)
+
+fun unmarked_local_tail_sum(n: int): int =
+    fun __sum(n: int, acc: int): int =
+        if n <= 0 then acc else __sum(n - 1, acc + n)
+    ---
+    __sum(n, 0)
+
+fun unmarked_local_tail_factorial_large(n: int): int =
+    fun __factorial(n: int, acc: int): int =
+        if n <= 1 then acc else __factorial(n - 1, acc * n)
+    ---
+    __factorial(n, 1)
+
+fun unmarked_non_tail_sum(n: int): int =
+    if n <= 0 then 0 else n + unmarked_non_tail_sum(n - 1)
 
 fun rec sum_present_values(values: list[int], acc: int): int =
     match values[0] with

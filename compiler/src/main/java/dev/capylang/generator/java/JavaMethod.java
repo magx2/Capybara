@@ -15,6 +15,7 @@ public record JavaMethod(
         List<String> typeParameters,
         JavaType returnType,
         List<JavaFunctionParameter> parameters,
+        dev.capylang.compiler.CompiledType sourceReturnType,
         List<dev.capylang.compiler.CompiledType> sourceParameterTypes,
         CompiledExpression expression,
         List<String> comments) implements Comparable<JavaMethod> {

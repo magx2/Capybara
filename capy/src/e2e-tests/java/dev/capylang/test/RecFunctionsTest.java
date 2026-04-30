@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 
 class RecFunctionsTest {
     @Test
@@ -25,7 +26,19 @@ class RecFunctionsTest {
 
     @Test
     void tailRecursiveFunctionIsLoweredWithoutJavaStackGrowth() {
-        assertThat(RecFunctions.countDownLarge(50_000, 0)).isEqualTo(50_000);
+        assertThat(RecFunctions.factorialLarge(5, 1)).isEqualTo(120);
+        assertThatCode(() -> RecFunctions.factorialLarge(50_000, 1)).doesNotThrowAnyException();
+    }
+
+    @Test
+    void unmarkedRecursiveFunctionsStillCompileAndRun() {
+        assertThat(RecFunctions.unmarkedTailSum(5, 0)).isEqualTo(15);
+        assertThat(RecFunctions.unmarkedTailFactorialLarge(5, 1)).isEqualTo(120);
+        assertThatCode(() -> RecFunctions.unmarkedTailFactorialLarge(50_000, 1)).doesNotThrowAnyException();
+        assertThat(RecFunctions.unmarkedLocalTailSum(5)).isEqualTo(15);
+        assertThat(RecFunctions.unmarkedLocalTailFactorialLarge(5)).isEqualTo(120);
+        assertThatCode(() -> RecFunctions.unmarkedLocalTailFactorialLarge(50_000)).doesNotThrowAnyException();
+        assertThat(RecFunctions.unmarkedNonTailSum(5)).isEqualTo(15);
     }
 
     @Test
