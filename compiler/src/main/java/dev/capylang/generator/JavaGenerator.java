@@ -821,6 +821,9 @@ public final class JavaGenerator implements Generator {
         if (isCapyLangSystemNanoTimeMethod(ownerPackage, ownerName, method)) {
             return mapCapyLangSystemNanoTimeMethod(method, visibility, methodTypeParameters);
         }
+        if (isCapyLangRandomSeedMethod(ownerPackage, ownerName, method)) {
+            return mapCapyLangRandomSeedMethod(method, visibility, methodTypeParameters);
+        }
         if (isCapyTestCurrentLogTypeMethod(ownerPackage, ownerName, method)) {
             return mapCapyTestCurrentLogTypeMethod(method, visibility, methodTypeParameters);
         }
@@ -875,6 +878,21 @@ public final class JavaGenerator implements Generator {
     }
 
     private String mapCapyLangSystemNanoTimeMethod(JavaMethod method, String visibility, String methodTypeParameters) {
+        return mapJavaDoc(method.comments())
+               + visibility + "static " + methodTypeParameters + method.returnType() + " " + mapMethodName(method.name()) + "() {\n"
+               + "return capy.lang.Effect.delay(java.lang.System::nanoTime);\n"
+               + "}\n";
+    }
+
+    private boolean isCapyLangRandomSeedMethod(String ownerPackage, String ownerName, JavaMethod method) {
+        return "capy.lang".equals(ownerPackage)
+               && "Random".equals(ownerName)
+               && "seed".equals(mapMethodName(method.name()))
+               && method.parameters().isEmpty()
+               && isEffectTypeReference(method.returnType().toString());
+    }
+
+    private String mapCapyLangRandomSeedMethod(JavaMethod method, String visibility, String methodTypeParameters) {
         return mapJavaDoc(method.comments())
                + visibility + "static " + methodTypeParameters + method.returnType() + " " + mapMethodName(method.name()) + "() {\n"
                + "return capy.lang.Effect.delay(java.lang.System::nanoTime);\n"

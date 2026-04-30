@@ -1,0 +1,41 @@
+from /capy/test/Assert import { * }
+from /capy/lang/Effect import { * }
+from /capy/lang/Random import { * }
+from /capy/lang/Seq import { * }
+from /capy/test/CapyTest import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/capy/lang/RandomTest", [
+        test("should generate deterministic values", () => should_generate_deterministic_values()),
+        test("should advance random state", () => should_advance_random_state()),
+        test("should generate infinite random sequences", () => should_generate_infinite_random_sequences()),
+    ])
+
+fun should_generate_deterministic_values(): Assert =
+    let random = Random { 123L }
+    let r1 = random.long()
+    let r2 = random.long()
+    assert_all([
+        assert_that(r1[0]).is_equal_to(r2[0]),
+        assert_that(r1[1].seed).is_equal_to(r2[1].seed),
+    ])
+
+fun should_advance_random_state(): Assert =
+    let random = Random { 42L }
+    let b = random.bool()
+    let f = random.float()
+    let d = random.double()
+    assert_all([
+        assert_that(b[1].seed != random.seed).is_equal_to(true),
+        assert_that(f[1].seed != random.seed).is_equal_to(true),
+        assert_that(d[1].seed != random.seed).is_equal_to(true),
+    ])
+
+fun should_generate_infinite_random_sequences(): Assert =
+    let random = Random { 1L }
+    let ints = random.int_seq().take(5)
+    let doubles = random.double_seq().take(5)
+    assert_all([
+        assert_that(ints.size).is_equal_to(5),
+        assert_that(doubles.size).is_equal_to(5),
+    ])

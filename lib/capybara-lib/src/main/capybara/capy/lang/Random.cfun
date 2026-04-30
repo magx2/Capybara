@@ -1,0 +1,66 @@
+from /capy/lang/Effect import { * }
+from /capy/lang/Seq import { * }
+from /capy/lang/Primitives import { clamp_long_to_int }
+
+data Random { seed: long }
+
+/// Returns an impure seed based on the current JVM nano time.
+fun seed(): Effect[long] = <native>
+
+/// Returns a new random state seeded from current JVM nano time.
+fun random(): Effect[Random] = seed().map(value => Random { value })
+
+private const MULTIPLIER: long = 6364136223846793005L
+private const INCREMENT: long = 1442695040888963407L
+
+private fun _next_seed(seed: long): long = seed * MULTIPLIER + INCREMENT
+
+fun Random.long(): tuple[long, Random] =
+    let next = _next_seed(this.seed)
+    (next, Random { next })
+
+fun Random.int(): tuple[int, Random] =
+    let result = this.long()
+    (clamp_long_to_int(result[0]), result[1])
+
+fun Random.bool(): tuple[bool, Random] =
+    let result = this.long()
+    (result[0] % 2L == 0L, result[1])
+
+fun Random.float(): tuple[float, Random] =
+    let result = this.int()
+    let value = result[0]
+    // Normalize negative values to positive before scaling into [0, 1].
+    let positive = if value < 0 then 0 - value else value
+    (positive / 2147483647.0f, result[1])
+
+fun Random.double(): tuple[double, Random] =
+    let result = this.int()
+    let value = result[0]
+    // Normalize negative values to positive before scaling into [0, 1].
+    let positive = if value < 0 then 0 - value else value
+    (positive / 2147483647.0, result[1])
+
+fun Random.long_seq(): Seq[long] =
+    fun __next(random: Random): Seq[long] =
+        let value = random.long()
+        Cons { value[0], () => __next(value[1]) }
+    ---
+    __next(this)
+
+fun Random.int_seq(): Seq[int] =
+    fun __next(random: Random): Seq[int] =
+        let value = random.int()
+        Cons { value[0], () => __next(value[1]) }
+    ---
+    __next(this)
+
+fun Random.bool_seq(): Seq[bool] = this.long_seq().map(v => v % 2L == 0L)
+
+fun Random.float_seq(): Seq[float] =
+    // Normalize negatives to keep values within the expected [0, 1] range.
+    this.int_seq().map(v => (if v < 0 then 0 - v else v) / 2147483647.0f)
+
+fun Random.double_seq(): Seq[double] =
+    // Normalize negatives to keep values within the expected [0, 1] range.
+    this.int_seq().map(v => (if v < 0 then 0 - v else v) / 2147483647.0)
