@@ -9,7 +9,7 @@ data Path {
 }
 
 fun from_string(string: string): Path =
-    fun __segments(value: string, current: string, acc: list[string]): list[string] =
+    fun rec __segments(value: string, current: string, acc: list[string]): list[string] =
         match value[0] with
         case None ->
             if current == ""
@@ -85,7 +85,7 @@ fun Path.is_absolute(): bool =
 fun Path.is_root(): bool = this.segments.size == 0
 
 fun Path.normalize(): Path =
-    fun __normalize_path(root: PathRoot, segments: list[string], acc: list[string]): list[string] =
+    fun rec __normalize_path(root: PathRoot, segments: list[string], acc: list[string]): list[string] =
         match segments[0] with
         case None -> acc
         case Some { seg } ->
@@ -108,7 +108,6 @@ fun Path.normalize(): Path =
         prefix: this.prefix,
         segments: __normalize_path(this.root, this.segments, [])
     }
-
 
 
 

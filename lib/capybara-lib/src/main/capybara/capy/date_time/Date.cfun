@@ -112,7 +112,7 @@ fun Date.add_years_months(years: int, months: int): Date =
 
 /// Formats this date as an ISO 8601 calendar date.
 fun Date.to_iso_8601(): string =
-    fun __pad_left(value: string, size: int): string =
+    fun rec __pad_left(value: string, size: int): string =
         if value.size >= size
         then value
         else __pad_left("0" + value, size)
@@ -140,7 +140,7 @@ fun from_iso_8601(iso: string): Result[Date] =
             match ("" + char).to_int() with
             case Success { digit } -> Success { __Parse { buffer: value[1:], value: digit } }
             case Error -> Error { __invalid("expected digit, got `" + char + "`") }
-    fun __parse_rest_digits(value: string, parsed: int): Result[__Parse[int]] =
+    fun rec __parse_rest_digits(value: string, parsed: int): Result[__Parse[int]] =
         if value.is_empty
         then Success { __Parse { buffer: value, value: parsed } }
         else
@@ -155,21 +155,21 @@ fun from_iso_8601(iso: string): Result[Date] =
         if parse.buffer.is_empty
         then Success { parse.value }
         else Error { __invalid("expected digits for " + label + ", got `" + value + "`") }
-    fun __drop_prefix(value: string, size: int): string =
+    fun rec __drop_prefix(value: string, size: int): string =
         if size <= 0
         then value
         else
             match value[0] with
             case None -> ""
             case Some { _ } -> __drop_prefix(value[1:], size - 1)
-    fun __take_prefix(value: string, size: int): string =
+    fun rec __take_prefix(value: string, size: int, acc: string): string =
         if size <= 0
-        then ""
+        then acc
         else
             match value[0] with
-            case None -> ""
-            case Some { char } -> ("" + char) + __take_prefix(value[1:], size - 1)
-    fun __slice(value: string, start: int, size: int): string = __take_prefix(__drop_prefix(value, start), size)
+            case None -> acc
+            case Some { char } -> __take_prefix(value[1:], size - 1, acc + char)
+    fun __slice(value: string, start: int, size: int): string = __take_prefix(__drop_prefix(value, start), size, "")
     fun __parse_year(value: string): Result[int] =
         if value.is_empty
         then Error { __invalid("expected year") }
@@ -212,7 +212,7 @@ fun from_iso_8601(iso: string): Result[Date] =
         & __slice(iso, extended_month_end, 1) == "-"
     let is_basic = iso.size >= 8
     if is_extended
-    then __parse_date(__take_prefix(iso, extended_year_end), __slice(iso, extended_month_start, 2), __slice(iso, extended_day_start, 2))
+    then __parse_date(__take_prefix(iso, extended_year_end, ""), __slice(iso, extended_month_start, 2), __slice(iso, extended_day_start, 2))
     else if is_basic
-        then __parse_date(__take_prefix(iso, basic_year_end), __slice(iso, basic_month_start, 2), __slice(iso, basic_day_start, 2))
+        then __parse_date(__take_prefix(iso, basic_year_end, ""), __slice(iso, basic_month_start, 2), __slice(iso, basic_day_start, 2))
         else Error { __invalid("expected date in `YYYY-MM-DD` or `YYYYMMDD` format, got `" + iso + "`") }

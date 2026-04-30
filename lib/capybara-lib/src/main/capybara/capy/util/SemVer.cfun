@@ -1,6 +1,5 @@
 from /capy/lang/Option import { Option, Some, None }
 from /capy/lang/Result import {*}
-from /capy/lang/Math import { digits }
 
 /// Given a version number MAJOR.MINOR.PATCH, increment the:
 ///
@@ -111,15 +110,8 @@ fun parse_semver(version: string): Result[SemVer] =
         case None -> Error { 'Unexpected end of version string!' }
         case Some { '0' } -> Success { __Parse { version[1:], 0 } }
         case Some { value } ->
-            __parse_positive_digit(version)
-                | first_positive_digit_parse => {
-                    match __parse_digits(first_positive_digit_parse.buffer) with
-                    case Error -> Success { first_positive_digit_parse }
-                    case Success { parse_digits } -> Success { __Parse {
-                        buffer: parse_digits.buffer,
-                        value: first_positive_digit_parse.value * 10 ^ digits(parse_digits.value) + parse_digits.value
-                    }}
-                }
+            let first_positive_digit_parse <- __parse_positive_digit(version)
+            __parse_digits_rest(first_positive_digit_parse.buffer, first_positive_digit_parse.value)
 
         /// ```
         /// <pre-release> ::= <dot-separated pre-release identifiers>
@@ -130,19 +122,17 @@ fun parse_semver(version: string): Result[SemVer] =
         ///                                           | <pre-release identifier> "." <dot-separated pre-release identifiers>
         /// ```
         fun __parse_dot_separated_pre_release_identifiers(version: string): Result[__Parse[string]] =
-            __parse_pre_release_identifier(version)
-            | parse => {
-                match parse.buffer[0] with
-                case None -> Success { parse }
-                case Some { char } when char == '.' ->
-                    __parse_dot_separated_pre_release_identifiers(parse.buffer[1:])
-                    | parse_dot_separated => Success { __Parse {
-                        buffer: parse_dot_separated.buffer,
-                        value: parse.value + "." + parse_dot_separated.value
-                    }}
-                case Some { char } when char == '+' -> Success { parse }
-                case Some { char } -> Error { 'Expected end of version string or `.` for next pre-release identifier, but got `' + char + '`!' }
+            let parse <- __parse_pre_release_identifier(version)
+            __parse_dot_separated_pre_release_identifiers_rest(parse.buffer, parse.value)
+        fun rec __parse_dot_separated_pre_release_identifiers_rest(version: string, parsed: string): Result[__Parse[string]] =
+            match version[0] with
+            case None -> Success { __Parse { buffer: version, value: parsed } }
+            case Some { char } when char == '.' -> {
+                let parse <- __parse_pre_release_identifier(version[1:])
+                __parse_dot_separated_pre_release_identifiers_rest(parse.buffer, parsed + "." + parse.value)
             }
+            case Some { char } when char == '+' -> Success { __Parse { buffer: version, value: parsed } }
+            case Some { char } -> Error { 'Expected end of version string or `.` for next pre-release identifier, but got `' + char + '`!' }
         /// ```
         /// <pre-release identifier> ::= <alphanumeric identifier>
         ///                            | <numeric identifier>
@@ -164,20 +154,16 @@ fun parse_semver(version: string): Result[SemVer] =
         //                                     | <build identifier> "." <dot-separated build identifiers>
         /// ```
         fun __parse_dot_separated_build_identifiers(version: string): Result[__Parse[string]] =
-            __parse_dot_separated_build_identifier(version)
-            | parse_identifier => {
-                match parse_identifier.buffer[0] with
-                case None -> Success { parse_identifier }
-                case Some { char } when char == '.' -> {
-                    __parse_dot_separated_build_identifiers(parse_identifier.buffer[1:])
-                    | parse_dot_separated_build_identifiers =>
-                        Success { __Parse {
-                            buffer: parse_dot_separated_build_identifiers.buffer,
-                            value: parse_identifier.value + "." + parse_dot_separated_build_identifiers.value
-                        }}
-                    }
-                case Some { char } -> Error { 'Expected end of version string or `.` for next build identifier, but got `' + char + '`!' }
+            let parse_identifier <- __parse_dot_separated_build_identifier(version)
+            __parse_dot_separated_build_identifiers_rest(parse_identifier.buffer, parse_identifier.value)
+        fun rec __parse_dot_separated_build_identifiers_rest(version: string, parsed: string): Result[__Parse[string]] =
+            match version[0] with
+            case None -> Success { __Parse { buffer: version, value: parsed } }
+            case Some { char } when char == '.' -> {
+                let parse_identifier <- __parse_dot_separated_build_identifier(version[1:])
+                __parse_dot_separated_build_identifiers_rest(parse_identifier.buffer, parsed + "." + parse_identifier.value)
             }
+            case Some { char } -> Error { 'Expected end of version string or `.` for next build identifier, but got `' + char + '`!' }
         /// ```
         // <build identifier> ::= <alphanumeric identifier>
         //                      | <digits>
@@ -220,14 +206,12 @@ fun parse_semver(version: string): Result[SemVer] =
         //                           | <identifier character> <identifier characters>
         /// ```
         fun __parse_identifier_characters(version: string): Result[__Parse[string]] =
-            __parse_identifier_character(version)
-            | pic => {
-                match __parse_identifier_characters(pic.buffer) with
-                case Error -> Success { pic }
-                case Success { parse_identifier_characters } -> Success { __Parse {
-                    buffer: parse_identifier_characters.buffer,
-                    value: pic.value + parse_identifier_characters.value }}
-            }
+            let pic <- __parse_identifier_character(version)
+            __parse_identifier_characters_rest(pic.buffer, pic.value)
+        fun rec __parse_identifier_characters_rest(version: string, parsed: string): Result[__Parse[string]] =
+            match __parse_identifier_character(version) with
+            case Success { parse } -> __parse_identifier_characters_rest(parse.buffer, parsed + parse.value)
+            case Error -> Success { __Parse { buffer: version, value: parsed } }
         /// ```
         /// <identifier character> ::= <digit>
         ///                          | <non-digit>
@@ -252,24 +236,20 @@ fun parse_semver(version: string): Result[SemVer] =
         ///            | <digit> <digits>
         /// ```
         fun __parse_digits(version: string): Result[__Parse[int]] =
-            __parse_digit(version)
-            | parse =>
-                match __parse_digits(parse.buffer) with
-                case Error -> Success { parse }
-                case Success { parse_digits } -> Success { __Parse {
-                    buffer: parse_digits.buffer,
-                    value: parse.value * 10 ^ digits(parse_digits.value) + parse_digits.value
-                }}
+            let parse <- __parse_digit(version)
+            __parse_digits_rest(parse.buffer, parse.value)
+        fun rec __parse_digits_rest(version: string, parsed: int): Result[__Parse[int]] =
+            match __parse_digit(version) with
+            case Success { parse } -> __parse_digits_rest(parse.buffer, parsed * 10 + parse.value)
+            case Error -> Success { __Parse { buffer: version, value: parsed } }
         /// Same as `__parse_digits(version: string): Result[__Parse[int]]`, but returns string to prevent prefix zeroes from being stripped, which is important for build metadata identifiers
         fun __parse_digits_as_string(version: string): Result[__Parse[string]] =
-            __parse_digit_as_string(version)
-            | parse =>
-                match __parse_digits_as_string(parse.buffer) with
-                case Error -> Success { parse }
-                case Success { parse_digits } -> Success { __Parse {
-                    buffer: parse_digits.buffer,
-                    value: parse.value + parse_digits.value
-                }}
+            let parse <- __parse_digit_as_string(version)
+            __parse_digits_as_string_rest(parse.buffer, parse.value)
+        fun rec __parse_digits_as_string_rest(version: string, parsed: string): Result[__Parse[string]] =
+            match __parse_digit_as_string(version) with
+            case Success { parse } -> __parse_digits_as_string_rest(parse.buffer, parsed + parse.value)
+            case Error -> Success { __Parse { buffer: version, value: parsed } }
         /// ```
         /// <digit> ::= "0"
         ///           | <positive digit>

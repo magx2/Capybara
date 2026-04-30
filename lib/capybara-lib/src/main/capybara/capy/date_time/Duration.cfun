@@ -131,7 +131,7 @@ fun from_iso_8601(iso: string): Result[Duration] =
         case None -> Error { __invalid("unexpected end of string while parsing digits") }
         case Some { '0' } -> Success { __Parse { buffer: value[1:], value: 0 } }
         case Some -> __parse_positive_digit(value)
-    fun __parse_rest_digits(value: string, parsed: int): Result[__Parse[int]] =
+    fun rec __parse_rest_digits(value: string, parsed: int): Result[__Parse[int]] =
         match value[0] with
         case Some { char } ->
             if match char with
@@ -301,7 +301,7 @@ fun from_iso_8601(iso: string): Result[Duration] =
             has_component: true,
             has_time_component: parse.has_time_component | parse.in_time
         }}
-    fun __parse_designator_duration(parse: __DurationParse): Result[Duration] =
+    fun rec __parse_designator_duration(parse: __DurationParse): Result[Duration] =
         match parse.buffer[0] with
         case None ->
             if !parse.has_component
