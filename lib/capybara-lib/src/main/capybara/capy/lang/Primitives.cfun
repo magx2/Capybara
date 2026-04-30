@@ -6,6 +6,18 @@ const MIN_INT_VALUE: int = -2147483648
 const MAX_LONG_VALUE: long = 9223372036854775807L
 const MIN_LONG_VALUE: long = -9223372036854775808L
 
+/// Number of distinct mantissa steps used to map random long values into `float`.
+const FLOAT_BOUND: long = 16777216L
+
+/// Number of distinct mantissa steps used to map random long values into `double`.
+const DOUBLE_BOUND: long = 9007199254740992L
+
+/// Floating-point representation of `FLOAT_BOUND`.
+const FLOAT_BOUND_AS_FLOAT: float = 16777216.0f
+
+/// Floating-point representation of `DOUBLE_BOUND`.
+const DOUBLE_BOUND_AS_DOUBLE: double = 9007199254740992.0
+
 fun clamp_long_to_int(value: long): int =
     if value > MAX_INT_VALUE
     then MAX_INT_VALUE

@@ -1,0 +1,126 @@
+from /capy/test/Assert import { * }
+from /capy/lang/Effect import { * }
+from /capy/lang/Primitives import { FLOAT_BOUND, DOUBLE_BOUND }
+from /capy/lang/Random import { * }
+from /capy/lang/Seq import { * }
+from /capy/test/CapyTest import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/capy/lang/Random.cfun", [
+        test("random_int should be deterministic for same seed", () => should_return_deterministic_random_int()),
+        test("random_long should thread seed", () => should_thread_seed_for_random_long()),
+        test("random_bool should be deterministic for same seed", () => should_return_deterministic_random_bool()),
+        test("random_float should be deterministic for same seed", () => should_return_deterministic_random_float()),
+        test("random_double should be deterministic for same seed", () => should_return_deterministic_random_double()),
+        test("random_float should stay in inclusive unit interval", () => should_return_random_float_in_inclusive_unit_interval()),
+        test("random_double should stay in inclusive unit interval", () => should_return_random_double_in_inclusive_unit_interval()),
+        test("random_float should be able to return one", () => should_return_random_float_one()),
+        test("random_double should be able to return one", () => should_return_random_double_one()),
+        test("seed should produce usable random state", () => should_use_native_seed()),
+        test("random_ints should produce deterministic sequence", () => should_produce_deterministic_random_int_sequence()),
+        test("random helper sequences should align with step functions", () => should_align_random_sequences_with_step_functions()),
+    ])
+
+fun should_return_deterministic_random_int(): Assert =
+    let seeded = Seed { value: 42L }
+    let r1 = seeded.random_int()
+    let r2 = seeded.random_int()
+    assert_all([
+        assert_that(r1.value).is_equal_to(r2.value),
+        assert_that(r1.seed).is_equal_to(r2.seed),
+    ])
+
+fun should_thread_seed_for_random_long(): Assert =
+    let seeded = Seed { value: 7L }
+    let first = seeded.random_long()
+    let second = first.seed.random_long()
+    let repeated = seeded.random_long().seed.random_long()
+    assert_all([
+        assert_that(second.value).is_equal_to(repeated.value),
+        assert_that(second.seed).is_equal_to(repeated.seed),
+    ])
+
+fun should_return_deterministic_random_bool(): Assert =
+    let seeded = Seed { value: 101L }
+    let r1 = seeded.random_bool()
+    let r2 = seeded.random_bool()
+    assert_all([
+        assert_that(r1.value).is_equal_to(r2.value),
+        assert_that(r1.seed).is_equal_to(r2.seed),
+    ])
+
+fun should_return_deterministic_random_float(): Assert =
+    let seeded = Seed { value: 5L }
+    let r1 = seeded.random_float()
+    let r2 = seeded.random_float()
+    assert_all([
+        assert_that(r1.value).is_equal_to(r2.value),
+        assert_that(r1.seed).is_equal_to(r2.seed),
+    ])
+
+fun should_return_deterministic_random_double(): Assert =
+    let seeded = Seed { value: 5L }
+    let r1 = seeded.random_double()
+    let r2 = seeded.random_double()
+    assert_all([
+        assert_that(r1.value).is_equal_to(r2.value),
+        assert_that(r1.seed).is_equal_to(r2.seed),
+    ])
+
+fun should_return_random_float_in_inclusive_unit_interval(): Assert =
+    let random = Seed { value: 42L }.random_float()
+    assert_all([
+        assert_that(random.value).is_greater_or_equals_than(0.0f),
+        assert_that(random.value).is_less_or_equals_than(1.0f),
+    ])
+
+fun should_return_random_double_in_inclusive_unit_interval(): Assert =
+    let random = Seed { value: 42L }.random_double()
+    assert_all([
+        assert_that(random.value).is_greater_or_equals_than(0.0),
+        assert_that(random.value).is_less_or_equals_than(1.0),
+    ])
+
+fun should_return_random_float_one(): Assert =
+    let random = Seed { value: FLOAT_BOUND }.random_float()
+    assert_that(random.value).is_equal_to(1.0f)
+
+fun should_return_random_double_one(): Assert =
+    let random = Seed { value: DOUBLE_BOUND }.random_double()
+    assert_that(random.value).is_equal_to(1.0)
+
+fun should_use_native_seed(): Assert =
+    let random = seed().random_double()
+    assert_all([
+        assert_that(random.value).is_greater_or_equals_than(0.0),
+        assert_that(random.value).is_less_or_equals_than(1.0),
+    ])
+
+fun should_produce_deterministic_random_int_sequence(): Assert =
+    let seeded = Seed { value: 11L }
+    let s1 = seeded.random_ints().take(8)
+    let s2 = seeded.random_ints().take(8)
+    assert_that(s1).is_equal_to(s2)
+
+fun should_align_random_sequences_with_step_functions(): Assert =
+    let seeded = Seed { value: 12345L }
+
+    let int_step = seeded.random_int()
+    let long_step = seeded.random_long()
+    let bool_step = seeded.random_bool()
+    let float_step = seeded.random_float()
+    let double_step = seeded.random_double()
+
+    let int_from_seq = seeded.random_ints().first()
+    let long_from_seq = seeded.random_longs().first()
+    let bool_from_seq = seeded.random_bools().first()
+    let float_from_seq = seeded.random_floats().first()
+    let double_from_seq = seeded.random_doubles().first()
+
+    assert_all([
+        assert_that(int_from_seq).contains(int_step.value),
+        assert_that(long_from_seq).contains(long_step.value),
+        assert_that(bool_from_seq).contains(bool_step.value),
+        assert_that(float_from_seq).contains(float_step.value),
+        assert_that(double_from_seq).contains(double_step.value),
+    ])

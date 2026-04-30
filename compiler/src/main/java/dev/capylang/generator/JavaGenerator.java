@@ -822,6 +822,9 @@ public final class JavaGenerator implements Generator {
         if (isCapyLangSystemNanoTimeMethod(ownerPackage, ownerName, method)) {
             return mapCapyLangSystemNanoTimeMethod(method, visibility, methodTypeParameters);
         }
+        if (isCapyLangRandomSeedMethod(ownerPackage, ownerName, method)) {
+            return mapCapyLangRandomSeedMethod(method, visibility, methodTypeParameters);
+        }
         if (isCapyTestCurrentLogTypeMethod(ownerPackage, ownerName, method)) {
             return mapCapyTestCurrentLogTypeMethod(method, visibility, methodTypeParameters);
         }
@@ -880,6 +883,29 @@ public final class JavaGenerator implements Generator {
                + visibility + "static " + methodTypeParameters + method.returnType() + " " + mapMethodName(method.name()) + "() {\n"
                + "return capy.lang.Effect.delay(java.lang.System::nanoTime);\n"
                + "}\n";
+    }
+
+    private boolean isCapyLangRandomSeedMethod(String ownerPackage, String ownerName, JavaMethod method) {
+        return "capy.lang".equals(ownerPackage)
+               && "Random".equals(ownerName)
+               && "seed".equals(mapMethodName(method.name()))
+               && method.parameters().isEmpty()
+               && method.sourceReturnType() instanceof dev.capylang.compiler.CompiledDataType dataType
+               && "Seed".equals(dataType.name())
+               && isNativeExpression(method);
+    }
+
+    private String mapCapyLangRandomSeedMethod(JavaMethod method, String visibility, String methodTypeParameters) {
+        return mapJavaDoc(method.comments())
+               + visibility + "static " + methodTypeParameters + method.returnType() + " " + mapMethodName(method.name()) + "() {\n"
+               + "return new Seed(java.util.concurrent.ThreadLocalRandom.current().nextLong());\n"
+               + "}\n";
+    }
+
+    private boolean isNativeExpression(JavaMethod method) {
+        return method.expression() instanceof dev.capylang.compiler.expression.CompiledNothingValue nothingValue
+               && (nothingValue.message().contains("`<native>`")
+                   || nothingValue.message().contains("native expression in function"));
     }
 
     private boolean isCapyTestCurrentLogTypeMethod(String ownerPackage, String ownerName, JavaMethod method) {

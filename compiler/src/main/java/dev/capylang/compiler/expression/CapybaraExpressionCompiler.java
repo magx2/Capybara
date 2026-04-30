@@ -1933,7 +1933,7 @@ public class CapybaraExpressionCompiler {
             }
             var resultCompatibleExpression = ((Result.Success<CompiledExpression>) wrapped).value();
             if (!linkedWasAlreadyResult) {
-                return Result.success(new CoercedArgument(resultCompatibleExpression, 1));
+                return Result.success(new CoercedArgument(resultCompatibleExpression, 2));
             }
             maybeCoerced = coerceArgument(resultCompatibleExpression, expected);
             if (maybeCoerced == null) {
