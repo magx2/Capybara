@@ -771,15 +771,8 @@ public class CapybaraExpressionCompiler {
             if (linkedType instanceof Result.Success<CompiledType> success) {
                 return Result.success(reflectionTypeInfo(success.value(), anyInfo, true));
             }
-            return withPosition(
-                    Result.error("Reflection target type `" + functionCall.name() + "` not found"),
-                    target.position()
-            );
         }
-        return withPosition(
-                Result.error("Reflection target must be a type name or function reference"),
-                target.position()
-        );
+        return linkExpression(target).map(expression -> reflectionTypeInfo(expression.type(), anyInfo, true));
     }
 
     private Result<CompiledExpression> linkReflectionFunctionTarget(

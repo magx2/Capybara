@@ -6,7 +6,11 @@ data B { b: list[string] }
 
 fun reflection_letter(): AnyInfo = reflection(Letter)
 
+fun reflection_letter2(letter: Letter): AnyInfo = reflection(letter)
+
 fun reflection_a(): AnyInfo = reflection(A)
+
+fun reflection_a2(a: A): AnyInfo = reflection(a)
 
 fun reflection_b(): AnyInfo = reflection(B)
 
