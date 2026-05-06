@@ -76,8 +76,8 @@ public final class ObjectOrientedJavaGenerator {
         code.append("@javax.annotation.processing.Generated(\"Capybara Compiler\")\n");
         code.append(switch (declaration) {
             case ObjectOriented.ClassDeclaration classDeclaration -> renderClass(module, classDeclaration, definitionsByName);
-            case ObjectOriented.InterfaceDeclaration interfaceDeclaration -> renderInterface(module, interfaceDeclaration);
-            case ObjectOriented.TraitDeclaration traitDeclaration -> renderTrait(module, traitDeclaration);
+            case ObjectOriented.InterfaceDeclaration interfaceDeclaration -> renderInterface(module, interfaceDeclaration, definitionsByName);
+            case ObjectOriented.TraitDeclaration traitDeclaration -> renderTrait(module, traitDeclaration, definitionsByName);
         });
         return code.toString();
     }
@@ -141,6 +141,7 @@ public final class ObjectOrientedJavaGenerator {
         if (usesMatchSupport(declaration)) {
             code.append(renderMatchHelper()).append("\n");
         }
+        code.append(renderReflectionMethod(module, declaration, definitionsByName)).append("\n");
 
         var parentNames = Stream.concat(
                         parents.classParent().stream(),
@@ -434,7 +435,11 @@ public final class ObjectOrientedJavaGenerator {
         return code.toString();
     }
 
-    private String renderInterface(ObjectOrientedModule module, ObjectOriented.InterfaceDeclaration declaration) {
+    private String renderInterface(
+            ObjectOrientedModule module,
+            ObjectOriented.InterfaceDeclaration declaration,
+            Map<String, ObjectOriented.TypeDeclaration> definitionsByName
+    ) {
         var code = new StringBuilder();
         appendDocComments(code, declaration.comments(), 0);
         code.append("public interface ").append(declaration.name());
@@ -443,6 +448,7 @@ public final class ObjectOrientedJavaGenerator {
                     .append(declaration.parents().stream().map(parent -> renderTypeReference(parent.name())).collect(Collectors.joining(", ")));
         }
         code.append(" {\n");
+        code.append(renderReflectionMethod(module, declaration, definitionsByName)).append("\n");
         for (var member : declaration.members()) {
             if (!(member instanceof ObjectOriented.MethodDeclaration method)) {
                 throw unsupported(module, "Interface `" + declaration.name() + "` can only contain methods");
@@ -453,7 +459,11 @@ public final class ObjectOrientedJavaGenerator {
         return code.toString();
     }
 
-    private String renderTrait(ObjectOrientedModule module, ObjectOriented.TraitDeclaration declaration) {
+    private String renderTrait(
+            ObjectOrientedModule module,
+            ObjectOriented.TraitDeclaration declaration,
+            Map<String, ObjectOriented.TypeDeclaration> definitionsByName
+    ) {
         for (var member : declaration.members()) {
             if (member instanceof ObjectOriented.FieldDeclaration) {
                 throw unsupported(module, "Trait fields are not supported by the Java backend in v1");
@@ -476,11 +486,248 @@ public final class ObjectOrientedJavaGenerator {
         if (usesMatchSupport(declaration)) {
             code.append(renderMatchHelper()).append("\n");
         }
+        code.append(renderReflectionMethod(module, declaration, definitionsByName)).append("\n");
         for (var member : declaration.members()) {
             code.append(renderTraitMethod(module, declaration.name(), (ObjectOriented.MethodDeclaration) member));
         }
         code.append("}\n");
         return code.toString();
+    }
+
+    private String renderReflectionMethod(
+            ObjectOrientedModule module,
+            ObjectOriented.TypeDeclaration declaration,
+            Map<String, ObjectOriented.TypeDeclaration> definitionsByName
+    ) {
+        return "    public static capy.reflection.Reflection.AnyInfo type() {\n"
+               + "        return " + renderObjectOrientedInfo(module, declaration, definitionsByName, true) + ";\n"
+               + "    }\n";
+    }
+
+    private String renderObjectOrientedInfo(
+            ObjectOrientedModule module,
+            ObjectOriented.TypeDeclaration declaration,
+            Map<String, ObjectOriented.TypeDeclaration> definitionsByName,
+            boolean full
+    ) {
+        if (declaration instanceof ObjectOriented.InterfaceDeclaration) {
+            return "new capy.reflection.Reflection.InterfaceInfo("
+                   + javaString(declaration.name()) + ", "
+                   + renderReflectionPackage(module) + ", "
+                   + renderReflectionMethods(module, declaration.members(), definitionsByName, full) + ", "
+                   + renderReflectionParents(module, declaration.parents(), definitionsByName, full)
+                   + ")";
+        }
+        if (declaration instanceof ObjectOriented.TraitDeclaration) {
+            return "new capy.reflection.Reflection.TraitInfo("
+                   + javaString(declaration.name()) + ", "
+                   + renderReflectionPackage(module) + ", "
+                   + renderReflectionMethods(module, declaration.members(), definitionsByName, full) + ", "
+                   + renderReflectionParents(module, declaration.parents(), definitionsByName, full)
+                   + ")";
+        }
+        var classDeclaration = (ObjectOriented.ClassDeclaration) declaration;
+        var fields = declaration.members().stream()
+                .filter(ObjectOriented.FieldDeclaration.class::isInstance)
+                .map(ObjectOriented.FieldDeclaration.class::cast)
+                .toList();
+        return "new capy.reflection.Reflection.ObjectInfo("
+               + javaString(declaration.name()) + ", "
+               + renderReflectionPackage(module) + ", "
+               + classDeclaration.modifiers().contains("open") + ", "
+               + renderReflectionFields(module, fields, definitionsByName, full) + ", "
+               + renderReflectionMethods(module, declaration.members(), definitionsByName, full) + ", "
+               + renderReflectionParents(module, declaration.parents(), definitionsByName, full)
+               + ")";
+    }
+
+    private String renderReflectionParents(
+            ObjectOrientedModule module,
+            List<ObjectOriented.TypeReference> parents,
+            Map<String, ObjectOriented.TypeDeclaration> definitionsByName,
+            boolean full
+    ) {
+        if (!full || parents.isEmpty()) {
+            return "java.util.Set.<capy.reflection.Reflection.ObjectOrientedInfo>of()";
+        }
+        return parents.stream()
+                .map(parent -> {
+                    var declaration = definitionsByName.get(simpleTypeName(parent.name()));
+                    if (declaration == null) {
+                        return renderExternalObjectInfo(module, simpleTypeName(parent.name()));
+                    }
+                    return renderObjectOrientedInfo(module, declaration, definitionsByName, false);
+                })
+                .collect(Collectors.joining(", ", "java.util.Set.<capy.reflection.Reflection.ObjectOrientedInfo>of(", ")"));
+    }
+
+    private String renderReflectionFields(
+            ObjectOrientedModule module,
+            List<ObjectOriented.FieldDeclaration> fields,
+            Map<String, ObjectOriented.TypeDeclaration> definitionsByName,
+            boolean full
+    ) {
+        if (!full || fields.isEmpty()) {
+            return "java.util.List.<capy.reflection.Reflection.FieldInfo>of()";
+        }
+        return fields.stream()
+                .map(field -> "new capy.reflection.Reflection.FieldInfo("
+                              + javaString(field.name()) + ", "
+                              + renderReflectionTypeInfo(module, field.type(), definitionsByName)
+                              + ")")
+                .collect(Collectors.joining(", ", "java.util.List.<capy.reflection.Reflection.FieldInfo>of(", ")"));
+    }
+
+    private String renderReflectionMethods(
+            ObjectOrientedModule module,
+            List<ObjectOriented.MemberDeclaration> members,
+            Map<String, ObjectOriented.TypeDeclaration> definitionsByName,
+            boolean full
+    ) {
+        if (!full) {
+            return "java.util.List.<capy.reflection.Reflection.MethodInfo>of()";
+        }
+        var methods = members.stream()
+                .filter(ObjectOriented.MethodDeclaration.class::isInstance)
+                .map(ObjectOriented.MethodDeclaration.class::cast)
+                .toList();
+        if (methods.isEmpty()) {
+            return "java.util.List.<capy.reflection.Reflection.MethodInfo>of()";
+        }
+        return methods.stream()
+                .map(method -> renderReflectionMethodInfo(module, method, definitionsByName))
+                .collect(Collectors.joining(", ", "java.util.List.<capy.reflection.Reflection.MethodInfo>of(", ")"));
+    }
+
+    private String renderReflectionMethodInfo(
+            ObjectOrientedModule module,
+            ObjectOriented.MethodDeclaration method,
+            Map<String, ObjectOriented.TypeDeclaration> definitionsByName
+    ) {
+        return "new capy.reflection.Reflection.MethodInfo("
+               + javaString(method.name()) + ", "
+               + renderReflectionPackage(module) + ", "
+               + renderReflectionParams(module, method.parameters(), definitionsByName) + ", "
+               + renderReflectionTypeInfo(module, method.returnType(), definitionsByName)
+               + ")";
+    }
+
+    private String renderReflectionParams(
+            ObjectOrientedModule module,
+            List<ObjectOriented.Parameter> parameters,
+            Map<String, ObjectOriented.TypeDeclaration> definitionsByName
+    ) {
+        if (parameters.isEmpty()) {
+            return "java.util.List.<capy.reflection.Reflection.ParamInfo>of()";
+        }
+        return parameters.stream()
+                .map(parameter -> "new capy.reflection.Reflection.ParamInfo("
+                                  + javaString(parameter.name()) + ", "
+                                  + renderReflectionTypeInfo(module, parameter.type(), definitionsByName)
+                                  + ")")
+                .collect(Collectors.joining(", ", "java.util.List.<capy.reflection.Reflection.ParamInfo>of(", ")"));
+    }
+
+    private String renderReflectionTypeInfo(
+            ObjectOrientedModule module,
+            String rawType,
+            Map<String, ObjectOriented.TypeDeclaration> definitionsByName
+    ) {
+        var trimmed = rawType.trim();
+        if (trimmed.endsWith("[]")) {
+            return "new capy.reflection.Reflection.ListInfo("
+                   + javaString("array") + ", "
+                   + renderEmptyReflectionPackage() + ", "
+                   + renderReflectionTypeInfo(module, trimmed.substring(0, trimmed.length() - 2), definitionsByName)
+                   + ")";
+        }
+        if (trimmed.startsWith("list[") && trimmed.endsWith("]")) {
+            return "new capy.reflection.Reflection.ListInfo("
+                   + javaString("list") + ", "
+                   + renderEmptyReflectionPackage() + ", "
+                   + renderReflectionTypeInfo(module, trimmed.substring(5, trimmed.length() - 1), definitionsByName)
+                   + ")";
+        }
+        if (trimmed.startsWith("set[") && trimmed.endsWith("]")) {
+            return "new capy.reflection.Reflection.SetInfo("
+                   + javaString("set") + ", "
+                   + renderEmptyReflectionPackage() + ", "
+                   + renderReflectionTypeInfo(module, trimmed.substring(4, trimmed.length() - 1), definitionsByName)
+                   + ")";
+        }
+        if (trimmed.startsWith("dict[") && trimmed.endsWith("]")) {
+            return "new capy.reflection.Reflection.DictInfo("
+                   + javaString("dict") + ", "
+                   + renderEmptyReflectionPackage() + ", "
+                   + renderReflectionTypeInfo(module, trimmed.substring(5, trimmed.length() - 1), definitionsByName)
+                   + ")";
+        }
+        if (trimmed.startsWith("tuple[") && trimmed.endsWith("]")) {
+            var inner = trimmed.substring(6, trimmed.length() - 1);
+            var elements = splitTopLevel(inner).stream()
+                    .map(type -> renderReflectionTypeInfo(module, type, definitionsByName))
+                    .collect(Collectors.joining(", ", "java.util.List.<capy.reflection.Reflection.AnyInfo>of(", ")"));
+            return "new capy.reflection.Reflection.TupleInfo("
+                   + javaString("tuple") + ", "
+                   + renderEmptyReflectionPackage() + ", "
+                   + elements
+                   + ")";
+        }
+        if (isPrimitiveReflectionType(trimmed)) {
+            return "new capy.reflection.Reflection.PrimitiveInfo("
+                   + javaString(trimmed) + ", "
+                   + renderEmptyReflectionPackage()
+                   + ")";
+        }
+        var declaration = definitionsByName.get(simpleTypeName(trimmed));
+        if (declaration != null) {
+            return renderObjectOrientedInfo(module, declaration, definitionsByName, false);
+        }
+        return "new capy.reflection.Reflection.DataInfo("
+               + javaString(simpleTypeName(trimmed)) + ", "
+               + renderReflectionPackageForType(module, trimmed) + ", "
+               + "java.util.List.<capy.reflection.Reflection.FieldInfo>of(), "
+               + "java.util.List.<capy.reflection.Reflection.FunctionInfo>of()"
+               + ")";
+    }
+
+    private boolean isPrimitiveReflectionType(String type) {
+        return switch (type) {
+            case "byte", "int", "long", "double", "float", "bool", "string", "any", "data", "void", "nothing" -> true;
+            default -> false;
+        };
+    }
+
+    private String renderExternalObjectInfo(ObjectOrientedModule module, String name) {
+        return "new capy.reflection.Reflection.ObjectInfo("
+               + javaString(name) + ", "
+               + renderReflectionPackageForType(module, name) + ", "
+               + "false, "
+               + "java.util.List.<capy.reflection.Reflection.FieldInfo>of(), "
+               + "java.util.List.<capy.reflection.Reflection.MethodInfo>of(), "
+               + "java.util.Set.<capy.reflection.Reflection.ObjectOrientedInfo>of()"
+               + ")";
+    }
+
+    private String renderReflectionPackage(ObjectOrientedModule module) {
+        var path = module.path().replaceFirst("^/", "");
+        var name = path.isBlank() ? "" : simpleTypeName(path);
+        return "new capy.reflection.Reflection.PackageInfo(" + javaString(name) + ", " + javaString(path) + ")";
+    }
+
+    private String renderReflectionPackageForType(ObjectOrientedModule module, String rawType) {
+        var normalized = rawType.replace('\\', '/');
+        if (normalized.startsWith("/")) {
+            var slash = normalized.lastIndexOf('/');
+            var path = slash > 0 ? normalized.substring(1, slash) : "";
+            var name = path.isBlank() ? "" : simpleTypeName(path);
+            return "new capy.reflection.Reflection.PackageInfo(" + javaString(name) + ", " + javaString(path) + ")";
+        }
+        return renderReflectionPackage(module);
+    }
+
+    private String renderEmptyReflectionPackage() {
+        return "new capy.reflection.Reflection.PackageInfo(\"\", \"\")";
     }
 
     private String renderInterfaceMethod(ObjectOrientedModule module, String ownerName, ObjectOriented.MethodDeclaration method) {
@@ -1610,6 +1857,16 @@ public final class ObjectOrientedJavaGenerator {
             return value + "_";
         }
         return value;
+    }
+
+    private String javaString(String value) {
+        return "\"" + value
+                .replace("\\", "\\\\")
+                .replace("\"", "\\\"")
+                .replace("\n", "\\n")
+                .replace("\r", "\\r")
+                .replace("\t", "\\t")
+                + "\"";
     }
 
     private String indent(int level) {

@@ -510,6 +510,9 @@ public class CapybaraExpressionCompiler {
         var signatures = resolvedModule.signatures();
 
         var candidates = functionsByNameAndArity(signatures, functionCall.name(), functionCall.arguments().size());
+        if (hasReflectionIntrinsicSignature(candidates)) {
+            return linkReflectionIntrinsicCall(functionCall, candidates);
+        }
         if (candidates.isEmpty()) {
             return withPosition(
                     Result.error(
@@ -653,6 +656,9 @@ public class CapybaraExpressionCompiler {
             return resolveMethodInvokeCall(functionCall, scope, expectedType);
         }
         var candidates = functionsByNameAndArity(functionSignatures, functionCall.name(), functionCall.arguments().size());
+        if (hasReflectionIntrinsicSignature(candidates)) {
+            return linkReflectionIntrinsicCall(functionCall, candidates);
+        }
         if (candidates.isEmpty()) {
             if (functionCall.arguments().isEmpty()) {
                 var singleton = findSingletonDataType(functionCall.name());
@@ -715,6 +721,384 @@ public class CapybaraExpressionCompiler {
                 best.arguments(),
                 best.returnType()
         ));
+    }
+
+    private boolean hasReflectionIntrinsicSignature(List<FunctionSignature> candidates) {
+        return candidates.stream().anyMatch(this::isReflectionIntrinsicSignature);
+    }
+
+    private boolean isReflectionIntrinsicSignature(FunctionSignature signature) {
+        return "reflection".equals(signature.name())
+               && signature.parameterTypes().size() == 1
+               && signature.returnType() instanceof CompiledDataParentType parentType
+               && "AnyInfo".equals(simpleTypeNameStatic(parentType.name()));
+    }
+
+    private Result<CompiledExpression> linkReflectionIntrinsicCall(
+            FunctionCall functionCall,
+            List<FunctionSignature> candidates
+    ) {
+        if (!"reflection".equals(functionCall.name()) || functionCall.arguments().size() != 1) {
+            return withPosition(
+                    Result.error("Reflection intrinsic expects exactly one target"),
+                    functionCall.position()
+            );
+        }
+        var anyInfo = candidates.stream()
+                .filter(this::isReflectionIntrinsicSignature)
+                .map(FunctionSignature::returnType)
+                .filter(CompiledDataParentType.class::isInstance)
+                .map(CompiledDataParentType.class::cast)
+                .findFirst()
+                .orElse(null);
+        if (anyInfo == null) {
+            return withPosition(
+                    Result.error("Reflection metadata type `AnyInfo` was not found"),
+                    functionCall.position()
+            );
+        }
+        return linkReflectionTarget(functionCall.arguments().getFirst(), anyInfo);
+    }
+
+    private Result<CompiledExpression> linkReflectionTarget(Expression target, CompiledDataParentType anyInfo) {
+        if (target instanceof FunctionReference functionReference) {
+            return linkReflectionFunctionTarget(functionReference, anyInfo);
+        }
+        if (target instanceof FunctionCall functionCall
+            && functionCall.moduleName().isEmpty()
+            && functionCall.arguments().isEmpty()) {
+            var linkedType = linkType(new DataType(functionCall.name()), dataTypes);
+            if (linkedType instanceof Result.Success<CompiledType> success) {
+                return Result.success(reflectionTypeInfo(success.value(), anyInfo, true));
+            }
+            return withPosition(
+                    Result.error("Reflection target type `" + functionCall.name() + "` not found"),
+                    target.position()
+            );
+        }
+        return withPosition(
+                Result.error("Reflection target must be a type name or function reference"),
+                target.position()
+        );
+    }
+
+    private Result<CompiledExpression> linkReflectionFunctionTarget(
+            FunctionReference functionReference,
+            CompiledDataParentType anyInfo
+    ) {
+        var candidates = functionsByName(functionSignatures, functionReference.name());
+        if (candidates.isEmpty()) {
+            return withPosition(
+                    Result.error("Function `" + functionReference.name() + "` not found"),
+                    functionReference.position()
+            );
+        }
+        if (candidates.size() > 1) {
+            return withPosition(
+                    Result.error("Function reference `" + functionReference.name() + "` is ambiguous. Add a non-overloaded wrapper before reflecting it."),
+                    functionReference.position()
+            );
+        }
+        return Result.success(reflectionMethodInfo(candidates.getFirst(), anyInfo));
+    }
+
+    private CompiledExpression reflectionTypeInfo(CompiledType type, CompiledDataParentType anyInfo, boolean full) {
+        return switch (type) {
+            case PrimitiveLinkedType primitive -> reflectionPrimitiveInfo(primitive, anyInfo);
+            case CompiledList listType -> reflectionCollectionInfo("ListInfo", "list", "element_type", listType.elementType(), anyInfo);
+            case CompiledSet setType -> reflectionCollectionInfo("SetInfo", "set", "element_type", setType.elementType(), anyInfo);
+            case CompiledDict dictType -> reflectionCollectionInfo("DictInfo", "dict", "value_type", dictType.valueType(), anyInfo);
+            case CompiledTupleType tupleType -> reflectionTupleInfo(tupleType, anyInfo);
+            case CompiledFunctionType functionType -> reflectionFunctionTypeInfo(functionType, anyInfo);
+            case CompiledGenericTypeParameter genericTypeParameter -> reflectionGenericParamInfo(genericTypeParameter, anyInfo);
+            case CompiledDataParentType parentType -> reflectionParentTypeInfo(parentType, anyInfo, full);
+            case CompiledDataType dataType -> reflectionDataInfo(dataType, anyInfo, full);
+        };
+    }
+
+    private CompiledExpression reflectionParentTypeInfo(
+            CompiledDataParentType parentType,
+            CompiledDataParentType anyInfo,
+            boolean full
+    ) {
+        var typeInfo = reflectionDataType(anyInfo, "TypeInfo");
+        var dataInfo = reflectionDataType(anyInfo, "DataInfo");
+        var functionInfo = reflectionDataType(anyInfo, "FunctionInfo");
+        return newData(typeInfo,
+                "name", stringLiteral(simpleTypeNameStatic(parentType.name())),
+                "pkg", packageInfo(parentType.name(), anyInfo),
+                "fields", fieldInfoList(full ? parentType.fields() : List.of(), anyInfo),
+                "functions", new CompiledNewList(List.of(), new CompiledList(functionInfo)),
+                "data", new CompiledNewSet(
+                        full
+                                ? parentType.subTypes().stream()
+                                        .map(subType -> reflectionDataInfo(subType, anyInfo, false))
+                                        .toList()
+                                : List.of(),
+                        new CompiledSet(dataInfo)
+                )
+        );
+    }
+
+    private CompiledExpression reflectionDataInfo(
+            CompiledDataType dataType,
+            CompiledDataParentType anyInfo,
+            boolean full
+    ) {
+        var dataInfo = reflectionDataType(anyInfo, "DataInfo");
+        var functionInfo = reflectionDataType(anyInfo, "FunctionInfo");
+        return newData(dataInfo,
+                "name", stringLiteral(simpleTypeNameStatic(dataType.name())),
+                "pkg", packageInfo(dataType.name(), anyInfo),
+                "fields", fieldInfoList(full ? dataType.fields() : List.of(), anyInfo),
+                "functions", new CompiledNewList(List.of(), new CompiledList(functionInfo))
+        );
+    }
+
+    private CompiledExpression reflectionPrimitiveInfo(PrimitiveLinkedType primitive, CompiledDataParentType anyInfo) {
+        return newData(reflectionDataType(anyInfo, "PrimitiveInfo"),
+                "name", stringLiteral(primitive.name().toLowerCase(Locale.ROOT)),
+                "pkg", emptyPackageInfo(anyInfo)
+        );
+    }
+
+    private CompiledExpression reflectionCollectionInfo(
+            String dataTypeName,
+            String sourceName,
+            String fieldName,
+            CompiledType elementType,
+            CompiledDataParentType anyInfo
+    ) {
+        return newData(reflectionDataType(anyInfo, dataTypeName),
+                "name", stringLiteral(sourceName),
+                "pkg", emptyPackageInfo(anyInfo),
+                fieldName, reflectionTypeInfo(elementType, anyInfo, false)
+        );
+    }
+
+    private CompiledExpression reflectionTupleInfo(CompiledTupleType tupleType, CompiledDataParentType anyInfo) {
+        return newData(reflectionDataType(anyInfo, "TupleInfo"),
+                "name", stringLiteral("tuple"),
+                "pkg", emptyPackageInfo(anyInfo),
+                "elements", new CompiledNewList(
+                        tupleType.elementTypes().stream()
+                                .map(elementType -> reflectionTypeInfo(elementType, anyInfo, false))
+                                .toList(),
+                        new CompiledList(anyInfo)
+                )
+        );
+    }
+
+    private CompiledExpression reflectionFunctionTypeInfo(CompiledFunctionType functionType, CompiledDataParentType anyInfo) {
+        var shape = flattenFunctionType(functionType);
+        return newData(reflectionDataType(anyInfo, "FunctionTypeInfo"),
+                "name", stringLiteral("function"),
+                "pkg", emptyPackageInfo(anyInfo),
+                "params", new CompiledNewList(
+                        shape.parameterTypes().stream()
+                                .map(parameterType -> reflectionTypeInfo(parameterType, anyInfo, false))
+                                .toList(),
+                        new CompiledList(anyInfo)
+                ),
+                "return_type", reflectionTypeInfo(shape.returnType(), anyInfo, false)
+        );
+    }
+
+    private CompiledExpression reflectionGenericParamInfo(
+            CompiledGenericTypeParameter genericTypeParameter,
+            CompiledDataParentType anyInfo
+    ) {
+        return newData(reflectionDataType(anyInfo, "GenericParamInfo"),
+                "name", stringLiteral(genericTypeParameter.name()),
+                "pkg", emptyPackageInfo(anyInfo)
+        );
+    }
+
+    private CompiledExpression reflectionMethodInfo(FunctionSignature signature, CompiledDataParentType anyInfo) {
+        var methodInfo = reflectionDataType(anyInfo, "MethodInfo");
+        var parameterOffset = signature.name().startsWith(METHOD_DECL_PREFIX) ? 1 : 0;
+        var parameterTypes = signature.parameterTypes().stream().skip(parameterOffset).toList();
+        var parameterNames = signature.parameterNames().stream().skip(parameterOffset).toList();
+        var params = new ArrayList<CompiledExpression>(parameterTypes.size());
+        for (var i = 0; i < parameterTypes.size(); i++) {
+            var name = i < parameterNames.size() ? parameterNames.get(i) : "arg" + i;
+            params.add(paramInfo(name, parameterTypes.get(i), anyInfo));
+        }
+        return newData(methodInfo,
+                "name", stringLiteral(reflectionFunctionDisplayName(signature.name())),
+                "pkg", packageInfo(signature.name(), anyInfo),
+                "params", new CompiledNewList(params, new CompiledList(reflectionDataType(anyInfo, "ParamInfo"))),
+                "return_type", reflectionTypeInfo(signature.returnType(), anyInfo, false)
+        );
+    }
+
+    private String reflectionFunctionDisplayName(String rawName) {
+        if (!rawName.startsWith(METHOD_DECL_PREFIX)) {
+            var dot = rawName.lastIndexOf('.');
+            return dot >= 0 ? rawName.substring(dot + 1) : rawName;
+        }
+        var index = rawName.lastIndexOf("__");
+        return index >= 0 && index + 2 < rawName.length() ? rawName.substring(index + 2) : rawName;
+    }
+
+    private CompiledExpression fieldInfoList(List<CompiledDataType.CompiledField> fields, CompiledDataParentType anyInfo) {
+        var fieldInfo = reflectionDataType(anyInfo, "FieldInfo");
+        return new CompiledNewList(
+                fields.stream()
+                        .map(field -> newData(fieldInfo,
+                                "name", stringLiteral(field.name()),
+                                "type", reflectionTypeInfo(field.type(), anyInfo, false)
+                        ))
+                        .toList(),
+                new CompiledList(fieldInfo)
+        );
+    }
+
+    private CompiledExpression paramInfo(String name, CompiledType type, CompiledDataParentType anyInfo) {
+        return newData(reflectionDataType(anyInfo, "ParamInfo"),
+                "name", stringLiteral(name),
+                "type", reflectionTypeInfo(type, anyInfo, false)
+        );
+    }
+
+    private CompiledExpression packageInfo(String symbolName, CompiledDataParentType anyInfo) {
+        var path = reflectionPackagePath(symbolName);
+        var name = path.isBlank() ? "" : simpleTypeNameStatic(path);
+        return newData(reflectionDataType(anyInfo, "PackageInfo"),
+                "name", stringLiteral(name),
+                "path", stringLiteral(path)
+        );
+    }
+
+    private CompiledExpression emptyPackageInfo(CompiledDataParentType anyInfo) {
+        return newData(reflectionDataType(anyInfo, "PackageInfo"),
+                "name", stringLiteral(""),
+                "path", stringLiteral("")
+        );
+    }
+
+    private String reflectionPackagePath(String symbolName) {
+        var normalized = symbolName.replace('\\', '/');
+        if (normalized.startsWith(METHOD_DECL_PREFIX)) {
+            return currentSourceModuleName.orElse("").replaceFirst("^/", "");
+        }
+        var dot = normalized.lastIndexOf('.');
+        var slash = normalized.lastIndexOf('/');
+        if (slash >= 0) {
+            if (dot > slash) {
+                return normalized.substring(0, dot).replaceFirst("^/", "");
+            }
+            return normalized.substring(0, slash).replaceFirst("^/", "");
+        }
+        if (dot > 0) {
+            return normalized.substring(0, dot);
+        }
+        return currentSourceModuleName.orElse("").replaceFirst("^/", "");
+    }
+
+    private CompiledDataType reflectionDataType(CompiledDataParentType anyInfo, String simpleName) {
+        var dataType = findReflectionDataType(anyInfo, simpleName, new HashSet<>())
+                .orElseThrow(() -> new IllegalStateException("Reflection data type `" + simpleName + "` not found"));
+        return qualifiedReflectionDataType(dataType);
+    }
+
+    private CompiledDataType qualifiedReflectionDataType(CompiledDataType dataType) {
+        var simpleName = simpleTypeNameStatic(dataType.name());
+        return new CompiledDataType(
+                "/capy/reflection/Reflection." + simpleName,
+                dataType.fields(),
+                dataType.typeParameters(),
+                dataType.extendedTypes(),
+                dataType.comments(),
+                dataType.visibility(),
+                dataType.singleton()
+        );
+    }
+
+    private Optional<CompiledDataType> findReflectionDataType(
+            CompiledType type,
+            String simpleName,
+            Set<String> visited
+    ) {
+        if (type instanceof CompiledDataType dataType) {
+            if (simpleTypeNameStatic(dataType.name()).equals(simpleName)) {
+                return Optional.of(dataType);
+            }
+            if (!visited.add("data:" + dataType.name())) {
+                return Optional.empty();
+            }
+            for (var field : dataType.fields()) {
+                var found = findReflectionDataType(field.type(), simpleName, visited);
+                if (found.isPresent()) {
+                    return found;
+                }
+            }
+            return Optional.empty();
+        }
+        if (type instanceof CompiledDataParentType parentType) {
+            if (!visited.add("parent:" + parentType.name())) {
+                return Optional.empty();
+            }
+            for (var field : parentType.fields()) {
+                var found = findReflectionDataType(field.type(), simpleName, visited);
+                if (found.isPresent()) {
+                    return found;
+                }
+            }
+            for (var subType : parentType.subTypes()) {
+                var found = findReflectionDataType(subType, simpleName, visited);
+                if (found.isPresent()) {
+                    return found;
+                }
+            }
+            return Optional.empty();
+        }
+        if (type instanceof CompiledList listType) {
+            return findReflectionDataType(listType.elementType(), simpleName, visited);
+        }
+        if (type instanceof CompiledSet setType) {
+            return findReflectionDataType(setType.elementType(), simpleName, visited);
+        }
+        if (type instanceof CompiledDict dictType) {
+            return findReflectionDataType(dictType.valueType(), simpleName, visited);
+        }
+        if (type instanceof CompiledTupleType tupleType) {
+            for (var elementType : tupleType.elementTypes()) {
+                var found = findReflectionDataType(elementType, simpleName, visited);
+                if (found.isPresent()) {
+                    return found;
+                }
+            }
+        }
+        if (type instanceof CompiledFunctionType functionType) {
+            var found = findReflectionDataType(functionType.argumentType(), simpleName, visited);
+            if (found.isPresent()) {
+                return found;
+            }
+            return findReflectionDataType(functionType.returnType(), simpleName, visited);
+        }
+        return Optional.empty();
+    }
+
+    private CompiledExpression newData(CompiledDataType type, Object... nameValuePairs) {
+        var assignments = new ArrayList<CompiledNewData.FieldAssignment>();
+        for (var i = 0; i < nameValuePairs.length; i += 2) {
+            assignments.add(new CompiledNewData.FieldAssignment(
+                    (String) nameValuePairs[i],
+                    (CompiledExpression) nameValuePairs[i + 1]
+            ));
+        }
+        return new CompiledNewData(type, List.copyOf(assignments));
+    }
+
+    private CompiledExpression stringLiteral(String value) {
+        return new CompiledStringValue("\"" + value
+                .replace("\\", "\\\\")
+                .replace("\"", "\\\"")
+                .replace("\n", "\\n")
+                .replace("\r", "\\r")
+                .replace("\t", "\\t")
+                + "\"");
     }
 
     private Optional<CompiledDataType> findSingletonDataType(String constructorName) {
@@ -2027,8 +2411,18 @@ public class CapybaraExpressionCompiler {
             || signature.visibility() != null) {
             return signature.name();
         }
+        var currentModuleNames = currentSourceModuleName
+                .map(name -> {
+                    var withoutLeadingSlash = name.replaceFirst("^/", "");
+                    var names = new HashSet<String>();
+                    names.add(name);
+                    names.add(withoutLeadingSlash);
+                    names.add(withoutLeadingSlash.replace("/", "."));
+                    return Set.copyOf(names);
+                })
+                .orElseGet(Set::of);
         var ownerModule = functionSignaturesByModule.entrySet().stream()
-                .filter(entry -> currentSourceModuleName.isEmpty() || !entry.getKey().equals(currentSourceModuleName.orElseThrow()))
+                .filter(entry -> currentModuleNames.isEmpty() || !currentModuleNames.contains(entry.getKey()))
                 .filter(entry -> entry.getValue().stream().anyMatch(candidate -> candidate.name().equals(signature.name())
                         && candidate.parameterTypes().equals(signature.parameterTypes())
                         && candidate.returnType().equals(signature.returnType())))
@@ -7888,7 +8282,23 @@ public class CapybaraExpressionCompiler {
     private record PatternAndScope(CompiledMatchExpression.Pattern pattern, Scope scope) {
     }
 
-    public record FunctionSignature(String name, List<CompiledType> parameterTypes, CompiledType returnType, Visibility visibility) {
+    public record FunctionSignature(String name, List<CompiledType> parameterTypes, List<String> parameterNames, CompiledType returnType, Visibility visibility) {
+        public FunctionSignature(String name, List<CompiledType> parameterTypes, CompiledType returnType, Visibility visibility) {
+            this(
+                    name,
+                    parameterTypes,
+                    java.util.stream.IntStream.range(0, parameterTypes.size())
+                            .mapToObj(index -> "arg" + index)
+                            .toList(),
+                    returnType,
+                    visibility
+            );
+        }
+
+        public FunctionSignature(String name, List<CompiledType> parameterTypes, List<String> parameterNames, CompiledType returnType) {
+            this(name, parameterTypes, parameterNames, returnType, null);
+        }
+
         public FunctionSignature(String name, List<CompiledType> parameterTypes, CompiledType returnType) {
             this(name, parameterTypes, returnType, null);
         }

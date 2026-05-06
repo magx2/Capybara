@@ -2365,9 +2365,19 @@ public class CapybaraCompiler {
         if (qualifiedModuleName.startsWith("/")) {
             qualifiedModuleName = qualifiedModuleName.substring(1);
         }
+        names.add(qualifiedModuleName + "." + functionName);
+        names.add(qualifiedModuleName.replace("/", ".") + "." + functionName);
+        names.add("." + qualifiedModuleName.replace("/", ".") + "." + functionName);
+        var lastSlash = qualifiedModuleName.lastIndexOf('/');
+        if (lastSlash >= 0 && lastSlash + 1 < qualifiedModuleName.length()) {
+            names.add(qualifiedModuleName.substring(lastSlash + 1) + "." + functionName);
+        }
         var className = moduleClassNameByModuleName.get(qualifiedModuleName);
         if (className != null) {
             names.add(className + "." + functionName);
+            if (className.startsWith(".")) {
+                names.add(className.substring(1) + "." + functionName);
+            }
         }
         return Set.copyOf(names);
     }
@@ -2495,6 +2505,7 @@ public class CapybaraCompiler {
                             ? new CapybaraExpressionCompiler.FunctionSignature(
                             signature.name(),
                             signature.parameterTypes(),
+                            signature.parameterNames(),
                             PrimitiveLinkedType.NOTHING,
                             signature.visibility()
                     )
@@ -3591,6 +3602,9 @@ public class CapybaraCompiler {
                     .filter(subType -> sameTypeName(subType.name(), actualDataType.name()))
                     .findFirst();
             if (matchingSubtype.isPresent()) {
+                if (actualDataType.name().startsWith("/capy/reflection/Reflection.")) {
+                    return expression;
+                }
                 var expectedSubtype = matchingSubtype.orElseThrow();
                 if (expectedSubtype.fields().size() != newData.assignments().size()) {
                     return expression;
@@ -3937,6 +3951,7 @@ public class CapybaraCompiler {
                                     .map(returnType -> new CapybaraExpressionCompiler.FunctionSignature(
                                             function.name(),
                                             parameters.stream().map(CompiledFunctionParameter::type).toList(),
+                                            parameters.stream().map(CompiledFunctionParameter::name).toList(),
                                             returnType,
                                             function.visibility()
                                     )));
@@ -4412,6 +4427,7 @@ public class CapybaraCompiler {
                 .map(function -> new CapybaraExpressionCompiler.FunctionSignature(
                         function.name(),
                         function.parameters().stream().map(CompiledFunctionParameter::type).toList(),
+                        function.parameters().stream().map(CompiledFunctionParameter::name).toList(),
                         function.returnType()
                 ))
                 .toList();

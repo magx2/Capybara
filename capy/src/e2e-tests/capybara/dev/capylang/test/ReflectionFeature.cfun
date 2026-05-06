@@ -1,0 +1,15 @@
+from /capy/reflection/Reflection import { AnyInfo, MethodInfo, reflection }
+
+type Letter { name: string } = A | B
+data A { a: int }
+data B { b: list[string] }
+
+fun reflection_letter(): AnyInfo = reflection(Letter)
+
+fun reflection_a(): AnyInfo = reflection(A)
+
+fun reflection_b(): AnyInfo = reflection(B)
+
+fun test_method(l: list[string], x: int, d: double, a: A, letter: Letter): string = "ok"
+
+fun reflection_method(): MethodInfo = reflection(:test_method)
