@@ -1,0 +1,37 @@
+type AnyInfo { name: string, pkg: PackageInfo } =
+    FunctionalProgrammingInfo
+    | ObjectOrientedInfo
+    | PrimitiveInfo
+    | CollectionInfo
+    | TupleInfo
+    | FunctionTypeInfo
+    | GenericParamInfo
+
+type FunctionalProgrammingInfo = DataInfo | TypeInfo | FunctionInfo | MethodInfo
+data DataInfo { fields: list[FieldInfo], functions: list[FunctionInfo] }
+data TypeInfo { fields: list[FieldInfo], functions: list[FunctionInfo], "data": set[DataInfo] }
+data FunctionInfo { params: list[ParamInfo], return_type: AnyInfo }
+data MethodInfo { params: list[ParamInfo], return_type: AnyInfo }
+
+type ObjectOrientedInfo = InterfaceInfo | ObjectInfo | TraitInfo
+data InterfaceInfo { methods: list[MethodInfo], parents: set[ObjectOrientedInfo] }
+data ObjectInfo { open: bool, fields: list[FieldInfo], methods: list[MethodInfo], parents: set[ObjectOrientedInfo] }
+data TraitInfo { methods: list[MethodInfo], parents: set[ObjectOrientedInfo] }
+
+data PrimitiveInfo {}
+
+type CollectionInfo = ListInfo | SetInfo | DictInfo
+data ListInfo { element_type: AnyInfo }
+data SetInfo { element_type: AnyInfo }
+data DictInfo { value_type: AnyInfo }
+
+data TupleInfo { elements: list[AnyInfo] }
+data FunctionTypeInfo { params: list[AnyInfo], return_type: AnyInfo }
+data GenericParamInfo {}
+
+data PackageInfo { name: string, path: string }
+data FieldInfo { name: string, type: AnyInfo }
+data ParamInfo { name: string, type: AnyInfo }
+
+/// Returns reflection metadata for a type or function symbol.
+fun reflection(type: any): AnyInfo = <native>

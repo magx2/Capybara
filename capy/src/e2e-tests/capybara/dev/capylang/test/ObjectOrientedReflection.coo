@@ -1,0 +1,15 @@
+interface X {
+    def print(): string
+}
+
+trait Y {
+    def bracket(name: string): string = "[" + name + "]"
+}
+
+class Z(name: string): X, Y {
+    field name: string = name
+
+    def greet(): string = this.bracket(this.name)
+
+    override def print(): string = this.greet()
+}

@@ -602,6 +602,7 @@ class ObjectOrientedJavaGeneratorTest {
             Files.createDirectories(path.getParent());
             Files.writeString(path, module.code(), StandardCharsets.UTF_8);
         }
+        writeReflectionStub(sourceDir);
 
         var compiler = ToolProvider.getSystemJavaCompiler();
         assertThat(compiler).isNotNull();
@@ -630,5 +631,38 @@ class ObjectOrientedJavaGeneratorTest {
                     .isTrue();
         }
         return classesDir;
+    }
+
+    private void writeReflectionStub(Path sourceDir) throws Exception {
+        var path = sourceDir.resolve("capy/reflection/Reflection.java");
+        Files.createDirectories(path.getParent());
+        Files.writeString(path, """
+                package capy.reflection;
+
+                public final class Reflection {
+                    public sealed interface AnyInfo permits FunctionalProgrammingInfo, ObjectOrientedInfo, PrimitiveInfo, CollectionInfo, TupleInfo, FunctionTypeInfo, GenericParamInfo {}
+                    public sealed interface FunctionalProgrammingInfo extends AnyInfo permits DataInfo, TypeInfo, FunctionInfo, MethodInfo {}
+                    public sealed interface ObjectOrientedInfo extends AnyInfo permits InterfaceInfo, ObjectInfo, TraitInfo {}
+                    public sealed interface CollectionInfo extends AnyInfo permits ListInfo, SetInfo, DictInfo {}
+
+                    public record PackageInfo(String name, String path) {}
+                    public record FieldInfo(String name, AnyInfo type) {}
+                    public record ParamInfo(String name, AnyInfo type) {}
+                    public record DataInfo(String name, PackageInfo pkg, java.util.List<FieldInfo> fields, java.util.List<FunctionInfo> functions) implements FunctionalProgrammingInfo {}
+                    public record TypeInfo(String name, PackageInfo pkg, java.util.List<FieldInfo> fields, java.util.List<FunctionInfo> functions, java.util.Set<DataInfo> data) implements FunctionalProgrammingInfo {}
+                    public record FunctionInfo(String name, PackageInfo pkg, java.util.List<ParamInfo> params, AnyInfo return_type) implements FunctionalProgrammingInfo {}
+                    public record MethodInfo(String name, PackageInfo pkg, java.util.List<ParamInfo> params, AnyInfo return_type) implements FunctionalProgrammingInfo {}
+                    public record InterfaceInfo(String name, PackageInfo pkg, java.util.List<MethodInfo> methods, java.util.Set<ObjectOrientedInfo> parents) implements ObjectOrientedInfo {}
+                    public record ObjectInfo(String name, PackageInfo pkg, boolean open, java.util.List<FieldInfo> fields, java.util.List<MethodInfo> methods, java.util.Set<ObjectOrientedInfo> parents) implements ObjectOrientedInfo {}
+                    public record TraitInfo(String name, PackageInfo pkg, java.util.List<MethodInfo> methods, java.util.Set<ObjectOrientedInfo> parents) implements ObjectOrientedInfo {}
+                    public record PrimitiveInfo(String name, PackageInfo pkg) implements AnyInfo {}
+                    public record ListInfo(String name, PackageInfo pkg, AnyInfo element_type) implements CollectionInfo {}
+                    public record SetInfo(String name, PackageInfo pkg, AnyInfo element_type) implements CollectionInfo {}
+                    public record DictInfo(String name, PackageInfo pkg, AnyInfo value_type) implements CollectionInfo {}
+                    public record TupleInfo(String name, PackageInfo pkg, java.util.List<AnyInfo> elements) implements AnyInfo {}
+                    public record FunctionTypeInfo(String name, PackageInfo pkg, java.util.List<AnyInfo> params, AnyInfo return_type) implements AnyInfo {}
+                    public record GenericParamInfo(String name, PackageInfo pkg) implements AnyInfo {}
+                }
+                """, StandardCharsets.UTF_8);
     }
 }
