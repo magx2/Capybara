@@ -179,6 +179,105 @@ public class CompilationErrorTest {
     }
 
     @Test
+    void shouldRejectUnknownDeriver() {
+        var errors = compileProgram("""
+                        data User { name: string } derive Missing
+                        """,
+                "derive_unknown_deriver");
+
+        assertThat(errors).hasSize(1);
+        assertThat(errors.first().message())
+                .contains("Deriver `Missing` not found for `User`");
+    }
+
+    @Test
+    void shouldRejectDerivedMethodCollision() {
+        var errors = compileProgram("""
+                        deriver Show {
+                            fun show(): string = "generated"
+                        }
+
+                        data User { name: string } derive Show
+
+                        fun User.show(): string = "manual"
+                        """,
+                "derive_method_collision");
+
+        assertThat(errors).hasSize(1);
+        assertThat(errors.first().message())
+                .contains("Duplicate function signature `User.show`");
+    }
+
+    @Test
+    void shouldRejectDuplicateDeriver() {
+        var errors = compileProgram("""
+                        deriver Show {
+                            fun show(): string = "generated"
+                        }
+
+                        deriver Show {
+                            fun print(): string = "generated"
+                        }
+
+                        data User { name: string } derive Show
+                        """,
+                "derive_duplicate_deriver");
+
+        assertThat(errors).hasSize(1);
+        assertThat(errors.first().message())
+                .contains("Duplicate deriver `Show`");
+    }
+
+    @Test
+    void shouldRejectLegacyDeriveTypeNameHelper() {
+        var errors = compileProgram("""
+                        deriver Show {
+                            fun show(): string = derive_type_name()
+                        }
+
+                        data User { name: string } derive Show
+                        """,
+                "derive_type_name_legacy");
+
+        assertThat(errors).hasSize(1);
+        assertThat(errors.first().message())
+                .contains("`derive_type_name()` has been replaced by `reflection_value(receiver)`");
+    }
+
+    @Test
+    void shouldRejectLegacyDeriveFieldsJoinHelper() {
+        var errors = compileProgram("""
+                        deriver Show {
+                            fun show(): string = derive_fields_join(", ")
+                        }
+
+                        data User { name: string } derive Show
+                        """,
+                "derive_fields_join_legacy");
+
+        assertThat(errors).hasSize(1);
+        assertThat(errors.first().message())
+                .contains("`derive_fields_join(...)` has been replaced by `reflection_value(receiver)`")
+                .contains("reflection_value(receiver).fields");
+    }
+
+    @Test
+    void shouldRejectIndirectLegacyDeriveHelperReference() {
+        var errors = compileProgram("""
+                        deriver Show {
+                            fun show(): string = (:derive_type_name)()
+                        }
+
+                        data User { name: string } derive Show
+                        """,
+                "derive_type_name_reference_legacy");
+
+        assertThat(errors).hasSize(1);
+        assertThat(errors.first().message())
+                .contains("`derive_type_name()` has been replaced by `reflection_value(receiver)`");
+    }
+
+    @Test
     void shouldRejectMatchAssignedToIncompatibleTypedLet() {
         var errors = compileProgram("""
                         fun broken(): int =

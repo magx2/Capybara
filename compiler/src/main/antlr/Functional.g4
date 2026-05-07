@@ -8,6 +8,7 @@ program : definition+ EOF;
 
 definition:
     functionDeclaration
+    | deriverDeclaration
     | typeDeclaration
     | enumDeclaration
     | dataDeclaration
@@ -36,12 +37,15 @@ functionNameDeclaration: identifier | genericTypeDeclaration DOT methodIdentifie
 methodIdentifier: identifier | 'with' | INFIX_METHOD_LITERAL;
 docComment: DOC_COMMENT;
 
-typeDeclaration: docComment* VISIBILITY? 'type' genericTypeDeclaration constructorClause? '=' genericTypeDeclaration (PIPE genericTypeDeclaration)*
-               | docComment* VISIBILITY? 'type' genericTypeDeclaration '{' fieldDeclarationList? '}' constructorClause? '=' genericTypeDeclaration (PIPE genericTypeDeclaration)*;
+typeDeclaration: docComment* VISIBILITY? 'type' genericTypeDeclaration constructorClause? '=' genericTypeDeclaration (PIPE genericTypeDeclaration)* deriveClause?
+               | docComment* VISIBILITY? 'type' genericTypeDeclaration '{' fieldDeclarationList? '}' constructorClause? '=' genericTypeDeclaration (PIPE genericTypeDeclaration)* deriveClause?;
 enumDeclaration: 'enum' TYPE '{' TYPE (COMMA TYPE)* COMMA? '}';
-dataDeclaration: docComment* VISIBILITY? 'data' genericTypeDeclaration '{' fieldDeclarationList? '}' constructorClause?
-               | docComment* VISIBILITY? 'data' genericTypeDeclaration '=' '{' fieldDeclarationList? '}' constructorClause?;
+dataDeclaration: docComment* VISIBILITY? 'data' genericTypeDeclaration '{' fieldDeclarationList? '}' constructorClause? deriveClause?
+               | docComment* VISIBILITY? 'data' genericTypeDeclaration '=' '{' fieldDeclarationList? '}' constructorClause? deriveClause?;
 constructorClause: 'with' 'constructor' '{' expression '}';
+deriveClause: 'derive' TYPE (COMMA TYPE)* COMMA?;
+deriverDeclaration: docComment* VISIBILITY? 'deriver' TYPE '{' deriverMethodDeclaration+ '}';
+deriverMethodDeclaration: docComment* 'fun' identifier '(' parameters? ')' functionType '=' expression;
 singleDeclaration: 'single' TYPE;
 constDeclaration: docComment* VISIBILITY? 'const' TYPE (':' type)? '=' expressionNoLet;
 fieldDeclarationList: fieldDeclaration (',' fieldDeclaration)* ','?;
@@ -55,7 +59,7 @@ BOOL_LITERAL: 'true' | 'false';
 COLLECTION: 'list' | 'set' | 'dict';
 REC: 'rec';
 NAME : [_]* [a-z] [a-zA-Z0-9_]*;
-identifier: NAME | REC | COLLECTION | 'fun' | 'type' | 'byte' | 'int' | 'long' | 'double' | 'bool' | 'string' | 'float' | 'nothing' | 'any';
+identifier: NAME | REC | COLLECTION | 'derive' | 'deriver' | 'fun' | 'type' | 'byte' | 'int' | 'long' | 'double' | 'bool' | 'string' | 'float' | 'nothing' | 'any';
 parameters: parameter (',' parameter)*;
 parameter: identifier ':' type;
 functionType: ':' type;
@@ -149,6 +153,8 @@ functionReference: COLON identifier;
 functionCall: NAME '(' argumentList? ')'
             | REC '(' argumentList? ')'
             | COLLECTION '(' argumentList? ')'
+            | 'derive' '(' argumentList? ')'
+            | 'deriver' '(' argumentList? ')'
             | 'fun' '(' argumentList? ')'
             | 'byte' '(' argumentList? ')'
             | 'int' '(' argumentList? ')'

@@ -1,6 +1,6 @@
 package dev.capylang.test;
 
-import capy.reflection.Reflection;
+import capy.metaProg.Reflection;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -45,8 +45,8 @@ class ReflectionFeatureTest {
     void reflectsFunctionalDataValues() {
         var a = ReflectionFeature.reflectionValueA(new ReflectionFeature.A("letter-a", 1));
 
-        assertThat(a.info().name()).isEqualTo("A");
-        assertThat(a.fields()).extracting(Reflection.DataValueFieldInfo::name).containsExactly("name", "a");
+        assertThat(a.name()).isEqualTo("A");
+        assertThat(a.fields()).extracting(Reflection.DataFieldInfo::name).containsExactly("name", "a");
         assertThat(a.fields().get(1).type()).isInstanceOf(Reflection.PrimitiveInfo.class);
         assertThat(a.fields().get(1).type().name()).isEqualTo("int");
     }

@@ -46,6 +46,107 @@ class CapybaraCompilerLibrariesTest {
     }
 
     @Test
+    void shouldExpandDeriverIntoGeneratedTypeMethod() {
+        var libraries = compileProgram(List.of(reflectionMetadataModule()), new java.util.TreeSet<>()).modules();
+        var compiled = compileProgram(List.of(new RawModule("Consumer", "/foo/app", """
+                from /capy/meta_prog/Reflection import { DataInfo, DataFieldInfo, reflection_value }
+
+                deriver Show {
+                    fun show(): string =
+                        let info: DataInfo = reflection_value(receiver)
+                        let body: string = info.fields |> info.name + " { ", (acc, field) =>
+                            acc + (if acc == info.name + " { " then "" else ", ") + field.name
+                        body + " }"
+                }
+
+                data AgeLimit { value: int }
+
+                deriver AgeComparable {
+                    fun bigger_than(i: int): bool = receiver.age > i
+
+                    fun matches_age_metadata(extra: int, limit: AgeLimit): bool =
+                        let info: DataInfo = reflection_value(receiver)
+                        let has_name_field: bool = info.fields |any? field => field.name == "name"
+                        let has_age_field: bool = info.fields |any? field => field.name == "age"
+                        (info.name == "User") & has_name_field & has_age_field & (receiver.age + extra > limit.value)
+                }
+
+                data User { name: string, age: int } derive Show, AgeComparable
+                type Named { id: string } = Person derive Show
+                data Person { id: string, name: string }
+
+                fun render(): string = User { name: "Ada", age: 42 }.show()
+                fun older_than(i: int): bool = User { name: "Ada", age: 42 }.bigger_than(i)
+                fun mixed_parameters(extra: int, limit: AgeLimit): bool =
+                    User { name: "Ada", age: 42 }.matches_age_metadata(extra, limit)
+                fun render_named(named: Named): string = named.show()
+                """)), libraries);
+
+        assertThat(compiled.modules().first().functions())
+                .extracting(CompiledFunction::name)
+                .contains("__method__User__show", "__method__User__bigger_than",
+                        "__method__User__matches_age_metadata", "__method__Named__show",
+                        "render", "older_than", "mixed_parameters", "render_named");
+        assertThat(compiledFunction(compiled, "Consumer", "__method__User__show").returnType())
+                .isEqualTo(PrimitiveLinkedType.STRING);
+        assertThat(compiledFunction(compiled, "Consumer", "__method__Named__show").returnType())
+                .isEqualTo(PrimitiveLinkedType.STRING);
+        var biggerThan = compiledFunction(compiled, "Consumer", "__method__User__bigger_than");
+        assertThat(biggerThan.parameters()).extracting(CompiledFunction.CompiledFunctionParameter::name)
+                .containsExactly("this", "i");
+        assertThat(biggerThan.parameters()).extracting(CompiledFunction.CompiledFunctionParameter::type)
+                .containsExactly(compiledFunction(compiled, "Consumer", "__method__User__show").parameters().getFirst().type(),
+                        PrimitiveLinkedType.INT);
+        assertThat(biggerThan.returnType()).isEqualTo(PrimitiveLinkedType.BOOL);
+        var mixedParameters = compiledFunction(compiled, "Consumer", "__method__User__matches_age_metadata");
+        assertThat(mixedParameters.parameters()).extracting(CompiledFunction.CompiledFunctionParameter::name)
+                .containsExactly("this", "extra", "limit");
+        assertThat(mixedParameters.parameters()).extracting(parameter -> parameter.type().name())
+                .containsExactly("User", "INT", "AgeLimit");
+        assertThat(mixedParameters.returnType()).isEqualTo(PrimitiveLinkedType.BOOL);
+    }
+
+    @Test
+    void shouldRejectUnknownDeriver() {
+        var error = compileFailure(List.of(new RawModule("Consumer", "/foo/app", """
+                data User { name: string } derive Missing
+                """)));
+
+        assertThat(error.message())
+                .contains("Deriver `Missing` not found for `User`");
+    }
+
+    @Test
+    void shouldRejectDeriverParameterNamedReceiver() {
+        var error = compileFailure(List.of(new RawModule("Consumer", "/foo/app", """
+                deriver Show {
+                    fun show(receiver: string): string = receiver
+                }
+
+                data User { name: string } derive Show
+                """)));
+
+        assertThat(error.message())
+                .contains("Deriver method parameter cannot be named `receiver`");
+    }
+
+    @Test
+    void shouldRejectDerivedMethodCollision() {
+        var error = compileFailure(List.of(new RawModule("Consumer", "/foo/app", """
+                deriver Show {
+                    fun show(): string = "generated"
+                }
+
+                data User { name: string } derive Show
+
+                fun User.show(): string = "manual"
+                """)));
+
+        assertThat(error.message())
+                .contains("Duplicate function signature `User.show`");
+    }
+
+    @Test
     void shouldApplyLibraryDataConstructorWhenInstantiatingImportedData() {
         var librarySource = """
                 data OddInt { number: int } with constructor {
@@ -789,6 +890,42 @@ class CapybaraCompilerLibrariesTest {
         var errors = ((Result.Error<CompiledProgram>) result).errors();
         assertThat(errors).isNotEmpty();
         return errors.first();
+    }
+
+    private static RawModule reflectionMetadataModule() {
+        return new RawModule("Reflection", "/capy/meta_prog", """
+                type AnyInfo { name: string, pkg: PackageInfo } =
+                    FunctionalProgrammingInfo
+                    | PrimitiveInfo
+                    | CollectionInfo
+                    | TupleInfo
+                    | FunctionTypeInfo
+                    | GenericParamInfo
+
+                type FunctionalProgrammingInfo = DataInfo | TypeInfo | FunctionInfo | MethodInfo
+                data DataInfo { name: string, pkg: PackageInfo, fields: list[DataFieldInfo], functions: list[FunctionInfo] }
+                data TypeInfo { fields: list[DataFieldInfo], functions: list[FunctionInfo], "data": set[DataInfo] }
+                data FunctionInfo { params: list[ParamInfo], return_type: AnyInfo }
+                data MethodInfo { params: list[ParamInfo], return_type: AnyInfo }
+
+                data PrimitiveInfo {}
+
+                type CollectionInfo = ListInfo | SetInfo | DictInfo
+                data ListInfo { element_type: AnyInfo }
+                data SetInfo { element_type: AnyInfo }
+                data DictInfo { value_type: AnyInfo }
+
+                data TupleInfo { elements: list[AnyInfo] }
+                data FunctionTypeInfo { params: list[AnyInfo], return_type: AnyInfo }
+                data GenericParamInfo {}
+
+                data PackageInfo { name: string, path: string }
+                data DataFieldInfo { name: string, type: AnyInfo }
+                data ParamInfo { name: string, type: AnyInfo }
+
+                fun reflection(type: any): AnyInfo = <native>
+                fun reflection_value(obj: data): DataInfo = <native>
+                """);
     }
 
     private static CompiledFunction compiledFunction(CompiledProgram program, String moduleName, String functionName) {

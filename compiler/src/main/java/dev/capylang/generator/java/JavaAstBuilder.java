@@ -89,7 +89,11 @@ public class JavaAstBuilder {
     }
 
     private String linkedStaticMethodsClassName(CompiledModule module) {
-        var className = module.path().replace('/', '.').replace('\\', '.') + "." + module.name();
+        var javaPackageName = buildJavaPackageName(module.path());
+        var javaClassName = buildClassName(module.name()).toString();
+        var className = javaPackageName.isBlank()
+                ? javaClassName
+                : javaPackageName + "." + javaClassName;
         var ownerType = module.types().get(module.name());
         if (ownerType == null || ownerType instanceof CompiledDataParentType) {
             return className;
@@ -479,7 +483,7 @@ public class JavaAstBuilder {
         if (rawTypeName.startsWith("/") && !rawTypeName.contains(".")) {
             var slashIndex = rawTypeName.lastIndexOf('/');
             if (slashIndex > 0 && slashIndex < rawTypeName.length() - 1) {
-                var packageName = rawTypeName.substring(1, slashIndex).replace('/', '.');
+                var packageName = buildJavaPackageName(rawTypeName.substring(1, slashIndex));
                 var className = buildClassName(rawTypeName.substring(slashIndex + 1));
                 return new JavaType(packageName + "." + className);
             }
@@ -489,7 +493,7 @@ public class JavaAstBuilder {
             var slashIndex = rawTypeName.lastIndexOf('/');
             if (slashIndex > 0 && slashIndex < dotIndex) {
                 var startIdx = rawTypeName.startsWith("/") ? 1 : 0;
-                var modulePath = rawTypeName.substring(startIdx, slashIndex).replace('/', '.');
+                var modulePath = buildJavaPackageName(rawTypeName.substring(startIdx, slashIndex));
                 var moduleName = buildClassName(rawTypeName.substring(slashIndex + 1, dotIndex));
                 var nestedType = buildClassName(rawTypeName.substring(dotIndex + 1));
                 if (moduleName.equals(nestedType)) {
@@ -624,7 +628,7 @@ public class JavaAstBuilder {
         if (rawTypeName.startsWith("/") && !rawTypeName.contains(".")) {
             var slashIndex = rawTypeName.lastIndexOf('/');
             if (slashIndex > 0 && slashIndex < rawTypeName.length() - 1) {
-                var packageName = rawTypeName.substring(1, slashIndex).replace('/', '.');
+                var packageName = buildJavaPackageName(rawTypeName.substring(1, slashIndex));
                 var className = buildClassName(rawTypeName.substring(slashIndex + 1));
                 return packageName + "." + className;
             }
@@ -634,7 +638,7 @@ public class JavaAstBuilder {
             var slashIndex = rawTypeName.lastIndexOf('/');
             if (slashIndex > 0 && slashIndex < dotIndex) {
                 var startIdx = rawTypeName.startsWith("/") ? 1 : 0;
-                var modulePath = rawTypeName.substring(startIdx, slashIndex).replace('/', '.');
+                var modulePath = buildJavaPackageName(rawTypeName.substring(startIdx, slashIndex));
                 var moduleName = buildClassName(rawTypeName.substring(slashIndex + 1, dotIndex));
                 var nestedType = buildClassName(rawTypeName.substring(dotIndex + 1));
                 if (moduleName.equals(nestedType)) {
