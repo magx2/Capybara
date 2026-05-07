@@ -33,6 +33,8 @@ public class CapybaraCompiler {
     private static final java.util.regex.Pattern IDENTIFIER_PATTERN = java.util.regex.Pattern.compile("[A-Za-z_][A-Za-z0-9_]*");
     private static final ObjectMapper OBJECT_MAPPER = objectMapper();
     private static final Logger log = Logger.getLogger(CapybaraCompiler.class.getName());
+    private static final Object BUNDLED_LIBRARIES_LOCK = new Object();
+    private static volatile SortedSet<CompiledModule> bundledLibrariesCache;
 
     public Result<CompiledProgram> compile(Collection<RawModule> rawModules, SortedSet<CompiledModule> libraries) {
         try {
@@ -101,6 +103,24 @@ public class CapybaraCompiler {
     }
 
     private static SortedSet<CompiledModule> loadBundledLibraries(Collection<RawModule> rawModules) {
+        var cached = bundledLibrariesCache;
+        if (cached != null) {
+            return new TreeSet<>(cached);
+        }
+        synchronized (BUNDLED_LIBRARIES_LOCK) {
+            cached = bundledLibrariesCache;
+            if (cached != null) {
+                return new TreeSet<>(cached);
+            }
+            var loaded = loadBundledLibrariesUncached(rawModules);
+            if (!loaded.isEmpty()) {
+                bundledLibrariesCache = new TreeSet<>(loaded);
+            }
+            return loaded;
+        }
+    }
+
+    private static SortedSet<CompiledModule> loadBundledLibrariesUncached(Collection<RawModule> rawModules) {
         try {
             var resource = CapybaraCompiler.class.getClassLoader().getResource("capy");
             if (resource != null) {
@@ -161,8 +181,8 @@ public class CapybaraCompiler {
     }
 
     private static CompiledModule readBundledLibrary(Path path) {
-        try {
-            return OBJECT_MAPPER.readValue(Files.readString(path), CompiledModule.class);
+        try (var input = Files.newInputStream(path)) {
+            return OBJECT_MAPPER.readValue(input, CompiledModule.class);
         } catch (IOException e) {
             throw new IllegalStateException("Unable to read bundled Capybara library `" + path + "`", e);
         }

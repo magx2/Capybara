@@ -401,7 +401,8 @@ class ObjectOrientedJavaGeneratorTest {
                 .contains("yield (\"dog:\"+name);");
 
         var classesDir = compileGeneratedJava(generatedProgram);
-        try (var classLoader = new URLClassLoader(new URL[]{classesDir.toUri().toURL()})) {
+        var capybaraLibClasses = Path.of("..", "lib", "capybara-lib", "build", "classes", "java", "main").normalize().toAbsolutePath();
+        try (var classLoader = new URLClassLoader(new URL[]{classesDir.toUri().toURL(), capybaraLibClasses.toUri().toURL()})) {
             var interactorType = classLoader.loadClass("foo.boo.PetInteractor");
             var interopDogType = classLoader.loadClass("foo.boo.ObjectOrientedFpInterop$InteropDog");
             var interactor = interactorType.getConstructor().newInstance();
@@ -471,7 +472,8 @@ class ObjectOrientedJavaGeneratorTest {
                 .contains("case SharedDog __capybaraCase");
 
         var classesDir = compileGeneratedJava(generatedProgram);
-        try (var classLoader = new URLClassLoader(new URL[]{classesDir.toUri().toURL()})) {
+        var capybaraLibClasses = Path.of("..", "lib", "capybara-lib", "build", "classes", "java", "main").normalize().toAbsolutePath();
+        try (var classLoader = new URLClassLoader(new URL[]{classesDir.toUri().toURL(), capybaraLibClasses.toUri().toURL()})) {
             var interactorType = classLoader.loadClass("foo.boo.SharedInteractor");
             var sharedDogType = classLoader.loadClass("foo.boo.SharedInterop$SharedDog");
             var interactor = interactorType.getConstructor().newInstance();

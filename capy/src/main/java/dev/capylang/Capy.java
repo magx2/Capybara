@@ -45,6 +45,7 @@ import java.nio.file.FileSystemAlreadyExistsException;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.time.Duration;
 import java.time.OffsetDateTime;
@@ -1224,7 +1225,7 @@ public class Capy {
             var programFile = outputDir.resolve(PROGRAM_FILE);
             log.info("Writing linked program to file: " + programFile);
             var programStartedAt = System.nanoTime();
-            writeJsonIfChanged(programFile, PRETTY_JSON_WRITER.writeValueAsBytes(program));
+            writeJsonIfChanged(programFile, program);
             log.info("Wrote linked program to file: " + programFile + " in " + Duration.ofNanos(System.nanoTime() - programStartedAt));
             writtenFiles.add(Path.of(PROGRAM_FILE));
             for (var module : program.modules()) {
@@ -1235,7 +1236,7 @@ public class Capy {
                 Files.createDirectories(moduleJson.getParent());
                 log.info("Writing linked module to file: " + moduleJson);
                 var startedAt = System.nanoTime();
-                writeJsonIfChanged(moduleJson, PRETTY_JSON_WRITER.writeValueAsBytes(module));
+                writeJsonIfChanged(moduleJson, module);
                 var duration = Duration.ofNanos(System.nanoTime() - startedAt);
                 log.info("Wrote linked module to file: " + moduleJson + " in " + duration);
                 writtenFiles.add(outputDir.relativize(moduleJson).normalize());
@@ -1503,15 +1504,43 @@ public class Capy {
         try {
             Files.createDirectories(outputDir);
             var buildInfoFile = outputDir.resolve(BUILD_INFO_FILE);
-            writeJsonIfChanged(buildInfoFile, PRETTY_JSON_WRITER.writeValueAsBytes(buildInfo));
+            writeJsonIfChanged(buildInfoFile, buildInfo);
             log.info("Writing build info to file: " + buildInfoFile);
         } catch (IOException e) {
             throw new UncheckedIOException("Unable to write build info JSON to " + outputDir, e);
         }
     }
 
-    private static void writeJsonIfChanged(Path outputFile, byte[] content) throws IOException {
-        writeBytesIfChanged(outputFile, content);
+    private static void writeJsonIfChanged(Path outputFile, Object value) throws IOException {
+        var parent = outputFile.getParent();
+        if (parent != null) {
+            Files.createDirectories(parent);
+        }
+        var tempDir = parent == null ? Path.of(".") : parent;
+        var tempFile = Files.createTempFile(tempDir, outputFile.getFileName().toString(), ".tmp");
+        var tempFileNeedsCleanup = true;
+        try {
+            try (var output = Files.newOutputStream(
+                    tempFile,
+                    StandardOpenOption.CREATE,
+                    StandardOpenOption.TRUNCATE_EXISTING,
+                    StandardOpenOption.WRITE
+            )) {
+                PRETTY_JSON_WRITER.writeValue(output, value);
+            }
+
+            if (Files.isRegularFile(outputFile)
+                && Files.size(outputFile) == Files.size(tempFile)
+                && Files.mismatch(outputFile, tempFile) == -1) {
+                return;
+            }
+            Files.move(tempFile, outputFile, StandardCopyOption.REPLACE_EXISTING);
+            tempFileNeedsCleanup = false;
+        } finally {
+            if (tempFileNeedsCleanup) {
+                Files.deleteIfExists(tempFile);
+            }
+        }
     }
 
     private static void writeStringIfChanged(Path outputFile, String content) throws IOException {
@@ -1823,7 +1852,6 @@ public class Capy {
     record CompilationArtifacts(CompiledProgram program, List<ModuleRef> sourceModules) {
     }
 }
-
 
 
 
