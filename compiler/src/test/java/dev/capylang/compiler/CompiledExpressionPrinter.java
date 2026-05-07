@@ -42,6 +42,7 @@ public class CompiledExpressionPrinter {
             case CompiledPipeFilterOutExpression linkedPipeFilterOutExpression -> printLinkedPipeFilterOutExpression(linkedPipeFilterOutExpression, level);
             case CompiledPipeExpression linkedPipeExpression -> printLinkedPipeExpression(linkedPipeExpression, level);
             case CompiledPipeReduceExpression linkedPipeReduceExpression -> printLinkedPipeReduceExpression(linkedPipeReduceExpression, level);
+            case CompiledReflectionValue linkedReflectionValue -> printLinkedReflectionValue(linkedReflectionValue, level);
             case CompiledSliceExpression linkedSliceExpression -> printLinkedSliceExpression(linkedSliceExpression, level);
             case CompiledTupleExpression linkedTupleExpression -> printLinkedTupleExpression(linkedTupleExpression, level);
             case CompiledNewDict linkedNewDict -> printLinkedNewDict(linkedNewDict, level);
@@ -194,6 +195,10 @@ public class CompiledExpressionPrinter {
                + printExpression(linkedPipeReduceExpression.initialValue(), level)
                + ", (" + args + ") => "
                + printExpression(linkedPipeReduceExpression.reducerExpression(), level);
+    }
+
+    private static String printLinkedReflectionValue(CompiledReflectionValue linkedReflectionValue, int level) {
+        return "reflection_value(" + printExpression(linkedReflectionValue.target(), level) + ")";
     }
 
     private static String printLinkedSliceExpression(CompiledSliceExpression linkedSliceExpression, int level) {

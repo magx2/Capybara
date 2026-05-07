@@ -2629,6 +2629,8 @@ public class CapybaraCompiler {
                     analyzeTailRecursion(selfCallNames, parameters, pipeReduceExpression.initialValue(), false),
                     analyzeTailRecursion(selfCallNames, parameters, pipeReduceExpression.reducerExpression(), false)
             );
+            case CompiledReflectionValue reflectionValue ->
+                    analyzeTailRecursion(selfCallNames, parameters, reflectionValue.target(), false);
             case CompiledNumericWidening numericWidening ->
                     analyzeTailRecursion(selfCallNames, parameters, numericWidening.expression(), false);
             case CompiledNewData newData -> analyzeAll(
@@ -4251,6 +4253,15 @@ public class CapybaraCompiler {
                                     assignment.name(),
                                     enrichNothing(assignment.value(), functionName, moduleSourceFile)
                             )).toList()
+                    );
+            case dev.capylang.compiler.expression.CompiledReflectionValue value ->
+                    new dev.capylang.compiler.expression.CompiledReflectionValue(
+                            enrichNothing(value.target(), functionName, moduleSourceFile),
+                            value.name(),
+                            value.packageName(),
+                            value.packagePath(),
+                            value.fields(),
+                            value.type()
                     );
             case dev.capylang.compiler.expression.CompiledSliceExpression value ->
                     new dev.capylang.compiler.expression.CompiledSliceExpression(

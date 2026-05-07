@@ -4,6 +4,7 @@ import dev.capylang.compiler.expression.CompiledFunctionCall;
 import dev.capylang.compiler.expression.CompiledLetExpression;
 import dev.capylang.compiler.expression.CompiledMatchExpression;
 import dev.capylang.compiler.expression.CompiledNewData;
+import dev.capylang.compiler.expression.CompiledReflectionValue;
 import dev.capylang.compiler.parser.RawModule;
 import org.junit.jupiter.api.Test;
 
@@ -49,11 +50,11 @@ class CapybaraCompilerLibrariesTest {
     void shouldExpandDeriverIntoGeneratedTypeMethod() {
         var libraries = compileProgram(List.of(reflectionMetadataModule()), new java.util.TreeSet<>()).modules();
         var compiled = compileProgram(List.of(new RawModule("Consumer", "/foo/app", """
-                from /capy/meta_prog/Reflection import { DataInfo, DataFieldInfo, reflection_value }
+                from /capy/meta_prog/Reflection import { DataValueInfo, DataFieldInfo, reflection_value }
 
                 deriver Show {
                     fun show(): string =
-                        let info: DataInfo = reflection_value(receiver)
+                        let info: DataValueInfo = reflection_value(receiver)
                         let body: string = info.fields |> info.name + " { ", (acc, field) =>
                             acc + (if acc == info.name + " { " then "" else ", ") + field.name
                         body + " }"
@@ -65,7 +66,7 @@ class CapybaraCompilerLibrariesTest {
                     fun bigger_than(i: int): bool = receiver.age > i
 
                     fun matches_age_metadata(extra: int, limit: AgeLimit): bool =
-                        let info: DataInfo = reflection_value(receiver)
+                        let info: DataValueInfo = reflection_value(receiver)
                         let has_name_field: bool = info.fields |any? field => field.name == "name"
                         let has_age_field: bool = info.fields |any? field => field.name == "age"
                         (info.name == "User") & has_name_field & has_age_field & (receiver.age + extra > limit.value)
@@ -104,6 +105,30 @@ class CapybaraCompilerLibrariesTest {
         assertThat(mixedParameters.parameters()).extracting(parameter -> parameter.type().name())
                 .containsExactly("User", "INT", "AgeLimit");
         assertThat(mixedParameters.returnType()).isEqualTo(PrimitiveLinkedType.BOOL);
+    }
+
+    @Test
+    void shouldReflectDataValueFields() {
+        var libraries = compileProgram(List.of(reflectionMetadataModule()), new java.util.TreeSet<>()).modules();
+        var compiled = compileProgram(List.of(new RawModule("Consumer", "/foo/app", """
+                from /capy/meta_prog/Reflection import { DataValueInfo, reflection_value }
+
+                data User { name: string, age: int }
+
+                fun reflect_user(): DataValueInfo = reflection_value(User { name: "Ada", age: 42 })
+                """)), libraries);
+
+        var function = compiledFunction(compiled, "Consumer", "reflect_user");
+        assertThat(function.returnType().name()).endsWith("DataValueInfo");
+        assertThat(function.expression()).isInstanceOfSatisfying(CompiledReflectionValue.class, reflectionValue -> {
+            assertThat(reflectionValue.name()).isEqualTo("User");
+            assertThat(reflectionValue.packageName()).isEqualTo("Consumer");
+            assertThat(reflectionValue.packagePath()).isEqualTo("foo/app/Consumer");
+            assertThat(reflectionValue.fields()).extracting(CompiledReflectionValue.Field::name)
+                    .containsExactly("name", "age");
+            assertThat(reflectionValue.fields()).extracting(field -> field.type().name())
+                    .containsExactly("STRING", "INT");
+        });
     }
 
     @Test
@@ -921,10 +946,12 @@ class CapybaraCompilerLibrariesTest {
 
                 data PackageInfo { name: string, path: string }
                 data DataFieldInfo { name: string, type: AnyInfo }
+                data DataFieldValueInfo { value: any, ...DataFieldInfo }
+                data DataValueInfo { values: list[DataFieldValueInfo], ...DataInfo }
                 data ParamInfo { name: string, type: AnyInfo }
 
                 fun reflection(type: any): AnyInfo = <native>
-                fun reflection_value(obj: data): DataInfo = <native>
+                fun reflection_value(obj: data): DataValueInfo = <native>
                 """);
     }
 

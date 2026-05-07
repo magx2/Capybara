@@ -647,6 +647,8 @@ class ObjectOrientedJavaGeneratorTest {
 
                     public record PackageInfo(String name, String path) {}
                     public record DataFieldInfo(String name, AnyInfo type) {}
+                    public record DataFieldValueInfo(String name, AnyInfo type, Object value) {}
+                    public record DataValueInfo(String name, PackageInfo pkg, java.util.List<DataFieldInfo> fields, java.util.List<FunctionInfo> functions, java.util.List<DataFieldValueInfo> values) {}
                     public record ObjectFieldInfo(String name, AnyInfo type) {}
                     public record ParamInfo(String name, AnyInfo type) {}
                     public record DataInfo(String name, PackageInfo pkg, java.util.List<DataFieldInfo> fields, java.util.List<FunctionInfo> functions) implements FunctionalProgrammingInfo {}
