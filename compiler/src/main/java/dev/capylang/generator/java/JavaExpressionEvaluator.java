@@ -1948,7 +1948,7 @@ public class JavaExpressionEvaluator {
                 }
                 if (fieldPattern instanceof CompiledMatchExpression.TypedPattern typedPattern) {
                     branchScope = branchScope.addLocalValue(typedPattern.name());
-                    var typedValue = "((" + javaPatternType(typedPattern.type()) + ") " + bindingName + ")";
+                    var typedValue = "((" + javaPatternBindingCastType(typedPattern.type()) + ") " + bindingName + ")";
                     branchScope = branchScope.addValueOverride(bindingName, typedValue);
                     branchScope = branchScope.addValueOverride(typedPattern.name(), typedValue);
                 }
@@ -2004,6 +2004,8 @@ public class JavaExpressionEvaluator {
                                     + ")";
             } else if (optionMatch && isOptionNonePattern(typedPattern.type().name())) {
                 typedPatternValue = normalizeJavaTypeReference(stripGenericSuffix(typedPattern.type().name())) + ".INSTANCE";
+            } else if (needsJavaPatternBindingCast(typedPattern.type())) {
+                typedPatternValue = "((" + javaPatternBindingCastType(typedPattern.type()) + ") " + generatedName + ")";
             }
             branchScope = branchScope
                     .addLocalValue(typedPattern.name())
@@ -2011,8 +2013,9 @@ public class JavaExpressionEvaluator {
         }
         if (matchCase.pattern() instanceof CompiledMatchExpression.TypedPattern typedPattern
             && matchExpression.matchWith() instanceof CompiledVariable matchedVariable) {
-            var generatedName = caseBindingNames.getOrDefault(typedPattern.name(), typedPattern.name());
-            branchScope = branchScope.addValueOverride(matchedVariable.name(), generatedName);
+            var matchedVariableValue = branchScope.findValueOverride(typedPattern.name())
+                    .orElse(caseBindingNames.getOrDefault(typedPattern.name(), typedPattern.name()));
+            branchScope = branchScope.addValueOverride(matchedVariable.name(), matchedVariableValue);
         }
         if (matchCase.pattern() instanceof CompiledMatchExpression.WildcardBindingPattern wildcardBindingPattern) {
             var generatedName = caseBindingNames.computeIfAbsent(
@@ -2629,6 +2632,23 @@ public class JavaExpressionEvaluator {
             case dev.capylang.compiler.CompiledTupleType ignored -> "java.util.List";
             default -> "java.lang.Object";
         };
+    }
+
+    private static String javaPatternBindingCastType(dev.capylang.compiler.CompiledType type) {
+        return switch (type) {
+            case dev.capylang.compiler.CollectionLinkedType.CompiledList ignored -> javaCastType(type);
+            case dev.capylang.compiler.CollectionLinkedType.CompiledSet ignored -> javaCastType(type);
+            case dev.capylang.compiler.CollectionLinkedType.CompiledDict ignored -> javaCastType(type);
+            case dev.capylang.compiler.CompiledTupleType ignored -> javaCastType(type);
+            default -> javaPatternType(type);
+        };
+    }
+
+    private static boolean needsJavaPatternBindingCast(dev.capylang.compiler.CompiledType type) {
+        return type instanceof dev.capylang.compiler.CollectionLinkedType.CompiledList
+               || type instanceof dev.capylang.compiler.CollectionLinkedType.CompiledSet
+               || type instanceof dev.capylang.compiler.CollectionLinkedType.CompiledDict
+               || type instanceof dev.capylang.compiler.CompiledTupleType;
     }
 
     private static Scope evaluateNewList(CompiledNewList newList, Scope scope) {

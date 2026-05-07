@@ -372,6 +372,26 @@ class JavaExpressionEvaluatorTest {
     }
 
     @Test
+    void shouldCastCollectionTypedPatternBindingsBeforeUse() {
+        var generatedProgram = new JavaGenerator().generate(compileProgram("CollectionTypedMatch", "/foo/bar", """
+                fun stringify(value: any): list[string] =
+                    match value with
+                    case list[any] items -> items | item => "" + item
+                    case set[any] items -> items |> [], (acc, item) => acc + ("" + item)
+                    case dict[any] items -> items |> [], (acc, key, item) => acc + (key + ":" + item)
+                    case _ -> []
+                """));
+        var generated = generatedProgram.modules().stream()
+                .map(dev.capylang.generator.GeneratedModule::code)
+                .collect(joining("\n"));
+
+        assertThat(generated).contains("((java.util.List<java.lang.Object>)");
+        assertThat(generated).contains("((java.util.Set<java.lang.Object>)");
+        assertThat(generated).contains("((java.util.Map<java.lang.String, java.lang.Object>)");
+        assertGeneratedJavaCompiles(generatedProgram);
+    }
+
+    @Test
     void shouldGenerateNativeRandomSeedMethod() {
         var program = compileProgram("Random", "/capy/lang", """
                 data Seed { value: long }
