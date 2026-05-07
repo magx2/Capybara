@@ -1,8 +1,11 @@
 from /capy/lang/Option import { * }
 from /capy/lang/Result import { * }
+from /capy/meta_prog/Reflection import { DataValueInfo, reflection_value }
 
 type Json = JsonObject | JsonArray | JsonValue
 data JsonObject { value: dict[Json] }
+fun JsonObject.`+`(other: JsonObject): JsonObject = JsonObject { value: this.value + other.value }
+fun JsonObject.`+`(other: tuple[string, Json]): JsonObject = JsonObject { value: this.value + other }
 data JsonArray { value: list[Json] }
 fun JsonArray.`+`(other: JsonArray): JsonArray = JsonArray { value: this.value + other.value }
 fun JsonArray.`+`(other: Json): JsonArray = JsonArray { value: this.value + other }
@@ -16,6 +19,42 @@ data JsonValueObject { value: JsonObject }
 data JsonValueArray { value: JsonArray }
 data JsonBool { value: bool }
 single JsonNull
+
+deriver Jsonable {
+    fun to_json(): JsonObject = to_json(receiver)
+}
+
+fun to_json(obj: data): JsonObject =
+    fun any_to_json(value: any): Json =
+        match value with
+        case Json j -> j
+        case string s -> JsonString { s }
+        case int i -> JsonNumberLong { i }
+        case long l -> JsonNumberLong { l }
+        case double d -> JsonNumberDouble { d }
+        case float f -> JsonNumberDouble { f }
+        case bool b -> JsonBool { b }
+        case list[any] l -> JsonArray { l | :any_to_json }
+        case set[any] s -> JsonArray { s |> [], (acc, item) => acc + any_to_json(item) }
+        case dict[any] d -> JsonObject { d | (k,v) => any_to_json(v) }
+        case Option[any] o -> {
+            match o with
+            case Some { value } -> any_to_json(value)
+            case None -> JsonNull
+        }
+        case Result[any] r -> {
+            match r with
+            case Success { value } -> any_to_json(value)
+            case Error { value } -> any_to_json(value)
+        }
+        case data d -> to_json(d)
+        // todo support enum
+        case _ -> JsonNull
+    ---
+    JsonObject {
+        reflection_value(obj).values
+        |> {:}, (acc, field) => acc + { field.name : any_to_json(field.value) }
+    }
 
 fun serialize(obj: JsonObject) =
     fun __serialize(json: Json): string =

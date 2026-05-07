@@ -1,10 +1,47 @@
 from /capy/test/Assert import { * }
 from /capy/lang/Effect import { * }
+from /capy/lang/Option import { * }
+from /capy/lang/Result import { * }
 from /capy/test/CapyTest import { * }
 from /capy/serialization/Json import { * }
 
+data JsonPrimitiveSample {
+    name: string,
+    age: int,
+    external_id: long,
+    score: double,
+    ratio: float,
+    active: bool
+}
+data JsonCollectionSample { numbers: list[int], flags: dict[bool] }
+data JsonSetSample { tags: set[string] }
+data JsonInnerSample { label: string, count: int }
+data JsonLambdaSample { callback: () => string }
+data JsonWrapperSample {
+    present: Option[string],
+    absent: Option[string],
+    success: Result[int],
+    error: Result[int],
+    inner: JsonInnerSample,
+    raw: Json
+}
+data JsonablePrimitiveSample { name: string, age: int, active: bool } derive Jsonable
+data JsonableNestedSample {
+    user: JsonablePrimitiveSample,
+    labels: list[string],
+    metadata: dict[int],
+    raw: Json
+} derive Jsonable
+
 fun tests(): Effect[TestFile] =
     test_file("/capy/lang/Json.cfun", [
+        test("should convert data with primitive fields to json object", () => should_convert_data_with_primitive_fields_to_json_object()),
+        test("should convert data with collection fields to json object", () => should_convert_data_with_collection_fields_to_json_object()),
+        test("should convert data with set field to json array", () => should_convert_data_with_set_field_to_json_array()),
+        test("should convert data with wrapper and nested fields to json object", () => should_convert_data_with_wrapper_and_nested_fields_to_json_object()),
+        test("should convert lambda field to json null", () => should_convert_lambda_field_to_json_null()),
+        test("should derive Jsonable to_json for primitive fields", () => should_derive_jsonable_to_json_for_primitive_fields()),
+        test("should derive Jsonable to_json for nested and collection fields", () => should_derive_jsonable_to_json_for_nested_and_collection_fields()),
         test("should serialize simple object", () => test_serialize_simple_object()),
         test("should serialize empty object", () => test_empty()),
         test("should serialize object with primitive types", () => test_serialize_object_with_primitive_types()),
@@ -23,6 +60,151 @@ fun tests(): Effect[TestFile] =
         test("should deserialize array with arrays", () => should_deserialize_array_with_arrays()),
         test("should deserialize JSON with whitespaces", () => should_deserialize_json_with_white_spaces()),
     ])
+
+fun should_convert_data_with_primitive_fields_to_json_object(): Assert =
+    let sample = JsonPrimitiveSample {
+        name: "Ada",
+        age: 42,
+        external_id: 9876543210L,
+        score: 99.5,
+        ratio: 0.75f,
+        active: true
+    }
+    assert_that(to_json(sample)).is_equal_to(JsonObject {
+        value: {
+            "name": JsonString { value: "Ada" },
+            "age": JsonNumberLong { value: 42 },
+            "external_id": JsonNumberLong { value: 9876543210L },
+            "score": JsonNumberDouble { value: 99.5 },
+            "ratio": JsonNumberDouble { value: 0.75 },
+            "active": JsonBool { value: true },
+        }
+    })
+
+fun should_convert_data_with_collection_fields_to_json_object(): Assert =
+    let sample = JsonCollectionSample {
+        numbers: [1, 2, 3],
+        flags: {
+            "debug": true,
+            "stable": false,
+        }
+    }
+    assert_that(to_json(sample)).is_equal_to(JsonObject {
+        value: {
+            "numbers": JsonArray {
+                value: [
+                    JsonNumberLong { value: 1 },
+                    JsonNumberLong { value: 2 },
+                    JsonNumberLong { value: 3 },
+                ]
+            },
+            "flags": JsonObject {
+                value: {
+                    "debug": JsonBool { value: true },
+                    "stable": JsonBool { value: false },
+                }
+            },
+        }
+    })
+
+fun should_convert_data_with_set_field_to_json_array(): Assert =
+    match _json_field(to_json(JsonSetSample { tags: {"red", "blue"} }), "tags") with
+    case Some { tags } -> {
+        match tags with
+        case JsonArray { values } ->
+            assert_that(values)
+                .has_size(2)
+                .contains(JsonString { value: "red" })
+                .contains(JsonString { value: "blue" })
+        case _ -> assert_that(false).is_true()
+    }
+    case None -> assert_that(false).is_true()
+
+fun should_convert_data_with_wrapper_and_nested_fields_to_json_object(): Assert =
+    let sample = JsonWrapperSample {
+        present: Some { value: "value" },
+        absent: None {},
+        success: Success { value: 7 },
+        error: Error { message: "bad" },
+        inner: JsonInnerSample { label: "child", count: 2 },
+        raw: JsonArray { value: [JsonString { value: "kept" }] }
+    }
+    assert_that(to_json(sample)).is_equal_to(JsonObject {
+        value: {
+            "present": JsonString { value: "value" },
+            "absent": JsonNull,
+            "success": JsonNumberLong { value: 7 },
+            "error": JsonString { value: "bad" },
+            "inner": JsonObject {
+                value: {
+                    "label": JsonString { value: "child" },
+                    "count": JsonNumberLong { value: 2 },
+                }
+            },
+            "raw": JsonArray {
+                value: [JsonString { value: "kept" }]
+            },
+        }
+    })
+
+fun should_convert_lambda_field_to_json_null(): Assert =
+    let sample = JsonLambdaSample {
+        callback: () => "ignored"
+    }
+    assert_that(to_json(sample)).is_equal_to(JsonObject {
+        value: {
+            "callback": JsonNull,
+        }
+    })
+
+fun should_derive_jsonable_to_json_for_primitive_fields(): Assert =
+    assert_that(JsonablePrimitiveSample {
+        name: "Ada",
+        age: 42,
+        active: true
+    }.to_json()).is_equal_to(JsonObject {
+        value: {
+            "name": JsonString { value: "Ada" },
+            "age": JsonNumberLong { value: 42 },
+            "active": JsonBool { value: true },
+        }
+    })
+
+fun should_derive_jsonable_to_json_for_nested_and_collection_fields(): Assert =
+    assert_that(JsonableNestedSample {
+        user: JsonablePrimitiveSample { name: "Grace", age: 36, active: false },
+        labels: ["compiler", "json"],
+        metadata: { "stars": 5 },
+        raw: JsonArray { value: [JsonString { value: "kept" }] }
+    }.to_json()).is_equal_to(JsonObject {
+        value: {
+            "user": JsonObject {
+                value: {
+                    "name": JsonString { value: "Grace" },
+                    "age": JsonNumberLong { value: 36 },
+                    "active": JsonBool { value: false },
+                }
+            },
+            "labels": JsonArray {
+                value: [
+                    JsonString { value: "compiler" },
+                    JsonString { value: "json" },
+                ]
+            },
+            "metadata": JsonObject {
+                value: {
+                    "stars": JsonNumberLong { value: 5 },
+                }
+            },
+            "raw": JsonArray {
+                value: [JsonString { value: "kept" }]
+            },
+        }
+    })
+
+fun _json_field(json: JsonObject, name: string): Option[Json] =
+    json.value |> None {}, (acc, key, value) =>
+        if key == name then Some { value } else acc
 
 fun test_serialize_simple_object(): Assert =
     let json = JsonObject { value: { "foo": JsonString { value: "boo" } } }
