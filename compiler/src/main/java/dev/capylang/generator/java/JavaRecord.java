@@ -9,6 +9,7 @@ public record JavaRecord(JavaType name,
                          Set<JavaType> implementInterfaces,
                          List<JavaRecordField> fields,
                          List<String> typeParameters,
+                         JavaDataValueInfo dataValueInfo,
                          Set<JavaMethod> staticMethods,
                          Set<JavaMethod> methods)implements Comparable<JavaRecord> {
     @Override

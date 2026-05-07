@@ -126,6 +126,72 @@ class ReflectionFeatureTest {
     }
 
     @Test
+    void reflectsFunctionalDataValuesThroughGenericDataParameter() {
+        var a = ReflectionFeature.reflectionValueData(new ReflectionFeature.A("letter-a", 1));
+
+        assertThat(a.name()).isEqualTo("A");
+        assertThat(a.fields()).extracting(Reflection.DataFieldInfo::name).containsExactly("name", "a");
+        assertThat(a.values()).extracting(Reflection.DataFieldValueInfo::value).containsExactly("letter-a", 1);
+    }
+
+    @Test
+    void reflectsFunctionalDataValuesWithCollectionFieldsThroughGenericDataParameter() {
+        var b = ReflectionFeature.reflectionValueData(new ReflectionFeature.B("letter-b", List.of("red", "blue")));
+
+        assertThat(b.name()).isEqualTo("B");
+        assertThat(b.values()).extracting(Reflection.DataFieldValueInfo::name).containsExactly("name", "b");
+        assertThat(b.values()).extracting(Reflection.DataFieldValueInfo::value)
+                .containsExactly("letter-b", List.of("red", "blue"));
+        assertThat(b.values().get(1).type()).isInstanceOf(Reflection.ListInfo.class);
+    }
+
+    @Test
+    void reflectsEmptyFunctionalDataValuesThroughGenericDataParameter() {
+        var empty = ReflectionFeature.reflectionValueData(new ReflectionFeature.ReflectedEmpty());
+
+        assertThat(empty.name()).isEqualTo("ReflectedEmpty");
+        assertThat(empty.fields()).isEmpty();
+        assertThat(empty.values()).isEmpty();
+    }
+
+    @Test
+    void reflectsFunctionalDataValuesWithSpreadFieldsThroughGenericDataParameter() {
+        var employee = ReflectionFeature.reflectionValueData(
+                new ReflectionFeature.ReflectedEmployee("E-1", "R&D", true));
+
+        assertThat(employee.name()).isEqualTo("ReflectedEmployee");
+        assertThat(employee.values()).extracting(Reflection.DataFieldValueInfo::name)
+                .containsExactly("id", "department", "active");
+        assertThat(employee.values()).extracting(Reflection.DataFieldValueInfo::value)
+                .containsExactly("E-1", "R&D", true);
+    }
+
+    @Test
+    void reflectsSingletonAndEnumDataValuesThroughGenericDataParameter() {
+        var singleton = ReflectionFeature.reflectionValueData(ReflectionFeature.ReflectedSingleton.INSTANCE);
+        var enumValue = ReflectionFeature.reflectionValueData(ReflectionFeature.ReflectedStatus.REFLECTED_READY);
+
+        assertThat(singleton.name()).isEqualTo("ReflectedSingleton");
+        assertThat(singleton.values()).isEmpty();
+        assertThat(enumValue.name()).isEqualTo("REFLECTED_READY");
+        assertThat(enumValue.values()).isEmpty();
+    }
+
+    @Test
+    void jsonShapedReflectionUsesGenericDataForNestedRecords() {
+        var json = ReflectionFeature.reflectionValueJsonShape(
+                new ReflectionFeature.ReflectedEnvelope("outer", new ReflectionFeature.A("inner", 7)));
+
+        assertThat(json.value()).containsEntry("label", new ReflectionFeature.ReflectedJsonString("outer"));
+        assertThat(json.value().get("payload")).isInstanceOfSatisfying(
+                ReflectionFeature.ReflectedJsonObject.class,
+                payload -> assertThat(payload.value())
+                        .containsEntry("name", new ReflectionFeature.ReflectedJsonString("inner"))
+                        .containsEntry("a", new ReflectionFeature.ReflectedJsonNumber(7))
+        );
+    }
+
+    @Test
     void reflectsFunctionReferences() {
         var method = ReflectionFeature.reflectionMethod();
 

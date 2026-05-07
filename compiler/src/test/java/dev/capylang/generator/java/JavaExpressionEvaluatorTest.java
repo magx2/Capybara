@@ -298,6 +298,80 @@ class JavaExpressionEvaluatorTest {
     }
 
     @Test
+    void shouldGenerateRuntimeDataValueCarrierForRecords() {
+        var generatedProgram = new JavaGenerator().generate(compileProgram("Consumer", "/foo/app", """
+                data User { name: string, age: int }
+                """));
+        var generated = generatedProgram.modules().stream()
+                .map(dev.capylang.generator.GeneratedModule::code)
+                .collect(joining("\n"));
+
+        assertThat(generated).contains("record User(java.lang.String name, int age) implements dev.capylang.CapybaraDataValue");
+        assertThat(generated).contains("public java.lang.Object capybaraDataValueInfo()");
+        assertThat(generated).contains("new capy.metaProg.Reflection.DataValueInfo(\"User\"");
+        assertThat(generated).contains("new capy.metaProg.Reflection.DataFieldValueInfo(\"name\"");
+    }
+
+    @Test
+    void shouldGenerateRuntimeDataValueCarrierForSingletonAndEnumValues() {
+        var generatedProgram = new JavaGenerator().generate(compileProgram("Consumer", "/foo/app", """
+                single Lonely
+                enum Color { RED, BLUE }
+                """));
+        var generated = generatedProgram.modules().stream()
+                .map(dev.capylang.generator.GeneratedModule::code)
+                .collect(joining("\n"));
+
+        assertThat(generated).contains("enum Lonely implements dev.capylang.CapybaraDataValue {INSTANCE;");
+        assertThat(generated).contains("enum Color implements dev.capylang.CapybaraDataValue {RED, BLUE;");
+        assertThat(generated).contains("new capy.metaProg.Reflection.DataValueInfo(\"Lonely\"");
+        assertThat(generated).contains("case RED -> new capy.metaProg.Reflection.DataValueInfo(\"RED\"");
+    }
+
+    @Test
+    void shouldGenerateRuntimeCarrierCallForReflectionValueOnGenericData() {
+        var generatedProgram = new JavaGenerator().generate(compileProgram(List.of(
+                reflectionMetadataModule(),
+                new RawModule("Consumer", "/foo/app", """
+                        from /capy/meta_prog/Reflection import { DataValueInfo, reflection_value }
+
+                        fun reflect_data(obj: data): DataValueInfo = reflection_value(obj)
+                        """)
+        )));
+        var generated = generatedProgram.modules().stream()
+                .filter(module -> module.relativePath().equals(Path.of("foo", "app", "Consumer.java")))
+                .map(dev.capylang.generator.GeneratedModule::code)
+                .findFirst()
+                .orElseThrow();
+
+        assertThat(generated).contains("instanceof dev.capylang.CapybaraDataValue");
+        assertThat(generated).contains("reflection_value expects a Capybara data value");
+        assertThat(generated).contains(".capybaraDataValueInfo()");
+    }
+
+    @Test
+    void shouldKeepConcreteReflectionValueGeneratingStaticMetadata() {
+        var generatedProgram = new JavaGenerator().generate(compileProgram(List.of(
+                reflectionMetadataModule(),
+                new RawModule("Consumer", "/foo/app", """
+                        from /capy/meta_prog/Reflection import { DataValueInfo, reflection_value }
+
+                        data User { name: string }
+
+                        fun reflect_user(user: User): DataValueInfo = reflection_value(user)
+                        """)
+        )));
+        var generated = generatedProgram.modules().stream()
+                .filter(module -> module.relativePath().equals(Path.of("foo", "app", "Consumer.java")))
+                .map(dev.capylang.generator.GeneratedModule::code)
+                .findFirst()
+                .orElseThrow();
+
+        assertThat(generated).contains("new capy.metaProg.Reflection.DataValueInfo(\"User\"");
+        assertThat(generated).doesNotContain("reflection_value expects a Capybara data value");
+    }
+
+    @Test
     void shouldGenerateNativeRandomSeedMethod() {
         var program = compileProgram("Random", "/capy/lang", """
                 data Seed { value: long }
@@ -966,6 +1040,44 @@ class JavaExpressionEvaluatorTest {
                         "return l.stream().flatMap(x -> (java.util.List.of(x, (x+1))).stream()).toList();"
                 )
         );
+    }
+
+    private static RawModule reflectionMetadataModule() {
+        return new RawModule("Reflection", "/capy/meta_prog", """
+                type AnyInfo { name: string, pkg: PackageInfo } =
+                    FunctionalProgrammingInfo
+                    | PrimitiveInfo
+                    | CollectionInfo
+                    | TupleInfo
+                    | FunctionTypeInfo
+                    | GenericParamInfo
+
+                type FunctionalProgrammingInfo = DataInfo | TypeInfo | FunctionInfo | MethodInfo
+                data DataInfo { name: string, pkg: PackageInfo, fields: list[DataFieldInfo], functions: list[FunctionInfo] }
+                data TypeInfo { fields: list[DataFieldInfo], functions: list[FunctionInfo], "data": set[DataInfo] }
+                data FunctionInfo { params: list[ParamInfo], return_type: AnyInfo }
+                data MethodInfo { params: list[ParamInfo], return_type: AnyInfo }
+
+                data PrimitiveInfo {}
+
+                type CollectionInfo = ListInfo | SetInfo | DictInfo
+                data ListInfo { element_type: AnyInfo }
+                data SetInfo { element_type: AnyInfo }
+                data DictInfo { value_type: AnyInfo }
+
+                data TupleInfo { elements: list[AnyInfo] }
+                data FunctionTypeInfo { params: list[AnyInfo], return_type: AnyInfo }
+                data GenericParamInfo {}
+
+                data PackageInfo { name: string, path: string }
+                data DataFieldInfo { name: string, type: AnyInfo }
+                data DataFieldValueInfo { value: any, ...DataFieldInfo }
+                data DataValueInfo { values: list[DataFieldValueInfo], ...DataInfo }
+                data ParamInfo { name: string, type: AnyInfo }
+
+                fun reflection(type: any): AnyInfo = <native>
+                fun reflection_value(obj: data): DataValueInfo = <native>
+                """);
     }
 
     private void assertGeneratedJavaCompiles(dev.capylang.generator.GeneratedProgram generatedProgram) {

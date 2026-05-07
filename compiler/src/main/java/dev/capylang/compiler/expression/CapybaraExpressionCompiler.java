@@ -810,6 +810,16 @@ public class CapybaraExpressionCompiler {
             return new Result.Error<>(error.errors());
         }
         var target = ((Result.Success<CompiledExpression>) linkedTarget).value();
+        if (target.type() == PrimitiveLinkedType.DATA) {
+            return Result.success(new CompiledReflectionValue(
+                    target,
+                    "",
+                    "",
+                    "",
+                    List.of(),
+                    dataValueInfo
+            ));
+        }
         if (!(target.type() instanceof GenericDataType dataType)) {
             return withPosition(
                     Result.error("Reflection value intrinsic expects a data value"),
