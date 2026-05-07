@@ -267,6 +267,10 @@ class Scope {
         return new Scope(valueIdx, localValues, javaLocalValues, Map.of(), statements, expression, moduleHelperClass);
     }
 
+    Scope withStatements(List<String> statements) {
+        return new Scope(valueIdx, localValues, javaLocalValues, valueNameToUniqueName, statements, expression, moduleHelperClass);
+    }
+
     record ScopeExpression(Scope scope, CompiledExpression expression) {
     }
 

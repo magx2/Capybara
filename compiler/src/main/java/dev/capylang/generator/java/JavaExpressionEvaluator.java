@@ -1240,22 +1240,21 @@ public class JavaExpressionEvaluator {
 
         var sourceStreamExSc = evaluateSourceAsStream(pipeReduceExpression.source(), scope);
         var initialExSc = evaluateExpression(pipeReduceExpression.initialValue(), sourceStreamExSc.scope()).popExpression();
+        var reducerScope = initialExSc.scope()
+                .addLocalValue(pipeReduceExpression.accumulatorName())
+                .addLocalValue(pipeReduceExpression.valueName());
         var reducerExSc = evaluateExpression(
                 pipeReduceExpression.reducerExpression(),
-                initialExSc.scope()
-                        .addLocalValue(pipeReduceExpression.accumulatorName())
-                        .addLocalValue(pipeReduceExpression.valueName())
+                reducerScope
         ).popExpression();
         var reduceInitialExpression = reduceInitialExpression(pipeReduceExpression.initialValue(), pipeReduceExpression.type(), initialExSc.expression());
-        var javaAccumulatorName = resolveJavaLocalIdentifier(reducerExSc.scope(), pipeReduceExpression.accumulatorName());
-        var javaValueName = resolveJavaLocalIdentifier(reducerExSc.scope(), pipeReduceExpression.valueName());
-        var javaReducerExpression = reducerExSc.expression();
-        if (!pipeReduceExpression.accumulatorName().equals(javaAccumulatorName)) {
-            javaReducerExpression = replaceIdentifier(javaReducerExpression, pipeReduceExpression.accumulatorName(), javaAccumulatorName);
-        }
-        if (!pipeReduceExpression.valueName().equals(javaValueName)) {
-            javaReducerExpression = replaceIdentifier(javaReducerExpression, pipeReduceExpression.valueName(), javaValueName);
-        }
+        var reducerLambda = biLambdaExpression(
+                pipeReduceExpression.accumulatorName(),
+                pipeReduceExpression.valueName(),
+                reducerScope,
+                reducerExSc.scope(),
+                reducerExSc.expression()
+        );
 
         var maybeElementType = streamElementType(pipeReduceExpression.source().type());
         if (maybeElementType.isPresent() && maybeElementType.get().equals(pipeReduceExpression.initialValue().type())) {
@@ -1264,12 +1263,11 @@ public class JavaExpressionEvaluator {
                     && !"\"\"".equals(initialExSc.expression())
                     ? ".map(" + reducedValueName + " -> (" + reduceInitialExpression + "+" + reducedValueName + "))"
                     : "";
-            return reducerExSc.scope().addExpression(
+            return reducerExSc.scope().withStatements(initialExSc.scope().getStatements()).addExpression(
                     sourceStreamExSc.streamExpression()
                     + ".reduce("
-                    + "(" + javaAccumulatorName
-                    + ", " + javaValueName
-                    + ") -> (" + javaReducerExpression + "))"
+                    + reducerLambda
+                    + ")"
                     + maybeMapPrefix
                     + ".orElse("
                     + reduceInitialExpression
@@ -1277,13 +1275,11 @@ public class JavaExpressionEvaluator {
             );
         }
 
-        return reducerExSc.scope().addExpression(
+        return reducerExSc.scope().withStatements(initialExSc.scope().getStatements()).addExpression(
                 sourceStreamExSc.streamExpression()
                 + ".reduce("
                 + reduceInitialExpression
-                + ", (" + javaAccumulatorName
-                + ", " + javaValueName
-                + ") -> (" + javaReducerExpression + ")"
+                + ", " + reducerLambda
                 + ", (left, right) -> left)"
         );
     }
@@ -1519,6 +1515,30 @@ public class JavaExpressionEvaluator {
         }
         var statements = String.join("; ", addedStatements);
         return javaArgumentName + " -> { " + statements + "; return " + bodyExpression + "; }";
+    }
+
+    private static String biLambdaExpression(
+            String firstArgumentName,
+            String secondArgumentName,
+            Scope baseScope,
+            Scope evaluatedScope,
+            String expression
+    ) {
+        var javaFirstArgumentName = resolveJavaLocalIdentifier(baseScope, firstArgumentName);
+        var javaSecondArgumentName = resolveJavaLocalIdentifier(baseScope, secondArgumentName);
+        var bodyExpression = expression;
+        if (!firstArgumentName.equals(javaFirstArgumentName)) {
+            bodyExpression = replaceIdentifier(bodyExpression, firstArgumentName, javaFirstArgumentName);
+        }
+        if (!secondArgumentName.equals(javaSecondArgumentName)) {
+            bodyExpression = replaceIdentifier(bodyExpression, secondArgumentName, javaSecondArgumentName);
+        }
+        var addedStatements = addedStatements(baseScope, evaluatedScope);
+        if (addedStatements.isEmpty()) {
+            return "(" + javaFirstArgumentName + ", " + javaSecondArgumentName + ") -> (" + bodyExpression + ")";
+        }
+        var statements = String.join("; ", addedStatements);
+        return "(" + javaFirstArgumentName + ", " + javaSecondArgumentName + ") -> { " + statements + "; return (" + bodyExpression + "); }";
     }
 
     private static java.util.List<String> addedStatements(Scope baseScope, Scope evaluatedScope) {

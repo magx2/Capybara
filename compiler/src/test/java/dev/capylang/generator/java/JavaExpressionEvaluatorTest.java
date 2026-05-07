@@ -737,6 +737,42 @@ class JavaExpressionEvaluatorTest {
     }
 
     @Test
+    void shouldKeepPipeReduceMatchStatementsInsideReducerLambda() {
+        var generatedProgram = new JavaGenerator().generate(compileProgram("ReduceMatchLambda", "/foo/bar", """
+                type Item = Text | Count
+                data Text { value: string }
+                data Count { value: int }
+
+                fun summarize(items: list[Item]): string =
+                    items |> "", (acc, item) =>
+                        acc + match item with
+                        case Text { text } -> text
+                        case Count { count } -> count + ""
+                """));
+        var generated = generatedProgram.modules().stream()
+                .map(dev.capylang.generator.GeneratedModule::code)
+                .collect(joining("\n"));
+
+        assertThat(generated).contains("-> { var __matchValue");
+        assertGeneratedJavaCompiles(generatedProgram);
+    }
+
+    @Test
+    void shouldAvoidPipeReduceLambdaArgumentCollisionWithLetName() {
+        var generatedProgram = new JavaGenerator().generate(compileProgram("ReduceLetNameCollision", "/foo/bar", """
+                fun flatten(asserts: list[list[int]]): list[int] =
+                    let assertions: list[int] = asserts |> [], (acc, assertions) => acc + assertions
+                    assertions
+                """));
+        var generated = generatedProgram.modules().stream()
+                .map(dev.capylang.generator.GeneratedModule::code)
+                .collect(joining("\n"));
+
+        assertThat(generated).contains("assertions_j1");
+        assertGeneratedJavaCompiles(generatedProgram);
+    }
+
+    @Test
     void shouldParenthesizeIfExpressionsInsideStringConcatenation() {
         var generated = new JavaGenerator().generate(compileProgram("StringIfConcat", "/foo/bar", """
                 fun label(is_valid: bool): string =

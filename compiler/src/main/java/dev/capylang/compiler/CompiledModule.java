@@ -1,5 +1,7 @@
 package dev.capylang.compiler;
 
+import dev.capylang.compiler.parser.DeriverDeclaration;
+
 import java.util.Collection;
 import java.util.Map;
 import java.util.SortedMap;
@@ -14,6 +16,7 @@ public record CompiledModule(
         String path,
         SortedMap<String, GenericDataType> types,
         SortedSet<CompiledFunction> functions,
+        SortedMap<String, DeriverDeclaration> derivers,
         SortedSet<StaticImport> staticImports) implements Comparable<CompiledModule> {
 
     public static final String EXTENSION = ".json";
@@ -25,11 +28,23 @@ public record CompiledModule(
             Collection<CompiledFunction> functions,
             Collection<StaticImport> staticImports
     ) {
+        this(name, path, types, functions, Map.of(), staticImports);
+    }
+
+    public CompiledModule(
+            String name,
+            String path,
+            Map<String, GenericDataType> types,
+            Collection<CompiledFunction> functions,
+            Map<String, DeriverDeclaration> derivers,
+            Collection<StaticImport> staticImports
+    ) {
         this(
                 name,
                 path,
                 new TreeMap<>(types),
                 new TreeSet<>(functions),
+                new TreeMap<>(derivers),
                 new TreeSet<>(staticImports)
         );
     }
@@ -37,6 +52,7 @@ public record CompiledModule(
     public CompiledModule {
         types = new TreeMap<>(types);
         functions = new TreeSet<>(functions);
+        derivers = derivers == null ? new TreeMap<>() : new TreeMap<>(derivers);
         staticImports = new TreeSet<>(staticImports);
     }
 
@@ -68,4 +84,3 @@ public record CompiledModule(
         return name.hashCode();
     }
 }
-

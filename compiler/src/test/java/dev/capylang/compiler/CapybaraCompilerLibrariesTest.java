@@ -47,6 +47,40 @@ class CapybaraCompilerLibrariesTest {
     }
 
     @Test
+    void shouldUseImportedDeriverWithDeriverModuleImports() {
+        var reflectionLibraries = compileProgram(List.of(reflectionMetadataModule()), new java.util.TreeSet<>()).modules();
+        var serdeLibraries = compileProgram(List.of(new RawModule("Serde", "/foo/lib", """
+                from /capy/meta_prog/Reflection import { DataValueInfo, reflection_value }
+
+                deriver TypeName {
+                    fun type_name(): string =
+                        let info: DataValueInfo = reflection_value(receiver)
+                        info.name
+                }
+                """)), reflectionLibraries).modules();
+        var libraries = new java.util.TreeSet<CompiledModule>();
+        libraries.addAll(reflectionLibraries);
+        libraries.addAll(serdeLibraries);
+
+        var compiled = compileProgram(List.of(new RawModule("Consumer", "/foo/app", """
+                from /foo/lib/Serde import { TypeName }
+
+                data User { name: string } derive TypeName
+
+                fun render(): string = User { name: "Ada" }.type_name()
+                """)), libraries);
+
+        assertThat(compiled.modules().first().functions())
+                .extracting(CompiledFunction::name)
+                .contains("__method__User__type_name", "render");
+        assertThat(compiledFunction(compiled, "Consumer", "__method__User__type_name").expression())
+                .isInstanceOfSatisfying(CompiledLetExpression.class, let -> {
+                    assertThat(let.value()).isInstanceOf(CompiledReflectionValue.class);
+                    assertThat(let.declaredType().orElseThrow().name()).endsWith("DataValueInfo");
+                });
+    }
+
+    @Test
     void shouldExpandDeriverIntoGeneratedTypeMethod() {
         var libraries = compileProgram(List.of(reflectionMetadataModule()), new java.util.TreeSet<>()).modules();
         var compiled = compileProgram(List.of(new RawModule("Consumer", "/foo/app", """
