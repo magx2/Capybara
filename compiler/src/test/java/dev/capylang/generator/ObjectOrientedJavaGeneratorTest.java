@@ -646,14 +646,15 @@ class ObjectOrientedJavaGeneratorTest {
                     public sealed interface CollectionInfo extends AnyInfo permits ListInfo, SetInfo, DictInfo {}
 
                     public record PackageInfo(String name, String path) {}
-                    public record FieldInfo(String name, AnyInfo type) {}
+                    public record DataFieldInfo(String name, AnyInfo type) {}
+                    public record ObjectFieldInfo(String name, AnyInfo type) {}
                     public record ParamInfo(String name, AnyInfo type) {}
-                    public record DataInfo(String name, PackageInfo pkg, java.util.List<FieldInfo> fields, java.util.List<FunctionInfo> functions) implements FunctionalProgrammingInfo {}
-                    public record TypeInfo(String name, PackageInfo pkg, java.util.List<FieldInfo> fields, java.util.List<FunctionInfo> functions, java.util.Set<DataInfo> data) implements FunctionalProgrammingInfo {}
+                    public record DataInfo(String name, PackageInfo pkg, java.util.List<DataFieldInfo> fields, java.util.List<FunctionInfo> functions) implements FunctionalProgrammingInfo {}
+                    public record TypeInfo(String name, PackageInfo pkg, java.util.List<DataFieldInfo> fields, java.util.List<FunctionInfo> functions, java.util.Set<DataInfo> data) implements FunctionalProgrammingInfo {}
                     public record FunctionInfo(String name, PackageInfo pkg, java.util.List<ParamInfo> params, AnyInfo return_type) implements FunctionalProgrammingInfo {}
                     public record MethodInfo(String name, PackageInfo pkg, java.util.List<ParamInfo> params, AnyInfo return_type) implements FunctionalProgrammingInfo {}
                     public record InterfaceInfo(String name, PackageInfo pkg, java.util.List<MethodInfo> methods, java.util.Set<ObjectOrientedInfo> parents) implements ObjectOrientedInfo {}
-                    public record ObjectInfo(String name, PackageInfo pkg, boolean open, java.util.List<FieldInfo> fields, java.util.List<MethodInfo> methods, java.util.Set<ObjectOrientedInfo> parents) implements ObjectOrientedInfo {}
+                    public record ObjectInfo(String name, PackageInfo pkg, boolean open, java.util.List<ObjectFieldInfo> fields, java.util.List<MethodInfo> methods, java.util.Set<ObjectOrientedInfo> parents) implements ObjectOrientedInfo {}
                     public record TraitInfo(String name, PackageInfo pkg, java.util.List<MethodInfo> methods, java.util.Set<ObjectOrientedInfo> parents) implements ObjectOrientedInfo {}
                     public record PrimitiveInfo(String name, PackageInfo pkg) implements AnyInfo {}
                     public record ListInfo(String name, PackageInfo pkg, AnyInfo element_type) implements CollectionInfo {}

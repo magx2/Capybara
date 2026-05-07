@@ -4,14 +4,7 @@ import dev.capylang.compiler.parser.ObjectOriented;
 import dev.capylang.compiler.parser.ObjectOrientedModule;
 
 import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
-import java.util.LinkedHashMap;
+import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -568,14 +561,14 @@ public final class ObjectOrientedJavaGenerator {
             boolean full
     ) {
         if (!full || fields.isEmpty()) {
-            return "java.util.List.<capy.reflection.Reflection.FieldInfo>of()";
+            return "java.util.List.<capy.reflection.Reflection.ObjectFieldInfo>of()";
         }
         return fields.stream()
-                .map(field -> "new capy.reflection.Reflection.FieldInfo("
+                .map(field -> "new capy.reflection.Reflection.ObjectFieldInfo("
                               + javaString(field.name()) + ", "
                               + renderReflectionTypeInfo(module, field.type(), definitionsByName)
                               + ")")
-                .collect(Collectors.joining(", ", "java.util.List.<capy.reflection.Reflection.FieldInfo>of(", ")"));
+                .collect(Collectors.joining(", ", "java.util.List.<capy.reflection.Reflection.ObjectFieldInfo>of(", ")"));
     }
 
     private String renderReflectionMethods(
@@ -686,7 +679,7 @@ public final class ObjectOrientedJavaGenerator {
         return "new capy.reflection.Reflection.DataInfo("
                + javaString(simpleTypeName(trimmed)) + ", "
                + renderReflectionPackageForType(module, trimmed) + ", "
-               + "java.util.List.<capy.reflection.Reflection.FieldInfo>of(), "
+               + "java.util.List.<capy.reflection.Reflection.DataFieldInfo>of(), "
                + "java.util.List.<capy.reflection.Reflection.FunctionInfo>of()"
                + ")";
     }
@@ -703,7 +696,7 @@ public final class ObjectOrientedJavaGenerator {
                + javaString(name) + ", "
                + renderReflectionPackageForType(module, name) + ", "
                + "false, "
-               + "java.util.List.<capy.reflection.Reflection.FieldInfo>of(), "
+               + "java.util.List.<capy.reflection.Reflection.ObjectFieldInfo>of(), "
                + "java.util.List.<capy.reflection.Reflection.MethodInfo>of(), "
                + "java.util.Set.<capy.reflection.Reflection.ObjectOrientedInfo>of()"
                + ")";

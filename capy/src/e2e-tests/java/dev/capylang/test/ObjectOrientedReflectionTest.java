@@ -30,7 +30,7 @@ class ObjectOrientedReflectionTest {
 
         assertThat(z.name()).isEqualTo("Z");
         assertThat(z.open()).isFalse();
-        assertThat(z.fields()).extracting(Reflection.FieldInfo::name).containsExactly("name");
+        assertThat(z.fields()).extracting(Reflection.ObjectFieldInfo::name).containsExactly("name");
         assertThat(z.methods()).extracting(Reflection.MethodInfo::name).containsExactlyInAnyOrder("greet", "print");
         assertThat(z.parents()).extracting(parent -> ((Reflection.AnyInfo) parent).name())
                 .containsExactlyInAnyOrder("X", "Y");

@@ -1,9 +1,9 @@
 package dev.capylang.compiler.expression;
 
+import dev.capylang.compiler.*;
 import dev.capylang.compiler.CollectionLinkedType.CompiledDict;
 import dev.capylang.compiler.CollectionLinkedType.CompiledList;
 import dev.capylang.compiler.CollectionLinkedType.CompiledSet;
-import dev.capylang.compiler.*;
 import dev.capylang.compiler.parser.*;
 
 import java.math.BigInteger;
@@ -728,24 +728,45 @@ public class CapybaraExpressionCompiler {
     }
 
     private boolean isReflectionIntrinsicSignature(FunctionSignature signature) {
+        return isReflectionTypeIntrinsicSignature(signature)
+               || isReflectionValueIntrinsicSignature(signature);
+    }
+
+    private boolean isReflectionTypeIntrinsicSignature(FunctionSignature signature) {
         return "reflection".equals(signature.name())
                && signature.parameterTypes().size() == 1
                && signature.returnType() instanceof CompiledDataParentType parentType
                && "AnyInfo".equals(simpleTypeNameStatic(parentType.name()));
     }
 
+    private boolean isReflectionValueIntrinsicSignature(FunctionSignature signature) {
+        return "reflection_value".equals(signature.name())
+               && signature.parameterTypes().size() == 1
+               && signature.returnType() instanceof CompiledDataType dataType
+               && "DataValueInfo".equals(simpleTypeNameStatic(dataType.name()));
+    }
+
     private Result<CompiledExpression> linkReflectionIntrinsicCall(
             FunctionCall functionCall,
             List<FunctionSignature> candidates
     ) {
-        if (!"reflection".equals(functionCall.name()) || functionCall.arguments().size() != 1) {
+        if (functionCall.arguments().size() != 1) {
+            return withPosition(
+                    Result.error("Reflection intrinsic expects exactly one target"),
+                    functionCall.position()
+            );
+        }
+        if ("reflection_value".equals(functionCall.name())) {
+            return linkReflectionValueIntrinsicCall(functionCall, candidates);
+        }
+        if (!"reflection".equals(functionCall.name())) {
             return withPosition(
                     Result.error("Reflection intrinsic expects exactly one target"),
                     functionCall.position()
             );
         }
         var anyInfo = candidates.stream()
-                .filter(this::isReflectionIntrinsicSignature)
+                .filter(this::isReflectionTypeIntrinsicSignature)
                 .map(FunctionSignature::returnType)
                 .filter(CompiledDataParentType.class::isInstance)
                 .map(CompiledDataParentType.class::cast)
@@ -758,6 +779,43 @@ public class CapybaraExpressionCompiler {
             );
         }
         return linkReflectionTarget(functionCall.arguments().getFirst(), anyInfo);
+    }
+
+    private Result<CompiledExpression> linkReflectionValueIntrinsicCall(
+            FunctionCall functionCall,
+            List<FunctionSignature> candidates
+    ) {
+        var signature = candidates.stream()
+                .filter(this::isReflectionValueIntrinsicSignature)
+                .findFirst()
+                .orElse(null);
+        if (signature == null) {
+            return withPosition(
+                    Result.error("Reflection value metadata type `DataValueInfo` was not found"),
+                    functionCall.position()
+            );
+        }
+        var anyInfo = findReflectionParentType(signature.returnType(), "AnyInfo", new HashSet<>())
+                .map(this::qualifiedReflectionParentType)
+                .orElse(null);
+        if (anyInfo == null) {
+            return withPosition(
+                    Result.error("Reflection metadata type `AnyInfo` was not found"),
+                    functionCall.position()
+            );
+        }
+        var linkedTarget = linkExpression(functionCall.arguments().getFirst());
+        if (linkedTarget instanceof Result.Error<CompiledExpression> error) {
+            return new Result.Error<>(error.errors());
+        }
+        var target = ((Result.Success<CompiledExpression>) linkedTarget).value();
+        if (!(target.type() instanceof CompiledDataType dataType)) {
+            return withPosition(
+                    Result.error("Reflection value intrinsic expects a concrete data value"),
+                    functionCall.arguments().getFirst().position()
+            );
+        }
+        return Result.success(reflectionDataValueInfo(dataType, signature.returnType(), anyInfo));
     }
 
     private Result<CompiledExpression> linkReflectionTarget(Expression target, CompiledDataParentType anyInfo) {
@@ -848,6 +906,27 @@ public class CapybaraExpressionCompiler {
         );
     }
 
+    private CompiledExpression reflectionDataValueInfo(
+            CompiledDataType dataType,
+            CompiledType dataValueInfoRoot,
+            CompiledDataParentType anyInfo
+    ) {
+        var dataValueInfo = reflectionDataType(dataValueInfoRoot, "DataValueInfo");
+        var dataValueFieldInfo = reflectionDataType(dataValueInfoRoot, "DataValueFieldInfo");
+        return newData(dataValueInfo,
+                "info", reflectionDataInfo(dataType, anyInfo, true),
+                "fields", new CompiledNewList(
+                        dataType.fields().stream()
+                                .map(field -> newData(dataValueFieldInfo,
+                                        "name", stringLiteral(field.name()),
+                                        "type", reflectionTypeInfo(field.type(), anyInfo, false)
+                                ))
+                                .toList(),
+                        new CompiledList(dataValueFieldInfo)
+                )
+        );
+    }
+
     private CompiledExpression reflectionPrimitiveInfo(PrimitiveLinkedType primitive, CompiledDataParentType anyInfo) {
         return newData(reflectionDataType(anyInfo, "PrimitiveInfo"),
                 "name", stringLiteral(primitive.name().toLowerCase(Locale.ROOT)),
@@ -935,7 +1014,7 @@ public class CapybaraExpressionCompiler {
     }
 
     private CompiledExpression fieldInfoList(List<CompiledDataType.CompiledField> fields, CompiledDataParentType anyInfo) {
-        var fieldInfo = reflectionDataType(anyInfo, "FieldInfo");
+        var fieldInfo = reflectionDataType(anyInfo, "DataFieldInfo");
         return new CompiledNewList(
                 fields.stream()
                         .map(field -> newData(fieldInfo,
@@ -989,8 +1068,8 @@ public class CapybaraExpressionCompiler {
         return currentSourceModuleName.orElse("").replaceFirst("^/", "");
     }
 
-    private CompiledDataType reflectionDataType(CompiledDataParentType anyInfo, String simpleName) {
-        var dataType = findReflectionDataType(anyInfo, simpleName, new HashSet<>())
+    private CompiledDataType reflectionDataType(CompiledType root, String simpleName) {
+        var dataType = findReflectionDataType(root, simpleName, new HashSet<>())
                 .orElseThrow(() -> new IllegalStateException("Reflection data type `" + simpleName + "` not found"));
         return qualifiedReflectionDataType(dataType);
     }
@@ -1005,6 +1084,19 @@ public class CapybaraExpressionCompiler {
                 dataType.comments(),
                 dataType.visibility(),
                 dataType.singleton()
+        );
+    }
+
+    private CompiledDataParentType qualifiedReflectionParentType(CompiledDataParentType parentType) {
+        var simpleName = simpleTypeNameStatic(parentType.name());
+        return new CompiledDataParentType(
+                "/capy/reflection/Reflection." + simpleName,
+                parentType.fields(),
+                parentType.subTypes(),
+                parentType.typeParameters(),
+                parentType.comments(),
+                parentType.visibility(),
+                parentType.enumType()
         );
     }
 
@@ -1069,6 +1161,71 @@ public class CapybaraExpressionCompiler {
                 return found;
             }
             return findReflectionDataType(functionType.returnType(), simpleName, visited);
+        }
+        return Optional.empty();
+    }
+
+    private Optional<CompiledDataParentType> findReflectionParentType(
+            CompiledType type,
+            String simpleName,
+            Set<String> visited
+    ) {
+        if (type instanceof CompiledDataParentType parentType) {
+            if (simpleTypeNameStatic(parentType.name()).equals(simpleName)) {
+                return Optional.of(parentType);
+            }
+            if (!visited.add("parent:" + parentType.name())) {
+                return Optional.empty();
+            }
+            for (var field : parentType.fields()) {
+                var found = findReflectionParentType(field.type(), simpleName, visited);
+                if (found.isPresent()) {
+                    return found;
+                }
+            }
+            for (var subType : parentType.subTypes()) {
+                var found = findReflectionParentType(subType, simpleName, visited);
+                if (found.isPresent()) {
+                    return found;
+                }
+            }
+            return Optional.empty();
+        }
+        if (type instanceof CompiledDataType dataType) {
+            if (!visited.add("data:" + dataType.name())) {
+                return Optional.empty();
+            }
+            for (var field : dataType.fields()) {
+                var found = findReflectionParentType(field.type(), simpleName, visited);
+                if (found.isPresent()) {
+                    return found;
+                }
+            }
+            return Optional.empty();
+        }
+        if (type instanceof CompiledList listType) {
+            return findReflectionParentType(listType.elementType(), simpleName, visited);
+        }
+        if (type instanceof CompiledSet setType) {
+            return findReflectionParentType(setType.elementType(), simpleName, visited);
+        }
+        if (type instanceof CompiledDict dictType) {
+            return findReflectionParentType(dictType.valueType(), simpleName, visited);
+        }
+        if (type instanceof CompiledTupleType tupleType) {
+            for (var elementType : tupleType.elementTypes()) {
+                var found = findReflectionParentType(elementType, simpleName, visited);
+                if (found.isPresent()) {
+                    return found;
+                }
+            }
+        }
+        if (type instanceof CompiledFunctionType functionType) {
+            var found = findReflectionParentType(functionType.argumentType(), simpleName, visited);
+            if (found.isPresent()) {
+                return found;
+            }
+            return findReflectionParentType(functionType.returnType(), simpleName, visited);
         }
         return Optional.empty();
     }
