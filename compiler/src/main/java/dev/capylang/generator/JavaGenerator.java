@@ -649,12 +649,13 @@ public final class JavaGenerator implements Generator {
         var methods = record.methods().stream()
                 .map(method -> mapJavaRecordMethod(method, helperCallOwnerName))
                 .collect(joining("\n"));
+        var dataValueInfoMethod = mapJavaRecordDataValueInfoMethod(record);
         var withMethods = mapJavaRecordWithMethods(record);
         var toStringMethod = mapJavaRecordToString(record);
         var visibility = record.isPrivate() ? (topLevel ? "" : "private ") : "public ";
         return mapJavaDoc(record.comments())
                + visibility + " record " + record.name() + typeParameters + "(" + fields + ")" + implementInterfaces + "{"
-               + staticMethods + methods + withMethods + toStringMethod + "}\n";
+               + staticMethods + methods + dataValueInfoMethod + withMethods + toStringMethod + "}\n";
     }
 
     private String mapJavaRecordField(JavaRecord.JavaRecordField field) {
@@ -715,17 +716,28 @@ public final class JavaGenerator implements Generator {
         return "dev.capylang.CapybaraToStringUtil.toStringValue(" + field.name() + ")";
     }
 
+    private String mapJavaRecordDataValueInfoMethod(JavaRecord record) {
+        return "@Override public java.lang.Object capybaraDataValueInfo() {\n"
+               + "return " + ReflectionValueInfoJava.dataValueInfoExpression(record.dataValueInfo()) + ";\n"
+               + "}\n";
+    }
+
     private String mapJavaEnum(JavaEnum javaEnum) {
         var implementInterfaces = javaEnum.implementInterfaces().isEmpty()
                 ? ""
                 : javaEnum.implementInterfaces().stream().map(Objects::toString).collect(joining(", ", " implements ", " "));
         var values = javaEnum.values().isEmpty() ? List.of("INSTANCE") : javaEnum.values();
         var body = String.join(", ", values);
+        var dataValueInfoMethod = mapJavaEnumDataValueInfoMethod(javaEnum, values);
         if (values.size() == 1 && "INSTANCE".equals(values.getFirst())) {
-            return "public enum " + javaEnum.name() + implementInterfaces + "{" + body + "}\n";
+            return "public enum " + javaEnum.name() + implementInterfaces + "{"
+                   + body + ";\n"
+                   + dataValueInfoMethod
+                   + "}\n";
         }
         return "public enum " + javaEnum.name() + implementInterfaces + "{"
                + body + ";\n"
+               + dataValueInfoMethod
                + "public static java.util.Set<" + javaEnum.name() + "> valuesSet() {\n"
                + "return java.util.EnumSet.allOf(" + javaEnum.name() + ".class);\n"
                + "}\n"
@@ -747,6 +759,27 @@ public final class JavaGenerator implements Generator {
                + "}\n"
                + "return new capy.lang.Result.Success<>(all[order]);\n"
                + "}\n"
+               + "}\n";
+    }
+
+    private String mapJavaEnumDataValueInfoMethod(JavaEnum javaEnum, List<String> values) {
+        if (values.size() == 1 && "INSTANCE".equals(values.getFirst())) {
+            return "@Override public java.lang.Object capybaraDataValueInfo() {\n"
+                   + "return " + ReflectionValueInfoJava.dataValueInfoExpression(javaEnum.dataValueInfos().getFirst()) + ";\n"
+                   + "}\n";
+        }
+        var cases = new StringBuilder();
+        for (var i = 0; i < values.size(); i++) {
+            cases.append("case ")
+                    .append(values.get(i))
+                    .append(" -> ")
+                    .append(ReflectionValueInfoJava.dataValueInfoExpression(javaEnum.dataValueInfos().get(i)))
+                    .append(";\n");
+        }
+        return "@Override public java.lang.Object capybaraDataValueInfo() {\n"
+               + "return switch (this) {\n"
+               + cases
+               + "};\n"
                + "}\n";
     }
 

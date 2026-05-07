@@ -36,6 +36,7 @@ public class JavaAstBuilder {
         return sorted;
     }
     private static final String METHOD_DECL_PREFIX = "__method__";
+    private static final JavaType CAPYBARA_DATA_VALUE = new JavaType("dev.capylang.CapybaraDataValue");
     private static final Set<String> JAVA_KEYWORDS = Set.of(
             "abstract", "assert", "boolean", "break", "byte", "case", "catch", "char", "class",
             "const", "continue", "default", "do", "double", "else", "enum", "extends", "final",
@@ -51,6 +52,7 @@ public class JavaAstBuilder {
         var functionsByOwnerPrefix = indexFunctionsByOwnerPrefix(module.functions());
         var javaPackageName = buildJavaPackageName(module.path());
         var javaClassName = buildClassName(module.name());
+        var reflectionFallbackPackagePath = reflectionFallbackPackagePath(module);
         var staticMethodsClassName = staticMethodsClassName(module, javaClassName.toString());
         var staticMethodsSelfCallClassNames = staticMethodsSelfCallClassNames(module, javaPackageName, staticMethodsClassName);
         var interfaces = buildInterfaces(typeIndex.dataParentTypes().stream()
@@ -67,8 +69,16 @@ public class JavaAstBuilder {
                 buildStaticConsts(module.functions()),
                 buildStaticMethods(module.functions(), staticMethodsSelfCallClassNames),
                 interfaces,
-                buildRecords(typeIndex.dataTypes(), subClassToInterface, functionsByOwnerPrefix),
-                buildEnums(typeIndex, subClassToInterface));
+                buildRecords(typeIndex.dataTypes(), subClassToInterface, functionsByOwnerPrefix, reflectionFallbackPackagePath),
+                buildEnums(typeIndex, subClassToInterface, reflectionFallbackPackagePath));
+    }
+
+    private String reflectionFallbackPackagePath(CompiledModule module) {
+        var modulePath = module.path().replace('\\', '/').replaceFirst("^/", "");
+        if (modulePath.isBlank()) {
+            return module.name();
+        }
+        return modulePath + "/" + module.name();
     }
 
     private String staticMethodsClassName(CompiledModule module, String javaClassName) {
@@ -975,23 +985,26 @@ public class JavaAstBuilder {
     private SortedSet<JavaRecord> buildRecords(
             SortedSet<CompiledDataType> dataTypes,
             SortedMap<CompiledDataType, SortedSet<JavaInterface>> subClassToInterface,
-            SortedMap<String, List<CompiledFunction>> functionsByOwnerPrefix
+            SortedMap<String, List<CompiledFunction>> functionsByOwnerPrefix,
+            String reflectionFallbackPackagePath
     ) {
         return dataTypes.stream()
                 .filter(dt -> !dt.singleton())
-                .map(dt -> buildRecord(dt, subClassToInterface, functionsByOwnerPrefix))
+                .map(dt -> buildRecord(dt, subClassToInterface, functionsByOwnerPrefix, reflectionFallbackPackagePath))
                 .collect(toCollection(TreeSet::new));
     }
 
     private JavaRecord buildRecord(
             CompiledDataType type,
             Map<CompiledDataType, SortedSet<JavaInterface>> subClassToInterface,
-            SortedMap<String, List<CompiledFunction>> functionsByOwnerPrefix
+            SortedMap<String, List<CompiledFunction>> functionsByOwnerPrefix,
+            String reflectionFallbackPackagePath
     ) {
         var javaInterface = subClassToInterface.get(type);
         var implementInterfaces = javaInterface == null
                 ? new TreeSet<JavaType>()
                 : javaInterface.stream().map(javaType -> implementedInterfaceType(type, javaType)).collect(toCollection(TreeSet::new));
+        implementInterfaces.add(CAPYBARA_DATA_VALUE);
 
         var interfaceFields = javaInterface == null
                 ? Stream.<JavaRecord.JavaRecordField>empty()
@@ -1025,8 +1038,25 @@ public class JavaAstBuilder {
                 implementInterfaces,
                 fields,
                 recordTypeParameters,
+                ReflectionValueInfoJava.dataValueInfo(type.name(), reflectionFallbackPackagePath, buildDataValueFields(type)),
                 new TreeSet<JavaMethod>(),
                 buildRecordMethods(type, functionsByOwnerPrefix));
+    }
+
+    private List<JavaDataValueInfo.Field> buildDataValueFields(CompiledDataType type) {
+        return type.fields().stream()
+                .map(field -> new JavaDataValueInfo.Field(
+                        field.name(),
+                        field.type(),
+                        dataValueFieldExpression(type, field)))
+                .toList();
+    }
+
+    private String dataValueFieldExpression(CompiledDataType type, CompiledDataType.CompiledField field) {
+        if (isResultErrorDataType(type) && "message".equals(field.name())) {
+            return "(this.ex() == null ? null : this.ex().getMessage())";
+        }
+        return "this." + field.name() + "()";
     }
 
     private SortedSet<JavaMethod> buildRecordMethods(CompiledDataType type, SortedMap<String, List<CompiledFunction>> functionsByOwnerPrefix) {
@@ -1132,31 +1162,50 @@ public class JavaAstBuilder {
 
     private SortedSet<JavaEnum> buildEnums(
             ModuleTypeIndex typeIndex,
-            SortedMap<CompiledDataType, SortedSet<JavaInterface>> subClassToInterface
+            SortedMap<CompiledDataType, SortedSet<JavaInterface>> subClassToInterface,
+            String reflectionFallbackPackagePath
     ) {
         var singletonEnums = typeIndex.dataTypes().stream()
                 .filter(CompiledDataType::singleton)
                 .filter(dt -> !typeIndex.enumValueTypeNames().contains(dt.name()))
-                .map(dt -> buildSingletonEnum(dt, subClassToInterface));
+                .map(dt -> buildSingletonEnum(dt, subClassToInterface, reflectionFallbackPackagePath));
         var declaredEnums = typeIndex.dataParentTypes().stream()
                 .filter(CompiledDataParentType::enumType)
-                .map(this::buildDeclaredEnum);
+                .map(enumType -> buildDeclaredEnum(enumType, reflectionFallbackPackagePath));
         return Stream.concat(singletonEnums, declaredEnums).collect(toCollection(TreeSet::new));
     }
 
-    private JavaEnum buildSingletonEnum(CompiledDataType type, SortedMap<CompiledDataType, SortedSet<JavaInterface>> subClassToInterface) {
+    private JavaEnum buildSingletonEnum(
+            CompiledDataType type,
+            SortedMap<CompiledDataType, SortedSet<JavaInterface>> subClassToInterface,
+            String reflectionFallbackPackagePath
+    ) {
         var javaInterface = subClassToInterface.get(type);
         var implementInterfaces = javaInterface == null
                 ? new TreeSet<JavaType>()
                 : javaInterface.stream().map(JavaInterface::name).collect(toCollection(TreeSet::new));
-        return new JavaEnum(buildClassName(type.name()), implementInterfaces, List.of("INSTANCE"));
+        implementInterfaces.add(CAPYBARA_DATA_VALUE);
+        return new JavaEnum(
+                buildClassName(type.name()),
+                implementInterfaces,
+                List.of("INSTANCE"),
+                List.of(ReflectionValueInfoJava.dataValueInfo(type.name(), reflectionFallbackPackagePath, List.of()))
+        );
     }
 
-    private JavaEnum buildDeclaredEnum(CompiledDataParentType enumType) {
+    private JavaEnum buildDeclaredEnum(CompiledDataParentType enumType, String reflectionFallbackPackagePath) {
+        var implementInterfaces = new TreeSet<JavaType>();
+        implementInterfaces.add(CAPYBARA_DATA_VALUE);
         return new JavaEnum(
                 buildClassName(enumType.name()),
-                new TreeSet<JavaType>(),
-                enumType.subTypes().stream().map(CompiledDataType::name).toList()
+                implementInterfaces,
+                enumType.subTypes().stream().map(CompiledDataType::name).toList(),
+                enumType.subTypes().stream()
+                        .map(subType -> ReflectionValueInfoJava.dataValueInfo(
+                                subType.name(),
+                                ReflectionValueInfoJava.reflectionPackagePath(enumType.name(), reflectionFallbackPackagePath),
+                                List.of()))
+                        .toList()
         );
     }
 

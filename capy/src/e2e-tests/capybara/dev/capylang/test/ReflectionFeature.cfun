@@ -6,6 +6,16 @@ data B { b: list[string] }
 data ReflectedEmpty {}
 data ReflectedEntity { id: string }
 data ReflectedEmployee { department: string, active: bool, ...ReflectedEntity }
+single ReflectedSingleton
+enum ReflectedStatus { REFLECTED_READY, REFLECTED_DONE }
+data ReflectedEnvelope { label: string, payload: A }
+
+type ReflectedJson = ReflectedJsonObject | ReflectedJsonString | ReflectedJsonNumber | ReflectedJsonBool | ReflectedJsonNull
+data ReflectedJsonObject { value: dict[ReflectedJson] }
+data ReflectedJsonString { value: string }
+data ReflectedJsonNumber { value: int }
+data ReflectedJsonBool { value: bool }
+single ReflectedJsonNull
 
 fun reflection_letter(): AnyInfo = reflection(Letter)
 
@@ -24,6 +34,27 @@ fun reflection_value_b(b: B): DataValueInfo = reflection_value(b)
 fun reflection_value_empty(): DataValueInfo = reflection_value(ReflectedEmpty {})
 
 fun reflection_value_employee(employee: ReflectedEmployee): DataValueInfo = reflection_value(employee)
+
+fun reflection_value_data(obj: data): DataValueInfo = reflection_value(obj)
+
+fun reflection_value_data_to_json(d: data): ReflectedJsonObject =
+    ReflectedJsonObject {
+        reflection_value(d).values
+        |> {:}, (acc, field) => acc + { field.name : reflection_value_any_to_json(field.value) }
+    }
+
+fun reflection_value_any_to_json(value: any): ReflectedJson =
+    match value with
+    case string s -> ReflectedJsonString { s }
+    case int i -> ReflectedJsonNumber { i }
+    case bool b -> ReflectedJsonBool { b }
+    case data d -> reflection_value_data_to_json(d)
+    case _ -> ReflectedJsonNull
+
+fun reflection_value_json_shape(obj: data): ReflectedJsonObject =
+    match reflection_value_any_to_json(obj) with
+    case ReflectedJsonObject { value } -> ReflectedJsonObject { value }
+    case _ -> ReflectedJsonObject { {:} }
 
 fun test_method(l: list[string], x: int, d: double, a: A, letter: Letter): string = "ok"
 

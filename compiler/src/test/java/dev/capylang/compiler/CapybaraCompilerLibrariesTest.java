@@ -166,6 +166,23 @@ class CapybaraCompilerLibrariesTest {
     }
 
     @Test
+    void shouldLinkReflectionValueForGenericDataSupertype() {
+        var libraries = compileProgram(List.of(reflectionMetadataModule()), new java.util.TreeSet<>()).modules();
+        var compiled = compileProgram(List.of(new RawModule("Consumer", "/foo/app", """
+                from /capy/meta_prog/Reflection import { DataValueInfo, reflection_value }
+
+                fun reflect_data(obj: data): DataValueInfo = reflection_value(obj)
+                """)), libraries);
+
+        var function = compiledFunction(compiled, "Consumer", "reflect_data");
+        assertThat(function.returnType().name()).endsWith("DataValueInfo");
+        assertThat(function.expression()).isInstanceOfSatisfying(CompiledReflectionValue.class, reflectionValue -> {
+            assertThat(reflectionValue.target().type()).isEqualTo(PrimitiveLinkedType.DATA);
+            assertThat(reflectionValue.fields()).isEmpty();
+        });
+    }
+
+    @Test
     void shouldRejectUnknownDeriver() {
         var error = compileFailure(List.of(new RawModule("Consumer", "/foo/app", """
                 data User { name: string } derive Missing

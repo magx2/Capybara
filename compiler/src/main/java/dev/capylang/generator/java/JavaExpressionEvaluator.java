@@ -2755,163 +2755,34 @@ public class JavaExpressionEvaluator {
         var current = declaredTarget.scope();
         var targetReference = declaredTarget.expression();
 
-        var fieldInfos = new ArrayList<String>(reflectionValue.fields().size());
-        var fieldValueInfos = new ArrayList<String>(reflectionValue.fields().size());
-        for (var field : reflectionValue.fields()) {
-            var typeInfo = reflectionTypeInfo(field.type(), reflectionValue.packagePath());
-            fieldInfos.add("new capy.metaProg.Reflection.DataFieldInfo("
-                           + javaString(field.name()) + ", "
-                           + typeInfo + ")");
+        if (reflectionValue.target().type() == dev.capylang.compiler.PrimitiveLinkedType.DATA) {
+            var targetJavaReference = evaluateExpression(targetReference, current).popExpression();
+            current = targetJavaReference.scope();
+            current = current.addStatement("if (!(" + targetJavaReference.expression() + " instanceof dev.capylang.CapybaraDataValue)) {\n"
+                                           + "throw new java.lang.IllegalArgumentException(\"reflection_value expects a Capybara data value\");\n"
+                                           + "}");
+            return current.addExpression("((capy.metaProg.Reflection.DataValueInfo) ((dev.capylang.CapybaraDataValue) "
+                                         + targetJavaReference.expression()
+                                         + ").capybaraDataValueInfo())");
+        }
 
+        var fields = new ArrayList<JavaDataValueInfo.Field>(reflectionValue.fields().size());
+        for (var field : reflectionValue.fields()) {
             var fieldValue = evaluateExpression(
                     new CompiledFieldAccess(targetReference, field.name(), field.type()),
                     current
             ).popExpression();
             current = fieldValue.scope();
-            fieldValueInfos.add("new capy.metaProg.Reflection.DataFieldValueInfo("
-                                + javaString(field.name()) + ", "
-                                + typeInfo + ", "
-                                + fieldValue.expression() + ")");
+            fields.add(new JavaDataValueInfo.Field(field.name(), field.type(), fieldValue.expression()));
         }
 
-        var expression = "new capy.metaProg.Reflection.DataValueInfo("
-                         + javaString(reflectionValue.name()) + ", "
-                         + "new capy.metaProg.Reflection.PackageInfo("
-                         + javaString(reflectionValue.packageName()) + ", "
-                         + javaString(reflectionValue.packagePath()) + "), "
-                         + reflectionList("capy.metaProg.Reflection.DataFieldInfo", fieldInfos) + ", "
-                         + "java.util.List.<capy.metaProg.Reflection.FunctionInfo>of(), "
-                         + reflectionList("capy.metaProg.Reflection.DataFieldValueInfo", fieldValueInfos)
-                         + ")";
+        var expression = ReflectionValueInfoJava.dataValueInfoExpression(new JavaDataValueInfo(
+                reflectionValue.name(),
+                reflectionValue.packageName(),
+                reflectionValue.packagePath(),
+                fields
+        ));
         return current.addExpression(expression);
-    }
-
-    private static String reflectionList(String javaElementType, List<String> values) {
-        if (values.isEmpty()) {
-            return "java.util.List.<" + javaElementType + ">of()";
-        }
-        return "java.util.List.of(" + String.join(", ", values) + ")";
-    }
-
-    private static String reflectionSet(String javaElementType, List<String> values) {
-        if (values.isEmpty()) {
-            return "java.util.Set.<" + javaElementType + ">of()";
-        }
-        return "java.util.Set.of(" + String.join(", ", values) + ")";
-    }
-
-    private static String reflectionTypeInfo(dev.capylang.compiler.CompiledType type, String fallbackPackagePath) {
-        return switch (type) {
-            case dev.capylang.compiler.PrimitiveLinkedType primitive ->
-                    "new capy.metaProg.Reflection.PrimitiveInfo("
-                    + javaString(primitive.name().toLowerCase(java.util.Locale.ROOT)) + ", "
-                    + reflectionEmptyPackageInfo() + ")";
-            case dev.capylang.compiler.CollectionLinkedType.CompiledList listType ->
-                    "new capy.metaProg.Reflection.ListInfo("
-                    + javaString("list") + ", "
-                    + reflectionEmptyPackageInfo() + ", "
-                    + reflectionTypeInfo(listType.elementType(), fallbackPackagePath) + ")";
-            case dev.capylang.compiler.CollectionLinkedType.CompiledSet setType ->
-                    "new capy.metaProg.Reflection.SetInfo("
-                    + javaString("set") + ", "
-                    + reflectionEmptyPackageInfo() + ", "
-                    + reflectionTypeInfo(setType.elementType(), fallbackPackagePath) + ")";
-            case dev.capylang.compiler.CollectionLinkedType.CompiledDict dictType ->
-                    "new capy.metaProg.Reflection.DictInfo("
-                    + javaString("dict") + ", "
-                    + reflectionEmptyPackageInfo() + ", "
-                    + reflectionTypeInfo(dictType.valueType(), fallbackPackagePath) + ")";
-            case dev.capylang.compiler.CompiledTupleType tupleType ->
-                    "new capy.metaProg.Reflection.TupleInfo("
-                    + javaString("tuple") + ", "
-                    + reflectionEmptyPackageInfo() + ", "
-                    + reflectionList(
-                            "capy.metaProg.Reflection.AnyInfo",
-                            tupleType.elementTypes().stream()
-                                    .map(elementType -> reflectionTypeInfo(elementType, fallbackPackagePath))
-                                    .toList()
-                    ) + ")";
-            case dev.capylang.compiler.CompiledFunctionType functionType -> {
-                var shape = flattenReflectionFunctionType(functionType);
-                yield "new capy.metaProg.Reflection.FunctionTypeInfo("
-                      + javaString("function") + ", "
-                      + reflectionEmptyPackageInfo() + ", "
-                      + reflectionList(
-                              "capy.metaProg.Reflection.AnyInfo",
-                              shape.parameterTypes().stream()
-                                      .map(parameterType -> reflectionTypeInfo(parameterType, fallbackPackagePath))
-                                      .toList()
-                      ) + ", "
-                      + reflectionTypeInfo(shape.returnType(), fallbackPackagePath) + ")";
-            }
-            case dev.capylang.compiler.CompiledGenericTypeParameter genericTypeParameter ->
-                    "new capy.metaProg.Reflection.GenericParamInfo("
-                    + javaString(genericTypeParameter.name()) + ", "
-                    + reflectionEmptyPackageInfo() + ")";
-            case dev.capylang.compiler.CompiledDataParentType parentType ->
-                    "new capy.metaProg.Reflection.TypeInfo("
-                    + javaString(simpleReflectionTypeName(parentType.name())) + ", "
-                    + reflectionPackageInfo(parentType.name(), fallbackPackagePath) + ", "
-                    + "java.util.List.<capy.metaProg.Reflection.DataFieldInfo>of(), "
-                    + "java.util.List.<capy.metaProg.Reflection.FunctionInfo>of(), "
-                    + reflectionSet("capy.metaProg.Reflection.DataInfo", List.of()) + ")";
-            case dev.capylang.compiler.CompiledDataType dataType ->
-                    "new capy.metaProg.Reflection.DataInfo("
-                    + javaString(simpleReflectionTypeName(dataType.name())) + ", "
-                    + reflectionPackageInfo(dataType.name(), fallbackPackagePath) + ", "
-                    + "java.util.List.<capy.metaProg.Reflection.DataFieldInfo>of(), "
-                    + "java.util.List.<capy.metaProg.Reflection.FunctionInfo>of())";
-        };
-    }
-
-    private static ReflectionFunctionShape flattenReflectionFunctionType(dev.capylang.compiler.CompiledFunctionType functionType) {
-        var parameterTypes = new ArrayList<dev.capylang.compiler.CompiledType>();
-        dev.capylang.compiler.CompiledType current = functionType;
-        while (current instanceof dev.capylang.compiler.CompiledFunctionType currentFunctionType) {
-            parameterTypes.add(currentFunctionType.argumentType());
-            current = currentFunctionType.returnType();
-        }
-        return new ReflectionFunctionShape(List.copyOf(parameterTypes), current);
-    }
-
-    private record ReflectionFunctionShape(
-            List<dev.capylang.compiler.CompiledType> parameterTypes,
-            dev.capylang.compiler.CompiledType returnType
-    ) {
-    }
-
-    private static String reflectionPackageInfo(String symbolName, String fallbackPackagePath) {
-        var path = reflectionPackagePath(symbolName, fallbackPackagePath);
-        var name = path.isBlank() ? "" : simpleReflectionTypeName(path);
-        return "new capy.metaProg.Reflection.PackageInfo(" + javaString(name) + ", " + javaString(path) + ")";
-    }
-
-    private static String reflectionEmptyPackageInfo() {
-        return "new capy.metaProg.Reflection.PackageInfo(\"\", \"\")";
-    }
-
-    private static String reflectionPackagePath(String symbolName, String fallbackPackagePath) {
-        var normalized = symbolName.replace('\\', '/');
-        var dot = normalized.lastIndexOf('.');
-        var slash = normalized.lastIndexOf('/');
-        if (slash >= 0) {
-            if (dot > slash) {
-                return normalized.substring(0, dot).replaceFirst("^/", "");
-            }
-            return normalized.substring(0, slash).replaceFirst("^/", "");
-        }
-        if (dot > 0) {
-            return normalized.substring(0, dot);
-        }
-        return fallbackPackagePath == null ? "" : fallbackPackagePath;
-    }
-
-    private static String simpleReflectionTypeName(String typeName) {
-        var normalized = stripGenericSuffix(typeName);
-        var slash = normalized.lastIndexOf('/');
-        var dot = normalized.lastIndexOf('.');
-        var index = Math.max(slash, dot);
-        return index >= 0 ? normalized.substring(index + 1) : normalized;
     }
 
     private static boolean isEnumValueType(CompiledDataType dataType) {
@@ -3282,10 +3153,6 @@ public class JavaExpressionEvaluator {
                 .replace("\n", "\\n")
                 .replace("\r", "\\r")
                 .replace("\t", "\\t");
-    }
-
-    private static String javaString(String value) {
-        return "\"" + escapeJavaString(value) + "\"";
     }
 
     private static String[] parseDictPipeArguments(String argumentName) {
