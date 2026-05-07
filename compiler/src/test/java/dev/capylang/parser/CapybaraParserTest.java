@@ -174,6 +174,44 @@ class CapybaraParserTest {
     }
 
     @Test
+    @DisplayName("should parse deriver declarations and derive clauses")
+    void parseDeriverAndDeriveClause() {
+        var module = parseSuccess(new RawModule("Test", "/parser", """
+                deriver Show {
+                    fun show(): string =
+                        let info: DataInfo = reflection_value(receiver)
+                        let body: string = info.fields |> info.name + " { ", (acc, field) =>
+                            acc + field.name + ": " + field.type.name
+                        body + " }"
+                }
+
+                data User { name: string, age: int } derive Show
+                type Named { id: string } = Person derive Show
+                data Person { id: string, name: string }
+                """));
+
+        var deriver = module.functional().definitions().stream()
+                .filter(DeriverDeclaration.class::isInstance)
+                .map(DeriverDeclaration.class::cast)
+                .findFirst()
+                .orElseThrow();
+        assertThat(deriver.name()).isEqualTo("Show");
+        assertThat(deriver.methods()).extracting(DeriverDeclaration.DeriverMethod::name)
+                .containsExactly("show");
+        assertThat(deriver.methods().getFirst().parameters()).extracting(Parameter::name)
+                .isEmpty();
+
+        var data = findDefinition(DataDeclaration.class, "User", module.functional());
+        assertThat(data.constructor()).isEmpty();
+        assertThat(data.derives()).extracting(DeriveDirective::name)
+                .containsExactly("Show");
+
+        var type = findDefinition(TypeDeclaration.class, "Named", module.functional());
+        assertThat(type.derives()).extracting(DeriveDirective::name)
+                .containsExactly("Show");
+    }
+
+    @Test
     @DisplayName("should parse data constructor bypass")
     void parseDataConstructorBypass() {
         var module = parseSuccess(new RawModule("Test", "/parser", """

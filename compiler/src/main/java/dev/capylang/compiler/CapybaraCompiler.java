@@ -239,9 +239,16 @@ public class CapybaraCompiler {
             );
         }
         for (var module : program.modules()) {
-            var functions = functions(module, linkedTypesByModule.get(module.name()));
+            var functions = functions(
+                    module,
+                    linkedTypesByModule.get(module.name()),
+                    visibleTypesByModule.get(module.name())
+            );
+            if (functions instanceof Result.Error<List<Function>> error) {
+                return new Result.Error<>(error.errors());
+            }
             var sourceFile = moduleSourceFile(module);
-            var signatures = withFile(linkFunctionSignatures(functions, visibleTypesByModule.get(module.name()), compileCache, sourceFile), sourceFile);
+            var signatures = withFile(linkFunctionSignatures(((Result.Success<List<Function>>) functions).value(), visibleTypesByModule.get(module.name()), compileCache, sourceFile), sourceFile);
             if (signatures instanceof Result.Error<List<CapybaraExpressionCompiler.FunctionSignature>> error) {
                 return new Result.Error<>(error.errors());
             }
@@ -533,14 +540,17 @@ public class CapybaraCompiler {
     ) {
         var dataTypes = visibleTypesByModule.get(module.name());
         var localTypeNames = linkedTypesByModule.get(module.name()).keySet();
-        var functions = functions(module, linkedTypesByModule.get(module.name()));
+        var functions = functions(module, linkedTypesByModule.get(module.name()), dataTypes);
+        if (functions instanceof Result.Error<List<Function>> error) {
+            return new Result.Error<>(error.errors());
+        }
         var moduleSourceFile = moduleSourceFile(module);
         var availableSignatures = availableSignatures(module, moduleLinkIndex, linkedTypesByModule, signaturesByModule, compileCache);
         if (availableSignatures instanceof Result.Error<List<CapybaraExpressionCompiler.FunctionSignature>> error) {
             return withFile(new Result.Error<>(error.errors()), moduleSourceFile);
         }
         var initialSignatures = ((Result.Success<List<CapybaraExpressionCompiler.FunctionSignature>>) availableSignatures).value();
-        return withFile(linkFunctions(functions, dataTypes, localTypeNames, initialSignatures, signaturesByModule, moduleClassNameByModuleName, protectedConstructorsByType, moduleSourceFile, compileCache), moduleSourceFile);
+        return withFile(linkFunctions(((Result.Success<List<Function>>) functions).value(), dataTypes, localTypeNames, initialSignatures, signaturesByModule, moduleClassNameByModuleName, protectedConstructorsByType, moduleSourceFile, compileCache), moduleSourceFile);
     }
 
     private Result<CompiledModule> linkModule(
@@ -555,14 +565,17 @@ public class CapybaraCompiler {
     ) {
         var localTypes = linkedTypesByModule.get(module.name());
         var visibleTypes = visibleTypesByModule.get(module.name());
-        var functions = functions(module, localTypes);
+        var functions = functions(module, localTypes, visibleTypes);
+        if (functions instanceof Result.Error<List<Function>> error) {
+            return new Result.Error<>(error.errors());
+        }
         var moduleSourceFile = moduleSourceFile(module);
         var availableSignatures = availableSignatures(module, moduleLinkIndex, linkedTypesByModule, signaturesByModule, compileCache);
         if (availableSignatures instanceof Result.Error<List<CapybaraExpressionCompiler.FunctionSignature>> error) {
             return withFile(new Result.Error<>(error.errors()), moduleSourceFile);
         }
         var initialSignatures = ((Result.Success<List<CapybaraExpressionCompiler.FunctionSignature>>) availableSignatures).value();
-        return withFile(linkFunctions(functions, visibleTypes, localTypes.keySet(), initialSignatures, signaturesByModule, moduleClassNameByModuleName, protectedConstructorsByType, moduleSourceFile, compileCache)
+        return withFile(linkFunctions(((Result.Success<List<Function>>) functions).value(), visibleTypes, localTypes.keySet(), initialSignatures, signaturesByModule, moduleClassNameByModuleName, protectedConstructorsByType, moduleSourceFile, compileCache)
                 .flatMap(firstPassFunctions -> {
                     var refinedSignatures = mergeSignatures(
                             signaturesByModule.get(module.name()),
@@ -578,7 +591,7 @@ public class CapybaraCompiler {
                         ));
                     }
                     var refinedAvailableSignatures = mergeSignatures(initialSignatures, refinedSignatures);
-                    return linkFunctions(functions, visibleTypes, localTypes.keySet(), refinedAvailableSignatures, signaturesByModule, moduleClassNameByModuleName, protectedConstructorsByType, moduleSourceFile, compileCache)
+                    return linkFunctions(((Result.Success<List<Function>>) functions).value(), visibleTypes, localTypes.keySet(), refinedAvailableSignatures, signaturesByModule, moduleClassNameByModuleName, protectedConstructorsByType, moduleSourceFile, compileCache)
                             .map(linkedFunctions -> new CompiledModule(
                                     module.name(),
                                     module.path(),
@@ -1261,7 +1274,7 @@ public class CapybaraCompiler {
     }
 
     private String signatureKey(CapybaraExpressionCompiler.FunctionSignature signature) {
-        var parameters = signature.parameterTypes().stream().map(CompiledType::name).toList();
+        var parameters = signature.parameterTypes().stream().map(String::valueOf).toList();
         return signature.name() + "#" + parameters;
     }
 
@@ -1275,15 +1288,334 @@ public class CapybaraCompiler {
                 .toList();
     }
 
-    private List<Function> functions(Module module, SortedMap<String, GenericDataType> linkedTypes) {
+    private Result<List<Function>> functions(
+            Module module,
+            SortedMap<String, GenericDataType> linkedTypes,
+            Map<String, GenericDataType> visibleTypes
+    ) {
         var combined = new ArrayList<Function>();
         combined.addAll(findFunctions(module.functional().definitions()));
         combined.addAll(constructorFunctions(module.functional().definitions(), linkedTypes));
+        var derivedFunctions = derivedFunctions(module, linkedTypes, visibleTypes);
+        if (derivedFunctions instanceof Result.Error<List<Function>> error) {
+            return new Result.Error<>(error.errors());
+        }
+        combined.addAll(((Result.Success<List<Function>>) derivedFunctions).value());
         combined.sort(Comparator
                 .comparingInt((Function function) -> function.position().map(SourcePosition::line).orElse(Integer.MAX_VALUE))
                 .thenComparingInt(function -> function.position().map(SourcePosition::column).orElse(Integer.MAX_VALUE))
                 .thenComparing(Function::name));
-        return List.copyOf(combined);
+        return Result.success(List.copyOf(combined));
+    }
+
+    private Result<List<Function>> derivedFunctions(
+            Module module,
+            SortedMap<String, GenericDataType> linkedTypes,
+            Map<String, GenericDataType> visibleTypes
+    ) {
+        var derivers = derivers(module.functional().definitions(), moduleSourceFile(module));
+        if (derivers instanceof Result.Error<Map<String, DeriverDeclaration>> error) {
+            return new Result.Error<>(error.errors());
+        }
+        var deriversByName = ((Result.Success<Map<String, DeriverDeclaration>>) derivers).value();
+        var generated = new ArrayList<Function>();
+        for (var target : deriveTargets(module.functional().definitions())) {
+            var linkedTarget = linkedTypes.get(target.name());
+            if (linkedTarget == null) {
+                continue;
+            }
+            for (var directive : target.derives()) {
+                var deriver = deriversByName.get(directive.name());
+                if (deriver == null) {
+                    return withPosition(
+                            Result.error("Deriver `" + directive.name() + "` not found for `" + target.name() + "`"),
+                            directive.position().or(target::position),
+                            normalizeFile(moduleSourceFile(module))
+                    );
+                }
+                for (var method : deriver.methods()) {
+                    var expression = expandDeriverExpression(method.expression(), linkedTarget, moduleSourceFile(module));
+                    if (expression instanceof Result.Error<Expression> error) {
+                        return new Result.Error<>(error.errors());
+                    }
+                    var parameters = new ArrayList<Parameter>(method.parameters().size() + 1);
+                    parameters.add(new Parameter(
+                            compiledTypeToParserType(linkedTarget),
+                            "this",
+                            directive.position().or(target::position)
+                    ));
+                    parameters.addAll(method.parameters());
+                    generated.add(new Function(
+                            METHOD_DECL_PREFIX + baseTypeName(linkedTarget.name()) + "__" + method.name(),
+                            List.copyOf(parameters),
+                            Optional.of(method.returnType()),
+                            ((Result.Success<Expression>) expression).value(),
+                            method.comments(),
+                            linkedTarget.visibility(),
+                            directive.position().or(target::position)
+                    ));
+                }
+            }
+        }
+        return Result.success(List.copyOf(generated));
+    }
+
+    private Result<Map<String, DeriverDeclaration>> derivers(Set<Definition> definitions, String moduleSourceFile) {
+        var derivers = new LinkedHashMap<String, DeriverDeclaration>();
+        for (var definition : definitions) {
+            if (!(definition instanceof DeriverDeclaration deriver)) {
+                continue;
+            }
+            var existing = derivers.putIfAbsent(deriver.name(), deriver);
+            if (existing != null) {
+                return withPosition(
+                        Result.error("Duplicate deriver `" + deriver.name() + "`"),
+                        deriver.position(),
+                        normalizeFile(moduleSourceFile)
+                );
+            }
+            for (var method : deriver.methods()) {
+                var reservedReceiver = method.parameters().stream()
+                        .filter(parameter -> "receiver".equals(parameter.name()))
+                        .findFirst();
+                if (reservedReceiver.isPresent()) {
+                    return withPosition(
+                            Result.error("Deriver method parameter cannot be named `receiver` because `receiver` is the generated derive receiver"),
+                            reservedReceiver.orElseThrow().position(),
+                            normalizeFile(moduleSourceFile)
+                    );
+                }
+            }
+        }
+        return Result.success(Map.copyOf(derivers));
+    }
+
+    private List<DeriveTarget> deriveTargets(Set<Definition> definitions) {
+        return definitions.stream()
+                .map(definition -> switch (definition) {
+                    case DataDeclaration dataDeclaration -> new DeriveTarget(
+                            dataDeclaration.name(),
+                            dataDeclaration.derives(),
+                            dataDeclaration.visibility(),
+                            dataDeclaration.position()
+                    );
+                    case TypeDeclaration typeDeclaration -> new DeriveTarget(
+                            typeDeclaration.name(),
+                            typeDeclaration.derives(),
+                            typeDeclaration.visibility(),
+                            typeDeclaration.position()
+                    );
+                    default -> null;
+                })
+                .filter(Objects::nonNull)
+                .filter(target -> !target.derives().isEmpty())
+                .toList();
+    }
+
+    private record DeriveTarget(
+            String name,
+            List<DeriveDirective> derives,
+            Visibility visibility,
+            Optional<SourcePosition> position
+    ) {
+    }
+
+    private Result<Expression> expandDeriverExpression(
+            Expression expression,
+            GenericDataType targetType,
+            String moduleSourceFile
+    ) {
+        if (expression instanceof Value value && "receiver".equals(value.name())) {
+            return Result.success(new Value("this", value.position()));
+        }
+        return switch (expression) {
+            case FunctionCall functionCall -> expandDeriverFunctionCall(functionCall, targetType, moduleSourceFile);
+            case FunctionReference functionReference -> expandDeriverFunctionReference(functionReference, moduleSourceFile);
+            case FunctionInvoke functionInvoke -> expandDeriverExpressions(functionInvoke.arguments(), targetType, moduleSourceFile)
+                    .flatMap(arguments -> expandDeriverExpression(functionInvoke.function(), targetType, moduleSourceFile)
+                            .map(function -> new FunctionInvoke(function, arguments, functionInvoke.position())));
+            case LetExpression letExpression -> expandDeriverExpression(letExpression.value(), targetType, moduleSourceFile)
+                    .flatMap(value -> expandDeriverExpression(letExpression.rest(), targetType, moduleSourceFile)
+                            .map(rest -> new LetExpression(
+                                    letExpression.name(),
+                                    letExpression.declaredType(),
+                                    letExpression.kind(),
+                                    value,
+                                    rest,
+                                    letExpression.position()
+                            )));
+            case IfExpression ifExpression -> expandDeriverExpression(ifExpression.condition(), targetType, moduleSourceFile)
+                    .flatMap(condition -> expandDeriverExpression(ifExpression.thenBranch(), targetType, moduleSourceFile)
+                            .flatMap(thenBranch -> expandDeriverExpression(ifExpression.elseBranch(), targetType, moduleSourceFile)
+                                    .map(elseBranch -> new IfExpression(condition, thenBranch, elseBranch, ifExpression.position()))));
+            case InfixExpression infixExpression -> expandDeriverExpression(infixExpression.left(), targetType, moduleSourceFile)
+                    .flatMap(left -> expandDeriverExpression(infixExpression.right(), targetType, moduleSourceFile)
+                            .map(right -> new InfixExpression(left, infixExpression.operator(), right, infixExpression.position())));
+            case FieldAccess fieldAccess -> expandDeriverExpression(fieldAccess.source(), targetType, moduleSourceFile)
+                    .map(source -> new FieldAccess(source, fieldAccess.field(), fieldAccess.position()));
+            case LambdaExpression lambdaExpression -> expandDeriverExpression(lambdaExpression.expression(), targetType, moduleSourceFile)
+                    .map(body -> new LambdaExpression(lambdaExpression.argumentNames(), body, lambdaExpression.position()));
+            case ReduceExpression reduceExpression -> expandDeriverExpression(reduceExpression.initialValue(), targetType, moduleSourceFile)
+                    .flatMap(initialValue -> expandDeriverExpression(reduceExpression.reducerExpression(), targetType, moduleSourceFile)
+                            .map(reducerExpression -> new ReduceExpression(
+                                    initialValue,
+                                    reduceExpression.accumulatorName(),
+                                    reduceExpression.keyName(),
+                                    reduceExpression.valueName(),
+                                    reducerExpression,
+                                    reduceExpression.position()
+                            )));
+            case IndexExpression indexExpression -> expandDeriverExpression(indexExpression.source(), targetType, moduleSourceFile)
+                    .flatMap(source -> expandDeriverExpression(indexExpression.index(), targetType, moduleSourceFile)
+                            .map(index -> new IndexExpression(source, index, indexExpression.position())));
+            case SliceExpression sliceExpression -> expandDeriverExpression(sliceExpression.source(), targetType, moduleSourceFile)
+                    .flatMap(source -> expandOptionalDeriverExpression(sliceExpression.start(), targetType, moduleSourceFile)
+                            .flatMap(start -> expandOptionalDeriverExpression(sliceExpression.end(), targetType, moduleSourceFile)
+                                    .map(end -> new SliceExpression(source, start, end, sliceExpression.position()))));
+            case MatchExpression matchExpression -> expandDeriverExpression(matchExpression.matchWith(), targetType, moduleSourceFile)
+                    .flatMap(matchWith -> matchExpression.cases().stream()
+                            .map(matchCase -> expandOptionalDeriverExpression(matchCase.guard(), targetType, moduleSourceFile)
+                                    .flatMap(guard -> expandDeriverExpression(matchCase.expression(), targetType, moduleSourceFile)
+                                            .map(body -> new MatchExpression.MatchCase(matchCase.pattern(), guard, body))))
+                            .collect(new ResultCollectionCollector<>())
+                            .map(cases -> new MatchExpression(matchWith, cases, matchExpression.position())));
+            case NewData newData -> expandFieldAssignments(newData.assignments(), targetType, moduleSourceFile)
+                    .flatMap(assignments -> expandDeriverExpressions(newData.positionalArguments(), targetType, moduleSourceFile)
+                            .flatMap(positionalArguments -> expandDeriverExpressions(newData.spreads(), targetType, moduleSourceFile)
+                                    .map(spreads -> new NewData(
+                                            newData.type(),
+                                            newData.bypassConstructor(),
+                                            assignments,
+                                            positionalArguments,
+                                            spreads,
+                                            newData.position()
+                                    ))));
+            case ConstructorData constructorData -> expandFieldAssignments(constructorData.assignments(), targetType, moduleSourceFile)
+                    .flatMap(assignments -> expandDeriverExpressions(constructorData.positionalArguments(), targetType, moduleSourceFile)
+                            .flatMap(positionalArguments -> expandDeriverExpressions(constructorData.spreads(), targetType, moduleSourceFile)
+                                    .map(spreads -> new ConstructorData(
+                                            assignments,
+                                            positionalArguments,
+                                            spreads,
+                                            constructorData.position()
+                                    ))));
+            case WithExpression withExpression -> expandDeriverExpression(withExpression.source(), targetType, moduleSourceFile)
+                    .flatMap(source -> expandFieldAssignments(withExpression.assignments(), targetType, moduleSourceFile)
+                            .map(assignments -> new WithExpression(source, assignments, withExpression.position())));
+            case NewListExpression newListExpression -> expandDeriverExpressions(newListExpression.values(), targetType, moduleSourceFile)
+                    .map(values -> new NewListExpression(values, newListExpression.position()));
+            case NewSetExpression newSetExpression -> expandDeriverExpressions(newSetExpression.values(), targetType, moduleSourceFile)
+                    .map(values -> new NewSetExpression(values, newSetExpression.position()));
+            case NewDictExpression newDictExpression -> newDictExpression.entries().stream()
+                    .map(entry -> expandDeriverExpression(entry.key(), targetType, moduleSourceFile)
+                            .flatMap(key -> expandDeriverExpression(entry.value(), targetType, moduleSourceFile)
+                                    .map(value -> new NewDictExpression.Entry(key, value))))
+                    .collect(new ResultCollectionCollector<>())
+                    .map(entries -> new NewDictExpression(entries, newDictExpression.position()));
+            case TupleExpression tupleExpression -> expandDeriverExpressions(tupleExpression.values(), targetType, moduleSourceFile)
+                    .map(values -> new TupleExpression(values, tupleExpression.position()));
+            default -> Result.success(expression);
+        };
+    }
+
+    private Result<Expression> expandDeriverFunctionReference(
+            FunctionReference functionReference,
+            String moduleSourceFile
+    ) {
+        if ("derive_type_name".equals(functionReference.name())) {
+            return legacyDeriveHelperError(
+                    "`derive_type_name()` has been replaced by `reflection_value(receiver)`. Import `/capy/meta_prog/Reflection` and use `reflection_value(receiver).name`.",
+                    functionReference.position(),
+                    moduleSourceFile
+            );
+        }
+        if ("derive_fields_join".equals(functionReference.name())) {
+            return legacyDeriveHelperError(
+                    "`derive_fields_join(...)` has been replaced by `reflection_value(receiver)`. Import `/capy/meta_prog/Reflection` and fold over `reflection_value(receiver).fields`.",
+                    functionReference.position(),
+                    moduleSourceFile
+            );
+        }
+        return Result.success(functionReference);
+    }
+
+    private Result<Expression> expandDeriverFunctionCall(
+            FunctionCall functionCall,
+            GenericDataType targetType,
+            String moduleSourceFile
+    ) {
+        if (functionCall.moduleName().isEmpty() && "derive_type_name".equals(functionCall.name())) {
+            return legacyDeriveHelperError(
+                    "`derive_type_name()` has been replaced by `reflection_value(receiver)`. Import `/capy/meta_prog/Reflection` and use `reflection_value(receiver).name`.",
+                    functionCall.position(),
+                    moduleSourceFile
+            );
+        }
+        if (functionCall.moduleName().isEmpty() && "derive_fields_join".equals(functionCall.name())) {
+            return legacyDeriveHelperError(
+                    "`derive_fields_join(...)` has been replaced by `reflection_value(receiver)`. Import `/capy/meta_prog/Reflection` and fold over `reflection_value(receiver).fields`.",
+                    functionCall.position(),
+                    moduleSourceFile
+            );
+        }
+        return expandDeriverExpressions(functionCall.arguments(), targetType, moduleSourceFile)
+                .map(arguments -> new FunctionCall(functionCall.moduleName(), functionCall.name(), arguments, functionCall.position()));
+    }
+
+    private Result<Expression> legacyDeriveHelperError(
+            String message,
+            Optional<SourcePosition> position,
+            String moduleSourceFile
+    ) {
+        return withPosition(
+                Result.error(message),
+                position,
+                normalizeFile(moduleSourceFile)
+        );
+    }
+
+    private Result<List<Expression>> expandDeriverExpressions(
+            List<Expression> expressions,
+            GenericDataType targetType,
+            String moduleSourceFile
+    ) {
+        return expressions.stream()
+                .map(expression -> expandDeriverExpression(expression, targetType, moduleSourceFile))
+                .collect(new ResultCollectionCollector<>());
+    }
+
+    private Result<Optional<Expression>> expandOptionalDeriverExpression(
+            Optional<Expression> expression,
+            GenericDataType targetType,
+            String moduleSourceFile
+    ) {
+        return expression
+                .map(value -> expandDeriverExpression(value, targetType, moduleSourceFile).map(Optional::of))
+                .orElseGet(() -> Result.success(Optional.empty()));
+    }
+
+    private Result<List<NewData.FieldAssignment>> expandFieldAssignments(
+            List<NewData.FieldAssignment> assignments,
+            GenericDataType targetType,
+            String moduleSourceFile
+    ) {
+        return assignments.stream()
+                .map(assignment -> expandDeriverExpression(assignment.value(), targetType, moduleSourceFile)
+                        .map(value -> new NewData.FieldAssignment(assignment.name(), value)))
+                .collect(new ResultCollectionCollector<>());
+    }
+
+    private String simpleTypeName(String typeName) {
+        var raw = baseTypeName(typeName);
+        var slash = raw.lastIndexOf('/');
+        if (slash >= 0 && slash < raw.length() - 1) {
+            raw = raw.substring(slash + 1);
+        }
+        var dot = raw.lastIndexOf('.');
+        if (dot >= 0 && dot < raw.length() - 1) {
+            raw = raw.substring(dot + 1);
+        }
+        return raw;
     }
 
     private List<Function> constructorFunctions(Set<Definition> definitions, SortedMap<String, GenericDataType> linkedTypes) {
@@ -3602,7 +3934,7 @@ public class CapybaraCompiler {
                     .filter(subType -> sameTypeName(subType.name(), actualDataType.name()))
                     .findFirst();
             if (matchingSubtype.isPresent()) {
-                if (actualDataType.name().startsWith("/capy/reflection/Reflection.")) {
+                if (actualDataType.name().startsWith("/capy/meta_prog/Reflection.")) {
                     return expression;
                 }
                 var expectedSubtype = matchingSubtype.orElseThrow();
@@ -3943,7 +4275,7 @@ public class CapybaraCompiler {
             CompileCache compileCache,
             String moduleSourceFile
     ) {
-        return functions.stream()
+        var linked = functions.stream()
                 .map(function -> {
                     var functionGenericTypeNames = functionGenericTypeNames(function, dataTypes, compileCache);
                     return linkParameters(function.parameters(), dataTypes, functionGenericTypeNames, compileCache)
@@ -3957,6 +4289,24 @@ public class CapybaraCompiler {
                                     )));
                 })
                 .collect(new ResultCollectionCollector<>());
+        if (linked instanceof Result.Error<List<CapybaraExpressionCompiler.FunctionSignature>> error) {
+            return error;
+        }
+        var signatures = ((Result.Success<List<CapybaraExpressionCompiler.FunctionSignature>>) linked).value();
+        var signaturesByKey = new LinkedHashMap<String, Function>();
+        for (var i = 0; i < signatures.size(); i++) {
+            var signature = signatures.get(i);
+            var previous = signaturesByKey.putIfAbsent(signatureKey(signature), functions.get(i));
+            if (previous != null) {
+                return withPosition(
+                        Result.error("Duplicate function signature `" + displaySignatureName(signature.name()) + "` for parameter types "
+                                     + signature.parameterTypes().stream().map(CompiledType::name).toList()),
+                        functions.get(i).position(),
+                        normalizeFile(moduleSourceFile)
+                );
+            }
+        }
+        return Result.success(signatures);
     }
 
     private boolean areAssignableDataTypeParameters(List<String> expectedParameters, List<String> actualParameters, Map<String, GenericDataType> dataTypes) {
@@ -4310,6 +4660,15 @@ public class CapybaraCompiler {
             return restorePrivateTypeNameForDisplay(constructorTarget.orElseThrow().targetTypeName());
         }
         return restorePrivateFunctionNameForDisplay(functionName);
+    }
+
+    private String displaySignatureName(String functionName) {
+        var owner = methodOwnerType(functionName);
+        var method = methodSimpleName(functionName);
+        if (owner.isPresent() && method.isPresent()) {
+            return owner.orElseThrow() + "." + method.orElseThrow();
+        }
+        return displayFunctionName(functionName);
     }
 
     private String normalizeUserVisibleNames(String message) {

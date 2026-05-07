@@ -743,7 +743,7 @@ public class CapybaraExpressionCompiler {
         return "reflection_value".equals(signature.name())
                && signature.parameterTypes().size() == 1
                && signature.returnType() instanceof CompiledDataType dataType
-               && "DataValueInfo".equals(simpleTypeNameStatic(dataType.name()));
+               && "DataInfo".equals(simpleTypeNameStatic(dataType.name()));
     }
 
     private Result<CompiledExpression> linkReflectionIntrinsicCall(
@@ -791,7 +791,7 @@ public class CapybaraExpressionCompiler {
                 .orElse(null);
         if (signature == null) {
             return withPosition(
-                    Result.error("Reflection value metadata type `DataValueInfo` was not found"),
+                    Result.error("Reflection value metadata type `DataInfo` was not found"),
                     functionCall.position()
             );
         }
@@ -809,13 +809,13 @@ public class CapybaraExpressionCompiler {
             return new Result.Error<>(error.errors());
         }
         var target = ((Result.Success<CompiledExpression>) linkedTarget).value();
-        if (!(target.type() instanceof CompiledDataType dataType)) {
+        if (!(target.type() instanceof GenericDataType dataType)) {
             return withPosition(
-                    Result.error("Reflection value intrinsic expects a concrete data value"),
+                    Result.error("Reflection value intrinsic expects a data value"),
                     functionCall.arguments().getFirst().position()
             );
         }
-        return Result.success(reflectionDataValueInfo(dataType, signature.returnType(), anyInfo));
+        return Result.success(reflectionDataInfo(dataType, anyInfo, true));
     }
 
     private Result<CompiledExpression> linkReflectionTarget(Expression target, CompiledDataParentType anyInfo) {
@@ -892,7 +892,7 @@ public class CapybaraExpressionCompiler {
     }
 
     private CompiledExpression reflectionDataInfo(
-            CompiledDataType dataType,
+            GenericDataType dataType,
             CompiledDataParentType anyInfo,
             boolean full
     ) {
@@ -903,27 +903,6 @@ public class CapybaraExpressionCompiler {
                 "pkg", packageInfo(dataType.name(), anyInfo),
                 "fields", fieldInfoList(full ? dataType.fields() : List.of(), anyInfo),
                 "functions", new CompiledNewList(List.of(), new CompiledList(functionInfo))
-        );
-    }
-
-    private CompiledExpression reflectionDataValueInfo(
-            CompiledDataType dataType,
-            CompiledType dataValueInfoRoot,
-            CompiledDataParentType anyInfo
-    ) {
-        var dataValueInfo = reflectionDataType(dataValueInfoRoot, "DataValueInfo");
-        var dataValueFieldInfo = reflectionDataType(dataValueInfoRoot, "DataValueFieldInfo");
-        return newData(dataValueInfo,
-                "info", reflectionDataInfo(dataType, anyInfo, true),
-                "fields", new CompiledNewList(
-                        dataType.fields().stream()
-                                .map(field -> newData(dataValueFieldInfo,
-                                        "name", stringLiteral(field.name()),
-                                        "type", reflectionTypeInfo(field.type(), anyInfo, false)
-                                ))
-                                .toList(),
-                        new CompiledList(dataValueFieldInfo)
-                )
         );
     }
 
@@ -1077,7 +1056,7 @@ public class CapybaraExpressionCompiler {
     private CompiledDataType qualifiedReflectionDataType(CompiledDataType dataType) {
         var simpleName = simpleTypeNameStatic(dataType.name());
         return new CompiledDataType(
-                "/capy/reflection/Reflection." + simpleName,
+                "/capy/meta_prog/Reflection." + simpleName,
                 dataType.fields(),
                 dataType.typeParameters(),
                 dataType.extendedTypes(),
@@ -1090,7 +1069,7 @@ public class CapybaraExpressionCompiler {
     private CompiledDataParentType qualifiedReflectionParentType(CompiledDataParentType parentType) {
         var simpleName = simpleTypeNameStatic(parentType.name());
         return new CompiledDataParentType(
-                "/capy/reflection/Reflection." + simpleName,
+                "/capy/meta_prog/Reflection." + simpleName,
                 parentType.fields(),
                 parentType.subTypes(),
                 parentType.typeParameters(),

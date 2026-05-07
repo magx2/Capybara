@@ -1,6 +1,6 @@
 package dev.capylang.test;
 
-import capy.reflection.Reflection;
+import capy.metaProg.Reflection;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;

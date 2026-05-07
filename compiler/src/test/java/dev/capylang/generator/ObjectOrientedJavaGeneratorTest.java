@@ -634,10 +634,10 @@ class ObjectOrientedJavaGeneratorTest {
     }
 
     private void writeReflectionStub(Path sourceDir) throws Exception {
-        var path = sourceDir.resolve("capy/reflection/Reflection.java");
+        var path = sourceDir.resolve("capy/metaProg/Reflection.java");
         Files.createDirectories(path.getParent());
         Files.writeString(path, """
-                package capy.reflection;
+                package capy.metaProg;
 
                 public final class Reflection {
                     public sealed interface AnyInfo permits FunctionalProgrammingInfo, ObjectOrientedInfo, PrimitiveInfo, CollectionInfo, TupleInfo, FunctionTypeInfo, GenericParamInfo {}

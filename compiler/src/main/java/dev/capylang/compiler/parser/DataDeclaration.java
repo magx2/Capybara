@@ -9,9 +9,20 @@ public record DataDeclaration(String name, List<DataField> fields,
                               List<String> extendsTypes,
                               List<String> typeParameters,
                               Optional<Expression> constructor,
+                              List<DeriveDirective> derives,
                               List<String> comments,
                               Visibility visibility,
                               Optional<SourcePosition> position) implements Definition {
+    public DataDeclaration(String name, List<DataField> fields,
+                           List<String> extendsTypes,
+                           List<String> typeParameters,
+                           Optional<Expression> constructor,
+                           List<String> comments,
+                           Visibility visibility,
+                           Optional<SourcePosition> position) {
+        this(name, fields, extendsTypes, typeParameters, constructor, List.of(), comments, visibility, position);
+    }
+
     public DataDeclaration(String name, List<DataField> fields,
                            List<String> extendsTypes,
                            List<String> typeParameters,

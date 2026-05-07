@@ -7,6 +7,7 @@ import dev.capylang.compiler.expression.*;
 import dev.capylang.compiler.parser.InfixOperator;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
@@ -3013,7 +3014,7 @@ public class JavaExpressionEvaluator {
         if (rawTypeName.startsWith("/") && !rawTypeName.contains(".")) {
             var slashIndex = rawTypeName.lastIndexOf('/');
             if (slashIndex > 0 && slashIndex < rawTypeName.length() - 1) {
-                var packageName = rawTypeName.substring(1, slashIndex).replace('/', '.');
+                var packageName = normalizeJavaPackagePath(rawTypeName.substring(1, slashIndex));
                 var className = normalizeJavaClassName(rawTypeName.substring(slashIndex + 1));
                 return packageName + "." + className;
             }
@@ -3023,7 +3024,7 @@ public class JavaExpressionEvaluator {
             var slashIndex = rawTypeName.lastIndexOf('/');
             if (slashIndex > 0 && slashIndex < dotIndex) {
                 var startIdx = rawTypeName.startsWith("/") ? 1 : 0;
-                var packageName = rawTypeName.substring(startIdx, slashIndex).replace('/', '.');
+                var packageName = normalizeJavaPackagePath(rawTypeName.substring(startIdx, slashIndex));
                 var outer = normalizeJavaClassName(rawTypeName.substring(slashIndex + 1, dotIndex));
                 var inner = normalizeJavaClassName(rawTypeName.substring(dotIndex + 1));
                 if (outer.equals(inner)) {
@@ -3041,6 +3042,14 @@ public class JavaExpressionEvaluator {
             normalized.add(normalizeJavaClassName(part));
         }
         return String.join(".", normalized);
+    }
+
+    private static String normalizeJavaPackagePath(String path) {
+        var normalized = path.replace('\\', '/');
+        return Arrays.stream(normalized.split("/"))
+                .filter(part -> !part.isBlank())
+                .map(JavaExpressionEvaluator::normalizeJavaPackageSegment)
+                .collect(java.util.stream.Collectors.joining("."));
     }
 
     private static String normalizeJavaClassName(String rawName) {

@@ -407,6 +407,11 @@ public class CapybaraParser {
             return List.of(dataDeclaration(dataDeclaration));
         }
 
+        var deriverDeclaration = context.deriverDeclaration();
+        if (deriverDeclaration != null) {
+            return List.of(deriverDeclaration(deriverDeclaration));
+        }
+
         var enumDeclaration = context.enumDeclaration();
         if (enumDeclaration != null) {
             return List.of(enumDeclaration(enumDeclaration));
@@ -445,6 +450,7 @@ public class CapybaraParser {
                 fieldDeclarationList,
                 genericTypeParameters(declaredType),
                 constructorExpression(context.constructorClause()),
+                deriveClause(context.deriveClause()),
                 context.docComment().stream()
                         .map(comment -> stripDocComment(comment.getText()))
                         .toList(),
@@ -462,12 +468,51 @@ public class CapybaraParser {
                 dataFields.extendsTypes(),
                 genericTypeParameters(declaration),
                 constructorExpression(context.constructorClause()),
+                deriveClause(context.deriveClause()),
                 context.docComment().stream()
                         .map(comment -> stripDocComment(comment.getText()))
                         .toList(),
                 visibility(context.VISIBILITY()),
                 position(context)
         );
+    }
+
+    private DeriverDeclaration deriverDeclaration(FunctionalParser.DeriverDeclarationContext context) {
+        return new DeriverDeclaration(
+                context.TYPE().getText(),
+                context.deriverMethodDeclaration().stream()
+                        .map(this::deriverMethodDeclaration)
+                        .toList(),
+                context.docComment().stream()
+                        .map(comment -> stripDocComment(comment.getText()))
+                        .toList(),
+                visibility(context.VISIBILITY()),
+                position(context)
+        );
+    }
+
+    private DeriverDeclaration.DeriverMethod deriverMethodDeclaration(
+            FunctionalParser.DeriverMethodDeclarationContext context
+    ) {
+        return new DeriverDeclaration.DeriverMethod(
+                identifier(context.identifier()),
+                parameters(context.parameters()),
+                type(context.functionType().type()),
+                expression(context.expression()),
+                context.docComment().stream()
+                        .map(comment -> stripDocComment(comment.getText()))
+                        .toList(),
+                position(context)
+        );
+    }
+
+    private List<DeriveDirective> deriveClause(FunctionalParser.DeriveClauseContext context) {
+        if (context == null) {
+            return List.of();
+        }
+        return context.TYPE().stream()
+                .map(type -> new DeriveDirective(type.getText(), position(type)))
+                .toList();
     }
 
     private Optional<Expression> constructorExpression(FunctionalParser.ConstructorClauseContext context) {
@@ -2405,6 +2450,13 @@ public class CapybaraParser {
 
     private Parameter parameter(dev.capylang.parser.antlr.FunctionalParser.ParameterContext context) {
         return new Parameter(type(context.type()), identifier(context.identifier()), position(context));
+    }
+
+    private List<Parameter> parameters(dev.capylang.parser.antlr.FunctionalParser.ParametersContext context) {
+        if (context == null) {
+            return List.of();
+        }
+        return context.parameter().stream().map(this::parameter).toList();
     }
 
     private static Optional<SourcePosition> position(ParserRuleContext context) {

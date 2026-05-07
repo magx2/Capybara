@@ -1,0 +1,50 @@
+from /capy/meta_prog/Reflection import { DataInfo, DataFieldInfo, reflection_value }
+
+deriver Show {
+    fun show(): string =
+        let info: DataInfo = reflection_value(receiver)
+        let body: string = info.fields |> info.name + " { ", (acc, field) =>
+            acc + (if acc == info.name + " { " then "" else ", ") + field.name
+        body + " }"
+}
+
+data AgeLimit { value: int }
+
+deriver AgeComparable {
+    fun bigger_than(i: int): bool = receiver.age > i
+
+    fun matches_age_metadata(extra: int, limit: AgeLimit): bool =
+        let info: DataInfo = reflection_value(receiver)
+        let has_name_field: bool = info.fields |any? field => field.name == "name"
+        let has_age_field: bool = info.fields |any? field => field.name == "age"
+        (info.name == "DerivedUser") & has_name_field & has_age_field & (receiver.age + extra > limit.value)
+}
+
+data DerivedUser { name: string, age: int } derive Show, AgeComparable
+data Empty {} derive Show
+data Entity { id: string }
+data Employee { department: string, ...Entity } derive Show
+type Named { id: string } = DerivedEntity derive Show
+data DerivedEntity { id: string, rank: int }
+
+fun show_user(): string =
+    DerivedUser { name: "Ada", age: 42 }.show()
+
+fun show_empty(): string =
+    Empty {}.show()
+
+fun show_employee(): string =
+    Employee { id: "E-1", department: "R&D" }.show()
+
+fun show_named(): string =
+    let named: Named = DerivedEntity { id: "N-1", rank: 7 }
+    named.show()
+
+fun user_bigger_than(i: int): bool =
+    DerivedUser { name: "Ada", age: 42 }.bigger_than(i)
+
+fun user_mixed_parameter_derive_true(): bool =
+    DerivedUser { name: "Ada", age: 42 }.matches_age_metadata(3, AgeLimit { value: 44 })
+
+fun user_mixed_parameter_derive_false(): bool =
+    DerivedUser { name: "Ada", age: 42 }.matches_age_metadata(0, AgeLimit { value: 42 })
