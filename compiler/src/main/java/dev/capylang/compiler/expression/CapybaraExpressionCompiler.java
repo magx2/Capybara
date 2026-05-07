@@ -743,7 +743,7 @@ public class CapybaraExpressionCompiler {
         return "reflection_value".equals(signature.name())
                && signature.parameterTypes().size() == 1
                && signature.returnType() instanceof CompiledDataType dataType
-               && "DataInfo".equals(simpleTypeNameStatic(dataType.name()));
+               && "DataValueInfo".equals(simpleTypeNameStatic(dataType.name()));
     }
 
     private Result<CompiledExpression> linkReflectionIntrinsicCall(
@@ -791,10 +791,11 @@ public class CapybaraExpressionCompiler {
                 .orElse(null);
         if (signature == null) {
             return withPosition(
-                    Result.error("Reflection value metadata type `DataInfo` was not found"),
+                    Result.error("Reflection value metadata type `DataValueInfo` was not found"),
                     functionCall.position()
             );
         }
+        var dataValueInfo = qualifiedReflectionDataType((CompiledDataType) signature.returnType());
         var anyInfo = findReflectionParentType(signature.returnType(), "AnyInfo", new HashSet<>())
                 .map(this::qualifiedReflectionParentType)
                 .orElse(null);
@@ -815,7 +816,18 @@ public class CapybaraExpressionCompiler {
                     functionCall.arguments().getFirst().position()
             );
         }
-        return Result.success(reflectionDataInfo(dataType, anyInfo, true));
+        var packagePath = reflectionPackagePath(dataType.name());
+        var packageName = packagePath.isBlank() ? "" : simpleTypeNameStatic(packagePath);
+        return Result.success(new CompiledReflectionValue(
+                target,
+                simpleTypeNameStatic(dataType.name()),
+                packageName,
+                packagePath,
+                dataType.fields().stream()
+                        .map(field -> new CompiledReflectionValue.Field(field.name(), field.type()))
+                        .toList(),
+                dataValueInfo
+        ));
     }
 
     private Result<CompiledExpression> linkReflectionTarget(Expression target, CompiledDataParentType anyInfo) {

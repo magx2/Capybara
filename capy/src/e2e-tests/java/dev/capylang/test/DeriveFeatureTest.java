@@ -36,4 +36,9 @@ class DeriveFeatureTest {
         assertThat(DeriveFeature.userMixedParameterDeriveTrue()).isTrue();
         assertThat(DeriveFeature.userMixedParameterDeriveFalse()).isFalse();
     }
+
+    @Test
+    void derivesMethodWithReflectedFieldValues() {
+        assertThat(DeriveFeature.userFieldValuesSummary()).isEqualTo("name=Ada,age=42");
+    }
 }

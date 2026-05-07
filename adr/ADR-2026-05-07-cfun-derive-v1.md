@@ -23,7 +23,7 @@ Capybara Functional v1 adds a constrained derive system:
 - Deriver methods use normal expression syntax and are expanded by the compiler into ordinary generated type methods.
 - Generated methods use the existing functional method encoding and pass through normal signature linking, type checking, diagnostics, linked JSON, and backend generation.
 - Deriver methods do not receive compiler-injected metadata parameters. The generated method receiver is available as `receiver`.
-- Derivers inspect metadata through the existing reflection API. `reflection_value(receiver)` returns `DataInfo`, whose `fields` expose linked field metadata.
+- Derivers inspect metadata through the existing reflection API. `reflection_value(receiver)` returns `DataValueInfo`, whose `fields` expose linked field metadata and whose `values` expose field values.
 - Metadata values come from linked field metadata, so inherited parent fields and validated field shapes are preserved.
 - V1 does not evaluate arbitrary `.cfun` at compile time, does not run user IO, and does not expose mutable compiler state.
 - V1 keeps `.coo` derive support out of scope. OO remains a separate frontend and is still Java-only for code generation.
@@ -32,11 +32,11 @@ Capybara Functional v1 adds a constrained derive system:
 Example:
 
 ```cfun
-from /capy/meta_prog/Reflection import { DataInfo, reflection_value }
+from /capy/meta_prog/Reflection import { DataValueInfo, reflection_value }
 
 deriver Show {
     fun show(): string =
-        let info: DataInfo = reflection_value(receiver)
+        let info: DataValueInfo = reflection_value(receiver)
         let body: string = info.fields |> info.name + " { ", (acc, field) =>
             acc + (if acc == info.name + " { " then "" else ", ") + field.name
         body + " }"

@@ -3,6 +3,8 @@ package dev.capylang.test;
 import capy.metaProg.Reflection;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 class ReflectionFeatureTest {
@@ -49,6 +51,78 @@ class ReflectionFeatureTest {
         assertThat(a.fields()).extracting(Reflection.DataFieldInfo::name).containsExactly("name", "a");
         assertThat(a.fields().get(1).type()).isInstanceOf(Reflection.PrimitiveInfo.class);
         assertThat(a.fields().get(1).type().name()).isEqualTo("int");
+        assertThat(a.values()).extracting(Reflection.DataFieldValueInfo::name).containsExactly("name", "a");
+        assertThat(a.values()).extracting(Reflection.DataFieldValueInfo::value).containsExactly("letter-a", 1);
+        assertThat(a.values().get(1).type().name()).isEqualTo("int");
+    }
+
+    @Test
+    void reflectsFunctionalDataValuesWithCollectionFields() {
+        var b = ReflectionFeature.reflectionValueB(new ReflectionFeature.B("letter-b", List.of("red", "blue")));
+
+        assertThat(b.name()).isEqualTo("B");
+        assertThat(b.fields()).extracting(Reflection.DataFieldInfo::name).containsExactly("name", "b");
+        assertThat(b.values()).extracting(Reflection.DataFieldValueInfo::name).containsExactly("name", "b");
+        assertThat(b.values()).extracting(Reflection.DataFieldValueInfo::value)
+                .containsExactly("letter-b", List.of("red", "blue"));
+        assertThat(b.values().get(1).type()).isInstanceOf(Reflection.ListInfo.class);
+        assertThat(((Reflection.ListInfo) b.values().get(1).type()).element_type().name()).isEqualTo("string");
+    }
+
+    @Test
+    void reflectsEmptyFunctionalDataValues() {
+        var empty = ReflectionFeature.reflectionValueEmpty();
+
+        assertThat(empty.name()).isEqualTo("ReflectedEmpty");
+        assertThat(empty.pkg().name()).isEqualTo("ReflectionFeature");
+        assertThat(empty.pkg().path()).isEqualTo("dev/capylang/test/ReflectionFeature");
+        assertThat(empty.fields()).isEmpty();
+        assertThat(empty.values()).isEmpty();
+    }
+
+    @Test
+    void reflectsFunctionalDataValuesWithSpreadFields() {
+        var employee = ReflectionFeature.reflectionValueEmployee(
+                new ReflectionFeature.ReflectedEmployee("E-1", "R&D", true));
+
+        assertThat(employee.name()).isEqualTo("ReflectedEmployee");
+        assertThat(employee.fields()).extracting(Reflection.DataFieldInfo::name)
+                .containsExactly("id", "department", "active");
+        assertThat(employee.values()).extracting(Reflection.DataFieldValueInfo::name)
+                .containsExactly("id", "department", "active");
+        assertThat(employee.values()).extracting(Reflection.DataFieldValueInfo::value)
+                .containsExactly("E-1", "R&D", true);
+        assertThat(employee.values().get(2).type().name()).isEqualTo("bool");
+    }
+
+    @Test
+    void reflectionValuePreservesDataInfoMetadataSurface() {
+        var a = ReflectionFeature.reflectionValueA(new ReflectionFeature.A("letter-a", 1));
+
+        assertThat(a.pkg().name()).isEqualTo("ReflectionFeature");
+        assertThat(a.pkg().path()).isEqualTo("dev/capylang/test/ReflectionFeature");
+        assertThat(a.functions()).isEmpty();
+        assertThat(a.fields()).extracting(Reflection.DataFieldInfo::name).containsExactly("name", "a");
+    }
+
+    @Test
+    void reflectionValueEntriesPreserveDataFieldInfoMetadata() {
+        var a = ReflectionFeature.reflectionValueA(new ReflectionFeature.A("letter-a", 1));
+
+        assertThat(a.values()).hasSize(2);
+        assertThat(a.values().get(0).name()).isEqualTo(a.fields().get(0).name());
+        assertThat(a.values().get(0).type().name()).isEqualTo(a.fields().get(0).type().name());
+        assertThat(a.values().get(1).name()).isEqualTo(a.fields().get(1).name());
+        assertThat(a.values().get(1).type().name()).isEqualTo(a.fields().get(1).type().name());
+    }
+
+    @Test
+    void reflectionValueIncludesInheritedParentFieldValuesInMetadataOrder() {
+        var a = ReflectionFeature.reflectionValueA(new ReflectionFeature.A("letter-a", 1));
+
+        assertThat(a.fields()).extracting(Reflection.DataFieldInfo::name).containsExactly("name", "a");
+        assertThat(a.values()).extracting(Reflection.DataFieldValueInfo::name).containsExactly("name", "a");
+        assertThat(a.values()).extracting(Reflection.DataFieldValueInfo::value).containsExactly("letter-a", 1);
     }
 
     @Test

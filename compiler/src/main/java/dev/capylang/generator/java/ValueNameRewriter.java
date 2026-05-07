@@ -50,6 +50,8 @@ public class ValueNameRewriter {
                     rewriteValueInLinkedPipeExpression(name, uniqueName, linkedPipeExpression);
             case CompiledPipeReduceExpression linkedPipeReduceExpression ->
                     rewriteValueInLinkedPipeReduceExpression(name, uniqueName, linkedPipeReduceExpression);
+            case CompiledReflectionValue linkedReflectionValue ->
+                    rewriteValueInLinkedReflectionValue(name, uniqueName, linkedReflectionValue);
             case CompiledSliceExpression linkedSliceExpression ->
                     rewriteValueInLinkedSliceExpression(name, uniqueName, linkedSliceExpression);
             case CompiledTupleExpression linkedTupleExpression ->
@@ -305,6 +307,21 @@ public class ValueNameRewriter {
     private static CompiledExpression rewriteValueInLinkedNewData(String name, String uniqueName, CompiledNewData linkedNewData) {
         // todo
         return linkedNewData;
+    }
+
+    private static CompiledExpression rewriteValueInLinkedReflectionValue(
+            String name,
+            String uniqueName,
+            CompiledReflectionValue linkedReflectionValue
+    ) {
+        return new CompiledReflectionValue(
+                rewriteValueInExpression(name, uniqueName, linkedReflectionValue.target()),
+                linkedReflectionValue.name(),
+                linkedReflectionValue.packageName(),
+                linkedReflectionValue.packagePath(),
+                linkedReflectionValue.fields(),
+                linkedReflectionValue.type()
+        );
     }
 
     private static CompiledExpression rewriteValueInLinkedPipeAnyExpression(

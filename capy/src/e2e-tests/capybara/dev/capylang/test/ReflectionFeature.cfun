@@ -1,8 +1,11 @@
-from /capy/meta_prog/Reflection import { AnyInfo, DataInfo, MethodInfo, reflection, reflection_value }
+from /capy/meta_prog/Reflection import { AnyInfo, DataInfo, DataValueInfo, MethodInfo, reflection, reflection_value }
 
 type Letter { name: string } = A | B
 data A { a: int }
 data B { b: list[string] }
+data ReflectedEmpty {}
+data ReflectedEntity { id: string }
+data ReflectedEmployee { department: string, active: bool, ...ReflectedEntity }
 
 fun reflection_letter(): AnyInfo = reflection(Letter)
 
@@ -14,7 +17,13 @@ fun reflection_a2(a: A): AnyInfo = reflection(a)
 
 fun reflection_b(): AnyInfo = reflection(B)
 
-fun reflection_value_a(a: A): DataInfo = reflection_value(a)
+fun reflection_value_a(a: A): DataValueInfo = reflection_value(a)
+
+fun reflection_value_b(b: B): DataValueInfo = reflection_value(b)
+
+fun reflection_value_empty(): DataValueInfo = reflection_value(ReflectedEmpty {})
+
+fun reflection_value_employee(employee: ReflectedEmployee): DataValueInfo = reflection_value(employee)
 
 fun test_method(l: list[string], x: int, d: double, a: A, letter: Letter): string = "ok"
 
