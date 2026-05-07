@@ -8,14 +8,14 @@ type AnyInfo { name: string, pkg: PackageInfo } =
     | GenericParamInfo
 
 type FunctionalProgrammingInfo = DataInfo | TypeInfo | FunctionInfo | MethodInfo
-data DataInfo { fields: list[FieldInfo], functions: list[FunctionInfo] }
-data TypeInfo { fields: list[FieldInfo], functions: list[FunctionInfo], "data": set[DataInfo] }
+data DataInfo { fields: list[DataFieldInfo], functions: list[FunctionInfo] }
+data TypeInfo { fields: list[DataFieldInfo], functions: list[FunctionInfo], "data": set[DataInfo] }
 data FunctionInfo { params: list[ParamInfo], return_type: AnyInfo }
 data MethodInfo { params: list[ParamInfo], return_type: AnyInfo }
 
 type ObjectOrientedInfo = InterfaceInfo | ObjectInfo | TraitInfo
 data InterfaceInfo { methods: list[MethodInfo], parents: set[ObjectOrientedInfo] }
-data ObjectInfo { open: bool, fields: list[FieldInfo], methods: list[MethodInfo], parents: set[ObjectOrientedInfo] }
+data ObjectInfo { open: bool, fields: list[ObjectFieldInfo], methods: list[MethodInfo], parents: set[ObjectOrientedInfo] }
 data TraitInfo { methods: list[MethodInfo], parents: set[ObjectOrientedInfo] }
 
 data PrimitiveInfo {}
@@ -30,8 +30,15 @@ data FunctionTypeInfo { params: list[AnyInfo], return_type: AnyInfo }
 data GenericParamInfo {}
 
 data PackageInfo { name: string, path: string }
-data FieldInfo { name: string, type: AnyInfo }
+data DataFieldInfo { name: string, type: AnyInfo }
+data ObjectFieldInfo { name: string, type: AnyInfo }
 data ParamInfo { name: string, type: AnyInfo }
+
+data DataValueInfo { info: DataInfo, fields: list[DataValueFieldInfo] }
+data DataValueFieldInfo { name: string, type: AnyInfo }
 
 /// Returns reflection metadata for a type or function symbol.
 fun reflection(type: any): AnyInfo = <native>
+
+/// Returns reflection metadata and field values for a data value.
+fun reflection_value(obj: data): DataValueInfo = <native>
