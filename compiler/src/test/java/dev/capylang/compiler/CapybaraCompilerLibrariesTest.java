@@ -142,6 +142,42 @@ class CapybaraCompilerLibrariesTest {
     }
 
     @Test
+    void shouldUseQualifiedModuleKeyForLocalDeriversWhenModuleNamesCollide() {
+        var compiled = compileProgram(List.of(
+                new RawModule("Serde", "/foo", """
+                        deriver Show {
+                            fun show(): string = "foo"
+                        }
+
+                        data User { name: string } derive Show
+
+                        fun render(): string = User { name: "Ada" }.show()
+                        """),
+                new RawModule("Serde", "/bar", """
+                        data User { name: string }
+                        """)
+        ), new java.util.TreeSet<>());
+
+        var fooSerde = compiled.modules().stream()
+                .filter(module -> module.name().equals("Serde"))
+                .filter(module -> module.path().equals("/foo"))
+                .findFirst()
+                .orElseThrow();
+        var barSerde = compiled.modules().stream()
+                .filter(module -> module.name().equals("Serde"))
+                .filter(module -> module.path().equals("/bar"))
+                .findFirst()
+                .orElseThrow();
+
+        assertThat(fooSerde.functions())
+                .extracting(CompiledFunction::name)
+                .contains("__method__User__show", "render");
+        assertThat(barSerde.functions())
+                .extracting(CompiledFunction::name)
+                .doesNotContain("__method__User__show");
+    }
+
+    @Test
     void shouldReflectDataValueFields() {
         var libraries = compileProgram(List.of(reflectionMetadataModule()), new java.util.TreeSet<>()).modules();
         var compiled = compileProgram(List.of(new RawModule("Consumer", "/foo/app", """
