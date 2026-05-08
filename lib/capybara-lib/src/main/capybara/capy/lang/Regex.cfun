@@ -50,7 +50,7 @@ fun Regex.matches(input: string): bool = input ? this.pattern
 fun Regex.find(input: string): Option[Match] =
     match _find_all(this.pattern, input, [])[0] with
     case Some { value } -> Some { value }
-    case None -> None
+    case None -> None {}
 
 fun Regex.find_all(input: string): /capy/lang/Seq[Match] =
     /capy/lang/Seq.to_seq(_find_all(this.pattern, input, []))
@@ -66,6 +66,6 @@ fun Regex.`~~`(input: string): /capy/lang/Seq[Match] = this.find_all(input)
 fun Regex.`~>`(replacement: string): string => string = this.replace(replacement)
 fun Regex.`/>`(input: string): list[string] = this.split(input)
 
-fun Match.group(index: int): Option[string] = if index == 0 then Some { value: this.group_value } else None
+fun Match.group(index: int): Option[string] = if index == 0 then Some { value: this.group_value } else None {}
 
 fun Match.groups(): list[Option[string]] = [Some { value: this.group_value }]

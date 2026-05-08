@@ -38,7 +38,7 @@ fun show_user(): string =
     DerivedUser { name: "Ada", age: 42 }.show()
 
 fun show_empty(): string =
-    let info: DataValueInfo = reflection(Empty)
+    let info: DataValueInfo = reflection(Empty {})
     info.name + " {  }"
 
 fun show_employee(): string =

@@ -68,7 +68,7 @@ fun to_json(obj: data): Result[JsonObject] =
         case Option o -> {
             match o with
             case Some { value } -> any_to_json(value)
-            case None -> Success { JsonNull }
+            case None -> Success { JsonNull {} }
         }
         case Result r -> {
             match r with
@@ -158,7 +158,7 @@ fun _deserialize_json_array(json: string): Result[_Parse[JsonArray]] =
 
 fun _deserialize_json_null(json: string): Result[_Parse[JsonNull]] =
     if json.starts_with('null')
-    then Success { _Parse { JsonNull, json[4:] } }
+    then Success { _Parse { JsonNull {}, json[4:] } }
     else {
         let actual =
             if json.size > 4

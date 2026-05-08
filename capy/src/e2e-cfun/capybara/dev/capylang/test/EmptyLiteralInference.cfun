@@ -63,7 +63,7 @@ data OutcomeBatch { outcomes: list[Outcome] }
 
 fun to_seq_using_end_literal(list: list[T]): SeqEnd[T] =
     list
-        |> EndEnd, (acc, value) => ConsEnd { value, () => acc }
+        |> EndEnd {}, (acc, value) => ConsEnd { value, () => acc }
 
 fun seq_end_head_or_default(s: SeqEnd[int], d: int): int =
     match s with

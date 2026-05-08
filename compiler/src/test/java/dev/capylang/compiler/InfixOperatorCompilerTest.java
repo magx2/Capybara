@@ -149,8 +149,8 @@ class InfixOperatorCompilerTest {
                         data Some[T] { value: T }
                         single None
 
-                        fun to_seq(values: list[T]): Seq[T] = End
-                        fun Seq[T].first_match(pred: T => bool): Option[T] = None
+                        fun to_seq(values: list[T]): Seq[T] = End {}
+                        fun Seq[T].first_match(pred: T => bool): Option[T] = None {}
                         """)
         )).modules();
 
@@ -176,7 +176,7 @@ class InfixOperatorCompilerTest {
                         data Cons[T] { value: T, rest: () => Seq[T] }
                         single End
 
-                        fun to_seq(values: list[T]): Seq[T] = End
+                        fun to_seq(values: list[T]): Seq[T] = End {}
                         """)
         )).modules();
 

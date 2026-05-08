@@ -250,7 +250,7 @@ class JavaExpressionEvaluatorTest {
                 type TestResult = Passed
                 data TestCase { name: string, result: TestResult, assertions_count: int, execution_time: long }
 
-                private fun execute(assertions: list[Assertion]): TestResult = Passed
+                private fun execute(assertions: list[Assertion]): TestResult = Passed {}
                 fun test(name: string, assert_: Assert): TestCase =
                     TestCase {
                         name: name,
@@ -279,7 +279,7 @@ class JavaExpressionEvaluatorTest {
                 type TestResult = Passed
                 data TestCase { name: string, result: TestResult, assertions_count: int, execution_time: long }
 
-                private fun execute(assertions: list[Assertion]): TestResult = Passed
+                private fun execute(assertions: list[Assertion]): TestResult = Passed {}
                 fun test(name: string, assert_: Assert): TestCase =
                     TestCase {
                         name: name,
@@ -326,6 +326,24 @@ class JavaExpressionEvaluatorTest {
         assertThat(generated).contains("enum Color implements dev.capylang.CapybaraDataValue {RED, BLUE;");
         assertThat(generated).contains("new capy.metaProg.Reflection.DataValueInfo(\"Lonely\"");
         assertThat(generated).contains("case RED -> new capy.metaProg.Reflection.DataValueInfo(\"RED\"");
+    }
+
+    @Test
+    void shouldQualifyConstructedEnumValuesInGeneratedJava() {
+        var generatedProgram = new JavaGenerator().generate(compileProgram("Consumer", "/foo/app", """
+                enum PathRoot { RELATIVE, ABSOLUTE }
+                fun root(): PathRoot = PathRoot.ABSOLUTE {}
+                fun inferred_root() = PathRoot.RELATIVE {}
+                """));
+        var generated = generatedProgram.modules().stream()
+                .map(dev.capylang.generator.GeneratedModule::code)
+                .collect(joining("\n"));
+
+        assertThat(generated)
+                .contains("public static PathRoot inferredRoot()")
+                .contains("return PathRoot.ABSOLUTE;")
+                .contains("return PathRoot.RELATIVE;");
+        assertGeneratedJavaCompiles(generatedProgram);
     }
 
     @Test
@@ -1031,7 +1049,7 @@ class JavaExpressionEvaluatorTest {
                                 type Knight = EnglishKnight | Tom
                                 data EnglishKnight { power: float }
                                 single Tom
-                                fun summon_tom(): Knight = Tom
+                                fun summon_tom(): Knight = Tom {}
                                 """,
                         "return Tom.INSTANCE;"
                 ),

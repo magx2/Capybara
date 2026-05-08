@@ -20,9 +20,15 @@ import static java.lang.System.lineSeparator;
 public class JavaExpressionEvaluator {
     private static final ThreadLocal<java.util.Map<String, String>> FUNCTION_NAME_OVERRIDES =
             ThreadLocal.withInitial(java.util.Map::of);
+    private static final ThreadLocal<java.util.Map<String, String>> ENUM_VALUE_OWNER_OVERRIDES =
+            ThreadLocal.withInitial(java.util.Map::of);
 
     public static void setFunctionNameOverrides(java.util.Map<String, String> functionNameOverrides) {
         FUNCTION_NAME_OVERRIDES.set(java.util.Map.copyOf(functionNameOverrides));
+    }
+
+    public static void setEnumValueOwnerOverrides(java.util.Map<String, String> enumValueOwnerOverrides) {
+        ENUM_VALUE_OWNER_OVERRIDES.set(java.util.Map.copyOf(enumValueOwnerOverrides));
     }
     private static final java.util.concurrent.atomic.AtomicLong OPTION_CASE_VAR_COUNTER =
             new java.util.concurrent.atomic.AtomicLong();
@@ -1757,7 +1763,8 @@ public class JavaExpressionEvaluator {
             case dev.capylang.compiler.CompiledDataType linkedDataType ->
                     isOptionSomeTypeName(linkedDataType.name()) || isOptionNoneTypeName(linkedDataType.name())
                             ? "java.util.Optional"
-                            : normalizeJavaTypeReference(linkedDataType.name());
+                            : enumValueOwnerTypeReference(linkedDataType)
+                                    .orElseGet(() -> normalizeJavaTypeReference(linkedDataType.name()));
             case dev.capylang.compiler.CompiledDataParentType linkedDataParentType ->
                     normalizeJavaTypeReference(linkedDataParentType.name());
             case dev.capylang.compiler.CompiledGenericTypeParameter genericTypeParameter ->
@@ -2424,6 +2431,12 @@ public class JavaExpressionEvaluator {
             case CompiledMatchExpression.ConstructorPattern constructorPattern -> {
                 var constructorType = resolveConstructorType(matchType, constructorPattern.constructorName());
                 var patternType = constructorPatternTypeName(matchType, constructorType, constructorPattern.constructorName());
+                if (constructorType != null && constructorType.singleton() && constructorPattern.fieldPatterns().isEmpty()) {
+                    if (matchType instanceof CompiledDataParentType parentType && parentType.enumType()) {
+                        yield "case " + enumValuePatternName(constructorType.name());
+                    }
+                    yield "case " + patternType + " __ignored";
+                }
                 var bindingNames = constructorPatternBindingNames(constructorPattern, caseBindingNames);
                 var constructorCasePattern = "case " + patternType + "("
                                              + bindingNames.stream().map(name -> "var " + name).reduce((a, b) -> a + ", " + b).orElse("")
@@ -2432,6 +2445,12 @@ public class JavaExpressionEvaluator {
                 yield guard.map(s -> constructorCasePattern + " when " + s).orElse(constructorCasePattern);
             }
         };
+    }
+
+    private static String enumValuePatternName(String constructorName) {
+        var normalized = constructorName.replace('\\', '/');
+        var separator = Math.max(normalized.lastIndexOf('/'), normalized.lastIndexOf('.'));
+        return separator >= 0 ? normalized.substring(separator + 1) : normalized;
     }
 
     private static String optionParentCasePattern(
@@ -2975,7 +2994,7 @@ public class JavaExpressionEvaluator {
         if (dataType.singleton()) {
             var javaType = normalizeJavaTypeReference(dataType.name());
             if (isEnumValueType(dataType)) {
-                return current.addExpression(javaType);
+                return current.addExpression(enumValueReference(dataType));
             }
             return current.addExpression(javaType + ".INSTANCE");
         }
@@ -3028,8 +3047,57 @@ public class JavaExpressionEvaluator {
     }
 
     private static boolean isEnumValueType(CompiledDataType dataType) {
-        return dataType.name().equals(dataType.name().toUpperCase(java.util.Locale.ROOT));
+        return qualifiedEnumValueName(dataType.name())
+                .map(name -> isUppercaseName(name.valueName()))
+                .orElseGet(() -> isUppercaseName(dataType.name()));
     }
+
+    private static boolean isUppercaseName(String name) {
+        return name.equals(name.toUpperCase(java.util.Locale.ROOT));
+    }
+
+    private static String enumValueReference(CompiledDataType dataType) {
+        return qualifiedEnumValueName(dataType.name())
+                .map(name -> normalizeJavaTypeReference(name.ownerName()) + "." + enumValuePatternName(name.valueName()))
+                .orElseGet(() -> {
+                    var ownerName = enumValueOwnerOverrides().get(dataType.name());
+                    if (ownerName != null) {
+                        return normalizeJavaTypeReference(ownerName) + "." + enumValuePatternName(dataType.name());
+                    }
+                    return normalizeJavaTypeReference(dataType.name());
+                });
+    }
+
+    private static Optional<String> enumValueOwnerTypeReference(CompiledDataType dataType) {
+        return qualifiedEnumValueName(dataType.name())
+                .filter(name -> isUppercaseName(name.valueName()))
+                .map(name -> normalizeJavaTypeReference(name.ownerName()))
+                .or(() -> Optional.ofNullable(enumValueOwnerOverrides().get(dataType.name()))
+                        .filter(ignored -> isUppercaseName(dataType.name()))
+                        .map(JavaExpressionEvaluator::normalizeJavaTypeReference));
+    }
+
+    private record QualifiedEnumValueName(String ownerName, String valueName) {
+    }
+
+    private static Optional<QualifiedEnumValueName> qualifiedEnumValueName(String typeName) {
+        var normalized = typeName.replace('\\', '/');
+        var valueSeparator = normalized.lastIndexOf('.');
+        if (valueSeparator < 0 || valueSeparator == normalized.length() - 1) {
+            return Optional.empty();
+        }
+        var ownerName = normalized.substring(0, valueSeparator);
+        var valueName = normalized.substring(valueSeparator + 1);
+        if (ownerName.isBlank() || valueName.isBlank()) {
+            return Optional.empty();
+        }
+        return Optional.of(new QualifiedEnumValueName(ownerName, valueName));
+    }
+
+    private static java.util.Map<String, String> enumValueOwnerOverrides() {
+        return ENUM_VALUE_OWNER_OVERRIDES.get();
+    }
+
     private static Scope evaluateStringValue(CompiledStringValue stringValue, Scope scope) {
         return scope.addExpression(stringValue.toString());
     }

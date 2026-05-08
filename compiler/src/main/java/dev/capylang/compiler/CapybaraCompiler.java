@@ -4302,6 +4302,11 @@ public class CapybaraCompiler {
         if (returnType instanceof CompiledDataParentType parentType
             && expression instanceof dev.capylang.compiler.expression.CompiledNewData newData
             && newData.type() instanceof CompiledDataType actualDataType) {
+            if (parentType.enumType()
+                && actualDataType.singleton()
+                && parentType.subTypes().stream().anyMatch(subType -> sameTypeName(subType.name(), actualDataType.name()))) {
+                return expression;
+            }
             var matchingSubtype = parentType.subTypes().stream()
                     .filter(subType -> sameTypeName(subType.name(), actualDataType.name()))
                     .findFirst();

@@ -29,11 +29,11 @@ fun should_assert_finite_sequence(): Assert =
         .does_not_contain(4)
 
 fun should_assert_empty_sequence(): Assert =
-    let seq: Seq[int] = End
+    let seq: Seq[int] = End {}
     assert_that(seq)
         .has_size(0)
         .is_empty()
-        .is_equal_to(End)
+        .is_equal_to(End {})
 
 fun should_take_from_infinite_sequence(): Assert =
     let l = natural_seq().take(5)
@@ -64,7 +64,7 @@ fun should_return_first_element(): Assert =
     assert_that(seq.first()).contains(3)
 
 fun should_return_empty_first_on_empty_sequence(): Assert =
-    let seq: Seq[int] = End
+    let seq: Seq[int] = End {}
     assert_that(seq.first()).is_equal_to(None {})
 
 fun should_find_first_matching_element(): Assert =
@@ -82,5 +82,4 @@ fun should_detect_any_matching_element(): Assert =
 fun should_detect_no_matching_element(): Assert =
     let seq = to_seq([1, 2, 3])
     assert_that(seq.any(x => x > 10)).is_equal_to(false)
-
 

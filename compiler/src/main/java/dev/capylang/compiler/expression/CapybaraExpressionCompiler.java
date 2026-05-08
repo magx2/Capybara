@@ -663,7 +663,11 @@ public class CapybaraExpressionCompiler {
             if (functionCall.arguments().isEmpty()) {
                 var singleton = findSingletonDataType(functionCall.name());
                 if (singleton.isPresent()) {
-                    return Result.success(new CompiledNewData(singleton.get(), List.of()));
+                    return withPosition(
+                            Result.error("Singleton data value `" + functionCall.name() + "` must be constructed with `"
+                                         + functionCall.name() + " {}`"),
+                            functionCall.position()
+                    );
                 }
             }
             return functionCall.arguments()
@@ -1151,7 +1155,17 @@ public class CapybaraExpressionCompiler {
                 + "\"");
     }
 
-    private Optional<CompiledDataType> findSingletonDataType(String constructorName) {
+    private record SingletonDataType(CompiledDataType type, Optional<CompiledDataParentType> enumParent) {
+    }
+
+    private Optional<SingletonDataType> findSingletonDataType(String constructorName) {
+        var qualified = qualifiedConstructorName(constructorName);
+        if (qualified.isPresent()) {
+            var qualifiedEnum = findEnumSingletonDataType(constructorName, qualified);
+            if (qualifiedEnum.isPresent()) {
+                return qualifiedEnum;
+            }
+        }
         var direct = dataTypes.values().stream()
                 .filter(CompiledDataType.class::isInstance)
                 .map(CompiledDataType.class::cast)
@@ -1159,15 +1173,47 @@ public class CapybaraExpressionCompiler {
                 .filter(dataType -> typeNameMatches(dataType.name(), constructorName))
                 .findFirst();
         if (direct.isPresent()) {
-            return direct;
+            return direct.map(dataType -> new SingletonDataType(dataType, Optional.empty()));
         }
-        return dataTypes.values().stream()
-                .filter(CompiledDataParentType.class::isInstance)
-                .map(CompiledDataParentType.class::cast)
-                .filter(CompiledDataParentType::enumType)
-                .flatMap(parentType -> parentType.subTypes().stream())
-                .filter(dataType -> typeNameMatches(dataType.name(), constructorName))
-                .findFirst();
+        return findEnumSingletonDataType(constructorName, qualified);
+    }
+
+    private Optional<SingletonDataType> findEnumSingletonDataType(
+            String constructorName,
+            Optional<QualifiedConstructorName> qualified
+    ) {
+        for (var type : dataTypes.values()) {
+            if (!(type instanceof CompiledDataParentType parentType) || !parentType.enumType()) {
+                continue;
+            }
+            for (var subType : parentType.subTypes()) {
+                var matches = qualified
+                        .map(parts -> typeNameMatches(parentType.name(), parts.ownerName())
+                                      && typeNameMatches(subType.name(), parts.valueName()))
+                        .orElseGet(() -> typeNameMatches(subType.name(), constructorName));
+                if (matches) {
+                    return Optional.of(new SingletonDataType(subType, Optional.of(parentType)));
+                }
+            }
+        }
+        return Optional.empty();
+    }
+
+    private record QualifiedConstructorName(String ownerName, String valueName) {
+    }
+
+    private Optional<QualifiedConstructorName> qualifiedConstructorName(String constructorName) {
+        var normalized = constructorName.replace('\\', '/');
+        var valueSeparator = normalized.lastIndexOf('.');
+        if (valueSeparator < 0 || valueSeparator == normalized.length() - 1) {
+            return Optional.empty();
+        }
+        var ownerName = normalized.substring(0, valueSeparator);
+        var valueName = normalized.substring(valueSeparator + 1);
+        if (ownerName.isBlank() || valueName.isBlank()) {
+            return Optional.empty();
+        }
+        return Optional.of(new QualifiedConstructorName(ownerName, valueName));
     }
 
     private Optional<Result<CompiledExpression>> tryLinkEnumValuesFieldAccess(FieldAccess fieldAccess, Scope scope) {
@@ -6929,7 +6975,7 @@ public class CapybaraExpressionCompiler {
     }
 
     private Result<CompiledExpression> rawLinkNewData(NewData newData, Scope scope) {
-        return linkTypeInScope(newData.type(), scope)
+        return linkNewDataType(newData.type(), scope)
                 .flatMap(type -> linkSpreadAssignments(newData.spreads(), scope)
                         .flatMap(spreadAssignments ->
                                 linkFieldAssignment(newData.assignments(), scope, type)
@@ -6967,6 +7013,47 @@ public class CapybaraExpressionCompiler {
                                                 ));
                                             });
                                         }))));
+    }
+
+    private Result<CompiledType> linkNewDataType(Type type, Scope scope) {
+        var linkedType = linkTypeInScope(type, scope);
+        Optional<SingletonDataType> singleton = Optional.empty();
+        if (type instanceof DataType dataType) {
+            singleton = findSingletonDataType(dataType.name());
+            if (singleton.isPresent() && singleton.orElseThrow().enumParent().isPresent()) {
+                return Result.success(singletonConstructionType(singleton.orElseThrow()));
+            }
+        }
+        if (linkedType instanceof Result.Success<CompiledType>) {
+            var value = ((Result.Success<CompiledType>) linkedType).value();
+            if (value instanceof CompiledDataType dataType && dataType.singleton()) {
+                var enumParent = findEnumParentForValue(dataType.name());
+                if (enumParent != null) {
+                    return Result.success(singletonConstructionType(new SingletonDataType(dataType, Optional.of(enumParent))));
+                }
+            }
+            return linkedType;
+        }
+        if (singleton.isPresent()) {
+            return Result.success(singletonConstructionType(singleton.orElseThrow()));
+        }
+        return linkedType;
+    }
+
+    private CompiledDataType singletonConstructionType(SingletonDataType singleton) {
+        if (singleton.enumParent().isEmpty()) {
+            return singleton.type();
+        }
+        var enumParent = singleton.enumParent().orElseThrow();
+        return new CompiledDataType(
+                enumParent.name() + "." + singleton.type().name(),
+                singleton.type().fields(),
+                singleton.type().typeParameters(),
+                singleton.type().extendedTypes(),
+                singleton.type().comments(),
+                singleton.type().visibility(),
+                singleton.type().singleton()
+        );
     }
 
     private Result<CompiledExpression> applyProtectedConstructorIfNeeded(

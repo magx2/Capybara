@@ -135,7 +135,7 @@ fun should_convert_data_with_wrapper_and_nested_fields_to_json_object(): Assert 
     assert_that(to_json(sample)).succeeds(JsonObject {
         value: {
             "present": JsonString { value: "value" },
-            "absent": JsonNull,
+            "absent": JsonNull {},
             "success": JsonNumberLong { value: 7 },
             "error": JsonString { value: "bad" },
             "inner": JsonObject {
@@ -223,7 +223,7 @@ fun test_serialize_object_with_primitive_types(): Assert =
         "ageDouble" : JsonNumberDouble { value: 50.5 },
         "ageFloat" : JsonNumberDouble { value: 60.5f },
         "married" : JsonBool { value: true },
-        "car" : JsonNull,
+        "car" : JsonNull {},
     }};
     let ser = serialize(json)
     assert_that(ser)
@@ -256,7 +256,7 @@ fun should_stringify_top_level_json_values(): Assert =
         assert_that(stringify(JsonNumberLong { value: 7L })).is_equal_to("7"),
         assert_that(stringify(JsonNumberDouble { value: 1.5 })).is_equal_to("1.5"),
         assert_that(stringify(JsonBool { value: true })).is_equal_to("true"),
-        assert_that(stringify(JsonNull)).is_equal_to("null"),
+        assert_that(stringify(JsonNull {})).is_equal_to("null"),
     ])
 
 fun should_deserialize_simple_object(): Assert =
@@ -328,7 +328,7 @@ fun should_fail_deserialize_object_as_bool_types(): Assert =
 
 fun should_deserialize_object_as_null(): Assert =
     assert_that(deserialize('{"foo":null}'))
-        .succeeds(JsonObject { value: { "foo": JsonNull } })
+        .succeeds(JsonObject { value: { "foo": JsonNull {} } })
 
 fun should_fail_deserialize_object_as_null(): Assert =
     assert_that(deserialize('{"foo":nul}')).fails('Expected `null`, but got `nul`!')
@@ -346,7 +346,7 @@ fun should_deserialize_array_with_values(): Assert =
                         JsonNumberLong { value: 1 },
                         JsonString { value: "x" },
                         JsonBool { value: false },
-                        JsonNull
+                        JsonNull {}
                     ]
                 }
             }

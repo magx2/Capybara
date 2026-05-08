@@ -59,6 +59,7 @@ public class JavaAstBuilder {
                 .filter(parentType -> !parentType.enumType())
                 .collect(toCollection(TreeSet::new)), functionsByOwnerPrefix);
         var subClassToInterface = findSubClassToInterface(typeIndex.dataParentTypes(), interfaces);
+        var enumValueOwnerOverrides = enumValueOwnerOverrides(typeIndex);
         return new JavaClass(
                 sortedSetOf(generatedAnnotation()),
                 javaClassName,
@@ -70,7 +71,8 @@ public class JavaAstBuilder {
                 buildStaticMethods(module.functions(), staticMethodsSelfCallClassNames),
                 interfaces,
                 buildRecords(typeIndex.dataTypes(), subClassToInterface, functionsByOwnerPrefix, reflectionFallbackPackagePath),
-                buildEnums(typeIndex, subClassToInterface, reflectionFallbackPackagePath));
+                buildEnums(typeIndex, subClassToInterface, reflectionFallbackPackagePath),
+                enumValueOwnerOverrides);
     }
 
     private String reflectionFallbackPackagePath(CompiledModule module) {
@@ -128,6 +130,25 @@ public class JavaAstBuilder {
             }
         }
         return new ModuleTypeIndex(dataParentTypes, dataTypes, Set.copyOf(enumValueTypeNames));
+    }
+
+    private Map<String, String> enumValueOwnerOverrides(ModuleTypeIndex typeIndex) {
+        var ownersByValue = new LinkedHashMap<String, LinkedHashSet<String>>();
+        for (var parentType : typeIndex.dataParentTypes()) {
+            if (!parentType.enumType()) {
+                continue;
+            }
+            for (var subType : parentType.subTypes()) {
+                ownersByValue.computeIfAbsent(subType.name(), ignored -> new LinkedHashSet<>()).add(parentType.name());
+            }
+        }
+        var overrides = new LinkedHashMap<String, String>();
+        ownersByValue.forEach((valueName, ownerNames) -> {
+            if (ownerNames.size() == 1) {
+                overrides.put(valueName, ownerNames.iterator().next());
+            }
+        });
+        return Map.copyOf(overrides);
     }
 
     private SortedMap<String, List<CompiledFunction>> indexFunctionsByOwnerPrefix(Set<CompiledFunction> functions) {
@@ -478,6 +499,12 @@ public class JavaAstBuilder {
         if (genericStart > 0) {
             rawTypeName = rawTypeName.substring(0, genericStart);
         }
+        if (type instanceof CompiledDataType dataType && dataType.singleton()) {
+            var enumOwner = qualifiedEnumValueOwner(rawTypeName);
+            if (enumOwner.isPresent()) {
+                return buildGenericDataType(new CompiledDataParentType(enumOwner.orElseThrow(), List.of(), List.of(), List.of(), true));
+            }
+        }
         if ("Option".equals(rawTypeName) || isOptionTypeName(rawTypeName)) {
             return new JavaType("java.util.Optional");
         }
@@ -519,6 +546,19 @@ public class JavaAstBuilder {
             return withTypeParametersIfGeneric(type, qualifiedName);
         }
         return withTypeParametersIfGeneric(type, buildClassName(rawTypeName).toString());
+    }
+
+    private Optional<String> qualifiedEnumValueOwner(String typeName) {
+        var normalized = typeName.replace('\\', '/');
+        var valueSeparator = normalized.lastIndexOf('.');
+        if (valueSeparator <= 0 || valueSeparator == normalized.length() - 1) {
+            return Optional.empty();
+        }
+        var valueName = normalized.substring(valueSeparator + 1);
+        if (!valueName.equals(valueName.toUpperCase(Locale.ROOT))) {
+            return Optional.empty();
+        }
+        return Optional.of(normalized.substring(0, valueSeparator));
     }
 
     private JavaType withTypeParametersIfGeneric(GenericDataType type, String rawJavaTypeName) {

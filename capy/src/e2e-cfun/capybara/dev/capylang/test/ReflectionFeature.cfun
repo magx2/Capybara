@@ -21,7 +21,7 @@ fun reflection_data_a(a: A): DataValueInfo = reflection(a)
 
 fun reflection_data_b(b: B): DataValueInfo = reflection(b)
 
-fun reflection_data_empty(): DataValueInfo = reflection(ReflectedEmpty)
+fun reflection_data_empty(): DataValueInfo = reflection(ReflectedEmpty {})
 
 fun reflection_data_employee(employee: ReflectedEmployee): DataValueInfo = reflection(employee)
 
@@ -39,7 +39,7 @@ fun reflection_any_to_json(value: any): ReflectedJson =
     case int i -> ReflectedJsonNumber { i }
     case bool b -> ReflectedJsonBool { b }
     case data d -> reflection_data_to_json(d)
-    case _ -> ReflectedJsonNull
+    case _ -> ReflectedJsonNull {}
 
 fun reflection_json_shape(obj: data): ReflectedJsonObject =
     match reflection_any_to_json(obj) with

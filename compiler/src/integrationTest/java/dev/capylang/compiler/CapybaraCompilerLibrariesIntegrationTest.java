@@ -61,7 +61,7 @@ class CapybaraCompilerLibrariesIntegrationTest {
                 fun Regex.`~>`(replacement: string): string => string = this.replace(replacement)
                 fun Regex.`/>`(input: string): list[string] = [input]
                 fun Match.group(index: int): /capy/lang/Option[string] =
-                    if index == 0 then /capy/lang/Option.Some { value: this.group_value } else /capy/lang/Option.None
+                    if index == 0 then /capy/lang/Option.Some { value: this.group_value } else /capy/lang/Option.None {}
                 fun Match.groups(): list[/capy/lang/Option[string]] = [/capy/lang/Option.Some { value: this.group_value }]
                 """;
         var libraries = compileProgram(List.of(new RawModule("Regex", "/capy/lang", regexLibrarySource)), new TreeSet<>()).modules();
