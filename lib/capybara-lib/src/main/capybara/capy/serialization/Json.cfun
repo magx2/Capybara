@@ -6,9 +6,14 @@ type Json = JsonObject | JsonArray | JsonValue
 data JsonObject { value: dict[Json] }
 fun JsonObject.`+`(other: JsonObject): JsonObject = JsonObject { value: this.value + other.value }
 fun JsonObject.`+`(other: tuple[string, Json]): JsonObject = JsonObject { value: this.value + other }
+fun JsonObject.get(key: string): Option[Json] =
+    this.value |> None {}, (acc, item_key, item_value) =>
+        if item_key == key then Some { item_value } else acc
+
 data JsonArray { value: list[Json] }
 fun JsonArray.`+`(other: JsonArray): JsonArray = JsonArray { value: this.value + other.value }
 fun JsonArray.`+`(other: Json): JsonArray = JsonArray { value: this.value + other }
+fun JsonArray.get(index: int): Option[Json] = this.value[index]
 
 type JsonValue = JsonString | JsonValueObject | JsonNumber | JsonValueArray | JsonBool | JsonNull
 data JsonString { value: string }
@@ -16,7 +21,9 @@ type JsonNumber = JsonNumberDouble | JsonNumberLong
 data JsonNumberDouble { value: double }
 data JsonNumberLong { value: long }
 data JsonValueObject { value: JsonObject }
+fun JsonValueObject.get(key: string): Option[Json] = this.value.get(key)
 data JsonValueArray { value: JsonArray }
+fun JsonValueArray.get(index: int): Option[Json] = this.value.get(index)
 data JsonBool { value: bool }
 single JsonNull
 

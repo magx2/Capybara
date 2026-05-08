@@ -292,28 +292,29 @@ public class CapybaraExpressionCompiler {
     }
 
     private Result<CompiledExpression> linkIndexExpression(IndexExpression expression, Scope scope) {
+        if (expression.arguments().isEmpty()) {
+            return withPosition(
+                    Result.error("Index access requires at least one argument."),
+                    expression.position()
+            );
+        }
         return linkExpression(expression.source(), scope)
                 .flatMap(source -> {
-                    if (!(source.type() instanceof CompiledList)
-                        && source.type() != STRING
-                        && !(source.type() instanceof CompiledTupleType)) {
-                        return withPosition(
-                                Result.error("Index source has to be `list`, `string` or `tuple`, was `" + source.type() + "`"),
-                                expression.position()
-                        );
+                    if (expression.arguments().size() != 1 || !isBuiltinIndexSource(source.type())) {
+                        return linkCustomIndexExpression(expression, scope, source);
                     }
-                    return linkExpression(expression.index(), scope)
+                    return linkExpression(expression.arguments().getFirst(), scope)
                             .flatMap(index -> {
                                 if (index.type() != PrimitiveLinkedType.INT) {
                                     return withPosition(
                                             Result.error("Index has to be `int`, was `" + index.type() + "`"),
-                                            expression.index().position()
+                                            expression.arguments().getFirst().position()
                                     );
                                 }
                                 var elementType = switch (source.type()) {
                                     case CompiledList linkedList -> Result.success(linkedList.elementType());
                                     case PrimitiveLinkedType primitive when primitive == STRING -> Result.<CompiledType>success(STRING);
-                                    case CompiledTupleType tupleType -> tupleElementType(tupleType, index, expression.index().position());
+                                    case CompiledTupleType tupleType -> tupleElementType(tupleType, index, expression.arguments().getFirst().position());
                                     default -> Result.<CompiledType>error("Unsupported index source `" + source.type() + "`");
                                 };
                                 if (elementType instanceof Result.Error<CompiledType> error) {
@@ -335,6 +336,69 @@ public class CapybaraExpressionCompiler {
                                 return Result.success((CompiledExpression) new CompiledIndexExpression(source, index, resolvedElementType, optionType));
                             });
                 });
+    }
+
+    private boolean isBuiltinIndexSource(CompiledType sourceType) {
+        return sourceType instanceof CompiledList
+               || sourceType == STRING
+               || sourceType instanceof CompiledTupleType;
+    }
+
+    private Result<CompiledExpression> linkCustomIndexExpression(
+            IndexExpression expression,
+            Scope scope,
+            CompiledExpression source
+    ) {
+        var args = new java.util.ArrayList<Expression>(expression.arguments().size() + 1);
+        args.add(expression.source());
+        args.addAll(expression.arguments());
+        var getCall = new FunctionCall(
+                Optional.empty(),
+                METHOD_INVOKE_PREFIX + "get",
+                List.copyOf(args),
+                expression.position()
+        );
+        var resolved = resolveMethodInvokeCall(getCall, scope);
+        if (resolved instanceof Result.Success<CompiledExpression>) {
+            return resolved;
+        }
+        if (!isIndexMethodResolutionError((Result.Error<CompiledExpression>) resolved)) {
+            return resolved;
+        }
+        return linkIndexArgumentTypes(expression.arguments(), scope)
+                .flatMap(argumentTypes -> withPosition(
+                        Result.error(indexMethodResolutionMessage(source.type(), argumentTypes)),
+                        expression.position()
+                ));
+    }
+
+    private boolean isIndexMethodResolutionError(Result.Error<CompiledExpression> error) {
+        return error.errors().stream()
+                .map(Result.Error.SingleError::message)
+                .anyMatch(message -> message.contains("No method `get`")
+                                     || message.contains("No matching method `get`"));
+    }
+
+    private Result<List<CompiledType>> linkIndexArgumentTypes(List<Expression> arguments, Scope scope) {
+        return arguments.stream()
+                .map(argument -> linkExpression(argument, scope).map(CompiledExpression::type))
+                .collect(new ResultCollectionCollector<>());
+    }
+
+    private String indexMethodResolutionMessage(CompiledType sourceType, List<CompiledType> argumentTypes) {
+        var ownerType = simpleTypeNameStatic(sourceType.name());
+        var arguments = argumentTypes.stream()
+                .map(this::diagnosticTypeName)
+                .toList();
+        return "Type '" + ownerType + "' cannot be indexed with arguments: " + String.join(", ", arguments) + ".\n"
+               + "No matching method '" + ownerType + ".get(" + String.join(", ", arguments) + ")' found.";
+    }
+
+    private String diagnosticTypeName(CompiledType type) {
+        if (type instanceof PrimitiveLinkedType) {
+            return type.name().toLowerCase(Locale.ROOT);
+        }
+        return type.name();
     }
 
     private Result<CompiledExpression> linkTupleExpression(TupleExpression expression, Scope scope) {
@@ -3765,7 +3829,8 @@ public class CapybaraExpressionCompiler {
                     || containsValueReference(ifExpression.elseBranch(), variableName);
             case IndexExpression indexExpression ->
                     containsValueReference(indexExpression.source(), variableName)
-                    || containsValueReference(indexExpression.index(), variableName);
+                    || indexExpression.arguments().stream()
+                            .anyMatch(argument -> containsValueReference(argument, variableName));
             case SliceExpression sliceExpression ->
                     containsValueReference(sliceExpression.source(), variableName)
                     || sliceExpression.start().map(start -> containsValueReference(start, variableName)).orElse(false)
@@ -5710,8 +5775,14 @@ public class CapybaraExpressionCompiler {
             CompiledExpression index,
             Optional<SourcePosition> position
     ) {
-        var size = tupleType.elementTypes().size();
         var indexValue = intLiteralValue(index);
+        if (indexValue == null) {
+            return withPosition(
+                    Result.error("Tuple index has to be an int literal"),
+                    position
+            );
+        }
+        var size = tupleType.elementTypes().size();
         var normalized = normalizeTupleIndex(indexValue, size);
         if (normalized < 0 || normalized >= size) {
             return withPosition(
@@ -5722,11 +5793,18 @@ public class CapybaraExpressionCompiler {
         return Result.success(tupleType.elementTypes().get(normalized));
     }
 
-    private int intLiteralValue(CompiledExpression expression) {
+    private Integer intLiteralValue(CompiledExpression expression) {
         if (expression instanceof CompiledIntValue intValue) {
             return Integer.parseInt(intValue.intValue());
         }
-        throw new IllegalStateException("Expected int literal expression, got: " + expression);
+        if (expression instanceof CompiledInfixExpression infixExpression
+            && infixExpression.operator() == InfixOperator.MINUS
+            && infixExpression.left() instanceof CompiledIntValue left
+            && "0".equals(left.intValue())
+            && infixExpression.right() instanceof CompiledIntValue right) {
+            return -Integer.parseInt(right.intValue());
+        }
+        return null;
     }
 
     private int normalizeTupleIndex(int index, int size) {
@@ -9220,7 +9298,8 @@ public class CapybaraExpressionCompiler {
             }
             case IndexExpression indexExpression -> {
                 collectGenericBindingsFromExpression(variableName, parentType, indexExpression.source(), scope, bindings);
-                collectGenericBindingsFromExpression(variableName, parentType, indexExpression.index(), scope, bindings);
+                indexExpression.arguments().forEach(argument ->
+                        collectGenericBindingsFromExpression(variableName, parentType, argument, scope, bindings));
             }
             case LambdaExpression lambdaExpression ->
                     collectGenericBindingsFromExpression(variableName, parentType, lambdaExpression.expression(), scope, bindings);

@@ -429,10 +429,32 @@ public class JavaAstBuilder {
     private JavaType buildJavaReturnType(CompiledFunction function) {
         if (function.returnType() instanceof GenericDataType genericDataType
             && ("Option".equals(genericDataType.name()) || isOptionTypeName(genericDataType.name()))) {
-            var elementType = inferOptionElementType(function.expression());
+            var elementDescriptor = optionElementTypeDescriptor(genericDataType);
+            if (elementDescriptor.isPresent()) {
+                return new JavaType("java.util.Optional<" + mapTypeParameterDescriptor(elementDescriptor.orElseThrow()) + ">");
+            }
+            var elementType = optionElementType(function.returnType())
+                    .orElseGet(() -> inferOptionElementType(function.expression()));
             return new JavaType("java.util.Optional<" + buildJavaBoxedType(elementType) + ">");
         }
         return buildJavaType(function.returnType());
+    }
+
+    private Optional<String> optionElementTypeDescriptor(GenericDataType type) {
+        var typeParameters = switch (type) {
+            case CompiledDataType linkedDataType -> linkedDataType.typeParameters();
+            case CompiledDataParentType linkedDataParentType -> linkedDataParentType.typeParameters();
+        };
+        return typeParameters.stream().findFirst();
+    }
+
+    private Optional<CompiledType> optionElementType(CompiledType type) {
+        if (!isOptionType(type) || !(type instanceof GenericDataType genericDataType)) {
+            return Optional.empty();
+        }
+        return genericDataType.fields().stream()
+                .findFirst()
+                .map(CompiledDataType.CompiledField::type);
     }
 
     private CompiledType inferOptionElementType(dev.capylang.compiler.expression.CompiledExpression expression) {

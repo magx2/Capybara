@@ -472,6 +472,35 @@ class CapybaraParserTest {
     }
 
     @Test
+    @DisplayName("should parse line-wrapped type brackets")
+    void parseLineWrappedTypeBrackets() {
+        var module = parseSuccess(new RawModule("Test", "/parser", """
+                data Box
+                [T] { value: T }
+
+                fun list_identity(xs: list
+                [string]): list
+                [string] = xs
+
+                fun box_identity(box: Box
+                [string]): Box
+                [string] = box
+
+                fun match_list(value: any): int =
+                    match value with
+                    case list
+                    [string] _ -> 1
+                    case _ -> 0
+                """));
+
+        findDefinition(DataDeclaration.class, "Box", module.functional());
+        assertThat(findFunction("list_identity", module.functional()).returnType())
+                .hasValue(new CollectionType.ListType(PrimitiveType.STRING));
+        findFunction("box_identity", module.functional());
+        findFunction("match_list", module.functional());
+    }
+
+    @Test
     @DisplayName("should parse doc comments for data and type declarations")
     void parseDataAndTypeComments() {
         var module = parseSuccess(new RawModule("Test", "/parser", """
@@ -708,6 +737,42 @@ class CapybaraParserTest {
         assertThat(((Value) fieldAccess.source()).name()).isEqualTo("parse");
         assertThat(indexExpression.index()).isInstanceOf(IntValue.class);
         assertThat(((IntValue) indexExpression.index()).intValue()).isEqualTo("0");
+    }
+
+    @Test
+    @DisplayName("should parse index access with multiple arguments")
+    void parseIndexAccessWithMultipleArguments() {
+        var module = parseSuccess(new RawModule("Test", "/parser", """
+                data Cell { name: string }
+                data Matrix { cell: Cell }
+                fun test(matrix: Matrix): string = matrix[1, 2].name
+                """));
+
+        var function = findFunction("test", module.functional());
+        assertThat(function.expression()).isInstanceOf(FieldAccess.class);
+        var fieldAccess = (FieldAccess) function.expression();
+        assertThat(fieldAccess.field()).isEqualTo("name");
+        assertThat(fieldAccess.source()).isInstanceOf(IndexExpression.class);
+        var indexExpression = (IndexExpression) fieldAccess.source();
+        assertThat(indexExpression.arguments()).hasSize(2);
+        assertThat(indexExpression.arguments().get(0)).isInstanceOf(IntValue.class);
+        assertThat(((IntValue) indexExpression.arguments().get(0)).intValue()).isEqualTo("1");
+        assertThat(indexExpression.arguments().get(1)).isInstanceOf(IntValue.class);
+        assertThat(((IntValue) indexExpression.arguments().get(1)).intValue()).isEqualTo("2");
+    }
+
+    @Test
+    @DisplayName("should parse empty index access for compiler diagnostics")
+    void parseEmptyIndexAccessForCompilerDiagnostics() {
+        var module = parseSuccess(new RawModule("Test", "/parser", """
+                data Box { value: string }
+                fun test(box: Box): string = box[]
+                """));
+
+        var function = findFunction("test", module.functional());
+        assertThat(function.expression()).isInstanceOf(IndexExpression.class);
+        var indexExpression = (IndexExpression) function.expression();
+        assertThat(indexExpression.arguments()).isEmpty();
     }
 
     @Test

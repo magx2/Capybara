@@ -4,6 +4,20 @@ grammar Functional;
 package dev.capylang.parser.antlr;
 }
 
+@lexer::members {
+private boolean lineStart = true;
+
+private boolean containsNewline(String text) {
+    return text.indexOf('\n') >= 0 || text.indexOf('\r') >= 0;
+}
+
+@Override
+public org.antlr.v4.runtime.Token emit() {
+    lineStart = false;
+    return super.emit();
+}
+}
+
 program : definition+ EOF;
 
 definition:
@@ -54,7 +68,8 @@ fieldDeclarationList: fieldDeclaration (',' fieldDeclaration)* ','?;
 fieldDeclaration: identifier ':' type
                 | STRING_LITERAL ':' type
                 | SPREAD TYPE;
-genericTypeDeclaration: TYPE ('[' TYPE (',' TYPE)* ']')?;
+genericTypeDeclaration: TYPE (typeLbrack TYPE (',' TYPE)* RBRACK)?;
+typeLbrack: LBRACK | LINE_START_LBRACK;
 
 VISIBILITY: 'local' | 'private';
 BOOL_LITERAL: 'true' | 'false';
@@ -65,8 +80,8 @@ identifier: NAME | REC | COLLECTION | 'derive' | 'deriver' | 'fun' | 'type' | 'b
 parameters: parameter (',' parameter)*;
 parameter: identifier ':' type;
 functionType: ':' type;
-type: COLLECTION '[' type ']'
-    | 'tuple' '[' type (COMMA type)+ ']'
+type: COLLECTION typeLbrack type RBRACK
+    | 'tuple' typeLbrack type (COMMA type)+ RBRACK
     | LPAREN RPAREN FAT_ARROW type
     | LPAREN type (COMMA type)+ RPAREN FAT_ARROW type
     | type FAT_ARROW type
@@ -80,7 +95,7 @@ type: COLLECTION '[' type ']'
     | 'any'
     | 'data'
     | 'nothing'
-    | qualifiedType ('[' type (',' type)* ']')?;
+    | qualifiedType (typeLbrack type (',' type)* RBRACK)?;
 qualifiedType: TYPE (DOT TYPE)*;
 TYPE: [_]* [A-Z][a-zA-Z0-9_]*
       | TYPE_FULL ;
@@ -105,8 +120,8 @@ expressionNoLet: ifExpression
                | BANG expressionNoLet
                | BITWISE_NOT expressionNoLet
                | MINUS expressionNoLet
-               | expressionNoLet LBRACK indexLiteral RBRACK
                | expressionNoLet LBRACK sliceIndexLiteral? COLON sliceIndexLiteral? RBRACK
+               | expressionNoLet LBRACK argumentList? RBRACK
                | expressionNoLet LPAREN argumentList? RPAREN
                | expressionNoLet DOT methodIdentifier LPAREN methodArgumentList? RPAREN
                | expressionNoLet INFIX_METHOD_LITERAL expressionNoLet
@@ -116,7 +131,6 @@ expressionNoLet: ifExpression
                | newData
                | constructorData
                | matchExpression;
-indexLiteral: MINUS? INT_LITERAL;
 sliceIndexLiteral: MINUS? INT_LITERAL;
 lambdaExpression: lambdaArgument FAT_ARROW expressionNoPipe
                 | LPAREN (lambdaArgument (COMMA lambdaArgument)*)? RPAREN FAT_ARROW expressionNoPipe;
@@ -135,8 +149,8 @@ expressionNoLetNoPipe: ifExpression
                      | BANG expressionNoLetNoPipe
                      | BITWISE_NOT expressionNoLetNoPipe
                      | MINUS expressionNoLetNoPipe
-                     | expressionNoLetNoPipe LBRACK indexNoPipeLiteral RBRACK
                      | expressionNoLetNoPipe LBRACK sliceIndexNoPipeLiteral? COLON sliceIndexNoPipeLiteral? RBRACK
+                     | expressionNoLetNoPipe LBRACK argumentList? RBRACK
                      | expressionNoLetNoPipe LPAREN argumentList? RPAREN
                      | expressionNoLetNoPipe DOT methodIdentifier LPAREN methodArgumentList? RPAREN
                      | expressionNoLetNoPipe INFIX_METHOD_LITERAL expressionNoLetNoPipe
@@ -146,7 +160,6 @@ expressionNoLetNoPipe: ifExpression
                      | newData
                      | constructorData
                      | matchExpressionNoPipe;
-indexNoPipeLiteral: MINUS? INT_LITERAL;
 sliceIndexNoPipeLiteral: MINUS? INT_LITERAL;
 tupleLiteral: LPAREN expression (COMMA expression)+ RPAREN;
 
@@ -208,8 +221,8 @@ pattern: TYPE
         | constructorPattern;
 wildcardPattern: UNDERSCORE NAME?;
 typedPattern: patternType (NAME | UNDERSCORE);
-patternType: COLLECTION ('[' type ']')?
-           | 'tuple' '[' type (COMMA type)+ ']'
+patternType: COLLECTION (typeLbrack type RBRACK)?
+           | 'tuple' typeLbrack type (COMMA type)+ RBRACK
            | 'byte'
            | 'int'
            | 'long'
@@ -220,13 +233,13 @@ patternType: COLLECTION ('[' type ']')?
            | 'any'
            | 'data'
            | 'nothing'
-           | qualifiedType ('[' type (',' type)* ']')?;
+           | qualifiedType (typeLbrack type (',' type)* RBRACK)?;
 constructorPattern: TYPE '{' fieldPatternList? '}';
 fieldPatternList: pattern (',' pattern)*;
 
 newData: type BANG? '{' fieldAssignmentList? '}';
 constructorData: MUL '{' fieldAssignmentList? '}';
-new_list: '[' (expression (',' expression)* ','?)? ']';
+new_list: (LBRACK | LINE_START_LBRACK) (expression (',' expression)* ','?)? RBRACK;
 new_set: '{' (expression (',' expression)* ','?)? '}';
 new_dict: '{' (dict_entry (',' dict_entry)* ','? | COLON) '}';
 dict_entry: expression ':' expression;
@@ -298,6 +311,7 @@ LPAREN : '(';
 RPAREN : ')';
 LBRACE : '{';
 RBRACE : '}';
+LINE_START_LBRACK : {lineStart}? '[';
 LBRACK : '[';
 RBRACK : ']';
 SEMI : ';';
@@ -358,5 +372,5 @@ URSHIFT_ASSIGN : '>>>=';
 
 DOC_COMMENT : '///' ~[\r\n]*;
 LINE_COMMENT : '//' ~[\r\n]* -> skip;
-BLOCK_COMMENT : '/*' .*? '*/' -> skip;
-WS : [ \t\r\n]+ -> skip;
+BLOCK_COMMENT : '/*' .*? '*/' { if (containsNewline(getText())) lineStart = true; } -> skip;
+WS : [ \t\r\n]+ { if (containsNewline(getText())) lineStart = true; } -> skip;

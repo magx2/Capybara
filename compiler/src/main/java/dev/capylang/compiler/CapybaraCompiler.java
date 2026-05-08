@@ -1751,8 +1751,8 @@ public class CapybaraCompiler {
                                     reduceExpression.position()
                             )));
             case IndexExpression indexExpression -> expandDeriverExpression(indexExpression.source(), targetType, moduleSourceFile, boundNames)
-                    .flatMap(source -> expandDeriverExpression(indexExpression.index(), targetType, moduleSourceFile, boundNames)
-                            .map(index -> new IndexExpression(source, index, indexExpression.position())));
+                    .flatMap(source -> expandDeriverExpressions(indexExpression.arguments(), targetType, moduleSourceFile, boundNames)
+                            .map(arguments -> new IndexExpression(source, arguments, indexExpression.position())));
             case SliceExpression sliceExpression -> expandDeriverExpression(sliceExpression.source(), targetType, moduleSourceFile, boundNames)
                     .flatMap(source -> expandOptionalDeriverExpression(sliceExpression.start(), targetType, moduleSourceFile, boundNames)
                             .flatMap(start -> expandOptionalDeriverExpression(sliceExpression.end(), targetType, moduleSourceFile, boundNames)
@@ -3886,7 +3886,9 @@ public class CapybaraCompiler {
             case Value value -> restorePrivateFunctionNameForDisplay(value.name());
             case FieldAccess fieldAccess -> formatExpressionPreview(fieldAccess.source()) + "." + fieldAccess.field();
             case IndexExpression indexExpression -> formatExpressionPreview(indexExpression.source())
-                                                    + "[" + formatExpressionPreview(indexExpression.index()) + "]";
+                                                    + "[" + indexExpression.arguments().stream()
+                                                            .map(this::formatExpressionPreview)
+                                                            .collect(java.util.stream.Collectors.joining(", ")) + "]";
             case FunctionCall functionCall -> formatFunctionCallPreview(functionCall);
             case FunctionInvoke functionInvoke -> formatExpressionPreview(functionInvoke.function())
                                                   + "(" + functionInvoke.arguments().stream()

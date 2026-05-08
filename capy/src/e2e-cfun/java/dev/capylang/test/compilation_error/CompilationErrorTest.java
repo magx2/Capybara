@@ -93,6 +93,34 @@ public class CompilationErrorTest {
     }
 
     @Test
+    void shouldRejectEmptyIndexAccess() {
+        var errors = compileProgram("""
+                        data Box { value: string }
+                        fun Box.get(): string = this.value
+                        fun broken(box: Box): string = box[]
+                        """,
+                "empty_index_access");
+
+        assertThat(errors).hasSize(1);
+        assertThat(errors.first().message())
+                .contains("Index access requires at least one argument.");
+    }
+
+    @Test
+    void shouldRejectIndexAccessWithoutMatchingGetMethod() {
+        var errors = compileProgram("""
+                        data Box { value: string }
+                        fun broken(box: Box): string = box[1]
+                        """,
+                "index_access_without_matching_get");
+
+        assertThat(errors).hasSize(1);
+        assertThat(errors.first().message())
+                .contains("Type 'Box' cannot be indexed with arguments: int.")
+                .contains("No matching method 'Box.get(int)' found.");
+    }
+
+    @Test
     void shouldRejectParameterizedRuntimeTypePatterns() {
         var errors = compileProgram("""
                         fun classify(value: any): int =

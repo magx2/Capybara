@@ -1033,7 +1033,9 @@ public class CapybaraParser {
             );
             case IndexExpression indexExpression -> new IndexExpression(
                     rewriteLocalNames(indexExpression.source(), localFunctionNameMap, localTypeNameMap, localConstNameMap),
-                    rewriteLocalNames(indexExpression.index(), localFunctionNameMap, localTypeNameMap, localConstNameMap),
+                    indexExpression.arguments().stream()
+                            .map(argument -> rewriteLocalNames(argument, localFunctionNameMap, localTypeNameMap, localConstNameMap))
+                            .toList(),
                     indexExpression.position()
             );
             case SliceExpression sliceExpression -> new SliceExpression(
@@ -1890,7 +1892,7 @@ public class CapybaraParser {
                     .orElseGet(() -> new TrailingPostfix(expressionNoLet(sourceContext), java.util.function.UnaryOperator.identity()));
             return java.util.Optional.of(new TrailingPostfix(
                     nested.base(),
-                    source -> indexExpression(nested.apply().apply(source), expression.indexLiteral(), position(expression))
+                    source -> indexExpression(nested.apply().apply(source), expression.argumentList(), position(expression))
             ));
         }
         if (isSlice(expression)) {
@@ -1960,14 +1962,14 @@ public class CapybaraParser {
             if (isUnaryBang(sourceContext)) {
                 return java.util.Optional.of(new TrailingPostfix(
                         expressionNoLet(sourceContext.expressionNoLet(0)),
-                        source -> indexExpression(source, expression.indexLiteral(), position(expression))
+                        source -> indexExpression(source, expression.argumentList(), position(expression))
                 ));
             }
             var nested = splitUnaryBangTrailingPostfix(sourceContext);
             if (nested.isPresent()) {
                 return java.util.Optional.of(new TrailingPostfix(
                         nested.get().base(),
-                        source -> indexExpression(nested.get().apply().apply(source), expression.indexLiteral(), position(expression))
+                        source -> indexExpression(nested.get().apply().apply(source), expression.argumentList(), position(expression))
                 ));
             }
         }
@@ -2091,14 +2093,14 @@ public class CapybaraParser {
             if (isUnaryBang(sourceContext)) {
                 return java.util.Optional.of(new TrailingPostfix(
                         expressionNoLetNoPipe(sourceContext.expressionNoLetNoPipe(0)),
-                        source -> indexExpression(source, expression.indexNoPipeLiteral(), position(expression))
+                        source -> indexExpression(source, expression.argumentList(), position(expression))
                 ));
             }
             var nested = splitUnaryBangTrailingPostfix(sourceContext);
             if (nested.isPresent()) {
                 return java.util.Optional.of(new TrailingPostfix(
                         nested.get().base(),
-                        source -> indexExpression(nested.get().apply().apply(source), expression.indexNoPipeLiteral(), position(expression))
+                        source -> indexExpression(nested.get().apply().apply(source), expression.argumentList(), position(expression))
                 ));
             }
         }
@@ -2722,7 +2724,9 @@ public class CapybaraParser {
             );
             case IndexExpression value -> new IndexExpression(
                     shiftInterpolationPositions(value.source(), stringPosition, interpolationOffset),
-                    shiftInterpolationPositions(value.index(), stringPosition, interpolationOffset),
+                    value.arguments().stream()
+                            .map(argument -> shiftInterpolationPositions(argument, stringPosition, interpolationOffset))
+                            .toList(),
                     shiftPosition(value.position(), stringPosition, interpolationOffset)
             );
             case InfixExpression value -> new InfixExpression(
@@ -3126,56 +3130,43 @@ public class CapybaraParser {
 
     private IndexExpression indexExpression(FunctionalParser.ExpressionNoLetContext expression) {
         var source = expressionNoLet(expression.expressionNoLet(0));
-        var index = indexExpression(expression.indexLiteral());
-        return new IndexExpression(source, index, position(expression));
+        return new IndexExpression(source, indexArguments(expression.argumentList()), position(expression));
     }
 
     private IndexExpression indexExpression(
             FunctionalParser.ExpressionNoLetContext sourceContext,
-            FunctionalParser.IndexLiteralContext indexContext,
+            FunctionalParser.ArgumentListContext argumentListContext,
             Optional<SourcePosition> position
     ) {
-        return new IndexExpression(expressionNoLet(sourceContext), indexExpression(indexContext), position);
+        return new IndexExpression(expressionNoLet(sourceContext), indexArguments(argumentListContext), position);
     }
 
     private IndexExpression indexExpression(FunctionalParser.ExpressionNoLetNoPipeContext expression) {
         var source = expressionNoLetNoPipe(expression.expressionNoLetNoPipe(0));
-        var index = indexExpression(expression.indexNoPipeLiteral());
-        return new IndexExpression(source, index, position(expression));
+        return new IndexExpression(source, indexArguments(expression.argumentList()), position(expression));
     }
 
     private IndexExpression indexExpression(
             FunctionalParser.ExpressionNoLetNoPipeContext sourceContext,
-            FunctionalParser.IndexNoPipeLiteralContext indexContext,
+            FunctionalParser.ArgumentListContext argumentListContext,
             Optional<SourcePosition> position
     ) {
-        return new IndexExpression(expressionNoLetNoPipe(sourceContext), indexExpression(indexContext), position);
+        return new IndexExpression(expressionNoLetNoPipe(sourceContext), indexArguments(argumentListContext), position);
     }
 
     private IndexExpression indexExpression(
             Expression source,
-            FunctionalParser.IndexLiteralContext indexContext,
+            FunctionalParser.ArgumentListContext argumentListContext,
             Optional<SourcePosition> position
     ) {
-        return new IndexExpression(source, indexExpression(indexContext), position);
+        return new IndexExpression(source, indexArguments(argumentListContext), position);
     }
 
-    private IndexExpression indexExpression(
-            Expression source,
-            FunctionalParser.IndexNoPipeLiteralContext indexContext,
-            Optional<SourcePosition> position
-    ) {
-        return new IndexExpression(source, indexExpression(indexContext), position);
-    }
-
-    private Expression indexExpression(FunctionalParser.IndexLiteralContext index) {
-        var sign = index.MINUS() == null ? "" : "-";
-        return new IntValue(sign + index.INT_LITERAL().getText(), position(index));
-    }
-
-    private Expression indexExpression(FunctionalParser.IndexNoPipeLiteralContext index) {
-        var sign = index.MINUS() == null ? "" : "-";
-        return new IntValue(sign + index.INT_LITERAL().getText(), position(index));
+    private List<Expression> indexArguments(FunctionalParser.ArgumentListContext argumentListContext) {
+        if (argumentListContext == null) {
+            return List.of();
+        }
+        return argumentListContext.expression().stream().map(this::expression).toList();
     }
 
     private SliceExpression sliceExpression(FunctionalParser.ExpressionNoLetNoPipeContext expression) {
@@ -3345,7 +3336,9 @@ public class CapybaraParser {
         return expression.LBRACK() != null
                && expression.RBRACK() != null
                && expression.COLON() != null
+               && expression.new_list() == null
                && expression.expressionNoLet().size() == 1
+               && isSameLinePostfixBracket(expression.LBRACK().getSymbol(), expression.expressionNoLet(0))
                && expression.sliceIndexLiteral().size() <= 2;
     }
 
@@ -3353,15 +3346,18 @@ public class CapybaraParser {
         return expression.LBRACK() != null
                && expression.RBRACK() != null
                && expression.COLON() == null
+               && expression.new_list() == null
                && expression.expressionNoLet().size() == 1
-               && expression.indexLiteral() != null;
+               && isSameLinePostfixBracket(expression.LBRACK().getSymbol(), expression.expressionNoLet(0));
     }
 
     private static boolean isSlice(FunctionalParser.ExpressionNoLetNoPipeContext expression) {
         return expression.LBRACK() != null
                && expression.RBRACK() != null
                && expression.COLON() != null
+               && expression.new_list() == null
                && expression.expressionNoLetNoPipe().size() == 1
+               && isSameLinePostfixBracket(expression.LBRACK().getSymbol(), expression.expressionNoLetNoPipe(0))
                && expression.sliceIndexNoPipeLiteral().size() <= 2;
     }
 
@@ -3369,8 +3365,13 @@ public class CapybaraParser {
         return expression.LBRACK() != null
                && expression.RBRACK() != null
                && expression.COLON() == null
+               && expression.new_list() == null
                && expression.expressionNoLetNoPipe().size() == 1
-               && expression.indexNoPipeLiteral() != null;
+               && isSameLinePostfixBracket(expression.LBRACK().getSymbol(), expression.expressionNoLetNoPipe(0));
+    }
+
+    private static boolean isSameLinePostfixBracket(Token bracket, ParserRuleContext sourceContext) {
+        return sourceContext.getStop() != null && bracket.getLine() == sourceContext.getStop().getLine();
     }
 
     private record DataFieldDeclarations(List<DataDeclaration.DataField> fields, List<String> extendsTypes) {
