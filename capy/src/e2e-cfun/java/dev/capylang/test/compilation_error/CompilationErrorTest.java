@@ -62,9 +62,9 @@ public class CompilationErrorTest {
     void shouldNormalizeLocalTypeNamesInMatchExhaustivenessErrors() {
         var errors = compileProgram("""
                         fun parse(value: int): int =
-                            type __Token = __Number | __Stop
+                            type __Token = __Number | Stop
                             data __Number { value: int }
-                            data __Stop { done: bool }
+                            single Stop
                             ---
                             let token: __Token = __Number { value }
                             match token with
@@ -74,8 +74,9 @@ public class CompilationErrorTest {
 
         assertThat(errors).hasSize(1);
         assertThat(errors.first().message())
-                .contains("`match` is not exhaustive. Use wildcard `case _ -> ...` or add missing branches:`__Stop`.")
-                .doesNotContain("__local_type_");
+                .contains("`match` is not exhaustive. Use wildcard `case _ -> ...` or add missing branches:`Stop`.")
+                .doesNotContain("__local_type_")
+                .doesNotContain("__local_single_");
     }
 
     @Test

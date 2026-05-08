@@ -4950,7 +4950,7 @@ public class CapybaraCompiler {
 
     private Optional<String> firstEscapedPrivateLocalType(Type type) {
         return switch (type) {
-            case DataType dataType -> dataType.name().contains("__local_type_")
+            case DataType dataType -> dataType.name().contains("__local_type_") || dataType.name().contains("__local_single_")
                     ? Optional.of(dataType.name())
                     : Optional.empty();
             case CollectionType.ListType listType -> firstEscapedPrivateLocalType(listType.elementType());
@@ -5022,12 +5022,13 @@ public class CapybaraCompiler {
     }
 
     private String restorePrivateTypeNameForDisplay(String typeName) {
-        return replacePrivateLocalNamesInText(typeName, "__local_type_", true);
+        var restoredLocalSingles = replacePrivateLocalNamesInText(typeName, "__local_single_", false);
+        return replacePrivateLocalNamesInText(restoredLocalSingles, "__local_type_", true);
     }
 
     private String toUserPrivateTypeName(String typeName) {
-        var marker = "__local_type_";
-        return toUserPrivateLocalName(typeName, marker, true);
+        var localSingle = toUserPrivateLocalName(typeName, "__local_single_", false);
+        return toUserPrivateLocalName(localSingle, "__local_type_", true);
     }
 
     private String restorePrivateFunctionNameForDisplay(String functionName) {
@@ -5062,7 +5063,8 @@ public class CapybaraCompiler {
         }
         var restoredLocalFunctions = replacePrivateLocalNamesInText(message, "__local_fun_", false);
         var restoredLocalConsts = replacePrivateLocalNamesInText(restoredLocalFunctions, "__local_const_", true);
-        return replacePrivateLocalNamesInText(restoredLocalConsts, "__local_type_", true);
+        var restoredLocalSingles = replacePrivateLocalNamesInText(restoredLocalConsts, "__local_single_", false);
+        return replacePrivateLocalNamesInText(restoredLocalSingles, "__local_type_", true);
     }
 
     private String replacePrivateLocalNamesInText(String text, String marker, boolean withPrivatePrefix) {
