@@ -11,7 +11,7 @@ class DeriveFeatureTest {
     }
 
     @Test
-    void derivesShowForEmptyData() {
+    void showsSingleEmptyValue() {
         assertThat(DeriveFeature.showEmpty()).isEqualTo("Empty {  }");
     }
 

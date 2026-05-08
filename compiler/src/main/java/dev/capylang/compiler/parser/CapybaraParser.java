@@ -462,8 +462,10 @@ public class CapybaraParser {
     private DataDeclaration dataDeclaration(FunctionalParser.DataDeclarationContext context) {
         var declaration = context.genericTypeDeclaration();
         var dataFields = dataFieldDeclarationList(context.fieldDeclarationList());
+        var dataName = genericTypeName(declaration);
+        reportEmptyDataDeclaration(context, dataName, dataFields);
         return new DataDeclaration(
-                genericTypeName(declaration),
+                dataName,
                 dataFields.fields(),
                 dataFields.extendsTypes(),
                 genericTypeParameters(declaration),
@@ -870,6 +872,7 @@ public class CapybaraParser {
             throw new IllegalStateException("Unknown local data mapping for: " + localDataName);
         }
         var dataFields = dataFieldDeclarationList(context.fieldDeclarationList());
+        reportEmptyDataDeclaration(context, localDataName, dataFields);
         return new DataDeclaration(
                 mappedDataName,
                 dataFields.fields().stream()
@@ -2401,6 +2404,28 @@ public class CapybaraParser {
             }
         }
         return new DataFieldDeclarations(List.copyOf(fields), List.copyOf(extendsTypes));
+    }
+
+    private void reportEmptyDataDeclaration(
+            ParserRuleContext context,
+            String dataName,
+            DataFieldDeclarations dataFields
+    ) {
+        if (currentModule == null || currentSource == null) {
+            return;
+        }
+        if (!dataFields.fields().isEmpty() || !dataFields.extendsTypes().isEmpty()) {
+            return;
+        }
+        var token = context.getStart();
+        parserErrors.add(
+                formatParserError(
+                        currentModule,
+                        currentSource,
+                        "line %d:%d: Data `%s` must declare at least one field; use `single` for empty values"
+                                .formatted(token.getLine(), token.getCharPositionInLine(), dataName)
+                )
+        );
     }
 
     private void reportSpreadTypeMustBeAtEnd(Token token) {

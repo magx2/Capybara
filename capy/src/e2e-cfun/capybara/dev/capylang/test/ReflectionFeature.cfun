@@ -3,7 +3,7 @@ from /capy/meta_prog/Reflection import { DataValueInfo, reflection }
 type Letter { name: string } = A | B
 data A { a: int }
 data B { b: list[string] }
-data ReflectedEmpty {}
+single ReflectedEmpty
 data ReflectedEntity { id: string }
 data ReflectedEmployee { department: string, active: bool, ...ReflectedEntity }
 single ReflectedSingleton
@@ -21,7 +21,7 @@ fun reflection_data_a(a: A): DataValueInfo = reflection(a)
 
 fun reflection_data_b(b: B): DataValueInfo = reflection(b)
 
-fun reflection_data_empty(): DataValueInfo = reflection(ReflectedEmpty {})
+fun reflection_data_empty(): DataValueInfo = reflection(ReflectedEmpty)
 
 fun reflection_data_employee(employee: ReflectedEmployee): DataValueInfo = reflection(employee)
 
