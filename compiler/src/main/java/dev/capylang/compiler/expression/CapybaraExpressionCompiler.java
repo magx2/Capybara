@@ -21,6 +21,9 @@ public class CapybaraExpressionCompiler {
     private static final String METHOD_INVOKE_PREFIX = "__invoke__";
     private static final String DICT_PIPE_ARGS_SEPARATOR = "::";
     private static final String TUPLE_PIPE_ARGS_SEPARATOR = ";;";
+    private static final String REFLECTION_INTRINSIC_MODULE = "capy/meta_prog/Reflection";
+    private static final String REFLECTION_INTRINSIC_FUNCTION = "reflection";
+    private static final String REFLECTION_DATA_VALUE_INFO = "DataValueInfo";
     private static final Map<String, String> NORMALIZED_TYPE_ALIAS_CACHE = new ConcurrentHashMap<>();
     private static final Map<String, String> SIMPLE_RAW_TYPE_NAME_CACHE = new ConcurrentHashMap<>();
 
@@ -510,9 +513,6 @@ public class CapybaraExpressionCompiler {
         var signatures = resolvedModule.signatures();
 
         var candidates = functionsByNameAndArity(signatures, functionCall.name(), functionCall.arguments().size());
-        if (hasReflectionIntrinsicSignature(candidates)) {
-            return linkReflectionIntrinsicCall(functionCall, candidates, scope);
-        }
         if (candidates.isEmpty()) {
             return withPosition(
                     Result.error(
@@ -567,6 +567,9 @@ public class CapybaraExpressionCompiler {
             );
         }
 
+        if (isReflectionIntrinsicSignature(best.signature())) {
+            return linkReflectionIntrinsicCall(functionCall, List.of(best.signature()), scope);
+        }
         return Result.success(new CompiledFunctionCall(
                 resolvedModule.javaModuleName() + "." + functionCall.name(),
                 best.arguments(),
@@ -656,9 +659,6 @@ public class CapybaraExpressionCompiler {
             return resolveMethodInvokeCall(functionCall, scope, expectedType);
         }
         var candidates = functionsByNameAndArity(functionSignatures, functionCall.name(), functionCall.arguments().size());
-        if (hasReflectionIntrinsicSignature(candidates)) {
-            return linkReflectionIntrinsicCall(functionCall, candidates, scope);
-        }
         if (candidates.isEmpty()) {
             if (functionCall.arguments().isEmpty()) {
                 var singleton = findSingletonDataType(functionCall.name());
@@ -716,6 +716,9 @@ public class CapybaraExpressionCompiler {
                     functionCall.position()
             );
         }
+        if (isReflectionIntrinsicSignature(best.signature())) {
+            return linkReflectionIntrinsicCall(functionCall, List.of(best.signature()), scope);
+        }
         return Result.success(new CompiledFunctionCall(
                 resolvedFunctionName(best.signature()),
                 best.arguments(),
@@ -723,19 +726,27 @@ public class CapybaraExpressionCompiler {
         ));
     }
 
-    private boolean hasReflectionIntrinsicSignature(List<FunctionSignature> candidates) {
-        return candidates.stream().anyMatch(this::isReflectionIntrinsicSignature);
-    }
-
     private boolean isReflectionIntrinsicSignature(FunctionSignature signature) {
         return isReflectionValueIntrinsicSignature(signature);
     }
 
     private boolean isReflectionValueIntrinsicSignature(FunctionSignature signature) {
-        return "reflection".equals(signature.name())
+        return REFLECTION_INTRINSIC_FUNCTION.equals(signature.name())
                && signature.parameterTypes().size() == 1
+               && signature.parameterTypes().getFirst() == PrimitiveLinkedType.DATA
                && signature.returnType() instanceof CompiledDataType dataType
-               && "DataValueInfo".equals(simpleTypeNameStatic(dataType.name()));
+               && REFLECTION_DATA_VALUE_INFO.equals(simpleTypeNameStatic(dataType.name()))
+               && isSignatureOwnedByIntrinsicReflectionModule(signature);
+    }
+
+    private boolean isSignatureOwnedByIntrinsicReflectionModule(FunctionSignature signature) {
+        var signatures = functionSignaturesByModule.getOrDefault(REFLECTION_INTRINSIC_MODULE, List.of());
+        for (var candidate : signatures) {
+            if (candidate == signature) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private Result<CompiledExpression> linkReflectionIntrinsicCall(
@@ -749,7 +760,7 @@ public class CapybaraExpressionCompiler {
                     functionCall.position()
             );
         }
-        if (!"reflection".equals(functionCall.name())) {
+        if (!REFLECTION_INTRINSIC_FUNCTION.equals(functionCall.name())) {
             return withPosition(
                     Result.error("Reflection intrinsic expects exactly one target"),
                     functionCall.position()
@@ -5828,6 +5839,10 @@ public class CapybaraExpressionCompiler {
             CompiledType matchType,
             Scope scope
     ) {
+        var unsupportedPatternType = unsupportedRuntimePatternType(typedPattern.type());
+        if (unsupportedPatternType.isPresent()) {
+            return Result.error("Parameterized runtime type patterns are not supported in v1; use bare `" + unsupportedPatternType.get() + "` or a wildcard guard");
+        }
         return linkTypeInScope(defaultAnyPatternTypeArguments(typedPattern.type()), scope)
                 .flatMap(patternType -> {
                     if (!isTypedPatternCompatible(matchType, patternType)) {
@@ -5846,6 +5861,26 @@ public class CapybaraExpressionCompiler {
                             scope.add(typedPattern.name(), effectivePatternType)
                     ));
                 });
+    }
+
+    private Optional<String> unsupportedRuntimePatternType(Type type) {
+        return switch (type) {
+            case CollectionType.ListType listType -> listType.elementType() == PrimitiveType.ANY
+                    ? Optional.empty()
+                    : Optional.of("list");
+            case CollectionType.SetType setType -> setType.elementType() == PrimitiveType.ANY
+                    ? Optional.empty()
+                    : Optional.of("set");
+            case CollectionType.DictType dictType -> dictType.valueType() == PrimitiveType.ANY
+                    ? Optional.empty()
+                    : Optional.of("dict");
+            case TupleType ignored -> Optional.of("tuple");
+            case FunctionType ignored -> Optional.of("function");
+            case DataType dataType -> dataType.name().contains("[")
+                    ? Optional.of(simpleTypeNameStatic(dataType.name()))
+                    : Optional.empty();
+            case PrimitiveType ignored -> Optional.empty();
+        };
     }
 
     private Type defaultAnyPatternTypeArguments(Type type) {

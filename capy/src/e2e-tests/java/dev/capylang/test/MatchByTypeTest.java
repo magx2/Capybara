@@ -2,8 +2,6 @@ package dev.capylang.test;
 
 import org.junit.jupiter.api.Test;
 
-import capy.lang.Result;
-
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -76,19 +74,4 @@ class MatchByTypeTest {
         assertThat(MatchByType.bareGenericTypePattern("a")).isEqualTo(0);
     }
 
-    @Test
-    void collectionTypePatternsCanUseExplicitAndDefaultGenericArguments() {
-        assertThat(MatchByType.listGenericTypePattern(List.<Object>of("a"))).isEqualTo(1);
-        assertThat(MatchByType.listGenericTypePattern(List.<Object>of(Optional.of("a")))).isEqualTo(2);
-        assertThat(MatchByType.listGenericTypePattern(List.<Object>of(1))).isEqualTo(3);
-        assertThat(MatchByType.listGenericTypePattern(List.<Object>of(1.5))).isEqualTo(99);
-    }
-
-    @Test
-    void collectionTypePatternsCanUseNestedGenericArguments() {
-        assertThat(MatchByType.nestedGenericTypePattern(List.<Object>of(Optional.of(new Result.Success<>(1)))))
-                .isEqualTo(1);
-        assertThat(MatchByType.nestedGenericTypePattern(List.<Object>of(Optional.of("a")))).isEqualTo(2);
-        assertThat(MatchByType.nestedGenericTypePattern(List.<Object>of(1.5))).isEqualTo(99);
-    }
 }

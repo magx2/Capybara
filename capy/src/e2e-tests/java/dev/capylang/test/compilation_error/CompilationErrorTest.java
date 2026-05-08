@@ -79,6 +79,21 @@ public class CompilationErrorTest {
     }
 
     @Test
+    void shouldRejectParameterizedRuntimeTypePatterns() {
+        var errors = compileProgram("""
+                        fun classify(value: any): int =
+                            match value with
+                            case list[string] -> 1
+                            case _ -> 0
+                        """,
+                "parameterized_runtime_type_pattern");
+
+        assertThat(errors).hasSize(1);
+        assertThat(errors.first().message())
+                .contains("Parameterized runtime type patterns are not supported in v1; use bare `list`");
+    }
+
+    @Test
     void shouldRejectConstructorStarOutsideConstructor() {
         var errors = compileProgram("""
                         fun parse(): int =

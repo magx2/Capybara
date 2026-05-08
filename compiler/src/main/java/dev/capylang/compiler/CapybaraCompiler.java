@@ -1615,7 +1615,19 @@ public class CapybaraCompiler {
                         normalizeFile(moduleSourceFile)
                 );
             }
+            var methodSignatures = new HashSet<String>();
             for (var method : deriver.methods()) {
+                var methodKey = method.name() + "#"
+                                + method.parameters().stream()
+                                        .map(parameter -> parameter.type().name())
+                                        .toList();
+                if (!methodSignatures.add(methodKey)) {
+                    return withPosition(
+                            Result.error("Duplicate deriver method signature `" + method.name() + "`"),
+                            method.position(),
+                            normalizeFile(moduleSourceFile)
+                    );
+                }
                 var reservedReceiver = method.parameters().stream()
                         .filter(parameter -> "receiver".equals(parameter.name()))
                         .findFirst();
@@ -1666,17 +1678,26 @@ public class CapybaraCompiler {
             GenericDataType targetType,
             String moduleSourceFile
     ) {
-        if (expression instanceof Value value && "receiver".equals(value.name())) {
+        return expandDeriverExpression(expression, targetType, moduleSourceFile, Set.of());
+    }
+
+    private Result<Expression> expandDeriverExpression(
+            Expression expression,
+            GenericDataType targetType,
+            String moduleSourceFile,
+            Set<String> boundNames
+    ) {
+        if (expression instanceof Value value && "receiver".equals(value.name()) && !boundNames.contains("receiver")) {
             return Result.success(new Value("this", value.position()));
         }
         return switch (expression) {
-            case FunctionCall functionCall -> expandDeriverFunctionCall(functionCall, targetType, moduleSourceFile);
+            case FunctionCall functionCall -> expandDeriverFunctionCall(functionCall, targetType, moduleSourceFile, boundNames);
             case FunctionReference functionReference -> expandDeriverFunctionReference(functionReference, moduleSourceFile);
-            case FunctionInvoke functionInvoke -> expandDeriverExpressions(functionInvoke.arguments(), targetType, moduleSourceFile)
-                    .flatMap(arguments -> expandDeriverExpression(functionInvoke.function(), targetType, moduleSourceFile)
+            case FunctionInvoke functionInvoke -> expandDeriverExpressions(functionInvoke.arguments(), targetType, moduleSourceFile, boundNames)
+                    .flatMap(arguments -> expandDeriverExpression(functionInvoke.function(), targetType, moduleSourceFile, boundNames)
                             .map(function -> new FunctionInvoke(function, arguments, functionInvoke.position())));
-            case LetExpression letExpression -> expandDeriverExpression(letExpression.value(), targetType, moduleSourceFile)
-                    .flatMap(value -> expandDeriverExpression(letExpression.rest(), targetType, moduleSourceFile)
+            case LetExpression letExpression -> expandDeriverExpression(letExpression.value(), targetType, moduleSourceFile, boundNames)
+                    .flatMap(value -> expandDeriverExpression(letExpression.rest(), targetType, moduleSourceFile, withBoundName(boundNames, letExpression.name()))
                             .map(rest -> new LetExpression(
                                     letExpression.name(),
                                     letExpression.declaredType(),
@@ -1685,19 +1706,19 @@ public class CapybaraCompiler {
                                     rest,
                                     letExpression.position()
                             )));
-            case IfExpression ifExpression -> expandDeriverExpression(ifExpression.condition(), targetType, moduleSourceFile)
-                    .flatMap(condition -> expandDeriverExpression(ifExpression.thenBranch(), targetType, moduleSourceFile)
-                            .flatMap(thenBranch -> expandDeriverExpression(ifExpression.elseBranch(), targetType, moduleSourceFile)
+            case IfExpression ifExpression -> expandDeriverExpression(ifExpression.condition(), targetType, moduleSourceFile, boundNames)
+                    .flatMap(condition -> expandDeriverExpression(ifExpression.thenBranch(), targetType, moduleSourceFile, boundNames)
+                            .flatMap(thenBranch -> expandDeriverExpression(ifExpression.elseBranch(), targetType, moduleSourceFile, boundNames)
                                     .map(elseBranch -> new IfExpression(condition, thenBranch, elseBranch, ifExpression.position()))));
-            case InfixExpression infixExpression -> expandDeriverExpression(infixExpression.left(), targetType, moduleSourceFile)
-                    .flatMap(left -> expandDeriverExpression(infixExpression.right(), targetType, moduleSourceFile)
+            case InfixExpression infixExpression -> expandDeriverExpression(infixExpression.left(), targetType, moduleSourceFile, boundNames)
+                    .flatMap(left -> expandDeriverExpression(infixExpression.right(), targetType, moduleSourceFile, boundNames)
                             .map(right -> new InfixExpression(left, infixExpression.operator(), right, infixExpression.position())));
-            case FieldAccess fieldAccess -> expandDeriverExpression(fieldAccess.source(), targetType, moduleSourceFile)
+            case FieldAccess fieldAccess -> expandDeriverExpression(fieldAccess.source(), targetType, moduleSourceFile, boundNames)
                     .map(source -> new FieldAccess(source, fieldAccess.field(), fieldAccess.position()));
-            case LambdaExpression lambdaExpression -> expandDeriverExpression(lambdaExpression.expression(), targetType, moduleSourceFile)
+            case LambdaExpression lambdaExpression -> expandDeriverExpression(lambdaExpression.expression(), targetType, moduleSourceFile, withBoundNames(boundNames, lambdaExpression.argumentNames()))
                     .map(body -> new LambdaExpression(lambdaExpression.argumentNames(), body, lambdaExpression.position()));
-            case ReduceExpression reduceExpression -> expandDeriverExpression(reduceExpression.initialValue(), targetType, moduleSourceFile)
-                    .flatMap(initialValue -> expandDeriverExpression(reduceExpression.reducerExpression(), targetType, moduleSourceFile)
+            case ReduceExpression reduceExpression -> expandDeriverExpression(reduceExpression.initialValue(), targetType, moduleSourceFile, boundNames)
+                    .flatMap(initialValue -> expandDeriverExpression(reduceExpression.reducerExpression(), targetType, moduleSourceFile, withReduceBoundNames(boundNames, reduceExpression))
                             .map(reducerExpression -> new ReduceExpression(
                                     initialValue,
                                     reduceExpression.accumulatorName(),
@@ -1706,23 +1727,26 @@ public class CapybaraCompiler {
                                     reducerExpression,
                                     reduceExpression.position()
                             )));
-            case IndexExpression indexExpression -> expandDeriverExpression(indexExpression.source(), targetType, moduleSourceFile)
-                    .flatMap(source -> expandDeriverExpression(indexExpression.index(), targetType, moduleSourceFile)
+            case IndexExpression indexExpression -> expandDeriverExpression(indexExpression.source(), targetType, moduleSourceFile, boundNames)
+                    .flatMap(source -> expandDeriverExpression(indexExpression.index(), targetType, moduleSourceFile, boundNames)
                             .map(index -> new IndexExpression(source, index, indexExpression.position())));
-            case SliceExpression sliceExpression -> expandDeriverExpression(sliceExpression.source(), targetType, moduleSourceFile)
-                    .flatMap(source -> expandOptionalDeriverExpression(sliceExpression.start(), targetType, moduleSourceFile)
-                            .flatMap(start -> expandOptionalDeriverExpression(sliceExpression.end(), targetType, moduleSourceFile)
+            case SliceExpression sliceExpression -> expandDeriverExpression(sliceExpression.source(), targetType, moduleSourceFile, boundNames)
+                    .flatMap(source -> expandOptionalDeriverExpression(sliceExpression.start(), targetType, moduleSourceFile, boundNames)
+                            .flatMap(start -> expandOptionalDeriverExpression(sliceExpression.end(), targetType, moduleSourceFile, boundNames)
                                     .map(end -> new SliceExpression(source, start, end, sliceExpression.position()))));
-            case MatchExpression matchExpression -> expandDeriverExpression(matchExpression.matchWith(), targetType, moduleSourceFile)
+            case MatchExpression matchExpression -> expandDeriverExpression(matchExpression.matchWith(), targetType, moduleSourceFile, boundNames)
                     .flatMap(matchWith -> matchExpression.cases().stream()
-                            .map(matchCase -> expandOptionalDeriverExpression(matchCase.guard(), targetType, moduleSourceFile)
-                                    .flatMap(guard -> expandDeriverExpression(matchCase.expression(), targetType, moduleSourceFile)
-                                            .map(body -> new MatchExpression.MatchCase(matchCase.pattern(), guard, body))))
+                            .map(matchCase -> {
+                                var branchBoundNames = withBoundNames(boundNames, patternBoundNames(matchCase.pattern()));
+                                return expandOptionalDeriverExpression(matchCase.guard(), targetType, moduleSourceFile, branchBoundNames)
+                                        .flatMap(guard -> expandDeriverExpression(matchCase.expression(), targetType, moduleSourceFile, branchBoundNames)
+                                                .map(body -> new MatchExpression.MatchCase(matchCase.pattern(), guard, body)));
+                            })
                             .collect(new ResultCollectionCollector<>())
                             .map(cases -> new MatchExpression(matchWith, cases, matchExpression.position())));
-            case NewData newData -> expandFieldAssignments(newData.assignments(), targetType, moduleSourceFile)
-                    .flatMap(assignments -> expandDeriverExpressions(newData.positionalArguments(), targetType, moduleSourceFile)
-                            .flatMap(positionalArguments -> expandDeriverExpressions(newData.spreads(), targetType, moduleSourceFile)
+            case NewData newData -> expandFieldAssignments(newData.assignments(), targetType, moduleSourceFile, boundNames)
+                    .flatMap(assignments -> expandDeriverExpressions(newData.positionalArguments(), targetType, moduleSourceFile, boundNames)
+                            .flatMap(positionalArguments -> expandDeriverExpressions(newData.spreads(), targetType, moduleSourceFile, boundNames)
                                     .map(spreads -> new NewData(
                                             newData.type(),
                                             newData.bypassConstructor(),
@@ -1731,29 +1755,29 @@ public class CapybaraCompiler {
                                             spreads,
                                             newData.position()
                                     ))));
-            case ConstructorData constructorData -> expandFieldAssignments(constructorData.assignments(), targetType, moduleSourceFile)
-                    .flatMap(assignments -> expandDeriverExpressions(constructorData.positionalArguments(), targetType, moduleSourceFile)
-                            .flatMap(positionalArguments -> expandDeriverExpressions(constructorData.spreads(), targetType, moduleSourceFile)
+            case ConstructorData constructorData -> expandFieldAssignments(constructorData.assignments(), targetType, moduleSourceFile, boundNames)
+                    .flatMap(assignments -> expandDeriverExpressions(constructorData.positionalArguments(), targetType, moduleSourceFile, boundNames)
+                            .flatMap(positionalArguments -> expandDeriverExpressions(constructorData.spreads(), targetType, moduleSourceFile, boundNames)
                                     .map(spreads -> new ConstructorData(
                                             assignments,
                                             positionalArguments,
                                             spreads,
                                             constructorData.position()
                                     ))));
-            case WithExpression withExpression -> expandDeriverExpression(withExpression.source(), targetType, moduleSourceFile)
-                    .flatMap(source -> expandFieldAssignments(withExpression.assignments(), targetType, moduleSourceFile)
+            case WithExpression withExpression -> expandDeriverExpression(withExpression.source(), targetType, moduleSourceFile, boundNames)
+                    .flatMap(source -> expandFieldAssignments(withExpression.assignments(), targetType, moduleSourceFile, boundNames)
                             .map(assignments -> new WithExpression(source, assignments, withExpression.position())));
-            case NewListExpression newListExpression -> expandDeriverExpressions(newListExpression.values(), targetType, moduleSourceFile)
+            case NewListExpression newListExpression -> expandDeriverExpressions(newListExpression.values(), targetType, moduleSourceFile, boundNames)
                     .map(values -> new NewListExpression(values, newListExpression.position()));
-            case NewSetExpression newSetExpression -> expandDeriverExpressions(newSetExpression.values(), targetType, moduleSourceFile)
+            case NewSetExpression newSetExpression -> expandDeriverExpressions(newSetExpression.values(), targetType, moduleSourceFile, boundNames)
                     .map(values -> new NewSetExpression(values, newSetExpression.position()));
             case NewDictExpression newDictExpression -> newDictExpression.entries().stream()
-                    .map(entry -> expandDeriverExpression(entry.key(), targetType, moduleSourceFile)
-                            .flatMap(key -> expandDeriverExpression(entry.value(), targetType, moduleSourceFile)
+                    .map(entry -> expandDeriverExpression(entry.key(), targetType, moduleSourceFile, boundNames)
+                            .flatMap(key -> expandDeriverExpression(entry.value(), targetType, moduleSourceFile, boundNames)
                                     .map(value -> new NewDictExpression.Entry(key, value))))
                     .collect(new ResultCollectionCollector<>())
                     .map(entries -> new NewDictExpression(entries, newDictExpression.position()));
-            case TupleExpression tupleExpression -> expandDeriverExpressions(tupleExpression.values(), targetType, moduleSourceFile)
+            case TupleExpression tupleExpression -> expandDeriverExpressions(tupleExpression.values(), targetType, moduleSourceFile, boundNames)
                     .map(values -> new TupleExpression(values, tupleExpression.position()));
             default -> Result.success(expression);
         };
@@ -1785,6 +1809,15 @@ public class CapybaraCompiler {
             GenericDataType targetType,
             String moduleSourceFile
     ) {
+        return expandDeriverFunctionCall(functionCall, targetType, moduleSourceFile, Set.of());
+    }
+
+    private Result<Expression> expandDeriverFunctionCall(
+            FunctionCall functionCall,
+            GenericDataType targetType,
+            String moduleSourceFile,
+            Set<String> boundNames
+    ) {
         if (functionCall.moduleName().isEmpty() && "derive_type_name".equals(functionCall.name())) {
             return legacyDeriveHelperError(
                     "`derive_type_name()` has been replaced by `reflection(receiver)`. Import `/capy/meta_prog/Reflection` and use `reflection(receiver).name`.",
@@ -1799,7 +1832,7 @@ public class CapybaraCompiler {
                     moduleSourceFile
             );
         }
-        return expandDeriverExpressions(functionCall.arguments(), targetType, moduleSourceFile)
+        return expandDeriverExpressions(functionCall.arguments(), targetType, moduleSourceFile, boundNames)
                 .map(arguments -> new FunctionCall(functionCall.moduleName(), functionCall.name(), arguments, functionCall.position()));
     }
 
@@ -1820,8 +1853,17 @@ public class CapybaraCompiler {
             GenericDataType targetType,
             String moduleSourceFile
     ) {
+        return expandDeriverExpressions(expressions, targetType, moduleSourceFile, Set.of());
+    }
+
+    private Result<List<Expression>> expandDeriverExpressions(
+            List<Expression> expressions,
+            GenericDataType targetType,
+            String moduleSourceFile,
+            Set<String> boundNames
+    ) {
         return expressions.stream()
-                .map(expression -> expandDeriverExpression(expression, targetType, moduleSourceFile))
+                .map(expression -> expandDeriverExpression(expression, targetType, moduleSourceFile, boundNames))
                 .collect(new ResultCollectionCollector<>());
     }
 
@@ -1830,8 +1872,17 @@ public class CapybaraCompiler {
             GenericDataType targetType,
             String moduleSourceFile
     ) {
+        return expandOptionalDeriverExpression(expression, targetType, moduleSourceFile, Set.of());
+    }
+
+    private Result<Optional<Expression>> expandOptionalDeriverExpression(
+            Optional<Expression> expression,
+            GenericDataType targetType,
+            String moduleSourceFile,
+            Set<String> boundNames
+    ) {
         return expression
-                .map(value -> expandDeriverExpression(value, targetType, moduleSourceFile).map(Optional::of))
+                .map(value -> expandDeriverExpression(value, targetType, moduleSourceFile, boundNames).map(Optional::of))
                 .orElseGet(() -> Result.success(Optional.empty()));
     }
 
@@ -1840,10 +1891,65 @@ public class CapybaraCompiler {
             GenericDataType targetType,
             String moduleSourceFile
     ) {
+        return expandFieldAssignments(assignments, targetType, moduleSourceFile, Set.of());
+    }
+
+    private Result<List<NewData.FieldAssignment>> expandFieldAssignments(
+            List<NewData.FieldAssignment> assignments,
+            GenericDataType targetType,
+            String moduleSourceFile,
+            Set<String> boundNames
+    ) {
         return assignments.stream()
-                .map(assignment -> expandDeriverExpression(assignment.value(), targetType, moduleSourceFile)
+                .map(assignment -> expandDeriverExpression(assignment.value(), targetType, moduleSourceFile, boundNames)
                         .map(value -> new NewData.FieldAssignment(assignment.name(), value)))
                 .collect(new ResultCollectionCollector<>());
+    }
+
+    private Set<String> withBoundName(Set<String> names, String name) {
+        var updated = new HashSet<>(names);
+        updated.add(name);
+        return Set.copyOf(updated);
+    }
+
+    private Set<String> withBoundNames(Set<String> names, Collection<String> additionalNames) {
+        var updated = new HashSet<>(names);
+        updated.addAll(additionalNames);
+        return Set.copyOf(updated);
+    }
+
+    private Set<String> withReduceBoundNames(Set<String> names, ReduceExpression reduceExpression) {
+        var updated = new HashSet<>(names);
+        updated.add(reduceExpression.accumulatorName());
+        reduceExpression.keyName().ifPresent(updated::add);
+        updated.add(reduceExpression.valueName());
+        return Set.copyOf(updated);
+    }
+
+    private Set<String> patternBoundNames(MatchExpression.Pattern pattern) {
+        return patternBoundNames(pattern, false);
+    }
+
+    private Set<String> patternBoundNames(MatchExpression.Pattern pattern, boolean nested) {
+        var names = new HashSet<String>();
+        switch (pattern) {
+            case MatchExpression.TypedPattern typedPattern -> {
+                if (!"_".equals(typedPattern.name())) {
+                    names.add(typedPattern.name());
+                }
+            }
+            case MatchExpression.WildcardBindingPattern wildcardBindingPattern -> names.add(wildcardBindingPattern.name());
+            case MatchExpression.VariablePattern variablePattern -> {
+                if (nested) {
+                    names.add(variablePattern.name());
+                }
+            }
+            case MatchExpression.ConstructorPattern constructorPattern ->
+                    constructorPattern.fieldPatterns().forEach(fieldPattern -> names.addAll(patternBoundNames(fieldPattern, true)));
+            default -> {
+            }
+        }
+        return Set.copyOf(names);
     }
 
     private String simpleTypeName(String typeName) {

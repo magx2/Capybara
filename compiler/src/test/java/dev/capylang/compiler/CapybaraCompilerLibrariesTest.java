@@ -183,6 +183,74 @@ class CapybaraCompilerLibrariesTest {
     }
 
     @Test
+    void shouldLinkReflectionIntrinsicFromWildcardImport() {
+        var libraries = compileProgram(List.of(reflectionMetadataModule()), new java.util.TreeSet<>()).modules();
+        var compiled = compileProgram(List.of(new RawModule("Consumer", "/foo/app", """
+                from /capy/meta_prog/Reflection import { * }
+
+                data User { name: string }
+
+                fun reflect_user(user: User): DataValueInfo = reflection(user)
+                """)), libraries);
+
+        assertThat(compiledFunction(compiled, "Consumer", "reflect_user").expression())
+                .isInstanceOf(CompiledReflectionValue.class);
+    }
+
+    @Test
+    void shouldNotTreatUserDefinedReflectionFunctionAsIntrinsic() {
+        var libraries = compileProgram(List.of(reflectionMetadataModule()), new java.util.TreeSet<>()).modules();
+        var compiled = compileProgram(List.of(new RawModule("Consumer", "/foo/app", """
+                from /capy/meta_prog/Reflection import { DataValueInfo, PackageInfo }
+
+                fun reflection(obj: data): DataValueInfo =
+                    DataValueInfo {
+                        name: "local",
+                        pkg: PackageInfo { name: "", path: "" },
+                        fields: []
+                    }
+
+                data User { name: string }
+
+                fun reflect_user(user: User): DataValueInfo = reflection(user)
+                """)), libraries);
+
+        assertThat(compiledFunction(compiled, "Consumer", "reflect_user").expression())
+                .isInstanceOf(CompiledFunctionCall.class)
+                .isNotInstanceOf(CompiledReflectionValue.class);
+    }
+
+    @Test
+    void shouldPreserveReceiverShadowingInsideDeriverLocalScopes() {
+        var compiled = compileProgram(List.of(new RawModule("Consumer", "/foo/app", """
+                deriver Shadow {
+                    fun shadow_let(): string =
+                        let receiver: string = "local"
+                        receiver
+
+                    fun shadow_lambda(): string =
+                        let f: string => string = receiver => receiver
+                        f("local")
+
+                    fun shadow_reduce(): string =
+                        ["a"] |> "", (receiver, item) => receiver + item
+
+                    fun shadow_match(value: any): string =
+                        match value with
+                        case string receiver -> receiver
+                        case _ -> ""
+                }
+
+                data User { name: string } derive Shadow
+                """)), new java.util.TreeSet<>());
+
+        assertThat(compiled.modules().first().functions())
+                .extracting(CompiledFunction::name)
+                .contains("__method__User__shadow_let", "__method__User__shadow_lambda",
+                        "__method__User__shadow_reduce", "__method__User__shadow_match");
+    }
+
+    @Test
     void shouldRejectUnknownDeriver() {
         var error = compileFailure(List.of(new RawModule("Consumer", "/foo/app", """
                 data User { name: string } derive Missing
@@ -204,6 +272,19 @@ class CapybaraCompilerLibrariesTest {
 
         assertThat(error.message())
                 .contains("Deriver method parameter cannot be named `receiver`");
+    }
+
+    @Test
+    void shouldRejectDuplicateMethodSignaturesInsideUnusedDeriver() {
+        var error = compileFailure(List.of(new RawModule("Consumer", "/foo/app", """
+                deriver Show {
+                    fun show(): string = "first"
+                    fun show(): string = "second"
+                }
+                """)));
+
+        assertThat(error.message())
+                .contains("Duplicate deriver method signature `show`");
     }
 
     @Test
