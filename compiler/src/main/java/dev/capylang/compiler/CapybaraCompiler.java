@@ -259,8 +259,9 @@ public class CapybaraCompiler {
         var constructorCatalog = constructorCatalog(program.modules(), libraries);
         var visibleConstructorsByModule = new HashMap<String, CapybaraExpressionCompiler.ConstructorRegistry>();
         for (var module : program.modules()) {
-            visibleConstructorsByModule.put(
-                    module.name(),
+            putOwnedModuleEntry(
+                    visibleConstructorsByModule,
+                    new ModuleRef(module.name(), module.path()),
                     availableConstructors(module, moduleLinkIndex, constructorCatalog, allModuleRefs)
             );
         }
@@ -273,7 +274,11 @@ public class CapybaraCompiler {
             if (visibleTypes instanceof Result.Error<Map<String, GenericDataType>> error) {
                 return new Result.Error<>(error.errors());
             }
-            visibleTypesByModule.put(module.name(), ((Result.Success<Map<String, GenericDataType>>) visibleTypes).value());
+            putOwnedModuleEntry(
+                    visibleTypesByModule,
+                    new ModuleRef(module.name(), module.path()),
+                    ((Result.Success<Map<String, GenericDataType>>) visibleTypes).value()
+            );
         }
         log.info("Prepared available types for " + program.modules().size() + " modules in " + Duration.ofNanos(System.nanoTime() - availableTypesStartedAt));
 
@@ -287,10 +292,13 @@ public class CapybaraCompiler {
             );
         }
         for (var module : program.modules()) {
+            var moduleRef = new ModuleRef(module.name(), module.path());
+            var localTypes = getModuleEntry(linkedTypesByModule, moduleRef);
+            var visibleTypes = getModuleEntry(visibleTypesByModule, moduleRef);
             var functions = functions(
                     module,
-                    linkedTypesByModule.get(module.name()),
-                    visibleTypesByModule.get(module.name()),
+                    localTypes,
+                    visibleTypes,
                     deriversByModule,
                     moduleLinkIndex
             );
@@ -298,19 +306,22 @@ public class CapybaraCompiler {
                 return new Result.Error<>(error.errors());
             }
             var sourceFile = moduleSourceFile(module);
-            var signatures = withFile(linkFunctionSignatures(((Result.Success<List<Function>>) functions).value(), visibleTypesByModule.get(module.name()), compileCache, sourceFile), sourceFile);
+            var signatures = withFile(linkFunctionSignatures(((Result.Success<List<Function>>) functions).value(), visibleTypes, compileCache, sourceFile), sourceFile);
             if (signatures instanceof Result.Error<List<CapybaraExpressionCompiler.FunctionSignature>> error) {
                 return new Result.Error<>(error.errors());
             }
             putOwnedModuleEntry(
                     signaturesByModule,
-                    new ModuleRef(module.name(), module.path()),
+                    moduleRef,
                     ((Result.Success<List<CapybaraExpressionCompiler.FunctionSignature>>) signatures).value()
             );
         }
 
         for (var module : program.modules()) {
-            var constructors = constructorFunctions(module.functional().definitions(), linkedTypesByModule.get(module.name()));
+            var moduleRef = new ModuleRef(module.name(), module.path());
+            var localTypes = getModuleEntry(linkedTypesByModule, moduleRef);
+            var visibleTypes = getModuleEntry(visibleTypesByModule, moduleRef);
+            var constructors = constructorFunctions(module.functional().definitions(), localTypes);
             if (constructors.isEmpty()) {
                 continue;
             }
@@ -321,12 +332,12 @@ public class CapybaraCompiler {
             }
             var linkedConstructors = withFile(linkFunctions(
                     constructors,
-                    visibleTypesByModule.get(module.name()),
-                    linkedTypesByModule.get(module.name()).keySet(),
+                    visibleTypes,
+                    localTypes.keySet(),
                     ((Result.Success<List<CapybaraExpressionCompiler.FunctionSignature>>) availableConstructorSignatures).value(),
                     signaturesByModule,
                     moduleClassNameByModuleName,
-                    visibleConstructorsByModule.get(module.name()),
+                    getModuleEntry(visibleConstructorsByModule, moduleRef),
                     sourceFile,
                     compileCache
             ), sourceFile);
@@ -336,7 +347,7 @@ public class CapybaraCompiler {
             var constructorValidation = validateResultReturningTypeConstructors(
                     module,
                     ((Result.Success<List<CompiledFunction>>) linkedConstructors).value(),
-                    visibleTypesByModule.get(module.name()),
+                    visibleTypes,
                     sourceFile
             );
             if (constructorValidation instanceof Result.Error<Void> error) {
@@ -344,9 +355,9 @@ public class CapybaraCompiler {
             }
             putOwnedModuleEntry(
                     signaturesByModule,
-                    new ModuleRef(module.name(), module.path()),
+                    moduleRef,
                     mergeSignatures(
-                            signaturesByModule.get(module.name()),
+                            getModuleEntry(signaturesByModule, moduleRef),
                             signaturesFromLinkedFunctions(((Result.Success<List<CompiledFunction>>) linkedConstructors).value())
                     )
             );
@@ -356,6 +367,7 @@ public class CapybaraCompiler {
         var refinedSignaturesByModule = new HashMap<>(signaturesByModule);
         var firstPassStartedAt = System.nanoTime();
         for (var module : program.modules()) {
+            var moduleRef = new ModuleRef(module.name(), module.path());
             var firstPassFunctions = firstPassLinkedFunctions(
                     module,
                     moduleLinkIndex,
@@ -365,7 +377,7 @@ public class CapybaraCompiler {
                     deriversByModule,
                     staticImportsByModule,
                     moduleClassNameByModuleName,
-                    visibleConstructorsByModule.get(module.name()),
+                    getModuleEntry(visibleConstructorsByModule, moduleRef),
                     compileCache
             );
             firstPassFunctions = withFile(firstPassFunctions, moduleSourceFile(module));
@@ -373,27 +385,30 @@ public class CapybaraCompiler {
                 return new Result.Error<>(error.errors());
             }
             var refined = mergeSignatures(
-                    signaturesByModule.get(module.name()),
+                    getModuleEntry(signaturesByModule, moduleRef),
                     signaturesFromLinkedFunctions(((Result.Success<List<CompiledFunction>>) firstPassFunctions).value())
             );
-            putOwnedModuleEntry(refinedSignaturesByModule, new ModuleRef(module.name(), module.path()), refined);
+            putOwnedModuleEntry(refinedSignaturesByModule, moduleRef, refined);
         }
         log.info("Completed first-pass linking for " + program.modules().size() + " modules in " + Duration.ofNanos(System.nanoTime() - firstPassStartedAt));
 
         var finalLinkStartedAt = System.nanoTime();
         var result = program.modules().stream()
-                .map(module -> linkModule(
-                        module,
-                        moduleLinkIndex,
-                        linkedTypesByModule,
-                        visibleTypesByModule,
-                        refinedSignaturesByModule,
-                        deriversByModule,
-                        staticImportsByModule,
-                        moduleClassNameByModuleName,
-                        visibleConstructorsByModule.get(module.name()),
-                        compileCache
-                ))
+                .map(module -> {
+                    var moduleRef = new ModuleRef(module.name(), module.path());
+                    return linkModule(
+                            module,
+                            moduleLinkIndex,
+                            linkedTypesByModule,
+                            visibleTypesByModule,
+                            refinedSignaturesByModule,
+                            deriversByModule,
+                            staticImportsByModule,
+                            moduleClassNameByModuleName,
+                            getModuleEntry(visibleConstructorsByModule, moduleRef),
+                            compileCache
+                    );
+                })
                 .collect(new ResultCollectionCollector<>())
                 .map(CompiledProgram::new);
         if (result instanceof Result.Success<CompiledProgram> success) {
@@ -461,8 +476,9 @@ public class CapybaraCompiler {
             modulesByExactName.putIfAbsent(module.name(), module);
             modulesByQualifiedName.putIfAbsent(qualifiedModuleName(module), module);
 
-            putImportedModuleEntry(linkedTypesByModuleName, module, linkedTypesByModule.get(module.name()));
-            putImportedModuleEntry(moduleJavaClassNameByModuleName, module, moduleJavaClassName(module, linkedTypesByModule.get(module.name())));
+            var linkedTypes = getModuleEntry(linkedTypesByModule, module);
+            putImportedModuleEntry(linkedTypesByModuleName, module, linkedTypes);
+            putImportedModuleEntry(moduleJavaClassNameByModuleName, module, moduleJavaClassName(module, linkedTypes));
 
             var tailName = moduleTailName(module);
             if (tailName == null || ambiguousTailNames.contains(tailName)) {
@@ -594,9 +610,11 @@ public class CapybaraCompiler {
             CapybaraExpressionCompiler.ConstructorRegistry protectedConstructorsByType,
             CompileCache compileCache
     ) {
-        var dataTypes = visibleTypesByModule.get(module.name());
-        var localTypeNames = linkedTypesByModule.get(module.name()).keySet();
-        var functions = functions(module, linkedTypesByModule.get(module.name()), dataTypes, deriversByModule, moduleLinkIndex);
+        var moduleRef = new ModuleRef(module.name(), module.path());
+        var dataTypes = getModuleEntry(visibleTypesByModule, moduleRef);
+        var localTypes = getModuleEntry(linkedTypesByModule, moduleRef);
+        var localTypeNames = localTypes.keySet();
+        var functions = functions(module, localTypes, dataTypes, deriversByModule, moduleLinkIndex);
         if (functions instanceof Result.Error<List<Function>> error) {
             return new Result.Error<>(error.errors());
         }
@@ -621,8 +639,9 @@ public class CapybaraCompiler {
             CapybaraExpressionCompiler.ConstructorRegistry protectedConstructorsByType,
             CompileCache compileCache
     ) {
-        var localTypes = linkedTypesByModule.get(module.name());
-        var visibleTypes = visibleTypesByModule.get(module.name());
+        var moduleRef = new ModuleRef(module.name(), module.path());
+        var localTypes = getModuleEntry(linkedTypesByModule, moduleRef);
+        var visibleTypes = getModuleEntry(visibleTypesByModule, moduleRef);
         var functions = functions(module, localTypes, visibleTypes, deriversByModule, moduleLinkIndex);
         if (functions instanceof Result.Error<List<Function>> error) {
             return new Result.Error<>(error.errors());
@@ -635,11 +654,12 @@ public class CapybaraCompiler {
         var initialSignatures = ((Result.Success<List<CapybaraExpressionCompiler.FunctionSignature>>) availableSignatures).value();
         return withFile(linkFunctions(((Result.Success<List<Function>>) functions).value(), visibleTypes, localTypes.keySet(), initialSignatures, signaturesByModule, moduleClassNameByModuleName, protectedConstructorsByType, moduleSourceFile, compileCache)
                 .flatMap(firstPassFunctions -> {
+                    var moduleSignatures = getModuleEntry(signaturesByModule, moduleRef);
                     var refinedSignatures = mergeSignatures(
-                            signaturesByModule.get(module.name()),
+                            moduleSignatures,
                             signaturesFromLinkedFunctions(firstPassFunctions)
                     );
-                    if (refinedSignatures.equals(signaturesByModule.get(module.name()))) {
+                    if (refinedSignatures.equals(moduleSignatures)) {
                         return Result.success(new CompiledModule(
                                 module.name(),
                                 module.path(),
@@ -677,7 +697,9 @@ public class CapybaraCompiler {
         if (cached != null) {
             return cached;
         }
-        var all = new ArrayList<CapybaraExpressionCompiler.FunctionSignature>(signaturesByModule.get(module.name()));
+        var all = new ArrayList<CapybaraExpressionCompiler.FunctionSignature>(
+                getModuleEntry(signaturesByModule, new ModuleRef(module.name(), module.path()))
+        );
         for (var importDeclaration : module.imports()) {
             var importedModule = resolveImportedModule(importDeclaration.moduleName(), moduleLinkIndex);
             if (importedModule == null) {
@@ -787,9 +809,10 @@ public class CapybaraCompiler {
             List<ModuleRef> allModules,
             CompileCache compileCache
     ) {
-        var localTypes = linkedTypesByModule.get(module.name());
+        var currentModule = new ModuleRef(module.name(), module.path());
+        var localTypes = getModuleEntry(linkedTypesByModule, currentModule);
         var all = new LinkedHashMap<String, GenericDataType>(localTypes);
-        addQualifiedTypeAliases(all, new ModuleRef(module.name(), module.path()), localTypes);
+        addQualifiedTypeAliases(all, currentModule, localTypes);
         for (var importDeclaration : module.imports()) {
             var importedModule = resolveImportedModule(importDeclaration.moduleName(), moduleLinkIndex);
             if (importedModule == null) {
@@ -1508,7 +1531,7 @@ public class CapybaraCompiler {
     ) {
         var all = new LinkedHashMap<String, AvailableDeriver>();
         var currentModule = new ModuleRef(module.name(), module.path());
-        deriversByModule.getOrDefault(module.name(), Map.of())
+        Optional.ofNullable(getModuleEntry(deriversByModule, currentModule)).orElse(Map.of())
                 .forEach((name, deriver) -> all.put(name, new AvailableDeriver(currentModule, deriver)));
         for (var importDeclaration : module.imports()) {
             var importedModule = resolveImportedModule(importDeclaration.moduleName(), moduleLinkIndex);
