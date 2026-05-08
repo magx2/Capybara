@@ -50,11 +50,11 @@ class CapybaraCompilerLibrariesTest {
     void shouldUseImportedDeriverWithDeriverModuleImports() {
         var reflectionLibraries = compileProgram(List.of(reflectionMetadataModule()), new java.util.TreeSet<>()).modules();
         var serdeLibraries = compileProgram(List.of(new RawModule("Serde", "/foo/lib", """
-                from /capy/meta_prog/Reflection import { DataValueInfo, reflection_value }
+                from /capy/meta_prog/Reflection import { DataValueInfo, reflection }
 
                 deriver TypeName {
                     fun type_name(): string =
-                        let info: DataValueInfo = reflection_value(receiver)
+                        let info: DataValueInfo = reflection(receiver)
                         info.name
                 }
                 """)), reflectionLibraries).modules();
@@ -84,11 +84,11 @@ class CapybaraCompilerLibrariesTest {
     void shouldExpandDeriverIntoGeneratedTypeMethod() {
         var libraries = compileProgram(List.of(reflectionMetadataModule()), new java.util.TreeSet<>()).modules();
         var compiled = compileProgram(List.of(new RawModule("Consumer", "/foo/app", """
-                from /capy/meta_prog/Reflection import { DataValueInfo, DataFieldInfo, reflection_value }
+                from /capy/meta_prog/Reflection import { DataValueInfo, reflection }
 
                 deriver Show {
                     fun show(): string =
-                        let info: DataValueInfo = reflection_value(receiver)
+                        let info: DataValueInfo = reflection(receiver)
                         let body: string = info.fields |> info.name + " { ", (acc, field) =>
                             acc + (if acc == info.name + " { " then "" else ", ") + field.name
                         body + " }"
@@ -100,7 +100,7 @@ class CapybaraCompilerLibrariesTest {
                     fun bigger_than(i: int): bool = receiver.age > i
 
                     fun matches_age_metadata(extra: int, limit: AgeLimit): bool =
-                        let info: DataValueInfo = reflection_value(receiver)
+                        let info: DataValueInfo = reflection(receiver)
                         let has_name_field: bool = info.fields |any? field => field.name == "name"
                         let has_age_field: bool = info.fields |any? field => field.name == "age"
                         (info.name == "User") & has_name_field & has_age_field & (receiver.age + extra > limit.value)
@@ -145,11 +145,11 @@ class CapybaraCompilerLibrariesTest {
     void shouldReflectDataValueFields() {
         var libraries = compileProgram(List.of(reflectionMetadataModule()), new java.util.TreeSet<>()).modules();
         var compiled = compileProgram(List.of(new RawModule("Consumer", "/foo/app", """
-                from /capy/meta_prog/Reflection import { DataValueInfo, reflection_value }
+                from /capy/meta_prog/Reflection import { DataValueInfo, reflection }
 
                 data User { name: string, age: int }
 
-                fun reflect_user(): DataValueInfo = reflection_value(User { name: "Ada", age: 42 })
+                fun reflect_user(): DataValueInfo = reflection(User { name: "Ada", age: 42 })
                 """)), libraries);
 
         var function = compiledFunction(compiled, "Consumer", "reflect_user");
@@ -169,9 +169,9 @@ class CapybaraCompilerLibrariesTest {
     void shouldLinkReflectionValueForGenericDataSupertype() {
         var libraries = compileProgram(List.of(reflectionMetadataModule()), new java.util.TreeSet<>()).modules();
         var compiled = compileProgram(List.of(new RawModule("Consumer", "/foo/app", """
-                from /capy/meta_prog/Reflection import { DataValueInfo, reflection_value }
+                from /capy/meta_prog/Reflection import { DataValueInfo, reflection }
 
-                fun reflect_data(obj: data): DataValueInfo = reflection_value(obj)
+                fun reflect_data(obj: data): DataValueInfo = reflection(obj)
                 """)), libraries);
 
         var function = compiledFunction(compiled, "Consumer", "reflect_data");
@@ -971,38 +971,36 @@ class CapybaraCompilerLibrariesTest {
     private static RawModule reflectionMetadataModule() {
         return new RawModule("Reflection", "/capy/meta_prog", """
                 type AnyInfo { name: string, pkg: PackageInfo } =
-                    FunctionalProgrammingInfo
-                    | PrimitiveInfo
-                    | CollectionInfo
+                    DataInfo
+                    | InterfaceInfo
+                    | ObjectInfo
+                    | TraitInfo
+                    | ListInfo
+                    | SetInfo
+                    | DictInfo
                     | TupleInfo
                     | FunctionTypeInfo
-                    | GenericParamInfo
 
-                type FunctionalProgrammingInfo = DataInfo | TypeInfo | FunctionInfo | MethodInfo
-                data DataInfo { name: string, pkg: PackageInfo, fields: list[DataFieldInfo], functions: list[FunctionInfo] }
-                data TypeInfo { fields: list[DataFieldInfo], functions: list[FunctionInfo], "data": set[DataInfo] }
-                data FunctionInfo { params: list[ParamInfo], return_type: AnyInfo }
-                data MethodInfo { params: list[ParamInfo], return_type: AnyInfo }
+                data DataInfo { name: string, pkg: PackageInfo }
 
-                data PrimitiveInfo {}
+                data InterfaceInfo { methods: list[MethodInfo], parents: set[AnyInfo] }
+                data ObjectInfo { open: bool, fields: list[FieldInfo], methods: list[MethodInfo], parents: set[AnyInfo] }
+                data TraitInfo { methods: list[MethodInfo], parents: set[AnyInfo] }
+                data MethodInfo { name: string, pkg: PackageInfo, params: list[FieldInfo], return_type: AnyInfo }
 
-                type CollectionInfo = ListInfo | SetInfo | DictInfo
                 data ListInfo { element_type: AnyInfo }
                 data SetInfo { element_type: AnyInfo }
                 data DictInfo { value_type: AnyInfo }
 
                 data TupleInfo { elements: list[AnyInfo] }
                 data FunctionTypeInfo { params: list[AnyInfo], return_type: AnyInfo }
-                data GenericParamInfo {}
 
                 data PackageInfo { name: string, path: string }
-                data DataFieldInfo { name: string, type: AnyInfo }
-                data DataFieldValueInfo { value: any, ...DataFieldInfo }
-                data DataValueInfo { values: list[DataFieldValueInfo], ...DataInfo }
-                data ParamInfo { name: string, type: AnyInfo }
+                data FieldInfo { name: string, type: AnyInfo }
+                data FieldValueInfo { name: string, type: AnyInfo, value: any }
+                data DataValueInfo { name: string, pkg: PackageInfo, fields: list[FieldValueInfo] }
 
-                fun reflection(type: any): AnyInfo = <native>
-                fun reflection_value(obj: data): DataValueInfo = <native>
+                fun reflection(obj: data): DataValueInfo = <native>
                 """);
     }
 

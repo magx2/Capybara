@@ -642,31 +642,22 @@ class ObjectOrientedJavaGeneratorTest {
                 package capy.metaProg;
 
                 public final class Reflection {
-                    public sealed interface AnyInfo permits FunctionalProgrammingInfo, ObjectOrientedInfo, PrimitiveInfo, CollectionInfo, TupleInfo, FunctionTypeInfo, GenericParamInfo {}
-                    public sealed interface FunctionalProgrammingInfo extends AnyInfo permits DataInfo, TypeInfo, FunctionInfo, MethodInfo {}
-                    public sealed interface ObjectOrientedInfo extends AnyInfo permits InterfaceInfo, ObjectInfo, TraitInfo {}
-                    public sealed interface CollectionInfo extends AnyInfo permits ListInfo, SetInfo, DictInfo {}
+                    public sealed interface AnyInfo permits DataInfo, InterfaceInfo, ObjectInfo, TraitInfo, ListInfo, SetInfo, DictInfo, TupleInfo, FunctionTypeInfo {}
 
                     public record PackageInfo(String name, String path) {}
-                    public record DataFieldInfo(String name, AnyInfo type) {}
-                    public record DataFieldValueInfo(String name, AnyInfo type, Object value) {}
-                    public record DataValueInfo(String name, PackageInfo pkg, java.util.List<DataFieldInfo> fields, java.util.List<FunctionInfo> functions, java.util.List<DataFieldValueInfo> values) {}
-                    public record ObjectFieldInfo(String name, AnyInfo type) {}
-                    public record ParamInfo(String name, AnyInfo type) {}
-                    public record DataInfo(String name, PackageInfo pkg, java.util.List<DataFieldInfo> fields, java.util.List<FunctionInfo> functions) implements FunctionalProgrammingInfo {}
-                    public record TypeInfo(String name, PackageInfo pkg, java.util.List<DataFieldInfo> fields, java.util.List<FunctionInfo> functions, java.util.Set<DataInfo> data) implements FunctionalProgrammingInfo {}
-                    public record FunctionInfo(String name, PackageInfo pkg, java.util.List<ParamInfo> params, AnyInfo return_type) implements FunctionalProgrammingInfo {}
-                    public record MethodInfo(String name, PackageInfo pkg, java.util.List<ParamInfo> params, AnyInfo return_type) implements FunctionalProgrammingInfo {}
-                    public record InterfaceInfo(String name, PackageInfo pkg, java.util.List<MethodInfo> methods, java.util.Set<ObjectOrientedInfo> parents) implements ObjectOrientedInfo {}
-                    public record ObjectInfo(String name, PackageInfo pkg, boolean open, java.util.List<ObjectFieldInfo> fields, java.util.List<MethodInfo> methods, java.util.Set<ObjectOrientedInfo> parents) implements ObjectOrientedInfo {}
-                    public record TraitInfo(String name, PackageInfo pkg, java.util.List<MethodInfo> methods, java.util.Set<ObjectOrientedInfo> parents) implements ObjectOrientedInfo {}
-                    public record PrimitiveInfo(String name, PackageInfo pkg) implements AnyInfo {}
-                    public record ListInfo(String name, PackageInfo pkg, AnyInfo element_type) implements CollectionInfo {}
-                    public record SetInfo(String name, PackageInfo pkg, AnyInfo element_type) implements CollectionInfo {}
-                    public record DictInfo(String name, PackageInfo pkg, AnyInfo value_type) implements CollectionInfo {}
+                    public record FieldInfo(String name, AnyInfo type) {}
+                    public record FieldValueInfo(String name, AnyInfo type, Object value) {}
+                    public record DataValueInfo(String name, PackageInfo pkg, java.util.List<FieldValueInfo> fields) {}
+                    public record DataInfo(String name, PackageInfo pkg) implements AnyInfo {}
+                    public record MethodInfo(String name, PackageInfo pkg, java.util.List<FieldInfo> params, AnyInfo return_type) {}
+                    public record InterfaceInfo(String name, PackageInfo pkg, java.util.List<MethodInfo> methods, java.util.Set<AnyInfo> parents) implements AnyInfo {}
+                    public record ObjectInfo(String name, PackageInfo pkg, boolean open, java.util.List<FieldInfo> fields, java.util.List<MethodInfo> methods, java.util.Set<AnyInfo> parents) implements AnyInfo {}
+                    public record TraitInfo(String name, PackageInfo pkg, java.util.List<MethodInfo> methods, java.util.Set<AnyInfo> parents) implements AnyInfo {}
+                    public record ListInfo(String name, PackageInfo pkg, AnyInfo element_type) implements AnyInfo {}
+                    public record SetInfo(String name, PackageInfo pkg, AnyInfo element_type) implements AnyInfo {}
+                    public record DictInfo(String name, PackageInfo pkg, AnyInfo value_type) implements AnyInfo {}
                     public record TupleInfo(String name, PackageInfo pkg, java.util.List<AnyInfo> elements) implements AnyInfo {}
                     public record FunctionTypeInfo(String name, PackageInfo pkg, java.util.List<AnyInfo> params, AnyInfo return_type) implements AnyInfo {}
-                    public record GenericParamInfo(String name, PackageInfo pkg) implements AnyInfo {}
                 }
                 """, StandardCharsets.UTF_8);
     }

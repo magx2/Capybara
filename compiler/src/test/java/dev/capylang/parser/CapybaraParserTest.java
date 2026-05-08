@@ -179,7 +179,7 @@ class CapybaraParserTest {
         var module = parseSuccess(new RawModule("Test", "/parser", """
                 deriver Show {
                     fun show(): string =
-                        let info: DataValueInfo = reflection_value(receiver)
+                        let info: DataValueInfo = reflection(receiver)
                         let body: string = info.fields |> info.name + " { ", (acc, field) =>
                             acc + field.name + ": " + field.type.name
                         body + " }"

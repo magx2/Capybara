@@ -241,7 +241,7 @@ public class CompilationErrorTest {
 
         assertThat(errors).hasSize(1);
         assertThat(errors.first().message())
-                .contains("`derive_type_name()` has been replaced by `reflection_value(receiver)`");
+                .contains("`derive_type_name()` has been replaced by `reflection(receiver)`");
     }
 
     @Test
@@ -257,8 +257,8 @@ public class CompilationErrorTest {
 
         assertThat(errors).hasSize(1);
         assertThat(errors.first().message())
-                .contains("`derive_fields_join(...)` has been replaced by `reflection_value(receiver)`")
-                .contains("reflection_value(receiver).fields");
+                .contains("`derive_fields_join(...)` has been replaced by `reflection(receiver)`")
+                .contains("reflection(receiver).fields");
     }
 
     @Test
@@ -274,7 +274,7 @@ public class CompilationErrorTest {
 
         assertThat(errors).hasSize(1);
         assertThat(errors.first().message())
-                .contains("`derive_type_name()` has been replaced by `reflection_value(receiver)`");
+                .contains("`derive_type_name()` has been replaced by `reflection(receiver)`");
     }
 
     @Test

@@ -3001,7 +3001,7 @@ public class JavaExpressionEvaluator {
             var targetJavaReference = evaluateExpression(targetReference, current).popExpression();
             current = targetJavaReference.scope();
             current = current.addStatement("if (!(" + targetJavaReference.expression() + " instanceof dev.capylang.CapybaraDataValue)) {\n"
-                                           + "throw new java.lang.IllegalArgumentException(\"reflection_value expects a Capybara data value\");\n"
+                                           + "throw new java.lang.IllegalArgumentException(\"reflection expects a Capybara data value\");\n"
                                            + "}");
             return current.addExpression("((capy.metaProg.Reflection.DataValueInfo) ((dev.capylang.CapybaraDataValue) "
                                          + targetJavaReference.expression()

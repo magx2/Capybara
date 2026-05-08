@@ -138,7 +138,7 @@
         },
         {
           "name": "keyword.operator.word.capybara",
-          "match": "\\b(is_empty|size|to_int|to_long|to_double|to_float|to_bool|reflection|reflection_value)\\b"
+          "match": "\\b(is_empty|size|to_int|to_long|to_double|to_float|to_bool|reflection)\\b"
         },
         {
           "name": "support.type.primitive.capybara",
