@@ -41,8 +41,7 @@ fun to_json(obj: data): Result[JsonObject] =
         case float f -> Success { JsonNumberDouble { f } }
         case bool b -> Success { JsonBool { b } }
         case list l -> {
-            let initial: Result[list[Json]] = Success { [] }
-            let values <- l |> initial, (acc_result, item) => {
+            let values <- l |> Success { [] }, (acc_result, item) => {
                 let acc <- acc_result
                 let encoded <- any_to_json(item)
                 Success { acc + encoded }
@@ -50,8 +49,7 @@ fun to_json(obj: data): Result[JsonObject] =
             JsonArray { values }
         }
         case set s -> {
-            let initial: Result[list[Json]] = Success { [] }
-            let values <- s |> initial, (acc_result, item) => {
+            let values <- s |> Success { [] }, (acc_result, item) => {
                 let acc <- acc_result
                 let encoded <- any_to_json(item)
                 Success { acc + encoded }
@@ -59,10 +57,9 @@ fun to_json(obj: data): Result[JsonObject] =
             JsonArray { values }
         }
         case dict d -> {
-            let initial: Result[dict[Json]] = Success { {:} }
             d
                 | (key, item) => __JsonEntry { key, any_to_json(item) }
-                |> initial, (acc, entry) => __merge_json_entry(acc, entry)
+                |> Success { {:} }, (acc, entry) => __merge_json_entry(acc, entry)
                 | values => Success { JsonObject { values } }
         }
         case Option o -> {
@@ -78,9 +75,8 @@ fun to_json(obj: data): Result[JsonObject] =
         case data d -> to_json(d) | object => Success { object }
         case _ -> Error { "unsupported value" }
     ---
-    let initial: Result[dict[Json]] = Success { {:} }
     let values <- reflection(obj).fields
-        |> initial, (acc_result, field) => {
+        |> Success { {:} }, (acc_result, field) => {
             let acc <- acc_result
             match any_to_json(field.value) with
             case Success { encoded } -> Success { acc + { field.name : encoded } }

@@ -1221,25 +1221,27 @@ public class JavaExpressionEvaluator {
                         + ".orElseGet(() -> " + initialExSc.expression() + ")"
                 );
             }
+            var reducerBaseScope = initialExSc.scope()
+                    .addLocalValue(pipeReduceExpression.accumulatorName())
+                    .addValueOverride(keyName, entryVar + ".getKey()")
+                    .addValueOverride(pipeReduceExpression.valueName(), entryVar + ".getValue()");
             var reducerExSc = evaluateExpression(
                     pipeReduceExpression.reducerExpression(),
-                    initialExSc.scope()
-                            .addLocalValue(pipeReduceExpression.accumulatorName())
-                            .addValueOverride(keyName, entryVar + ".getKey()")
-                            .addValueOverride(pipeReduceExpression.valueName(), entryVar + ".getValue()")
+                    reducerBaseScope
             ).popExpression();
             var reduceInitialExpression = reduceInitialExpression(pipeReduceExpression.initialValue(), pipeReduceExpression.type(), initialExSc.expression());
-            var javaAccumulatorName = resolveJavaLocalIdentifier(reducerExSc.scope(), pipeReduceExpression.accumulatorName());
-            var javaReducerExpression = pipeReduceExpression.accumulatorName().equals(javaAccumulatorName)
-                    ? reducerExSc.expression()
-                    : replaceIdentifier(reducerExSc.expression(), pipeReduceExpression.accumulatorName(), javaAccumulatorName);
-            return reducerExSc.scope().addExpression(
+            var reducerLambda = biLambdaExpression(
+                    pipeReduceExpression.accumulatorName(),
+                    entryVar,
+                    reducerBaseScope,
+                    reducerExSc.scope(),
+                    reducerExSc.expression()
+            );
+            return reducerExSc.scope().withStatements(initialExSc.scope().getStatements()).addExpression(
                     sourceExSc.expression()
                     + ".entrySet().stream().reduce("
                     + reduceInitialExpression
-                    + ", (" + javaAccumulatorName
-                    + ", " + entryVar
-                    + ") -> (" + javaReducerExpression + ")"
+                    + ", " + reducerLambda
                     + ", (left, right) -> left)"
             );
         }
@@ -2082,6 +2084,10 @@ public class JavaExpressionEvaluator {
                     if (fieldType instanceof dev.capylang.compiler.CompiledFunctionType) {
                         return null;
                     }
+                    var resolvedDescriptorCast = sanitizePatternCastType(genericCasts.get(capyTypeDescriptor(fieldType)));
+                    if (resolvedDescriptorCast != null) {
+                        return resolvedDescriptorCast;
+                    }
                     if (fieldType instanceof dev.capylang.compiler.CompiledGenericTypeParameter genericTypeParameter) {
                         var resolvedGenericCast = sanitizePatternCastType(genericCasts.get(genericTypeParameter.name()));
                         return resolvedGenericCast != null ? resolvedGenericCast : genericTypeParameter.name();
@@ -2095,6 +2101,38 @@ public class JavaExpressionEvaluator {
                     return sanitizePatternCastType(javaCastType(fieldType));
                 })
                 .toList();
+    }
+
+    private static String capyTypeDescriptor(dev.capylang.compiler.CompiledType type) {
+        return switch (type) {
+            case dev.capylang.compiler.PrimitiveLinkedType primitiveType ->
+                    primitiveType.name().toLowerCase(java.util.Locale.ROOT);
+            case dev.capylang.compiler.CollectionLinkedType.CompiledList listType ->
+                    "list[" + capyTypeDescriptor(listType.elementType()) + "]";
+            case dev.capylang.compiler.CollectionLinkedType.CompiledSet setType ->
+                    "set[" + capyTypeDescriptor(setType.elementType()) + "]";
+            case dev.capylang.compiler.CollectionLinkedType.CompiledDict dictType ->
+                    "dict[" + capyTypeDescriptor(dictType.valueType()) + "]";
+            case dev.capylang.compiler.CompiledTupleType tupleType ->
+                    "tuple[" + tupleType.elementTypes().stream()
+                            .map(JavaExpressionEvaluator::capyTypeDescriptor)
+                            .reduce((left, right) -> left + ", " + right)
+                            .orElse("") + "]";
+            case dev.capylang.compiler.CompiledFunctionType functionType ->
+                    "fn[" + capyTypeDescriptor(functionType.argumentType())
+                    + ", " + capyTypeDescriptor(functionType.returnType()) + "]";
+            case dev.capylang.compiler.CompiledGenericTypeParameter genericTypeParameter ->
+                    genericTypeParameter.name();
+            case dev.capylang.compiler.CompiledDataType dataType ->
+                    dataType.typeParameters().isEmpty()
+                            ? dataType.name()
+                            : dataType.name() + "[" + String.join(", ", dataType.typeParameters()) + "]";
+            case dev.capylang.compiler.CompiledDataParentType parentType ->
+                    parentType.typeParameters().isEmpty()
+                            ? parentType.name()
+                            : parentType.name() + "[" + String.join(", ", parentType.typeParameters()) + "]";
+            default -> type.name();
+        };
     }
 
     private static String sanitizePatternCastType(String castType) {

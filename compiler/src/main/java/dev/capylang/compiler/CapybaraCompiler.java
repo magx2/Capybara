@@ -4191,7 +4191,7 @@ public class CapybaraCompiler {
                 if (matchingExtendedParent.isPresent()) {
                     return areAssignableDataTypeParameters(
                             expectedParent.typeParameters(),
-                            matchingExtendedParent.orElseThrow().typeArguments(),
+                            resolvedExtendedParentTypeArguments(actualData, matchingExtendedParent.orElseThrow(), dataTypes),
                             dataTypes
                     );
                 }
@@ -4234,6 +4234,50 @@ public class CapybaraCompiler {
             return true;
         }
         return false;
+    }
+
+    private List<String> resolvedExtendedParentTypeArguments(
+            CompiledDataType actualData,
+            ParsedGenericTypeName extendedParent,
+            Map<String, GenericDataType> dataTypes
+    ) {
+        if (extendedParent.typeArguments().isEmpty() || actualData.typeParameters().isEmpty()) {
+            return extendedParent.typeArguments();
+        }
+        var rawType = dataTypes.values().stream()
+                .filter(CompiledDataType.class::isInstance)
+                .map(CompiledDataType.class::cast)
+                .filter(candidate -> sameTypeName(candidate.name(), actualData.name()))
+                .findFirst();
+        if (rawType.isEmpty() || rawType.orElseThrow().typeParameters().isEmpty()) {
+            return extendedParent.typeArguments();
+        }
+        var substitutions = new LinkedHashMap<String, String>();
+        var max = Math.min(rawType.orElseThrow().typeParameters().size(), actualData.typeParameters().size());
+        for (var i = 0; i < max; i++) {
+            substitutions.put(rawType.orElseThrow().typeParameters().get(i), actualData.typeParameters().get(i));
+        }
+        if (substitutions.isEmpty()) {
+            return extendedParent.typeArguments();
+        }
+        return extendedParent.typeArguments().stream()
+                .map(typeArgument -> substituteTypeArgumentDescriptor(typeArgument, substitutions))
+                .toList();
+    }
+
+    private String substituteTypeArgumentDescriptor(String descriptor, Map<String, String> substitutions) {
+        var normalized = normalizeDescriptor(descriptor);
+        var direct = substitutions.get(normalized);
+        if (direct != null) {
+            return direct;
+        }
+        var parsed = parseGenericTypeName(normalized);
+        if (parsed.typeArguments().isEmpty()) {
+            return normalized;
+        }
+        return parsed.baseName() + "[" + parsed.typeArguments().stream()
+                .map(typeArgument -> substituteTypeArgumentDescriptor(typeArgument, substitutions))
+                .collect(java.util.stream.Collectors.joining(", ")) + "]";
     }
 
     private boolean isAssignablePrimitiveReturnType(PrimitiveLinkedType expected, PrimitiveLinkedType actual) {
@@ -4816,7 +4860,24 @@ public class CapybaraCompiler {
                 .filter(dataType -> sameTypeName(dataType.name(), normalizedActual))
                 .findFirst();
         if (maybeActual.isEmpty()) {
-            return false;
+            var maybeParent = dataTypes.values().stream()
+                    .filter(CompiledDataParentType.class::isInstance)
+                    .map(CompiledDataParentType.class::cast)
+                    .filter(parentType -> sameTypeName(parentType.name(), normalizedActual))
+                    .findFirst();
+            if (maybeParent.isEmpty()) {
+                return false;
+            }
+            var actualParent = maybeParent.orElseThrow();
+            if (sameTypeName(actualParent.name(), expectedParentName)) {
+                return true;
+            }
+            return dataTypes.values().stream()
+                    .filter(CompiledDataParentType.class::isInstance)
+                    .map(CompiledDataParentType.class::cast)
+                    .filter(parent -> parent.subTypes().stream().anyMatch(subType -> sameTypeName(subType.name(), actualParent.name())))
+                    .anyMatch(parent -> sameTypeName(parent.name(), expectedParentName)
+                                        || isSubtypeNameOfParent(parent.name(), expectedParentName, dataTypes, visited));
         }
         var actualData = maybeActual.orElseThrow();
         for (var extendedType : actualData.extendedTypes()) {

@@ -1,6 +1,8 @@
 from /capy/test/Assert import { * }
 from /capy/test/CapyTest import { * }
 from /capy/lang/Effect import { * }
+from /capy/lang/Option import { * }
+from /capy/lang/Result import { * }
 
 fun reverse_ints(values: list[int]): list[int] =
     fun rev(left: list[int], acc: list[int]): list[int] =
@@ -30,6 +32,7 @@ fun empty_list_of_type_param(v: T): list[T] =
 data JsonBox { value: string }
 data NamedValue { name: string, value: int }
 data ParseCase { source: string, expected: int }
+data Box[T] { value: T }
 
 fun typed_empty_dict_then_append_json_box(name: string): int =
     let values: dict[JsonBox] = {:}
@@ -51,6 +54,33 @@ fun reduce_dict_to_two_lists_and_concat_sizes(values: dict[int]): int =
     let parse_test_cases = values |> [], (acc, source, expected) => acc + NamedValue { name: "parse:" + source, value: expected }
     let format_test_cases = values |> [], (acc, expected, value) => acc + NamedValue { name: "format:" + expected, value }
     (parse_test_cases + format_test_cases).size
+
+fun reduce_list_to_success_values(values: list[int]): Result[list[int]] =
+    values |> Success { [] }, (acc_result, item) => {
+        let acc <- acc_result
+        Success { acc + item }
+    }
+
+fun reduce_set_to_success_values(values: set[string]): Result[set[string]] =
+    values |> Success { {} }, (acc_result, item) => {
+        let acc <- acc_result
+        Success { acc + item }
+    }
+
+fun reduce_dict_to_success_values(values: dict[int]): Result[dict[int]] =
+    values |> Success { {:} }, (acc_result, key, value) => {
+        let acc <- acc_result
+        Success { acc + { key : value } }
+    }
+
+fun reduce_list_to_some_values(values: list[int]): Option[list[int]] =
+    values |> Some { [] }, (acc_option, item) =>
+        match acc_option with
+        case Some { acc } -> Some { acc + item }
+        case None -> None {}
+
+fun reduce_list_to_box_values(values: list[int]): Box[list[int]] =
+    values |> Box { [] }, (acc_box, item) => Box { acc_box.value + item }
 
 type SeqEnd[T] = ConsEnd[T] | EndEnd
 data ConsEnd[T] { value: T, rest: () => SeqEnd[T] }
