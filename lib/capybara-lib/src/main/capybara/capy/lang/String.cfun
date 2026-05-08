@@ -1,10 +1,15 @@
 from /capy/lang/Result import { * }
+from /capy/lang/Option import { * }
 
 /// Native String type backed by the runtime String implementation.
+/// String literals use quotes: "hello".
 data String { <native> }
 
 /// Returns the number of characters in this String.
 fun String.length(): int = <native>
+
+/// Returns the character at idx as a String using the same bounds and negative-index rules as string[idx].
+fun String.get(idx: int): Option[String] = <native>
 
 /// Returns true when this String has no characters.
 fun String.is_empty(): bool = <native>

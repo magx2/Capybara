@@ -2089,6 +2089,10 @@ public class CapybaraExpressionCompiler {
         if (pipeAlias.isPresent()) {
             return pipeAlias;
         }
+        var getAlias = resolveBuiltinGetMethodInvoke(functionCall, scope, methodName);
+        if (getAlias.isPresent()) {
+            return getAlias;
+        }
         var enumNameMethod = resolveBuiltinEnumNameMethodInvoke(functionCall, scope, methodName);
         if (enumNameMethod.isPresent()) {
             return enumNameMethod;
@@ -2354,6 +2358,80 @@ public class CapybaraExpressionCompiler {
                 List.of(value.value()),
                 STRING
         )));
+    }
+
+    private Optional<Result<CompiledExpression>> resolveBuiltinGetMethodInvoke(
+            FunctionCall functionCall,
+            Scope scope,
+            String methodName
+    ) {
+        if (!"get".equals(methodName) || functionCall.arguments().size() != 2) {
+            return Optional.empty();
+        }
+        var linkedArguments = functionCall.arguments().stream()
+                .map(argument -> linkExpression(argument, scope))
+                .collect(new ResultCollectionCollector<>());
+        if (!(linkedArguments instanceof Result.Success<java.util.List<CompiledExpression>> value)) {
+            if (linkedArguments instanceof Result.Error<java.util.List<CompiledExpression>> error) {
+                return Optional.of(new Result.Error<>(error.errors()));
+            }
+            return Optional.empty();
+        }
+        var args = value.value();
+        var source = args.get(0);
+        var index = args.get(1);
+        var sourceType = source.type();
+        if (sourceType instanceof CompiledList || sourceType == STRING) {
+            if (index.type() != INT) {
+                return Optional.empty();
+            }
+            var elementType = sourceType instanceof CompiledList linkedListType ? linkedListType.elementType() : STRING;
+            var optionType = optionTypeFor(elementType);
+            if (optionType == null) {
+                return Optional.of(withPosition(Result.error("Option type not found"), functionCall.position()));
+            }
+            return Optional.of(Result.success(new CompiledIndexExpression(source, index, elementType, optionType)));
+        }
+        if (sourceType instanceof CompiledTupleType tupleType) {
+            if (index.type() != INT) {
+                return Optional.empty();
+            }
+            var elementType = tupleElementType(tupleType, index, functionCall.arguments().get(1).position());
+            if (elementType instanceof Result.Error<CompiledType> error) {
+                return Optional.of(withPosition(new Result.Error<>(error.errors()), functionCall.position()));
+            }
+            var resolvedElementType = ((Result.Success<CompiledType>) elementType).value();
+            return Optional.of(Result.success(new CompiledIndexExpression(source, index, resolvedElementType, resolvedElementType)));
+        }
+        if (sourceType instanceof CompiledDict linkedDict) {
+            if (index.type() != STRING) {
+                return Optional.empty();
+            }
+            var optionType = optionTypeFor(linkedDict.valueType());
+            if (optionType == null) {
+                return Optional.of(withPosition(Result.error("Option type not found"), functionCall.position()));
+            }
+            return Optional.of(Result.success(new CompiledFunctionCall(
+                    METHOD_DECL_PREFIX + "Dict__get",
+                    args,
+                    optionType
+            )));
+        }
+        if (sourceType instanceof CompiledSet linkedSet) {
+            if (!canCoerceToExpectedType(index.type(), linkedSet.elementType())) {
+                return Optional.empty();
+            }
+            var optionType = optionTypeFor(linkedSet.elementType());
+            if (optionType == null) {
+                return Optional.of(withPosition(Result.error("Option type not found"), functionCall.position()));
+            }
+            return Optional.of(Result.success(new CompiledFunctionCall(
+                    METHOD_DECL_PREFIX + "Set__get",
+                    args,
+                    optionType
+            )));
+        }
+        return Optional.empty();
     }
 
     private Optional<Result<CompiledExpression>> rewriteReduceMethodInvoke(

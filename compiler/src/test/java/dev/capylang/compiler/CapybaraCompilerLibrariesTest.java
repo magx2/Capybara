@@ -48,6 +48,21 @@ class CapybaraCompilerLibrariesTest {
     }
 
     @Test
+    void shouldPreserveNativeStatusWhenInstantiatingGenericNativeDataType() {
+        var compiled = compileProgram(List.of(new RawModule("NativeHandle", "/foo/app", """
+                data Handle[T] { <native> }
+
+                fun identity(handle: Handle[int]): Handle[int] = handle
+                """)), new java.util.TreeSet<>());
+
+        var identity = compiledFunction(compiled, "NativeHandle", "identity");
+        assertThat(identity.returnType()).isInstanceOfSatisfying(CompiledDataType.class, dataType ->
+                assertThat(dataType.nativeType()).isTrue());
+        assertThat(identity.parameters().getFirst().type()).isInstanceOfSatisfying(CompiledDataType.class, dataType ->
+                assertThat(dataType.nativeType()).isTrue());
+    }
+
+    @Test
     void shouldUseImportedDeriverWithDeriverModuleImports() {
         var reflectionLibraries = compileProgram(List.of(reflectionMetadataModule()), new java.util.TreeSet<>()).modules();
         var serdeLibraries = compileProgram(List.of(new RawModule("Serde", "/foo/lib", """
