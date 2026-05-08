@@ -492,9 +492,19 @@ public final class ObjectOrientedJavaGenerator {
             ObjectOriented.TypeDeclaration declaration,
             Map<String, ObjectOriented.TypeDeclaration> definitionsByName
     ) {
-        return "    public static capy.metaProg.Reflection.AnyInfo type() {\n"
+        return "    public static " + reflectionInfoJavaType(declaration) + " type() {\n"
                + "        return " + renderObjectOrientedInfo(module, declaration, definitionsByName, true) + ";\n"
                + "    }\n";
+    }
+
+    private String reflectionInfoJavaType(ObjectOriented.TypeDeclaration declaration) {
+        if (declaration instanceof ObjectOriented.InterfaceDeclaration) {
+            return "capy.metaProg.Reflection.InterfaceInfo";
+        }
+        if (declaration instanceof ObjectOriented.TraitDeclaration) {
+            return "capy.metaProg.Reflection.TraitInfo";
+        }
+        return "capy.metaProg.Reflection.ObjectInfo";
     }
 
     private String renderObjectOrientedInfo(
@@ -541,7 +551,7 @@ public final class ObjectOrientedJavaGenerator {
             boolean full
     ) {
         if (!full || parents.isEmpty()) {
-            return "java.util.Set.<capy.metaProg.Reflection.ObjectOrientedInfo>of()";
+            return "java.util.Set.<capy.metaProg.Reflection.AnyInfo>of()";
         }
         return parents.stream()
                 .map(parent -> {
@@ -551,7 +561,7 @@ public final class ObjectOrientedJavaGenerator {
                     }
                     return renderObjectOrientedInfo(module, declaration, definitionsByName, false);
                 })
-                .collect(Collectors.joining(", ", "java.util.Set.<capy.metaProg.Reflection.ObjectOrientedInfo>of(", ")"));
+                .collect(Collectors.joining(", ", "java.util.Set.<capy.metaProg.Reflection.AnyInfo>of(", ")"));
     }
 
     private String renderReflectionFields(
@@ -561,14 +571,14 @@ public final class ObjectOrientedJavaGenerator {
             boolean full
     ) {
         if (!full || fields.isEmpty()) {
-            return "java.util.List.<capy.metaProg.Reflection.ObjectFieldInfo>of()";
+            return "java.util.List.<capy.metaProg.Reflection.FieldInfo>of()";
         }
         return fields.stream()
-                .map(field -> "new capy.metaProg.Reflection.ObjectFieldInfo("
+                .map(field -> "new capy.metaProg.Reflection.FieldInfo("
                               + javaString(field.name()) + ", "
                               + renderReflectionTypeInfo(module, field.type(), definitionsByName)
                               + ")")
-                .collect(Collectors.joining(", ", "java.util.List.<capy.metaProg.Reflection.ObjectFieldInfo>of(", ")"));
+                .collect(Collectors.joining(", ", "java.util.List.<capy.metaProg.Reflection.FieldInfo>of(", ")"));
     }
 
     private String renderReflectionMethods(
@@ -611,14 +621,14 @@ public final class ObjectOrientedJavaGenerator {
             Map<String, ObjectOriented.TypeDeclaration> definitionsByName
     ) {
         if (parameters.isEmpty()) {
-            return "java.util.List.<capy.metaProg.Reflection.ParamInfo>of()";
+            return "java.util.List.<capy.metaProg.Reflection.FieldInfo>of()";
         }
         return parameters.stream()
-                .map(parameter -> "new capy.metaProg.Reflection.ParamInfo("
+                .map(parameter -> "new capy.metaProg.Reflection.FieldInfo("
                                   + javaString(parameter.name()) + ", "
                                   + renderReflectionTypeInfo(module, parameter.type(), definitionsByName)
                                   + ")")
-                .collect(Collectors.joining(", ", "java.util.List.<capy.metaProg.Reflection.ParamInfo>of(", ")"));
+                .collect(Collectors.joining(", ", "java.util.List.<capy.metaProg.Reflection.FieldInfo>of(", ")"));
     }
 
     private String renderReflectionTypeInfo(
@@ -667,7 +677,7 @@ public final class ObjectOrientedJavaGenerator {
                    + ")";
         }
         if (isPrimitiveReflectionType(trimmed)) {
-            return "new capy.metaProg.Reflection.PrimitiveInfo("
+            return "new capy.metaProg.Reflection.DataInfo("
                    + javaString(trimmed) + ", "
                    + renderEmptyReflectionPackage()
                    + ")";
@@ -678,9 +688,7 @@ public final class ObjectOrientedJavaGenerator {
         }
         return "new capy.metaProg.Reflection.DataInfo("
                + javaString(simpleTypeName(trimmed)) + ", "
-               + renderReflectionPackageForType(module, trimmed) + ", "
-               + "java.util.List.<capy.metaProg.Reflection.DataFieldInfo>of(), "
-               + "java.util.List.<capy.metaProg.Reflection.FunctionInfo>of()"
+               + renderReflectionPackageForType(module, trimmed)
                + ")";
     }
 
@@ -696,9 +704,9 @@ public final class ObjectOrientedJavaGenerator {
                + javaString(name) + ", "
                + renderReflectionPackageForType(module, name) + ", "
                + "false, "
-               + "java.util.List.<capy.metaProg.Reflection.ObjectFieldInfo>of(), "
+               + "java.util.List.<capy.metaProg.Reflection.FieldInfo>of(), "
                + "java.util.List.<capy.metaProg.Reflection.MethodInfo>of(), "
-               + "java.util.Set.<capy.metaProg.Reflection.ObjectOrientedInfo>of()"
+               + "java.util.Set.<capy.metaProg.Reflection.AnyInfo>of()"
                + ")";
     }
 

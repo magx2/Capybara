@@ -31,14 +31,10 @@ public final class ReflectionValueInfoJava {
     }
 
     public static String dataValueInfoExpression(JavaDataValueInfo dataValueInfo) {
-        var fieldInfos = new ArrayList<String>(dataValueInfo.fields().size());
         var fieldValueInfos = new ArrayList<String>(dataValueInfo.fields().size());
         for (var field : dataValueInfo.fields()) {
             var typeInfo = reflectionTypeInfo(field.type(), dataValueInfo.packagePath());
-            fieldInfos.add("new capy.metaProg.Reflection.DataFieldInfo("
-                           + javaString(field.name()) + ", "
-                           + typeInfo + ")");
-            fieldValueInfos.add("new capy.metaProg.Reflection.DataFieldValueInfo("
+            fieldValueInfos.add("new capy.metaProg.Reflection.FieldValueInfo("
                                 + javaString(field.name()) + ", "
                                 + typeInfo + ", "
                                 + field.valueExpression() + ")");
@@ -49,16 +45,14 @@ public final class ReflectionValueInfoJava {
                + "new capy.metaProg.Reflection.PackageInfo("
                + javaString(dataValueInfo.packageName()) + ", "
                + javaString(dataValueInfo.packagePath()) + "), "
-               + reflectionList("capy.metaProg.Reflection.DataFieldInfo", fieldInfos) + ", "
-               + "java.util.List.<capy.metaProg.Reflection.FunctionInfo>of(), "
-               + reflectionList("capy.metaProg.Reflection.DataFieldValueInfo", fieldValueInfos)
+               + reflectionList("capy.metaProg.Reflection.FieldValueInfo", fieldValueInfos)
                + ")";
     }
 
     public static String reflectionTypeInfo(dev.capylang.compiler.CompiledType type, String fallbackPackagePath) {
         return switch (type) {
             case PrimitiveLinkedType primitive ->
-                    "new capy.metaProg.Reflection.PrimitiveInfo("
+                    "new capy.metaProg.Reflection.DataInfo("
                     + javaString(primitive.name().toLowerCase(java.util.Locale.ROOT)) + ", "
                     + reflectionEmptyPackageInfo() + ")";
             case CollectionLinkedType.CompiledList listType ->
@@ -100,22 +94,17 @@ public final class ReflectionValueInfoJava {
                       + reflectionTypeInfo(shape.returnType(), fallbackPackagePath) + ")";
             }
             case CompiledGenericTypeParameter genericTypeParameter ->
-                    "new capy.metaProg.Reflection.GenericParamInfo("
+                    "new capy.metaProg.Reflection.DataInfo("
                     + javaString(genericTypeParameter.name()) + ", "
                     + reflectionEmptyPackageInfo() + ")";
             case CompiledDataParentType parentType ->
-                    "new capy.metaProg.Reflection.TypeInfo("
+                    "new capy.metaProg.Reflection.DataInfo("
                     + javaString(simpleReflectionTypeName(parentType.name())) + ", "
-                    + reflectionPackageInfo(parentType.name(), fallbackPackagePath) + ", "
-                    + "java.util.List.<capy.metaProg.Reflection.DataFieldInfo>of(), "
-                    + "java.util.List.<capy.metaProg.Reflection.FunctionInfo>of(), "
-                    + reflectionSet("capy.metaProg.Reflection.DataInfo", List.of()) + ")";
+                    + reflectionPackageInfo(parentType.name(), fallbackPackagePath) + ")";
             case CompiledDataType dataType ->
                     "new capy.metaProg.Reflection.DataInfo("
                     + javaString(simpleReflectionTypeName(dataType.name())) + ", "
-                    + reflectionPackageInfo(dataType.name(), fallbackPackagePath) + ", "
-                    + "java.util.List.<capy.metaProg.Reflection.DataFieldInfo>of(), "
-                    + "java.util.List.<capy.metaProg.Reflection.FunctionInfo>of())";
+                    + reflectionPackageInfo(dataType.name(), fallbackPackagePath) + ")";
         };
     }
 
@@ -140,13 +129,6 @@ public final class ReflectionValueInfoJava {
             return "java.util.List.<" + javaElementType + ">of()";
         }
         return "java.util.List.of(" + String.join(", ", values) + ")";
-    }
-
-    private static String reflectionSet(String javaElementType, List<String> values) {
-        if (values.isEmpty()) {
-            return "java.util.Set.<" + javaElementType + ">of()";
-        }
-        return "java.util.Set.of(" + String.join(", ", values) + ")";
     }
 
     private static ReflectionFunctionShape flattenReflectionFunctionType(CompiledFunctionType functionType) {

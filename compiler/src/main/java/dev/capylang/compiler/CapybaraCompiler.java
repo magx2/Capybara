@@ -1765,14 +1765,14 @@ public class CapybaraCompiler {
     ) {
         if ("derive_type_name".equals(functionReference.name())) {
             return legacyDeriveHelperError(
-                    "`derive_type_name()` has been replaced by `reflection_value(receiver)`. Import `/capy/meta_prog/Reflection` and use `reflection_value(receiver).name`.",
+                    "`derive_type_name()` has been replaced by `reflection(receiver)`. Import `/capy/meta_prog/Reflection` and use `reflection(receiver).name`.",
                     functionReference.position(),
                     moduleSourceFile
             );
         }
         if ("derive_fields_join".equals(functionReference.name())) {
             return legacyDeriveHelperError(
-                    "`derive_fields_join(...)` has been replaced by `reflection_value(receiver)`. Import `/capy/meta_prog/Reflection` and fold over `reflection_value(receiver).fields`.",
+                    "`derive_fields_join(...)` has been replaced by `reflection(receiver)`. Import `/capy/meta_prog/Reflection` and fold over `reflection(receiver).fields`.",
                     functionReference.position(),
                     moduleSourceFile
             );
@@ -1787,14 +1787,14 @@ public class CapybaraCompiler {
     ) {
         if (functionCall.moduleName().isEmpty() && "derive_type_name".equals(functionCall.name())) {
             return legacyDeriveHelperError(
-                    "`derive_type_name()` has been replaced by `reflection_value(receiver)`. Import `/capy/meta_prog/Reflection` and use `reflection_value(receiver).name`.",
+                    "`derive_type_name()` has been replaced by `reflection(receiver)`. Import `/capy/meta_prog/Reflection` and use `reflection(receiver).name`.",
                     functionCall.position(),
                     moduleSourceFile
             );
         }
         if (functionCall.moduleName().isEmpty() && "derive_fields_join".equals(functionCall.name())) {
             return legacyDeriveHelperError(
-                    "`derive_fields_join(...)` has been replaced by `reflection_value(receiver)`. Import `/capy/meta_prog/Reflection` and fold over `reflection_value(receiver).fields`.",
+                    "`derive_fields_join(...)` has been replaced by `reflection(receiver)`. Import `/capy/meta_prog/Reflection` and fold over `reflection(receiver).fields`.",
                     functionCall.position(),
                     moduleSourceFile
             );

@@ -1,4 +1,4 @@
-from /capy/meta_prog/Reflection import { AnyInfo, DataInfo, DataValueInfo, MethodInfo, reflection, reflection_value }
+from /capy/meta_prog/Reflection import { DataValueInfo, reflection }
 
 type Letter { name: string } = A | B
 data A { a: int }
@@ -17,45 +17,31 @@ data ReflectedJsonNumber { value: int }
 data ReflectedJsonBool { value: bool }
 single ReflectedJsonNull
 
-fun reflection_letter(): AnyInfo = reflection(Letter)
+fun reflection_data_a(a: A): DataValueInfo = reflection(a)
 
-fun reflection_letter2(letter: Letter): AnyInfo = reflection(letter)
+fun reflection_data_b(b: B): DataValueInfo = reflection(b)
 
-fun reflection_a(): AnyInfo = reflection(A)
+fun reflection_data_empty(): DataValueInfo = reflection(ReflectedEmpty {})
 
-fun reflection_a2(a: A): AnyInfo = reflection(a)
+fun reflection_data_employee(employee: ReflectedEmployee): DataValueInfo = reflection(employee)
 
-fun reflection_b(): AnyInfo = reflection(B)
+fun reflection_data(obj: data): DataValueInfo = reflection(obj)
 
-fun reflection_value_a(a: A): DataValueInfo = reflection_value(a)
-
-fun reflection_value_b(b: B): DataValueInfo = reflection_value(b)
-
-fun reflection_value_empty(): DataValueInfo = reflection_value(ReflectedEmpty {})
-
-fun reflection_value_employee(employee: ReflectedEmployee): DataValueInfo = reflection_value(employee)
-
-fun reflection_value_data(obj: data): DataValueInfo = reflection_value(obj)
-
-fun reflection_value_data_to_json(d: data): ReflectedJsonObject =
+fun reflection_data_to_json(d: data): ReflectedJsonObject =
     ReflectedJsonObject {
-        reflection_value(d).values
-        |> {:}, (acc, field) => acc + { field.name : reflection_value_any_to_json(field.value) }
+        reflection(d).fields
+        |> {:}, (acc, field) => acc + { field.name : reflection_any_to_json(field.value) }
     }
 
-fun reflection_value_any_to_json(value: any): ReflectedJson =
+fun reflection_any_to_json(value: any): ReflectedJson =
     match value with
     case string s -> ReflectedJsonString { s }
     case int i -> ReflectedJsonNumber { i }
     case bool b -> ReflectedJsonBool { b }
-    case data d -> reflection_value_data_to_json(d)
+    case data d -> reflection_data_to_json(d)
     case _ -> ReflectedJsonNull
 
-fun reflection_value_json_shape(obj: data): ReflectedJsonObject =
-    match reflection_value_any_to_json(obj) with
+fun reflection_json_shape(obj: data): ReflectedJsonObject =
+    match reflection_any_to_json(obj) with
     case ReflectedJsonObject { value } -> ReflectedJsonObject { value }
     case _ -> ReflectedJsonObject { {:} }
-
-fun test_method(l: list[string], x: int, d: double, a: A, letter: Letter): string = "ok"
-
-fun reflection_method(): MethodInfo = reflection(:test_method)

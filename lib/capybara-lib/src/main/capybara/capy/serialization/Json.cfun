@@ -1,6 +1,6 @@
 from /capy/lang/Option import { * }
 from /capy/lang/Result import { * }
-from /capy/meta_prog/Reflection import { DataValueInfo, reflection_value }
+from /capy/meta_prog/Reflection import { DataValueInfo, reflection }
 
 type Json = JsonObject | JsonArray | JsonValue
 data JsonObject { value: dict[Json] }
@@ -52,7 +52,7 @@ fun to_json(obj: data): JsonObject =
         case _ -> JsonNull
     ---
     JsonObject {
-        reflection_value(obj).values
+        reflection(obj).fields
         |> {:}, (acc, field) => acc + { field.name : any_to_json(field.value) }
     }
 

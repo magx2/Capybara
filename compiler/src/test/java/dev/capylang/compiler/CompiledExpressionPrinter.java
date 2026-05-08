@@ -198,7 +198,7 @@ public class CompiledExpressionPrinter {
     }
 
     private static String printLinkedReflectionValue(CompiledReflectionValue linkedReflectionValue, int level) {
-        return "reflection_value(" + printExpression(linkedReflectionValue.target(), level) + ")";
+        return "reflection(" + printExpression(linkedReflectionValue.target(), level) + ")";
     }
 
     private static String printLinkedSliceExpression(CompiledSliceExpression linkedSliceExpression, int level) {

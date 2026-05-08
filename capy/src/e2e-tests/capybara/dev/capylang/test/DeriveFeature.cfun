@@ -1,8 +1,8 @@
-from /capy/meta_prog/Reflection import { DataValueInfo, DataFieldInfo, reflection_value }
+from /capy/meta_prog/Reflection import { DataValueInfo, reflection }
 
 deriver Show {
     fun show(): string =
-        let info: DataValueInfo = reflection_value(receiver)
+        let info: DataValueInfo = reflection(receiver)
         let body: string = info.fields |> info.name + " { ", (acc, field) =>
             acc + (if acc == info.name + " { " then "" else ", ") + field.name
         body + " }"
@@ -14,7 +14,7 @@ deriver AgeComparable {
     fun bigger_than(i: int): bool = receiver.age > i
 
     fun matches_age_metadata(extra: int, limit: AgeLimit): bool =
-        let info: DataValueInfo = reflection_value(receiver)
+        let info: DataValueInfo = reflection(receiver)
         let has_name_field: bool = info.fields |any? field => field.name == "name"
         let has_age_field: bool = info.fields |any? field => field.name == "age"
         (info.name == "DerivedUser") & has_name_field & has_age_field & (receiver.age + extra > limit.value)
@@ -22,8 +22,8 @@ deriver AgeComparable {
 
 deriver FieldValueSummary {
     fun field_values_summary(): string =
-        let info: DataValueInfo = reflection_value(receiver)
-        info.values |> "", (acc, field) =>
+        let info: DataValueInfo = reflection(receiver)
+        info.fields |> "", (acc, field) =>
             acc + (if acc == "" then "" else ",") + field.name + "=" + field.value
 }
 
