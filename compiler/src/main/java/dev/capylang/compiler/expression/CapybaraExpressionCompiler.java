@@ -3154,7 +3154,7 @@ public class CapybaraExpressionCompiler {
         var parsedActual = parseLinkedTypeDescriptor(actual);
         var parsedExpected = parseLinkedTypeDescriptor(expected);
         if (parsedActual.isPresent() && parsedExpected.isPresent()) {
-            if (hasKnownEmptyCollectionShape(parsedActual.get())) {
+            if (isEmptyCollectionShapeCompatible(parsedActual.get(), parsedExpected.get())) {
                 return true;
             }
             return isTypeCompatible(parsedActual.get(), parsedExpected.get());
@@ -7883,6 +7883,86 @@ public class CapybaraExpressionCompiler {
                             .anyMatch(this::hasKnownEmptyCollectionShape);
             default -> false;
         };
+    }
+
+    private boolean isEmptyCollectionShapeCompatible(CompiledType actual, CompiledType expected) {
+        if (!hasKnownEmptyCollectionShape(actual)) {
+            return false;
+        }
+        return switch (actual) {
+            case CompiledList actualList when expected instanceof CompiledList expectedList ->
+                    isEmptyCollectionElementCompatible(actualList.elementType(), expectedList.elementType());
+            case CompiledSet actualSet when expected instanceof CompiledSet expectedSet ->
+                    isEmptyCollectionElementCompatible(actualSet.elementType(), expectedSet.elementType());
+            case CompiledDict actualDict when expected instanceof CompiledDict expectedDict ->
+                    isEmptyCollectionElementCompatible(actualDict.valueType(), expectedDict.valueType());
+            case CompiledTupleType actualTuple when expected instanceof CompiledTupleType expectedTuple ->
+                    actualTuple.elementTypes().size() == expectedTuple.elementTypes().size()
+                    && java.util.stream.IntStream.range(0, actualTuple.elementTypes().size())
+                            .allMatch(i -> isEmptyShapeTypeArgumentCompatible(
+                                    actualTuple.elementTypes().get(i),
+                                    expectedTuple.elementTypes().get(i)
+                            ));
+            case CompiledFunctionType actualFunction when expected instanceof CompiledFunctionType expectedFunction ->
+                    isEmptyShapeTypeArgumentCompatible(actualFunction.argumentType(), expectedFunction.argumentType())
+                    && isEmptyShapeTypeArgumentCompatible(actualFunction.returnType(), expectedFunction.returnType());
+            case CompiledDataType actualData when expected instanceof CompiledDataType expectedData
+                                               && sameRawTypeName(actualData.name(), expectedData.name()) ->
+                    areEmptyShapeTypeParametersCompatible(actualData.typeParameters(), expectedData.typeParameters());
+            case CompiledDataParentType actualParent when expected instanceof CompiledDataParentType expectedParent
+                                                        && (sameRawTypeName(actualParent.name(), expectedParent.name())
+                                                            || isParentSubtypeOfParent(actualParent, expectedParent, new java.util.HashSet<>())) ->
+                    areEmptyShapeTypeParametersCompatible(actualParent.typeParameters(), expectedParent.typeParameters());
+            case CompiledDataType actualData when expected instanceof CompiledDataParentType expectedParent
+                                               && isSubtypeOfParent(actualData, expectedParent) ->
+                    specializedReduceParentType(actualData, expectedParent)
+                            .map(parentType -> isEmptyCollectionShapeCompatible(parentType, expectedParent))
+                            .orElseGet(() -> areEmptyShapeTypeParametersCompatible(
+                                    actualData.typeParameters(),
+                                    expectedParent.typeParameters()
+                            ));
+            default -> false;
+        };
+    }
+
+    private boolean isEmptyCollectionElementCompatible(CompiledType actual, CompiledType expected) {
+        if (actual == ANY) {
+            return true;
+        }
+        return isEmptyShapeTypeArgumentCompatible(actual, expected);
+    }
+
+    private boolean isEmptyShapeTypeArgumentCompatible(CompiledType actual, CompiledType expected) {
+        if (hasKnownEmptyCollectionShape(actual)) {
+            return isEmptyCollectionShapeCompatible(actual, expected);
+        }
+        return isTypeCompatible(actual, expected);
+    }
+
+    private boolean areEmptyShapeTypeParametersCompatible(
+            List<String> actualTypeParameters,
+            List<String> expectedTypeParameters
+    ) {
+        if (expectedTypeParameters.isEmpty()) {
+            return true;
+        }
+        if (actualTypeParameters.size() != expectedTypeParameters.size()) {
+            return false;
+        }
+        for (var i = 0; i < expectedTypeParameters.size(); i++) {
+            var actualType = parseLinkedTypeDescriptor(actualTypeParameters.get(i));
+            var expectedType = parseLinkedTypeDescriptor(expectedTypeParameters.get(i));
+            if (actualType.isEmpty() || expectedType.isEmpty()) {
+                if (!isTypeDescriptorCompatible(actualTypeParameters.get(i), expectedTypeParameters.get(i))) {
+                    return false;
+                }
+                continue;
+            }
+            if (!isEmptyShapeTypeArgumentCompatible(actualType.orElseThrow(), expectedType.orElseThrow())) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private boolean hasGenericTypeParameters(CompiledType type) {
