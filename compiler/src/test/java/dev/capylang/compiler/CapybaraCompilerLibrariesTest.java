@@ -198,6 +198,28 @@ class CapybaraCompilerLibrariesTest {
     }
 
     @Test
+    void shouldSelectRegularReflectionOverloadWhenIntrinsicIsVisible() {
+        var libraries = compileProgram(List.of(reflectionMetadataModule()), new java.util.TreeSet<>()).modules();
+        var compiled = compileProgram(List.of(new RawModule("Consumer", "/foo/app", """
+                from /capy/meta_prog/Reflection import { DataValueInfo, reflection }
+
+                data User { name: string }
+
+                fun reflection(value: string): string = value
+
+                fun reflect_string(): string = reflection("x")
+                fun reflect_user(user: User): DataValueInfo = reflection(user)
+                """)), libraries);
+
+        assertThat(compiledFunction(compiled, "Consumer", "reflect_string").expression())
+                .isInstanceOfSatisfying(CompiledFunctionCall.class, call ->
+                        assertThat(call.returnType()).isEqualTo(PrimitiveLinkedType.STRING))
+                .isNotInstanceOf(CompiledReflectionValue.class);
+        assertThat(compiledFunction(compiled, "Consumer", "reflect_user").expression())
+                .isInstanceOf(CompiledReflectionValue.class);
+    }
+
+    @Test
     void shouldNotTreatUserDefinedReflectionFunctionAsIntrinsic() {
         var libraries = compileProgram(List.of(reflectionMetadataModule()), new java.util.TreeSet<>()).modules();
         var compiled = compileProgram(List.of(new RawModule("Consumer", "/foo/app", """
