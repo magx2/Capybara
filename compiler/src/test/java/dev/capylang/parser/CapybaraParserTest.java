@@ -927,6 +927,30 @@ class CapybaraParserTest {
     }
 
     @Test
+    @DisplayName("should parse bare collection type patterns as any collections")
+    void parseBareCollectionTypePatternsAsAnyCollections() {
+        var module = parseSuccess(new RawModule("Test", "/parser", """
+                fun test(value: any): int =
+                    match value with
+                    case list -> 1
+                    case set s -> 2
+                    case dict _ -> 3
+                    case _ -> 0
+                """));
+
+        var function = findFunction("test", module.functional());
+        assertThat(function.expression()).isInstanceOf(MatchExpression.class);
+        var expression = (MatchExpression) function.expression();
+        assertThat(expression.cases()).hasSize(4);
+        assertThat(expression.cases().get(0).pattern())
+                .isEqualTo(new MatchExpression.TypedPattern(new CollectionType.ListType(PrimitiveType.ANY), "__ignored"));
+        assertThat(expression.cases().get(1).pattern())
+                .isEqualTo(new MatchExpression.TypedPattern(new CollectionType.SetType(PrimitiveType.ANY), "s"));
+        assertThat(expression.cases().get(2).pattern())
+                .isEqualTo(new MatchExpression.TypedPattern(new CollectionType.DictType(PrimitiveType.ANY), "__ignored"));
+    }
+
+    @Test
     @DisplayName("should parse grouped brace expression in pipe lambda body with nested match")
     void parseGroupedBraceExpressionInPipeLambdaBodyWithNestedMatch() {
         var module = parseSuccess(new RawModule("Test", "/parser", """

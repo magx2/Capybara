@@ -258,6 +258,7 @@ pattern
     | STRING_LITERAL
     | FLOAT_LITERAL
     | typedPattern
+    | patternType
     | identifier
     | wildcardPattern
     | constructorPattern
@@ -266,7 +267,7 @@ pattern
 wildcardPattern: UNDERSCORE NAME?;
 typedPattern: patternType (NAME | UNDERSCORE);
 patternType
-    : COLLECTION '[' type ']'
+    : COLLECTION ('[' type ']')?
     | 'tuple' '[' type (COMMA type)+ ']'
     | 'byte'
     | 'int'

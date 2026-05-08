@@ -34,10 +34,10 @@ fun to_json(obj: data): JsonObject =
         case double d -> JsonNumberDouble { d }
         case float f -> JsonNumberDouble { f }
         case bool b -> JsonBool { b }
-        case list[any] l -> JsonArray { l | :any_to_json }
-        case set[any] s -> JsonArray { s |> [], (acc, item) => acc + any_to_json(item) }
-        case dict[any] d -> JsonObject { d | (k,v) => any_to_json(v) }
-        case Option[any] o -> {
+        case list l -> JsonArray { l | :any_to_json }
+        case set s -> JsonArray { s |> [], (acc, item) => acc + any_to_json(item) }
+        case dict d -> JsonObject { d | (k,v) => any_to_json(v) }
+        case Option o -> {
             match o with
             case Some { value } -> any_to_json(value)
             case None -> JsonNull

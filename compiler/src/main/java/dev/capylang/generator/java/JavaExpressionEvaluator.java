@@ -2359,6 +2359,8 @@ public class JavaExpressionEvaluator {
                         "case java.util.Optional " + optionCaseVar + " when " + optionCaseVar + ".isPresent()";
                 case CompiledMatchExpression.VariablePattern variablePattern when isOptionNonePattern(variablePattern.name()) ->
                         "case java.util.Optional " + optionCaseVar + " when " + optionCaseVar + ".isEmpty()";
+                case CompiledMatchExpression.TypedPattern typedPattern when isOptionType(typedPattern.type()) ->
+                        optionParentCasePattern(typedPattern, caseBindingNames);
                 case CompiledMatchExpression.TypedPattern typedPattern when isOptionSomePattern(typedPattern.type().name()) ->
                         "case java.util.Optional " + caseBindingNames.getOrDefault(typedPattern.name(), typedPattern.name()) + " when " + caseBindingNames.getOrDefault(typedPattern.name(), typedPattern.name()) + ".isPresent()";
                 case CompiledMatchExpression.TypedPattern typedPattern when isOptionNonePattern(typedPattern.type().name()) ->
@@ -2394,9 +2396,15 @@ public class JavaExpressionEvaluator {
                 if (typedPattern.type() instanceof CompiledDataType typedDataType) {
                     var resolvedTypedType = resolveConstructorType(matchType, typedDataType.name());
                     var patternType = constructorPatternTypeName(matchType, resolvedTypedType, typedDataType.name());
-                    yield "case " + patternType + " " + patternBindingName;
+                    var casePattern = "case " + patternType + " " + patternBindingName;
+                    yield typedPatternRuntimeGuard(typedPattern.type(), patternBindingName)
+                            .map(guard -> casePattern + " when " + guard)
+                            .orElse(casePattern);
                 }
-                yield "case " + javaPatternType(typedPattern.type()) + " " + patternBindingName;
+                var casePattern = "case " + javaPatternType(typedPattern.type()) + " " + patternBindingName;
+                yield typedPatternRuntimeGuard(typedPattern.type(), patternBindingName)
+                        .map(guard -> casePattern + " when " + guard)
+                        .orElse(casePattern);
             }
             case CompiledMatchExpression.VariablePattern variablePattern -> {
                 if (matchType instanceof CompiledDataParentType parentType && parentType.enumType()) {
@@ -2424,6 +2432,227 @@ public class JavaExpressionEvaluator {
                 yield guard.map(s -> constructorCasePattern + " when " + s).orElse(constructorCasePattern);
             }
         };
+    }
+
+    private static String optionParentCasePattern(
+            CompiledMatchExpression.TypedPattern typedPattern,
+            java.util.Map<String, String> caseBindingNames
+    ) {
+        var patternBindingName = caseBindingNames.getOrDefault(typedPattern.name(), typedPattern.name());
+        var casePattern = "case java.util.Optional " + patternBindingName;
+        return typedPatternRuntimeGuard(typedPattern.type(), patternBindingName)
+                .map(guard -> casePattern + " when " + guard)
+                .orElse(casePattern);
+    }
+
+    private static Optional<String> typedPatternRuntimeGuard(
+            dev.capylang.compiler.CompiledType type,
+            String expression
+    ) {
+        return switch (type) {
+            case dev.capylang.compiler.CollectionLinkedType.CompiledList listType ->
+                    runtimeElementGuard(listType.elementType(), expression + ".stream()");
+            case dev.capylang.compiler.CollectionLinkedType.CompiledSet setType ->
+                    runtimeElementGuard(setType.elementType(), expression + ".stream()");
+            case dev.capylang.compiler.CollectionLinkedType.CompiledDict dictType ->
+                    runtimeElementGuard(dictType.valueType(), expression + ".values().stream()");
+            case dev.capylang.compiler.CompiledDataParentType parentType when isOptionType(parentType) ->
+                    optionTypeArgumentGuard(parentType, expression);
+            default -> Optional.empty();
+        };
+    }
+
+    private static Optional<String> runtimeElementGuard(
+            dev.capylang.compiler.CompiledType elementType,
+            String streamExpression
+    ) {
+        if (!needsRuntimeValueGuard(elementType)) {
+            return Optional.empty();
+        }
+        var valueName = "__capybaraTypeValue" + MATCH_BINDING_COUNTER.incrementAndGet();
+        return Optional.of(streamExpression + ".allMatch(" + valueName + " -> " + runtimeValueMatchesType(elementType, valueName) + ")");
+    }
+
+    private static Optional<String> optionTypeArgumentGuard(
+            dev.capylang.compiler.CompiledDataParentType parentType,
+            String optionalExpression
+    ) {
+        if (parentType.typeParameters().isEmpty() || !needsRuntimeDescriptorGuard(parentType.typeParameters().getFirst())) {
+            return Optional.empty();
+        }
+        return Optional.of("(" + optionalExpression + ".isEmpty() || "
+                           + runtimeValueMatchesDescriptor(parentType.typeParameters().getFirst(), optionalExpression + ".orElse(null)")
+                           + ")");
+    }
+
+    private static boolean needsRuntimeValueGuard(dev.capylang.compiler.CompiledType type) {
+        if (type == dev.capylang.compiler.PrimitiveLinkedType.ANY
+            || type instanceof dev.capylang.compiler.CompiledGenericTypeParameter) {
+            return false;
+        }
+        return true;
+    }
+
+    private static boolean needsRuntimeDescriptorGuard(String descriptor) {
+        var normalized = descriptor == null ? "" : descriptor.trim();
+        return !normalized.isEmpty()
+               && !"any".equalsIgnoreCase(normalized)
+               && !normalized.matches("[A-Z]");
+    }
+
+    private static String runtimeValueMatchesType(dev.capylang.compiler.CompiledType type, String expression) {
+        return switch (type) {
+            case dev.capylang.compiler.PrimitiveLinkedType primitiveType -> switch (primitiveType) {
+                case ANY -> "true";
+                case DATA -> dataGuard(expression);
+                case NOTHING -> expression + " == null";
+                default -> expression + " instanceof " + javaPatternType(primitiveType);
+            };
+            case dev.capylang.compiler.CollectionLinkedType.CompiledList listType -> {
+                var listName = "__capybaraListValue" + MATCH_BINDING_COUNTER.incrementAndGet();
+                var guard = expression + " instanceof java.util.List<?> " + listName;
+                if (needsRuntimeValueGuard(listType.elementType())) {
+                    var itemName = "__capybaraListItem" + MATCH_BINDING_COUNTER.incrementAndGet();
+                    guard += " && " + listName + ".stream().allMatch(" + itemName + " -> "
+                             + runtimeValueMatchesType(listType.elementType(), itemName) + ")";
+                }
+                yield guard;
+            }
+            case dev.capylang.compiler.CollectionLinkedType.CompiledSet setType -> {
+                var setName = "__capybaraSetValue" + MATCH_BINDING_COUNTER.incrementAndGet();
+                var guard = expression + " instanceof java.util.Set<?> " + setName;
+                if (needsRuntimeValueGuard(setType.elementType())) {
+                    var itemName = "__capybaraSetItem" + MATCH_BINDING_COUNTER.incrementAndGet();
+                    guard += " && " + setName + ".stream().allMatch(" + itemName + " -> "
+                             + runtimeValueMatchesType(setType.elementType(), itemName) + ")";
+                }
+                yield guard;
+            }
+            case dev.capylang.compiler.CollectionLinkedType.CompiledDict dictType -> {
+                var dictName = "__capybaraDictValue" + MATCH_BINDING_COUNTER.incrementAndGet();
+                var guard = expression + " instanceof java.util.Map<?, ?> " + dictName;
+                if (needsRuntimeValueGuard(dictType.valueType())) {
+                    var itemName = "__capybaraDictItem" + MATCH_BINDING_COUNTER.incrementAndGet();
+                    guard += " && " + dictName + ".values().stream().allMatch(" + itemName + " -> "
+                             + runtimeValueMatchesType(dictType.valueType(), itemName) + ")";
+                }
+                yield guard;
+            }
+            case dev.capylang.compiler.CompiledDataParentType parentType when isOptionType(parentType) ->
+                    runtimeValueMatchesOption(parentType.typeParameters(), expression);
+            case dev.capylang.compiler.CompiledDataType dataType when isOptionSomeTypeName(dataType.name()) ->
+                    runtimeValueMatchesOptionalConstructor(expression, true);
+            case dev.capylang.compiler.CompiledDataType dataType when isOptionNoneTypeName(dataType.name()) ->
+                    runtimeValueMatchesOptionalConstructor(expression, false);
+            case dev.capylang.compiler.CompiledDataType dataType ->
+                    expression + " instanceof " + javaPatternType(dataType);
+            case dev.capylang.compiler.CompiledDataParentType parentType ->
+                    expression + " instanceof " + javaPatternType(parentType);
+            case dev.capylang.compiler.CompiledTupleType ignored ->
+                    expression + " instanceof java.util.List<?>";
+            case dev.capylang.compiler.CompiledFunctionType ignored ->
+                    expression + " instanceof java.util.function.Function";
+            case dev.capylang.compiler.CompiledGenericTypeParameter ignored -> "true";
+            default -> "true";
+        };
+    }
+
+    private static String runtimeValueMatchesDescriptor(String descriptor, String expression) {
+        var normalized = descriptor.trim();
+        return switch (normalized) {
+            case "any" -> "true";
+            case "data" -> dataGuard(expression);
+            case "nothing" -> expression + " == null";
+            case "byte" -> expression + " instanceof java.lang.Byte";
+            case "int" -> expression + " instanceof java.lang.Integer";
+            case "long" -> expression + " instanceof java.lang.Long";
+            case "double" -> expression + " instanceof java.lang.Double";
+            case "string" -> expression + " instanceof java.lang.String";
+            case "bool" -> expression + " instanceof java.lang.Boolean";
+            case "float" -> expression + " instanceof java.lang.Float";
+            default -> runtimeValueMatchesStructuredDescriptor(normalized, expression);
+        };
+    }
+
+    private static String runtimeValueMatchesStructuredDescriptor(String descriptor, String expression) {
+        if (descriptor.startsWith("list[") && descriptor.endsWith("]")) {
+            return runtimeValueMatchesCollectionDescriptor(
+                    expression,
+                    "java.util.List<?>",
+                    ".stream()",
+                    descriptor.substring(5, descriptor.length() - 1),
+                    "__capybaraListValue",
+                    "__capybaraListItem"
+            );
+        }
+        if (descriptor.startsWith("set[") && descriptor.endsWith("]")) {
+            return runtimeValueMatchesCollectionDescriptor(
+                    expression,
+                    "java.util.Set<?>",
+                    ".stream()",
+                    descriptor.substring(4, descriptor.length() - 1),
+                    "__capybaraSetValue",
+                    "__capybaraSetItem"
+            );
+        }
+        if (descriptor.startsWith("dict[") && descriptor.endsWith("]")) {
+            return runtimeValueMatchesCollectionDescriptor(
+                    expression,
+                    "java.util.Map<?, ?>",
+                    ".values().stream()",
+                    descriptor.substring(5, descriptor.length() - 1),
+                    "__capybaraDictValue",
+                    "__capybaraDictItem"
+            );
+        }
+        var genericStart = descriptor.indexOf('[');
+        if (genericStart > 0 && descriptor.endsWith("]")) {
+            var rawTypeName = descriptor.substring(0, genericStart).trim();
+            var arguments = splitTopLevelDescriptors(descriptor.substring(genericStart + 1, descriptor.length() - 1));
+            if (isOptionTypeName(rawTypeName) || "Option".equals(rawTypeName)) {
+                return runtimeValueMatchesOption(arguments, expression);
+            }
+            return expression + " instanceof " + normalizeJavaTypeReference(rawTypeName);
+        }
+        if (isOptionTypeName(descriptor) || "Option".equals(descriptor)) {
+            return expression + " instanceof java.util.Optional<?>";
+        }
+        return expression + " instanceof " + normalizeJavaTypeReference(descriptor);
+    }
+
+    private static String runtimeValueMatchesCollectionDescriptor(
+            String expression,
+            String javaType,
+            String streamSuffix,
+            String elementDescriptor,
+            String collectionPrefix,
+            String itemPrefix
+    ) {
+        var collectionName = collectionPrefix + MATCH_BINDING_COUNTER.incrementAndGet();
+        var guard = expression + " instanceof " + javaType + " " + collectionName;
+        if (needsRuntimeDescriptorGuard(elementDescriptor)) {
+            var itemName = itemPrefix + MATCH_BINDING_COUNTER.incrementAndGet();
+            guard += " && " + collectionName + streamSuffix + ".allMatch(" + itemName + " -> "
+                     + runtimeValueMatchesDescriptor(elementDescriptor, itemName) + ")";
+        }
+        return guard;
+    }
+
+    private static String runtimeValueMatchesOption(List<String> typeArguments, String expression) {
+        var optionName = "__capybaraOptionValue" + MATCH_BINDING_COUNTER.incrementAndGet();
+        var guard = expression + " instanceof java.util.Optional<?> " + optionName;
+        if (!typeArguments.isEmpty() && needsRuntimeDescriptorGuard(typeArguments.getFirst())) {
+            guard += " && (" + optionName + ".isEmpty() || "
+                     + runtimeValueMatchesDescriptor(typeArguments.getFirst(), optionName + ".orElse(null)")
+                     + ")";
+        }
+        return guard;
+    }
+
+    private static String runtimeValueMatchesOptionalConstructor(String expression, boolean present) {
+        var optionName = "__capybaraOptionValue" + MATCH_BINDING_COUNTER.incrementAndGet();
+        return expression + " instanceof java.util.Optional<?> " + optionName
+               + (present ? " && " + optionName + ".isPresent()" : " && " + optionName + ".isEmpty()");
     }
 
     private static String constructorPatternTypeName(
@@ -3321,8 +3550,12 @@ public class JavaExpressionEvaluator {
         if (!(type instanceof dev.capylang.compiler.GenericDataType genericDataType)) {
             return false;
         }
-        var normalized = normalizeQualifiedTypeName(genericDataType.name());
-        return "Option".equals(genericDataType.name())
+        return isOptionTypeName(genericDataType.name());
+    }
+
+    private static boolean isOptionTypeName(String typeName) {
+        var normalized = normalizeQualifiedTypeName(typeName);
+        return "Option".equals(typeName)
                || normalized.endsWith("/Option.Option")
                || normalized.endsWith("/Option");
     }
