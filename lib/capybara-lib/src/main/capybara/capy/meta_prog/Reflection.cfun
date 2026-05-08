@@ -18,10 +18,10 @@ data PackageInfo { name: string, path: string }
 data FunctionTypeInfo { params: list[AnyInfo], return_type: AnyInfo }
 
 data DataInfo { name: string, pkg: PackageInfo }
-data DataValueInfo { name: string, pkg: PackageInfo, fields: list[FieldValueInfo] }
 
 data FieldInfo { name: string, type: AnyInfo }
 data FieldValueInfo { name: string, type: AnyInfo, value: any }
+data DataValueInfo { name: string, pkg: PackageInfo, fields: list[FieldValueInfo] }
 
 // CFUN > COLLECTIONS
 data ListInfo { element_type: AnyInfo }
