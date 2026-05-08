@@ -460,6 +460,12 @@ public class JavaExpressionEvaluator {
             if ("to_bool".equals(methodName)) {
                 return current.addExpression(buildBoolStringParseResult(functionCall.type(), receiver));
             }
+            if ("get".equals(methodName)) {
+                var nativeGet = evaluateNativeGetMethod(functionCall, current, args);
+                if (nativeGet.isPresent()) {
+                    return nativeGet.orElseThrow();
+                }
+            }
             var invokeArgs = args.size() > 1
                     ? java.util.stream.IntStream.range(1, args.size())
                             .mapToObj(i -> coercePrimitiveCallArgument(functionCall.arguments().get(i).type(), args.get(i)))
@@ -483,6 +489,46 @@ public class JavaExpressionEvaluator {
                     : normalizeFunctionCallTarget(functionCall, scope) + "(" + String.join(", ", callArgs) + ")";
         };
         return current.addExpression(expression);
+    }
+
+    private static Optional<Scope> evaluateNativeGetMethod(
+            CompiledFunctionCall functionCall,
+            Scope current,
+            List<String> args
+    ) {
+        if (args.size() != 2 || functionCall.arguments().size() != 2) {
+            return Optional.empty();
+        }
+        var receiverType = functionCall.arguments().getFirst().type();
+        var source = args.get(0);
+        var index = args.get(1);
+        if (receiverType == dev.capylang.compiler.PrimitiveLinkedType.STRING) {
+            var sizeExpression = "(" + source + ").length()";
+            var normalizedIndex = normalizeSliceIndex(index, sizeExpression);
+            var inRange = "(" + normalizedIndex + " >= 0 && " + normalizedIndex + " < " + sizeExpression + ")";
+            var value = "java.lang.String.valueOf((" + source + ").charAt(" + normalizedIndex + "))";
+            return Optional.of(current.addExpression("(" + inRange + " ? java.util.Optional.of(" + value + ") : java.util.Optional.empty())"));
+        }
+        if (receiverType instanceof dev.capylang.compiler.CollectionLinkedType.CompiledList) {
+            var sizeExpression = "(" + source + ").size()";
+            var normalizedIndex = normalizeSliceIndex(index, sizeExpression);
+            var inRange = "(" + normalizedIndex + " >= 0 && " + normalizedIndex + " < " + sizeExpression + ")";
+            var value = "(" + source + ").get(" + normalizedIndex + ")";
+            return Optional.of(current.addExpression("(" + inRange + " ? java.util.Optional.of(" + value + ") : java.util.Optional.empty())"));
+        }
+        if (receiverType instanceof dev.capylang.compiler.CollectionLinkedType.CompiledDict) {
+            return Optional.of(current.addExpression("java.util.Optional.ofNullable((" + source + ").get(" + index + "))"));
+        }
+        if (receiverType instanceof dev.capylang.compiler.CollectionLinkedType.CompiledSet) {
+            return Optional.of(current.addExpression("((" + source + ").contains(" + index + ") ? java.util.Optional.of(" + index + ") : java.util.Optional.empty())"));
+        }
+        if (receiverType instanceof dev.capylang.compiler.CompiledTupleType) {
+            var sizeExpression = "(" + source + ").size()";
+            var normalizedIndex = normalizeSliceIndex(index, sizeExpression);
+            var castType = javaCastType(functionCall.type());
+            return Optional.of(current.addExpression("((" + castType + ") (" + source + ").get(" + normalizedIndex + "))"));
+        }
+        return Optional.empty();
     }
 
     private static boolean isConstCall(CompiledFunctionCall functionCall) {

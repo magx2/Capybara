@@ -1,4 +1,7 @@
+from /capy/lang/Option import { * }
+
 /// Native ordered collection type backed by the runtime List implementation.
+/// List literals use square brackets: [1, 2, 3].
 data List[T] { <native> }
 
 /// Returns the number of values in this List.
@@ -9,3 +12,6 @@ fun List[T].is_empty(): bool = <native>
 
 /// Returns true when this List contains the given value.
 fun List[T].contains(value: T): bool = <native>
+
+/// Returns the value at idx using the same bounds and negative-index rules as list[idx].
+fun List[T].get(idx: int): Option[T] = <native>
