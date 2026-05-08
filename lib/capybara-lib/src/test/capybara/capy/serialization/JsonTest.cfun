@@ -42,6 +42,8 @@ fun tests(): Effect[TestFile] =
         test("should fail converting lambda field", () => should_fail_converting_lambda_field()),
         test("should derive Jsonable to_json for primitive fields", () => should_derive_jsonable_to_json_for_primitive_fields()),
         test("should derive Jsonable to_json for nested and collection fields", () => should_derive_jsonable_to_json_for_nested_and_collection_fields()),
+        test("should index json object and array containers", () => should_index_json_object_and_array_containers()),
+        test("should index json value container wrappers", () => should_index_json_value_container_wrappers()),
         test("should serialize simple object", () => test_serialize_simple_object()),
         test("should serialize empty object", () => test_empty()),
         test("should serialize object with primitive types", () => test_serialize_object_with_primitive_types()),
@@ -204,6 +206,47 @@ fun should_derive_jsonable_to_json_for_nested_and_collection_fields(): Assert =
 fun _json_field(json: JsonObject, name: string): Option[Json] =
     json.value |> None {}, (acc, key, value) =>
         if key == name then Some { value } else acc
+
+fun should_index_json_object_and_array_containers(): Assert =
+    let object = JsonObject {
+        value: {
+            "name": JsonString { value: "Ada" },
+            "numbers": JsonArray {
+                value: [
+                    JsonNumberLong { value: 1 },
+                    JsonNumberLong { value: 2 },
+                ]
+            },
+        }
+    }
+    let array = JsonArray {
+        value: [
+            JsonString { value: "first" },
+            JsonBool { value: true },
+        ]
+    }
+    assert_all([
+        assert_that(object["name"]).contains(JsonString { value: "Ada" }),
+        assert_that(object["missing"]).is_empty(),
+        assert_that(array[1]).contains(JsonBool { value: true }),
+        assert_that(array[3]).is_empty(),
+    ])
+
+fun should_index_json_value_container_wrappers(): Assert =
+    let object = JsonValueObject {
+        value: JsonObject {
+            value: { "enabled": JsonBool { value: true } }
+        }
+    }
+    let array = JsonValueArray {
+        value: JsonArray {
+            value: [JsonNumberLong { value: 7 }]
+        }
+    }
+    assert_all([
+        assert_that(object["enabled"]).contains(JsonBool { value: true }),
+        assert_that(array[0]).contains(JsonNumberLong { value: 7 }),
+    ])
 
 fun test_serialize_simple_object(): Assert =
     let json = JsonObject { value: { "foo": JsonString { value: "boo" } } }

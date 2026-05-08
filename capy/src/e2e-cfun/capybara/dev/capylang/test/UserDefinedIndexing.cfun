@@ -1,0 +1,38 @@
+data IntIndexed { value: string }
+
+fun IntIndexed.get(idx: int): string =
+    if idx == 1 then this.value else ""
+
+data StringIndexed { age: double }
+
+fun StringIndexed.get(key: string): double =
+    if key == "age" then this.age else 0.0
+
+data Cell { name: string }
+
+data Matrix { first: Cell, second: Cell }
+
+fun Matrix.get(row: int, col: int): Cell =
+    if row == 1 & col == 2 then this.second else this.first
+
+data RowBox { rows: list[list[string]] }
+
+fun RowBox.get(row: int): list[string] =
+    match this.rows[row] with
+    case Some { value } -> value
+    case None -> []
+
+fun int_index(): string =
+    IntIndexed { "one" }[1]
+
+fun string_index(): double =
+    StringIndexed { 42.5 }["age"]
+
+fun matrix_index_name(): string =
+    Matrix { Cell { "first" }, Cell { "second" } }[1, 2].name
+
+fun chained_index(): Option[string] =
+    RowBox { [["a", "b"], ["c", "d", "e"]] }[1][2]
+
+fun list_variable_index(values: list[string], idx: int): Option[string] =
+    values[idx]

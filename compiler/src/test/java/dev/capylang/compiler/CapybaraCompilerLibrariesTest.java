@@ -1,6 +1,7 @@
 package dev.capylang.compiler;
 
 import dev.capylang.compiler.expression.CompiledFunctionCall;
+import dev.capylang.compiler.expression.CompiledFieldAccess;
 import dev.capylang.compiler.expression.CompiledLetExpression;
 import dev.capylang.compiler.expression.CompiledMatchExpression;
 import dev.capylang.compiler.expression.CompiledNewData;
@@ -139,6 +140,45 @@ class CapybaraCompilerLibrariesTest {
         assertThat(mixedParameters.parameters()).extracting(parameter -> parameter.type().name())
                 .containsExactly("User", "INT", "AgeLimit");
         assertThat(mixedParameters.returnType()).isEqualTo(PrimitiveLinkedType.BOOL);
+    }
+
+    @Test
+    void shouldResolveUserDefinedIndexAccessAsGetMethod() {
+        var compiled = compileProgram(List.of(new RawModule("Consumer", "/foo/app", """
+                data Box { value: string }
+                data Bag { age: double }
+                data Cell { name: string }
+                data Matrix { cell: Cell }
+
+                fun Box.get(idx: int): string = this.value
+                fun Bag.get(key: string): double = this.age
+                fun Matrix.get(row: int, col: int): Cell = this.cell
+
+                fun read_box(box: Box): string = box[1]
+                fun read_bag(bag: Bag): double = bag["age"]
+                fun read_cell(matrix: Matrix): string = matrix[1, 2].name
+                """)), new java.util.TreeSet<>());
+
+        assertThat(compiledFunction(compiled, "Consumer", "read_box").expression())
+                .isInstanceOfSatisfying(CompiledFunctionCall.class, call -> {
+                    assertThat(call.name()).isEqualTo("__method__Box__get");
+                    assertThat(call.arguments()).hasSize(2);
+                    assertThat(call.returnType()).isEqualTo(PrimitiveLinkedType.STRING);
+                });
+        assertThat(compiledFunction(compiled, "Consumer", "read_bag").expression())
+                .isInstanceOfSatisfying(CompiledFunctionCall.class, call -> {
+                    assertThat(call.name()).isEqualTo("__method__Bag__get");
+                    assertThat(call.arguments()).hasSize(2);
+                    assertThat(call.returnType()).isEqualTo(PrimitiveLinkedType.DOUBLE);
+                });
+        assertThat(compiledFunction(compiled, "Consumer", "read_cell").expression())
+                .isInstanceOfSatisfying(CompiledFieldAccess.class, fieldAccess -> {
+                    assertThat(fieldAccess.field()).isEqualTo("name");
+                    assertThat(fieldAccess.source()).isInstanceOfSatisfying(CompiledFunctionCall.class, call -> {
+                        assertThat(call.name()).isEqualTo("__method__Matrix__get");
+                        assertThat(call.arguments()).hasSize(3);
+                    });
+                });
     }
 
     @Test
