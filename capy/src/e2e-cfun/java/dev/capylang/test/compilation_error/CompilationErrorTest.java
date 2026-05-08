@@ -460,7 +460,7 @@ public class CompilationErrorTest {
 
         assertThat(errors).hasSize(1);
         assertThat(errors.first().message())
-                .contains("Expected `int`, got `Effect`");
+                .contains("Expected `int`, got `Effect[int]`");
     }
 
     @Test
@@ -490,7 +490,7 @@ public class CompilationErrorTest {
 
         assertThat(errors).hasSize(1);
         assertThat(errors.first().message())
-                .contains("Expected `int`, got `Result[T]`");
+                .contains("Expected `int`, got `Result[int]`");
     }
 
     @Test
@@ -534,7 +534,7 @@ public class CompilationErrorTest {
         var errors = ((Result.Error<CompiledProgram>) result).errors();
         assertThat(errors).hasSize(1);
         assertThat(errors.first().message())
-                .contains("Expected `Widget`, got `Success`");
+                .contains("Expected `Widget`, got `Success[Widget]`");
     }
 
     @ParameterizedTest(name = "{index}: should fail when compiling `{0}.cfun`")

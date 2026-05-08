@@ -36,6 +36,8 @@ public class CapybaraExpressionCompiler {
         private final Map<String, Set<String>> methodOwnerCandidatesBySimpleType;
         private final Map<String, Set<String>> subtypeParentOwnerCandidatesBySimpleType;
         private final Map<String, CompiledDataParentType> parentTypesByRawName;
+        private final List<CompiledDataParentType> knownParentTypes;
+        private final Map<String, List<CompiledDataParentType>> parentTypesBySubtypeRawName;
         private final CompiledDataParentType optionType;
         private final CompiledDataParentType resultType;
         private final CompiledDataParentType effectType;
@@ -48,6 +50,8 @@ public class CapybaraExpressionCompiler {
             this.optionType = findParentType(dataTypes, CapybaraExpressionCompiler::isOptionTypeKeyStatic, "Option");
             this.resultType = findParentType(dataTypes, CapybaraExpressionCompiler::isResultTypeKeyStatic, "Result");
             this.effectType = findParentType(dataTypes, CapybaraExpressionCompiler::isEffectTypeKeyStatic, "Effect");
+            this.knownParentTypes = buildKnownParentTypes(dataTypes, parentTypesByRawName, optionType, resultType, effectType);
+            this.parentTypesBySubtypeRawName = buildParentTypesBySubtypeRawName(knownParentTypes);
         }
 
         private static Map<String, CompiledDataParentType> buildParentTypesByRawName(Map<String, GenericDataType> dataTypes) {
@@ -57,6 +61,47 @@ public class CapybaraExpressionCompiler {
                     .map(CompiledDataParentType.class::cast)
                     .forEach(parentType -> parentTypesByRawName.putIfAbsent(normalizeTypeAlias(parentType.name()), parentType));
             return Map.copyOf(parentTypesByRawName);
+        }
+
+        private static List<CompiledDataParentType> buildKnownParentTypes(
+                Map<String, GenericDataType> dataTypes,
+                Map<String, CompiledDataParentType> parentTypesByRawName,
+                CompiledDataParentType optionType,
+                CompiledDataParentType resultType,
+                CompiledDataParentType effectType
+        ) {
+            var parentsByRawName = new java.util.LinkedHashMap<String, CompiledDataParentType>();
+            dataTypes.values().stream()
+                    .filter(CompiledDataParentType.class::isInstance)
+                    .map(CompiledDataParentType.class::cast)
+                    .forEach(parent -> putKnownParentType(parentsByRawName, parent));
+            parentTypesByRawName.values().forEach(parent -> putKnownParentType(parentsByRawName, parent));
+            if (optionType != null) {
+                putKnownParentType(parentsByRawName, optionType);
+            }
+            if (resultType != null) {
+                putKnownParentType(parentsByRawName, resultType);
+            }
+            if (effectType != null) {
+                putKnownParentType(parentsByRawName, effectType);
+            }
+            return List.copyOf(parentsByRawName.values());
+        }
+
+        private static Map<String, List<CompiledDataParentType>> buildParentTypesBySubtypeRawName(
+                List<CompiledDataParentType> knownParentTypes
+        ) {
+            var parentsBySubtypeRawName = new java.util.LinkedHashMap<String, List<CompiledDataParentType>>();
+            for (var parentType : knownParentTypes) {
+                for (var subType : parentType.subTypes()) {
+                    var subtypeKey = simpleRawTypeName(normalizeTypeAlias(subType.name()));
+                    parentsBySubtypeRawName.computeIfAbsent(subtypeKey, ignored -> new java.util.ArrayList<>())
+                            .add(parentType);
+                }
+            }
+            var immutable = new java.util.LinkedHashMap<String, List<CompiledDataParentType>>();
+            parentsBySubtypeRawName.forEach((subtype, parents) -> immutable.put(subtype, List.copyOf(parents)));
+            return Map.copyOf(immutable);
         }
     }
 
@@ -1421,7 +1466,7 @@ public class CapybaraExpressionCompiler {
                 continue;
             }
             var position = rawArguments.get(i).position();
-            var message = "Expected `" + expected + "`, got `" + actual + "`";
+            var message = expectedGotMessage(expected, actual);
             return withPosition(Result.error(message), position) instanceof Result.Error<?> error
                     ? error.errors().first()
                     : null;
@@ -2203,7 +2248,7 @@ public class CapybaraExpressionCompiler {
                         var maybeCoerced = coerceArgument(linkedArgument, expected);
                         if (maybeCoerced == null) {
                             return withPosition(
-                                    Result.error("Expected `" + expected + "`, got `" + linkedArgument.type() + "`"),
+                                    Result.error(expectedGotMessage(expected, linkedArgument.type())),
                                     argument.position()
                             );
                         }
@@ -2216,7 +2261,7 @@ public class CapybaraExpressionCompiler {
                         var maybeCoerced = coerceArgument(linkedArgument, expected);
                         if (maybeCoerced == null) {
                             return withPosition(
-                                    Result.error("Expected `" + expected + "`, got `" + linkedArgument.type() + "`"),
+                                    Result.error(expectedGotMessage(expected, linkedArgument.type())),
                                     argument.position()
                             );
                         }
@@ -2229,7 +2274,7 @@ public class CapybaraExpressionCompiler {
                         var maybeCoerced = coerceArgument(linkedArgument, expected);
                         if (maybeCoerced == null) {
                             return withPosition(
-                                    Result.error("Expected `" + expected + "`, got `" + linkedArgument.type() + "`"),
+                                    Result.error(expectedGotMessage(expected, linkedArgument.type())),
                                     argument.position()
                             );
                         }
@@ -2240,7 +2285,7 @@ public class CapybaraExpressionCompiler {
             && expected instanceof CompiledTupleType expectedTupleType) {
             if (tupleExpression.values().size() != expectedTupleType.elementTypes().size()) {
                 return withPosition(
-                        Result.error("Expected `" + expected + "`, got tuple with "
+                        Result.error("Expected `" + renderTypeForError(expected) + "`, got tuple with "
                                            + tupleExpression.values().size() + " element(s)"),
                         argument.position()
                 );
@@ -2296,7 +2341,7 @@ public class CapybaraExpressionCompiler {
                         var maybeCoerced = coerceArgument(linkedArgument, expected);
                         if (maybeCoerced == null) {
                             return withPosition(
-                                    Result.error("Expected `" + expected + "`, got `" + linkedArgument.type() + "`"),
+                                    Result.error(expectedGotMessage(expected, linkedArgument.type())),
                                     argument.position()
                             );
                         }
@@ -2316,7 +2361,7 @@ public class CapybaraExpressionCompiler {
                 var maybeCoerced = coerceArgument(linked, expected);
                 if (maybeCoerced == null) {
                     return withPosition(
-                            Result.error("Expected `" + expected + "`, got `" + linked.type() + "`"),
+                            Result.error(expectedGotMessage(expected, linked.type())),
                             argument.position()
                     );
                 }
@@ -2331,7 +2376,7 @@ public class CapybaraExpressionCompiler {
                         var maybeCoerced = coerceArgument(linkedArgument, expected);
                         if (maybeCoerced == null) {
                             return withPosition(
-                                    Result.error("Expected `" + expected + "`, got `" + linkedArgument.type() + "`"),
+                                    Result.error(expectedGotMessage(expected, linkedArgument.type())),
                                     argument.position()
                             );
                         }
@@ -2344,7 +2389,7 @@ public class CapybaraExpressionCompiler {
                         var maybeCoerced = coerceArgument(linkedArgument, expected);
                         if (maybeCoerced == null) {
                             return withPosition(
-                                    Result.error("Expected `" + expected + "`, got `" + linkedArgument.type() + "`"),
+                                    Result.error(expectedGotMessage(expected, linkedArgument.type())),
                                     argument.position()
                             );
                         }
@@ -2359,7 +2404,7 @@ public class CapybaraExpressionCompiler {
                         var maybeCoerced = coerceArgument(linkedArgument, expected);
                         if (maybeCoerced == null) {
                             return withPosition(
-                                    Result.error("Expected `" + expected + "`, got `" + linkedArgument.type() + "`"),
+                                    Result.error(expectedGotMessage(expected, linkedArgument.type())),
                                     argument.position()
                             );
                         }
@@ -2372,7 +2417,7 @@ public class CapybaraExpressionCompiler {
                         var maybeCoerced = coerceArgument(linkedArgument, expected);
                         if (maybeCoerced == null) {
                             return withPosition(
-                                    Result.error("Expected `" + expected + "`, got `" + linkedArgument.type() + "`"),
+                                    Result.error(expectedGotMessage(expected, linkedArgument.type())),
                                     argument.position()
                             );
                         }
@@ -2385,7 +2430,7 @@ public class CapybaraExpressionCompiler {
                         var maybeCoerced = coerceArgument(linkedArgument, expected);
                         if (maybeCoerced == null) {
                             return withPosition(
-                                    Result.error("Expected `" + expected + "`, got `" + linkedArgument.type() + "`"),
+                                    Result.error(expectedGotMessage(expected, linkedArgument.type())),
                                     argument.position()
                             );
                         }
@@ -2398,7 +2443,7 @@ public class CapybaraExpressionCompiler {
                         var maybeCoerced = coerceArgument(linkedArgument, expected);
                         if (maybeCoerced == null) {
                             return withPosition(
-                                    Result.error("Expected `" + expected + "`, got `" + linkedArgument.type() + "`"),
+                                    Result.error(expectedGotMessage(expected, linkedArgument.type())),
                                     argument.position()
                             );
                         }
@@ -2411,7 +2456,7 @@ public class CapybaraExpressionCompiler {
                     var maybeCoerced = coerceArgument(linkedArgument, expected);
                     if (maybeCoerced == null) {
                         return withPosition(
-                                Result.error("Expected `" + expected + "`, got `" + linkedArgument.type() + "`"),
+                                Result.error(expectedGotMessage(expected, linkedArgument.type())),
                                 argument.position()
                         );
                     }
@@ -2463,7 +2508,7 @@ public class CapybaraExpressionCompiler {
             maybeCoerced = coerceArgument(resultCompatibleExpression, expected);
             if (maybeCoerced == null) {
                 return withPosition(
-                        Result.error("Expected `" + expected + "`, got `" + linked.type() + "`"),
+                        Result.error(expectedGotMessage(expected, linked.type())),
                         argument.position()
                 );
             }
@@ -2531,7 +2576,7 @@ public class CapybaraExpressionCompiler {
             maybeCoerced = coerceArgument(effectCompatibleExpression, expected);
             if (maybeCoerced == null) {
                 return withPosition(
-                        Result.error("Expected `" + expected + "`, got `" + linked.type() + "`"),
+                        Result.error(expectedGotMessage(expected, linked.type())),
                         argument.position()
                 );
             }
@@ -3208,10 +3253,7 @@ public class CapybaraExpressionCompiler {
                 .anyMatch(subType -> sameRawTypeName(subType.name(), candidate.name()))) {
             return true;
         }
-        for (var parentType : knownParentTypes()) {
-            if (parentType.subTypes().stream().noneMatch(subType -> sameRawTypeName(subType.name(), candidate.name()))) {
-                continue;
-            }
+        for (var parentType : parentTypesForSubtype(candidate.name())) {
             if (sameRawTypeName(parentType.name(), expectedParentType.name())
                 || isParentSubtypeOfParent(parentType, expectedParentType, visitedParents)) {
                 return true;
@@ -3247,10 +3289,12 @@ public class CapybaraExpressionCompiler {
                     .allMatch(subType -> isSubtypeOfParent(subType, expectedParent, new java.util.HashSet<>(visited)))) {
             return true;
         }
-        return knownParentTypes().stream()
-                .filter(parentType -> parentType.subTypes().stream()
-                        .anyMatch(subType -> sameRawTypeName(subType.name(), candidateParent.name())))
-                .anyMatch(parentType -> isParentSubtypeOfParent(parentType, expectedParent, visited));
+        for (var parentType : parentTypesForSubtype(candidateParent.name())) {
+            if (isParentSubtypeOfParent(parentType, expectedParent, visited)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static boolean sameRawTypeName(String left, String right) {
@@ -4400,7 +4444,7 @@ public class CapybaraExpressionCompiler {
                     .collect(java.util.stream.Collectors.toMap(
                             parent -> simpleRawTypeName(normalizeTypeAlias(parent.name())),
                             parent -> parent,
-                            this::preferQualifiedParent,
+                            CapybaraExpressionCompiler::preferQualifiedParent,
                             java.util.LinkedHashMap::new
                     ));
             if (uniqueByRawName.size() == 1) {
@@ -4431,32 +4475,24 @@ public class CapybaraExpressionCompiler {
     }
 
     private List<CompiledDataParentType> knownParentTypes() {
-        var parentsByRawName = new java.util.LinkedHashMap<String, CompiledDataParentType>();
-        dataTypes.values().stream()
-                .filter(CompiledDataParentType.class::isInstance)
-                .map(CompiledDataParentType.class::cast)
-                .forEach(parent -> putKnownParentType(parentsByRawName, parent));
-        linkCache.parentTypesByRawName.values().forEach(parent -> putKnownParentType(parentsByRawName, parent));
-        if (findOptionType() != null) {
-            putKnownParentType(parentsByRawName, findOptionType());
-        }
-        if (findResultType() != null) {
-            putKnownParentType(parentsByRawName, findResultType());
-        }
-        if (findEffectType() != null) {
-            putKnownParentType(parentsByRawName, findEffectType());
-        }
-        return List.copyOf(parentsByRawName.values());
+        return linkCache.knownParentTypes;
     }
 
-    private void putKnownParentType(
+    private List<CompiledDataParentType> parentTypesForSubtype(String subtypeName) {
+        return linkCache.parentTypesBySubtypeRawName.getOrDefault(
+                simpleRawTypeName(normalizeTypeAlias(subtypeName)),
+                List.of()
+        );
+    }
+
+    private static void putKnownParentType(
             Map<String, CompiledDataParentType> parentsByRawName,
             CompiledDataParentType parent
     ) {
         parentsByRawName.merge(
                 simpleRawTypeName(normalizeTypeAlias(parent.name())),
                 parent,
-                this::preferQualifiedParent
+                CapybaraExpressionCompiler::preferQualifiedParent
         );
     }
 
@@ -5938,7 +5974,7 @@ public class CapybaraExpressionCompiler {
         return merged;
     }
 
-    private CompiledDataParentType preferQualifiedParent(CompiledDataParentType first, CompiledDataParentType second) {
+    private static CompiledDataParentType preferQualifiedParent(CompiledDataParentType first, CompiledDataParentType second) {
         var firstQualified = first.name().contains("/") || first.name().contains(".");
         var secondQualified = second.name().contains("/") || second.name().contains(".");
         if (firstQualified == secondQualified) {
@@ -8283,6 +8319,10 @@ public class CapybaraExpressionCompiler {
         }
 
         return false;
+    }
+
+    private String expectedGotMessage(CompiledType expected, CompiledType actual) {
+        return "Expected `" + renderTypeForError(expected) + "`, got `" + renderTypeForError(actual) + "`";
     }
 
     private static boolean isImplicitNumericWidening(PrimitiveLinkedType expected, PrimitiveLinkedType actual) {
