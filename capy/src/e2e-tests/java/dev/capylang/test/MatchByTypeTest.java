@@ -2,8 +2,11 @@ package dev.capylang.test;
 
 import org.junit.jupiter.api.Test;
 
+import capy.lang.Result;
+
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -62,5 +65,30 @@ class MatchByTypeTest {
     void boolMatchCanBeExhaustiveWithoutWildcard() {
         assertThat(MatchByType.mood(true)).isEqualTo("I'm happy");
         assertThat(MatchByType.mood(false)).isEqualTo("I'm sad");
+    }
+
+    @Test
+    void bareGenericTypePatternsDefaultToAny() {
+        assertThat(MatchByType.bareGenericTypePattern(List.of("a"))).isEqualTo(1);
+        assertThat(MatchByType.bareGenericTypePattern(Set.of("a"))).isEqualTo(2);
+        assertThat(MatchByType.bareGenericTypePattern(Map.of("a", 1))).isEqualTo(3);
+        assertThat(MatchByType.bareGenericTypePattern(Optional.of("a"))).isEqualTo(4);
+        assertThat(MatchByType.bareGenericTypePattern("a")).isEqualTo(0);
+    }
+
+    @Test
+    void collectionTypePatternsCanUseExplicitAndDefaultGenericArguments() {
+        assertThat(MatchByType.listGenericTypePattern(List.<Object>of("a"))).isEqualTo(1);
+        assertThat(MatchByType.listGenericTypePattern(List.<Object>of(Optional.of("a")))).isEqualTo(2);
+        assertThat(MatchByType.listGenericTypePattern(List.<Object>of(1))).isEqualTo(3);
+        assertThat(MatchByType.listGenericTypePattern(List.<Object>of(1.5))).isEqualTo(99);
+    }
+
+    @Test
+    void collectionTypePatternsCanUseNestedGenericArguments() {
+        assertThat(MatchByType.nestedGenericTypePattern(List.<Object>of(Optional.of(new Result.Success<>(1)))))
+                .isEqualTo(1);
+        assertThat(MatchByType.nestedGenericTypePattern(List.<Object>of(Optional.of("a")))).isEqualTo(2);
+        assertThat(MatchByType.nestedGenericTypePattern(List.<Object>of(1.5))).isEqualTo(99);
     }
 }

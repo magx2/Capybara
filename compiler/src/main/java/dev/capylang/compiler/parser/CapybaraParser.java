@@ -2229,8 +2229,16 @@ public class CapybaraParser {
                     ? typedPattern.NAME().getText()
                     : "__ignored";
             return new MatchExpression.TypedPattern(
-                    type(typedPattern.patternType().getText()),
+                    patternType(typedPattern.patternType()),
                     patternName
+            );
+        }
+
+        var patternType = context.patternType();
+        if (patternType != null) {
+            return new MatchExpression.TypedPattern(
+                    patternType(patternType),
+                    "__ignored"
             );
         }
 
@@ -2261,6 +2269,18 @@ public class CapybaraParser {
         }
 
         throw new IllegalStateException("Unknown pattern: " + context.getText());
+    }
+
+    private static Type patternType(FunctionalParser.PatternTypeContext context) {
+        if (context.COLLECTION() != null && context.type().isEmpty()) {
+            return switch (context.COLLECTION().getText()) {
+                case "list" -> new CollectionType.ListType(PrimitiveType.ANY);
+                case "set" -> new CollectionType.SetType(PrimitiveType.ANY);
+                case "dict" -> new CollectionType.DictType(PrimitiveType.ANY);
+                default -> throw new IllegalStateException("Unknown collection type: " + context.COLLECTION().getText());
+            };
+        }
+        return type(context.getText());
     }
 
     private Expression functionCall(dev.capylang.parser.antlr.FunctionalParser.FunctionCallContext context) {

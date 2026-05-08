@@ -200,12 +200,13 @@ pattern: TYPE
         | STRING_LITERAL
         | FLOAT_LITERAL
         | typedPattern
+        | patternType
         | identifier
         | wildcardPattern
         | constructorPattern;
 wildcardPattern: UNDERSCORE NAME?;
 typedPattern: patternType (NAME | UNDERSCORE);
-patternType: COLLECTION '[' type ']'
+patternType: COLLECTION ('[' type ']')?
            | 'tuple' '[' type (COMMA type)+ ']'
            | 'byte'
            | 'int'

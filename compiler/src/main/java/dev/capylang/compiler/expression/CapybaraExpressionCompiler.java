@@ -5646,6 +5646,9 @@ public class CapybaraExpressionCompiler {
         if (matchType == PrimitiveLinkedType.BOOL) {
             return validateBoolMatchExhaustiveness(matchExpression, cases);
         }
+        if (hasExhaustiveTypedPattern(matchType, cases)) {
+            return Result.success(null);
+        }
         var requiredConstructors = requiredConstructorsForMatch(matchType);
         if (requiredConstructors.isEmpty()) {
             return withPosition(
@@ -5667,6 +5670,38 @@ public class CapybaraExpressionCompiler {
                 Result.error("`match` is not exhaustive. Use wildcard `case _ -> ...` or add missing branches:" + missingText + "."),
                 matchExpression.position()
         );
+    }
+
+    private boolean hasExhaustiveTypedPattern(
+            CompiledType matchType,
+            List<CompiledMatchExpression.MatchCase> cases
+    ) {
+        return cases.stream()
+                .filter(matchCase -> matchCase.guard().isEmpty())
+                .map(CompiledMatchExpression.MatchCase::pattern)
+                .filter(CompiledMatchExpression.TypedPattern.class::isInstance)
+                .map(CompiledMatchExpression.TypedPattern.class::cast)
+                .anyMatch(typedPattern -> typedPatternCoversStaticMatchType(matchType, typedPattern.type()));
+    }
+
+    private boolean typedPatternCoversStaticMatchType(CompiledType matchType, CompiledType patternType) {
+        if (matchType instanceof CompiledList matchList && patternType instanceof CompiledList patternList) {
+            return patternArgumentCoversStaticType(matchList.elementType(), patternList.elementType());
+        }
+        if (matchType instanceof CompiledSet matchSet && patternType instanceof CompiledSet patternSet) {
+            return patternArgumentCoversStaticType(matchSet.elementType(), patternSet.elementType());
+        }
+        if (matchType instanceof CompiledDict matchDict && patternType instanceof CompiledDict patternDict) {
+            return patternArgumentCoversStaticType(matchDict.valueType(), patternDict.valueType());
+        }
+        return false;
+    }
+
+    private boolean patternArgumentCoversStaticType(CompiledType matchArgument, CompiledType patternArgument) {
+        if (patternArgument == ANY || matchArgument.equals(patternArgument)) {
+            return true;
+        }
+        return typedPatternCoversStaticMatchType(matchArgument, patternArgument);
     }
 
     private Result<Void> validateBoolMatchExhaustiveness(
@@ -5905,7 +5940,7 @@ public class CapybaraExpressionCompiler {
             CompiledType matchType,
             Scope scope
     ) {
-        return linkTypeInScope(typedPattern.type(), scope)
+        return linkTypeInScope(defaultAnyPatternTypeArguments(typedPattern.type()), scope)
                 .flatMap(patternType -> {
                     if (!isTypedPatternCompatible(matchType, patternType)) {
                         return Result.error("Cannot match `" + matchType + "` with typed pattern `" + patternType + "`");
@@ -5925,8 +5960,70 @@ public class CapybaraExpressionCompiler {
                 });
     }
 
+    private Type defaultAnyPatternTypeArguments(Type type) {
+        return switch (type) {
+            case CollectionType.ListType listType -> new CollectionType.ListType(defaultAnyPatternTypeArguments(listType.elementType()));
+            case CollectionType.SetType setType -> new CollectionType.SetType(defaultAnyPatternTypeArguments(setType.elementType()));
+            case CollectionType.DictType dictType -> new CollectionType.DictType(defaultAnyPatternTypeArguments(dictType.valueType()));
+            case TupleType tupleType -> new TupleType(tupleType.elementTypes().stream()
+                    .map(this::defaultAnyPatternTypeArguments)
+                    .toList());
+            case FunctionType functionType -> new FunctionType(
+                    defaultAnyPatternTypeArguments(functionType.argumentType()),
+                    defaultAnyPatternTypeArguments(functionType.returnType())
+            );
+            case DataType dataType -> new DataType(defaultAnyPatternTypeDescriptor(dataType.name()));
+            case PrimitiveType primitiveType -> primitiveType;
+        };
+    }
+
+    private String defaultAnyPatternTypeDescriptor(String descriptor) {
+        var trimmed = descriptor.trim();
+        if (trimmed.startsWith("list[") && trimmed.endsWith("]")) {
+            return "list[" + defaultAnyPatternTypeDescriptor(trimmed.substring(5, trimmed.length() - 1)) + "]";
+        }
+        if (trimmed.startsWith("set[") && trimmed.endsWith("]")) {
+            return "set[" + defaultAnyPatternTypeDescriptor(trimmed.substring(4, trimmed.length() - 1)) + "]";
+        }
+        if (trimmed.startsWith("dict[") && trimmed.endsWith("]")) {
+            return "dict[" + defaultAnyPatternTypeDescriptor(trimmed.substring(5, trimmed.length() - 1)) + "]";
+        }
+        if (trimmed.startsWith("tuple[") && trimmed.endsWith("]")) {
+            var inner = trimmed.substring(6, trimmed.length() - 1);
+            return "tuple[" + splitTopLevelTypeDescriptors(inner).stream()
+                    .map(this::defaultAnyPatternTypeDescriptor)
+                    .collect(java.util.stream.Collectors.joining(", ")) + "]";
+        }
+
+        var genericStart = trimmed.indexOf('[');
+        if (genericStart > 0 && trimmed.endsWith("]")) {
+            var baseName = trimmed.substring(0, genericStart).trim();
+            var inner = trimmed.substring(genericStart + 1, trimmed.length() - 1);
+            return baseName + "[" + splitTopLevelTypeDescriptors(inner).stream()
+                    .map(this::defaultAnyPatternTypeDescriptor)
+                    .collect(java.util.stream.Collectors.joining(", ")) + "]";
+        }
+
+        if (PrimitiveType.find(trimmed).isPresent()) {
+            return trimmed;
+        }
+        var resolved = resolveDataTypeByName(trimmed);
+        if (resolved instanceof CompiledDataParentType parentType && !parentType.typeParameters().isEmpty()) {
+            return trimmed + "[" + java.util.Collections.nCopies(parentType.typeParameters().size(), "any").stream()
+                    .collect(java.util.stream.Collectors.joining(", ")) + "]";
+        }
+        if (resolved instanceof CompiledDataType dataType && !dataType.typeParameters().isEmpty()) {
+            return trimmed + "[" + java.util.Collections.nCopies(dataType.typeParameters().size(), "any").stream()
+                    .collect(java.util.stream.Collectors.joining(", ")) + "]";
+        }
+        return trimmed;
+    }
+
     private boolean isTypedPatternCompatible(CompiledType matchType, CompiledType patternType) {
         if (matchType == ANY || patternType == ANY) {
+            return true;
+        }
+        if (isGenericPatternCompatible(matchType, patternType)) {
             return true;
         }
         if (patternType == PrimitiveLinkedType.DATA && matchType instanceof GenericDataType) {
@@ -5947,6 +6044,55 @@ public class CapybaraExpressionCompiler {
             return isSubtypeOfParent(matchDataType, patternParentType);
         }
         return false;
+    }
+
+    private boolean isGenericPatternCompatible(CompiledType matchType, CompiledType patternType) {
+        if (matchType instanceof CompiledList matchList && patternType instanceof CompiledList patternList) {
+            return isGenericPatternArgumentCompatible(matchList.elementType(), patternList.elementType());
+        }
+        if (matchType instanceof CompiledSet matchSet && patternType instanceof CompiledSet patternSet) {
+            return isGenericPatternArgumentCompatible(matchSet.elementType(), patternSet.elementType());
+        }
+        if (matchType instanceof CompiledDict matchDict && patternType instanceof CompiledDict patternDict) {
+            return isGenericPatternArgumentCompatible(matchDict.valueType(), patternDict.valueType());
+        }
+        if (matchType instanceof GenericDataType matchDataType && patternType instanceof GenericDataType patternDataType
+            && sameRawTypeName(matchDataType.name(), patternDataType.name())) {
+            var matchParameters = genericTypeParameters(matchDataType);
+            var patternParameters = genericTypeParameters(patternDataType);
+            if (matchParameters.size() != patternParameters.size()) {
+                return false;
+            }
+            for (var i = 0; i < matchParameters.size(); i++) {
+                var matchArgument = parseLinkedTypeDescriptor(matchParameters.get(i));
+                var patternArgument = parseLinkedTypeDescriptor(patternParameters.get(i));
+                if (matchArgument.isEmpty() || patternArgument.isEmpty()) {
+                    return false;
+                }
+                if (!isGenericPatternArgumentCompatible(matchArgument.orElseThrow(), patternArgument.orElseThrow())) {
+                    return false;
+                }
+            }
+            return true;
+        }
+        return false;
+    }
+
+    private boolean isGenericPatternArgumentCompatible(CompiledType matchArgument, CompiledType patternArgument) {
+        if (matchArgument == ANY || patternArgument == ANY) {
+            return true;
+        }
+        if (matchArgument.equals(patternArgument)) {
+            return true;
+        }
+        return isGenericPatternCompatible(matchArgument, patternArgument);
+    }
+
+    private List<String> genericTypeParameters(GenericDataType type) {
+        return switch (type) {
+            case CompiledDataType dataType -> dataType.typeParameters();
+            case CompiledDataParentType parentType -> parentType.typeParameters();
+        };
     }
 
     private Result<PatternAndScope> linkConstructorPattern(
