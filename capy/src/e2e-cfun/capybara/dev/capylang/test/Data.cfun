@@ -35,60 +35,60 @@ single Jerry
 
 fun summon_jerry(): King[int] = Jerry {}
 
-fun jerry_or_french(king: King[int]): string =
+fun jerry_or_french(king: King[int]): String =
     match king with
     case Jerry -> "jerry"
     case FrenchKing { head, foo } -> head + ":" + foo
 
-type Worker {name: string, surname: string } = BlueCollar | WhiteCollar
+type Worker {name: String, surname: String } = BlueCollar | WhiteCollar
 data BlueCollar { strength: double }
 data WhiteCollar { intelligence: double }
 
-data PrintableData { foo: string, boo: int }
-data PositionalData { text: string, number: int }
+data PrintableData { foo: String, boo: int }
+data PositionalData { text: String, number: int }
 data KnightHolder { knight: Knight }
-data FooWithType { type: string }
+data FooWithType { type: String }
 
-fun printable_data_to_string(): string =
+fun printable_data_to_string(): String =
     PrintableData { foo: "abc", boo: 123 } + ""
 
-fun string_plus_data_left(): string =
+fun string_plus_data_left(): String =
     "prefix=" + PrintableData { foo: "abc", boo: 123 }
 
-fun string_plus_data_right(): string =
+fun string_plus_data_right(): String =
     PrintableData { foo: "abc", boo: 123 } + "=suffix"
 
-fun knight_holder_to_string(): string =
+fun knight_holder_to_string(): String =
     KnightHolder { knight: Tom {} } + ""
 
-fun create_positional_data(text: string, number: int): PositionalData =
+fun create_positional_data(text: String, number: int): PositionalData =
     PositionalData { text, number }
 
-fun create_positional_data_expr(text: string, number: int): PositionalData =
+fun create_positional_data_expr(text: String, number: int): PositionalData =
     let new_text = text + "!"
     let new_number = number + 1
     PositionalData { new_text, new_number }
 
-fun create_data_with_type(value: string): FooWithType =
+fun create_data_with_type(value: String): FooWithType =
     FooWithType { type: value }
 
-fun read_data_type(foo: FooWithType): string = foo.type
+fun read_data_type(foo: FooWithType): String = foo.type
 
 data Box[T] { value: T }
 
 type BoxResult[T] = BoxSuccess[T] | BoxError
 data BoxSuccess[T] { value: T }
-data BoxError { message: string }
+data BoxError { message: String }
 
 fun BoxResult[T].`|`(map: T => BoxResult[Y]): BoxResult[Y] =
     match this with
     case BoxError e -> e
     case BoxSuccess s -> map(s.value)
 
-fun to_box_long(v: string): BoxResult[long] =
+fun to_box_long(v: String): BoxResult[long] =
     if v == "41"
     then BoxSuccess { 42L }
     else BoxError { "bad long: " + v }
 
-fun generic_field_pipe(box: Box[string]): BoxResult[long] =
+fun generic_field_pipe(box: Box[String]): BoxResult[long] =
     to_box_long(box.value) | number => BoxSuccess { number + 1L }

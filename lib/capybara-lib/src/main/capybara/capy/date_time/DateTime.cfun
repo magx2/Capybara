@@ -93,8 +93,8 @@ fun DateTime.`<`(other: DateTime): bool = this.less_than(other)
 fun DateTime.`>`(other: DateTime): bool = this.greater_than(other)
 
 /// Formats this date-time as a canonical UTC ISO 8601 string.
-fun DateTime.to_iso_8601(): string =
-    fun __format_utc(datetime: DateTime): string =
+fun DateTime.to_iso_8601(): String =
+    fun __format_utc(datetime: DateTime): String =
         match Time {
             hour: datetime.time.hour,
             minute: datetime.time.minute,
@@ -127,11 +127,11 @@ fun DateTime.to_iso_8601(): string =
     __format_utc(__normalize_to_utc(this))
 
 /// Parses a UTC ISO 8601 date-time in basic or extended form.
-fun from_iso_8601(iso: string): Result[DateTime] =
-    data __Split { left: string, right: string }
-    data __SplitScan { left: string, right: string, seen_separator: bool }
-    fun __invalid(message: string): string = "Invalid ISO 8601 date-time format: " + message
-    fun rec __scan_split(value: string, scan: __SplitScan): Result[__Split] =
+fun from_iso_8601(iso: String): Result[DateTime] =
+    data __Split { left: String, right: String }
+    data __SplitScan { left: String, right: String, seen_separator: bool }
+    fun __invalid(message: String): String = "Invalid ISO 8601 date-time format: " + message
+    fun rec __scan_split(value: String, scan: __SplitScan): Result[__Split] =
         if value.is_empty
         then if !scan.seen_separator
             then Error { __invalid("expected `T` separator between date and time") }
@@ -157,11 +157,11 @@ fun from_iso_8601(iso: string): Result[DateTime] =
                     right: scan.right,
                     seen_separator: false
                 })
-    fun __is_extended_date(value: string): bool =
+    fun __is_extended_date(value: String): bool =
         if value.size == 10
         then value[4:5] == "-" & value[7:8] == "-"
         else false
-    fun __is_extended_time(value: string): bool =
+    fun __is_extended_time(value: String): bool =
         if value.size >= 8
         then value[2:3] == ":" & value[5:6] == ":"
         else false

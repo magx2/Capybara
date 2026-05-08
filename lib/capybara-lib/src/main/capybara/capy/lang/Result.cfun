@@ -1,6 +1,6 @@
 type Result[T] = Success[T] | Error
 data Success[T] { value: T }
-data Error { message: string }
+data Error { message: String }
 
 fun Result[T].`|`(map: T => Result[Y]): Result[Y] =
     match this with
@@ -38,11 +38,11 @@ fun Result[T].or(r: Result[T]): Result[T] =
     case Error _ -> r
     case Success s -> s
 
-fun Result[T].`|>`(reduce: tuple[T => R, string => R]): R =
+fun Result[T].`|>`(reduce: Tuple[T => R, String => R]): R =
     match this with
     case Success { v } -> reduce[0](v)
     case Error { msg } -> reduce[1](msg)
 
-fun Result[T].reduce(on_success: T => R, on_error: string => R): R = this |> (on_success, on_error)
+fun Result[T].reduce(on_success: T => R, on_error: String => R): R = this |> (on_success, on_error)
 
-fun Result[T].reduce_left(on_success: T => R, on_error: string => R): R = this.reduce(on_success, on_error)
+fun Result[T].reduce_left(on_success: T => R, on_error: String => R): R = this.reduce(on_success, on_error)

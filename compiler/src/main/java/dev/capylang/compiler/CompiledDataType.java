@@ -9,6 +9,7 @@ public record CompiledDataType(String name,
                              List<String> comments,
                              Visibility visibility,
                              boolean singleton,
+                             boolean nativeType,
                              boolean enumValue) implements GenericDataType, Comparable<CompiledDataType> {
     public CompiledDataType(String name,
                             List<CompiledField> fields,
@@ -17,7 +18,18 @@ public record CompiledDataType(String name,
                             List<String> comments,
                             Visibility visibility,
                             boolean singleton) {
-        this(name, fields, typeParameters, extendedTypes, comments, visibility, singleton, false);
+        this(name, fields, typeParameters, extendedTypes, comments, visibility, singleton, false, false);
+    }
+
+    public CompiledDataType(String name,
+                            List<CompiledField> fields,
+                            List<String> typeParameters,
+                            List<String> extendedTypes,
+                            List<String> comments,
+                            Visibility visibility,
+                            boolean singleton,
+                            boolean enumValue) {
+        this(name, fields, typeParameters, extendedTypes, comments, visibility, singleton, false, enumValue);
     }
 
     public CompiledDataType(String name,

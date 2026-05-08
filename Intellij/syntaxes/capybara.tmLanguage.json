@@ -142,7 +142,7 @@
         },
         {
           "name": "support.type.primitive.capybara",
-          "match": "\\b(byte|int|long|float|double|bool|string|any|data|void|list|set|dict|tuple)(?:\\[\\])*(?=\\b|[^A-Za-z0-9_])"
+          "match": "\\b(byte|int|long|float|double|bool|String|any|data|void|List|Set|Dict|Tuple)(?:\\[\\])*(?=\\b|[^A-Za-z0-9_])"
         },
         {
           "name": "constant.language.boolean.capybara",

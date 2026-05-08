@@ -18,7 +18,7 @@ class ObjectOrientedCompilerTest {
                         "/foo/boo",
                         """
                                 class User {
-                                    def greet(): string = "hello"
+                                    def greet(): String = "hello"
                                 }
                                 """,
                         SourceKind.OBJECT_ORIENTED
@@ -45,12 +45,12 @@ class ObjectOrientedCompilerTest {
                         "/foo/boo",
                         """
                                 class User {
-                                    def format(name: string): string = name
+                                    def format(name: String): String = name
 
-                                    def print(value: string): void {
+                                    def print(value: String): void {
                                     }
 
-                                    def greet(name: string): void {
+                                    def greet(name: String): void {
                                         print(format(name))
                                     }
                                 }

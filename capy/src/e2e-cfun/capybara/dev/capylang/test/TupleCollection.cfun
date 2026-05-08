@@ -1,35 +1,35 @@
-fun static_tuple(): tuple[int, string, double] = (1, "foo", 5.0)
+fun static_tuple(): Tuple[int, String, double] = (1, "foo", 5.0)
 
-fun static_tuple_option(): tuple[int, Option[string], double] = (1, Some { value: "foo" }, 5.0)
+fun static_tuple_option(): Tuple[int, Option[String], double] = (1, Some { value: "foo" }, 5.0)
 
-fun tuple_if(x: int): tuple[int, string, float, string] =
+fun tuple_if(x: int): Tuple[int, String, float, String] =
     (5, if x > 4 then "big" else "small", 5.1f, "foo")
 
-fun tuple_index_1(): string = (1, "foo", 5.0)[1]
+fun tuple_index_1(): String = (1, "foo", 5.0)[1]
 
 fun tuple_index_minus_1(): double = (1, "foo", 5.0)[-1]
 
-fun tuple_index_on_var(t: tuple[int, string, double]): string = t[1]
+fun tuple_index_on_var(t: Tuple[int, String, double]): String = t[1]
 
-fun tuple_slice_from_1(): tuple[string, double] = (1, "foo", 5.0)[1:]
+fun tuple_slice_from_1(): Tuple[String, double] = (1, "foo", 5.0)[1:]
 
-fun tuple_slice_to_minus_1(): tuple[int, string] = (1, "foo", 5.0)[:-1]
+fun tuple_slice_to_minus_1(): Tuple[int, String] = (1, "foo", 5.0)[:-1]
 
-fun tuple_slice_on_var(t: tuple[int, string, double]): tuple[string, double] = t[1:]
+fun tuple_slice_on_var(t: Tuple[int, String, double]): Tuple[String, double] = t[1:]
 
 private fun plus_one(x: int): int = x + 1
 
 private fun times_two(x: int): int = x * 2
 
-fun tuple_with_functions(): tuple[int => int, int => int] = (:plus_one, :times_two)
+fun tuple_with_functions(): Tuple[int => int, int => int] = (:plus_one, :times_two)
 
 fun tuple_with_functions_apply_first(x: int): int =
-    let funs: tuple[int => int, int => int] = tuple_with_functions()
+    let funs: Tuple[int => int, int => int] = tuple_with_functions()
     let f: int => int = funs[0]
     f(x)
 
 fun tuple_with_functions_apply_second(x: int): int =
-    let funs: tuple[int => int, int => int] = tuple_with_functions()
+    let funs: Tuple[int => int, int => int] = tuple_with_functions()
     let f: int => int = funs[1]
     f(x)
 

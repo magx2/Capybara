@@ -1,29 +1,29 @@
-fun static_list(): list[int] = [1,2,3]
+fun static_list(): List[int] = [1,2,3]
 
-fun empty_static_list(): list[int] = []
+fun empty_static_list(): List[int] = []
 
-fun static_list_with_trailing_comma(): list[int] = [1,2,3,]
+fun static_list_with_trailing_comma(): List[int] = [1,2,3,]
 
-fun append(l: list[int]): list[int] = l + 5
+fun append(l: List[int]): List[int] = l + 5
 
-fun append_list(left: list[int], right: list[int]): list[int] = left + right
+fun append_list(left: List[int], right: List[int]): List[int] = left + right
 
-fun remove(l: list[int]): list[int] = l - 2
+fun remove(l: List[int]): List[int] = l - 2
 
-fun remove_list(left: list[int], right: list[int]): list[int] = left - right
+fun remove_list(left: List[int], right: List[int]): List[int] = left - right
 
-fun contains(l: list[int], value: int): bool = l ? value
+fun contains(l: List[int], value: int): bool = l ? value
 
-fun is_empty(l: list[int]): bool = l.is_empty
+fun is_empty(l: List[int]): bool = l.is_empty
 
-data ListHolder { values: list[int] }
+data ListHolder { values: List[int] }
 
-fun not_is_empty(l: list[int]): bool = !l.is_empty
+fun not_is_empty(l: List[int]): bool = !l.is_empty
 
 fun not_nested_is_empty(holder: ListHolder): bool = !holder.values.is_empty
 
-fun size(l: list[int]): int = l.size
+fun size(l: List[int]): int = l.size
 
 fun let_named_list(): int =
-    let list: list[int] = [1, 2, 3, 4]
+    let list: List[int] = [1, 2, 3, 4]
     list.size

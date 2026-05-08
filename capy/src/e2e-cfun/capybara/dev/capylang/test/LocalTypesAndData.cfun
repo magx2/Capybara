@@ -1,11 +1,11 @@
 from /capy/lang/Result import { * }
 
-fun foo_me(name: string): string =
+fun foo_me(name: String): String =
     type __Name = __Foo | __Boo | __Unknown
-    data __Foo { foo: string }
-    data __Boo { boo: string }
-    data __Unknown { unkn: string }
-    fun name(value: __Name): string =
+    data __Foo { foo: String }
+    data __Boo { boo: String }
+    data __Unknown { unkn: String }
+    fun name(value: __Name): String =
         match value with
         case __Foo { foo } -> foo
         case __Boo { boo } -> boo
@@ -18,22 +18,22 @@ fun foo_me(name: string): string =
         case _ -> __Unknown { name }
     name(x)
 
-fun local_data_with_imported_result(v: int): string =
-    data __Entry { key: string, value: Result[int] }
+fun local_data_with_imported_result(v: int): String =
+    data __Entry { key: String, value: Result[int] }
     ---
     let entry = __Entry { "k", Success { value: v } }
     match entry.value with
     case Success { value } -> "ok:" + value
     case Error { message } -> "err:" + message
 
-fun local_data_used_in_local_function(v: int): string =
+fun local_data_used_in_local_function(v: int): String =
     data __Parse[T] { value: T }
-    fun unwrap(parse: __Parse[int]): string =
+    fun unwrap(parse: __Parse[int]): String =
         "value:" + parse.value
     ---
     unwrap(__Parse { v })
 
-fun local_generic_data_used_in_local_function_return_type(v: int): string =
+fun local_generic_data_used_in_local_function_return_type(v: int): String =
     data __Parse[T] { value: T }
     fun parse(value: int): Result[__Parse[int]] =
         Success { __Parse { value } }
@@ -42,20 +42,20 @@ fun local_generic_data_used_in_local_function_return_type(v: int): string =
     case Success { value } -> "value:" + value.value
     case Error { message } -> "error:" + message
 
-fun local_single_used_in_local_type_and_function(use_stop: bool): string =
+fun local_single_used_in_local_type_and_function(use_stop: bool): String =
     type __Token = __Value | Stop
     data __Value { value: int }
     single Stop
-    fun describe(token: __Token): string =
+    fun describe(token: __Token): String =
         match token with
         case __Value { value } -> "value:" + value
         case Stop -> "stop"
     ---
     describe(if use_stop then Stop {} else __Value { 7 })
 
-fun local_generic_data_field_access_followed_by_index(buffer: string): string =
-    data __Parse[T] { buffer: string, value: T }
-    fun parse(value: string): Result[__Parse[int]] =
+fun local_generic_data_field_access_followed_by_index(buffer: String): String =
+    data __Parse[T] { buffer: String, value: T }
+    fun parse(value: String): Result[__Parse[int]] =
         Success { __Parse { buffer: value, value: 1 } }
     ---
     match (parse(buffer) | parse =>

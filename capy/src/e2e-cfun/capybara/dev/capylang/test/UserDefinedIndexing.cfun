@@ -1,38 +1,38 @@
-data IntIndexed { value: string }
+data IntIndexed { value: String }
 
-fun IntIndexed.get(idx: int): string =
+fun IntIndexed.get(idx: int): String =
     if idx == 1 then this.value else ""
 
 data StringIndexed { age: double }
 
-fun StringIndexed.get(key: string): double =
+fun StringIndexed.get(key: String): double =
     if key == "age" then this.age else 0.0
 
-data Cell { name: string }
+data Cell { name: String }
 
 data Matrix { first: Cell, second: Cell }
 
 fun Matrix.get(row: int, col: int): Cell =
     if row == 1 & col == 2 then this.second else this.first
 
-data RowBox { rows: list[list[string]] }
+data RowBox { rows: List[List[String]] }
 
-fun RowBox.get(row: int): list[string] =
+fun RowBox.get(row: int): List[String] =
     match this.rows[row] with
     case Some { value } -> value
     case None -> []
 
-fun int_index(): string =
+fun int_index(): String =
     IntIndexed { "one" }[1]
 
 fun string_index(): double =
     StringIndexed { 42.5 }["age"]
 
-fun matrix_index_name(): string =
+fun matrix_index_name(): String =
     Matrix { Cell { "first" }, Cell { "second" } }[1, 2].name
 
-fun chained_index(): Option[string] =
+fun chained_index(): Option[String] =
     RowBox { [["a", "b"], ["c", "d", "e"]] }[1][2]
 
-fun list_variable_index(values: list[string], idx: int): Option[string] =
+fun list_variable_index(values: List[String], idx: int): Option[String] =
     values[idx]

@@ -1,9 +1,9 @@
 from /capy/meta_prog/Reflection import { DataValueInfo, reflection }
 
 deriver Show {
-    fun show(): string =
+    fun show(): String =
         let info: DataValueInfo = reflection(receiver)
-        let body: string = info.fields |> info.name + " { ", (acc, field) =>
+        let body: String = info.fields |> info.name + " { ", (acc, field) =>
             acc + (if acc == info.name + " { " then "" else ", ") + field.name
         body + " }"
 }
@@ -21,30 +21,30 @@ deriver AgeComparable {
 }
 
 deriver FieldValueSummary {
-    fun field_values_summary(): string =
+    fun field_values_summary(): String =
         let info: DataValueInfo = reflection(receiver)
         info.fields |> "", (acc, field) =>
             acc + (if acc == "" then "" else ",") + field.name + "=" + field.value
 }
 
-data DerivedUser { name: string, age: int } derive Show, AgeComparable, FieldValueSummary
+data DerivedUser { name: String, age: int } derive Show, AgeComparable, FieldValueSummary
 single Empty
-data Entity { id: string }
-data Employee { department: string, ...Entity } derive Show
-type Named { id: string } = DerivedEntity derive Show
-data DerivedEntity { id: string, rank: int }
+data Entity { id: String }
+data Employee { department: String, ...Entity } derive Show
+type Named { id: String } = DerivedEntity derive Show
+data DerivedEntity { id: String, rank: int }
 
-fun show_user(): string =
+fun show_user(): String =
     DerivedUser { name: "Ada", age: 42 }.show()
 
-fun show_empty(): string =
+fun show_empty(): String =
     let info: DataValueInfo = reflection(Empty {})
     info.name + " {  }"
 
-fun show_employee(): string =
+fun show_employee(): String =
     Employee { id: "E-1", department: "R&D" }.show()
 
-fun show_named(): string =
+fun show_named(): String =
     let named: Named = DerivedEntity { id: "N-1", rank: 7 }
     named.show()
 
@@ -57,5 +57,5 @@ fun user_mixed_parameter_derive_true(): bool =
 fun user_mixed_parameter_derive_false(): bool =
     DerivedUser { name: "Ada", age: 42 }.matches_age_metadata(0, AgeLimit { value: 42 })
 
-fun user_field_values_summary(): string =
+fun user_field_values_summary(): String =
     DerivedUser { name: "Ada", age: 42 }.field_values_summary()

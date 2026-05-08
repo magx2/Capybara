@@ -62,12 +62,12 @@ class CompilationTest {
                                     case Rectangle { width, height } -> Circle { radius : (width + height) / 4 }
                                 
                                 // type with common value
-                                type Person { name: string, age: int } = Student | Teacher
+                                type Person { name: String, age: int } = Student | Teacher
                                 data Student { grade: int }
-                                data Teacher { subject: string }
+                                data Teacher { subject: String }
                                 """,
                         """
-                                fun classify(x: int): string =
+                                fun classify(x: int): String =
                                     if x > 0 then "positive"
                                     else "non-positive"
                                 fun always_true(): bool = true
@@ -105,22 +105,22 @@ class CompilationTest {
                                 """,
                         """
                                 // type with common value
-                                type Person { name: string, age: int } = Student | Teacher
+                                type Person { name: String, age: int } = Student | Teacher
                                 data Student { grade: int }
-                                data Teacher { subject: string }
+                                data Teacher { subject: String }
                                 """,
                         """
                                 type Option[T] = Some[T] | None
                                 data Some[T] { value: T }
                                 single None
 
-                                fun tuple(): tuple[int, string, double] = (1, "foo", 5.0)
-                                fun tuple2(): tuple[int, Option[string], double] = (1, Some { value: "foo" }, 5.0)
-                                fun tuple_index(): Option[string] = (1, "foo", 5.0)[1]
-                                fun tuple_index_negative(): Option[string] = (1, "foo", 5.0)[-2]
-                                fun tuple_slice(): tuple[string, double] = (1, "foo", 5.0)[1:]
-                                fun tuple_slice_negative(): tuple[int, string] = (1, "foo", 5.0)[:-1]
-                                fun tuple_if(x: int): tuple[int, string, float, string] =
+                                fun tuple(): Tuple[int, String, double] = (1, "foo", 5.0)
+                                fun tuple2(): Tuple[int, Option[String], double] = (1, Some { value: "foo" }, 5.0)
+                                fun tuple_index(): Option[String] = (1, "foo", 5.0)[1]
+                                fun tuple_index_negative(): Option[String] = (1, "foo", 5.0)[-2]
+                                fun tuple_slice(): Tuple[String, double] = (1, "foo", 5.0)[1:]
+                                fun tuple_slice_negative(): Tuple[int, String] = (1, "foo", 5.0)[:-1]
+                                fun tuple_if(x: int): Tuple[int, String, float, String] =
                                     (5, if x > 4 then "big" else "small", 5.1f, "foo")
                                 """)
         );

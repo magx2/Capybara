@@ -1,0 +1,11 @@
+/// Native String-keyed map type backed by the runtime Dict implementation.
+data Dict[T] { <native> }
+
+/// Returns the number of entries in this Dict.
+fun Dict[T].size(): int = <native>
+
+/// Returns true when this Dict has no entries.
+fun Dict[T].is_empty(): bool = <native>
+
+/// Returns true when this Dict contains the given key.
+fun Dict[T].contains_key(key: String): bool = <native>

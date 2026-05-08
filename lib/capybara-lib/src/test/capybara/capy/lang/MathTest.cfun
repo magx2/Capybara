@@ -96,10 +96,10 @@ fun tests(): Effect[TestFile] =
     let list_long_cases = [
         test("min([3L, 1L, 2L]) should return Some { 1L }", () => _test_min_values_long(1L)),
         test("min([-3L, -1L, -2L]) should return Some { -3L }", () => _test_min_negative_values_long(-3L)),
-        test("min([]: list[long]) should return None", () => _test_empty_min_long()),
+        test("min([]: List[long]) should return None", () => _test_empty_min_long()),
         test("max([3L, 1L, 2L]) should return Some { 3L }", () => _test_max_values_long(3L)),
         test("max([-3L, -1L, -2L]) should return Some { -1L }", () => _test_max_negative_values_long(-1L)),
-        test("max([]: list[long]) should return None", () => _test_empty_max_long()),
+        test("max([]: List[long]) should return None", () => _test_empty_max_long()),
     ]
 
     let all_cases = digits_test_cases
@@ -200,14 +200,14 @@ fun _min_negative_longs(): Option[long] = min(_negative_longs())
 fun _max_negative_longs(): Option[long] = max(_negative_longs())
 
 
-fun _ints(): list[int] = [3, 1, 2]
+fun _ints(): List[int] = [3, 1, 2]
 
-fun _longs(): list[long] = [3L, 1L, 2L]
+fun _longs(): List[long] = [3L, 1L, 2L]
 
-fun _negative_ints(): list[int] = [-3, -1, -2]
+fun _negative_ints(): List[int] = [-3, -1, -2]
 
-fun _negative_longs(): list[long] = [-3L, -1L, -2L]
+fun _negative_longs(): List[long] = [-3L, -1L, -2L]
 
-fun _empty_ints(): list[int] = []
+fun _empty_ints(): List[int] = []
 
-fun _empty_longs(): list[long] = []
+fun _empty_longs(): List[long] = []

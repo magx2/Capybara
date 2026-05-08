@@ -1,15 +1,15 @@
-data Foo { name: string }
+data Foo { name: String }
 
-fun simple(name: string): string = "Hello {name}"
+fun simple(name: String): String = "Hello {name}"
 
-fun expression(name: string, x: int): string = "Hello {name + x}"
+fun expression(name: String, x: int): String = "Hello {name + x}"
 
-fun escaped(name: string): string = "Hello \{}"
+fun escaped(name: String): String = "Hello \{}"
 
-fun escaped_with_interpolation_value(foo: string): string = "xyz \{{foo}}"
+fun escaped_with_interpolation_value(foo: String): String = "xyz \{{foo}}"
 
-fun data_field(foo: Foo): string = "Hello {foo.name}"
+fun data_field(foo: Foo): String = "Hello {foo.name}"
 
-fun quote_escape(foo: Foo): string = "Hello \"{foo.name}\""
+fun quote_escape(foo: Foo): String = "Hello \"{foo.name}\""
 
-fun single_quoted(name: string): string = 'Hello {name}'
+fun single_quoted(name: String): String = 'Hello {name}'

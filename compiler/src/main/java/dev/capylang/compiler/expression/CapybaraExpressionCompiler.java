@@ -281,7 +281,7 @@ public class CapybaraExpressionCompiler {
                         && source.type() != STRING
                         && !(source.type() instanceof CompiledTupleType)) {
                         return withPosition(
-                                Result.error("Slice source has to be `list`, `string` or `tuple`, was `" + source.type() + "`"),
+                                Result.error("Slice source has to be `List`, `String` or `Tuple`, was `" + source.type() + "`"),
                                 expression.position()
                         );
                     }
@@ -401,9 +401,13 @@ public class CapybaraExpressionCompiler {
 
     private String diagnosticTypeName(CompiledType type) {
         if (type instanceof PrimitiveLinkedType) {
-            return type.name().toLowerCase(Locale.ROOT);
+            return primitiveTypeName((PrimitiveLinkedType) type);
         }
         return type.name();
+    }
+
+    private String primitiveTypeName(PrimitiveLinkedType type) {
+        return type == STRING ? "String" : type.name().toLowerCase(Locale.ROOT);
     }
 
     private Result<CompiledExpression> linkTupleExpression(TupleExpression expression, Scope scope) {
@@ -891,7 +895,7 @@ public class CapybaraExpressionCompiler {
         }
         if (!"parse".equals(functionCall.name()) || functionCall.arguments().size() != 1) {
             return Optional.of(withPosition(
-                    Result.error("Enum `" + enumType.name() + "` supports only `parse(string)` and `parse(int)`"),
+                    Result.error("Enum `" + enumType.name() + "` supports only `parse(String)` and `parse(int)`"),
                     functionCall.position()
             ));
         }
@@ -902,7 +906,7 @@ public class CapybaraExpressionCompiler {
         var argument = ((Result.Success<CompiledExpression>) linkedArgument).value();
         if (argument.type() != STRING && argument.type() != INT) {
             return Optional.of(withPosition(
-                    Result.error("Enum `parse` expects `string` or `int`, got `" + argument.type() + "`"),
+                    Result.error("Enum `parse` expects `String` or `int`, got `" + argument.type() + "`"),
                     functionCall.arguments().getFirst().position()
             ));
         }
@@ -1185,9 +1189,9 @@ public class CapybaraExpressionCompiler {
     private CompiledExpression reflectionTypeInfo(CompiledType type, CompiledDataParentType anyInfo) {
         return switch (type) {
             case PrimitiveLinkedType primitive -> reflectionPrimitiveInfo(primitive, anyInfo);
-            case CompiledList listType -> reflectionCollectionInfo("ListInfo", "list", "element_type", listType.elementType(), anyInfo);
-            case CompiledSet setType -> reflectionCollectionInfo("SetInfo", "set", "element_type", setType.elementType(), anyInfo);
-            case CompiledDict dictType -> reflectionCollectionInfo("DictInfo", "dict", "value_type", dictType.valueType(), anyInfo);
+            case CompiledList listType -> reflectionCollectionInfo("ListInfo", "List", "element_type", listType.elementType(), anyInfo);
+            case CompiledSet setType -> reflectionCollectionInfo("SetInfo", "Set", "element_type", setType.elementType(), anyInfo);
+            case CompiledDict dictType -> reflectionCollectionInfo("DictInfo", "Dict", "value_type", dictType.valueType(), anyInfo);
             case CompiledTupleType tupleType -> reflectionTupleInfo(tupleType, anyInfo);
             case CompiledFunctionType functionType -> reflectionFunctionTypeInfo(functionType, anyInfo);
             case CompiledGenericTypeParameter genericTypeParameter -> reflectionGenericParamInfo(genericTypeParameter, anyInfo);
@@ -1220,7 +1224,7 @@ public class CapybaraExpressionCompiler {
 
     private CompiledExpression reflectionPrimitiveInfo(PrimitiveLinkedType primitive, CompiledDataParentType anyInfo) {
         return newData(reflectionDataType(anyInfo, "DataInfo"),
-                "name", stringLiteral(primitive.name().toLowerCase(Locale.ROOT)),
+                "name", stringLiteral(primitiveTypeName(primitive)),
                 "pkg", emptyPackageInfo(anyInfo)
         );
     }
@@ -1241,7 +1245,7 @@ public class CapybaraExpressionCompiler {
 
     private CompiledExpression reflectionTupleInfo(CompiledTupleType tupleType, CompiledDataParentType anyInfo) {
         return newData(reflectionDataType(anyInfo, "TupleInfo"),
-                "name", stringLiteral("tuple"),
+                "name", stringLiteral("Tuple"),
                 "pkg", emptyPackageInfo(anyInfo),
                 "elements", new CompiledNewList(
                         tupleType.elementTypes().stream()
@@ -1328,6 +1332,7 @@ public class CapybaraExpressionCompiler {
                 dataType.comments(),
                 dataType.visibility(),
                 dataType.singleton(),
+                dataType.nativeType(),
                 dataType.enumValue()
         );
     }
@@ -3088,6 +3093,7 @@ public class CapybaraExpressionCompiler {
                 dataType.comments(),
                 dataType.visibility(),
                 dataType.singleton(),
+                dataType.nativeType(),
                 dataType.enumValue()
         )));
     }
@@ -3726,6 +3732,7 @@ public class CapybaraExpressionCompiler {
                 expectedSubtype.comments(),
                 expectedSubtype.visibility(),
                 expectedSubtype.singleton(),
+                expectedSubtype.nativeType(),
                 expectedSubtype.enumValue()
         );
     }
@@ -5016,7 +5023,7 @@ public class CapybaraExpressionCompiler {
                                 var initialAccumulatorType = widenReduceAccumulatorBindingType(initial.type());
                                 if (reduceExpression.accumulatorName().contains("::") && reduceExpression.keyName().isPresent()) {
                                     return withPosition(
-                                            Result.error("Reducer with four arguments is not supported for `dict`. Use `|>` mapper and then a standard reduce."),
+                                            Result.error("Reducer with four arguments is not supported for `Dict`. Use `|>` mapper and then a standard reduce."),
                                             reduceExpression.position()
                                     );
                                 } else {
@@ -5029,7 +5036,7 @@ public class CapybaraExpressionCompiler {
                                 if (reduceExpression.keyName().isPresent()) {
                                     if (!(left.type() instanceof CompiledDict)) {
                                         return withPosition(
-                                                Result.error("Reducer in `|>` with key argument can only be used for `dict`"),
+                                                Result.error("Reducer in `|>` with key argument can only be used for `Dict`"),
                                                 reduceExpression.position()
                                         );
                                     }
@@ -5347,6 +5354,7 @@ public class CapybaraExpressionCompiler {
                     dataType.comments(),
                     dataType.visibility(),
                     dataType.singleton(),
+                    dataType.nativeType(),
                     dataType.enumValue()
             );
         }
@@ -5363,6 +5371,7 @@ public class CapybaraExpressionCompiler {
                 dataType.comments(),
                 dataType.visibility(),
                 substituted.singleton(),
+                substituted.nativeType(),
                 substituted.enumValue()
         );
     }
@@ -7073,14 +7082,14 @@ public class CapybaraExpressionCompiler {
         return switch (type) {
             case CollectionType.ListType listType -> listType.elementType() == PrimitiveType.ANY
                     ? Optional.empty()
-                    : Optional.of("list");
+                    : Optional.of("List");
             case CollectionType.SetType setType -> setType.elementType() == PrimitiveType.ANY
                     ? Optional.empty()
-                    : Optional.of("set");
+                    : Optional.of("Set");
             case CollectionType.DictType dictType -> dictType.valueType() == PrimitiveType.ANY
                     ? Optional.empty()
-                    : Optional.of("dict");
-            case TupleType ignored -> Optional.of("tuple");
+                    : Optional.of("Dict");
+            case TupleType ignored -> Optional.of("Tuple");
             case FunctionType ignored -> Optional.of("function");
             case DataType dataType -> dataType.name().contains("[")
                     ? Optional.of(simpleTypeNameStatic(dataType.name()))
@@ -7108,18 +7117,18 @@ public class CapybaraExpressionCompiler {
 
     private String defaultAnyPatternTypeDescriptor(String descriptor) {
         var trimmed = descriptor.trim();
-        if (trimmed.startsWith("list[") && trimmed.endsWith("]")) {
-            return "list[" + defaultAnyPatternTypeDescriptor(trimmed.substring(5, trimmed.length() - 1)) + "]";
+        if (trimmed.startsWith("List[") && trimmed.endsWith("]")) {
+            return "List[" + defaultAnyPatternTypeDescriptor(trimmed.substring(5, trimmed.length() - 1)) + "]";
         }
-        if (trimmed.startsWith("set[") && trimmed.endsWith("]")) {
-            return "set[" + defaultAnyPatternTypeDescriptor(trimmed.substring(4, trimmed.length() - 1)) + "]";
+        if (trimmed.startsWith("Set[") && trimmed.endsWith("]")) {
+            return "Set[" + defaultAnyPatternTypeDescriptor(trimmed.substring(4, trimmed.length() - 1)) + "]";
         }
-        if (trimmed.startsWith("dict[") && trimmed.endsWith("]")) {
-            return "dict[" + defaultAnyPatternTypeDescriptor(trimmed.substring(5, trimmed.length() - 1)) + "]";
+        if (trimmed.startsWith("Dict[") && trimmed.endsWith("]")) {
+            return "Dict[" + defaultAnyPatternTypeDescriptor(trimmed.substring(5, trimmed.length() - 1)) + "]";
         }
-        if (trimmed.startsWith("tuple[") && trimmed.endsWith("]")) {
+        if (trimmed.startsWith("Tuple[") && trimmed.endsWith("]")) {
             var inner = trimmed.substring(6, trimmed.length() - 1);
-            return "tuple[" + splitTopLevelTypeDescriptors(inner).stream()
+            return "Tuple[" + splitTopLevelTypeDescriptors(inner).stream()
                     .map(this::defaultAnyPatternTypeDescriptor)
                     .collect(java.util.stream.Collectors.joining(", ")) + "]";
         }
@@ -7444,6 +7453,7 @@ public class CapybaraExpressionCompiler {
                     linkedDataType.comments(),
                     linkedDataType.visibility(),
                     linkedDataType.singleton(),
+                    linkedDataType.nativeType(),
                     linkedDataType.enumValue()
             );
             case CompiledDataParentType linkedDataParentType -> new CompiledDataParentType(
@@ -7510,19 +7520,19 @@ public class CapybaraExpressionCompiler {
                 return Optional.empty();
             }
         }
-        if (normalizedDescriptor.startsWith("list[") && normalizedDescriptor.endsWith("]")) {
+        if (normalizedDescriptor.startsWith("List[") && normalizedDescriptor.endsWith("]")) {
             return parseLinkedTypeDescriptor(normalizedDescriptor.substring(5, normalizedDescriptor.length() - 1))
                     .map(CompiledList::new);
         }
-        if (normalizedDescriptor.startsWith("set[") && normalizedDescriptor.endsWith("]")) {
+        if (normalizedDescriptor.startsWith("Set[") && normalizedDescriptor.endsWith("]")) {
             return parseLinkedTypeDescriptor(normalizedDescriptor.substring(4, normalizedDescriptor.length() - 1))
                     .map(CompiledSet::new);
         }
-        if (normalizedDescriptor.startsWith("dict[") && normalizedDescriptor.endsWith("]")) {
+        if (normalizedDescriptor.startsWith("Dict[") && normalizedDescriptor.endsWith("]")) {
             return parseLinkedTypeDescriptor(normalizedDescriptor.substring(5, normalizedDescriptor.length() - 1))
                     .map(CompiledDict::new);
         }
-        if (normalizedDescriptor.startsWith("tuple[") && normalizedDescriptor.endsWith("]")) {
+        if (normalizedDescriptor.startsWith("Tuple[") && normalizedDescriptor.endsWith("]")) {
             var inner = normalizedDescriptor.substring(6, normalizedDescriptor.length() - 1);
             var elementTypes = splitTopLevelTypeDescriptors(inner).stream()
                     .map(this::parseLinkedTypeDescriptor)
@@ -7583,6 +7593,7 @@ public class CapybaraExpressionCompiler {
                                 dataType.comments(),
                                 dataType.visibility(),
                                 dataType.singleton(),
+                                dataType.nativeType(),
                                 dataType.enumValue()
                         );
                     }
@@ -7605,6 +7616,7 @@ public class CapybaraExpressionCompiler {
                             dataType.comments(),
                             dataType.visibility(),
                             dataType.singleton(),
+                            dataType.nativeType(),
                             dataType.enumValue()
                     );
                 }
@@ -7800,11 +7812,11 @@ public class CapybaraExpressionCompiler {
 
     private String linkedTypeDescriptor(CompiledType type) {
         return switch (type) {
-            case PrimitiveLinkedType primitive -> primitive.name().toLowerCase();
-            case CompiledList linkedList -> "list[" + linkedTypeDescriptor(linkedList.elementType()) + "]";
-            case CompiledSet linkedSet -> "set[" + linkedTypeDescriptor(linkedSet.elementType()) + "]";
-            case CompiledDict linkedDict -> "dict[" + linkedTypeDescriptor(linkedDict.valueType()) + "]";
-            case CompiledTupleType linkedTupleType -> "tuple[" + linkedTupleType.elementTypes().stream()
+            case PrimitiveLinkedType primitive -> primitiveTypeName(primitive);
+            case CompiledList linkedList -> "List[" + linkedTypeDescriptor(linkedList.elementType()) + "]";
+            case CompiledSet linkedSet -> "Set[" + linkedTypeDescriptor(linkedSet.elementType()) + "]";
+            case CompiledDict linkedDict -> "Dict[" + linkedTypeDescriptor(linkedDict.valueType()) + "]";
+            case CompiledTupleType linkedTupleType -> "Tuple[" + linkedTupleType.elementTypes().stream()
                     .map(this::linkedTypeDescriptor)
                     .collect(java.util.stream.Collectors.joining(", ")) + "]";
             case CompiledFunctionType linkedFunctionType ->
@@ -8285,6 +8297,7 @@ public class CapybaraExpressionCompiler {
                 singleton.type().comments(),
                 singleton.type().visibility(),
                 singleton.type().singleton(),
+                singleton.type().nativeType(),
                 singleton.type().enumValue()
         );
     }
@@ -9181,14 +9194,14 @@ public class CapybaraExpressionCompiler {
 
     private String renderTypeForError(CompiledType type) {
         return switch (type) {
-            case PrimitiveLinkedType primitive -> primitive.name().toLowerCase(java.util.Locale.ROOT);
+            case PrimitiveLinkedType primitive -> primitiveTypeName(primitive);
             case CollectionLinkedType.CompiledList listType ->
-                    "list[" + renderTypeForError(listType.elementType()) + "]";
+                    "List[" + renderTypeForError(listType.elementType()) + "]";
             case CollectionLinkedType.CompiledSet setType ->
-                    "set[" + renderTypeForError(setType.elementType()) + "]";
+                    "Set[" + renderTypeForError(setType.elementType()) + "]";
             case CollectionLinkedType.CompiledDict dictType ->
-                    "dict[" + renderTypeForError(dictType.valueType()) + "]";
-            case CompiledTupleType tupleType -> "tuple[" + tupleType.elementTypes().stream()
+                    "Dict[" + renderTypeForError(dictType.valueType()) + "]";
+            case CompiledTupleType tupleType -> "Tuple[" + tupleType.elementTypes().stream()
                     .map(this::renderTypeForError)
                     .collect(java.util.stream.Collectors.joining(", ")) + "]";
             case CompiledFunctionType functionType ->
@@ -9966,6 +9979,7 @@ public class CapybaraExpressionCompiler {
                     linkedDataType.comments(),
                     linkedDataType.visibility(),
                     linkedDataType.singleton(),
+                    linkedDataType.nativeType(),
                     linkedDataType.enumValue()
             );
             case CompiledDataParentType linkedDataParentType -> new CompiledDataParentType(

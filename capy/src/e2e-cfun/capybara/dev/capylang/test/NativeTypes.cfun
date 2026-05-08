@@ -1,0 +1,23 @@
+from /capy/lang/String import { * }
+from /capy/lang/collection/List import { * }
+from /capy/lang/collection/Set import { * }
+from /capy/lang/collection/Dict import { * }
+from /capy/lang/collection/Tuple import { * }
+
+fun string_length(value: String): int = value.length()
+
+fun string_trim(value: String): String = value.trim()
+
+fun list_size(values: List[int]): int = values.size()
+
+fun list_contains(values: List[int], value: int): bool = values.contains(value)
+
+fun set_is_empty(values: Set[int]): bool = values.is_empty()
+
+fun set_contains(values: Set[int], value: int): bool = values.contains(value)
+
+fun dict_size(values: Dict[int]): int = values.size()
+
+fun dict_contains_key(values: Dict[int], key: String): bool = values.contains_key(key)
+
+fun tuple_second(value: Tuple[int, String]): String = value[1]

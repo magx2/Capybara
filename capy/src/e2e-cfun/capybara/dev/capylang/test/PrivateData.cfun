@@ -1,11 +1,11 @@
-data _Parse[T] { value: T, parsing_string: string }
+data _Parse[T] { value: T, parsing_string: String }
 data Parse[T] { message: T }
 
-fun parse_int(v: int): string =
+fun parse_int(v: int): String =
     let parsed = _Parse[int] { value: v, parsing_string: "ok" }
     parsed.parsing_string + ":" + parsed.value
 
-fun parse_conflict(v: string): string =
-    let private_parse = _Parse[string] { value: v, parsing_string: "internal" }
-    let public_parse = Parse[string] { message: v }
+fun parse_conflict(v: String): String =
+    let private_parse = _Parse[String] { value: v, parsing_string: "internal" }
+    let public_parse = Parse[String] { message: v }
     private_parse.parsing_string + ":" + public_parse.message

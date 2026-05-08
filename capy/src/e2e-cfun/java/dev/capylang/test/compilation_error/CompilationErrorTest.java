@@ -20,9 +20,9 @@ public class CompilationErrorTest {
     @Test
     void shouldKeepOriginalLocalNamesInUserVisibleErrors() {
         var errors = compileProgram("""
-                        fun parse_semver(version: string): Result[int] =
-                            data __Parse[T] { buffer: string, value: T }
-                            fun __parse_digit(buffer: string): Result[__Parse[int]] =
+                        fun parse_semver(version: String): Result[int] =
+                            data __Parse[T] { buffer: String, value: T }
+                            fun __parse_digit(buffer: String): Result[__Parse[int]] =
                                 Success { __Parse { buffer: buffer[1:], value: 1 } }
                             fun __parse_digits(parse: __Parse[Option[int]]): Result[__Parse[int]] =
                                 match parse.buffer[0] with
@@ -95,9 +95,9 @@ public class CompilationErrorTest {
     @Test
     void shouldRejectEmptyIndexAccess() {
         var errors = compileProgram("""
-                        data Box { value: string }
-                        fun Box.get(): string = this.value
-                        fun broken(box: Box): string = box[]
+                        data Box { value: String }
+                        fun Box.get(): String = this.value
+                        fun broken(box: Box): String = box[]
                         """,
                 "empty_index_access");
 
@@ -109,8 +109,8 @@ public class CompilationErrorTest {
     @Test
     void shouldRejectIndexAccessWithoutMatchingGetMethod() {
         var errors = compileProgram("""
-                        data Box { value: string }
-                        fun broken(box: Box): string = box[1]
+                        data Box { value: String }
+                        fun broken(box: Box): String = box[1]
                         """,
                 "index_access_without_matching_get");
 
@@ -125,14 +125,14 @@ public class CompilationErrorTest {
         var errors = compileProgram("""
                         fun classify(value: any): int =
                             match value with
-                            case list[string] -> 1
+                            case List[String] -> 1
                             case _ -> 0
                         """,
                 "parameterized_runtime_type_pattern");
 
         assertThat(errors).hasSize(1);
         assertThat(errors.first().message())
-                .contains("Parameterized runtime type patterns are not supported in v1; use bare `list`");
+                .contains("Parameterized runtime type patterns are not supported in v1; use bare `List`");
     }
 
     @Test
@@ -186,16 +186,16 @@ public class CompilationErrorTest {
     void shouldRequireResultDataConstructorWhenParentTypeConstructorReturnsResult() {
                 var errors = compileProgram("""
                         from /capy/lang/Result import { * }
-                        type Parent { foo: string } with constructor {
+                        type Parent { foo: String } with constructor {
                            if foo.size == 0 then
                                Error { message: "missing" }
                            else
                                Success { value: * { foo: foo } }
                         } = Child
-                        data Child { foo: string, bar: string } with constructor {
+                        data Child { foo: String, bar: String } with constructor {
                             * { foo: foo, bar: bar }
                         }
-                        fun create(foo: string, bar: string): string =
+                        fun create(foo: String, bar: String): String =
                             ""
                         """,
                 "type_constructor_requires_result_child");
@@ -253,7 +253,7 @@ public class CompilationErrorTest {
     @Test
     void shouldRejectUnknownDeriver() {
         var errors = compileProgram("""
-                        data User { name: string } derive Missing
+                        data User { name: String } derive Missing
                         """,
                 "derive_unknown_deriver");
 
@@ -266,12 +266,12 @@ public class CompilationErrorTest {
     void shouldRejectDerivedMethodCollision() {
         var errors = compileProgram("""
                         deriver Show {
-                            fun show(): string = "generated"
+                            fun show(): String = "generated"
                         }
 
-                        data User { name: string } derive Show
+                        data User { name: String } derive Show
 
-                        fun User.show(): string = "manual"
+                        fun User.show(): String = "manual"
                         """,
                 "derive_method_collision");
 
@@ -284,14 +284,14 @@ public class CompilationErrorTest {
     void shouldRejectDuplicateDeriver() {
         var errors = compileProgram("""
                         deriver Show {
-                            fun show(): string = "generated"
+                            fun show(): String = "generated"
                         }
 
                         deriver Show {
-                            fun print(): string = "generated"
+                            fun print(): String = "generated"
                         }
 
-                        data User { name: string } derive Show
+                        data User { name: String } derive Show
                         """,
                 "derive_duplicate_deriver");
 
@@ -304,10 +304,10 @@ public class CompilationErrorTest {
     void shouldRejectLegacyDeriveTypeNameHelper() {
         var errors = compileProgram("""
                         deriver Show {
-                            fun show(): string = derive_type_name()
+                            fun show(): String = derive_type_name()
                         }
 
-                        data User { name: string } derive Show
+                        data User { name: String } derive Show
                         """,
                 "derive_type_name_legacy");
 
@@ -320,10 +320,10 @@ public class CompilationErrorTest {
     void shouldRejectLegacyDeriveFieldsJoinHelper() {
         var errors = compileProgram("""
                         deriver Show {
-                            fun show(): string = derive_fields_join(", ")
+                            fun show(): String = derive_fields_join(", ")
                         }
 
-                        data User { name: string } derive Show
+                        data User { name: String } derive Show
                         """,
                 "derive_fields_join_legacy");
 
@@ -337,10 +337,10 @@ public class CompilationErrorTest {
     void shouldRejectIndirectLegacyDeriveHelperReference() {
         var errors = compileProgram("""
                         deriver Show {
-                            fun show(): string = (:derive_type_name)()
+                            fun show(): String = (:derive_type_name)()
                         }
 
-                        data User { name: string } derive Show
+                        data User { name: String } derive Show
                         """,
                 "derive_type_name_reference_legacy");
 
@@ -353,7 +353,7 @@ public class CompilationErrorTest {
     void shouldRejectMatchAssignedToIncompatibleTypedLet() {
         var errors = compileProgram("""
                         fun broken(): int =
-                            let xs: list[() => int] =
+                            let xs: List[() => int] =
                                 match true with
                                 case true -> [1]
                                 case false -> [() => 2]
@@ -536,14 +536,14 @@ public class CompilationErrorTest {
         var errors = compileProgram("""
                         from /capy/lang/Result import { * }
                         fun broken(): Result[int] =
-                            let value: string <- Success { value: 1 }
+                            let value: String <- Success { value: 1 }
                             value
                         """,
                 "result_bind_type_mismatch");
 
         assertThat(errors).hasSize(1);
         assertThat(errors.first().message())
-                .contains("Expected `string`, got `int`");
+                .contains("Expected `String`, got `int`");
     }
 
     @Test
@@ -567,7 +567,7 @@ public class CompilationErrorTest {
                 new RawModule("Result", "/capy/lang", """
                         type Result[T] = Success[T] | Error
                         data Success[T] { value: T }
-                        data Error { message: string }
+                        data Error { message: String }
                         """),
                 new RawModule("Assert", "/capy/test", """
                         from /capy/lang/Result import { * }
@@ -742,7 +742,7 @@ public class CompilationErrorTest {
                         "match_guard_not_bool",
                         """
                                 from /capy/lang/Option import { * }
-                                fun foo(option: Option[int]): string =
+                                fun foo(option: Option[int]): String =
                                     match option with
                                     case Some { value } when value + 1 -> "x"
                                     case None -> "none"
@@ -751,7 +751,7 @@ public class CompilationErrorTest {
                         """
                                 error: mismatched types
                                  --> /foo/boo/match_guard_not_bool.cfun:4:35
-                                fun foo(option: Option[int]): string =
+                                fun foo(option: Option[int]): String =
                                     match option with ...
                                 %3$s^ `when` guard has to be `bool`, was `INT`
                                 """
@@ -780,7 +780,7 @@ public class CompilationErrorTest {
                         "match_guard_where_keyword_syntax_error",
                         """
                                 from /capy/lang/Option import { * }
-                                fun foo(option: Option[string]): string =
+                                fun foo(option: Option[String]): String =
                                     match option with
                                     case Some { value } where value == "+" -> "plus"
                                     case Some { value } -> "other"
@@ -790,7 +790,7 @@ public class CompilationErrorTest {
                         """
                                 error: mismatched types
                                  --> /foo/boo/match_guard_where_keyword_syntax_error.cfun:4:24
-                                fun foo(option: Option[string]): string =
+                                fun foo(option: Option[String]): String =
                                     match option with
                                     case Some { value } where value == "+" -> "plus"
                                 %3$s^ Syntax error, `where` not expected here. Use `when` for match guards
@@ -801,7 +801,7 @@ public class CompilationErrorTest {
                         """
                                 from /capy/lang/Option import { * }
                                 from /capy/lang/Result import { * }
-                                fun foo(v: string): Result[int] =
+                                fun foo(v: String): Result[int] =
                                     match v[0] with
                                     case None -> Error { "missing" }
                                     case Some { value } -> value
@@ -810,7 +810,7 @@ public class CompilationErrorTest {
                         """
                                 error: mismatched types
                                  --> /foo/boo/match_result_branch_type_mismatch_to_int.cfun:6:27
-                                fun foo(v: string): Result[int] =
+                                fun foo(v: String): Result[int] =
                                     match v[0] with ...
                                                            ^ Cannot coerce constructor result to `INT`
                                 """
@@ -819,7 +819,7 @@ public class CompilationErrorTest {
                         "match_option_branch_type_mismatch",
                         """
                                 from /capy/lang/Option import { * }
-                                fun foo(v: string): Option[string] =
+                                fun foo(v: String): Option[String] =
                                     match v[0] with
                                     case None -> None {}
                                     case Some { value } -> value + ""
@@ -828,9 +828,9 @@ public class CompilationErrorTest {
                         """
                                 error: mismatched types
                                  --> /foo/boo/match_option_branch_type_mismatch.cfun:5:33
-                                fun foo(v: string): Option[string] =
+                                fun foo(v: String): Option[String] =
                                     match v[0] with ...
-                                                                 ^ Expected `Option[string]`, got `string`
+                                                                 ^ Expected `Option[String]`, got `String`
                                 """
                 ),
                 Arguments.of(
@@ -849,7 +849,7 @@ public class CompilationErrorTest {
                                     ^ `match` is not exhaustive. Use wildcard `case _ -> ...` or add missing branches:`false`.
                                 """
                 ));
-        var primitiveTypes = List.of("string", "byte", "int", "long", "float", "double");
+        var primitiveTypes = List.of("String", "byte", "int", "long", "float", "double");
         var primitiveCases = primitiveTypes.stream().map(CompilationErrorTest::primitiveMatchNotExhaustiveCase);
         return Stream.concat(base, primitiveCases);
     }
@@ -900,9 +900,9 @@ public class CompilationErrorTest {
 
             if (!op.equals("+")) {
                 for (var left : numericTypes) {
-                    add(byModule, op, left, new InfixOperand("string", "string", "string"));
+                    add(byModule, op, left, new InfixOperand("String", "String", "String"));
                 }
-                add(byModule, op, new InfixOperand("string", "string", "string"), new InfixOperand("string", "string", "string"));
+                add(byModule, op, new InfixOperand("String", "String", "String"), new InfixOperand("String", "String", "String"));
             }
             add(byModule, op, anyType, anyType);
         }
@@ -913,7 +913,7 @@ public class CompilationErrorTest {
                         "infix_plus_data_parent_and_subtype",
                         """
                                 type Json = JsonArray | JsonNull
-                                data JsonArray { value: list[Json] }
+                                data JsonArray { value: List[Json] }
                                 single JsonNull
                                 fun foo(left: JsonArray, right: Json): Json =
                                     left + right
@@ -938,7 +938,7 @@ public class CompilationErrorTest {
                 new InfixOperand("float", "float", "float"),
                 new InfixOperand("double", "double", "double"),
                 new InfixOperand("bool", "bool", "bool"),
-                new InfixOperand("string", "string", "string")
+                new InfixOperand("String", "String", "String")
         );
         var byModule = new LinkedHashMap<String, Arguments>();
         var intType = new InfixOperand("int", "int", "int");
@@ -1064,7 +1064,7 @@ public class CompilationErrorTest {
                         "data_extension_conflicting_inherited_field_types",
                         """
                                 data Foo { a: int, b: int }
-                                data Boo { b: string, c: int }
+                                data Boo { b: String, c: int }
                                 data Bar { d: int, ...Foo, ...Boo }
                                 """,
                         new Position(3, 0),
@@ -1076,7 +1076,7 @@ public class CompilationErrorTest {
                                 type Seq[T] = Cons[T] | End
                                 data Cons[T] { value: T, rest: Seq[T] }
                                 single End
-                                fun to_seq(list: list[int]): Seq[int] =
+                                fun to_seq(list: List[int]): Seq[int] =
                                     if list.size > 0
                                     then Cons { list[0], to_seq(list[1:])
                                     else End {}
@@ -1088,7 +1088,7 @@ public class CompilationErrorTest {
                                 type Seq[T] = Cons[T] | End
                                 data Cons[T] { value: T, rest: Seq[T] }
                                 single End
-                                fun to_seq(list: list[int]): Seq[int] =
+                                fun to_seq(list: List[int]): Seq[int] =
                                     if list.size > 0
                                     then Cons { list[0], to_seq(list[1:])
                                     else End {}
@@ -1109,7 +1109,7 @@ public class CompilationErrorTest {
                 Arguments.of(
                         "pipe_lambda_postfix_requires_parentheses",
                         """
-                                fun foo(): string =
+                                fun foo(): String =
                                     " x "
                                         | value => value.trim()
                                         .trim()
@@ -1118,7 +1118,7 @@ public class CompilationErrorTest {
                         """
                                 error: mismatched types
                                  --> /foo/boo/pipe_lambda_postfix_requires_parentheses.cfun:%d:%d
-                                fun foo(): string =
+                                fun foo(): String =
                                     " x "
                                         | value => value.trim()
                                         .trim()
@@ -1131,7 +1131,7 @@ public class CompilationErrorTest {
                                 type Seq[T] = Cons[T] | End
                                 data Cons[T] { value: T, rest: Seq[T] }
                                 single End
-                                fun Seq[T].take(n: int): list[T] =
+                                fun Seq[T].take(n: int): List[T] =
                                     match this with
                                     case End => []
                                     case Cons { value, rest } -> []
@@ -1143,7 +1143,7 @@ public class CompilationErrorTest {
                                 type Seq[T] = Cons[T] | End
                                 data Cons[T] { value: T, rest: Seq[T] }
                                 single End
-                                fun Seq[T].take(n: int): list[T] =
+                                fun Seq[T].take(n: int): List[T] =
                                     match this with
                                     case End => []
                                 %3$s^ Expected `->`, found `=`
@@ -1258,18 +1258,18 @@ public class CompilationErrorTest {
                         """
                                 type Result[T] = Success[T] | Error
                                 data Success[T] { value: T }
-                                data Error { message: string }
-                                data _Parse[T] { value: T, parsing_string: string }
+                                data Error { message: String }
+                                data _Parse[T] { value: T, parsing_string: String }
                                 data JsonBool { value: bool }
                                 single JsonNull
-                                  fun _deserialize_json_null(json: string): Result[_Parse[JsonBool]] =
+                                  fun _deserialize_json_null(json: String): Result[_Parse[JsonBool]] =
                                     let parsed: _Parse[JsonNull] = _Parse { JsonNull {}, json[4:] }
                                     Success { parsed }
                                 """,
                         new Position(9, 4),
                         "error: mismatched types\n"
                         + " --> /foo/boo/function_json_null_wrong_generic_return_type.cfun:%d:%d\n"
-                        + "fun _deserialize_json_null(json: string): Result[_Parse[JsonBool]] =\n"
+                        + "fun _deserialize_json_null(json: String): Result[_Parse[JsonBool]] =\n"
                         + "    let parsed: _Parse[JsonNull] = _Parse {\n"
                         + "        JsonNull {  },\n"
                         + "    ^ Expected `_Parse[JsonBool]`, but got `_Parse[JsonNull]`\n"
@@ -1279,8 +1279,8 @@ public class CompilationErrorTest {
                         """
                                 type Result[T] = Success[T] | Error
                                 data Success[T] { value: T }
-                                data Error { message: string }
-                                fun accepts_list(value: Result[list[int]]): int = 1
+                                data Error { message: String }
+                                fun accepts_list(value: Result[List[int]]): int = 1
                                 fun broken(): int =
                                     let x = Success { {:} }
                                     accepts_list(x)
@@ -1291,30 +1291,30 @@ public class CompilationErrorTest {
                         + "fun broken(): int =\n"
                         + "    let x = Success {\n"
                         + "        {}\n"
-                        + "%3$s^ Expected `Result[list[int]]`, got `Success[dict[any]]`\n"
+                        + "%3$s^ Expected `Result[List[int]]`, got `Success[Dict[any]]`\n"
                 ),
                 Arguments.of(
                         "any_list_result_not_compatible_with_list_result",
                         """
                                 type Result[T] = Success[T] | Error
                                 data Success[T] { value: T }
-                                data Error { message: string }
-                                fun accepts_list(value: Result[list[int]]): int = 1
-                                fun broken(value: Result[list[any]]): int =
+                                data Error { message: String }
+                                fun accepts_list(value: Result[List[int]]): int = 1
+                                fun broken(value: Result[List[any]]): int =
                                     accepts_list(value)
                                 """,
                         new Position(6, 17),
                         "error: mismatched types\n"
                         + " --> /foo/boo/any_list_result_not_compatible_with_list_result.cfun:%d:%d\n"
-                        + "fun broken(value: Result[list[any]]): int =\n"
+                        + "fun broken(value: Result[List[any]]): int =\n"
                         + "    accepts_list(value)\n"
-                        + "%3$s^ Expected `Result[list[int]]`, got `Result[list[any]]`\n"
+                        + "%3$s^ Expected `Result[List[int]]`, got `Result[List[any]]`\n"
                 ),
                 Arguments.of(
                         "json_assertion_no_viable_alternative",
                         """
                                 data JsonNumberLong { value: long }
-                                data JsonObject { value: dict[JsonNumberLong] }
+                                data JsonObject { value: Dict[JsonNumberLong] }
                                 fun foo(): JsonObject =
                                     JsonObject {
                                         value: {
@@ -1340,7 +1340,7 @@ public class CompilationErrorTest {
                         "json_assertion_int_no_viable_alternative",
                         """
                                 data JsonNumberInt { value: int }
-                                data JsonObject { value: dict[JsonNumberInt] }
+                                data JsonObject { value: Dict[JsonNumberInt] }
                                 fun foo(): JsonObject =
                                     JsonObject {
                                         value: {
@@ -1363,8 +1363,8 @@ public class CompilationErrorTest {
                 Arguments.of(
                         "json_assertion_string_no_viable_alternative",
                         """
-                                data JsonString { value: string }
-                                data JsonObject { value: dict[JsonString] }
+                                data JsonString { value: String }
+                                data JsonObject { value: Dict[JsonString] }
                                 fun foo(): JsonObject =
                                     JsonObject {
                                         value: {
@@ -1381,14 +1381,14 @@ public class CompilationErrorTest {
                                     JsonObject {
                                         value: {
                                             "name": JsonString { value: 123 },
-                                                                        ^ Expected `string`, but got `int`
+                                                                        ^ Expected `String`, but got `int`
                                 """
                 ),
                 Arguments.of(
                         "json_assertion_bool_no_viable_alternative",
                         """
                                 data JsonBool { value: bool }
-                                data JsonObject { value: dict[JsonBool] }
+                                data JsonObject { value: Dict[JsonBool] }
                                 fun foo(): JsonObject =
                                     JsonObject {
                                         value: {
@@ -1405,15 +1405,15 @@ public class CompilationErrorTest {
                                     JsonObject {
                                         value: {
                                             "married": JsonBool { value: "yes" },
-                                                                         ^ Expected `bool`, but got `string`
+                                                                         ^ Expected `bool`, but got `String`
                                 """
                 ),
                 Arguments.of(
                         "json_assertion_list_no_viable_alternative",
                         """
-                                data JsonListInt { value: list[int], size: int }
-                                data JsonObject { value: dict[JsonListInt] }
-                                fun foo(v: list[int]): JsonObject =
+                                data JsonListInt { value: List[int], size: int }
+                                data JsonObject { value: Dict[JsonListInt] }
+                                fun foo(v: List[int]): JsonObject =
                                     JsonObject {
                                         value: {
                                             "numbers": JsonListInt { value: v, size: "x" },
@@ -1424,19 +1424,19 @@ public class CompilationErrorTest {
                         """
                                 error: mismatched types
                                  --> /foo/boo/json_assertion_list_no_viable_alternative.cfun:%d:%d
-                                fun foo(v: list[int]): JsonObject =
+                                fun foo(v: List[int]): JsonObject =
                                     JsonObject {
                                         value: {
                                             "numbers": JsonListInt { value: v, size: "x" }
-                                                                                     ^ Expected `int`, but got `string`
+                                                                                     ^ Expected `int`, but got `String`
                                 """
                 ),
                 Arguments.of(
                         "json_assertion_set_no_viable_alternative",
                         """
-                                data JsonSetBool { value: set[bool], ok: bool }
-                                data JsonObject { value: dict[JsonSetBool] }
-                                fun foo(v: set[bool]): JsonObject =
+                                data JsonSetBool { value: Set[bool], ok: bool }
+                                data JsonObject { value: Dict[JsonSetBool] }
+                                fun foo(v: Set[bool]): JsonObject =
                                     JsonObject {
                                         value: {
                                             "flags": JsonSetBool { value: v, ok: "yes" },
@@ -1447,18 +1447,18 @@ public class CompilationErrorTest {
                         """
                                 error: mismatched types
                                  --> /foo/boo/json_assertion_set_no_viable_alternative.cfun:%d:%d
-                                fun foo(v: set[bool]): JsonObject =
+                                fun foo(v: Set[bool]): JsonObject =
                                     JsonObject {
                                         value: {
                                             "flags": JsonSetBool { value: v, ok: "yes" }
-                                                                                 ^ Expected `bool`, but got `string`
+                                                                                 ^ Expected `bool`, but got `String`
                                 """
                 ),
                 Arguments.of(
                         "json_assertion_dict_no_viable_alternative",
                         """
                                 data JsonByte { value: byte }
-                                data JsonObject { value: dict[JsonByte] }
+                                data JsonObject { value: Dict[JsonByte] }
                                 fun foo(): JsonObject =
                                     JsonObject {
                                         value: {
@@ -1474,14 +1474,14 @@ public class CompilationErrorTest {
                                     JsonObject {
                                         value: {
                                             "tiny": JsonByte { value: "7" }
-                                                                      ^ Expected `byte`, but got `string`
+                                                                      ^ Expected `byte`, but got `String`
                                 """
                 ),
                 Arguments.of(
                         "json_assertion_primitive_no_viable_alternative",
                         """
                                 data JsonByte { value: byte }
-                                data JsonObject { value: dict[JsonByte] }
+                                data JsonObject { value: Dict[JsonByte] }
                                 fun foo(): JsonObject =
                                     JsonObject {
                                         value: {
@@ -1497,7 +1497,7 @@ public class CompilationErrorTest {
                                     JsonObject {
                                         value: {
                                             "tiny": JsonByte { value: "7" }
-                                                                      ^ Expected `byte`, but got `string`
+                                                                      ^ Expected `byte`, but got `String`
                                 """
                 ),
                 Arguments.of(
@@ -1508,7 +1508,7 @@ public class CompilationErrorTest {
                                 error: mismatched types
                                  --> /foo/boo/function_wrong_return_type.cfun:1:23
                                 fun foo(x: int): int = "boo"
-                                                       ^ Expected `int`, got `string`
+                                                       ^ Expected `int`, got `String`
                                 """
                 ),
                 Arguments.of(
@@ -1546,13 +1546,13 @@ public class CompilationErrorTest {
                 ),
                 Arguments.of(
                         "function_wrong_return_type_string",
-                        "fun foo(x: int): string = 1",
+                        "fun foo(x: int): String = 1",
                         new Position(1, 26),
                         """
                                 error: mismatched types
                                  --> /foo/boo/function_wrong_return_type_string.cfun:1:26
-                                fun foo(x: int): string = 1
-                                                          ^ Expected `string`, got `int`
+                                fun foo(x: int): String = 1
+                                                          ^ Expected `String`, got `int`
                                 """
                 ),
                 Arguments.of(
@@ -1569,11 +1569,11 @@ public class CompilationErrorTest {
                 Arguments.of(
                         "function_private_type_escapes_signature",
                         """
-                                fun foo_me(name: string): __Name =
+                                fun foo_me(name: String): __Name =
                                     type __Name = __Foo | __Boo | __Unknown
-                                    data __Foo { foo: string }
-                                    data __Boo { boo: string }
-                                    data __Unknown { unkn: string }
+                                    data __Foo { foo: String }
+                                    data __Boo { boo: String }
+                                    data __Unknown { unkn: String }
                                     ---
                                     match name with
                                     case "foo" -> __Foo { foo: "xyz" }
@@ -1584,14 +1584,14 @@ public class CompilationErrorTest {
                         """
                                 error: mismatched types
                                  --> /foo/boo/function_private_type_escapes_signature.cfun:1:26
-                                fun foo_me(name: string): __Name = ...
+                                fun foo_me(name: String): __Name = ...
                                                           ^ Private type `__Name` cannot be used in function signature
                                 """
                 ),
                 Arguments.of(
                         "local_function_error_restores_private_names",
                         """
-                                    fun parse_semver(version: string): int =
+                                    fun parse_semver(version: String): int =
                                         data __Parse[T] { value: T }
                                         fun parse_digits(parse: __Parse[Option[int]]): __Parse[int] = parse.value
                                         ---
@@ -1615,7 +1615,7 @@ public class CompilationErrorTest {
                         """
                                 // normal comment
                                 data Foo {
-                                    option: string,
+                                    option: String,
                                     x: int
                                 }
                                 
@@ -1638,7 +1638,7 @@ public class CompilationErrorTest {
                                         5
                                     }
                                     "boo"
-                                    ^ Expected `int`, got `string`
+                                    ^ Expected `int`, got `String`
                                 """
                 ),
                 Arguments.of(
@@ -1658,7 +1658,7 @@ public class CompilationErrorTest {
                                     let a = x+1
                                     let b = a+2
                                     "x"
-                                    ^ Expected `int`, got `string`
+                                    ^ Expected `int`, got `String`
                                 """
                 ),
                 Arguments.of(
@@ -1684,9 +1684,9 @@ public class CompilationErrorTest {
                         "multiline_new_data_return_wrong_type",
                         """
                                 /* block comment */
-                                data Foo { a: int, b: string }
+                                data Foo { a: int, b: String }
                                 
-                                fun foo(): string =
+                                fun foo(): String =
                                     let f = Foo {
                                         a: 1,
                                         b: "x"
@@ -1697,13 +1697,13 @@ public class CompilationErrorTest {
                         """
                                 error: mismatched types
                                  --> /foo/boo/multiline_new_data_return_wrong_type.cfun:9:4
-                                fun foo(): string =
+                                fun foo(): String =
                                     let f = Foo {
                                         a: 1,
                                         b: "x"
                                     }
                                     f
-                                    ^ Expected `string`, got `Foo`
+                                    ^ Expected `String`, got `Foo`
                                 """
                 )
         );
@@ -1719,7 +1719,7 @@ public class CompilationErrorTest {
             new RawModule("Name", "/capy/compilation_test", """
                     type Name[T] = Foo[T] | Boo
                     data Foo[T] { value: T }
-                    data Boo { message: string }
+                    data Boo { message: String }
                     """)
     );
 

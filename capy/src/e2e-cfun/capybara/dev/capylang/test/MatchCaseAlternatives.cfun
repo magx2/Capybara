@@ -1,29 +1,29 @@
 from /capy/lang/Result import { * }
 
-fun digit_label(char: string): string =
+fun digit_label(char: String): String =
     match char with
     case '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' -> 'digit'
     case '0' -> 'zero'
     case _ -> 'other'
 
-fun int_bucket(value: int): string =
+fun int_bucket(value: int): String =
     match value with
     case 1 | 2 | 3 -> 'small'
     case 10 | 20 | 30 -> 'tens'
     case _ -> 'other'
 
-fun long_bucket(value: long): string =
+fun long_bucket(value: long): String =
     match value with
     case 1L | 2L | 3L -> 'small'
     case 100L | 200L | 300L -> 'hundreds'
     case _ -> 'other'
 
 type Sign = Plus | Minus | Zero
-data Plus { value: string }
-data Minus { value: string }
-data Zero { value: string }
+data Plus { value: String }
+data Minus { value: String }
+data Zero { value: String }
 
-fun sign_name(sign: Sign): string =
+fun sign_name(sign: Sign): String =
     match sign with
     case Plus { _ } | Minus { _ } -> 'non-zero'
     case Zero { _ } -> 'zero'

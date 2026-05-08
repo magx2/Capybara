@@ -44,8 +44,8 @@ localFunctionDeclaration: docComment* 'fun' recFunctionMarker localFunctionNameD
 localFunctionNameDeclaration: NAME | REC;
 localTypeDeclaration: 'type' genericTypeDeclaration constructorClause? '=' genericTypeDeclaration (PIPE genericTypeDeclaration)*
                     | 'type' genericTypeDeclaration '{' fieldDeclarationList? '}' constructorClause? '=' genericTypeDeclaration (PIPE genericTypeDeclaration)*;
-localDataDeclaration: 'data' genericTypeDeclaration '{' fieldDeclarationList? '}' constructorClause?
-                    | 'data' genericTypeDeclaration '=' '{' fieldDeclarationList? '}' constructorClause?;
+localDataDeclaration: 'data' genericTypeDeclaration '{' dataBody? '}' constructorClause?
+                    | 'data' genericTypeDeclaration '=' '{' dataBody? '}' constructorClause?;
 localSingleDeclaration: 'single' TYPE;
 localConstDeclaration: docComment* 'const' privateLocalConstName (':' type)? '=' expressionNoLet;
 privateLocalConstName: NAME | TYPE;
@@ -56,8 +56,8 @@ docComment: DOC_COMMENT;
 typeDeclaration: docComment* VISIBILITY? 'type' genericTypeDeclaration constructorClause? '=' genericTypeDeclaration (PIPE genericTypeDeclaration)* deriveClause?
                | docComment* VISIBILITY? 'type' genericTypeDeclaration '{' fieldDeclarationList? '}' constructorClause? '=' genericTypeDeclaration (PIPE genericTypeDeclaration)* deriveClause?;
 enumDeclaration: 'enum' TYPE '{' TYPE (COMMA TYPE)* COMMA? '}';
-dataDeclaration: docComment* VISIBILITY? 'data' genericTypeDeclaration '{' fieldDeclarationList? '}' constructorClause? deriveClause?
-               | docComment* VISIBILITY? 'data' genericTypeDeclaration '=' '{' fieldDeclarationList? '}' constructorClause? deriveClause?;
+dataDeclaration: docComment* VISIBILITY? 'data' genericTypeDeclaration '{' dataBody? '}' constructorClause? deriveClause?
+               | docComment* VISIBILITY? 'data' genericTypeDeclaration '=' '{' dataBody? '}' constructorClause? deriveClause?;
 constructorClause: 'with' 'constructor' '{' expression '}';
 deriveClause: 'derive' TYPE (COMMA TYPE)* COMMA?;
 deriverDeclaration: docComment* VISIBILITY? 'deriver' TYPE '{' deriverMethodDeclaration+ '}';
@@ -68,21 +68,19 @@ fieldDeclarationList: fieldDeclaration (',' fieldDeclaration)* ','?;
 fieldDeclaration: identifier ':' type
                 | STRING_LITERAL ':' type
                 | SPREAD TYPE;
+dataBody: NATIVE_LITERAL | fieldDeclarationList;
 genericTypeDeclaration: TYPE (typeLbrack TYPE (',' TYPE)* RBRACK)?;
 typeLbrack: LBRACK | LINE_START_LBRACK;
 
 VISIBILITY: 'local' | 'private';
 BOOL_LITERAL: 'true' | 'false';
-COLLECTION: 'list' | 'set' | 'dict';
 REC: 'rec';
 NAME : [_]* [a-z] [a-zA-Z0-9_]*;
-identifier: NAME | REC | COLLECTION | 'derive' | 'deriver' | 'fun' | 'type' | 'enum' | 'byte' | 'int' | 'long' | 'double' | 'bool' | 'string' | 'float' | 'nothing' | 'any';
+identifier: NAME | REC | 'derive' | 'deriver' | 'fun' | 'type' | 'enum' | 'byte' | 'int' | 'long' | 'double' | 'bool' | 'float' | 'nothing' | 'any';
 parameters: parameter (',' parameter)*;
 parameter: identifier ':' type;
 functionType: ':' type;
-type: COLLECTION typeLbrack type RBRACK
-    | 'tuple' typeLbrack type (COMMA type)+ RBRACK
-    | LPAREN RPAREN FAT_ARROW type
+type: LPAREN RPAREN FAT_ARROW type
     | LPAREN type (COMMA type)+ RPAREN FAT_ARROW type
     | type FAT_ARROW type
     | 'byte'
@@ -90,7 +88,6 @@ type: COLLECTION typeLbrack type RBRACK
     | 'long'
     | 'double'
     | 'bool'
-    | 'string'
     | 'float'
     | 'any'
     | 'data'
@@ -171,7 +168,6 @@ functionReference: COLON identifier;
 placeholder: UNDERSCORE;
 functionCall: NAME '(' argumentList? ')'
             | REC '(' argumentList? ')'
-            | COLLECTION '(' argumentList? ')'
             | 'derive' '(' argumentList? ')'
             | 'deriver' '(' argumentList? ')'
             | 'fun' '(' argumentList? ')'
@@ -180,7 +176,6 @@ functionCall: NAME '(' argumentList? ')'
             | 'long' '(' argumentList? ')'
             | 'double' '(' argumentList? ')'
             | 'bool' '(' argumentList? ')'
-            | 'string' '(' argumentList? ')'
             | 'float' '(' argumentList? ')'
             | 'nothing' '(' argumentList? ')'
             | 'any' '(' argumentList? ')'
@@ -225,14 +220,11 @@ pattern: TYPE
         | constructorPattern;
 wildcardPattern: UNDERSCORE NAME?;
 typedPattern: patternType (NAME | UNDERSCORE);
-patternType: COLLECTION (typeLbrack type RBRACK)?
-           | 'tuple' typeLbrack type (COMMA type)+ RBRACK
-           | 'byte'
+patternType: 'byte'
            | 'int'
            | 'long'
            | 'double'
            | 'bool'
-           | 'string'
            | 'float'
            | 'any'
            | 'data'

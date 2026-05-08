@@ -54,34 +54,34 @@ public class CapybaraTypeFinder {
     /// `int`:
     /// - `int + int -> int`
     /// - `int + float -> float`
-    /// - `int + string -> string`
+    /// - `int + String -> String`
     /// - `int + bool -> bool`
     /// - `int + any -> any`
     ///
     /// `float`:
     ///  - `float + int -> float`
     ///  - `float + float -> float`
-    ///  - `float + string -> string`
+    ///  - `float + String -> String`
     ///  - `float + bool -> bool`
     ///
-    /// `string`:
-    ///  - `string + int -> string`
-    ///  - `string + float -> string`
-    ///  - `string + string -> string`
-    ///  - `string + bool -> bool`
-    ///  - `string + any -> any`
+    /// `String`:
+    ///  - `String + int -> String`
+    ///  - `String + float -> String`
+    ///  - `String + String -> String`
+    ///  - `String + bool -> bool`
+    ///  - `String + any -> any`
     ///
     /// `bool`:
     ///  - `bool + int -> bool`
     ///  - `bool + float -> bool`
-    ///  - `bool + string -> bool`
+    ///  - `bool + String -> bool`
     ///  - `bool + bool -> bool`
     ///  - `bool + any -> any`
     ///
     /// `any`:
     ///  - `any + int -> any`
     ///  - `any + float -> any`
-    ///  - `any + string -> any`
+    ///  - `any + String -> any`
     ///  - `any + bool -> any`
     ///  - `any + any -> any`
     ///

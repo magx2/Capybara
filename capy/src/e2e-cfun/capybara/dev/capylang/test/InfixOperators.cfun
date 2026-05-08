@@ -8,37 +8,37 @@ fun plus_byte_int(a: byte, b: int): int = a + b
 fun plus_byte_long(a: byte, b: long): long = a + b
 fun plus_byte_float(a: byte, b: float): float = a + b
 fun plus_byte_double(a: byte, b: double): double = a + b
-fun plus_byte_string(a: byte, b: string): string = a + b
+fun plus_byte_string(a: byte, b: String): String = a + b
 fun plus_int_byte(a: int, b: byte): int = a + b
 fun plus_int_int(a: int, b: int): int = a + b
 fun plus_int_long(a: int, b: long): long = a + b
 fun plus_int_float(a: int, b: float): float = a + b
 fun plus_int_double(a: int, b: double): double = a + b
-fun plus_int_string(a: int, b: string): string = a + b
+fun plus_int_string(a: int, b: String): String = a + b
 fun plus_long_byte(a: long, b: byte): long = a + b
 fun plus_long_int(a: long, b: int): long = a + b
 fun plus_long_long(a: long, b: long): long = a + b
 fun plus_long_float(a: long, b: float): float = a + b
 fun plus_long_double(a: long, b: double): double = a + b
-fun plus_long_string(a: long, b: string): string = a + b
+fun plus_long_string(a: long, b: String): String = a + b
 fun plus_float_byte(a: float, b: byte): float = a + b
 fun plus_float_int(a: float, b: int): float = a + b
 fun plus_float_long(a: float, b: long): float = a + b
 fun plus_float_float(a: float, b: float): float = a + b
 fun plus_float_double(a: float, b: double): double = a + b
-fun plus_float_string(a: float, b: string): string = a + b
+fun plus_float_string(a: float, b: String): String = a + b
 fun plus_double_byte(a: double, b: byte): double = a + b
 fun plus_double_int(a: double, b: int): double = a + b
 fun plus_double_long(a: double, b: long): double = a + b
 fun plus_double_float(a: double, b: float): double = a + b
 fun plus_double_double(a: double, b: double): double = a + b
-fun plus_double_string(a: double, b: string): string = a + b
-fun plus_string_byte(a: string, b: byte): string = a + b
-fun plus_string_int(a: string, b: int): string = a + b
-fun plus_string_long(a: string, b: long): string = a + b
-fun plus_string_float(a: string, b: float): string = a + b
-fun plus_string_double(a: string, b: double): string = a + b
-fun plus_string_string(a: string, b: string): string = a + b
+fun plus_double_string(a: double, b: String): String = a + b
+fun plus_string_byte(a: String, b: byte): String = a + b
+fun plus_string_int(a: String, b: int): String = a + b
+fun plus_string_long(a: String, b: long): String = a + b
+fun plus_string_float(a: String, b: float): String = a + b
+fun plus_string_double(a: String, b: double): String = a + b
+fun plus_string_string(a: String, b: String): String = a + b
 
 // MINUS (-)
 fun minus_byte_byte(a: byte, b: byte): byte = a - b
@@ -66,11 +66,11 @@ fun minus_double_int(a: double, b: int): double = a - b
 fun minus_double_long(a: double, b: long): double = a - b
 fun minus_double_float(a: double, b: float): double = a - b
 fun minus_double_double(a: double, b: double): double = a - b
-fun minus_string_byte(a: string, b: byte): string = a - b
-fun minus_string_int(a: string, b: int): string = a - b
-fun minus_string_long(a: string, b: long): string = a - b
-fun minus_string_float(a: string, b: float): string = a - b
-fun minus_string_double(a: string, b: double): string = a - b
+fun minus_string_byte(a: String, b: byte): String = a - b
+fun minus_string_int(a: String, b: int): String = a - b
+fun minus_string_long(a: String, b: long): String = a - b
+fun minus_string_float(a: String, b: float): String = a - b
+fun minus_string_double(a: String, b: double): String = a - b
 
 // MUL (*)
 fun mul_byte_byte(a: byte, b: byte): byte = a * b
@@ -98,11 +98,11 @@ fun mul_double_int(a: double, b: int): double = a * b
 fun mul_double_long(a: double, b: long): double = a * b
 fun mul_double_float(a: double, b: float): double = a * b
 fun mul_double_double(a: double, b: double): double = a * b
-fun mul_string_byte(a: string, b: byte): string = a * b
-fun mul_string_int(a: string, b: int): string = a * b
-fun mul_string_long(a: string, b: long): string = a * b
-fun mul_string_float(a: string, b: float): string = a * b
-fun mul_string_double(a: string, b: double): string = a * b
+fun mul_string_byte(a: String, b: byte): String = a * b
+fun mul_string_int(a: String, b: int): String = a * b
+fun mul_string_long(a: String, b: long): String = a * b
+fun mul_string_float(a: String, b: float): String = a * b
+fun mul_string_double(a: String, b: double): String = a * b
 
 // DIV (/)
 fun div_byte_byte(a: byte, b: byte): byte = a / b
@@ -130,11 +130,11 @@ fun div_double_int(a: double, b: int): double = a / b
 fun div_double_long(a: double, b: long): double = a / b
 fun div_double_float(a: double, b: float): double = a / b
 fun div_double_double(a: double, b: double): double = a / b
-fun div_string_byte(a: string, b: byte): string = a / b
-fun div_string_int(a: string, b: int): string = a / b
-fun div_string_long(a: string, b: long): string = a / b
-fun div_string_float(a: string, b: float): string = a / b
-fun div_string_double(a: string, b: double): string = a / b
+fun div_string_byte(a: String, b: byte): String = a / b
+fun div_string_int(a: String, b: int): String = a / b
+fun div_string_long(a: String, b: long): String = a / b
+fun div_string_float(a: String, b: float): String = a / b
+fun div_string_double(a: String, b: double): String = a / b
 
 // POW (^)
 fun pow_byte_byte(a: byte, b: byte): byte = a ^ b
@@ -162,11 +162,11 @@ fun pow_double_int(a: double, b: int): double = a ^ b
 fun pow_double_long(a: double, b: long): double = a ^ b
 fun pow_double_float(a: double, b: float): double = a ^ b
 fun pow_double_double(a: double, b: double): double = a ^ b
-fun pow_string_byte(a: string, b: byte): string = a ^ b
-fun pow_string_int(a: string, b: int): string = a ^ b
-fun pow_string_long(a: string, b: long): string = a ^ b
-fun pow_string_float(a: string, b: float): string = a ^ b
-fun pow_string_double(a: string, b: double): string = a ^ b
+fun pow_string_byte(a: String, b: byte): String = a ^ b
+fun pow_string_int(a: String, b: int): String = a ^ b
+fun pow_string_long(a: String, b: long): String = a ^ b
+fun pow_string_float(a: String, b: float): String = a ^ b
+fun pow_string_double(a: String, b: double): String = a ^ b
 
 // Unsupported combinations (should fail linking/type-checking if enabled as negative tests):
 // PLUS unsupported:

@@ -4,8 +4,8 @@ from /capy/lang/Effect import { * }
 from /capy/lang/Option import { * }
 from /capy/lang/Result import { * }
 
-fun reverse_ints(values: list[int]): list[int] =
-    fun rev(left: list[int], acc: list[int]): list[int] =
+fun reverse_ints(values: List[int]): List[int] =
+    fun rev(left: List[int], acc: List[int]): List[int] =
         if left.size == 0
         then acc
         else
@@ -15,8 +15,8 @@ fun reverse_ints(values: list[int]): list[int] =
     ---
     rev(values, [])
 
-fun duplicate_strings(values: list[string]): list[string] =
-    fun dup(left: list[string], acc: list[string]): list[string] =
+fun duplicate_strings(values: List[String]): List[String] =
+    fun dup(left: List[String], acc: List[String]): List[String] =
         if left.size == 0
         then acc
         else
@@ -26,60 +26,60 @@ fun duplicate_strings(values: list[string]): list[string] =
     ---
     dup(values, [])
 
-fun empty_list_of_type_param(v: T): list[T] =
+fun empty_list_of_type_param(v: T): List[T] =
     []
 
-data JsonBox { value: string }
-data NamedValue { name: string, value: int }
-data ParseCase { source: string, expected: int }
+data JsonBox { value: String }
+data NamedValue { name: String, value: int }
+data ParseCase { source: String, expected: int }
 data Box[T] { value: T }
 
-fun typed_empty_dict_then_append_json_box(name: string): int =
-    let values: dict[JsonBox] = {:}
+fun typed_empty_dict_then_append_json_box(name: String): int =
+    let values: Dict[JsonBox] = {:}
     (values + (name, JsonBox { value: "box:" + name })).size
 
-fun reduce_dict_to_named_values_size(values: dict[int]): int =
+fun reduce_dict_to_named_values_size(values: Dict[int]): int =
     let named_values = values |> [], (acc, name, value) => acc + NamedValue { name, value }
     named_values.size
 
-fun reduce_dict_to_parse_cases_size(values: dict[int]): int =
+fun reduce_dict_to_parse_cases_size(values: Dict[int]): int =
     let parse_test_cases = values |> [], (acc, source, expected) => acc + ParseCase { source, expected }
     parse_test_cases.size
 
-fun reduce_dict_to_format_cases_size(values: dict[int]): int =
+fun reduce_dict_to_format_cases_size(values: Dict[int]): int =
     let format_test_cases = values |> [], (acc, expected, value) => acc + NamedValue { name: expected, value }
     format_test_cases.size
 
-fun reduce_dict_to_two_lists_and_concat_sizes(values: dict[int]): int =
+fun reduce_dict_to_two_lists_and_concat_sizes(values: Dict[int]): int =
     let parse_test_cases = values |> [], (acc, source, expected) => acc + NamedValue { name: "parse:" + source, value: expected }
     let format_test_cases = values |> [], (acc, expected, value) => acc + NamedValue { name: "format:" + expected, value }
     (parse_test_cases + format_test_cases).size
 
-fun reduce_list_to_success_values(values: list[int]): Result[list[int]] =
+fun reduce_list_to_success_values(values: List[int]): Result[List[int]] =
     values |> Success { [] }, (acc_result, item) => {
         let acc <- acc_result
         Success { acc + item }
     }
 
-fun reduce_set_to_success_values(values: set[string]): Result[set[string]] =
+fun reduce_set_to_success_values(values: Set[String]): Result[Set[String]] =
     values |> Success { {} }, (acc_result, item) => {
         let acc <- acc_result
         Success { acc + item }
     }
 
-fun reduce_dict_to_success_values(values: dict[int]): Result[dict[int]] =
+fun reduce_dict_to_success_values(values: Dict[int]): Result[Dict[int]] =
     values |> Success { {:} }, (acc_result, key, value) => {
         let acc <- acc_result
         Success { acc + { key : value } }
     }
 
-fun reduce_list_to_some_values(values: list[int]): Option[list[int]] =
+fun reduce_list_to_some_values(values: List[int]): Option[List[int]] =
     values |> Some { [] }, (acc_option, item) =>
         match acc_option with
         case Some { acc } -> Some { acc + item }
         case None -> None {}
 
-fun reduce_list_to_box_values(values: list[int]): Box[list[int]] =
+fun reduce_list_to_box_values(values: List[int]): Box[List[int]] =
     values |> Box { [] }, (acc_box, item) => Box { acc_box.value + item }
 
 type SeqEnd[T] = ConsEnd[T] | EndEnd
@@ -87,11 +87,11 @@ data ConsEnd[T] { value: T, rest: () => SeqEnd[T] }
 single EndEnd
 
 type Outcome = ParseSucceeded | ParseFailed
-data ParseSucceeded { source: string }
-data ParseFailed { source: string }
-data OutcomeBatch { outcomes: list[Outcome] }
+data ParseSucceeded { source: String }
+data ParseFailed { source: String }
+data OutcomeBatch { outcomes: List[Outcome] }
 
-fun to_seq_using_end_literal(list: list[T]): SeqEnd[T] =
+fun to_seq_using_end_literal(list: List[T]): SeqEnd[T] =
     list
         |> EndEnd {}, (acc, value) => ConsEnd { value, () => acc }
 
@@ -100,10 +100,10 @@ fun seq_end_head_or_default(s: SeqEnd[int], d: int): int =
     case EndEnd -> d
     case ConsEnd { value, rest } -> value
 
-fun batch_outcomes(outcomes: list[Outcome]): OutcomeBatch =
+fun batch_outcomes(outcomes: List[Outcome]): OutcomeBatch =
     OutcomeBatch { outcomes }
 
-fun concat_inferred_parent_subtype_lists(values: list[string]): OutcomeBatch =
+fun concat_inferred_parent_subtype_lists(values: List[String]): OutcomeBatch =
     let succeeded = values |> [], (acc, source) => acc + ParseSucceeded { source }
     let failed = values |> [], (acc, source) => acc + ParseFailed { source }
     batch_outcomes(succeeded + failed)

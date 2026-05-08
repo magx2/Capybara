@@ -3,10 +3,10 @@
 data Point { x: float, y: float }
 data Point3D =  { z: float, ...Point }
 
-data Label { label: string }
+data Label { label: String }
 data Weighted { weight: float }
 data LabeledPoint = { ...Point, ...Label }
-data WeightedLabeledPoint3D = { tag: string, ...Point3D, ...Label, ...Weighted }
+data WeightedLabeledPoint3D = { tag: String, ...Point3D, ...Label, ...Weighted }
 
 fun new_point3d(x: float, y: float, z: float): Point3D = Point3D { "x": x, "y": y, "z": z }
 
@@ -28,18 +28,18 @@ fun only_point2d(): float =
 
 fun test_substitution(p3d: Point3D): float = length2d(p3d)
 
-fun new_labeled_point(x: float, y: float, label: string): LabeledPoint =
+fun new_labeled_point(x: float, y: float, label: String): LabeledPoint =
     LabeledPoint { x: x, y: y, label: label }
 
 fun weighted_labeled_point_score(point: WeightedLabeledPoint3D): float =
     point.x + point.y + point.z + point.weight
 
-fun weighted_labeled_point_label(point: WeightedLabeledPoint3D): string = point.label + ":" + point.tag
+fun weighted_labeled_point_label(point: WeightedLabeledPoint3D): String = point.label + ":" + point.tag
 
 fun overload_prefers_most_concrete(point: WeightedLabeledPoint3D): float = length(point)
 
-fun overload_any_vs_parent(point: Point): string = "point"
+fun overload_any_vs_parent(point: Point): String = "point"
 
-fun overload_any_vs_parent(value: any): string = "any"
+fun overload_any_vs_parent(value: any): String = "any"
 
-fun overload_any_prefers_parent(point: Point3D): string = overload_any_vs_parent(point)
+fun overload_any_prefers_parent(point: Point3D): String = overload_any_vs_parent(point)

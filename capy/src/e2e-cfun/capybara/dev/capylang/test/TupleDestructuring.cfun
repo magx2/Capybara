@@ -1,14 +1,14 @@
-fun map_pairs(x: list[tuple[int, int]]): list[string] =
+fun map_pairs(x: List[Tuple[int, int]]): List[String] =
     x | (number, expected) => "digits(" + number + ") should return " + expected
 
-fun filter_pairs(x: list[tuple[int, int]]): list[tuple[int, int]] =
+fun filter_pairs(x: List[Tuple[int, int]]): List[Tuple[int, int]] =
     x |- (number, expected) => number < expected
 
-fun flat_map_pairs(x: list[tuple[int, int]]): list[int] =
+fun flat_map_pairs(x: List[Tuple[int, int]]): List[int] =
     x |* (number, expected) => [number, expected]
 
-fun any_equal(x: list[tuple[int, int]]): bool =
+fun any_equal(x: List[Tuple[int, int]]): bool =
     x |any? (number, expected) => number == expected
 
-fun all_less(x: list[tuple[int, int]]): bool =
+fun all_less(x: List[Tuple[int, int]]): bool =
     x |all? (number, expected) => number < expected

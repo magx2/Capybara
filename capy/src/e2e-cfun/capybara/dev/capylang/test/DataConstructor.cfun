@@ -17,7 +17,7 @@ data User { age: int } with constructor {
 fun odd_number(x: int): int =
     (OddInt { number: x }).number
 
-fun validated_user_age(age: int): string =
+fun validated_user_age(age: int): String =
     match User { age: age } with
     case Success { value } -> "ok:" + value.age
     case Error { message } -> "err:" + message
@@ -25,49 +25,49 @@ fun validated_user_age(age: int): string =
 fun validated_user_age_or_default(age: int): int =
     (User { age: age }).or_else(User! { age: 1 }).age
 
-type ValidatedName { name: string } with constructor {
+type ValidatedName { name: String } with constructor {
    if name.size == 0 then
        Error { "Name was empty" }
    else
        Success { * { name: name } }
 } = NamedUser | NamedGuest
 
-data NamedUser { name: string, role: string } with constructor {
+data NamedUser { name: String, role: String } with constructor {
     if role.size == 0 then
         Error { "Role was empty" }
     else
         Success { * { name: name, role: role } }
 }
 
-data NamedGuest { name: string, badge: string }
+data NamedGuest { name: String, badge: String }
 
-type ValidatedProfileName { name: string } with constructor {
+type ValidatedProfileName { name: String } with constructor {
    if name.size == 0 then
        Error { "Profile name was empty" }
    else
        Success { * { name: name } }
 } = Profile
 
-type ValidatedProfileRole { role: string } with constructor {
+type ValidatedProfileRole { role: String } with constructor {
    if role.size == 0 then
        Error { "Profile role was empty" }
    else
        Success { * { role: role } }
 } = Profile
 
-data Profile { name: string, role: string }
+data Profile { name: String, role: String }
 
-fun validated_named_user(name: string, role: string): string =
+fun validated_named_user(name: String, role: String): String =
     match NamedUser { name: name, role: role } with
     case Success { value } -> "ok:" + value.name + ":" + value.role
     case Error { message } -> "err:" + message
 
-fun validated_named_guest(name: string, badge: string): string =
+fun validated_named_guest(name: String, badge: String): String =
     match NamedGuest { name: name, badge: badge } with
     case Success { value } -> "ok:" + value.name + ":" + value.badge
     case Error { message } -> "err:" + message
 
-fun validated_profile(name: string, role: string): string =
+fun validated_profile(name: String, role: String): String =
     match Profile { name: name, role: role } with
     case Success { value } -> "ok:" + value.name + ":" + value.role
     case Error { message } -> "err:" + message

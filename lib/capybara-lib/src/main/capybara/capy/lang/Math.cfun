@@ -58,9 +58,9 @@ fun min(a: int, b: int): int = if a < b then a else b
 
 /// Returns the smallest integer in `values`.
 ///
-/// Returns `None` when the list is empty.
-fun min(values: list[int]): Option[int] =
-    fun rec __min(min: int, values: list[int]): int =
+/// Returns `None` when the List is empty.
+fun min(values: List[int]): Option[int] =
+    fun rec __min(min: int, values: List[int]): int =
         match values[0] with
         case None -> min
         case Some { v } -> if min < v then __min(min, values[1:]) else __min(v, values[1:])
@@ -74,9 +74,9 @@ fun max(a: int, b: int): int = if a > b then a else b
 
 /// Returns the greatest integer in `values`.
 ///
-/// Returns `None` when the list is empty.
-fun max(values: list[int]): Option[int] =
-    fun rec __max(max: int, values: list[int]): int =
+/// Returns `None` when the List is empty.
+fun max(values: List[int]): Option[int] =
+    fun rec __max(max: int, values: List[int]): int =
         match values[0] with
         case None -> max
         case Some { v } -> if max < v then __max(v, values[1:]) else __max(max, values[1:])
@@ -90,9 +90,9 @@ fun min(a: long, b: long): long = if a < b then a else b
 
 /// Returns the smallest long integer in `values`.
 ///
-/// Returns `None` when the list is empty.
-fun min(values: list[long]): Option[long] =
-    fun rec __min(min: long, values: list[long]): long =
+/// Returns `None` when the List is empty.
+fun min(values: List[long]): Option[long] =
+    fun rec __min(min: long, values: List[long]): long =
         match values[0] with
         case None -> min
         case Some { v } -> if min < v then __min(min, values[1:]) else __min(v, values[1:])
@@ -106,9 +106,9 @@ fun max(a: long, b: long): long = if a > b then a else b
 
 /// Returns the greatest long integer in `values`.
 ///
-/// Returns `None` when the list is empty.
-fun max(values: list[long]): Option[long] =
-    fun rec __max(max: long, values: list[long]): long =
+/// Returns `None` when the List is empty.
+fun max(values: List[long]): Option[long] =
+    fun rec __max(max: long, values: List[long]): long =
         match values[0] with
         case None -> max
         case Some { v } -> if max < v then __max(v, values[1:]) else __max(max, values[1:])

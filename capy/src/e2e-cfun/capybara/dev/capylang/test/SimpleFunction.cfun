@@ -1,4 +1,4 @@
-fun classify(x: int): string =
+fun classify(x: int): String =
     if (x > 0) then "positive" else "non-positive"
 
 fun always_true(): bool = true
@@ -17,9 +17,9 @@ fun divide(a: int, b: int): int =
 
 fun is_positive(x: int): bool = x > 0
 
-fun greet(name: string): string = "Hello, " + name
+fun greet(name: String): String = "Hello, " + name
 
-fun double_then_classify(x: int): string =
+fun double_then_classify(x: int): String =
     if (x * 2 > 0) then "positive" else "non-positive"
 
 fun order_of_expression(a: int, b: int): int =
@@ -33,7 +33,7 @@ fun order_of_expression(a: int, b: int): int =
 
 fun power(x: int, y: int): int = x ^ y
 
-fun static_list(): list[int] = [1,2,3]
+fun static_list(): List[int] = [1,2,3]
 
 fun foo(x: int): int = x + 1
 
@@ -41,21 +41,21 @@ private fun hidden_foo(x: int): int = x + 2
 
 fun call_private_and_public(x: int): int = foo(x) + hidden_foo(x)
 
-fun typed_let_string(): string =
+fun typed_let_string(): String =
     {
-        let s: string = 'd'
+        let s: String = 'd'
         s
     }
 
-fun typed_let_tuple_string(): string =
+fun typed_let_tuple_string(): String =
     {
-        let pair: tuple[string, int] = ("d", 1)
+        let pair: Tuple[String, int] = ("d", 1)
         pair[0]
     }
 
 fun typed_let_tuple_int(): int =
     {
-        let pair: tuple[string, int] = ("d", 1)
+        let pair: Tuple[String, int] = ("d", 1)
         pair[1]
     }
 
@@ -89,21 +89,21 @@ fun typed_let_double(): double =
         v
     }
 
-fun typed_let_list(): list[int] =
+fun typed_let_list(): List[int] =
     {
-        let v: list[int] = [1, 2, 3]
+        let v: List[int] = [1, 2, 3]
         v
     }
 
-fun typed_let_set(): set[int] =
+fun typed_let_set(): Set[int] =
     {
-        let v: set[int] = {1, 2, 3}
+        let v: Set[int] = {1, 2, 3}
         v
     }
 
-fun typed_let_dict(): dict[int] =
+fun typed_let_dict(): Dict[int] =
     {
-        let v: dict[int] = {"a": 1, "b": 2}
+        let v: Dict[int] = {"a": 1, "b": 2}
         v
     }
 

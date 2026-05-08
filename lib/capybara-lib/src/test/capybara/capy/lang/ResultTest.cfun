@@ -32,12 +32,12 @@ fun should_map_error(): Assert =
     let mapped = result | value => Success { "mapped_" + value }
     assert_that(mapped).fails("error message")
 
-fun _positive(x: int): Result[string] =
+fun _positive(x: int): Result[String] =
     if x > 0
     then Success { x + " is positive" }
     else Error { x + " is NOT positive" }
 
-fun _positive_not_zero(x: int): Result[Result[string]] =
+fun _positive_not_zero(x: int): Result[Result[String]] =
     if x != 0
     then Success { _positive(x) }
     else Error { "I don't like zero" }
@@ -99,11 +99,11 @@ fun should_return_other_result_if_failed(): Assert =
 
 fun should_reduce_success_result(): Assert =
     let result: Result[int] = Success { 100 }
-    let reduced: string = result |> (x=>x+"", msg=>msg)
+    let reduced: String = result |> (x=>x+"", msg=>msg)
     assert_that(reduced).is_equal_to("100")
 
 fun should_reduce_error_result(): Assert =
     let result: Result[int] = Error { "Unknown" }
-    let reduced: string = result |> (x=>x+"", msg=>msg)
+    let reduced: String = result |> (x=>x+"", msg=>msg)
     assert_that(reduced).is_equal_to("Unknown")
 

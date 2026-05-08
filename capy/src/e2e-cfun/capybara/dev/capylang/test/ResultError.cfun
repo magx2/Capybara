@@ -1,31 +1,31 @@
 from /capy/lang/Result import { * }
 
-data ParseState { value: string, parsing_string: string }
+data ParseState { value: String, parsing_string: String }
 
 fun success_result(): Result[int] = Success { value: 7 }
 
 fun fail_result(): Result[int] = Error { message: "boom" }
 
-fun parse_state(input: string): Result[ParseState] =
+fun parse_state(input: String): Result[ParseState] =
     Success { value: ParseState { value: input, parsing_string: "xyz" } }
 
-fun parse_and_add_rest_size(input: string): Result[long] =
+fun parse_and_add_rest_size(input: String): Result[long] =
     parse_state(input) | parse => (parse.value.to_long() | number => Success { value: number + parse.parsing_string.size })
 
-fun map_untyped_result(): Result[string] =
+fun map_untyped_result(): Result[String] =
     let result: Result = Success { "success_value" }
     result | value => Success { "mapped_" + value }
 
-fun flatmap_untyped_result(): Result[string] =
+fun flatmap_untyped_result(): Result[String] =
     let result: Result = Success { "success_value" }
     result |* value => Success { Success { "mapped_" + value } }
 
-private fun append_dict_entry(acc: Result[string], key: string, value: int): Result[string] =
+private fun append_dict_entry(acc: Result[String], key: String, value: int): Result[String] =
     acc | text => Success { value: text + key + ":" + value + "," }
 
-private fun empty_result(): Result[string] = Success { value: "" }
+private fun empty_result(): Result[String] = Success { value: "" }
 
-fun dict_reduce_then_map(d: dict[int]): Result[string] =
+fun dict_reduce_then_map(d: Dict[int]): Result[String] =
     d
         |> empty_result(), (acc, k, v) => append_dict_entry(acc, k, v)
         | text => Success { value: text + "done" }

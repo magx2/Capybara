@@ -53,26 +53,28 @@ public final class ReflectionValueInfoJava {
         return switch (type) {
             case PrimitiveLinkedType primitive ->
                     "new capy.metaProg.Reflection.DataInfo("
-                    + javaString(primitive.name().toLowerCase(java.util.Locale.ROOT)) + ", "
+                    + javaString(primitive == PrimitiveLinkedType.STRING
+                            ? "String"
+                            : primitive.name().toLowerCase(java.util.Locale.ROOT)) + ", "
                     + reflectionEmptyPackageInfo() + ")";
             case CollectionLinkedType.CompiledList listType ->
                     "new capy.metaProg.Reflection.ListInfo("
-                    + javaString("list") + ", "
+                    + javaString("List") + ", "
                     + reflectionEmptyPackageInfo() + ", "
                     + reflectionTypeInfo(listType.elementType(), fallbackPackagePath) + ")";
             case CollectionLinkedType.CompiledSet setType ->
                     "new capy.metaProg.Reflection.SetInfo("
-                    + javaString("set") + ", "
+                    + javaString("Set") + ", "
                     + reflectionEmptyPackageInfo() + ", "
                     + reflectionTypeInfo(setType.elementType(), fallbackPackagePath) + ")";
             case CollectionLinkedType.CompiledDict dictType ->
                     "new capy.metaProg.Reflection.DictInfo("
-                    + javaString("dict") + ", "
+                    + javaString("Dict") + ", "
                     + reflectionEmptyPackageInfo() + ", "
                     + reflectionTypeInfo(dictType.valueType(), fallbackPackagePath) + ")";
             case CompiledTupleType tupleType ->
                     "new capy.metaProg.Reflection.TupleInfo("
-                    + javaString("tuple") + ", "
+                    + javaString("Tuple") + ", "
                     + reflectionEmptyPackageInfo() + ", "
                     + reflectionList(
                             "capy.metaProg.Reflection.AnyInfo",

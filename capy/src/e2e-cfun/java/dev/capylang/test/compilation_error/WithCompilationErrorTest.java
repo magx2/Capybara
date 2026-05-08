@@ -49,7 +49,7 @@ class WithCompilationErrorTest {
                                 data Foo { a: int }
                                 fun foo(foo: Foo): Foo = foo.with(a: \"x\")
                                 """,
-                        "Expected `int`, got `string`"
+                        "Expected `int`, got `String`"
                 ),
                 Arguments.of(
                         "non data receiver",
@@ -62,7 +62,7 @@ class WithCompilationErrorTest {
                         "parent cannot update subtype field",
                         """
                                 type Letter { x: int } = A | B
-                                data A { a: string }
+                                data A { a: String }
                                 data B { b: int }
                                 fun foo(letter: Letter): Letter = letter.with(a: \"x\")
                                 """,

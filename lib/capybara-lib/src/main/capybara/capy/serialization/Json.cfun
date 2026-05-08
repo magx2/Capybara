@@ -3,25 +3,25 @@ from /capy/lang/Result import { * }
 from /capy/meta_prog/Reflection import { DataValueInfo, reflection }
 
 type Json = JsonObject | JsonArray | JsonValue
-data JsonObject { value: dict[Json] }
+data JsonObject { value: Dict[Json] }
 fun JsonObject.`+`(other: JsonObject): JsonObject = JsonObject { value: this.value + other.value }
-fun JsonObject.`+`(other: tuple[string, Json]): JsonObject = JsonObject { value: this.value + other }
-fun JsonObject.get(key: string): Option[Json] =
+fun JsonObject.`+`(other: Tuple[String, Json]): JsonObject = JsonObject { value: this.value + other }
+fun JsonObject.get(key: String): Option[Json] =
     this.value |> None {}, (acc, item_key, item_value) =>
         if item_key == key then Some { item_value } else acc
 
-data JsonArray { value: list[Json] }
+data JsonArray { value: List[Json] }
 fun JsonArray.`+`(other: JsonArray): JsonArray = JsonArray { value: this.value + other.value }
 fun JsonArray.`+`(other: Json): JsonArray = JsonArray { value: this.value + other }
 fun JsonArray.get(index: int): Option[Json] = this.value[index]
 
 type JsonValue = JsonString | JsonValueObject | JsonNumber | JsonValueArray | JsonBool | JsonNull
-data JsonString { value: string }
+data JsonString { value: String }
 type JsonNumber = JsonNumberDouble | JsonNumberLong
 data JsonNumberDouble { value: double }
 data JsonNumberLong { value: long }
 data JsonValueObject { value: JsonObject }
-fun JsonValueObject.get(key: string): Option[Json] = this.value.get(key)
+fun JsonValueObject.get(key: String): Option[Json] = this.value.get(key)
 data JsonValueArray { value: JsonArray }
 fun JsonValueArray.get(index: int): Option[Json] = this.value.get(index)
 data JsonBool { value: bool }
@@ -32,8 +32,8 @@ deriver Jsonable {
 }
 
 fun to_json(obj: data): Result[JsonObject] =
-    data __JsonEntry { key: string, value: Result[Json] }
-    fun __merge_json_entry(acc: Result[dict[Json]], json_entry: __JsonEntry): Result[dict[Json]] =
+    data __JsonEntry { key: String, value: Result[Json] }
+    fun __merge_json_entry(acc: Result[Dict[Json]], json_entry: __JsonEntry): Result[Dict[Json]] =
         let parsed_dict <- acc
         let json <- json_entry.value
         parsed_dict + { json_entry.key : json }
@@ -41,13 +41,13 @@ fun to_json(obj: data): Result[JsonObject] =
     fun any_to_json(value: any): Result[Json] =
         match value with
         case Json j -> Success { j }
-        case string s -> Success { JsonString { s } }
+        case String s -> Success { JsonString { s } }
         case int i -> Success { JsonNumberLong { i } }
         case long l -> Success { JsonNumberLong { l } }
         case double d -> Success { JsonNumberDouble { d } }
         case float f -> Success { JsonNumberDouble { f } }
         case bool b -> Success { JsonBool { b } }
-        case list l -> {
+        case List l -> {
             let values <- l |> Success { [] }, (acc_result, item) => {
                 let acc <- acc_result
                 let encoded <- any_to_json(item)
@@ -55,7 +55,7 @@ fun to_json(obj: data): Result[JsonObject] =
             }
             JsonArray { values }
         }
-        case set s -> {
+        case Set s -> {
             let values <- s |> Success { [] }, (acc_result, item) => {
                 let acc <- acc_result
                 let encoded <- any_to_json(item)
@@ -63,7 +63,7 @@ fun to_json(obj: data): Result[JsonObject] =
             }
             JsonArray { values }
         }
-        case dict d -> {
+        case Dict d -> {
             d
                 | (key, item) => __JsonEntry { key, any_to_json(item) }
                 |> Success { {:} }, (acc, entry) => __merge_json_entry(acc, entry)
@@ -92,7 +92,7 @@ fun to_json(obj: data): Result[JsonObject] =
         }
     JsonObject { values }
 
-fun stringify(json: Json): string =
+fun stringify(json: Json): String =
     match json with
     case JsonObject { v } ->
         "{"
@@ -111,19 +111,19 @@ fun stringify(json: Json): string =
     case JsonBool { value } -> value + ""
     case JsonNull -> "null"
 
-fun serialize(obj: JsonObject): string = stringify(obj)
+fun serialize(obj: JsonObject): String = stringify(obj)
 
-fun deserialize(json: string): Result[JsonObject] =
+fun deserialize(json: String): Result[JsonObject] =
     _deserialize_json_object(json)
     | parse =>
         if parse.parsing_string.is_empty()
         then Success { value: parse.value }
         else Error { "Expected string to end, but still got `{parse.parsing_string}`" }
 
-data _Parse[T] { value: T, parsing_string: string }
-fun _Parse[T].pop(): tuple[Option[string], _Parse[T]] = (this.parsing_string[0], _Parse { this.value, this.parsing_string[1:] })
+data _Parse[T] { value: T, parsing_string: String }
+fun _Parse[T].pop(): Tuple[Option[String], _Parse[T]] = (this.parsing_string[0], _Parse { this.value, this.parsing_string[1:] })
 
-fun rec _deserialize_json(json: string): Result[_Parse[Json]] =
+fun rec _deserialize_json(json: String): Result[_Parse[Json]] =
     match json[0] with
     case None -> Error { "Expected JSON, but got end of string" }
     case Some { first_char } when _is_white_space(first_char) -> _deserialize_json(_drop_white_space(json[1:]))
@@ -137,7 +137,7 @@ fun rec _deserialize_json(json: string): Result[_Parse[Json]] =
         case '[' -> _deserialize_json_array(json)
         case _ -> Error { "Do not know what to do with char `" + first_char + "`!" }
 
-fun _deserialize_json_array(json: string): Result[_Parse[JsonArray]] =
+fun _deserialize_json_array(json: String): Result[_Parse[JsonArray]] =
     fun rec __deserialize_json_array(parse: _Parse[JsonArray]): Result[_Parse[JsonArray]] =
         match parse.parsing_string[0] with
         case None -> Error { "Expected `,` or `]`, but got end of string!" }
@@ -160,7 +160,7 @@ fun _deserialize_json_array(json: string): Result[_Parse[JsonArray]] =
                 parsing_string: parse.parsing_string
             })
 
-fun _deserialize_json_null(json: string): Result[_Parse[JsonNull]] =
+fun _deserialize_json_null(json: String): Result[_Parse[JsonNull]] =
     if json.starts_with('null')
     then Success { _Parse { JsonNull {}, json[4:] } }
     else {
@@ -177,7 +177,7 @@ fun _deserialize_json_null(json: string): Result[_Parse[JsonNull]] =
         Error { "Expected `null`, but got `" + actual + "`!" }
     }
 
-fun _deserialize_json_bool(json: string): Result[_Parse[JsonBool]] =
+fun _deserialize_json_bool(json: String): Result[_Parse[JsonBool]] =
     if json.starts_with('true')
     then Success { _Parse { JsonBool {true}, json[4:] } }
     else if json.starts_with('false')
@@ -198,8 +198,8 @@ fun _deserialize_json_bool(json: string): Result[_Parse[JsonBool]] =
         Error { "Expected `true` or `false`, but got `" + actual + "`!" }
     }
 
-fun _deserialize_json_number(json: string): Result[_Parse[JsonNumber]] =
-    fun rec __parse_number(parse: _Parse[string]): Result[_Parse[string]] =
+fun _deserialize_json_number(json: String): Result[_Parse[JsonNumber]] =
+    fun rec __parse_number(parse: _Parse[String]): Result[_Parse[String]] =
         match parse.parsing_string[0] with
         case None -> Error { 'Expected `-[0-9]`, but got empty string!' }
         case Some { first_char } ->
@@ -232,14 +232,14 @@ fun _deserialize_json_number(json: string): Result[_Parse[JsonNumber]] =
             _Parse { JsonNumberLong { parsed_long }, _drop_white_space(parse.parsing_string) }
         }
 
-fun _deserialize_json_string(json: string): Result[_Parse[JsonString]] =
+fun _deserialize_json_string(json: String): Result[_Parse[JsonString]] =
     let parse <- _parse_string(json)
     _Parse {
             value: JsonString { parse.value },
             parsing_string: parse.parsing_string
     }
 
-fun _deserialize_json_object(json: string): Result[_Parse[JsonObject]] =
+fun _deserialize_json_object(json: String): Result[_Parse[JsonObject]] =
     match json[0] with
     case None -> Error { "message": "Expected JSON object, but got empty string!" }
     case Some { "{" } -> {
@@ -252,8 +252,8 @@ fun _deserialize_json_object(json: string): Result[_Parse[JsonObject]] =
     }
     case Some { v } -> Error { message: "Expected `{`, but got `" + v + "`."}
 
-fun _deserialize_key_values(json: string): Result[_Parse[dict[Json]]] =
-    fun rec __deserialize_key_values(json: string, acc: dict[Json]): Result[_Parse[dict[Json]]] =
+fun _deserialize_key_values(json: String): Result[_Parse[Dict[Json]]] =
+    fun rec __deserialize_key_values(json: String, acc: Dict[Json]): Result[_Parse[Dict[Json]]] =
         match json[0] with
         case None -> Error { "Expected `,` or `}`, but got empty string!" }
         case Some { "}" } -> Success { _Parse { acc, json[1:] } }
@@ -274,12 +274,12 @@ fun _deserialize_key_values(json: string): Result[_Parse[dict[Json]]] =
                 case Some { v } -> Error { "Expected `,` or `}`, but got `" + v + "`!" }
             }
     ---
-    let empty: dict[Json] = {:}
+    let empty: Dict[Json] = {:}
     __deserialize_key_values(json, empty)
 
-data _KeyValue { key: string, value: Json }
+data _KeyValue { key: String, value: Json }
 
-fun _deserialize_key_value(json: string): Result[_Parse[_KeyValue]] =
+fun _deserialize_key_value(json: String): Result[_Parse[_KeyValue]] =
     _parse_string(json)
     | parse =>
         match parse.parsing_string[0] with
@@ -295,8 +295,8 @@ fun _deserialize_key_value(json: string): Result[_Parse[_KeyValue]] =
         }
         case Some { v } ->  Error { "Expected `:`, but got `" + v + "`!" }
 
-fun _parse_string(json: string): Result[_Parse[string]] =
-    const __escape_chars: set[string] = { '"', '\\', '/', 'b', 'f', 'n', 'r', 't', 'u' }
+fun _parse_string(json: String): Result[_Parse[String]] =
+    const __escape_chars: Set[String] = { '"', '\\', '/', 'b', 'f', 'n', 'r', 't', 'u' }
     /// Parses JSON string, the quotation marks `"` are not included in final string
     /// Supports escape character `\`:
     /// - `\"` - quotation mark
@@ -308,7 +308,7 @@ fun _parse_string(json: string): Result[_Parse[string]] =
     /// - `\r` - carriage return
     /// - `\t` - horizontal tab
     /// - `\\uXXXX` - 4 HEX digits
-    fun rec __parse_string_until_quotation(parse: _Parse[string], escape: bool): Result[_Parse[string]] =
+    fun rec __parse_string_until_quotation(parse: _Parse[String], escape: bool): Result[_Parse[String]] =
         if escape
         then
             match parse.parsing_string[0] with
@@ -338,14 +338,14 @@ fun _parse_string(json: string): Result[_Parse[string]] =
     case Some { v } -> Error { message: "parse_string: Expected `\"`, but got `" + v + "`." }
     case None -> Error { message: "parse_string: Expected JSON string, got end of string." }
 
-fun rec _drop_white_space(s: string): string =
+fun rec _drop_white_space(s: String): String =
     match s[0] with
     case Some { c } when _is_white_space(c) -> _drop_white_space(s[1:])
     case _ -> s
 
-fun _is_white_space(s: string): bool =
+fun _is_white_space(s: String): bool =
     const __white_spaces = { " ", "\r", "\n", "\t" }
-    fun rec __is_white_space(s: string, white_spaces: set[string]): bool =
+    fun rec __is_white_space(s: String, white_spaces: Set[String]): bool =
         match s[0] with
         case None -> true
         case Some { c } ->
@@ -355,28 +355,28 @@ fun _is_white_space(s: string): bool =
     ---
     __is_white_space(s, __white_spaces)
 
-fun deserialize(dict: dict[any]): Result[JsonObject] =
-    data __Entry { key: string, value: Result[Json] }
-    fun __initial_result(): Result[dict[Json]] = Success { {:} }
-    fun __merge(acc: Result[dict[Json]], e: __Entry): Result[dict[Json]] =
+fun deserialize(dict: Dict[any]): Result[JsonObject] =
+    data __Entry { key: String, value: Result[Json] }
+    fun __initial_result(): Result[Dict[Json]] = Success { {:} }
+    fun __merge(acc: Result[Dict[Json]], e: __Entry): Result[Dict[Json]] =
         let parsed_dict <- acc
         let json <- e.value
         parsed_dict + { e.key : json }
     ---
-    let initial_result: Result[dict[Json]] = __initial_result()
+    let initial_result: Result[Dict[Json]] = __initial_result()
     dict
-        // dict[any] => dict[Result[Json]]
+        // Dict[any] => Dict[Result[Json]]
         | (k,v) =>
             match v with
-            case string s -> Success { JsonString { s } }
+            case String s -> Success { JsonString { s } }
             case int i -> Success { JsonNumberLong { i } }
             case long l -> Success { JsonNumberLong { l } }
             case double d -> Success { JsonNumberDouble { d } }
             case float f -> Success { JsonNumberDouble { f } }
-            case dict[any] d -> deserialize(d)
+            case Dict[any] d -> deserialize(d)
             case Json j -> Success { j }
             case _ x -> Error { "Don't know how to deserialize: " + x }
-        // dict[Result[Json]] => Result[dict[Json]]
+        // Dict[Result[Json]] => Result[Dict[Json]]
         | (k,v) => __Entry { k, v }
         |> initial_result, (acc, e) => __merge(acc, e)
         | d => Success { JsonObject { d } }

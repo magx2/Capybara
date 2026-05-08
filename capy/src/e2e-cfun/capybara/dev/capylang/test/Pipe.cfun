@@ -1,98 +1,98 @@
 from /capy/lang/Seq import {*}
 
-fun map1(l: list[int]): list[int] =
+fun map1(l: List[int]): List[int] =
     l | x => x * 2
 
-fun map2(l: list[int]): list[int] =
+fun map2(l: List[int]): List[int] =
     l
         | x => x * 2
         | x => x - 1
 
-fun map3(l: list[int]): list[string] = l | x => "Hello " + x
+fun map3(l: List[int]): List[String] = l | x => "Hello " + x
 
-fun filter1(l: list[int]): list[int] = l |- x => x > 0
+fun filter1(l: List[int]): List[int] = l |- x => x > 0
 
-fun filter2(l: list[int]): list[int] =
+fun filter2(l: List[int]): List[int] =
     l
         |- x => x > 2
         |- x => x == 1
 
-fun reduce1(l: list[int]): int = l |> 0, (a,b) => a+b
+fun reduce1(l: List[int]): int = l |> 0, (a,b) => a+b
 
 /// returns if any of the ints in the list is positive
-fun any_positive(l: list[int]): bool = l |any? x => x > 0
+fun any_positive(l: List[int]): bool = l |any? x => x > 0
 
 /// returns if all of the ints in the list is positive
-fun all_positive(l: list[int]): bool = l |all? x => x > 0
+fun all_positive(l: List[int]): bool = l |all? x => x > 0
 
 private fun is_positive(x: int): bool = x > 0
-fun any_positive_ref(l: list[int]): bool = l |any? :is_positive
-fun all_positive_ref(l: list[int]): bool = l |all? :is_positive
+fun any_positive_ref(l: List[int]): bool = l |any? :is_positive
+fun all_positive_ref(l: List[int]): bool = l |all? :is_positive
 
-fun reduce2(l: list[int]): int =
+fun reduce2(l: List[int]): int =
     l
         | x => x * 2
         |- x => x < 0
         |> 0, (a,b) => a+b
 
-fun reduce_string1(l: list[string]): string = l |> "", (acc, v) => acc + v
+fun reduce_string1(l: List[String]): String = l |> "", (acc, v) => acc + v
 
-fun reduce_string2(l: list[string]): string = l |> "start: ", (acc, v) => acc + " " + v
+fun reduce_string2(l: List[String]): String = l |> "start: ", (acc, v) => acc + " " + v
 
-fun string_map(s: string): list[string] = s | ch => "[" + ch + "]"
+fun string_map(s: String): List[String] = s | ch => "[" + ch + "]"
 
-fun string_filter(s: string): string = s |- ch => ch == "b"
+fun string_filter(s: String): String = s |- ch => ch == "b"
 
-fun string_reduce(s: string): string = s |> "", (acc, ch) => acc + ch
+fun string_reduce(s: String): String = s |> "", (acc, ch) => acc + ch
 
-data Foo { value: string }
-fun reduce_to_data(l: list[string]): Foo = l
+data Foo { value: String }
+fun reduce_to_data(l: List[String]): Foo = l
     | v => Foo {value:v}
     |> Foo {value:""}, (acc, v) => Foo { value: acc.value + v.value }
 
-fun flatMap1(l: list[int]): list[int] = l |* x => [x, x+1, x+2]
+fun flatMap1(l: List[int]): List[int] = l |* x => [x, x+1, x+2]
 
-fun flatMap2(l: list[int]): list[int] =
+fun flatMap2(l: List[int]): List[int] =
     l
         | x => x * 2
         |- x => x > 0
         |* x => [x, x+1, x+2]
 
-fun setMap1(s: set[int]): set[int] = s | x => x * 2
+fun setMap1(s: Set[int]): Set[int] = s | x => x * 2
 
-fun setFilter1(s: set[int]): set[int] = s |- x => x > 0
+fun setFilter1(s: Set[int]): Set[int] = s |- x => x > 0
 
-fun setReduce1(s: set[int]): int = s |> 0, (a,b) => a+b
+fun setReduce1(s: Set[int]): int = s |> 0, (a,b) => a+b
 
-fun set_reduce_string2(s: set[string]): string = s |> "start: ", (acc, v) => acc + " " + v
+fun set_reduce_string2(s: Set[String]): String = s |> "start: ", (acc, v) => acc + " " + v
 
-fun setFlatMap1(s: set[int]): set[int] = s |* x => {x, x+10}
+fun setFlatMap1(s: Set[int]): Set[int] = s |* x => {x, x+10}
 
-fun mapDict(d: dict[int]): dict[string] = d | (k,v) => v + ""
+fun mapDict(d: Dict[int]): Dict[String] = d | (k,v) => v + ""
 
-fun filterDict(d: dict[int]): dict[int] = d |- (k,v) => k != "" & v > 0
+fun filterDict(d: Dict[int]): Dict[int] = d |- (k,v) => k != "" & v > 0
 
-fun reduceDict(d: dict[int]): string = d
+fun reduceDict(d: Dict[int]): String = d
     |> (k, v) => "(" + k + ":" + v + ")"
     |> "start: ", (acc, e) => acc + ", " + e
 
-data Entry { key: string, value: string }
-fun reduce_to_data(l: dict[string]): set[Entry] = l
+data Entry { key: String, value: String }
+fun reduce_to_data(l: Dict[String]): Set[Entry] = l
     |> (k,v) => Entry {key:k,value:v}
 
-fun dict_reduce_string2(d: dict[string]): string = d |> "start: ", (acc, v) => acc + " " + v
+fun dict_reduce_string2(d: Dict[String]): String = d |> "start: ", (acc, v) => acc + " " + v
 
-fun dict_unused_key_to_sum(d: dict[int]): int =
+fun dict_unused_key_to_sum(d: Dict[int]): int =
     d
         | (_, v) => v
         |> 0, (acc, v) => acc + v
 
-fun dict_unused_reduce_key(d: dict[int]): int =
+fun dict_unused_reduce_key(d: Dict[int]): int =
     d
         |> (_, v) => v
         |> 0, (acc, v) => acc + v
 
-fun list_unused_lambda_arg(l: list[int]): list[int] = l | _ => 1
+fun list_unused_lambda_arg(l: List[int]): List[int] = l | _ => 1
 
 data Value { x: int }
 
@@ -137,24 +137,24 @@ fun pipe_then_chain_after_lambda(): int =
     case Some { value } -> value
     case None -> 0
 
-fun pipe_then_chain_methods_after_lambda(): string =
-    let ok: () => string = () => "ok"
-    let failed: () => string = () => "failed"
-    let later: () => string = () => "later"
-    let suppliers: list[() => string] = [ok, failed, later]
+fun pipe_then_chain_methods_after_lambda(): String =
+    let ok: () => String = () => "ok"
+    let failed: () => String = () => "failed"
+    let later: () => String = () => "later"
+    let suppliers: List[() => String] = [ok, failed, later]
     match to_seq(suppliers)
         | (supplier => supplier())
         .first() with
     case Some { value } -> value
     case None -> ""
 
-fun pipe_lambda_body_multiline_without_parentheses(): list[string] =
+fun pipe_lambda_body_multiline_without_parentheses(): List[String] =
     [" x ", " y "]
         | value =>
             value
                 .trim()
 
-fun pipe_filter_lambda_body_multiline_without_parentheses(): list[string] =
+fun pipe_filter_lambda_body_multiline_without_parentheses(): List[String] =
     [" a ", "bb", " c "]
         |- value =>
             value

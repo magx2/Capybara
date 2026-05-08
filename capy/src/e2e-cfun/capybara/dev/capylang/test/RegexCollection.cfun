@@ -2,34 +2,34 @@ from /capy/lang/Regex import { * }
 from /capy/lang/Option import { * }
 from /capy/lang/Seq import { * }
 
-fun matches_named(input: string): bool = regex/foo/.matches(input)
-fun matches_alias(input: string): bool = regex/foo/ ? input
+fun matches_named(input: String): bool = regex/foo/.matches(input)
+fun matches_alias(input: String): bool = regex/foo/ ? input
 
-fun find_named(input: string): bool =
+fun find_named(input: String): bool =
     match regex/foo/.find(input) with
     case Some { _ } -> true
     case None -> false
 
-fun find_alias(input: string): bool =
+fun find_alias(input: String): bool =
     match regex/foo/ ~ input with
     case Some { _ } -> true
     case None -> false
 
-fun find_all_named_count(input: string): int =
+fun find_all_named_count(input: String): int =
     if regex/foo/.find_all(input).any(_ => true)
     then 1
     else 0
 
-fun find_all_alias_count(input: string): int =
+fun find_all_alias_count(input: String): int =
     if (regex/foo/ ~~ input).any(_ => true)
     then 1
     else 0
 
-fun replace_named(input: string): string = regex/1/.replace("#")(input)
-fun replace_alias(input: string): string = (regex/1/ ~> "#")(input)
+fun replace_named(input: String): String = regex/1/.replace("#")(input)
+fun replace_alias(input: String): String = (regex/1/ ~> "#")(input)
 
-fun split_named(input: string): list[string] = regex/,/.split(input)
-fun split_alias(input: string): list[string] = regex/,/ /> input
-fun split_multi_char(input: string): list[string] = regex/--/.split(input)
+fun split_named(input: String): List[String] = regex/,/.split(input)
+fun split_alias(input: String): List[String] = regex/,/ /> input
+fun split_multi_char(input: String): List[String] = regex/--/.split(input)
 
 fun escaped_slash_match(): bool = regex/a\/b/ ? "--a/b--"

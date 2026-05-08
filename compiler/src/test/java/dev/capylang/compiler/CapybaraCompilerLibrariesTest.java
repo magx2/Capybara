@@ -29,15 +29,15 @@ class CapybaraCompilerLibrariesTest {
     @Test
     void shouldCompileAgainstLibrariesWithoutIncludingThemInOutput() {
         var librarySource = """
-                data Message { value: string }
-                fun make_message(value: string): Message = Message { value: value }
+                data Message { value: String }
+                fun make_message(value: String): Message = Message { value: value }
                 """;
         var libraries = compileProgram(List.of(new RawModule("Library", "/foo/lib", librarySource)), new java.util.TreeSet<>()).modules();
 
         var consumerSource = """
                 from Library import { * }
-                fun consume(value: string): Message = make_message(value)
-                fun unwrap(message: Message): string = message.value
+                fun consume(value: String): Message = make_message(value)
+                fun unwrap(message: Message): String = message.value
                 """;
         var compiled = compileProgram(List.of(new RawModule("Consumer", "/foo/app", consumerSource)), libraries);
 
@@ -54,7 +54,7 @@ class CapybaraCompilerLibrariesTest {
                 from /capy/meta_prog/Reflection import { DataValueInfo, reflection }
 
                 deriver TypeName {
-                    fun type_name(): string =
+                    fun type_name(): String =
                         let info: DataValueInfo = reflection(receiver)
                         info.name
                 }
@@ -66,9 +66,9 @@ class CapybaraCompilerLibrariesTest {
         var compiled = compileProgram(List.of(new RawModule("Consumer", "/foo/app", """
                 from /foo/lib/Serde import { TypeName }
 
-                data User { name: string } derive TypeName
+                data User { name: String } derive TypeName
 
-                fun render(): string = User { name: "Ada" }.type_name()
+                fun render(): String = User { name: "Ada" }.type_name()
                 """)), libraries);
 
         assertThat(compiled.modules().first().functions())
@@ -88,9 +88,9 @@ class CapybaraCompilerLibrariesTest {
                 from /capy/meta_prog/Reflection import { DataValueInfo, reflection }
 
                 deriver Show {
-                    fun show(): string =
+                    fun show(): String =
                         let info: DataValueInfo = reflection(receiver)
-                        let body: string = info.fields |> info.name + " { ", (acc, field) =>
+                        let body: String = info.fields |> info.name + " { ", (acc, field) =>
                             acc + (if acc == info.name + " { " then "" else ", ") + field.name
                         body + " }"
                 }
@@ -107,15 +107,15 @@ class CapybaraCompilerLibrariesTest {
                         (info.name == "User") & has_name_field & has_age_field & (receiver.age + extra > limit.value)
                 }
 
-                data User { name: string, age: int } derive Show, AgeComparable
-                type Named { id: string } = Person derive Show
-                data Person { id: string, name: string }
+                data User { name: String, age: int } derive Show, AgeComparable
+                type Named { id: String } = Person derive Show
+                data Person { id: String, name: String }
 
-                fun render(): string = User { name: "Ada", age: 42 }.show()
+                fun render(): String = User { name: "Ada", age: 42 }.show()
                 fun older_than(i: int): bool = User { name: "Ada", age: 42 }.bigger_than(i)
                 fun mixed_parameters(extra: int, limit: AgeLimit): bool =
                     User { name: "Ada", age: 42 }.matches_age_metadata(extra, limit)
-                fun render_named(named: Named): string = named.show()
+                fun render_named(named: Named): String = named.show()
                 """)), libraries);
 
         assertThat(compiled.modules().first().functions())
@@ -145,18 +145,18 @@ class CapybaraCompilerLibrariesTest {
     @Test
     void shouldResolveUserDefinedIndexAccessAsGetMethod() {
         var compiled = compileProgram(List.of(new RawModule("Consumer", "/foo/app", """
-                data Box { value: string }
+                data Box { value: String }
                 data Bag { age: double }
-                data Cell { name: string }
+                data Cell { name: String }
                 data Matrix { cell: Cell }
 
-                fun Box.get(idx: int): string = this.value
-                fun Bag.get(key: string): double = this.age
+                fun Box.get(idx: int): String = this.value
+                fun Bag.get(key: String): double = this.age
                 fun Matrix.get(row: int, col: int): Cell = this.cell
 
-                fun read_box(box: Box): string = box[1]
+                fun read_box(box: Box): String = box[1]
                 fun read_bag(bag: Bag): double = bag["age"]
-                fun read_cell(matrix: Matrix): string = matrix[1, 2].name
+                fun read_cell(matrix: Matrix): String = matrix[1, 2].name
                 """)), new java.util.TreeSet<>());
 
         assertThat(compiledFunction(compiled, "Consumer", "read_box").expression())
@@ -186,15 +186,15 @@ class CapybaraCompilerLibrariesTest {
         var compiled = compileProgram(List.of(
                 new RawModule("Serde", "/foo", """
                         deriver Show {
-                            fun show(): string = "foo"
+                            fun show(): String = "foo"
                         }
 
-                        data User { name: string } derive Show
+                        data User { name: String } derive Show
 
-                        fun render(): string = User { name: "Ada" }.show()
+                        fun render(): String = User { name: "Ada" }.show()
                         """),
                 new RawModule("Serde", "/bar", """
-                        data User { name: string }
+                        data User { name: String }
                         """)
         ), new java.util.TreeSet<>());
 
@@ -223,7 +223,7 @@ class CapybaraCompilerLibrariesTest {
         var compiled = compileProgram(List.of(new RawModule("Consumer", "/foo/app", """
                 from /capy/meta_prog/Reflection import { DataValueInfo, reflection }
 
-                data User { name: string, age: int }
+                data User { name: String, age: int }
 
                 fun reflect_user(): DataValueInfo = reflection(User { name: "Ada", age: 42 })
                 """)), libraries);
@@ -264,7 +264,7 @@ class CapybaraCompilerLibrariesTest {
         var compiled = compileProgram(List.of(new RawModule("Consumer", "/foo/app", """
                 from /capy/meta_prog/Reflection import { * }
 
-                data User { name: string }
+                data User { name: String }
 
                 fun reflect_user(user: User): DataValueInfo = reflection(user)
                 """)), libraries);
@@ -279,11 +279,11 @@ class CapybaraCompilerLibrariesTest {
         var compiled = compileProgram(List.of(new RawModule("Consumer", "/foo/app", """
                 from /capy/meta_prog/Reflection import { DataValueInfo, reflection }
 
-                data User { name: string }
+                data User { name: String }
 
-                fun reflection(value: string): string = value
+                fun reflection(value: String): String = value
 
-                fun reflect_string(): string = reflection("x")
+                fun reflect_string(): String = reflection("x")
                 fun reflect_user(user: User): DataValueInfo = reflection(user)
                 """)), libraries);
 
@@ -308,7 +308,7 @@ class CapybaraCompilerLibrariesTest {
                         fields: []
                     }
 
-                data User { name: string }
+                data User { name: String }
 
                 fun reflect_user(user: User): DataValueInfo = reflection(user)
                 """)), libraries);
@@ -322,24 +322,24 @@ class CapybaraCompilerLibrariesTest {
     void shouldPreserveReceiverShadowingInsideDeriverLocalScopes() {
         var compiled = compileProgram(List.of(new RawModule("Consumer", "/foo/app", """
                 deriver Shadow {
-                    fun shadow_let(): string =
-                        let receiver: string = "local"
+                    fun shadow_let(): String =
+                        let receiver: String = "local"
                         receiver
 
-                    fun shadow_lambda(): string =
-                        let f: string => string = receiver => receiver
+                    fun shadow_lambda(): String =
+                        let f: String => String = receiver => receiver
                         f("local")
 
-                    fun shadow_reduce(): string =
+                    fun shadow_reduce(): String =
                         ["a"] |> "", (receiver, item) => receiver + item
 
-                    fun shadow_match(value: any): string =
+                    fun shadow_match(value: any): String =
                         match value with
-                        case string receiver -> receiver
+                        case String receiver -> receiver
                         case _ -> ""
                 }
 
-                data User { name: string } derive Shadow
+                data User { name: String } derive Shadow
                 """)), new java.util.TreeSet<>());
 
         assertThat(compiled.modules().first().functions())
@@ -351,7 +351,7 @@ class CapybaraCompilerLibrariesTest {
     @Test
     void shouldRejectUnknownDeriver() {
         var error = compileFailure(List.of(new RawModule("Consumer", "/foo/app", """
-                data User { name: string } derive Missing
+                data User { name: String } derive Missing
                 """)));
 
         assertThat(error.message())
@@ -362,10 +362,10 @@ class CapybaraCompilerLibrariesTest {
     void shouldRejectDeriverParameterNamedReceiver() {
         var error = compileFailure(List.of(new RawModule("Consumer", "/foo/app", """
                 deriver Show {
-                    fun show(receiver: string): string = receiver
+                    fun show(receiver: String): String = receiver
                 }
 
-                data User { name: string } derive Show
+                data User { name: String } derive Show
                 """)));
 
         assertThat(error.message())
@@ -376,8 +376,8 @@ class CapybaraCompilerLibrariesTest {
     void shouldRejectDuplicateMethodSignaturesInsideUnusedDeriver() {
         var error = compileFailure(List.of(new RawModule("Consumer", "/foo/app", """
                 deriver Show {
-                    fun show(): string = "first"
-                    fun show(): string = "second"
+                    fun show(): String = "first"
+                    fun show(): String = "second"
                 }
                 """)));
 
@@ -389,12 +389,12 @@ class CapybaraCompilerLibrariesTest {
     void shouldRejectDerivedMethodCollision() {
         var error = compileFailure(List.of(new RawModule("Consumer", "/foo/app", """
                 deriver Show {
-                    fun show(): string = "generated"
+                    fun show(): String = "generated"
                 }
 
-                data User { name: string } derive Show
+                data User { name: String } derive Show
 
-                fun User.show(): string = "manual"
+                fun User.show(): String = "manual"
                 """)));
 
         assertThat(error.message())
@@ -469,21 +469,21 @@ class CapybaraCompilerLibrariesTest {
         var librarySource = """
                 from /capy/lang/Result import { * }
 
-                type ValidatedName { name: string } with constructor {
+                type ValidatedName { name: String } with constructor {
                    if name.size == 0 then
                        Error { message: "Name was empty" }
                    else
                        Success { value: * { name: name } }
                 } = NamedUser
 
-                data NamedUser { name: string, role: string }
+                data NamedUser { name: String, role: String }
                 """;
         var libraries = compileProgram(List.of(new RawModule("Library", "/foo/lib", librarySource)), new java.util.TreeSet<>()).modules();
 
         var consumerSource = """
                 from Library import { * }
 
-                fun build(name: string, role: string): Result[NamedUser] =
+                fun build(name: String, role: String): Result[NamedUser] =
                     NamedUser { name: name, role: role }
                 """;
         var compiled = compileProgram(List.of(new RawModule("Consumer", "/foo/app", consumerSource)), libraries);
@@ -497,23 +497,23 @@ class CapybaraCompilerLibrariesTest {
         var librarySource = """
                 from /capy/lang/Result import { * }
 
-                type ValidatedName { name: string } with constructor {
+                type ValidatedName { name: String } with constructor {
                    if name.size == 0 then
                        Error { message: "Name was empty" }
                    else
                        Success { value: * { name: name } }
                 } = NamedEntity
 
-                type NamedEntity { name: string } = NamedUser
+                type NamedEntity { name: String } = NamedUser
 
-                data NamedUser { name: string, role: string }
+                data NamedUser { name: String, role: String }
                 """;
         var libraries = compileProgram(List.of(new RawModule("Library", "/foo/lib", librarySource)), new java.util.TreeSet<>()).modules();
 
         var consumerSource = """
                 from Library import { * }
 
-                fun build(name: string, role: string): Result[NamedUser] =
+                fun build(name: String, role: String): Result[NamedUser] =
                     NamedUser { name: name, role: role }
                 """;
         var compiled = compileProgram(List.of(new RawModule("Consumer", "/foo/app", consumerSource)), libraries);
@@ -528,13 +528,13 @@ class CapybaraCompilerLibrariesTest {
                 new RawModule("Consumer", "/foo/app", """
                         from /capy/lang/Result import { * }
 
-                        data Parent { name: string }
+                        data Parent { name: String }
                         data Child { age: int, ...Parent }
 
                         fun child(): Result[Child] =
                             Success { value: 1 } | value => Success { value: Child { age: value, name: "Ada" } }
 
-                        fun use_parent(): Result[string] =
+                        fun use_parent(): Result[String] =
                             let parent: Parent <- child()
                             parent.name
                         """)
@@ -552,14 +552,14 @@ class CapybaraCompilerLibrariesTest {
     void shouldResolveImportedParentTypeFieldsAcrossModules() {
         var compiled = compileProgram(List.of(
                 new RawModule("Assert", "/capy/test", """
-                        data Assertion { result: bool, message: string }
-                        type Assert { assertions: list[Assertion] } = StringAssert
-                        data StringAssert { value: string }
+                        data Assertion { result: bool, message: String }
+                        type Assert { assertions: List[Assertion] } = StringAssert
+                        data StringAssert { value: String }
                         """),
                 new RawModule("CapyTest", "/capy/test", """
                         from Assert import { * }
 
-                        data TestCase { asserts: list[Assert] }
+                        data TestCase { asserts: List[Assert] }
                         fun assertion_count(test_case: TestCase): int =
                             test_case.asserts
                                 |> 0, (acc, a) => acc + a.assertions.size
@@ -583,8 +583,8 @@ class CapybaraCompilerLibrariesTest {
     void shouldResolveImportedDataFieldsNestedInCollectionsAcrossModules() {
         var compiled = compileProgram(List.of(
                 new RawModule("CapyTest", "/capy/test", """
-                        data TestCase { asserts: list[string] }
-                        data TestFile { test_cases: list[TestCase] }
+                        data TestCase { asserts: List[String] }
+                        data TestFile { test_cases: List[TestCase] }
                         """),
                 new RawModule("Runtime", "/capy/test", """
                         from CapyTest import { * }
@@ -610,7 +610,7 @@ class CapybaraCompilerLibrariesTest {
     void shouldCompileDataWithExpression() {
         var compiled = compileProgram(List.of(
                 new RawModule("WithData", "/foo/with", """
-                        data Foo { a: int, b: string }
+                        data Foo { a: int, b: String }
                         fun update(foo: Foo): Foo = foo.with(a: foo.a + 1, b: "x")
                         """)
         ), new java.util.TreeSet<>());
@@ -629,7 +629,7 @@ class CapybaraCompilerLibrariesTest {
         var compiled = compileProgram(List.of(
                 new RawModule("WithParent", "/foo/with", """
                         type Letter { x: int } = A | B
-                        data A { a: string }
+                        data A { a: String }
                         data B { b: int }
                         fun update(letter: Letter): Letter = letter.with(x: letter.x + 1)
                         """)
@@ -651,7 +651,7 @@ class CapybaraCompilerLibrariesTest {
                         data Thing { value: int }
                         """),
                 new RawModule("Consumer", "/foo/app", """
-                        data Thing { label: string }
+                        data Thing { label: String }
 
                         fun local_thing(): Thing = Thing { label: "local" }
                         fun imported_thing(value: int): Types.Thing = Types.Thing { value: value }
@@ -697,7 +697,7 @@ class CapybaraCompilerLibrariesTest {
                 new RawModule("Result", "/capy/lang", """
                         type Result[T] = Success[T] | Error
                         data Success[T] { value: T }
-                        data Error { message: string }
+                        data Error { message: String }
                         """),
                 new RawModule("Assert", "/capy/test", """
                         from /capy/lang/Result import { * }
@@ -736,7 +736,7 @@ class CapybaraCompilerLibrariesTest {
                 new RawModule("Result", "/capy/lang", """
                         type Result[T] = Success[T] | Error
                         data Success[T] { value: T }
-                        data Error { message: string }
+                        data Error { message: String }
                         """),
                 new RawModule("Assert", "/capy/test", """
                         from /capy/lang/Result import { * }
@@ -777,22 +777,22 @@ class CapybaraCompilerLibrariesTest {
                 new RawModule("Result", "/capy/lang", """
                         type Result[T] = Success[T] | Error
                         data Success[T] { value: T }
-                        data Error { message: string }
+                        data Error { message: String }
                         """),
                 new RawModule("Assert", "/capy/test", """
                         from /capy/lang/Result import { * }
 
                         data ResultAssert[T] { value: Result[T] }
                         data DataAssert { value: data }
-                        data ListAssert[T] { value: list[T] }
+                        data ListAssert[T] { value: List[T] }
 
                         fun ResultAssert[T].is_equal_to(other: Result[T]): ResultAssert[T] = this
                         fun DataAssert.is_equal_to(other: data): DataAssert = this
-                        fun ListAssert[T].is_equal_to(other: list[T]): ListAssert[T] = this
+                        fun ListAssert[T].is_equal_to(other: List[T]): ListAssert[T] = this
 
                         fun assert_that(value: Result[T]): ResultAssert[T] = ResultAssert { value: value }
                         fun assert_that(value: data): DataAssert = DataAssert { value: value }
-                        fun assert_that(value: list[T]): ListAssert[T] = ListAssert { value: value }
+                        fun assert_that(value: List[T]): ListAssert[T] = ListAssert { value: value }
                         """),
                 new RawModule("Consumer", "/foo/app", """
                         from /capy/lang/Result import { * }
@@ -801,10 +801,10 @@ class CapybaraCompilerLibrariesTest {
                         data Seed { value: long }
 
                         fun data_assert(seed: Seed): DataAssert = assert_that(seed)
-                        fun list_assert(values: list[int]): ListAssert[int] = assert_that(values)
+                        fun list_assert(values: List[int]): ListAssert[int] = assert_that(values)
                         fun result_assert(value: Result[Seed]): ResultAssert[Seed] = assert_that(value)
                         fun data_chain(seed: Seed): DataAssert = assert_that(seed).is_equal_to(seed)
-                        fun list_chain(values: list[int]): ListAssert[int] = assert_that(values).is_equal_to(values)
+                        fun list_chain(values: List[int]): ListAssert[int] = assert_that(values).is_equal_to(values)
                         """)
         ), new java.util.TreeSet<>());
 
@@ -828,7 +828,7 @@ class CapybaraCompilerLibrariesTest {
                 new RawModule("Result", "capy/lang", """
                         type Result[T] = Success[T] | Error
                         data Success[T] { value: T }
-                        data Error { message: string }
+                        data Error { message: String }
                         """),
                 new RawModule("Date", "capy/date_time", """
                         from /capy/lang/Result import { * }
@@ -851,7 +851,7 @@ class CapybaraCompilerLibrariesTest {
                 new RawModule("Result", "/capy/lang", """
                         type Result[T] = Success[T] | Error
                         data Success[T] { value: T }
-                        data Error { message: string }
+                        data Error { message: String }
                         """),
                 new RawModule("Assert", "/capy/test", """
                         from /capy/lang/Result import { * }
@@ -891,7 +891,7 @@ class CapybaraCompilerLibrariesTest {
                 new RawModule("Result", "/capy/lang", """
                         type Result[T] = Success[T] | Error
                         data Success[T] { value: T }
-                        data Error { message: string }
+                        data Error { message: String }
                         """),
                 new RawModule("Assert", "/capy/test", """
                         from /capy/lang/Result import { * }
@@ -946,18 +946,18 @@ class CapybaraCompilerLibrariesTest {
                 new RawModule("Result", "/capy/lang", """
                         type Result[T] = Success[T] | Error
                         data Success[T] { value: T }
-                        data Error { message: string }
+                        data Error { message: String }
                         """),
                 new RawModule("Assert", "/capy/test", """
                         from /capy/lang/Result import { * }
 
                         type Assert = TechnicalAssert | DataAssert | IntAssert | ResultAssert
-                        data TechnicalAssert { assertions: list[bool] }
+                        data TechnicalAssert { assertions: List[bool] }
                         data DataAssert { value: data }
                         data IntAssert { value: int }
                         data ResultAssert[T] { value: Result[T] }
 
-                        fun assert_all(asserts: list[Assert]): Assert = TechnicalAssert { assertions: [] }
+                        fun assert_all(asserts: List[Assert]): Assert = TechnicalAssert { assertions: [] }
                         fun DataAssert.is_equal_to(other: data): DataAssert = this
                         fun IntAssert.is_equal_to(other: int): IntAssert = this
                         fun ResultAssert[T].fails(): ResultAssert[T] = this
@@ -1005,13 +1005,13 @@ class CapybaraCompilerLibrariesTest {
                 new RawModule("Result", "/capy/lang", """
                         type Result[T] = Success[T] | Error
                         data Success[T] { value: T }
-                        data Error { message: string }
+                        data Error { message: String }
                         """),
                 new RawModule("Json", "/capy/serialization", """
                         from /capy/lang/Result import { * }
 
                         type Json = JsonObject | JsonBool
-                        data JsonObject { value: dict[Json] }
+                        data JsonObject { value: Dict[Json] }
                         data JsonBool { value: bool }
 
                         fun deserialize(valid: bool): Result[Json] =
@@ -1125,7 +1125,7 @@ class CapybaraCompilerLibrariesTest {
         assertThat(error.message())
                 .contains("/foo/app/Consumer.cfun")
                 .contains("fun Duration.seconds(): long =")
-                .contains("Field getter `DateDuration.seconds` returns `INT`, but this method returns `LONG`")
+                .contains("Field getter `DateDuration.seconds` returns `int`, but this method returns `long`")
                 .contains("Conflicting declaration: data `DateDuration` at /foo/app/Consumer.cfun:2:0");
     }
 
@@ -1149,7 +1149,7 @@ class CapybaraCompilerLibrariesTest {
 
     private static RawModule reflectionMetadataModule() {
         return new RawModule("Reflection", "/capy/meta_prog", """
-                type AnyInfo { name: string, pkg: PackageInfo } =
+                type AnyInfo { name: String, pkg: PackageInfo } =
                     DataInfo
                     | InterfaceInfo
                     | ObjectInfo
@@ -1160,24 +1160,24 @@ class CapybaraCompilerLibrariesTest {
                     | TupleInfo
                     | FunctionTypeInfo
 
-                data DataInfo { name: string, pkg: PackageInfo }
+                data DataInfo { name: String, pkg: PackageInfo }
 
-                data InterfaceInfo { methods: list[MethodInfo], parents: set[AnyInfo] }
-                data ObjectInfo { open: bool, fields: list[FieldInfo], methods: list[MethodInfo], parents: set[AnyInfo] }
-                data TraitInfo { methods: list[MethodInfo], parents: set[AnyInfo] }
-                data MethodInfo { name: string, pkg: PackageInfo, params: list[FieldInfo], return_type: AnyInfo }
+                data InterfaceInfo { methods: List[MethodInfo], parents: Set[AnyInfo] }
+                data ObjectInfo { open: bool, fields: List[FieldInfo], methods: List[MethodInfo], parents: Set[AnyInfo] }
+                data TraitInfo { methods: List[MethodInfo], parents: Set[AnyInfo] }
+                data MethodInfo { name: String, pkg: PackageInfo, params: List[FieldInfo], return_type: AnyInfo }
 
                 data ListInfo { element_type: AnyInfo }
                 data SetInfo { element_type: AnyInfo }
                 data DictInfo { value_type: AnyInfo }
 
-                data TupleInfo { elements: list[AnyInfo] }
-                data FunctionTypeInfo { params: list[AnyInfo], return_type: AnyInfo }
+                data TupleInfo { elements: List[AnyInfo] }
+                data FunctionTypeInfo { params: List[AnyInfo], return_type: AnyInfo }
 
-                data PackageInfo { name: string, path: string }
-                data FieldInfo { name: string, type: AnyInfo }
-                data FieldValueInfo { name: string, type: AnyInfo, value: any }
-                data DataValueInfo { name: string, pkg: PackageInfo, fields: list[FieldValueInfo] }
+                data PackageInfo { name: String, path: String }
+                data FieldInfo { name: String, type: AnyInfo }
+                data FieldValueInfo { name: String, type: AnyInfo, value: any }
+                data DataValueInfo { name: String, pkg: PackageInfo, fields: List[FieldValueInfo] }
 
                 fun reflection(obj: data): DataValueInfo = <native>
                 """);

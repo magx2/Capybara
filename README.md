@@ -9,16 +9,16 @@ Extension: `.cfun`
 #### Example
 
 ```cfun
-fun main(params: list[string]): ProgramResult =
+fun main(params: List[String]): ProgramResult =
     let name = params | head | default("world")
     yield Success { result = Some { value = "Hello, " + name + "!" }}
 
 // local aliases with let
-fun greeting(firstName: string, lastName: string): string =
+fun greeting(firstName: String, lastName: String): String =
     let fullName = firstName + " " + lastName
     yield "Hello, " + fullName
 
-fun score_label(score: int): string =
+fun score_label(score: int): String =
     let normalized = score / 10
     if normalized > 8 then "great"
     else "ok"
@@ -27,9 +27,9 @@ fun rectangle_area(width: float, height: float): float =
     let area = width * height
     yield area
  
-type ProgramResult = Success { result: Option[string] } | Failure { errorCode: int } 
+type ProgramResult = Success { result: Option[String] } | Failure { errorCode: int }
  
-fun test_if(x: int): string =
+fun test_if(x: int): String =
     if x > 0 then "positive"
     else if x < 0 then "negative"
     else "zero"
@@ -38,21 +38,21 @@ fun fibbonacci(n: int): int =
     if n <= 1 then n
     else fibonacci(n - 1) + fibonacci(n - 2)
     
-fun test_pipe(n: int): string = n | fibbonacci | test_if
+fun test_pipe(n: int): String = n | fibbonacci | test_if
 
-fun test_val(x: int): string {
+fun test_val(x: int): String {
     val y = x * 2
     if y > 10 then "big" else "small"
 }
 
-fun test_list(list: list[int]): list[int] =
+fun test_list(list: List[int]): List[int] =
     list 
         // filter
         |- x => x > 0
         // map
         | x => x * 2
 
-fun test_list_reduce(list: list[int]): list[int] =
+fun test_list_reduce(list: List[int]): List[int] =
     list 
         // filter
         |- x => x > 0
@@ -63,23 +63,23 @@ fun test_list_reduce(list: list[int]): list[int] =
         // reduce left 
         // |l> 0 | a,b => a + b
 
-fun test_new_static_list(): list[int] = [1, 2, 3]
+fun test_new_static_list(): List[int] = [1, 2, 3]
 
-fun build_list(n: int): list[int] =
+fun build_list(n: int): List[int] =
     if n <= 0 then None
     else Cons { "head": n, "tail": build_list(n - 1) }
 
-// check: `fun add on list[T]`
-fun add_to_list(n: int, list: list[int]): list[int] = 
+// check: `fun add on List[T]`
+fun add_to_list(n: int, list: List[int]): List[int] =
     list + n
     // or `list add n`
     // or `add(list, n)` 
     // or `+ (list, n)`
     // or `list.add(n)`
     
-fun test_new_static_set(): set[int] = {1, 2, 3}
+fun test_new_static_set(): Set[int] = {1, 2, 3}
 
-fun test_new_static_dictonary(): dict[int] = 
+fun test_new_static_dictonary(): Dict[int] =
     {
         "one": 1,
         "two": 2,
@@ -108,10 +108,10 @@ fun positive_or_none(x: int): Option[int] =
     else None
 
 // type with common value
-type Person { name: string, age: int } = Student | Teacher
+type Person { name: String, age: int } = Student | Teacher
 data Student { grade: int }
-data Teacher { subject: string }
-fun ppl_in_school(persons: Person): list[string] = persons | p => p.name + " is age of " + p.age
+data Teacher { subject: String }
+fun ppl_in_school(persons: Person): List[String] = persons | p => p.name + " is age of " + p.age
 
 // type extension
 data Point { x: float, y: float }
@@ -130,27 +130,27 @@ fun apply_twice(f: (int) => int, x: int): int = x | f | f
 fun compose(f: (int) => int, g: (int) => int): (int) => int = x => x | f | g
 
 type BuildIn = Primitive | Collection | Tuple
-type Primitive = Number | string | bool
+type Primitive = Number | String | bool
 type Number = int | long | float | double
-type Collection[T] = list[T] | set[T] | dict[T]
-type list[T] = Cons[T] | None
-data Cons[T] { head: T, tail: list[T] }
+type Collection[T] = List[T] | Set[T] | Dict[T]
+type List[T] = Cons[T] | None
+data Cons[T] { head: T, tail: List[T] }
 
 // method on types
-fun add on list[T](list: list[T], element: T): list[T] =
+fun add on List[T](list: List[T], element: T): List[T] =
     match list with
     | None => Cons { "head": element, "tail": None }
     | Cons { head, tail } => Cons { "head": head, "tail": add(tail, element) }
-fun `+` on list[T](list: list[T], element: T): list[T] = add(list, element)
+fun `+` on List[T](list: List[T], element: T): List[T] = add(list, element)
 
-fun add on list[T](list1: list[T], list2: list[T]): list[T] =
+fun add on List[T](list1: List[T], list2: List[T]): List[T] =
     match list1 with
     | None => list2
     | Cons { head, tail } => Cons { "head": head, "tail": add(tail, list2) }
 // there is an operation overload so `+` have 2 different implementations based on the type of the second argument
-fun `+` on list[T](list1: list[T], list2: list[T]): list[T] = add(list1, list2)
+fun `+` on List[T](list1: List[T], list2: List[T]): List[T] = add(list1, list2)
 
-fun pop on list[T](list: list[T]): Option[Tuple[T, list[T]]] =
+fun pop on List[T](list: List[T]): Option[Tuple[T, List[T]]] =
     match list with
     | None => None
     | Cons { head, tail } =>  Option { value: (head, tail) }

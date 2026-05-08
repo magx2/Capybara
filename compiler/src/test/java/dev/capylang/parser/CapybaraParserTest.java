@@ -60,22 +60,22 @@ class CapybaraParserTest {
                 Arguments.of(
                         "test_if",
                         """
-                                fun test_if(x: int): string =
+                                fun test_if(x: int): String =
                                     if x > 0 then "positive"
                                     else if x < 0 then "negative"
                                     else "zero"
                                 """),
-                Arguments.of("list_identity", "fun list_identity(l: list[int]): list[int] = l"),
-                Arguments.of("pipe_map", "fun pipe_map(l: list[int]): list[int] = l | x => x * 2"),
-                Arguments.of("map", "fun map(l: list[int]) = l | :double\nfun double(x: int) = x * x"),
-                Arguments.of("pipe_filter_out", "fun pipe_filter_out(l: list[int]): list[int] = l |- x => x > 0"),
-                Arguments.of("pipe_reduce", "fun pipe_reduce(l: list[int]): int = l |> 0, (a, b) => a + b"),
-                Arguments.of("pipe_reduce_dict", "fun pipe_reduce_dict(d: dict[int]): string = d |> \"\", (a, k, v) => a + k + v"),
-                Arguments.of("pipe_map_unused", "fun pipe_map_unused(l: list[int]): list[int] = l | _ => 1"),
-                Arguments.of("pipe_reduce_unused", "fun pipe_reduce_unused(l: list[int]): int = l |> 0, (_, v) => v"),
-                Arguments.of("pipe_reduce_dict_unused", "fun pipe_reduce_dict_unused(d: dict[int]): int = d |> 0, (_, _, v) => v"),
-                Arguments.of("pipe_flat_map", "fun pipe_flat_map(l: list[int]): list[int] = l |* x => [x, x + 1]"),
-                Arguments.of("single_quote_string", "fun single_quote_string(): string = 'hello'"),
+                Arguments.of("list_identity", "fun list_identity(l: List[int]): List[int] = l"),
+                Arguments.of("pipe_map", "fun pipe_map(l: List[int]): List[int] = l | x => x * 2"),
+                Arguments.of("map", "fun map(l: List[int]) = l | :double\nfun double(x: int) = x * x"),
+                Arguments.of("pipe_filter_out", "fun pipe_filter_out(l: List[int]): List[int] = l |- x => x > 0"),
+                Arguments.of("pipe_reduce", "fun pipe_reduce(l: List[int]): int = l |> 0, (a, b) => a + b"),
+                Arguments.of("pipe_reduce_dict", "fun pipe_reduce_dict(d: Dict[int]): String = d |> \"\", (a, k, v) => a + k + v"),
+                Arguments.of("pipe_map_unused", "fun pipe_map_unused(l: List[int]): List[int] = l | _ => 1"),
+                Arguments.of("pipe_reduce_unused", "fun pipe_reduce_unused(l: List[int]): int = l |> 0, (_, v) => v"),
+                Arguments.of("pipe_reduce_dict_unused", "fun pipe_reduce_dict_unused(d: Dict[int]): int = d |> 0, (_, _, v) => v"),
+                Arguments.of("pipe_flat_map", "fun pipe_flat_map(l: List[int]): List[int] = l |* x => [x, x + 1]"),
+                Arguments.of("single_quote_string", "fun single_quote_string(): String = 'hello'"),
                 Arguments.of(
                         "chained_lets_without_semicolons",
                         """
@@ -122,7 +122,7 @@ class CapybaraParserTest {
                 ),
                 Arguments.of(
                         "invoke_no_arg_lambda",
-                        "fun run0(f: () => string): string = f()\nfun invoke_no_arg_lambda(): string = run0(() => \"Hello, Wrold\")"
+                        "fun run0(f: () => String): String = f()\nfun invoke_no_arg_lambda(): String = run0(() => \"Hello, Wrold\")"
                 ),
                 Arguments.of(
                         "seq_first_wildcard",
@@ -231,16 +231,16 @@ class CapybaraParserTest {
     void parseDeriverAndDeriveClause() {
         var module = parseSuccess(new RawModule("Test", "/parser", """
                 deriver Show {
-                    fun show(): string =
+                    fun show(): String =
                         let info: DataValueInfo = reflection(receiver)
-                        let body: string = info.fields |> info.name + " { ", (acc, field) =>
+                        let body: String = info.fields |> info.name + " { ", (acc, field) =>
                             acc + field.name + ": " + field.type.name
                         body + " }"
                 }
 
-                data User { name: string, age: int } derive Show
-                type Named { id: string } = Person derive Show
-                data Person { id: string, name: string }
+                data User { name: String, age: int } derive Show
+                type Named { id: String } = Person derive Show
+                data Person { id: String, name: String }
                 """));
 
         var deriver = module.functional().definitions().stream()
@@ -303,7 +303,7 @@ class CapybaraParserTest {
         var module = parseSuccess(new RawModule("Test", "/parser", """
                 from /capy/lang/Result import { * }
 
-                fun users(name: string): Result[string] =
+                fun users(name: String): Result[String] =
                     let user <- Success { value: name }
                     user
                 """));
@@ -405,6 +405,40 @@ class CapybaraParserTest {
     }
 
     @Test
+    @DisplayName("should parse native data declaration")
+    void parseNativeDataDeclaration() {
+        var module = parseSuccess(new RawModule("String", "/capy/lang", "data String { <native> }"));
+
+        var data = findDefinition(DataDeclaration.class, "String", module.functional());
+
+        assertThat(data.nativeType()).isTrue();
+        assertThat(data.fields()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("should parse capitalized native type aliases")
+    void parseCapitalizedNativeTypeAliases() {
+        var module = parseSuccess(new RawModule("Test", "/parser", """
+                fun aliases(
+                    text: String,
+                    values: List[String],
+                    flags: Set[bool],
+                    counts: Dict[int],
+                    pair: Tuple[int, String]
+                ): Tuple[String, int] = (text, pair[0])
+                """));
+
+        var function = findFunction("aliases", module.functional());
+
+        assertThat(function.parameters().get(0).type()).isEqualTo(PrimitiveType.STRING);
+        assertThat(function.parameters().get(1).type()).isInstanceOf(CollectionType.ListType.class);
+        assertThat(function.parameters().get(2).type()).isInstanceOf(CollectionType.SetType.class);
+        assertThat(function.parameters().get(3).type()).isInstanceOf(CollectionType.DictType.class);
+        assertThat(function.parameters().get(4).type()).isInstanceOf(TupleType.class);
+        assertThat(function.returnType()).containsInstanceOf(TupleType.class);
+    }
+
+    @Test
     @DisplayName("should parse regex literal into runtime factory call")
     void parseRegexLiteral() {
         var module = parseSuccess(new RawModule("Test", "/parser", "fun digits() = regex/\\\\d+/im"));
@@ -425,11 +459,11 @@ class CapybaraParserTest {
     @DisplayName("should parse regex symbolic operators")
     void parseRegexSymbolicOperators() {
         var module = parseSuccess(new RawModule("Test", "/parser", """
-                fun check(v: string) = regex/\\\\d+/ ? v
-                fun find(v: string) = regex/\\\\d+/ ~ v
-                fun find_all(v: string) = regex/\\\\d+/ ~~ v
+                fun check(v: String) = regex/\\\\d+/ ? v
+                fun find(v: String) = regex/\\\\d+/ ~ v
+                fun find_all(v: String) = regex/\\\\d+/ ~~ v
                 fun redact() = regex/\\\\d+/ ~> "#"
-                fun split(v: string) = regex/,/ /> v
+                fun split(v: String) = regex/,/ /> v
                 """));
 
         assertThat(((InfixExpression) findFunction("check", module.functional()).expression()).operator()).isEqualTo(InfixOperator.QUESTION);
@@ -443,7 +477,7 @@ class CapybaraParserTest {
     @DisplayName("should parse lowercase private local const declaration")
     void parseLowercasePrivateLocalConstDeclaration() {
         var module = parseSuccess(new RawModule("Test", "/parser", """
-                fun foo(x: string): bool =
+                fun foo(x: String): bool =
                     const __white_space = { " ", "\\t", "\\n" }
                     ---
                     __white_space ? x
@@ -464,7 +498,7 @@ class CapybaraParserTest {
     @DisplayName("should reject local const name without private prefix")
     void rejectLocalConstNameWithoutPrivatePrefix() {
         var result = new CapybaraParser().parseModule(new RawModule("Test", "/parser", """
-                fun foo(x: string): bool =
+                fun foo(x: String): bool =
                     const white_space = { " ", "\\t", "\\n" }
                     ---
                     x == ""
@@ -508,7 +542,7 @@ class CapybaraParserTest {
     void parseListType() {
         // given
         var name = "list_identity";
-        var code = "fun list_identity(l: list[int]): list[int] = l";
+        var code = "fun list_identity(l: List[int]): List[int] = l";
 
         // when
         var module = parseSuccess(new RawModule("Test", "/parser", code));
@@ -531,18 +565,18 @@ class CapybaraParserTest {
                 data Box
                 [T] { value: T }
 
-                fun list_identity(xs: list
-                [string]): list
-                [string] = xs
+                fun list_identity(xs: List
+                [String]): List
+                [String] = xs
 
                 fun box_identity(box: Box
-                [string]): Box
-                [string] = box
+                [String]): Box
+                [String] = box
 
                 fun match_list(value: any): int =
                     match value with
-                    case list
-                    [string] _ -> 1
+                    case List
+                    [String] _ -> 1
                     case _ -> 0
                 """));
 
@@ -558,7 +592,7 @@ class CapybaraParserTest {
     void parseDataAndTypeComments() {
         var module = parseSuccess(new RawModule("Test", "/parser", """
                 /// See: [Complete JUnit XML example](https://github.com/testmoapp/junitxml?tab=readme-ov-file#complete-junit-xml-example)
-                data JUnitReport { suites: list[JUnitTestSuite] }
+                data JUnitReport { suites: List[JUnitTestSuite] }
 
                 /// Represents a single suite
                 type JUnitNode = JUnitTestSuite
@@ -575,7 +609,7 @@ class CapybaraParserTest {
     @DisplayName("should parse trailing comma in data and type field declarations")
     void parseTrailingCommaInDataAndTypeFieldDeclarations() {
         var module = parseSuccess(new RawModule("Test", "/parser", """
-                type T1 { a: int, b: string, c: int, } = D1 | D2
+                type T1 { a: int, b: String, c: int, } = D1 | D2
                 data D1 { d: int, e: int, }
                 data D2 { f: int, g: int, }
                 """));
@@ -752,7 +786,7 @@ class CapybaraParserTest {
     @DisplayName("should parse bang over nested field access")
     void parseBangOverNestedFieldAccess() {
         var module = parseSuccess(new RawModule("Test", "/parser", """
-                data Parse { buffer: string }
+                data Parse { buffer: String }
                 fun test(parse: Parse): bool = !parse.buffer.is_empty
                 """));
 
@@ -776,8 +810,8 @@ class CapybaraParserTest {
     @DisplayName("should parse field access followed by index")
     void parseFieldAccessFollowedByIndex() {
         var module = parseSuccess(new RawModule("Test", "/parser", """
-                data Parse { buffer: string }
-                fun test(parse: Parse): string = parse.buffer[0]
+                data Parse { buffer: String }
+                fun test(parse: Parse): String = parse.buffer[0]
                 """));
 
         var function = findFunction("test", module.functional());
@@ -796,9 +830,9 @@ class CapybaraParserTest {
     @DisplayName("should parse index access with multiple arguments")
     void parseIndexAccessWithMultipleArguments() {
         var module = parseSuccess(new RawModule("Test", "/parser", """
-                data Cell { name: string }
+                data Cell { name: String }
                 data Matrix { cell: Cell }
-                fun test(matrix: Matrix): string = matrix[1, 2].name
+                fun test(matrix: Matrix): String = matrix[1, 2].name
                 """));
 
         var function = findFunction("test", module.functional());
@@ -818,8 +852,8 @@ class CapybaraParserTest {
     @DisplayName("should parse empty index access for compiler diagnostics")
     void parseEmptyIndexAccessForCompilerDiagnostics() {
         var module = parseSuccess(new RawModule("Test", "/parser", """
-                data Box { value: string }
-                fun test(box: Box): string = box[]
+                data Box { value: String }
+                fun test(box: Box): String = box[]
                 """));
 
         var function = findFunction("test", module.functional());
@@ -832,7 +866,7 @@ class CapybaraParserTest {
     @DisplayName("should reject chained postfix after unparenthesized pipe lambda")
     void rejectChainedPostfixAfterUnparenthesizedPipeLambda() {
         var result = new CapybaraParser().parseModule(new RawModule("Test", "/parser", """
-                fun test(): /capy/lang/Option[string] =
+                fun test(): /capy/lang/Option[String] =
                     to_seq([() => "ok", () => "failed", () => "later"])
                         | supplier => supplier()
                         .drop_until(value => value == "failed")
@@ -854,7 +888,7 @@ class CapybaraParserTest {
     @DisplayName("should parse chained postfix after parenthesized pipe lambda")
     void parseChainedPostfixAfterParenthesizedPipeLambda() {
         var module = parseSuccess(new RawModule("Test", "/parser", """
-                fun test(): /capy/lang/Option[string] =
+                fun test(): /capy/lang/Option[String] =
                     to_seq([() => "ok", () => "failed", () => "later"])
                         | (supplier => supplier())
                         .drop_until(value => value == "failed")
@@ -882,7 +916,7 @@ class CapybaraParserTest {
     @DisplayName("should allow multiline postfix formatting inside unparenthesized pipe lambda body")
     void allowMultilinePostfixInsideUnparenthesizedPipeLambdaBody() {
         var result = new CapybaraParser().parseModule(new RawModule("Test", "/parser", """
-                fun test(): string =
+                fun test(): String =
                     " x "
                         | value =>
                             value
@@ -896,7 +930,7 @@ class CapybaraParserTest {
     @DisplayName("should parse with expression with named assignments")
     void parseWithExpression() {
         var module = parseSuccess(new RawModule("Test", "/parser", """
-                data Foo { a: int, b: string }
+                data Foo { a: int, b: String }
                 fun test(foo: Foo): Foo = foo.with(a: foo.a + 1, b: "x")
                 """));
 
@@ -912,7 +946,7 @@ class CapybaraParserTest {
     @DisplayName("should parse chained with expressions")
     void parseChainedWithExpression() {
         var module = parseSuccess(new RawModule("Test", "/parser", """
-                data Foo { a: int, b: string }
+                data Foo { a: int, b: String }
                 fun test(foo: Foo): Foo = foo.with(a: 1).with(b: "x")
                 """));
 
@@ -930,7 +964,7 @@ class CapybaraParserTest {
     void parseMatchCaseWhenGuard() {
         var module = parseSuccess(new RawModule("Test", "/parser", """
                 from /capy/lang/Option import { * }
-                fun test(option: Option[string]): string =
+                fun test(option: Option[String]): String =
                     match option with
                     case Some { char } when char == "-" -> "minus"
                     case Some { char } -> "other"
@@ -1022,7 +1056,7 @@ class CapybaraParserTest {
     @DisplayName("should parse match case with pattern alternatives")
     void parseMatchCaseWithPatternAlternatives() {
         var module = parseSuccess(new RawModule("Test", "/parser", """
-                fun test(char: string): string =
+                fun test(char: String): String =
                     match char with
                     case "1" | "2" | "3" -> "digit"
                     case _ -> "other"
@@ -1050,9 +1084,9 @@ class CapybaraParserTest {
         var module = parseSuccess(new RawModule("Test", "/parser", """
                 fun test(value: any): int =
                     match value with
-                    case list -> 1
-                    case set s -> 2
-                    case dict _ -> 3
+                    case List -> 1
+                    case Set s -> 2
+                    case Dict _ -> 3
                     case _ -> 0
                 """));
 
@@ -1117,15 +1151,15 @@ class CapybaraParserTest {
                 from /capy/lang/Option import { * }
                 from /capy/lang/Result import { * }
 
-                data SemVer { pre_release: Option[string], build_metadata: Option[string] }
+                data SemVer { pre_release: Option[String], build_metadata: Option[String] }
 
-                fun test(version: string): Result[SemVer] =
-                    data __Parse[T] { buffer: string, value: T }
-                    fun __parse_pre_release(version: string): Result[__Parse[string]] = Success { __Parse { version, "rc1" } }
-                    fun __parse_build(version: string): Result[__Parse[string]] = Success { __Parse { version, "001" } }
+                fun test(version: String): Result[SemVer] =
+                    data __Parse[T] { buffer: String, value: T }
+                    fun __parse_pre_release(version: String): Result[__Parse[String]] = Success { __Parse { version, "rc1" } }
+                    fun __parse_build(version: String): Result[__Parse[String]] = Success { __Parse { version, "001" } }
                     ---
                     let raw_sem_ver = SemVer { None {}, None {} }
-                    let parse_patch: __Parse[string] = __Parse { version, "1.2.3" }
+                    let parse_patch: __Parse[String] = __Parse { version, "1.2.3" }
                     match parse_patch.buffer[0] with
                     case Some { next_char } when next_char == "-" -> {
                         __parse_pre_release(parse_patch.buffer[1:])
@@ -1172,12 +1206,12 @@ class CapybaraParserTest {
         var module = parseSuccess(new RawModule("Test", "/parser", """
                 from /capy/lang/Result import { * }
 
-                fun test(input: string): string =
-                    data __Parse[T] { buffer: string, value: T }
-                    fun __parse_tail(buffer: string): Result[__Parse[string]] = Success { __Parse { buffer, "tail" } }
-                    fun __parse_build(buffer: string): Result[__Parse[string]] = Success { __Parse { buffer, "build" } }
+                fun test(input: String): String =
+                    data __Parse[T] { buffer: String, value: T }
+                    fun __parse_tail(buffer: String): Result[__Parse[String]] = Success { __Parse { buffer, "tail" } }
+                    fun __parse_build(buffer: String): Result[__Parse[String]] = Success { __Parse { buffer, "build" } }
                     ---
-                    let parse_patch: __Parse[string] = __Parse { input, "base" }
+                    let parse_patch: __Parse[String] = __Parse { input, "base" }
                     match parse_patch.buffer[0] with
                     case Some { ch } when ch == "-" -> {
                         __parse_tail(parse_patch.buffer[1:])

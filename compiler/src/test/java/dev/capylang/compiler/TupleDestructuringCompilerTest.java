@@ -14,7 +14,7 @@ class TupleDestructuringCompilerTest {
         var compiled = compileProgram(List.of(new RawModule(
                 "TuplePipes",
                 "/foo/boo",
-                "fun map_pairs(values: list[tuple[int, int]]): list[string] = values | (number, expected) => \"digits(\" + number + \") should return \" + expected"
+                "fun map_pairs(values: List[Tuple[int, int]]): List[String] = values | (number, expected) => \"digits(\" + number + \") should return \" + expected"
         )));
 
         var function = compiled.modules().first().functions().stream()
@@ -33,7 +33,7 @@ class TupleDestructuringCompilerTest {
         var compiled = compileProgram(List.of(new RawModule(
                 "TuplePipes",
                 "/foo/boo",
-                "fun filter_pairs(values: list[tuple[int, int]]): list[tuple[int, int]] = values |- (left, right) => left == right"
+                "fun filter_pairs(values: List[Tuple[int, int]]): List[Tuple[int, int]] = values |- (left, right) => left == right"
         )));
 
         var function = compiled.modules().first().functions().stream()
@@ -48,14 +48,14 @@ class TupleDestructuringCompilerTest {
 
     @Test
     void shouldFailWhenTupleDestructuringIsUsedForNonTupleElements() {
-        var error = compileFailure("fun foo(values: list[int]) = values | (a, b) => a + b");
+        var error = compileFailure("fun foo(values: List[int]) = values | (a, b) => a + b");
 
         assertThat(error.message()).contains("Right side lambda of `|` can use tuple destructuring only for tuple elements");
     }
 
     @Test
     void shouldFailWhenTupleDestructuringArityDoesNotMatchTupleSize() {
-        var error = compileFailure("fun foo(values: list[tuple[int, int]]) = values |* (a, b, c) => [a, b, c]");
+        var error = compileFailure("fun foo(values: List[Tuple[int, int]]) = values |* (a, b, c) => [a, b, c]");
 
         assertThat(error.message()).contains("Tuple destructuring in `|*` expects 2 arguments, got 3");
     }

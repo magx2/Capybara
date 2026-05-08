@@ -1,18 +1,18 @@
 from /capy/lang/Option import { Option, Some, None }
 from /capy/lang/Result import { * }
 
-data Pretty { value: string }
+data Pretty { value: String }
 data SemVer {
     major: int,
-    build_metadata: Option[string]
+    build_metadata: Option[String]
 }
 
-fun Pretty.to_string(): string = "pretty:" + this.value
+fun Pretty.to_string(): String = "pretty:" + this.value
 
-fun custom_to_string(value: string): string = Pretty { value }.to_string()
+fun custom_to_string(value: String): String = Pretty { value }.to_string()
 
 fun parse_local_option(value: int): Result[int] =
-    data __Parse[T] { buffer: string, value: T }
+    data __Parse[T] { buffer: String, value: T }
     fun unwrap(parse: __Parse[Option[int]]): Result[__Parse[int]] =
         match parse.value with
         case Some { inner } -> Success { __Parse { buffer: parse.buffer, value: inner } }
@@ -22,7 +22,7 @@ fun parse_local_option(value: int): Result[int] =
     | parsed => Success { parsed.value }
 
 fun parse_local_option_none(): Result[int] =
-    data __Parse[T] { buffer: string, value: T }
+    data __Parse[T] { buffer: String, value: T }
     fun unwrap(parse: __Parse[Option[int]]): Result[__Parse[int]] =
         match parse.value with
         case Some { inner } -> Success { __Parse { buffer: parse.buffer, value: inner } }
@@ -32,9 +32,9 @@ fun parse_local_option_none(): Result[int] =
     unwrap(__Parse { buffer: "", value: none_value })
     | parsed => Success { parsed.value }
 
-fun parse_local_semver_build(version: string): Result[string] =
-    data __Parse[T] { buffer: string, value: T }
-    fun parse_build(buffer: string): Result[__Parse[string]] =
+fun parse_local_semver_build(version: String): Result[String] =
+    data __Parse[T] { buffer: String, value: T }
+    fun parse_build(buffer: String): Result[__Parse[String]] =
         Success { __Parse { buffer: "", value: buffer } }
     ---
     let parse: __Parse[SemVer] = __Parse {
@@ -51,9 +51,9 @@ fun parse_local_semver_build(version: string): Result[string] =
         case Some { value } -> Success { value }
         case None -> Error { "missing metadata" }
 
-fun parse_local_semver_build_and_increment(version: string): Result[int] =
-    data __Parse[T] { buffer: string, value: T }
-    fun parse_build(buffer: string): Result[__Parse[string]] =
+fun parse_local_semver_build_and_increment(version: String): Result[int] =
+    data __Parse[T] { buffer: String, value: T }
+    fun parse_build(buffer: String): Result[__Parse[String]] =
         Success { __Parse { buffer: "", value: buffer } }
     ---
     let parse: __Parse[SemVer] = __Parse {

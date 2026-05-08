@@ -28,18 +28,18 @@ fun float_to_bool(v: float): bool = if v then true else false
 
 fun double_to_bool(v: double): bool = if v then true else false
 
-fun string_to_bool(v: string): bool = if v then true else false
+fun string_to_bool(v: String): bool = if v then true else false
 
-fun list_to_bool(v: list[int]): bool = if v then true else false
+fun list_to_bool(v: List[int]): bool = if v then true else false
 
-fun set_to_bool(v: set[int]): bool = if v then true else false
+fun set_to_bool(v: Set[int]): bool = if v then true else false
 
-fun dict_to_bool(v: dict[int]): bool = if v then true else false
+fun dict_to_bool(v: Dict[int]): bool = if v then true else false
 
 fun and_int(a: int, b: int): bool = a & b
 
-fun or_string(a: string, b: string): bool = a | b
+fun or_string(a: String, b: String): bool = a | b
 
 fun not_int(v: int): bool = !v
 
-fun not_list(v: list[int]): bool = !v
+fun not_list(v: List[int]): bool = !v

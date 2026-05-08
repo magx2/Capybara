@@ -895,6 +895,7 @@ public class CapybaraCompiler {
                     linkedDataType.comments(),
                     linkedDataType.visibility(),
                     linkedDataType.singleton(),
+                    linkedDataType.nativeType(),
                     linkedDataType.enumValue()
             );
             case CompiledDataParentType linkedDataParentType -> new CompiledDataParentType(
@@ -1114,8 +1115,8 @@ public class CapybaraCompiler {
         var pointerIndent = methodDeclarationPointerIndent(methodFunction, functionPreview);
         var conflictLocation = declarationLocation(conflictingDeclaration, normalizedFile);
         var pointer = " ".repeat(Math.max(pointerIndent, 0))
-                      + "^ Field getter `" + conflictingSubtypeName + "." + field.name() + "` returns `" + field.type() + "`,"
-                      + " but this method returns `" + methodReturnType + "`. Conflicting declaration: " + conflictLocation;
+                      + "^ Field getter `" + conflictingSubtypeName + "." + field.name() + "` returns `" + formatLinkedType(field.type()) + "`,"
+                      + " but this method returns `" + formatLinkedType(methodReturnType) + "`. Conflicting declaration: " + conflictLocation;
         var message = "error: mismatched types\n"
                       + " --> " + normalizedFile + ":" + methodLine + ":" + methodColumn + "\n"
                       + functionPreview + "\n"
@@ -1180,6 +1181,7 @@ public class CapybaraCompiler {
                     linkedDataType.comments(),
                     linkedDataType.visibility(),
                     linkedDataType.singleton(),
+                    linkedDataType.nativeType(),
                     linkedDataType.enumValue()
             );
             case CompiledDataParentType linkedDataParentType -> new CompiledDataParentType(
@@ -1315,6 +1317,9 @@ public class CapybaraCompiler {
         }
         var ownerType = linkedTypes.get(module.name());
         if (ownerType instanceof CompiledDataParentType) {
+            return className;
+        }
+        if (ownerType instanceof CompiledDataType dataType && dataType.nativeType()) {
             return className;
         }
         if (ownerType != null) {
@@ -3864,17 +3869,23 @@ public class CapybaraCompiler {
 
     private String formatParserType(Type type) {
         return switch (type) {
-            case PrimitiveType primitiveType -> primitiveType.name().toLowerCase(java.util.Locale.ROOT);
-            case CollectionType.ListType listType -> "list[" + formatParserType(listType.elementType()) + "]";
-            case CollectionType.SetType setType -> "set[" + formatParserType(setType.elementType()) + "]";
-            case CollectionType.DictType dictType -> "dict[" + formatParserType(dictType.valueType()) + "]";
-            case TupleType tupleType -> "tuple[" + tupleType.elementTypes().stream()
+            case PrimitiveType primitiveType -> formatPrimitiveParserType(primitiveType);
+            case CollectionType.ListType listType -> "List[" + formatParserType(listType.elementType()) + "]";
+            case CollectionType.SetType setType -> "Set[" + formatParserType(setType.elementType()) + "]";
+            case CollectionType.DictType dictType -> "Dict[" + formatParserType(dictType.valueType()) + "]";
+            case TupleType tupleType -> "Tuple[" + tupleType.elementTypes().stream()
                     .map(this::formatParserType)
                     .collect(java.util.stream.Collectors.joining(", ")) + "]";
             case FunctionType functionType ->
                     formatParserType(functionType.argumentType()) + "=>" + formatParserType(functionType.returnType());
             case DataType dataType -> restorePrivateTypeNameForDisplay(dataType.name());
         };
+    }
+
+    private String formatPrimitiveParserType(PrimitiveType primitiveType) {
+        return primitiveType == PrimitiveType.STRING
+                ? "String"
+                : primitiveType.name().toLowerCase(java.util.Locale.ROOT);
     }
 
     private String formatExpressionPreview(Expression expression) {
@@ -4003,22 +4014,22 @@ public class CapybaraCompiler {
         typeName = typeName.trim();
         if (typeName.startsWith("CompiledList[elementType=") && typeName.endsWith("]")) {
             var inner = typeName.substring("CompiledList[elementType=".length(), typeName.length() - 1);
-            return "list[" + normalizeReportedTypeName(inner) + "]";
+            return "List[" + normalizeReportedTypeName(inner) + "]";
         }
         if (typeName.startsWith("CompiledSet[elementType=") && typeName.endsWith("]")) {
             var inner = typeName.substring("CompiledSet[elementType=".length(), typeName.length() - 1);
-            return "set[" + normalizeReportedTypeName(inner) + "]";
+            return "Set[" + normalizeReportedTypeName(inner) + "]";
         }
         if (typeName.startsWith("CompiledDict[valueType=") && typeName.endsWith("]")) {
             var inner = typeName.substring("CompiledDict[valueType=".length(), typeName.length() - 1);
-            return "dict[" + normalizeReportedTypeName(inner) + "]";
+            return "Dict[" + normalizeReportedTypeName(inner) + "]";
         }
         if (typeName.startsWith("CompiledGenericTypeParameter[name=") && typeName.endsWith("]")) {
             return normalizeUserVisibleNames(typeName.substring("CompiledGenericTypeParameter[name=".length(), typeName.length() - 1));
         }
         if (typeName.startsWith("CompiledTupleType[elementTypes=[") && typeName.endsWith("]]")) {
             var inner = typeName.substring("CompiledTupleType[elementTypes=[".length(), typeName.length() - 2);
-            return "tuple[" + splitTopLevelTypeArguments(inner).stream()
+            return "Tuple[" + splitTopLevelTypeArguments(inner).stream()
                     .map(this::normalizeReportedTypeName)
                     .collect(java.util.stream.Collectors.joining(", ")) + "]";
         }
@@ -4050,7 +4061,7 @@ public class CapybaraCompiler {
             case "LONG" -> "long";
             case "FLOAT" -> "float";
             case "DOUBLE" -> "double";
-            case "STRING" -> "string";
+            case "STRING" -> "String";
             case "ANY" -> "any";
             case "NOTHING" -> "nothing";
             default -> typeName;
@@ -4112,13 +4123,13 @@ public class CapybaraCompiler {
 
     private String formatLinkedType(CompiledType type) {
         return switch (type) {
-            case PrimitiveLinkedType primitiveType -> primitiveType.name().toLowerCase(java.util.Locale.ROOT);
+            case PrimitiveLinkedType primitiveType -> formatPrimitiveLinkedType(primitiveType);
             case CollectionLinkedType.CompiledList linkedList ->
-                    "list[" + formatLinkedType(linkedList.elementType()) + "]";
-            case CollectionLinkedType.CompiledSet linkedSet -> "set[" + formatLinkedType(linkedSet.elementType()) + "]";
+                    "List[" + formatLinkedType(linkedList.elementType()) + "]";
+            case CollectionLinkedType.CompiledSet linkedSet -> "Set[" + formatLinkedType(linkedSet.elementType()) + "]";
             case CollectionLinkedType.CompiledDict linkedDict ->
-                    "dict[" + formatLinkedType(linkedDict.valueType()) + "]";
-            case CompiledTupleType linkedTupleType -> "tuple[" + linkedTupleType.elementTypes().stream()
+                    "Dict[" + formatLinkedType(linkedDict.valueType()) + "]";
+            case CompiledTupleType linkedTupleType -> "Tuple[" + linkedTupleType.elementTypes().stream()
                     .map(this::formatLinkedType)
                     .collect(java.util.stream.Collectors.joining(", ")) + "]";
             case CompiledFunctionType linkedFunctionType ->
@@ -4135,6 +4146,12 @@ public class CapybaraCompiler {
                     .collect(java.util.stream.Collectors.joining(", ")) + "]";
             case CompiledGenericTypeParameter linkedGenericTypeParameter -> restorePrivateTypeNameForDisplay(linkedGenericTypeParameter.name());
         };
+    }
+
+    private String formatPrimitiveLinkedType(PrimitiveLinkedType primitiveType) {
+        return primitiveType == PrimitiveLinkedType.STRING
+                ? "String"
+                : primitiveType.name().toLowerCase(java.util.Locale.ROOT);
     }
 
     private boolean isAssignableReturnType(CompiledType expected, CompiledType actual, Map<String, GenericDataType> dataTypes) {
@@ -4800,24 +4817,24 @@ public class CapybaraCompiler {
         if (expectedPrimitive.isPresent() && actualPrimitive.isPresent()) {
             return isAssignablePrimitiveReturnType(expectedPrimitive.get(), actualPrimitive.get());
         }
-        if (expected.startsWith("list[") && expected.endsWith("]")
-            && actual.startsWith("list[") && actual.endsWith("]")) {
+        if (expected.startsWith("List[") && expected.endsWith("]")
+            && actual.startsWith("List[") && actual.endsWith("]")) {
             return isAssignableTypeDescriptor(
                     expected.substring(5, expected.length() - 1),
                     actual.substring(5, actual.length() - 1),
                     dataTypes
             );
         }
-        if (expected.startsWith("set[") && expected.endsWith("]")
-            && actual.startsWith("set[") && actual.endsWith("]")) {
+        if (expected.startsWith("Set[") && expected.endsWith("]")
+            && actual.startsWith("Set[") && actual.endsWith("]")) {
             return isAssignableTypeDescriptor(
                     expected.substring(4, expected.length() - 1),
                     actual.substring(4, actual.length() - 1),
                     dataTypes
             );
         }
-        if (expected.startsWith("dict[") && expected.endsWith("]")
-            && actual.startsWith("dict[") && actual.endsWith("]")) {
+        if (expected.startsWith("Dict[") && expected.endsWith("]")
+            && actual.startsWith("Dict[") && actual.endsWith("]")) {
             return isAssignableTypeDescriptor(
                     expected.substring(5, expected.length() - 1),
                     actual.substring(5, actual.length() - 1),
@@ -5447,13 +5464,13 @@ public class CapybaraCompiler {
     private String typeCacheKey(Type type) {
         return switch (type) {
             case PrimitiveType primitiveType -> primitiveType.name();
-            case CollectionType.ListType listType -> "list[" + typeCacheKey(listType.elementType()) + "]";
-            case CollectionType.SetType setType -> "set[" + typeCacheKey(setType.elementType()) + "]";
-            case CollectionType.DictType dictType -> "dict[" + typeCacheKey(dictType.valueType()) + "]";
+            case CollectionType.ListType listType -> "List[" + typeCacheKey(listType.elementType()) + "]";
+            case CollectionType.SetType setType -> "Set[" + typeCacheKey(setType.elementType()) + "]";
+            case CollectionType.DictType dictType -> "Dict[" + typeCacheKey(dictType.valueType()) + "]";
             case DataType dataType -> dataType.name();
             case FunctionType functionType ->
                     "(" + typeCacheKey(functionType.argumentType()) + " => " + typeCacheKey(functionType.returnType()) + ")";
-            case TupleType tupleType -> "tuple[" + tupleType.elementTypes().stream()
+            case TupleType tupleType -> "Tuple[" + tupleType.elementTypes().stream()
                     .map(this::typeCacheKey)
                     .collect(java.util.stream.Collectors.joining(", ")) + "]";
         };
@@ -5493,6 +5510,7 @@ public class CapybaraCompiler {
                             dataType.comments(),
                             dataType.visibility(),
                             dataType.singleton(),
+                            dataType.nativeType(),
                             dataType.enumValue()
                     );
                 }
@@ -5512,6 +5530,7 @@ public class CapybaraCompiler {
                         dataType.comments(),
                         dataType.visibility(),
                         dataType.singleton(),
+                        dataType.nativeType(),
                         dataType.enumValue()
                 );
             }
@@ -5545,12 +5564,12 @@ public class CapybaraCompiler {
 
     private String typeDescriptor(CompiledType type) {
         return switch (type) {
-            case PrimitiveLinkedType primitive -> primitive.name().toLowerCase();
+            case PrimitiveLinkedType primitive -> formatPrimitiveLinkedType(primitive);
             case CollectionLinkedType.CompiledList linkedList ->
-                    "list[" + typeDescriptor(linkedList.elementType()) + "]";
-            case CollectionLinkedType.CompiledSet linkedSet -> "set[" + typeDescriptor(linkedSet.elementType()) + "]";
-            case CollectionLinkedType.CompiledDict linkedDict -> "dict[" + typeDescriptor(linkedDict.valueType()) + "]";
-            case CompiledTupleType linkedTupleType -> "tuple[" + linkedTupleType.elementTypes().stream()
+                    "List[" + typeDescriptor(linkedList.elementType()) + "]";
+            case CollectionLinkedType.CompiledSet linkedSet -> "Set[" + typeDescriptor(linkedSet.elementType()) + "]";
+            case CollectionLinkedType.CompiledDict linkedDict -> "Dict[" + typeDescriptor(linkedDict.valueType()) + "]";
+            case CompiledTupleType linkedTupleType -> "Tuple[" + linkedTupleType.elementTypes().stream()
                     .map(this::typeDescriptor)
                     .collect(java.util.stream.Collectors.joining(", ")) + "]";
             case CompiledFunctionType linkedFunctionType ->
@@ -5650,16 +5669,16 @@ public class CapybaraCompiler {
         var parsed = PrimitiveType.find(trimmed)
                 .map(Type.class::cast)
                 .orElseGet(() -> {
-                    if (trimmed.startsWith("list[") && trimmed.endsWith("]")) {
+                    if (trimmed.startsWith("List[") && trimmed.endsWith("]")) {
                         return new CollectionType.ListType(parseTypeArgument(trimmed.substring(5, trimmed.length() - 1), compileCache));
                     }
-                    if (trimmed.startsWith("set[") && trimmed.endsWith("]")) {
+                    if (trimmed.startsWith("Set[") && trimmed.endsWith("]")) {
                         return new CollectionType.SetType(parseTypeArgument(trimmed.substring(4, trimmed.length() - 1), compileCache));
                     }
-                    if (trimmed.startsWith("dict[") && trimmed.endsWith("]")) {
+                    if (trimmed.startsWith("Dict[") && trimmed.endsWith("]")) {
                         return new CollectionType.DictType(parseTypeArgument(trimmed.substring(5, trimmed.length() - 1), compileCache));
                     }
-                    if (trimmed.startsWith("tuple[") && trimmed.endsWith("]")) {
+                    if (trimmed.startsWith("Tuple[") && trimmed.endsWith("]")) {
                         var inner = trimmed.substring(6, trimmed.length() - 1);
                         var elements = splitTopLevelTypeArguments(inner, compileCache).stream()
                                 .map(argument -> parseTypeArgument(argument, compileCache))
@@ -5718,6 +5737,9 @@ public class CapybaraCompiler {
 
     private String stripOptionalParentheses(String value) {
         var trimmed = value.trim();
+        if ("()".equals(trimmed)) {
+            return "nothing";
+        }
         if (!trimmed.startsWith("(") || !trimmed.endsWith(")")) {
             return trimmed;
         }
@@ -5966,6 +5988,22 @@ public class CapybaraCompiler {
         if (cached != null) {
             return cached;
         }
+        if (dataDeclaration.nativeType()) {
+            var linkedNative = Result.success(new CompiledDataType(
+                    dataDeclaration.name(),
+                    List.of(),
+                    dataDeclaration.typeParameters(),
+                    List.of(),
+                    dataDeclaration.comments(),
+                    dataDeclaration.visibility(),
+                    false,
+                    true,
+                    false
+            ));
+            var withPosition = withPosition(linkedNative, dataDeclaration.position(), normalizedFile);
+            cache.put(dataDeclaration.name(), withPosition);
+            return withPosition;
+        }
         if (!visiting.add(dataDeclaration.name())) {
             return withPosition(
                     Result.error("Circular data extension detected for `" + dataDeclaration.name() + "`"),
@@ -6199,6 +6237,7 @@ public class CapybaraCompiler {
                     dataType.comments(),
                     dataType.visibility(),
                     dataType.singleton(),
+                    dataType.nativeType(),
                     dataType.enumValue()
             );
             default -> placeholder;
@@ -6416,6 +6455,7 @@ public class CapybaraCompiler {
                 childType.comments(),
                 childType.visibility(),
                 childType.singleton(),
+                childType.nativeType(),
                 childType.enumValue()
         ));
     }

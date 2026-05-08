@@ -1,25 +1,25 @@
 from /capy/lang/Result import { * }
 
-data User { name: string } with constructor {
+data User { name: String } with constructor {
     if name.size == 0
     then Error { message: "You need to pass name" }
     else Success { value: * { name: name } }
 }
 
-fun user(name: string): Result[User] =
+fun user(name: String): Result[User] =
     User { name: name }
 
-fun users(name1: string, name2: string, name3: string): Result[tuple[User, User, User]] =
+fun users(name1: String, name2: String, name3: String): Result[Tuple[User, User, User]] =
     let user1: User <- user(name1)
     let user2: User <- user(name2)
     let user3: User <- user(name3)
     (user1, user2, user3)
 
-fun users_with_regular_let(name1: string, name2: string): Result[string] =
+fun users_with_regular_let(name1: String, name2: String): Result[String] =
     let separator = ":"
     let user1: User <- user(name1)
     let user2: User <- user(name2)
     user1.name + separator + user2.name
 
-fun first_error_message(name1: string, name2: string): string =
+fun first_error_message(name1: String, name2: String): String =
     users_with_regular_let(name1, name2).reduce_left(value => value, message => message)

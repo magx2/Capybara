@@ -38,8 +38,8 @@ class ObjectOrientedJavaGeneratorTest {
         var program = compileProgram("""
                 from /capy/io/Stdout import { * }
 
-                class Speaker(name: string) {
-                    field name: string = name
+                class Speaker(name: String) {
+                    field name: String = name
 
                     def emit_inline(): void = println(this.name)
 
@@ -91,33 +91,33 @@ class ObjectOrientedJavaGeneratorTest {
         var program = compileProgram("""
                 /// Base type
                 open class Base {
-                    open def label(): string = "base"
+                    open def label(): String = "base"
                 }
 
                 /// Printable contract
                 interface Printable {
-                    def print(): string
+                    def print(): String
                 }
 
                 /// User type
-                class User(name: string): Base, Printable {
-                    field name: string = name
+                class User(name: String): Base, Printable {
+                    field name: String = name
 
                     /// Friendly greet
-                    def greet(): string = "Hello " + this.name
+                    def greet(): String = "Hello " + this.name
 
-                    def mutable(): string {
+                    def mutable(): String {
                         def x = "a"
                         x = "2"
                         return x
                     }
 
-                    override def print(): string {
-                        let label: string = Base.label()
+                    override def print(): String {
+                        let label: String = Base.label()
                         return label + " " + this.name
                     }
 
-                    def first_positive(values: list[int]): int {
+                    def first_positive(values: List[int]): int {
                         for value in values {
                             if value > 0 {
                                 return value
@@ -126,7 +126,7 @@ class ObjectOrientedJavaGeneratorTest {
                         return 0
                     }
 
-                    def first_large(values: list[int]): int {
+                    def first_large(values: List[int]): int {
                         foreach value: int in values {
                             if value > 10 {
                                 return value
@@ -151,17 +151,17 @@ class ObjectOrientedJavaGeneratorTest {
                         } while false
                     }
 
-                    def second_name(values: string[]): string = values[1]
+                    def second_name(values: String[]): String = values[1]
 
                     def first_id(values: int[]): int = values[0]
 
                     def copy_users(values: User[]): User[] = values
 
-                    def names(): string[] = string[]{"zero", "one"}
+                    def names(): String[] = String[]{"zero", "one"}
 
                     def slots(size: int): int[] = int[size]
 
-                    def recover(flag: bool): string {
+                    def recover(flag: bool): String {
                         try {
                             if flag {
                                 throw "boom"
@@ -172,7 +172,7 @@ class ObjectOrientedJavaGeneratorTest {
                         }
                     }
 
-                    def catch_index(values: string[]): string {
+                    def catch_index(values: String[]): String {
                         try {
                             return values[3]
                         } catch error {
@@ -291,7 +291,7 @@ class ObjectOrientedJavaGeneratorTest {
     void shouldRejectTraitStateInJavaBackendV1() {
         var program = compileProgram("""
                 trait Named {
-                    field name: string = "Capy"
+                    field name: String = "Capy"
                 }
                 """);
 
@@ -304,7 +304,7 @@ class ObjectOrientedJavaGeneratorTest {
     void shouldGenerateJavaEntrypointForObjectOrientedMainMethod() throws Exception {
         var program = compileProgram("""
                 class Main {
-                    def main(args: list[string]): int = args.size()
+                    def main(args: List[String]): int = args.size()
                 }
                 """);
 
@@ -332,8 +332,8 @@ class ObjectOrientedJavaGeneratorTest {
     @Test
     void shouldRejectObjectOrientedMainEntrypointThatRequiresConstructor() {
         var program = compileProgram("""
-                class Main(name: string) {
-                    def main(args: list[string]): int = args.size()
+                class Main(name: String) {
+                    def main(args: List[String]): int = args.size()
                 }
                 """);
 
@@ -350,12 +350,12 @@ class ObjectOrientedJavaGeneratorTest {
                         "/foo/boo",
                         """
                                 type InteropPet = InteropDog | InteropCat
-                                data InteropDog { name: string }
+                                data InteropDog { name: String }
                                 data InteropCat { age: int }
 
-                                fun make_dog(name: string): InteropDog = InteropDog { name: name }
+                                fun make_dog(name: String): InteropDog = InteropDog { name: name }
 
-                                fun pet_text(pet: InteropPet): string =
+                                fun pet_text(pet: InteropPet): String =
                                     match pet with
                                     case InteropDog { name } -> "dog:" + name
                                     case InteropCat { age } -> "cat:" + age
@@ -369,13 +369,13 @@ class ObjectOrientedJavaGeneratorTest {
                                 from ObjectOrientedFpInterop import { InteropPet, InteropDog, InteropCat }
 
                                 class PetInteractor {
-                                    def invoke_fp_function(name: string): string =
+                                    def invoke_fp_function(name: String): String =
                                         ObjectOrientedFpInterop.petText(ObjectOrientedFpInterop.makeDog(name))
 
-                                    def create_fp_data(name: string): InteropPet =
+                                    def create_fp_data(name: String): InteropPet =
                                         InteropDog { name: name }
 
-                                    def match_fp_type(pet_name: string): string {
+                                    def match_fp_type(pet_name: String): String {
                                         let pet: InteropPet = InteropDog { name: pet_name }
                                         return match pet with
                                         case InteropDog { name } -> ("dog:" + name)
@@ -423,12 +423,12 @@ class ObjectOrientedJavaGeneratorTest {
                         "/foo/boo",
                         """
                                 type SharedPet = SharedDog | SharedCat
-                                data SharedDog { name: string }
+                                data SharedDog { name: String }
                                 data SharedCat { age: int }
 
-                                fun make_dog(name: string): SharedDog = SharedDog { name: name }
+                                fun make_dog(name: String): SharedDog = SharedDog { name: name }
 
-                                fun pet_text(pet: SharedPet): string =
+                                fun pet_text(pet: SharedPet): String =
                                     match pet with
                                     case SharedDog { name } -> "dog:" + name
                                     case _ -> "cat"
@@ -440,13 +440,13 @@ class ObjectOrientedJavaGeneratorTest {
                         "/foo/boo",
                         """
                                 class SharedInteractor {
-                                    def invoke_fp_function(name: string): string =
+                                    def invoke_fp_function(name: String): String =
                                         SharedInterop.petText(SharedInterop.makeDog(name))
 
-                                    def create_fp_data(name: string): SharedPet =
+                                    def create_fp_data(name: String): SharedPet =
                                         SharedDog { name: name }
 
-                                    def match_fp_type(pet_name: string): string {
+                                    def match_fp_type(pet_name: String): String {
                                         let pet: SharedPet = SharedDog { name: pet_name }
                                         return match pet with
                                         case SharedDog { name } -> ("dog:" + name)
@@ -495,12 +495,12 @@ class ObjectOrientedJavaGeneratorTest {
                         "",
                         """
                                 type SharedPet = SharedDog | SharedCat
-                                data SharedDog { name: string }
+                                data SharedDog { name: String }
                                 data SharedCat { age: int }
 
-                                fun make_dog(name: string): SharedDog = SharedDog { name: name }
+                                fun make_dog(name: String): SharedDog = SharedDog { name: name }
 
-                                fun pet_text(pet: SharedPet): string =
+                                fun pet_text(pet: SharedPet): String =
                                     match pet with
                                     case SharedDog { name } -> "dog:" + name
                                     case _ -> "cat"
@@ -514,10 +514,10 @@ class ObjectOrientedJavaGeneratorTest {
                                 from SharedInterop import { SharedPet, SharedDog }
 
                                 class RootConsumer {
-                                    def invoke_fp_function(name: string): string =
+                                    def invoke_fp_function(name: String): String =
                                         SharedInterop.petText(SharedInterop.makeDog(name))
 
-                                    def create_fp_data(name: string): SharedPet =
+                                    def create_fp_data(name: String): SharedPet =
                                         SharedDog { name: name }
                                 }
                                 """,
@@ -549,7 +549,7 @@ class ObjectOrientedJavaGeneratorTest {
                         "/foo/boo",
                         """
                                 class LiteralConsumer {
-                                    def label(): string = 'SharedDog'
+                                    def label(): String = 'SharedDog'
                                 }
                                 """,
                         SourceKind.OBJECT_ORIENTED
@@ -573,7 +573,7 @@ class ObjectOrientedJavaGeneratorTest {
                 class Main {
                     def helper(): int = 1
 
-                    def main(args: list[string]): int = size(args) + this.helper()
+                    def main(args: List[String]): int = size(args) + this.helper()
                 }
                 """);
 
