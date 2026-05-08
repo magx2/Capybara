@@ -42,6 +42,17 @@ fun local_generic_data_used_in_local_function_return_type(v: int): string =
     case Success { value } -> "value:" + value.value
     case Error { message } -> "error:" + message
 
+fun local_single_used_in_local_type_and_function(use_stop: bool): string =
+    type __Token = __Value | Stop
+    data __Value { value: int }
+    single Stop
+    fun describe(token: __Token): string =
+        match token with
+        case __Value { value } -> "value:" + value
+        case Stop -> "stop"
+    ---
+    describe(if use_stop then Stop else __Value { 7 })
+
 fun local_generic_data_field_access_followed_by_index(buffer: string): string =
     data __Parse[T] { buffer: string, value: T }
     fun parse(value: string): Result[__Parse[int]] =

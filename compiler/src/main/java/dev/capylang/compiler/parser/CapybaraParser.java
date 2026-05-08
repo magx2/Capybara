@@ -40,7 +40,7 @@ public class CapybaraParser {
     private RawModule currentModule;
     private String currentSource;
 
-    public Result<Program> parseModule(Collection<RawModule> rawModules) {
+    public synchronized Result<Program> parseModule(Collection<RawModule> rawModules) {
         try {
             var modules = new ArrayList<Module>();
             var errors = new TreeSet<Result.Error.SingleError>();
@@ -61,7 +61,7 @@ public class CapybaraParser {
         }
     }
 
-    public Result<Module> parseModule(RawModule module) {
+    public synchronized Result<Module> parseModule(RawModule module) {
         try {
             var parsedSource = parseSource(module.input());
             parserErrors.clear();
@@ -652,6 +652,18 @@ public class CapybaraParser {
                 );
                 localTypeIndex++;
             }
+            var localSingle = localDefinition.localSingleDeclaration();
+            if (localSingle != null) {
+                var localSingleName = localSingle.TYPE().getText();
+                if (localTypeNameMap.containsKey(localSingleName)) {
+                    throw new IllegalStateException("Duplicate local type/data/single name: " + localSingleName);
+                }
+                localTypeNameMap.put(
+                        localSingleName,
+                        localScopePrefix + "__local_single_" + localTypeIndex + "_" + localSingleName
+                );
+                localTypeIndex++;
+            }
             var localConst = localDefinition.localConstDeclaration();
             if (localConst != null) {
                 var localConstNameNode = localConst.privateLocalConstName();
@@ -706,6 +718,13 @@ public class CapybaraParser {
                                 localFunctionNameMap,
                                 localTypeNameMap,
                                 localConstNameMap
+                        )
+                );
+            } else if (localDefinition.localSingleDeclaration() != null) {
+                extractedLocalDefinitions.add(
+                        localSingleDeclaration(
+                                localDefinition.localSingleDeclaration(),
+                                localTypeNameMap
                         )
                 );
             } else if (localDefinition.localConstDeclaration() != null) {
@@ -892,6 +911,18 @@ public class CapybaraParser {
         );
     }
 
+    private SingleDeclaration localSingleDeclaration(
+            FunctionalParser.LocalSingleDeclarationContext context,
+            java.util.Map<String, String> localTypeNameMap
+    ) {
+        var localSingleName = context.TYPE().getText();
+        var mappedSingleName = localTypeNameMap.get(localSingleName);
+        if (mappedSingleName == null) {
+            throw new IllegalStateException("Unknown local single mapping for: " + localSingleName);
+        }
+        return new SingleDeclaration(mappedSingleName, position(context));
+    }
+
     private Expression rewriteLocalNames(
             Expression expression,
             java.util.Map<String, String> localFunctionNameMap,
@@ -917,6 +948,16 @@ public class CapybaraParser {
                             functionCall.arguments().stream()
                                     .map(argument -> rewriteLocalNames(argument, localFunctionNameMap, localTypeNameMap, localConstNameMap))
                                     .toList(),
+                            functionCall.position()
+                    );
+                }
+                if (functionCall.moduleName().isEmpty()
+                    && functionCall.arguments().isEmpty()
+                    && localTypeNameMap.containsKey(functionCall.name())) {
+                    yield new FunctionCall(
+                            Optional.empty(),
+                            localTypeNameMap.get(functionCall.name()),
+                            List.of(),
                             functionCall.position()
                     );
                 }

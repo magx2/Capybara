@@ -28,6 +28,12 @@ class LocalTypesAndDataTest {
     }
 
     @Test
+    void localFunctionShouldResolveLocalSingleType() {
+        assertThat(LocalTypesAndData.localSingleUsedInLocalTypeAndFunction(false)).isEqualTo("value:7");
+        assertThat(LocalTypesAndData.localSingleUsedInLocalTypeAndFunction(true)).isEqualTo("stop");
+    }
+
+    @Test
     void localGenericDataFieldAccessShouldRemainVisibleBeforeIndexingInsidePipeLambda() {
         assertThat(LocalTypesAndData.localGenericDataFieldAccessFollowedByIndex("abc")).isEqualTo("a");
     }

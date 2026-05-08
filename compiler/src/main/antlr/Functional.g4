@@ -23,6 +23,7 @@ functionBody: expression
 localDefinition: localFunctionDeclaration
                | localTypeDeclaration
                | localDataDeclaration
+               | localSingleDeclaration
                | localConstDeclaration;
 localFunctionDeclaration: docComment* 'fun' recFunctionMarker localFunctionNameDeclaration '(' parameters? ')' functionType? '=' expression
                         | docComment* 'fun' localFunctionNameDeclaration '(' parameters? ')' functionType? '=' expression;
@@ -31,6 +32,7 @@ localTypeDeclaration: 'type' genericTypeDeclaration constructorClause? '=' gener
                     | 'type' genericTypeDeclaration '{' fieldDeclarationList? '}' constructorClause? '=' genericTypeDeclaration (PIPE genericTypeDeclaration)*;
 localDataDeclaration: 'data' genericTypeDeclaration '{' fieldDeclarationList? '}' constructorClause?
                     | 'data' genericTypeDeclaration '=' '{' fieldDeclarationList? '}' constructorClause?;
+localSingleDeclaration: 'single' TYPE;
 localConstDeclaration: docComment* 'const' privateLocalConstName (':' type)? '=' expressionNoLet;
 privateLocalConstName: NAME | TYPE;
 functionNameDeclaration: identifier | genericTypeDeclaration DOT methodIdentifier;
