@@ -571,7 +571,13 @@ public class CapybaraExpressionCompiler {
         ResolvedFunctionCall best = null;
         Result.Error.SingleError deepestError = null;
         for (var candidate : candidates) {
-            var maybeResolved = linkArgumentsForExpectedTypes(functionCall.arguments(), scope, candidate.parameterTypes());
+            var maybeResolved = linkArgumentsForExpectedTypes(
+                    functionCall.arguments(),
+                    scope,
+                    candidate.parameterTypes(),
+                    candidate.returnType(),
+                    expectedType
+            );
             if (maybeResolved instanceof Result.Error<CoercedArguments> error) {
                 deepestError = preferDeeperError(deepestError, firstError(error));
                 continue;
@@ -587,7 +593,11 @@ public class CapybaraExpressionCompiler {
             }
             var returnType = resolveReturnType(candidate, resolved.arguments());
             if (expectedType.isPresent() && !canCoerceToExpectedType(returnType, expectedType.orElseThrow())) {
-                continue;
+                if (canUseExpectedTypeForEmptyShapeReturn(candidate, resolved.arguments(), returnType, expectedType.orElseThrow())) {
+                    returnType = expectedType.orElseThrow();
+                } else {
+                    continue;
+                }
             }
             if (isBetterResolvedCall(candidate, resolved.arguments(), resolved.coercions(), returnType, expectedType, best)) {
                 best = new ResolvedFunctionCall(candidate, resolved.arguments(), resolved.coercions(), returnType);
@@ -725,7 +735,13 @@ public class CapybaraExpressionCompiler {
         ResolvedFunctionCall best = null;
         Result.Error.SingleError deepestError = null;
         for (var candidate : candidates) {
-            var maybeResolved = linkArgumentsForExpectedTypes(functionCall.arguments(), scope, candidate.parameterTypes());
+            var maybeResolved = linkArgumentsForExpectedTypes(
+                    functionCall.arguments(),
+                    scope,
+                    candidate.parameterTypes(),
+                    candidate.returnType(),
+                    expectedType
+            );
             if (maybeResolved instanceof Result.Error<CoercedArguments> error) {
                 deepestError = preferDeeperError(deepestError, firstError(error));
                 continue;
@@ -741,7 +757,11 @@ public class CapybaraExpressionCompiler {
             }
             var returnType = resolveReturnType(candidate, resolved.arguments());
             if (expectedType.isPresent() && !canCoerceToExpectedType(returnType, expectedType.orElseThrow())) {
-                continue;
+                if (canUseExpectedTypeForEmptyShapeReturn(candidate, resolved.arguments(), returnType, expectedType.orElseThrow())) {
+                    returnType = expectedType.orElseThrow();
+                } else {
+                    continue;
+                }
             }
             if (isBetterResolvedCall(candidate, resolved.arguments(), resolved.coercions(), returnType, expectedType, best)) {
                 best = new ResolvedFunctionCall(candidate, resolved.arguments(), resolved.coercions(), returnType);
@@ -773,6 +793,17 @@ public class CapybaraExpressionCompiler {
                 best.arguments(),
                 best.returnType()
         ));
+    }
+
+    private boolean canUseExpectedTypeForEmptyShapeReturn(
+            FunctionSignature signature,
+            List<CompiledExpression> arguments,
+            CompiledType returnType,
+            CompiledType expectedType
+    ) {
+        return containsGenericTypeParameter(signature.returnType())
+               && arguments.stream().anyMatch(this::hasKnownEmptyCollectionShapeExpression)
+               && isEmptyCollectionShapeCompatible(returnType, expectedType);
     }
 
     private boolean isReflectionIntrinsicSignature(FunctionSignature signature) {
@@ -1410,7 +1441,13 @@ public class CapybaraExpressionCompiler {
         ResolvedFunctionCall best = null;
         Result.Error.SingleError deepestError = null;
         for (var candidate : candidates) {
-            var maybeResolved = linkArgumentsForExpectedTypes(functionCall.arguments(), scope, candidate.parameterTypes());
+            var maybeResolved = linkArgumentsForExpectedTypes(
+                    functionCall.arguments(),
+                    scope,
+                    candidate.parameterTypes(),
+                    candidate.returnType(),
+                    expectedType
+            );
             if (maybeResolved instanceof Result.Error<CoercedArguments> error) {
                 deepestError = preferDeeperError(deepestError, firstError(error));
                 continue;
@@ -2213,9 +2250,24 @@ public class CapybaraExpressionCompiler {
             Scope scope,
             List<CompiledType> expectedTypes
     ) {
+        return linkArgumentsForExpectedTypes(arguments, scope, expectedTypes, null, Optional.empty());
+    }
+
+    private Result<CoercedArguments> linkArgumentsForExpectedTypes(
+            List<Expression> arguments,
+            Scope scope,
+            List<CompiledType> expectedTypes,
+            CompiledType returnType,
+            Optional<CompiledType> expectedReturnType
+    ) {
         var coerced = new java.util.ArrayList<CompiledExpression>(arguments.size());
         var coercions = 0;
         var substitutions = new java.util.LinkedHashMap<String, CompiledType>();
+        if (returnType != null
+            && expectedReturnType.isPresent()
+            && arguments.stream().anyMatch(this::hasKnownEmptyCollectionShapeExpression)) {
+            collectTypeSubstitutions(returnType, expectedReturnType.orElseThrow(), substitutions);
+        }
         for (var i = 0; i < arguments.size(); i++) {
             var argument = arguments.get(i);
             var expected = substituteTypeParameters(expectedTypes.get(i), substitutions);
@@ -2488,6 +2540,7 @@ public class CapybaraExpressionCompiler {
                 case IfExpression ifExpression -> linkIfExpression(ifExpression, scope, expected);
                 case MatchExpression matchExpression -> linkMatchExpression(matchExpression, scope, expected);
                 case LetExpression letExpression -> linkLetExpression(letExpression, scope, Optional.of(expected));
+                case FunctionCall functionCall -> linkFunctionCallWithExpectedFallback(functionCall, scope, expected);
                 default -> linkExpression(argument, scope);
             };
         }
@@ -2533,6 +2586,11 @@ public class CapybaraExpressionCompiler {
         var typeParameters = dataType.typeParameters().isEmpty()
                 ? dataType.typeParameters()
                 : expectedParent.typeParameters();
+        var expectedSubtype = expectedSubtypeForParent(dataType, expectedParent);
+        if (expectedSubtype != null
+            && shouldUseExpectedSubtypeForParentConstructor(dataType, expectedSubtype, expectedParent)) {
+            return Result.success(Optional.of(expectedSubtype));
+        }
         return Result.success(Optional.of(new CompiledDataType(
                 dataType.name(),
                 resolvedFields,
@@ -2557,6 +2615,7 @@ public class CapybaraExpressionCompiler {
             case IfExpression ifExpression -> linkIfExpression(ifExpression, scope, expected);
             case MatchExpression matchExpression -> linkMatchExpression(matchExpression, scope, expected);
             case LetExpression letExpression -> linkLetExpression(letExpression, scope, Optional.of(expected));
+            case FunctionCall functionCall -> linkFunctionCallWithExpectedFallback(functionCall, scope, expected);
             default -> linkExpression(argument, scope);
         };
         return linkedArgument.flatMap(linked -> {
@@ -2582,6 +2641,18 @@ public class CapybaraExpressionCompiler {
             }
             return Result.success(maybeCoerced);
         });
+    }
+
+    private Result<CompiledExpression> linkFunctionCallWithExpectedFallback(
+            FunctionCall functionCall,
+            Scope scope,
+            CompiledType expected
+    ) {
+        var linkedForExpected = linkFunctionCall(functionCall, scope, Optional.of(expected));
+        if (linkedForExpected instanceof Result.Success<CompiledExpression>) {
+            return linkedForExpected;
+        }
+        return linkExpression(functionCall, scope);
     }
 
     private Result<CompiledExpression> linkFunctionReference(FunctionReference functionReference, CompiledFunctionType expectedType) {
@@ -2928,6 +2999,12 @@ public class CapybaraExpressionCompiler {
                 || canCoerceToExpectedType(argumentList.elementType(), expectedList.elementType()))) {
             return new CoercedArgument(argument, 1);
         }
+        if (expected instanceof CompiledList
+            && argument.type() instanceof CompiledList
+            && isEmptyShapeCompatibleVariable(argument)
+            && isEmptyCollectionShapeCompatible(argument.type(), expected)) {
+            return new CoercedArgument(argument, 1);
+        }
         if (expected instanceof CompiledSet expectedSet
             && argument.type() instanceof CompiledSet argumentSet
             && argumentSet.elementType() != ANY
@@ -2935,11 +3012,23 @@ public class CapybaraExpressionCompiler {
                 || canCoerceToExpectedType(argumentSet.elementType(), expectedSet.elementType()))) {
             return new CoercedArgument(argument, 1);
         }
+        if (expected instanceof CompiledSet
+            && argument.type() instanceof CompiledSet
+            && isEmptyShapeCompatibleVariable(argument)
+            && isEmptyCollectionShapeCompatible(argument.type(), expected)) {
+            return new CoercedArgument(argument, 1);
+        }
         if (expected instanceof CompiledDict expectedDict
             && argument.type() instanceof CompiledDict argumentDict
             && argumentDict.valueType() != ANY
             && (isTypeCompatible(argumentDict.valueType(), expectedDict.valueType())
                 || canCoerceToExpectedType(argumentDict.valueType(), expectedDict.valueType()))) {
+            return new CoercedArgument(argument, 1);
+        }
+        if (expected instanceof CompiledDict
+            && argument.type() instanceof CompiledDict
+            && isEmptyShapeCompatibleVariable(argument)
+            && isEmptyCollectionShapeCompatible(argument.type(), expected)) {
             return new CoercedArgument(argument, 1);
         }
         if (expected instanceof CompiledFunctionType expectedFunction
@@ -2966,19 +3055,31 @@ public class CapybaraExpressionCompiler {
         if (expected instanceof CompiledDataParentType expectedParent
             && argument.type() instanceof CompiledDataParentType argumentParent
             && (sameRawTypeName(expectedParent.name(), argumentParent.name())
-                || isParentSubtypeOfParent(argumentParent, expectedParent, new java.util.HashSet<>()))
-            && areTypeParameterDescriptorsCompatible(argumentParent.typeParameters(), expectedParent.typeParameters())) {
-            return new CoercedArgument(argument, 1);
+                || isParentSubtypeOfParent(argumentParent, expectedParent, new java.util.HashSet<>()))) {
+            if (areTypeParameterDescriptorsCompatible(argumentParent.typeParameters(), expectedParent.typeParameters())
+                || (isEmptyShapeCompatibleVariable(argument)
+                    && areEmptyShapeTypeParametersCompatible(argumentParent.typeParameters(), expectedParent.typeParameters()))) {
+                return new CoercedArgument(argument, 1);
+            }
         }
         if (expected instanceof CompiledDataType expectedData
             && argument.type() instanceof CompiledDataType argumentData
-            && sameRawTypeName(expectedData.name(), argumentData.name())
-            && areTypeParameterDescriptorsCompatible(argumentData.typeParameters(), expectedData.typeParameters())) {
-            if (!argumentData.typeParameters().equals(expectedData.typeParameters())
-                && argument instanceof CompiledNewData newData) {
+            && sameRawTypeName(expectedData.name(), argumentData.name())) {
+            if (areTypeParameterDescriptorsCompatible(argumentData.typeParameters(), expectedData.typeParameters())) {
+                if (!argumentData.typeParameters().equals(expectedData.typeParameters())
+                    && argument instanceof CompiledNewData newData) {
+                    return new CoercedArgument(rebuildNewDataForExpectedType(newData, argumentData, expectedData), 1);
+                }
+                return new CoercedArgument(argument, 1);
+            }
+            if (isEmptyShapeCompatibleVariable(argument)
+                && areEmptyShapeTypeParametersCompatible(argumentData.typeParameters(), expectedData.typeParameters())) {
+                return new CoercedArgument(argument, 1);
+            }
+            if (argument instanceof CompiledNewData newData
+                && canRebuildNewDataForExpectedType(newData, argumentData, expectedData)) {
                 return new CoercedArgument(rebuildNewDataForExpectedType(newData, argumentData, expectedData), 1);
             }
-            return new CoercedArgument(argument, 1);
         }
         if (argument.type() == ANY) {
             return new CoercedArgument(argument, 1);
@@ -2997,6 +3098,14 @@ public class CapybaraExpressionCompiler {
         if (expected instanceof CompiledDataParentType expectedParentType
             && argument.type() instanceof CompiledDataType argumentDataType
             && isSubtypeOfParent(argumentDataType, expectedParentType)) {
+            if (argument instanceof CompiledNewData newData) {
+                var expectedSubtype = expectedSubtypeForParent(argumentDataType, expectedParentType);
+                if (expectedSubtype != null
+                    && shouldRebuildNewDataForParent(argumentDataType, expectedSubtype, expectedParentType, newData)
+                    && canRebuildNewDataForExpectedType(newData, argumentDataType, expectedSubtype)) {
+                    return new CoercedArgument(rebuildNewDataForExpectedType(newData, argumentDataType, expectedSubtype), 1);
+                }
+            }
             var specializedParent = argumentDataType.extendedTypes().stream()
                     .map(this::parseLinkedTypeDescriptor)
                     .flatMap(Optional::stream)
@@ -3059,10 +3168,123 @@ public class CapybaraExpressionCompiler {
         var rebuiltAssignments = expectedType.fields().stream()
                 .map(field -> new CompiledNewData.FieldAssignment(
                         field.name(),
-                        assignmentsByName.get(field.name())
+                        coerceExpressionToType(assignmentsByName.get(field.name()), field.type())
+                                .orElse(assignmentsByName.get(field.name()))
                 ))
                 .toList();
         return new CompiledNewData(expectedType, rebuiltAssignments);
+    }
+
+    private boolean canRebuildNewDataForExpectedType(
+            CompiledNewData newData,
+            CompiledDataType sourceType,
+            CompiledDataType expectedType
+    ) {
+        var assignmentsByName = orderedAssignmentsByName(newData, sourceType);
+        for (var field : expectedType.fields()) {
+            var assignment = assignmentsByName.get(field.name());
+            if (assignment == null || coerceArgument(assignment, field.type()) == null) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private boolean shouldRebuildNewDataForParent(
+            CompiledDataType argumentDataType,
+            CompiledDataType expectedSubtype,
+            CompiledDataParentType expectedParentType,
+            CompiledNewData newData
+    ) {
+        return hasKnownEmptyCollectionShapeExpression(newData)
+               || shouldUseExpectedSubtypeForParentConstructor(argumentDataType, expectedSubtype, expectedParentType);
+    }
+
+    private boolean shouldUseExpectedSubtypeForParentConstructor(
+            CompiledDataType argumentDataType,
+            CompiledDataType expectedSubtype,
+            CompiledDataParentType expectedParentType
+    ) {
+        return expectedParentType.typeParameters().isEmpty()
+               && argumentDataType.typeParameters().isEmpty()
+               && expectedSubtype.typeParameters().isEmpty()
+               && !argumentDataType.name().equals(expectedSubtype.name());
+    }
+
+    private CompiledDataType expectedSubtypeForParent(
+            CompiledDataType argumentDataType,
+            CompiledDataParentType expectedParentType
+    ) {
+        var expectedSubtype = expectedParentType.subTypes().stream()
+                .filter(subtype -> sameRawTypeName(subtype.name(), argumentDataType.name()))
+                .findFirst()
+                .orElse(null);
+        if (expectedSubtype == null) {
+            return null;
+        }
+        var typeParameters = expectedSubtype.typeParameters().isEmpty()
+                ? expectedSubtype.typeParameters()
+                : expectedParentType.typeParameters();
+        return new CompiledDataType(
+                expectedSubtypeNameForParent(argumentDataType, expectedSubtype, expectedParentType),
+                resolveConstructorFields(expectedSubtype, expectedParentType),
+                typeParameters,
+                expectedSubtype.extendedTypes(),
+                expectedSubtype.comments(),
+                expectedSubtype.visibility(),
+                expectedSubtype.singleton()
+        );
+    }
+
+    private String expectedSubtypeNameForParent(
+            CompiledDataType argumentDataType,
+            CompiledDataType expectedSubtype,
+            CompiledDataParentType expectedParentType
+    ) {
+        var knownQualifiedSubtype = dataTypes.values().stream()
+                .filter(CompiledDataType.class::isInstance)
+                .map(CompiledDataType.class::cast)
+                .filter(candidate -> sameRawTypeName(candidate.name(), argumentDataType.name()))
+                .filter(candidate -> hasQualifiedTypeName(candidate.name()))
+                .filter(candidate -> parentTypesForSubtype(candidate.name()).stream()
+                        .anyMatch(parentType -> sameRawTypeName(parentType.name(), expectedParentType.name())))
+                .map(CompiledDataType::name)
+                .findFirst();
+        if (knownQualifiedSubtype.isPresent()) {
+            return knownQualifiedSubtype.orElseThrow();
+        }
+        return subtypeNameFromParentName(expectedParentType.name(), expectedSubtype.name());
+    }
+
+    private static String subtypeNameFromParentName(String parentName, String subtypeName) {
+        var rawParentName = stripGenericSuffix(parentName);
+        var rawSubtypeName = simpleRawTypeName(normalizeTypeAlias(subtypeName));
+        if (isProgramParentName(rawParentName)) {
+            return "/capy/lang/Program." + rawSubtypeName;
+        }
+        if (rawParentName.contains("/") && !rawParentName.contains(".")) {
+            return rawParentName + "." + rawSubtypeName;
+        }
+        if (rawParentName.contains(".")) {
+            var slashIndex = rawParentName.lastIndexOf('/');
+            var dotIndex = rawParentName.lastIndexOf('.');
+            if (dotIndex > slashIndex) {
+                return rawParentName.substring(0, dotIndex + 1) + rawSubtypeName;
+            }
+        }
+        return subtypeName;
+    }
+
+    private static boolean hasQualifiedTypeName(String name) {
+        var rawName = stripGenericSuffix(name);
+        return rawName.contains("/") || rawName.contains(".");
+    }
+
+    private static boolean isProgramParentName(String name) {
+        var rawName = stripGenericSuffix(name);
+        return "Program".equals(rawName)
+               || rawName.endsWith("/Program")
+               || rawName.endsWith(".Program");
     }
 
     private boolean areTupleTypesCompatible(CompiledTupleType actual, CompiledTupleType expected) {
@@ -3199,9 +3421,6 @@ public class CapybaraExpressionCompiler {
         var parsedActual = parseLinkedTypeDescriptor(actual);
         var parsedExpected = parseLinkedTypeDescriptor(expected);
         if (parsedActual.isPresent() && parsedExpected.isPresent()) {
-            if (isEmptyCollectionShapeCompatible(parsedActual.get(), parsedExpected.get())) {
-                return true;
-            }
             return isTypeCompatible(parsedActual.get(), parsedExpected.get());
         }
         return sameRawTypeName(actual, expected);
@@ -4301,7 +4520,8 @@ public class CapybaraExpressionCompiler {
                                 } else {
                                     reduceScope = reduceScope.add(
                                             reduceExpression.accumulatorName(),
-                                            initialAccumulatorType
+                                            initialAccumulatorType,
+                                            hasKnownEmptyCollectionShapeExpression(initial)
                                     );
                                 }
                                 if (reduceExpression.keyName().isPresent()) {
@@ -7894,6 +8114,64 @@ public class CapybaraExpressionCompiler {
         return isConcreteResolvedType(type) || hasKnownEmptyCollectionShape(type);
     }
 
+    private boolean isEmptyShapeCompatibleVariable(CompiledExpression expression) {
+        return expression instanceof CompiledVariable variable && variable.emptyShapeCompatible();
+    }
+
+    private boolean hasKnownEmptyCollectionShapeExpression(CompiledExpression expression) {
+        return switch (expression) {
+            case CompiledNewList newList -> newList.values().isEmpty();
+            case CompiledNewSet newSet -> newSet.values().isEmpty();
+            case CompiledNewDict newDict -> newDict.entries().isEmpty();
+            case CompiledNewData newData ->
+                    newData.assignments().stream()
+                            .map(CompiledNewData.FieldAssignment::value)
+                            .anyMatch(this::hasKnownEmptyCollectionShapeExpression);
+            case CompiledTupleExpression tupleExpression ->
+                    tupleExpression.values().stream().anyMatch(this::hasKnownEmptyCollectionShapeExpression);
+            default -> false;
+        };
+    }
+
+    private boolean hasKnownEmptyCollectionShapeExpression(Expression expression) {
+        return switch (expression) {
+            case NewListExpression newList -> newList.values().isEmpty()
+                                             || newList.values().stream().anyMatch(this::hasKnownEmptyCollectionShapeExpression);
+            case NewSetExpression newSet -> newSet.values().isEmpty()
+                                           || newSet.values().stream().anyMatch(this::hasKnownEmptyCollectionShapeExpression);
+            case NewDictExpression newDict -> newDict.entries().isEmpty()
+                                             || newDict.entries().stream()
+                                                     .map(NewDictExpression.Entry::value)
+                                                     .anyMatch(this::hasKnownEmptyCollectionShapeExpression);
+            case NewData newData -> newData.assignments().stream()
+                    .map(NewData.FieldAssignment::value)
+                    .anyMatch(this::hasKnownEmptyCollectionShapeExpression)
+                                    || newData.positionalArguments().stream().anyMatch(this::hasKnownEmptyCollectionShapeExpression)
+                                    || newData.spreads().stream().anyMatch(this::hasKnownEmptyCollectionShapeExpression);
+            case TupleExpression tupleExpression ->
+                    tupleExpression.values().stream().anyMatch(this::hasKnownEmptyCollectionShapeExpression);
+            case FunctionCall functionCall ->
+                    functionCall.arguments().stream().anyMatch(this::hasKnownEmptyCollectionShapeExpression);
+            case FunctionInvoke functionInvoke ->
+                    functionInvoke.arguments().stream().anyMatch(this::hasKnownEmptyCollectionShapeExpression);
+            case IfExpression ifExpression ->
+                    hasKnownEmptyCollectionShapeExpression(ifExpression.thenBranch())
+                    || hasKnownEmptyCollectionShapeExpression(ifExpression.elseBranch());
+            case MatchExpression matchExpression ->
+                    matchExpression.cases().stream()
+                            .map(MatchExpression.MatchCase::expression)
+                            .anyMatch(this::hasKnownEmptyCollectionShapeExpression);
+            case LetExpression letExpression ->
+                    hasKnownEmptyCollectionShapeExpression(letExpression.value())
+                    || hasKnownEmptyCollectionShapeExpression(letExpression.rest());
+            case WithExpression withExpression ->
+                    withExpression.assignments().stream()
+                            .map(NewData.FieldAssignment::value)
+                            .anyMatch(this::hasKnownEmptyCollectionShapeExpression);
+            default -> false;
+        };
+    }
+
     private boolean hasKnownEmptyCollectionShape(CompiledType type) {
         return switch (type) {
             case CompiledList linkedList ->
@@ -8399,7 +8677,11 @@ public class CapybaraExpressionCompiler {
 //            } else {
             finalName = value.name();
 //            }
-            return Result.success(new CompiledVariable(finalName, scope.localValues().get(value.name())));
+            return Result.success(new CompiledVariable(
+                    finalName,
+                    scope.localValues().get(value.name()),
+                    scope.isEmptyShapeCompatibleValue(value.name())
+            ));
         }
         return parameters.stream()
                 .filter(parameter -> parameter.name().equals(value.name()))
