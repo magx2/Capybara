@@ -7,9 +7,9 @@ from /capy/date_time/DateTime import { * }
 from /capy/date_time/Duration import { * }
 from /capy/date_time/Interval import { * }
 
-data Assertion { result: bool, message: string, type: string }
+data Assertion { result: bool, message: String, type: String }
 
-type Assert { assertions: list[() => Assertion] } =
+type Assert { assertions: List[() => Assertion] } =
     _TechnicalAssert
     | StringAssert | IntAssert | LongAssert | DoubleAssert | FloatAssert | BoolAssert
     | DataAssert | OptionAssert | ResultAssert
@@ -20,8 +20,8 @@ fun Assert.failed(): bool = this.assertions | supplier => supplier().result |any
 
 fun Assert.succeeded(): bool = !this.failed()
 
-data _TechnicalAssert { assertions: list[() => Assertion] }
-data StringAssert { value: string }
+data _TechnicalAssert { assertions: List[() => Assertion] }
+data StringAssert { value: String }
 data IntAssert { value: int }
 data LongAssert { value: long }
 data DoubleAssert { value: double }
@@ -35,16 +35,16 @@ data TimeAssert { value: Time }
 data DateTimeAssert { value: DateTime }
 data DurationAssert { value: Duration }
 data IntervalAssert { value: Interval }
-data ListAssert[T] { value: list[T] }
-data SetAssert[T] { value: set[T] }
-data DictAssert[T] { value: dict[T] }
+data ListAssert[T] { value: List[T] }
+data SetAssert[T] { value: Set[T] }
+data DictAssert[T] { value: Dict[T] }
 data SeqAssert[T] { value: Seq[T] }
 
-fun assert_all(asserts: list[Assert]): Assert =
-    let assertions: list[() => Assertion] = asserts | assert => assert.assertions |> [], (acc, assertions) => acc + assertions
+fun assert_all(asserts: List[Assert]): Assert =
+    let assertions: List[() => Assertion] = asserts | assert => assert.assertions |> [], (acc, assertions) => acc + assertions
     _TechnicalAssert { assertions: assertions }
 
-fun StringAssert.is_equal_to(other: string): StringAssert =
+fun StringAssert.is_equal_to(other: String): StringAssert =
     let assertion = Assertion {
         result: this.value == other,
         message: "Expected string:\n" + this.value + "\nto be equal to:\n" + other,
@@ -55,7 +55,7 @@ fun StringAssert.is_equal_to(other: string): StringAssert =
         assertions: this.assertions + () => assertion
     }
 
-fun StringAssert.starts_with(other: string): StringAssert =
+fun StringAssert.starts_with(other: String): StringAssert =
     let assertion = Assertion {
        result: this.value.starts_with(other),
        message: "Expected string:\n" + this.value + "\nto start with:\n" + other,
@@ -66,7 +66,7 @@ fun StringAssert.starts_with(other: string): StringAssert =
        assertions: this.assertions + () => assertion
     }
 
-fun StringAssert.does_not_start_with(other: string): StringAssert =
+fun StringAssert.does_not_start_with(other: String): StringAssert =
     let assertion = Assertion {
        result: this.value.starts_with(other) != true,
        message: "Expected string:\n" + this.value + "\nnot to start with:\n" + other,
@@ -77,7 +77,7 @@ fun StringAssert.does_not_start_with(other: string): StringAssert =
        assertions: this.assertions + () => assertion
     }
 
-fun StringAssert.contains(other: string): StringAssert =
+fun StringAssert.contains(other: String): StringAssert =
     let assertion = Assertion {
        result: this.value ? other,
        message: "Expected string:\n" + this.value + "\nto contain:\n" + other,
@@ -447,7 +447,7 @@ fun ResultAssert[T].succeeds(other: T): ResultAssert[T] =
     }
 
 fun ResultAssert[T].succeeds(assert: T => Assert): ResultAssert[T] =
-    let assertions: list[() => Assertion] =
+    let assertions: List[() => Assertion] =
         match this.value with
         case Error e -> [() => Assertion {
             result: false,
@@ -477,7 +477,7 @@ fun ResultAssert[T].fails(): ResultAssert[T] =
         assertions: this.assertions + () => assertion
     }
 
-fun ResultAssert[T].fails(message: string): ResultAssert[T] =
+fun ResultAssert[T].fails(message: String): ResultAssert[T] =
     let assertion = Assertion {
         result: {
             match this.value with
@@ -861,7 +861,7 @@ fun IntervalAssert.has_duration(other: Duration): IntervalAssert =
         assertions: this.assertions + () => assertion
     }
 
-fun ListAssert[T].is_equal_to(other: list[T]): ListAssert[T] =
+fun ListAssert[T].is_equal_to(other: List[T]): ListAssert[T] =
     let assertion = Assertion {
         result: this.value == other,
         message: "Expected list:\n" + this.value + "\nto be equal to:\n" + other,
@@ -916,7 +916,7 @@ fun ListAssert[T].does_not_contain(other: T): ListAssert[T] =
         assertions: this.assertions + () => assertion
     }
 
-fun SetAssert[T].is_equal_to(other: set[T]): SetAssert[T] =
+fun SetAssert[T].is_equal_to(other: Set[T]): SetAssert[T] =
     let assertion = Assertion {
         result: this.value == other,
         message: "Expected set:\n" + this.value + "\nto be equal to:\n" + other,
@@ -971,7 +971,7 @@ fun SetAssert[T].does_not_contain(other: T): SetAssert[T] =
         assertions: this.assertions + () => assertion
     }
 
-fun DictAssert[T].is_equal_to(other: dict[T]): DictAssert[T] =
+fun DictAssert[T].is_equal_to(other: Dict[T]): DictAssert[T] =
     let assertion = Assertion {
         result: this.value == other,
         message: "Expected dict:\n" + this.value + "\nto be equal to:\n" + other,
@@ -1004,7 +1004,7 @@ fun DictAssert[T].is_empty(): DictAssert[T] =
         assertions: this.assertions + () => assertion
     }
 
-fun DictAssert[T].contains_key(other: string): DictAssert[T] =
+fun DictAssert[T].contains_key(other: String): DictAssert[T] =
     let assertion = Assertion {
         result: this.value |any? (k, v) => k == other,
         message: "Expected dict:\n" + this.value + "\nto contain key:\n" + other,
@@ -1015,7 +1015,7 @@ fun DictAssert[T].contains_key(other: string): DictAssert[T] =
         assertions: this.assertions + () => assertion
     }
 
-fun DictAssert[T].does_not_contain_key(other: string): DictAssert[T] =
+fun DictAssert[T].does_not_contain_key(other: String): DictAssert[T] =
     let assertion = Assertion {
         result: (this.value |any? (k, v) => k == other) == false,
         message: "Expected dict:\n" + this.value + "\nnot to contain key:\n" + other,
@@ -1092,7 +1092,7 @@ fun SeqAssert[T].does_not_contain(other: T): SeqAssert[T] =
         assertions: this.assertions + () => assertion
     }
 
-fun assert_that(value: string) = StringAssert { value: value, assertions: [] }
+fun assert_that(value: String) = StringAssert { value: value, assertions: [] }
 fun assert_that(value: int) = IntAssert { value: value, assertions: [] }
 fun assert_that(value: long) = LongAssert { value: value, assertions: [] }
 fun assert_that(value: double) = DoubleAssert { value: value, assertions: [] }
@@ -1103,9 +1103,9 @@ fun assert_that(value: Time) = TimeAssert { value: value, assertions: [] }
 fun assert_that(value: DateTime) = DateTimeAssert { value: value, assertions: [] }
 fun assert_that(value: Duration) = DurationAssert { value: value, assertions: [] }
 fun assert_that(value: Interval) = IntervalAssert { value: value, assertions: [] }
-fun assert_that(value: list[T]): ListAssert[T] = ListAssert { value: value, assertions: [] }
-fun assert_that(value: set[T]): SetAssert[T] = SetAssert { value: value, assertions: [] }
-fun assert_that(value: dict[T]): DictAssert[T] = DictAssert { value: value, assertions: [] }
+fun assert_that(value: List[T]): ListAssert[T] = ListAssert { value: value, assertions: [] }
+fun assert_that(value: Set[T]): SetAssert[T] = SetAssert { value: value, assertions: [] }
+fun assert_that(value: Dict[T]): DictAssert[T] = DictAssert { value: value, assertions: [] }
 fun assert_that(value: Seq[T]): SeqAssert[T] = SeqAssert { value: value, assertions: [] }
 fun assert_that(value: Option[T]) = OptionAssert { value: value, assertions: [] }
 fun assert_that(value: Result[T]) = ResultAssert { value: value, assertions: [] }

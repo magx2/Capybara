@@ -14,7 +14,7 @@ class InfixOperatorCompilerTest {
     void shouldFailPlusForDataParentAndSubtype() {
         var error = compileFailure("""
                 type Json = JsonArray | JsonNull
-                data JsonArray { value: list[Json] }
+                data JsonArray { value: List[Json] }
                 single JsonNull
 
                 fun foo(left: JsonArray, right: Json): Json =
@@ -28,10 +28,10 @@ class InfixOperatorCompilerTest {
     void shouldAllowPlusForCollectionAndSubtypeElement() {
         var compiled = compileProgram("""
                 type Json = JsonArray | JsonNull
-                data JsonArray { value: list[Json] }
+                data JsonArray { value: List[Json] }
                 single JsonNull
 
-                fun append(values: list[Json], value: JsonArray): list[Json] =
+                fun append(values: List[Json], value: JsonArray): List[Json] =
                     values + value
                 """);
 
@@ -49,9 +49,9 @@ class InfixOperatorCompilerTest {
         var compiled = compileProgram("""
                 type Assert = ResultAssert | StringAssert
                 data ResultAssert { value: bool }
-                data StringAssert { value: string }
+                data StringAssert { value: String }
 
-                fun collect(): list[Assert] =
+                fun collect(): List[Assert] =
                     [ResultAssert { value: true }]
                 """);
 
@@ -70,13 +70,13 @@ class InfixOperatorCompilerTest {
         var compiled = compileProgram("""
                 type Result[T] = Success[T] | Error
                 data Success[T] { value: T }
-                data Error { message: string }
+                data Error { message: String }
 
                 type Assert[T] = ResultAssert[T] | StringAssert
                 data ResultAssert[T] { value: Result[T] }
-                data StringAssert { value: string }
+                data StringAssert { value: String }
 
-                fun collect(): list[Assert[bool]] =
+                fun collect(): List[Assert[bool]] =
                     [ResultAssert { value: Success { value: true } }]
                 """);
 
@@ -96,9 +96,9 @@ class InfixOperatorCompilerTest {
         var compiled = compileProgram("""
                 type Assert = ResultAssert | StringAssert
                 data ResultAssert { value: bool }
-                data StringAssert { value: string }
+                data StringAssert { value: String }
 
-                fun collect(values: list[bool]): list[Assert] =
+                fun collect(values: List[bool]): List[Assert] =
                     values | value => ResultAssert { value: value }
                 """);
 
@@ -117,13 +117,13 @@ class InfixOperatorCompilerTest {
         var compiled = compileProgram("""
                 type Result[T] = Success[T] | Error
                 data Success[T] { value: T }
-                data Error { message: string }
+                data Error { message: String }
 
                 type Assert[T] = ResultAssert[T] | StringAssert
                 data ResultAssert[T] { value: Result[T] }
-                data StringAssert { value: string }
+                data StringAssert { value: String }
 
-                fun collect(values: list[bool]): list[Assert[bool]] =
+                fun collect(values: List[bool]): List[Assert[bool]] =
                     values | value => ResultAssert { value: Success { value: value } }
                 """);
 
@@ -149,7 +149,7 @@ class InfixOperatorCompilerTest {
                         data Some[T] { value: T }
                         single None
 
-                        fun to_seq(values: list[T]): Seq[T] = End {}
+                        fun to_seq(values: List[T]): Seq[T] = End {}
                         fun Seq[T].first_match(pred: T => bool): Option[T] = None {}
                         """)
         )).modules();
@@ -176,7 +176,7 @@ class InfixOperatorCompilerTest {
                         data Cons[T] { value: T, rest: () => Seq[T] }
                         single End
 
-                        fun to_seq(values: list[T]): Seq[T] = End {}
+                        fun to_seq(values: List[T]): Seq[T] = End {}
                         """)
         )).modules();
 
@@ -206,7 +206,7 @@ class InfixOperatorCompilerTest {
     @Test
     void shouldAllowStringFilterNamedMethod() {
         var compiled = compileProgram("""
-                fun keep_non_b(value: string): string =
+                fun keep_non_b(value: String): String =
                     value.filter(ch => ch != "b")
                 """);
 
@@ -221,7 +221,7 @@ class InfixOperatorCompilerTest {
     @Test
     void shouldAllowStringFilterSymbolicMethod() {
         var compiled = compileProgram("""
-                fun keep_non_b(value: string): string =
+                fun keep_non_b(value: String): String =
                     value.`|-`(ch => ch != "b")
                 """);
 

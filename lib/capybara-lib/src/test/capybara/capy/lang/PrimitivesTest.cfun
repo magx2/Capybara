@@ -39,5 +39,5 @@ fun _should_clamp(value: long, expected: int): Assert =
 fun _should_safely_convert(value: long, expected: int): Assert =
     assert_that(safe_long_to_int(value)).succeeds(expected)
 
-fun _should_fail_safe_conversion(value: long, expected_message: string): Assert =
+fun _should_fail_safe_conversion(value: long, expected_message: String): Assert =
     assert_that(safe_long_to_int(value)).fails(expected_message)

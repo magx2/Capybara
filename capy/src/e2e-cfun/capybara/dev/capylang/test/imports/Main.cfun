@@ -5,7 +5,7 @@ from /dev/capylang/capybara/imports2/Pck5 import { lvl_multiplier }
 from Types1 import { * }
 from Types2 import { * } except { T1 }
 
-fun calculator(a: int, b: int, op: string) =
+fun calculator(a: int, b: int, op: String) =
     if op == "+"
     then add(a,b)
     else if op == "-"
@@ -20,9 +20,9 @@ fun calculator(a: int, b: int, op: string) =
 
 fun what_to_do(x: int) = Pck3.foo_boo(x>10, x<20)
 
-fun x(a: int, b: int, op: string) = /dev/capylang/capybara/imports2/Pck4.awesome(calculator(a,b,op))
+fun x(a: int, b: int, op: String) = /dev/capylang/capybara/imports2/Pck4.awesome(calculator(a,b,op))
 
-fun y(a: int, b: int, op: string) = /dev/capylang/capybara/imports2/Pck4.awesome(lvl_multiplier(calculator(a,b,op)))
+fun y(a: int, b: int, op: String) = /dev/capylang/capybara/imports2/Pck4.awesome(lvl_multiplier(calculator(a,b,op)))
 
 fun t1_types1(x: int): T1 = D1 { foo: x }
 

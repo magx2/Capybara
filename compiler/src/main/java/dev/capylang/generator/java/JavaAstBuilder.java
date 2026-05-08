@@ -616,25 +616,25 @@ public class JavaAstBuilder {
             case "double" -> "java.lang.Double";
             case "float" -> "java.lang.Float";
             case "bool" -> "java.lang.Boolean";
-            case "string" -> "java.lang.String";
+            case "String" -> "java.lang.String";
             case "any", "nothing", "data" -> "java.lang.Object";
             default -> {
                 if (normalized.matches("[A-Z][A-Za-z0-9_]*")) {
                     yield normalized;
                 }
-                if (normalized.startsWith("list[") && normalized.endsWith("]")) {
-                    var inner = normalized.substring("list[".length(), normalized.length() - 1);
+                if (normalized.startsWith("List[") && normalized.endsWith("]")) {
+                    var inner = normalized.substring("List[".length(), normalized.length() - 1);
                     yield "java.util.List<" + mapTypeParameterDescriptor(inner) + ">";
                 }
-                if (normalized.startsWith("set[") && normalized.endsWith("]")) {
-                    var inner = normalized.substring("set[".length(), normalized.length() - 1);
+                if (normalized.startsWith("Set[") && normalized.endsWith("]")) {
+                    var inner = normalized.substring("Set[".length(), normalized.length() - 1);
                     yield "java.util.Set<" + mapTypeParameterDescriptor(inner) + ">";
                 }
-                if (normalized.startsWith("dict[") && normalized.endsWith("]")) {
-                    var inner = normalized.substring("dict[".length(), normalized.length() - 1);
+                if (normalized.startsWith("Dict[") && normalized.endsWith("]")) {
+                    var inner = normalized.substring("Dict[".length(), normalized.length() - 1);
                     yield "java.util.Map<java.lang.String, " + mapTypeParameterDescriptor(inner) + ">";
                 }
-                if (normalized.startsWith("tuple[") && normalized.endsWith("]")) {
+                if (normalized.startsWith("Tuple[") && normalized.endsWith("]")) {
                     yield "java.util.List<java.lang.Object>";
                 }
                 var genericStart = normalized.indexOf('[');
@@ -1054,6 +1054,7 @@ public class JavaAstBuilder {
     ) {
         return dataTypes.stream()
                 .filter(dt -> !dt.singleton())
+                .filter(dt -> !dt.nativeType())
                 .map(dt -> buildRecord(dt, subClassToInterface, functionsByOwnerPrefix, reflectionFallbackPackagePath))
                 .collect(toCollection(TreeSet::new));
     }

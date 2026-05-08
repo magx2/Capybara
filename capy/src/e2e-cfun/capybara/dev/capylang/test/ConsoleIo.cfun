@@ -2,7 +2,7 @@ from /capy/io/Console import { * }
 from /capy/lang/Effect import { * }
 from /capy/lang/Option import { * }
 
-fun emit_all(): Effect[string] =
+fun emit_all(): Effect[String] =
     let out_printed <- print("out")
     let out_line_printed <- println(" line")
     let err_printed <- print_error("err")
@@ -44,19 +44,19 @@ fun emit_primitives(byte_value: byte): Effect[bool] =
     let err_line_double <- println_error(2.5d)
     println_error(false)
 
-fun emit_byte_lists(bytes: list[byte]): Effect[list[byte]] =
+fun emit_byte_lists(bytes: List[byte]): Effect[List[byte]] =
     let out_bytes <- print(bytes)
     let out_line_bytes <- println(bytes)
     let err_bytes <- print_error(bytes)
     println_error(bytes)
 
-fun read_one(): Effect[string] =
+fun read_one(): Effect[String] =
     read_line().map(line => _line_or_eof(line))
 
-fun read_eof_marker(): Effect[string] =
+fun read_eof_marker(): Effect[String] =
     read_line().map(line => _line_or_eof(line))
 
-fun _line_or_eof(line: Option[string]): string =
+fun _line_or_eof(line: Option[String]): String =
     match line with
     case Some { value } -> value
     case None -> "EOF"

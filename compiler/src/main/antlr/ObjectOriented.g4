@@ -91,9 +91,8 @@ functionType: ':' type;
 
 VISIBILITY: 'local';
 BOOL_LITERAL: 'true' | 'false';
-COLLECTION: 'list' | 'set' | 'dict';
 NAME : [_]* [a-z] [a-zA-Z0-9_]*;
-identifier: NAME | COLLECTION | 'def' | 'type' | 'byte' | 'int' | 'long' | 'double' | 'bool' | 'string' | 'float' | 'void' | 'any' | 'return' | 'catch';
+identifier: NAME | 'def' | 'type' | 'byte' | 'int' | 'long' | 'double' | 'bool' | 'float' | 'void' | 'any' | 'return' | 'catch';
 type: functionTypeLiteral | arrayOrSimpleType;
 functionTypeLiteral
     : LPAREN RPAREN FAT_ARROW type
@@ -101,14 +100,11 @@ functionTypeLiteral
     | arrayOrSimpleType FAT_ARROW type
     ;
 arrayOrSimpleType: simpleType ('[' ']')*;
-simpleType: COLLECTION '[' type ']'
-    | 'tuple' '[' type (COMMA type)+ ']'
-    | 'byte'
+simpleType: 'byte'
     | 'int'
     | 'long'
     | 'double'
     | 'bool'
-    | 'string'
     | 'float'
     | 'any'
     | 'data'
@@ -209,14 +205,12 @@ ifExpression: 'if' expression 'then' expression 'else' expression;
 functionReference: COLON identifier;
 functionCall
     : NAME LPAREN argumentList? RPAREN
-    | COLLECTION LPAREN argumentList? RPAREN
     | 'def' LPAREN argumentList? RPAREN
     | 'byte' LPAREN argumentList? RPAREN
     | 'int' LPAREN argumentList? RPAREN
     | 'long' LPAREN argumentList? RPAREN
     | 'double' LPAREN argumentList? RPAREN
     | 'bool' LPAREN argumentList? RPAREN
-    | 'string' LPAREN argumentList? RPAREN
     | 'float' LPAREN argumentList? RPAREN
     | 'void' LPAREN argumentList? RPAREN
     | 'any' LPAREN argumentList? RPAREN
@@ -267,14 +261,11 @@ pattern
 wildcardPattern: UNDERSCORE NAME?;
 typedPattern: patternType (NAME | UNDERSCORE);
 patternType
-    : COLLECTION ('[' type ']')?
-    | 'tuple' '[' type (COMMA type)+ ']'
-    | 'byte'
+    : 'byte'
     | 'int'
     | 'long'
     | 'double'
     | 'bool'
-    | 'string'
     | 'float'
     | 'any'
     | 'data'

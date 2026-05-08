@@ -1,11 +1,11 @@
 data Foo {
     a: int,
-    b: string,
+    b: String,
     c: double
 }
 
 type Letter { x: int } = A | B | C
-data A { a: string }
+data A { a: String }
 data B { b: int }
 data C { c: double }
 
@@ -25,7 +25,7 @@ fun parent_with_chain(letter: Letter): Letter =
         .with(x: letter.x + 1)
         .with(x: 100)
 
-fun parent_with_preserves_subtype(letter: Letter): string =
+fun parent_with_preserves_subtype(letter: Letter): String =
     match letter.with(x: letter.x + 1) with
     case A { x, a } -> "A:" + x + ":" + a
     case B { x, b } -> "B:" + x + ":" + b

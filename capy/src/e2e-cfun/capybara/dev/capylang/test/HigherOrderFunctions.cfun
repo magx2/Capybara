@@ -1,10 +1,10 @@
-fun map(l: list[int]) = l | :double
+fun map(l: List[int]) = l | :double
 
 fun double(x: int) = x * x
 
-fun hof(fun: int=>string) = fun(5)
+fun hof(fun: int=>String) = fun(5)
 
-fun invoke_hof(s: string) = hof(x => s + " " + x)
+fun invoke_hof(s: String) = hof(x => s + " " + x)
 
 fun plus(a: int, b: int, c: int, d: int) = a+b-c*d
 
@@ -14,10 +14,10 @@ fun run_lambda() = run((a, b, c, d) => a + b - c * d)
 
 fun run_lambda2() = run(:plus)
 
-fun invoke_hof_unused(s: string) = hof(_ => s)
+fun invoke_hof_unused(s: String) = hof(_ => s)
 
 fun run_lambda_unused_middle() = run((a, _, c, d) => a + c)
 
-fun run0(fun: () => string) = fun()
+fun run0(fun: () => String) = fun()
 
 fun run_lambda_no_args() = run0(() => "Hello, Wrold")

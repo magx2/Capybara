@@ -121,7 +121,7 @@ class CapyTest {
         Files.createDirectories(sourceDir.resolve("foo"));
         Files.writeString(sourceDir.resolve("foo").resolve("Main.coo"), """
                 class Main {
-                    def main(args: list[string]): int = args.size()
+                    def main(args: List[String]): int = args.size()
                 }
                 """);
         var generatedDir = tempDir.resolve("oo-source-generated");
@@ -157,9 +157,9 @@ class CapyTest {
         Files.createDirectories(sourceDir.resolve("foo"));
         Files.writeString(sourceDir.resolve("foo").resolve("Main.cfun"), "fun main(): int = 1\n");
         Files.writeString(sourceDir.resolve("foo").resolve("User.coo"), """
-                class User(name: string) {
-                    field name: string = name
-                    def greet(): string = "hi " + this.name
+                class User(name: String) {
+                    field name: String = name
+                    def greet(): String = "hi " + this.name
                 }
                 """);
         var generatedDir = tempDir.resolve("mixed-oo-functional-generated");

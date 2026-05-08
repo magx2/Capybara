@@ -41,11 +41,11 @@ fun powers_seq(base: int): Seq[int] = natural_seq() | n => base ^ n
 /// The first element is `1` because `2^0 = 1`.
 fun powers_of_2_seq() = powers_seq(2)
 
-/// Collects the first `n` elements into a `list`.
+/// Collects the first `n` elements into a `List`.
 ///
 /// This method is safe to use with infinite sequences.
-fun Seq[T].take(n: int): list[T] =
-    fun rec __take(seq: Seq[T], n: int, list: list[T]): list[T] =
+fun Seq[T].take(n: int): List[T] =
+    fun rec __take(seq: Seq[T], n: int, list: List[T]): List[T] =
         if n <=0
         then list
         else
@@ -55,35 +55,35 @@ fun Seq[T].take(n: int): list[T] =
     ---
     __take(this, n, [])
 
-/// Collects the entire sequence into a `list`.
+/// Collects the entire sequence into a `List`.
 ///
 /// Important: calling this on an infinite sequence does not terminate.
-fun Seq[T].as_list(): list[T] =
-    fun rec __as_list(seq: Seq[T], list: list[T]): list[T] =
+fun Seq[T].as_list(): List[T] =
+    fun rec __as_list(seq: Seq[T], list: List[T]): List[T] =
         match seq with
         case End -> list
         case Cons { value, rest } -> __as_list(rest(), list + value)
     ---
     __as_list(this, [])
 
-/// Converts a `list` into a finite `Seq`.
-fun to_seq(list: list[T]): Seq[T] =
+/// Converts a `List` into a finite `Seq`.
+fun to_seq(list: List[T]): Seq[T] =
     list |> End {}, (acc, value) => acc + Cons { value, () => End {} }
 
-/// Converts a `set` into a finite `Seq`.
-fun to_seq(list: set[T]): Seq[T] =
+/// Converts a `Set` into a finite `Seq`.
+fun to_seq(list: Set[T]): Seq[T] =
     list |> End {}, (acc, value) => acc + Cons { value, () => End {} }
 
-/// Converts a `dict` into a finite `Seq` of `(key, value)` tuples.
-fun to_seq(list: dict[T]): Seq[tuple[string, T]] =
+/// Converts a `Dict` into a finite `Seq` of `(key, value)` tuples.
+fun to_seq(list: Dict[T]): Seq[Tuple[String, T]] =
     list |> End {}, (acc, key, value) => acc + Cons { (key, value), () => End {} }
 
-/// Collects the last `n` elements into a `list`.
+/// Collects the last `n` elements into a `List`.
 ///
 /// Important: calling this on an infinite sequence does not terminate.
-fun Seq[T].take_last(n: int): list[T] =
-    fun __add_to_list(max: int, list: list[T], value: T) = (if list.size >= max then list[1:] else list) + value
-    fun __take_last(seq: Seq[T], max: int, n: int, list: list[T]) =
+fun Seq[T].take_last(n: int): List[T] =
+    fun __add_to_list(max: int, list: List[T], value: T) = (if list.size >= max then list[1:] else list) + value
+    fun __take_last(seq: Seq[T], max: int, n: int, list: List[T]) =
         if n <= 0
         then list
         else
@@ -218,8 +218,8 @@ fun Seq[T].reduce_left(initial: R, reducer: (R, T) => R): R = this.reduce(initia
 /// `s1 = [1, 2, 3, ...]`
 /// `s2 = [a, b, c, ..., z]` (finite)
 /// `s1.zip(s2)` -> [(1, a), (2, b), (3, c), ..., (26, z)]
-fun Seq[T].zip(other: Seq[Y]): Seq[tuple[T,Y]] =
-    fun __zip(this: Seq[T], other: Seq[Y]): Seq[tuple[T,Y]] =
+fun Seq[T].zip(other: Seq[Y]): Seq[Tuple[T,Y]] =
+    fun __zip(this: Seq[T], other: Seq[Y]): Seq[Tuple[T,Y]] =
         match this with
         case End -> End {}
         case Cons { v1, r1 } ->

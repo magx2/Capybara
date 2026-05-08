@@ -1341,7 +1341,7 @@ public class Capy {
         var testFunctions = discoverTestFunctions(linkedProgram);
         log.info("Discovered " + testFunctions.size() + " Capybara test producers in " + Duration.ofNanos(System.nanoTime() - discoverStartedAt));
         if (testFunctions.isEmpty()) {
-            throw new CliException("No Capybara functions returning TestFile, list[TestFile], Effect[TestFile], or Effect[list[TestFile]] were found.");
+            throw new CliException("No Capybara functions returning TestFile, List[TestFile], Effect[TestFile], or Effect[List[TestFile]] were found.");
         }
 
         var outputModules = new java.util.ArrayList<>(linkedProgram.modules());
@@ -1420,10 +1420,10 @@ public class Capy {
 
     private static boolean isTestFileListDescriptor(String descriptor) {
         var normalized = descriptor.trim();
-        if (!normalized.startsWith("list[") || !normalized.endsWith("]")) {
+        if (!normalized.startsWith("List[") || !normalized.endsWith("]")) {
             return false;
         }
-        return isTestFileTypeDescriptor(normalized.substring("list[".length(), normalized.length() - 1));
+        return isTestFileTypeDescriptor(normalized.substring("List[".length(), normalized.length() - 1));
     }
 
     private static String stripGenericDescriptor(String descriptor) {
@@ -1660,7 +1660,7 @@ public class Capy {
                 "  compile output directory may be reused; stale generated files are pruned automatically.",
                 "  compile-generate compiles Capybara sources directly to generated output without writing linked intermediates unless --linked-output is provided.",
                 "  compile-generate --test-input/--test-output also compiles test Capybara sources against the freshly compiled main program in the same invocation.",
-                "  compile --compile-tests writes bundled stdlib modules and injects discovered TestFile/list[TestFile] producers into capy/test/CapyTestRuntime.gather_tests.",
+                "  compile --compile-tests writes bundled stdlib modules and injects discovered TestFile/List[TestFile] producers into capy/test/CapyTestRuntime.gather_tests.",
                 "  generate input directory defaults to the current directory.",
                 "  generate --skip-java-lib omits bundled Java runtime sources when the caller already has them on the compile classpath.",
                 "  package writes `capy.cbin` next to the provided `capy.yml`."
@@ -1852,7 +1852,6 @@ public class Capy {
     record CompilationArtifacts(CompiledProgram program, List<ModuleRef> sourceModules) {
     }
 }
-
 
 
 

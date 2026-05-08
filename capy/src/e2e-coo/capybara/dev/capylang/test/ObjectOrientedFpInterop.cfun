@@ -1,11 +1,11 @@
 type InteropPet = InteropDog | InteropCat
-data InteropDog { name: string }
+data InteropDog { name: String }
 data InteropCat { age: int }
 data RecInteropValue { value: int }
 
-fun make_dog(name: string): InteropDog = InteropDog { name: name }
+fun make_dog(name: String): InteropDog = InteropDog { name: name }
 
-fun pet_text(pet: InteropPet): string =
+fun pet_text(pet: InteropPet): String =
     match pet with
     case InteropDog { name } -> "dog:" + name
     case InteropCat { age } -> "cat:" + age

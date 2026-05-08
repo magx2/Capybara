@@ -1,17 +1,17 @@
 from /capy/lang/Option import {*}
 
 data Holder {
-    supplier: () => string,
-    suppliers: list[() => string]
+    supplier: () => String,
+    suppliers: List[() => String]
 }
 
-fun make_supplier(): () => string = () => "hello"
+fun make_supplier(): () => String = () => "hello"
 
-fun invoke_supplier(): string =
+fun invoke_supplier(): String =
     let supplier = () => "hello"
     supplier()
 
-fun invoke_field_supplier(): string =
+fun invoke_field_supplier(): String =
     let holder = Holder { supplier: () => "hello", suppliers: [() => "x", () => "y"] }
     let supplier = holder.supplier
     supplier()

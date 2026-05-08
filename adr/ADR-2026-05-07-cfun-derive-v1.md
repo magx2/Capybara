@@ -38,17 +38,17 @@ Example:
 from /capy/meta_prog/Reflection import { DataValueInfo, reflection }
 
 deriver Show {
-    fun show(): string =
+    fun show(): String =
         let info: DataValueInfo = reflection(receiver)
-        let body: string = info.fields |> info.name + " { ", (acc, field) =>
+        let body: String = info.fields |> info.name + " { ", (acc, field) =>
             acc + (if acc == info.name + " { " then "" else ", ") + field.name
         body + " }"
 }
 
-data User { name: string, age: int } derive Show
+data User { name: String, age: int } derive Show
 ```
 
-This generates an ordinary `User.show(): string` method during compilation.
+This generates an ordinary `User.show(): String` method during compilation.
 
 ## Consequences
 

@@ -23,7 +23,7 @@ class ObjectOrientedCompilationErrorTest {
                         "/foo/boo",
                         """
                                 interface Printable {
-                                    fun print(): string
+                                    fun print(): String
                                 }
                                 """,
                         SourceKind.OBJECT_ORIENTED
@@ -47,7 +47,7 @@ class ObjectOrientedCompilationErrorTest {
                         "/foo/boo",
                         """
                                 interface Printable {
-                                    def print(): string =
+                                    def print(): String =
                                 }
                                 """,
                         SourceKind.OBJECT_ORIENTED
@@ -71,7 +71,7 @@ class ObjectOrientedCompilationErrorTest {
                         "/foo/boo",
                         """
                                 class BrokenLoop {
-                                    def run(values: list[int]): int {
+                                    def run(values: List[int]): int {
                                         foreach value in values return value
                                     }
                                 }
@@ -98,7 +98,7 @@ class ObjectOrientedCompilationErrorTest {
                         "/foo/boo",
                         """
                                 class Mutable {
-                                    def mutable(): string {
+                                    def mutable(): String {
                                         let x = "a"
                                         x = "2"
                                         return x
@@ -155,7 +155,7 @@ class ObjectOrientedCompilationErrorTest {
                         "/foo/boo",
                         """
                                 class BrokenTry {
-                                    def run(): string {
+                                    def run(): String {
                                         try {
                                             throw "boom"
                                         }
@@ -183,7 +183,7 @@ class ObjectOrientedCompilationErrorTest {
                         "/foo/boo",
                         """
                                 class BrokenCatch {
-                                    def run(): string {
+                                    def run(): String {
                                         try {
                                             throw "boom"
                                         } catch error {
@@ -242,8 +242,8 @@ class ObjectOrientedCompilationErrorTest {
                         "Main",
                         "/foo/boo",
                         """
-                                class Main(name: string) {
-                                    def main(args: list[string]): int = args.size()
+                                class Main(name: String) {
+                                    def main(args: List[String]): int = args.size()
                                 }
                                 """,
                         SourceKind.OBJECT_ORIENTED
@@ -267,7 +267,7 @@ class ObjectOrientedCompilationErrorTest {
                                 class Main {
                                     def helper(): int = 1
 
-                                    def main(args: list[string]): int = args.size() + this.helper()
+                                    def main(args: List[String]): int = args.size() + this.helper()
                                 }
                                 """,
                         SourceKind.OBJECT_ORIENTED

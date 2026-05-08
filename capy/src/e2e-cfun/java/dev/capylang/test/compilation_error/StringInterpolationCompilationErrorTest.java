@@ -41,21 +41,21 @@ class StringInterpolationCompilationErrorTest {
         return Stream.of(
                 Arguments.of(
                         "interpolation_empty_expression",
-                        "fun foo(name: string): string = \"Hello {}\"",
+                        "fun foo(name: String): String = \"Hello {}\"",
                         1,
                         39,
                         "Cannot evaluate expression"
                 ),
                 Arguments.of(
                         "interpolation_unknown_variable",
-                        "fun foo(name: string): string = \"Hello {surname}\"",
+                        "fun foo(name: String): String = \"Hello {surname}\"",
                         1,
                         39,
                         "Variable surname not found"
                 ),
                 Arguments.of(
                         "interpolation_missing_closing_brace",
-                        "fun foo(name: string): string = \"Hello {name\"",
+                        "fun foo(name: String): String = \"Hello {name\"",
                         1,
                         39,
                         "missing `}`"
@@ -63,8 +63,8 @@ class StringInterpolationCompilationErrorTest {
                 Arguments.of(
                         "interpolation_missing_data_field",
                         """
-                                data Foo { name: string }
-                                fun foo(foo: Foo): string = \"Hello {foo.surname}\"
+                                data Foo { name: String }
+                                fun foo(foo: Foo): String = \"Hello {foo.surname}\"
                                 """,
                         2,
                         35,
@@ -73,8 +73,8 @@ class StringInterpolationCompilationErrorTest {
                 Arguments.of(
                         "interpolation_incomplete_field_access",
                         """
-                                data Foo { name: string }
-                                fun foo(foo: Foo): string = \"Hello {foo.}\"
+                                data Foo { name: String }
+                                fun foo(foo: Foo): String = \"Hello {foo.}\"
                                 """,
                         2,
                         35,

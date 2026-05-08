@@ -21,14 +21,14 @@ class ObjectOrientedParserTest {
                 """
                         /// Printable contract
                         interface Printable {
-                            def print(): string
+                            def print(): String
                         }
 
                         trait Named {
-                            field name: string = "unknown"
-                            def display_name(): string = name
-                            def normalize(values: list[int]): int {
-                                let scaled: list[int] = values | value => value * 2
+                            field name: String = "unknown"
+                            def display_name(): String = name
+                            def normalize(values: List[int]): int {
+                                let scaled: List[int] = values | value => value * 2
                                 if size(scaled) > 0 {
                                     return scaled[0]
                                 } else {
@@ -39,9 +39,9 @@ class ObjectOrientedParserTest {
                         }
 
                         /// User type
-                        open class User(name: string): Named, Printable {
-                            field name: string = name
-                            override def print(): string = "User(" + this.name + ")"
+                        open class User(name: String): Named, Printable {
+                            field name: String = name
+                            override def print(): String = "User(" + this.name + ")"
                         }
                         """,
                 SourceKind.OBJECT_ORIENTED
@@ -96,9 +96,9 @@ class ObjectOrientedParserTest {
                         /// User type
                         class Docs {
                             /// Greets user
-                            def greet(name: string): string {
+                            def greet(name: String): String {
                                 /// Internal formatter
-                                def format(value: string): string = "Hello " + value
+                                def format(value: String): String = "Hello " + value
                                 return format(name)
                             }
                         }
@@ -129,7 +129,7 @@ class ObjectOrientedParserTest {
                 "/parser",
                 """
                         class Broken {
-                            def print(): string =
+                            def print(): String =
                         }
                         """,
                 SourceKind.OBJECT_ORIENTED
@@ -149,7 +149,7 @@ class ObjectOrientedParserTest {
                 "/parser",
                 """
                         class Broken {
-                            fun print(): string = "nope"
+                            fun print(): String = "nope"
                         }
                         """,
                 SourceKind.OBJECT_ORIENTED
@@ -169,11 +169,11 @@ class ObjectOrientedParserTest {
                 "/parser",
                 """
                         open class Base {
-                            def label(): string = "base"
+                            def label(): String = "base"
                         }
 
                         class Broken: Base {
-                            def print(): string = super[Base].label()
+                            def print(): String = super[Base].label()
                         }
                         """,
                 SourceKind.OBJECT_ORIENTED
@@ -200,7 +200,7 @@ class ObjectOrientedParserTest {
                                 this.log("done")
                             }
 
-                            def log(message: string): void = println(message)
+                            def log(message: String): void = println(message)
                         }
                         """,
                 SourceKind.OBJECT_ORIENTED
@@ -259,7 +259,7 @@ class ObjectOrientedParserTest {
                 "/parser",
                 """
                         open class Base {
-                            def label(): string = "base"
+                            def label(): String = "base"
                         }
 
                         class Returns: Base {
@@ -268,12 +268,12 @@ class ObjectOrientedParserTest {
                             def choose(x: int): int =
                                 if x > 0 then x else -x
 
-                            def first(xs: list[int]): int {
+                            def first(xs: List[int]): int {
                                 let selected: int = xs[0]
                                 return selected;
                             }
 
-                            def nested(flag: bool, xs: list[int]): int {
+                            def nested(flag: bool, xs: List[int]): int {
                                 if flag {
                                     return match xs with
                                     case _ -> xs[0]
@@ -284,7 +284,7 @@ class ObjectOrientedParserTest {
                                 }
                             }
 
-                            def call_parent(): string = Base.label()
+                            def call_parent(): String = Base.label()
                         }
                         """,
                 SourceKind.OBJECT_ORIENTED
@@ -345,7 +345,7 @@ class ObjectOrientedParserTest {
                 "/parser",
                 """
                         class MutableLocals {
-                            def mutable(): string {
+                            def mutable(): String {
                                 def x = "a"
                                 x = "2"
                                 return x
@@ -437,7 +437,7 @@ class ObjectOrientedParserTest {
                 "/parser",
                 """
                         class Loops {
-                            def first_positive(values: list[int]): int {
+                            def first_positive(values: List[int]): int {
                                 for value in values {
                                     if value > 0 {
                                         return value
@@ -446,7 +446,7 @@ class ObjectOrientedParserTest {
                                 return 0
                             }
 
-                            def first_large(values: list[int]): int {
+                            def first_large(values: List[int]): int {
                                 foreach value: int in values {
                                     if value > 10 {
                                         return value
@@ -501,7 +501,7 @@ class ObjectOrientedParserTest {
                 "/parser",
                 """
                         class Exceptions {
-                            def recover(flag: bool): string {
+                            def recover(flag: bool): String {
                                 try {
                                     if flag {
                                         throw "boom"
@@ -550,17 +550,17 @@ class ObjectOrientedParserTest {
                 "Arrays",
                 "/parser",
                 """
-                        class Arrays(values: string[], ids: int[]) {
-                            field values: string[] = values
+                        class Arrays(values: String[], ids: int[]) {
+                            field values: String[] = values
                             field ids: int[] = ids
 
-                            def second_name(input: string[]): string = input[1]
+                            def second_name(input: String[]): String = input[1]
                             def first_id(input: int[]): int = input[0]
                             def copy_people(input: Person[]): Person[] = input
                         }
 
-                        class Person(name: string) {
-                            field name: string = name
+                        class Person(name: String) {
+                            field name: String = name
                         }
                         """,
                 SourceKind.OBJECT_ORIENTED
@@ -577,19 +577,19 @@ class ObjectOrientedParserTest {
 
         assertThat(arrays.constructorParameters())
                 .extracting(ObjectOriented.Parameter::type)
-                .containsExactly("string[]", "int[]");
+                .containsExactly("String[]", "int[]");
         assertThat(arrays.members().stream()
                 .filter(ObjectOriented.FieldDeclaration.class::isInstance)
                 .map(ObjectOriented.FieldDeclaration.class::cast)
                 .map(ObjectOriented.FieldDeclaration::type)
                 .toList())
-                .containsExactly("string[]", "int[]");
+                .containsExactly("String[]", "int[]");
         assertThat(arrays.members().stream()
                 .filter(ObjectOriented.MethodDeclaration.class::isInstance)
                 .map(ObjectOriented.MethodDeclaration.class::cast)
                 .map(ObjectOriented.MethodDeclaration::returnType)
                 .toList())
-                .containsExactly("string", "int", "Person[]");
+                .containsExactly("String", "int", "Person[]");
     }
 
     @Test
@@ -600,7 +600,7 @@ class ObjectOrientedParserTest {
                 "/parser",
                 """
                         class ArrayCreation {
-                            def names(): string[] = string[]{"zero", "one"}
+                            def names(): String[] = String[]{"zero", "one"}
 
                             def slots(size: int): int[] = int[size]
                         }
@@ -622,7 +622,7 @@ class ObjectOrientedParserTest {
                 .extracting(ObjectOriented.MethodDeclaration::name)
                 .containsExactly("names", "slots");
         assertThat(methods.get(0).body()).hasValueSatisfying(body ->
-                assertThat(((ObjectOriented.ExpressionBody) body).expression()).isEqualTo("string[]{\"zero\",\"one\"}"));
+                assertThat(((ObjectOriented.ExpressionBody) body).expression()).isEqualTo("String[]{\"zero\",\"one\"}"));
         assertThat(methods.get(1).body()).hasValueSatisfying(body ->
                 assertThat(((ObjectOriented.ExpressionBody) body).expression()).isEqualTo("int[size]"));
     }
@@ -657,7 +657,7 @@ class ObjectOrientedParserTest {
                 "/parser",
                 """
                         class Broken {
-                            def run(): string {
+                            def run(): String {
                                 try {
                                     throw "boom"
                                 }

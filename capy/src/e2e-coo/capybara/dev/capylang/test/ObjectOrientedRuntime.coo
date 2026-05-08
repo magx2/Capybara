@@ -1,25 +1,25 @@
 from /capy/io/Stdout import { * }
 
 open class GreeterBase {
-    field prefix: string = "hello"
+    field prefix: String = "hello"
 
-    open def describe(name: string): string = prefix + " " + name
+    open def describe(name: String): String = prefix + " " + name
 }
 
 interface Printable {
-    def print(): string
+    def print(): String
 }
 
 trait BracketNaming {
-    def bracket(name: string): string = "[" + name + "]"
+    def bracket(name: String): String = "[" + name + "]"
 }
 
-class Person(name: string): GreeterBase, Printable, BracketNaming {
-    field name: string = name
+class Person(name: String): GreeterBase, Printable, BracketNaming {
+    field name: String = name
 
-    def greet(): string = this.describe(this.name)
+    def greet(): String = this.describe(this.name)
 
-    def mutable(): string {
+    def mutable(): String {
         def x = "a"
         x = "2"
         return x
@@ -37,12 +37,12 @@ class Person(name: string): GreeterBase, Printable, BracketNaming {
 
     def emit_star(): void = print("*")
 
-    override def print(): string {
-        let label: string = GreeterBase.describe(this.name)
+    override def print(): String {
+        let label: String = GreeterBase.describe(this.name)
         return label + "!"
     }
 
-    def display(formal: bool): string {
+    def display(formal: bool): String {
         if formal {
             return this.bracket(this.name)
         } else {
@@ -50,9 +50,9 @@ class Person(name: string): GreeterBase, Printable, BracketNaming {
         }
     }
 
-    def nested_label(): string {
+    def nested_label(): String {
         {
-            let label: string = this.describe(this.name)
+            let label: String = this.describe(this.name)
             return label
         }
     }
@@ -81,17 +81,17 @@ class Person(name: string): GreeterBase, Printable, BracketNaming {
         return is_even(x)
     }
 
-    def second_name(values: string[]): string = values[1]
+    def second_name(values: String[]): String = values[1]
 
     def first_id(values: int[]): int = values[0]
 
     def copy_people(values: Person[]): Person[] = values
 
-    def names(): string[] = string[]{"zero", "one"}
+    def names(): String[] = String[]{"zero", "one"}
 
     def slots(size: int): int[] = int[size]
 
-    def recover(flag: bool): string {
+    def recover(flag: bool): String {
         try {
             if flag {
                 throw "boom"
@@ -102,7 +102,7 @@ class Person(name: string): GreeterBase, Printable, BracketNaming {
         }
     }
 
-    def catch_index(values: string[]): string {
+    def catch_index(values: String[]): String {
         try {
             return values[3]
         } catch error {
@@ -110,7 +110,7 @@ class Person(name: string): GreeterBase, Printable, BracketNaming {
         }
     }
 
-    def first_positive(values: list[int]): int {
+    def first_positive(values: List[int]): int {
         for value in values {
             if value > 0 {
                 return value
@@ -119,7 +119,7 @@ class Person(name: string): GreeterBase, Printable, BracketNaming {
         return 0
     }
 
-    def first_large(values: list[int]): int {
+    def first_large(values: List[int]): int {
         foreach value: int in values {
             if value > 10 {
                 return value
@@ -146,30 +146,30 @@ class Person(name: string): GreeterBase, Printable, BracketNaming {
 
     def warmup(formal: bool): void {
         if formal {
-            let label: string = this.bracket(this.name)
+            let label: String = this.bracket(this.name)
             {
-                let copy: string = label
+                let copy: String = label
             }
         } else {
-            let copy: string = this.name
+            let copy: String = this.name
         }
     }
 
-    def foreach_warm(values: list[int]): void {
+    def foreach_warm(values: List[int]): void {
         foreach value in values {
-            let label: string = this.bracket(this.name)
+            let label: String = this.bracket(this.name)
         }
     }
 
     def while_warm(flag: bool): void {
         while flag {
-            let label: string = this.name
+            let label: String = this.name
         }
     }
 
     def do_warm(): void {
         do {
-            let label: string = this.describe(this.name)
+            let label: String = this.describe(this.name)
         } while false
     }
 }

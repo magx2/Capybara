@@ -1,18 +1,18 @@
 from /capy/meta_prog/Reflection import { DataValueInfo, reflection }
 
-type Letter { name: string } = A | B
+type Letter { name: String } = A | B
 data A { a: int }
-data B { b: list[string] }
+data B { b: List[String] }
 single ReflectedEmpty
-data ReflectedEntity { id: string }
-data ReflectedEmployee { department: string, active: bool, ...ReflectedEntity }
+data ReflectedEntity { id: String }
+data ReflectedEmployee { department: String, active: bool, ...ReflectedEntity }
 single ReflectedSingleton
 enum ReflectedStatus { REFLECTED_READY, REFLECTED_DONE }
-data ReflectedEnvelope { label: string, payload: A }
+data ReflectedEnvelope { label: String, payload: A }
 
 type ReflectedJson = ReflectedJsonObject | ReflectedJsonString | ReflectedJsonNumber | ReflectedJsonBool | ReflectedJsonNull
-data ReflectedJsonObject { value: dict[ReflectedJson] }
-data ReflectedJsonString { value: string }
+data ReflectedJsonObject { value: Dict[ReflectedJson] }
+data ReflectedJsonString { value: String }
 data ReflectedJsonNumber { value: int }
 data ReflectedJsonBool { value: bool }
 single ReflectedJsonNull
@@ -35,7 +35,7 @@ fun reflection_data_to_json(d: data): ReflectedJsonObject =
 
 fun reflection_any_to_json(value: any): ReflectedJson =
     match value with
-    case string s -> ReflectedJsonString { s }
+    case String s -> ReflectedJsonString { s }
     case int i -> ReflectedJsonNumber { i }
     case bool b -> ReflectedJsonBool { b }
     case data d -> reflection_data_to_json(d)

@@ -6,32 +6,32 @@ from /capy/test/CapyTest import { * }
 from /capy/serialization/Json import { * }
 
 data JsonPrimitiveSample {
-    name: string,
+    name: String,
     age: int,
     external_id: long,
     score: double,
     ratio: float,
     active: bool
 }
-data JsonCollectionSample { numbers: list[int], flags: dict[bool] }
-data JsonSetSample { tags: set[string] }
-data JsonInnerSample { label: string, count: int }
+data JsonCollectionSample { numbers: List[int], flags: Dict[bool] }
+data JsonSetSample { tags: Set[String] }
+data JsonInnerSample { label: String, count: int }
 enum JsonSampleStatus { PENDING, COMPLETE }
-data JsonLambdaSample { callback: () => string }
+data JsonLambdaSample { callback: () => String }
 data JsonWrapperSample {
-    present: Option[string],
-    absent: Option[string],
+    present: Option[String],
+    absent: Option[String],
     success: Result[int],
     error: Result[int],
     inner: JsonInnerSample,
     status: JsonSampleStatus,
     raw: Json
 }
-data JsonablePrimitiveSample { name: string, age: int, active: bool } derive Jsonable
+data JsonablePrimitiveSample { name: String, age: int, active: bool } derive Jsonable
 data JsonableNestedSample {
     user: JsonablePrimitiveSample,
-    labels: list[string],
-    metadata: dict[int],
+    labels: List[String],
+    metadata: Dict[int],
     raw: Json
 } derive Jsonable
 
@@ -227,7 +227,7 @@ fun should_derive_jsonable_to_json_for_nested_and_collection_fields(): Assert =
         }
     })
 
-fun _json_field(json: JsonObject, name: string): Option[Json] =
+fun _json_field(json: JsonObject, name: String): Option[Json] =
     json.value |> None {}, (acc, key, value) =>
         if key == name then Some { value } else acc
 

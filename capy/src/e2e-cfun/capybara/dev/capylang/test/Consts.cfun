@@ -7,13 +7,13 @@ const LONG_V: long = 97387717187L
 const FLOAT_V: float = 1.5f
 const DOUBLE_V: double = 2.5
 const BOOL_V: bool = true
-const STRING_V: string = "const"
-const LIST_V: list[int] = [1, 2, 3]
-const SET_V: set[string] = {"a", "b"}
-const DICT_V: dict[int] = {"one": 1, "two": 2}
+const STRING_V: String = "const"
+const LIST_V: List[int] = [1, 2, 3]
+const SET_V: Set[String] = {"a", "b"}
+const DICT_V: Dict[int] = {"one": 1, "two": 2}
 
 type Animal = Dog | Cat
-data Dog { name: string }
+data Dog { name: String }
 data Cat { age: int }
 
 const DOG_DATA: Dog = Dog { name: "Rex" }
@@ -29,12 +29,12 @@ fun local_consts(x: int): int =
     ---
     x + __BASE + __INC
 
-fun local_private_named_const(x: string): bool =
-    const __white_space: set[string] = { " ", "\t", "\n" }
+fun local_private_named_const(x: String): bool =
+    const __white_space: Set[String] = { " ", "\t", "\n" }
     ---
     __white_space ? x
 
-fun primitives_summary(): string =
+fun primitives_summary(): String =
     BYTE_V + ":" + INT_V + ":" + LONG_V + ":" + FLOAT_V + ":" + DOUBLE_V + ":" + BOOL_V + ":" + STRING_V
 
 fun list_const_sum(): int = LIST_V |> 0, (acc, v) => acc + v
@@ -43,9 +43,9 @@ fun set_const_has_a(): bool = SET_V ? "a"
 
 fun dict_const_size(): int = DICT_V.size
 
-fun dog_data_name(): string = DOG_DATA.name
+fun dog_data_name(): String = DOG_DATA.name
 
-fun animal_type_text(): string =
+fun animal_type_text(): String =
     match ANIMAL_TYPE with
     case Dog { name } -> "dog:" + name
     case Cat { age } -> "cat:" + age

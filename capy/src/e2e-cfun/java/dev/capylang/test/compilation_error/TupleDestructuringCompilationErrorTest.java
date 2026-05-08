@@ -15,7 +15,7 @@ class TupleDestructuringCompilationErrorTest {
     void shouldFailWhenTupleDestructuringIsUsedForNonTupleElements() {
         var error = compileFailure(
                 "tuple_destructuring_requires_tuple_elements",
-                "fun foo(values: list[int]) = values | (a, b) => a + b"
+                "fun foo(values: List[int]) = values | (a, b) => a + b"
         );
 
         assertThat(error.file()).isEqualTo("/foo/boo/tuple_destructuring_requires_tuple_elements.cfun");
@@ -26,7 +26,7 @@ class TupleDestructuringCompilationErrorTest {
     void shouldFailWhenTupleDestructuringArityDoesNotMatchTupleSize() {
         var error = compileFailure(
                 "tuple_destructuring_arity_mismatch",
-                "fun foo(values: list[tuple[int, int]]) = values | (a, b, c) => a + b + c"
+                "fun foo(values: List[Tuple[int, int]]) = values | (a, b, c) => a + b + c"
         );
 
         assertThat(error.file()).isEqualTo("/foo/boo/tuple_destructuring_arity_mismatch.cfun");

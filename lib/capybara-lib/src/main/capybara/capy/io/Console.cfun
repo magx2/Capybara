@@ -2,7 +2,7 @@ from /capy/lang/Effect import { * }
 from /capy/lang/Option import { * }
 
 /// Writes a string to standard output without a trailing newline and returns the consumed value.
-fun print(text: string): Effect[string] = <native>
+fun print(text: String): Effect[String] = <native>
 
 /// Writes a byte to standard output without a trailing newline and returns the consumed value.
 fun print(text: byte): Effect[byte] = <native>
@@ -23,10 +23,10 @@ fun print(text: double): Effect[double] = <native>
 fun print(text: bool): Effect[bool] = <native>
 
 /// Writes bytes to standard output without a trailing newline and returns the consumed value.
-fun print(text: list[byte]): Effect[list[byte]] = <native>
+fun print(text: List[byte]): Effect[List[byte]] = <native>
 
 /// Writes a string to standard output followed by a newline and returns the consumed value.
-fun println(text: string): Effect[string] = <native>
+fun println(text: String): Effect[String] = <native>
 
 /// Writes a byte to standard output followed by a newline and returns the consumed value.
 fun println(text: byte): Effect[byte] = <native>
@@ -47,10 +47,10 @@ fun println(text: double): Effect[double] = <native>
 fun println(text: bool): Effect[bool] = <native>
 
 /// Writes bytes to standard output followed by a newline and returns the consumed value.
-fun println(text: list[byte]): Effect[list[byte]] = <native>
+fun println(text: List[byte]): Effect[List[byte]] = <native>
 
 /// Writes a string to standard error without a trailing newline and returns the consumed value.
-fun print_error(text: string): Effect[string] = <native>
+fun print_error(text: String): Effect[String] = <native>
 
 /// Writes a byte to standard error without a trailing newline and returns the consumed value.
 fun print_error(text: byte): Effect[byte] = <native>
@@ -71,10 +71,10 @@ fun print_error(text: double): Effect[double] = <native>
 fun print_error(text: bool): Effect[bool] = <native>
 
 /// Writes bytes to standard error without a trailing newline and returns the consumed value.
-fun print_error(text: list[byte]): Effect[list[byte]] = <native>
+fun print_error(text: List[byte]): Effect[List[byte]] = <native>
 
 /// Writes a string to standard error followed by a newline and returns the consumed value.
-fun println_error(text: string): Effect[string] = <native>
+fun println_error(text: String): Effect[String] = <native>
 
 /// Writes a byte to standard error followed by a newline and returns the consumed value.
 fun println_error(text: byte): Effect[byte] = <native>
@@ -95,7 +95,7 @@ fun println_error(text: double): Effect[double] = <native>
 fun println_error(text: bool): Effect[bool] = <native>
 
 /// Writes bytes to standard error followed by a newline and returns the consumed value.
-fun println_error(text: list[byte]): Effect[list[byte]] = <native>
+fun println_error(text: List[byte]): Effect[List[byte]] = <native>
 
 /// Reads one line from standard input, or None at end of input.
-fun read_line(): Effect[Option[string]] = <native>
+fun read_line(): Effect[Option[String]] = <native>

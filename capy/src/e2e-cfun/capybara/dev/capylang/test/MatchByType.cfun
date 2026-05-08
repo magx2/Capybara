@@ -1,16 +1,16 @@
 from /capy/lang/Option import { * }
 from /capy/lang/Result import { * }
 
-fun match_string(value: any): string =
+fun match_string(value: any): String =
     match value with
-    case string s -> "s:" + s
+    case String s -> "s:" + s
     case int i -> "i:" + i
     case _ -> ""
 
 fun match_int(value: any): int =
     match value with
     case int i -> i + 1
-    case string s -> 0
+    case String s -> 0
     case _ -> 0
 
 fun match_int_ignore_binding(value: any): int =
@@ -18,7 +18,7 @@ fun match_int_ignore_binding(value: any): int =
     case int _ -> 1
     case _ -> 0
 
-data Person { name: string }
+data Person { name: String }
 type Entity = Person
 enum MatchStatus { READY, DONE }
 
@@ -32,47 +32,47 @@ fun is_data_from_entity(value: Entity): bool =
     case data d -> true
     case _ -> false
 
-fun classify_enum(value: any): string =
+fun classify_enum(value: any): String =
     match value with
     case enum e -> e.name()
     case data d -> "data"
     case _ -> "any"
 
-fun generic_enum_name(value: enum): string = value.name()
+fun generic_enum_name(value: enum): String = value.name()
 
-fun exhaustive_enum_type_match(value: enum): string =
+fun exhaustive_enum_type_match(value: enum): String =
     match value with
     case enum e -> e.name()
 
-fun merged_enum_name(flag: bool, current_enum: enum): string =
+fun merged_enum_name(flag: bool, current_enum: enum): String =
     let v = if flag then current_enum else READY {}
     v.name()
 
-fun merged_enum_list_names(current_enum: enum): list[string] =
+fun merged_enum_list_names(current_enum: enum): List[String] =
     [current_enum, READY {}] | value => value.name()
 
-fun classify_json_char(first_char: string): string =
+fun classify_json_char(first_char: String): String =
     match first_char with
     case '{' -> "object"
     case '"' -> "string"
     case '-', '1', '2', '3', '4', '5', '6', '7', '8', '9', '0' -> "number"
     case _ -> "other"
 
-fun classify_json_char_with_named_wildcard(first_char: string): string =
+fun classify_json_char_with_named_wildcard(first_char: String): String =
     match first_char with
     case '-' -> "minus"
     case '1', '2', '3', '4', '5', '6', '7', '8', '9', '0' -> "number"
     case _ v -> "unknown: " + v
 
-fun mood(b: bool): string =
+fun mood(b: bool): String =
     match b with
     case true -> "I'm happy"
     case false -> "I'm sad"
 
 fun bare_generic_type_pattern(value: any): int =
     match value with
-    case list -> 1
-    case set s -> 2
-    case dict d -> 3
+    case List -> 1
+    case Set s -> 2
+    case Dict d -> 3
     case Option o -> 4
     case _ -> 0

@@ -3,31 +3,31 @@ from /capy/lang/Effect import { * }
 from /capy/lang/Result import { * }
 
 /// Reads the entire file as UTF-8 text.
-fun read_text(path: Path): Effect[Result[string]] = <native>
+fun read_text(path: Path): Effect[Result[String]] = <native>
 
 /// Reads all lines from the file as UTF-8 text.
-fun read_lines(path: Path): Effect[Result[list[string]]] = <native>
+fun read_lines(path: Path): Effect[Result[List[String]]] = <native>
 
 /// Reads the entire file as bytes.
-fun read_bytes(path: Path): Effect[Result[list[byte]]] = <native>
+fun read_bytes(path: Path): Effect[Result[List[byte]]] = <native>
 
 /// Writes UTF-8 text to the file, replacing existing content, and returns the consumed text.
-fun write_text(path: Path, text: string): Effect[Result[string]] = <native>
+fun write_text(path: Path, text: String): Effect[Result[String]] = <native>
 
 /// Writes UTF-8 lines to the file, replacing existing content, and returns the consumed lines.
-fun write_lines(path: Path, lines: list[string]): Effect[Result[list[string]]] = <native>
+fun write_lines(path: Path, lines: List[String]): Effect[Result[List[String]]] = <native>
 
 /// Writes bytes to the file, replacing existing content, and returns the consumed bytes.
-fun write_bytes(path: Path, bytes: list[byte]): Effect[Result[list[byte]]] = <native>
+fun write_bytes(path: Path, bytes: List[byte]): Effect[Result[List[byte]]] = <native>
 
 /// Appends UTF-8 text to the file, creating the file when needed, and returns the consumed text.
-fun append_text(path: Path, text: string): Effect[Result[string]] = <native>
+fun append_text(path: Path, text: String): Effect[Result[String]] = <native>
 
 /// Appends UTF-8 lines to the file, creating the file when needed, and returns the consumed lines.
-fun append_lines(path: Path, lines: list[string]): Effect[Result[list[string]]] = <native>
+fun append_lines(path: Path, lines: List[String]): Effect[Result[List[String]]] = <native>
 
 /// Appends bytes to the file, creating the file when needed, and returns the consumed bytes.
-fun append_bytes(path: Path, bytes: list[byte]): Effect[Result[list[byte]]] = <native>
+fun append_bytes(path: Path, bytes: List[byte]): Effect[Result[List[byte]]] = <native>
 
 /// Returns true when the path exists.
 fun exists(path: Path): Effect[bool] = <native>
@@ -51,7 +51,7 @@ fun create_directory(path: Path): Effect[Result[Path]] = <native>
 fun create_directories(path: Path): Effect[Result[Path]] = <native>
 
 /// Lists direct child entries of a directory.
-fun list_entries(path: Path): Effect[Result[list[Path]]] = <native>
+fun list_entries(path: Path): Effect[Result[List[Path]]] = <native>
 
 /// Deletes a file or empty directory and returns true when something was deleted.
 fun delete(path: Path): Effect[Result[bool]] = <native>

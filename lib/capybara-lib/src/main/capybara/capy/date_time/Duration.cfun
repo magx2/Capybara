@@ -62,7 +62,7 @@ const ZERO: Duration = DateDuration { years: 0, months: 0, days: 0, hours: 0, mi
 /// ```
 ///
 /// The output uses the symbolic ISO 8601 form and omits zero-valued components.
-fun Duration.to_iso_8601(): string =
+fun Duration.to_iso_8601(): String =
     match this with
     case WeekDuration { weeks } -> "P" + weeks + "W"
     case DateDuration { years, months, days, hours, minutes, seconds } ->
@@ -93,8 +93,8 @@ fun Duration.to_iso_8601(): string =
 /// - only integer values are supported
 ///
 /// Returns `Error` with a readable message when the input is invalid.
-fun from_iso_8601(iso: string): Result[Duration] =
-    data __Parse[T] { buffer: string, value: T }
+fun from_iso_8601(iso: String): Result[Duration] =
+    data __Parse[T] { buffer: String, value: T }
     data __Parts {
         years: int,
         months: int,
@@ -105,15 +105,15 @@ fun from_iso_8601(iso: string): Result[Duration] =
         seconds: int
     }
     data __DurationParse {
-        buffer: string,
+        buffer: String,
         value: __Parts,
         in_time: bool,
         previous_order: int,
         has_component: bool,
         has_time_component: bool
     }
-    fun __invalid(message: string): string = "Invalid ISO 8601 duration format: " + message
-    fun __parse_positive_digit(value: string): Result[__Parse[int]] =
+    fun __invalid(message: String): String = "Invalid ISO 8601 duration format: " + message
+    fun __parse_positive_digit(value: String): Result[__Parse[int]] =
         match value[0] with
         case None -> Error { __invalid("unexpected end of string while parsing digits") }
         case Some { '1' }  -> Success { __Parse { buffer: value[1:], value: 1 } }
@@ -126,12 +126,12 @@ fun from_iso_8601(iso: string): Result[Duration] =
         case Some { '8' }  -> Success { __Parse { buffer: value[1:], value: 8 } }
         case Some { '9' }  -> Success { __Parse { buffer: value[1:], value: 9 } }
         case Some { char } -> Error { __invalid("expected digit between `1` and `9`, got `" + char + "`") }
-    fun __parse_digit(value: string): Result[__Parse[int]] =
+    fun __parse_digit(value: String): Result[__Parse[int]] =
         match value[0] with
         case None -> Error { __invalid("unexpected end of string while parsing digits") }
         case Some { '0' } -> Success { __Parse { buffer: value[1:], value: 0 } }
         case Some -> __parse_positive_digit(value)
-    fun rec __parse_rest_digits(value: string, parsed: int): Result[__Parse[int]] =
+    fun rec __parse_rest_digits(value: String, parsed: int): Result[__Parse[int]] =
         match value[0] with
         case Some { char } ->
             if match char with
@@ -143,25 +143,25 @@ fun from_iso_8601(iso: string): Result[Duration] =
             }
             else Success { __Parse { buffer: value, value: parsed } }
         case _ -> Success { __Parse { buffer: value, value: parsed } }
-    fun __parse_digits(value: string): Result[__Parse[int]] =
+    fun __parse_digits(value: String): Result[__Parse[int]] =
         let parse <- __parse_digit(value)
         __parse_rest_digits(parse.buffer, parse.value)
-    fun __parse_exact_digits(value: string, label: string): Result[int] =
+    fun __parse_exact_digits(value: String, label: String): Result[int] =
         let parse <- __parse_digits(value)
         if parse.buffer.is_empty
         then Success { parse.value }
         else Error { __invalid("expected digits for " + label + ", got `" + value + "`") }
-    fun __is_exact_digits(value: string): bool =
+    fun __is_exact_digits(value: String): bool =
         match __parse_exact_digits(value, "value") with
         case Success -> true
         case Error -> false
-    fun __is_combined_basic(value: string): bool =
+    fun __is_combined_basic(value: String): bool =
         if value.size == 15
         then __is_exact_digits(value[0:8])
             & value[8:9] == "T"
             & __is_exact_digits(value[9:15])
         else false
-    fun __is_combined_extended(value: string): bool =
+    fun __is_combined_extended(value: String): bool =
         if value.size == 19
         then __is_exact_digits(value[0:4])
             & value[4:5] == "-"
@@ -198,7 +198,7 @@ fun from_iso_8601(iso: string): Result[Duration] =
         else if parts.seconds < 0 | parts.seconds > 59
         then Error { __invalid("combined duration second component must be between 0 and 59") }
         else Success { __to_duration(parts) }
-    fun __parse_combined_basic(value: string): Result[Duration] =
+    fun __parse_combined_basic(value: String): Result[Duration] =
         let years <- __parse_exact_digits(value[0:4], "years")
         let months <- __parse_exact_digits(value[4:6], "months")
         let days <- __parse_exact_digits(value[6:8], "days")
@@ -214,7 +214,7 @@ fun from_iso_8601(iso: string): Result[Duration] =
             minutes,
             seconds
         })
-    fun __parse_combined_extended(value: string): Result[Duration] =
+    fun __parse_combined_extended(value: String): Result[Duration] =
         let years <- __parse_exact_digits(value[0:4], "years")
         let months <- __parse_exact_digits(value[5:7], "months")
         let days <- __parse_exact_digits(value[8:10], "days")
@@ -237,7 +237,7 @@ fun from_iso_8601(iso: string): Result[Duration] =
         | parts.hours != 0
         | parts.minutes != 0
         | parts.seconds != 0
-    fun __component_order(in_time: bool, designator: string): Result[int] =
+    fun __component_order(in_time: bool, designator: String): Result[int] =
         if in_time
         then
             if designator == "H"
@@ -257,7 +257,7 @@ fun from_iso_8601(iso: string): Result[Duration] =
             else if designator == "D"
             then Success { 4 }
             else Error { __invalid("unexpected date designator `" + designator + "`") }
-    fun __set_component(parts: __Parts, in_time: bool, designator: string, amount: int): __Parts =
+    fun __set_component(parts: __Parts, in_time: bool, designator: String, amount: int): __Parts =
         if designator == "Y"
         then parts.with(years: amount)
         else if designator == "M"
@@ -285,7 +285,7 @@ fun from_iso_8601(iso: string): Result[Duration] =
             has_component: true,
             has_time_component: true
         }}
-    fun __apply_component(parse: __DurationParse, amount: int, designator: string): Result[__DurationParse] =
+    fun __apply_component(parse: __DurationParse, amount: int, designator: String): Result[__DurationParse] =
         let order <- __component_order(parse.in_time, designator)
         if order <= parse.previous_order
         then Error { __invalid("components must appear in ISO 8601 order and may not repeat") }

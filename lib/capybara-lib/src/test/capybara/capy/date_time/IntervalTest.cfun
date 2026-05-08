@@ -104,8 +104,8 @@ fun tests(): Effect[TestFile] =
     test_file("/capy/date_time/Interval.cfun", success_test_cases + failed_test_cases)
 
 fun _should_parse_interval(
-    iso: string,
-    canonical: string,
+    iso: String,
+    canonical: String,
     start: DateTime,
     end: DateTime,
     duration: Duration

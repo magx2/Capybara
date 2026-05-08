@@ -1,6 +1,6 @@
 type MyResult[T] = Ok[T] | Fail
 data Ok[T] { value: T }
-data Fail { message: string }
+data Fail { message: String }
 
 fun MyResult[T].`|`(map: T => MyResult[Y]): MyResult[Y] =
     match this with
@@ -20,17 +20,17 @@ fun MyResult[T].or_else(v: T): T =
     case Fail _ -> v
     case Ok { v } -> v
 
-fun map_to_string(v: int): MyResult[string] = Ok { value: "v=" + v }
+fun map_to_string(v: int): MyResult[String] = Ok { value: "v=" + v }
 
-fun map_to_fail(v: int): MyResult[string] = Fail { message: "bad:" + v }
+fun map_to_fail(v: int): MyResult[String] = Fail { message: "bad:" + v }
 
-fun map_to_nested_ok(v: int): MyResult[MyResult[string]] = Ok { value: Ok { value: "mapped_" + v } }
+fun map_to_nested_ok(v: int): MyResult[MyResult[String]] = Ok { value: Ok { value: "mapped_" + v } }
 
-fun map_to_nested_fail(v: int): MyResult[MyResult[string]] = Ok { value: Fail { message: "nested_bad:" + v } }
+fun map_to_nested_fail(v: int): MyResult[MyResult[String]] = Ok { value: Fail { message: "nested_bad:" + v } }
 
-fun wrap_nested_ok(v: int): MyResult[MyResult[string]] = Ok { value: Ok { value: "wrapped_" + v } }
+fun wrap_nested_ok(v: int): MyResult[MyResult[String]] = Ok { value: Ok { value: "wrapped_" + v } }
 
-fun wrap_nested_fail(v: int): MyResult[MyResult[string]] = Ok { value: Fail { message: "wrapped_bad:" + v } }
+fun wrap_nested_fail(v: int): MyResult[MyResult[String]] = Ok { value: Fail { message: "wrapped_bad:" + v } }
 
 fun apply_mapper(r: MyResult[T], map: T => MyResult[Y]): MyResult[Y] = r | map
 
@@ -38,7 +38,7 @@ fun propagate_fail(r: MyResult[T], map: T => MyResult[Y]): MyResult[Y] = r | map
 
 fun apply_flat_mapper(r: MyResult[T], map: T => MyResult[MyResult[Y]]): MyResult[Y] = r |* map
 
-fun nested_identity(r: MyResult[MyResult[string]]): MyResult[MyResult[string]] = r
+fun nested_identity(r: MyResult[MyResult[String]]): MyResult[MyResult[String]] = r
 
-fun flatten_nested_result(r: MyResult[MyResult[string]]): MyResult[string] =
+fun flatten_nested_result(r: MyResult[MyResult[String]]): MyResult[String] =
     r |* nested => Ok { value: nested }

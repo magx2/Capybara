@@ -1,5 +1,5 @@
 from /capy/lang/Effect import { * }
 
-fun main(args: list[string]): /capy/lang/Effect[/capy/lang/Program] =
+fun main(args: List[String]): /capy/lang/Effect[/capy/lang/Program] =
     let count <- pure(args.size)
     /capy/lang/Program.Success { results: ["effect-main:" + count] }

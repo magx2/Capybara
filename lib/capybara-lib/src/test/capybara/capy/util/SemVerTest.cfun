@@ -48,8 +48,8 @@ fun tests(): Effect[TestFile] =
 
     test_file("/capy/util/SemVer.cfun", parse_test_cases + to_string_test_cases + failed_test_cases)
 
-fun should_parse_sem_ver(str: string, expected: SemVer) = assert_that(parse_semver(str)).succeeds(expected)
+fun should_parse_sem_ver(str: String, expected: SemVer) = assert_that(parse_semver(str)).succeeds(expected)
 
-fun should_stringify_sem_ver(sem_ver: SemVer, expected: string) = assert_that(sem_ver.to_string()).is_equal_to(expected)
+fun should_stringify_sem_ver(sem_ver: SemVer, expected: String) = assert_that(sem_ver.to_string()).is_equal_to(expected)
 
-fun should_fail_parse_with_message(sem_ver: string, expected_message: string) = assert_that(parse_semver(sem_ver)).fails(expected_message)
+fun should_fail_parse_with_message(sem_ver: String, expected_message: String) = assert_that(parse_semver(sem_ver)).fails(expected_message)

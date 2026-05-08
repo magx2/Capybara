@@ -183,10 +183,18 @@ public final class ObjectOrientedJavaGenerator {
                 .filter(symbol -> !localDefinitions.contains(symbol))
                 .filter(symbol -> !module.name().equals(symbol))
                 .filter(symbol -> !explicitlyImportedSymbols.contains(symbol))
+                .filter(symbol -> !isBuiltInTypeToken(symbol))
                 .map(symbol -> ownerReference + "." + symbol)
                 .distinct()
                 .sorted()
                 .toList();
+    }
+
+    private boolean isBuiltInTypeToken(String symbol) {
+        return switch (symbol) {
+            case "String", "List", "Set", "Dict", "Tuple" -> true;
+            default -> false;
+        };
     }
 
     private Set<String> referencedTypeTokens(ObjectOrientedModule module) {
@@ -644,34 +652,34 @@ public final class ObjectOrientedJavaGenerator {
                    + renderReflectionTypeInfo(module, trimmed.substring(0, trimmed.length() - 2), definitionsByName)
                    + ")";
         }
-        if (trimmed.startsWith("list[") && trimmed.endsWith("]")) {
+        if (trimmed.startsWith("List[") && trimmed.endsWith("]")) {
             return "new capy.metaProg.Reflection.ListInfo("
-                   + javaString("list") + ", "
+                   + javaString("List") + ", "
                    + renderEmptyReflectionPackage() + ", "
                    + renderReflectionTypeInfo(module, trimmed.substring(5, trimmed.length() - 1), definitionsByName)
                    + ")";
         }
-        if (trimmed.startsWith("set[") && trimmed.endsWith("]")) {
+        if (trimmed.startsWith("Set[") && trimmed.endsWith("]")) {
             return "new capy.metaProg.Reflection.SetInfo("
-                   + javaString("set") + ", "
+                   + javaString("Set") + ", "
                    + renderEmptyReflectionPackage() + ", "
                    + renderReflectionTypeInfo(module, trimmed.substring(4, trimmed.length() - 1), definitionsByName)
                    + ")";
         }
-        if (trimmed.startsWith("dict[") && trimmed.endsWith("]")) {
+        if (trimmed.startsWith("Dict[") && trimmed.endsWith("]")) {
             return "new capy.metaProg.Reflection.DictInfo("
-                   + javaString("dict") + ", "
+                   + javaString("Dict") + ", "
                    + renderEmptyReflectionPackage() + ", "
                    + renderReflectionTypeInfo(module, trimmed.substring(5, trimmed.length() - 1), definitionsByName)
                    + ")";
         }
-        if (trimmed.startsWith("tuple[") && trimmed.endsWith("]")) {
+        if (trimmed.startsWith("Tuple[") && trimmed.endsWith("]")) {
             var inner = trimmed.substring(6, trimmed.length() - 1);
             var elements = splitTopLevel(inner).stream()
                     .map(type -> renderReflectionTypeInfo(module, type, definitionsByName))
                     .collect(Collectors.joining(", ", "java.util.List.<capy.metaProg.Reflection.AnyInfo>of(", ")"));
             return "new capy.metaProg.Reflection.TupleInfo("
-                   + javaString("tuple") + ", "
+                   + javaString("Tuple") + ", "
                    + renderEmptyReflectionPackage() + ", "
                    + elements
                    + ")";
@@ -694,7 +702,7 @@ public final class ObjectOrientedJavaGenerator {
 
     private boolean isPrimitiveReflectionType(String type) {
         return switch (type) {
-            case "byte", "int", "long", "double", "float", "bool", "string", "any", "data", "void", "nothing" -> true;
+            case "byte", "int", "long", "double", "float", "bool", "String", "any", "data", "void", "nothing" -> true;
             default -> false;
         };
     }
@@ -1034,7 +1042,7 @@ public final class ObjectOrientedJavaGenerator {
         return method.name().equals("main")
                && method.returnType().equals("int")
                && method.parameters().size() == 1
-               && method.parameters().getFirst().type().equals("list[string]")
+               && method.parameters().getFirst().type().equals("List[String]")
                && method.body().isPresent()
                && !method.modifiers().contains("abstract");
     }
@@ -1769,7 +1777,7 @@ public final class ObjectOrientedJavaGenerator {
 
     private boolean isTypeLikePrefix(String value) {
         return switch (value) {
-            case "byte", "int", "long", "double", "float", "bool", "string", "any", "data", "void" -> true;
+            case "byte", "int", "long", "double", "float", "bool", "String", "any", "data", "void" -> true;
             default -> value.startsWith("/") || Character.isUpperCase(value.charAt(0)) || value.startsWith("_");
         };
     }
@@ -1779,13 +1787,13 @@ public final class ObjectOrientedJavaGenerator {
         if (trimmed.endsWith("[]")) {
             return renderType(trimmed.substring(0, trimmed.length() - 2), false) + "[]";
         }
-        if (trimmed.startsWith("list[") && trimmed.endsWith("]")) {
+        if (trimmed.startsWith("List[") && trimmed.endsWith("]")) {
             return "java.util.List<" + renderType(innerType(trimmed), true) + ">";
         }
-        if (trimmed.startsWith("set[") && trimmed.endsWith("]")) {
+        if (trimmed.startsWith("Set[") && trimmed.endsWith("]")) {
             return "java.util.Set<" + renderType(innerType(trimmed), true) + ">";
         }
-        if (trimmed.startsWith("dict[") && trimmed.endsWith("]")) {
+        if (trimmed.startsWith("Dict[") && trimmed.endsWith("]")) {
             return "java.util.Map<String, " + renderType(innerType(trimmed), true) + ">";
         }
         return switch (trimmed) {
@@ -1795,7 +1803,7 @@ public final class ObjectOrientedJavaGenerator {
             case "double" -> boxed ? "Double" : "double";
             case "float" -> boxed ? "Float" : "float";
             case "bool" -> boxed ? "Boolean" : "boolean";
-            case "string" -> "String";
+            case "String" -> "String";
             case "any" -> "Object";
             case "void" -> "void";
             default -> renderTypeReference(trimmed);

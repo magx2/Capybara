@@ -14,7 +14,7 @@ data DateTimeStartDuration { start: DateTime, duration: Duration }
 data DateTimeDurationEnd { duration: Duration, end: DateTime }
 
 /// Formats this interval as canonical ISO 8601 using `/` as the separator.
-fun Interval.to_iso_8601(): string =
+fun Interval.to_iso_8601(): String =
     match this with
     case DateTimeStartEnd { start, end } -> start.to_iso_8601() + "/" + end.to_iso_8601()
     case DateTimeStartDuration { start, duration } -> start.to_iso_8601() + "/" + duration.to_iso_8601()
@@ -47,18 +47,18 @@ fun Interval.duration(): Duration =
 /// - `<duration>/<end>`
 ///
 /// Also accepts `--` as an alternate input separator and canonicalizes back to `/`.
-fun from_iso_8601(iso: string): Result[Interval] =
-    data __Split { left: string, right: string }
-    data __SplitScan { left: string, right: string, seen_separator: bool }
-    fun __invalid(message: string): string = "Invalid ISO 8601 interval format: " + message
-    fun rec __drop_prefix(value: string, size: int): string =
+fun from_iso_8601(iso: String): Result[Interval] =
+    data __Split { left: String, right: String }
+    data __SplitScan { left: String, right: String, seen_separator: bool }
+    fun __invalid(message: String): String = "Invalid ISO 8601 interval format: " + message
+    fun rec __drop_prefix(value: String, size: int): String =
         if size <= 0
         then value
         else
             match value[0] with
             case None -> ""
             case Some { _ } -> __drop_prefix(value[1:], size - 1)
-    fun rec __scan_split(separator: string, value: string, scan: __SplitScan): Result[__Split] =
+    fun rec __scan_split(separator: String, value: String, scan: __SplitScan): Result[__Split] =
         if value.is_empty
         then if !scan.seen_separator
             then Error { __invalid("expected exactly one `" + separator + "` separator") }
@@ -84,7 +84,7 @@ fun from_iso_8601(iso: string): Result[Interval] =
                     right: scan.right,
                     seen_separator: false
                 })
-    fun __split_interval(value: string): Result[__Split] =
+    fun __split_interval(value: String): Result[__Split] =
         let has_slash = regex/\// ? value
         let has_dash = regex/--/ ? value
         if has_slash & !has_dash
@@ -94,7 +94,7 @@ fun from_iso_8601(iso: string): Result[Interval] =
         else if has_slash & has_dash
         then Error { __invalid("expected exactly one interval separator") }
         else Error { __invalid("expected `/` or `--` separator") }
-    fun __parse_datetime(value: string): Result[DateTime] =
+    fun __parse_datetime(value: String): Result[DateTime] =
         match /capy/date_time/DateTime.from_iso_8601(value) with
         case Success { datetime } -> Success { datetime }
         case Error -> Error { __invalid("interval endpoints must be UTC date-times") }

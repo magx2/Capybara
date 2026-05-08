@@ -2108,15 +2108,15 @@ public class JavaExpressionEvaluator {
     private static String capyTypeDescriptor(dev.capylang.compiler.CompiledType type) {
         return switch (type) {
             case dev.capylang.compiler.PrimitiveLinkedType primitiveType ->
-                    primitiveType.name().toLowerCase(java.util.Locale.ROOT);
+                    capyPrimitiveDescriptor(primitiveType);
             case dev.capylang.compiler.CollectionLinkedType.CompiledList listType ->
-                    "list[" + capyTypeDescriptor(listType.elementType()) + "]";
+                    "List[" + capyTypeDescriptor(listType.elementType()) + "]";
             case dev.capylang.compiler.CollectionLinkedType.CompiledSet setType ->
-                    "set[" + capyTypeDescriptor(setType.elementType()) + "]";
+                    "Set[" + capyTypeDescriptor(setType.elementType()) + "]";
             case dev.capylang.compiler.CollectionLinkedType.CompiledDict dictType ->
-                    "dict[" + capyTypeDescriptor(dictType.valueType()) + "]";
+                    "Dict[" + capyTypeDescriptor(dictType.valueType()) + "]";
             case dev.capylang.compiler.CompiledTupleType tupleType ->
-                    "tuple[" + tupleType.elementTypes().stream()
+                    "Tuple[" + tupleType.elementTypes().stream()
                             .map(JavaExpressionEvaluator::capyTypeDescriptor)
                             .reduce((left, right) -> left + ", " + right)
                             .orElse("") + "]";
@@ -2135,6 +2135,12 @@ public class JavaExpressionEvaluator {
                             : parentType.name() + "[" + String.join(", ", parentType.typeParameters()) + "]";
             default -> type.name();
         };
+    }
+
+    private static String capyPrimitiveDescriptor(dev.capylang.compiler.PrimitiveLinkedType primitiveType) {
+        return primitiveType == dev.capylang.compiler.PrimitiveLinkedType.STRING
+                ? "String"
+                : primitiveType.name().toLowerCase(java.util.Locale.ROOT);
     }
 
     private static String sanitizePatternCastType(String castType) {
@@ -2233,13 +2239,13 @@ public class JavaExpressionEvaluator {
     }
 
     private static String computeJavaCastTypeFromDescriptor(String normalized) {
-        return switch (normalized.toLowerCase(java.util.Locale.ROOT)) {
+        return switch (normalized) {
             case "byte" -> "java.lang.Byte";
             case "int" -> "java.lang.Integer";
             case "long" -> "java.lang.Long";
             case "float" -> "java.lang.Float";
             case "double" -> "java.lang.Double";
-            case "string" -> "java.lang.String";
+            case "String" -> "java.lang.String";
             case "bool" -> "java.lang.Boolean";
             case "enum" -> "java.lang.Enum<?>";
             case "any", "nothing", "data" -> "java.lang.Object";
@@ -2247,19 +2253,19 @@ public class JavaExpressionEvaluator {
                 if (normalized.matches("[A-Z]")) {
                     yield "java.lang.Object";
                 }
-                if (normalized.startsWith("list[") && normalized.endsWith("]")) {
-                    var inner = normalized.substring("list[".length(), normalized.length() - 1);
+                if (normalized.startsWith("List[") && normalized.endsWith("]")) {
+                    var inner = normalized.substring("List[".length(), normalized.length() - 1);
                     yield "java.util.List<" + javaCastTypeFromDescriptor(inner) + ">";
                 }
-                if (normalized.startsWith("set[") && normalized.endsWith("]")) {
-                    var inner = normalized.substring("set[".length(), normalized.length() - 1);
+                if (normalized.startsWith("Set[") && normalized.endsWith("]")) {
+                    var inner = normalized.substring("Set[".length(), normalized.length() - 1);
                     yield "java.util.Set<" + javaCastTypeFromDescriptor(inner) + ">";
                 }
-                if (normalized.startsWith("dict[") && normalized.endsWith("]")) {
-                    var inner = normalized.substring("dict[".length(), normalized.length() - 1);
+                if (normalized.startsWith("Dict[") && normalized.endsWith("]")) {
+                    var inner = normalized.substring("Dict[".length(), normalized.length() - 1);
                     yield "java.util.Map<java.lang.String, " + javaCastTypeFromDescriptor(inner) + ">";
                 }
-                if (normalized.startsWith("tuple[") && normalized.endsWith("]")) {
+                if (normalized.startsWith("Tuple[") && normalized.endsWith("]")) {
                     yield "java.util.List<java.lang.Object>";
                 }
                 var genericStart = normalized.indexOf('[');
@@ -2633,7 +2639,7 @@ public class JavaExpressionEvaluator {
             case "int" -> expression + " instanceof java.lang.Integer";
             case "long" -> expression + " instanceof java.lang.Long";
             case "double" -> expression + " instanceof java.lang.Double";
-            case "string" -> expression + " instanceof java.lang.String";
+            case "String" -> expression + " instanceof java.lang.String";
             case "bool" -> expression + " instanceof java.lang.Boolean";
             case "float" -> expression + " instanceof java.lang.Float";
             default -> runtimeValueMatchesStructuredDescriptor(normalized, expression);
@@ -2641,7 +2647,7 @@ public class JavaExpressionEvaluator {
     }
 
     private static String runtimeValueMatchesStructuredDescriptor(String descriptor, String expression) {
-        if (descriptor.startsWith("list[") && descriptor.endsWith("]")) {
+        if (descriptor.startsWith("List[") && descriptor.endsWith("]")) {
             return runtimeValueMatchesCollectionDescriptor(
                     expression,
                     "java.util.List<?>",
@@ -2651,7 +2657,7 @@ public class JavaExpressionEvaluator {
                     "__capybaraListItem"
             );
         }
-        if (descriptor.startsWith("set[") && descriptor.endsWith("]")) {
+        if (descriptor.startsWith("Set[") && descriptor.endsWith("]")) {
             return runtimeValueMatchesCollectionDescriptor(
                     expression,
                     "java.util.Set<?>",
@@ -2661,7 +2667,7 @@ public class JavaExpressionEvaluator {
                     "__capybaraSetItem"
             );
         }
-        if (descriptor.startsWith("dict[") && descriptor.endsWith("]")) {
+        if (descriptor.startsWith("Dict[") && descriptor.endsWith("]")) {
             return runtimeValueMatchesCollectionDescriptor(
                     expression,
                     "java.util.Map<?, ?>",

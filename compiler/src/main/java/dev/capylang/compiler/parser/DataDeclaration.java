@@ -12,6 +12,7 @@ public record DataDeclaration(String name, List<DataField> fields,
                               List<DeriveDirective> derives,
                               List<String> comments,
                               Visibility visibility,
+                              boolean nativeType,
                               Optional<SourcePosition> position) implements Definition {
     public DataDeclaration(String name, List<DataField> fields,
                            List<String> extendsTypes,
@@ -20,7 +21,7 @@ public record DataDeclaration(String name, List<DataField> fields,
                            List<String> comments,
                            Visibility visibility,
                            Optional<SourcePosition> position) {
-        this(name, fields, extendsTypes, typeParameters, constructor, List.of(), comments, visibility, position);
+        this(name, fields, extendsTypes, typeParameters, constructor, List.of(), comments, visibility, false, position);
     }
 
     public DataDeclaration(String name, List<DataField> fields,

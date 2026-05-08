@@ -1,8 +1,8 @@
-fun choose(values: list[int]): int = 100 + values.size
-fun choose(values: list[long]): int = 200 + values.size
+fun choose(values: List[int]): int = 100 + values.size
+fun choose(values: List[long]): int = 200 + values.size
 
-fun ints(): list[int] = [1, 2, 3]
-fun longs(): list[long] = [1L, 2L, 3L]
+fun ints(): List[int] = [1, 2, 3]
+fun longs(): List[long] = [1L, 2L, 3L]
 
 fun choose_ints(): int = choose(ints())
 fun choose_longs(): int = choose(longs())

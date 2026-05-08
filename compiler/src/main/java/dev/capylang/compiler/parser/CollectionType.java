@@ -4,7 +4,7 @@ public sealed interface CollectionType extends Type {
     public record ListType(Type elementType) implements CollectionType {
         @Override
         public String name() {
-            return "list";
+            return "List";
         }
     }
 
@@ -12,14 +12,14 @@ public sealed interface CollectionType extends Type {
 
         @Override
         public String name() {
-            return "set";
+            return "Set";
         }
     }
 
     public record DictType(Type valueType) implements CollectionType {
         @Override
         public String name() {
-            return "dict";
+            return "Dict";
         }
     }
 }

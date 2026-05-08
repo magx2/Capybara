@@ -1,0 +1,2 @@
+/// Native fixed-size ordered collection type backed by the runtime Tuple implementation.
+data Tuple { <native> }

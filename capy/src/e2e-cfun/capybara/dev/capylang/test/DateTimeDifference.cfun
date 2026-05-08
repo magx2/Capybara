@@ -11,10 +11,10 @@ private fun at(days_since_epoch: int, seconds_since_midnight: int): DateTime =
         time: midnight.add_seconds(seconds_since_midnight)
     }
 
-fun forward_difference_iso(): string =
+fun forward_difference_iso(): String =
     at(1, 3661).minus(at(0, 0)).to_iso_8601()
 
-fun backward_difference_iso(): string =
+fun backward_difference_iso(): String =
     at(0, 0).minus(at(1, 3661)).to_iso_8601()
 
 fun difference_round_trips(): bool =

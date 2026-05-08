@@ -58,12 +58,12 @@ fun Time.add_minutes(minutes: int): Time = this.add_seconds(minutes * SECONDS_IN
 fun Time.add_hours(hours: int): Time = this.add_seconds(hours * SECONDS_IN_HOUR)
 
 /// Formats this time as an ISO 8601 extended time.
-fun Time.to_iso_8601(): string =
-    fun rec __pad_left(value: string, size: int): string =
+fun Time.to_iso_8601(): String =
+    fun rec __pad_left(value: String, size: int): String =
         if value.size >= size
         then value
         else __pad_left("0" + value, size)
-    fun __format_offset(offset_minutes: int): string =
+    fun __format_offset(offset_minutes: int): String =
         let absolute_offset_minutes = if offset_minutes < 0 then 0 - offset_minutes else offset_minutes
         let offset_hours = absolute_offset_minutes / MINUTES_IN_HOUR
         let offset_remaining_minutes = absolute_offset_minutes % MINUTES_IN_HOUR
@@ -85,48 +85,48 @@ fun Time.to_iso_8601(): string =
       case Some { value } -> __format_offset(value)
 
 /// Parses an ISO 8601 time in basic or extended complete form.
-fun from_iso_8601(iso: string): Result[Time] =
-    data __Parse[T] { buffer: string, value: T }
-    data __ZoneParse { buffer: string, offset_minutes: Option[int] }
-    fun __invalid(message: string): string = "Invalid ISO 8601 time format: " + message
-    fun rec __drop_prefix(value: string, size: int): string =
+fun from_iso_8601(iso: String): Result[Time] =
+    data __Parse[T] { buffer: String, value: T }
+    data __ZoneParse { buffer: String, offset_minutes: Option[int] }
+    fun __invalid(message: String): String = "Invalid ISO 8601 time format: " + message
+    fun rec __drop_prefix(value: String, size: int): String =
         if size <= 0
         then value
         else
             match value[0] with
             case None -> ""
             case Some { _ } -> __drop_prefix(value[1:], size - 1)
-    fun rec __take_prefix(value: string, size: int, acc: string): string =
+    fun rec __take_prefix(value: String, size: int, acc: String): String =
         if size <= 0
         then acc
         else
             match value[0] with
             case None -> acc
             case Some { char } -> __take_prefix(value[1:], size - 1, acc + char)
-    fun __slice(value: string, start: int, size: int): string = __take_prefix(__drop_prefix(value, start), size, "")
-    fun __parse_single_digit(value: string): Result[__Parse[int]] =
+    fun __slice(value: String, start: int, size: int): String = __take_prefix(__drop_prefix(value, start), size, "")
+    fun __parse_single_digit(value: String): Result[__Parse[int]] =
         match value[0] with
         case None -> Error { __invalid("unexpected end of string while parsing digits") }
         case Some { char } ->
             match ("" + char).to_int() with
             case Success { digit } -> Success { __Parse { buffer: value[1:], value: digit } }
             case Error -> Error { __invalid("expected digit, got `" + char + "`") }
-    fun rec __parse_rest_digits(value: string, parsed: int): Result[__Parse[int]] =
+    fun rec __parse_rest_digits(value: String, parsed: int): Result[__Parse[int]] =
         if value.is_empty
         then Success { __Parse { buffer: value, value: parsed } }
         else
             match __parse_single_digit(value) with
             case Success { next } -> __parse_rest_digits(next.buffer, parsed * 10 + next.value)
             case Error -> Success { __Parse { buffer: value, value: parsed } }
-    fun __parse_digits(value: string): Result[__Parse[int]] =
+    fun __parse_digits(value: String): Result[__Parse[int]] =
         let parse <- __parse_single_digit(value)
         __parse_rest_digits(parse.buffer, parse.value)
-    fun __parse_exact_digits(value: string, label: string): Result[int] =
+    fun __parse_exact_digits(value: String, label: String): Result[int] =
         let parse <- __parse_digits(value)
         if parse.buffer.is_empty
         then Success { parse.value }
         else Error { __invalid("expected digits for " + label + ", got `" + value + "`") }
-    fun __parse_offset(sign: string, hour_part: string, minute_part: string): Result[int] = {
+    fun __parse_offset(sign: String, hour_part: String, minute_part: String): Result[int] = {
         let hours <- __parse_exact_digits(hour_part, "offset hour")
         let minutes <- __parse_exact_digits(minute_part, "offset minute")
         if hours > 23
@@ -140,7 +140,7 @@ fun from_iso_8601(iso: string): Result[Time] =
                     Success { direction * (hours * MINUTES_IN_HOUR + minutes) }
                 }
     }
-    fun __parse_zone(value: string): Result[__ZoneParse] =
+    fun __parse_zone(value: String): Result[__ZoneParse] =
         if value.is_empty
         then Error { __invalid("time must not be empty") }
         else if __slice(value, value.size - 1, 1) == "Z"
@@ -165,7 +165,7 @@ fun from_iso_8601(iso: string): Result[Time] =
                             Success { __ZoneParse { buffer: __take_prefix(value, value.size - 3, ""), offset_minutes: Some { offset_minutes } } }
                         }
                         else Success { __ZoneParse { buffer: value, offset_minutes: None {} } }
-    fun __parse_parts(hour_part: string, minute_part: string, second_part: string, offset_minutes: Option[int]): Result[Time] = {
+    fun __parse_parts(hour_part: String, minute_part: String, second_part: String, offset_minutes: Option[int]): Result[Time] = {
         let hour <- __parse_exact_digits(hour_part, "hour")
         let minute <- __parse_exact_digits(minute_part, "minute")
         let second <- __parse_exact_digits(second_part, "second")

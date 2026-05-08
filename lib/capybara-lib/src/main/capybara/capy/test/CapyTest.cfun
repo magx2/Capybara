@@ -10,14 +10,14 @@ from /capy/date_time/Clock import { now }
 from /capy/date_time/DateTime import { * }
 from /capy/lang/System import { nano_time }
 
-data TestFile { file_name: string, test_cases: list[TestCase], timestamp: string }
-data TestCase { name: string, result: TestResult, assertions_count: int, execution_time: double }
+data TestFile { file_name: String, test_cases: List[TestCase], timestamp: String }
+data TestCase { name: String, result: TestResult, assertions_count: int, execution_time: double }
 type TestResult = Passed | Failed
 single Passed
-data Failed { message: string, type: string }
+data Failed { message: String, type: String }
 enum LogType { NONE, LOG, TEAM_CITY }
 
-fun test_file(file_name: string, test_cases: list[Effect[TestCase]]): Effect[TestFile] =
+fun test_file(file_name: String, test_cases: List[Effect[TestCase]]): Effect[TestFile] =
     let current <- now()
     let pushed_file <- push_test_file(file_name)
     let include_file <- should_include_test_file(file_name)
@@ -42,7 +42,7 @@ fun test_file(file_name: string, test_cases: list[Effect[TestCase]]): Effect[Tes
         timestamp: current.to_iso_8601()
     }
 
-fun test(name: string, assert_supplier: () => Assert): Effect[TestCase] =
+fun test(name: String, assert_supplier: () => Assert): Effect[TestCase] =
     let should_execute <- should_execute_test(name)
     if !should_execute
     then pure(TestCase {
@@ -69,15 +69,15 @@ fun test(name: string, assert_supplier: () => Assert): Effect[TestCase] =
         test_case
 
 private fun current_log_type(): Effect[LogType] = <native>
-private fun push_test_file(file_name: string): Effect[string] = <native>
-private fun pop_test_file(): Effect[string] = <native>
-private fun should_include_test_file(file_name: string): Effect[bool] = <native>
-private fun should_execute_test(test_name: string): Effect[bool] = <native>
-private fun should_include_test(test_name: string): Effect[bool] = <native>
+private fun push_test_file(file_name: String): Effect[String] = <native>
+private fun pop_test_file(): Effect[String] = <native>
+private fun should_include_test_file(file_name: String): Effect[bool] = <native>
+private fun should_execute_test(test_name: String): Effect[bool] = <native>
+private fun should_include_test(test_name: String): Effect[bool] = <native>
 
-private fun empty_test_cases(): list[TestCase] = []
+private fun empty_test_cases(): List[TestCase] = []
 
-private fun execute_test_cases(test_cases: list[Effect[TestCase]]): Effect[list[TestCase]] =
+private fun execute_test_cases(test_cases: List[Effect[TestCase]]): Effect[List[TestCase]] =
     match test_cases[0] with
     case None -> pure([])
     case Some { test_case } ->
@@ -88,7 +88,7 @@ private fun execute_test_cases(test_cases: list[Effect[TestCase]]): Effect[list[
         then [executed_test_case] + executed_test_cases
         else executed_test_cases
 
-private fun execute(assertions: list[() => Assertion]): TestResult =
+private fun execute(assertions: List[() => Assertion]): TestResult =
     let failed_assertion = to_seq(assertions)
         | (supplier => supplier())
         .drop_until(assertion => !assertion.result)
@@ -111,7 +111,7 @@ enum ReportType { JUNIT }
 type Report = JUnitReport
 
 /// See: [Complete JUnit XML example](https://github.com/testmoapp/junitxml/blob/main/examples/junit-complete.xml)
-data JUnitReport { suites: list[JUnitTestSuite] }
+data JUnitReport { suites: List[JUnitTestSuite] }
 /// name        Name of the entire test run
 /// tests       Total number of tests in this file
 /// failures    Total number of failed tests in this file
@@ -121,15 +121,15 @@ data JUnitReport { suites: list[JUnitTestSuite] }
 /// time        Aggregated time of all tests in this file in seconds
 /// timestamp   Date and time of when the test run was executed (in ISO 8601 format)
 data JUnitTestSuite {
-    name: string,
+    name: String,
     tests: int,
     failures: int,
     error: int,
     skipped: int,
     assertions: int,
     time: int,
-    timestamp: string,
-    cases: list[JUnitTestCase]
+    timestamp: String,
+    cases: List[JUnitTestCase]
 }
 /// name        The name of this test case, often the method name
 /// classname   The name of the parent class/folder, often the same as the suite's name
@@ -137,23 +137,23 @@ data JUnitTestSuite {
 /// time        Execution time of the test in seconds
 /// file        (not implemented) Source code file of this test case
 /// line        (not implemented) Source code line number of the start of this test case
-data JUnitTestCase { name: string, classname: string, assertions: int, failure: /capy/lang/Option[JUnitFailure] }
-data JUnitFailure { message: string, jtype: string, call_stack: string }
-fun JUnitFailure.`+`(other_message: string): JUnitFailure =
+data JUnitTestCase { name: String, classname: String, assertions: int, failure: /capy/lang/Option[JUnitFailure] }
+data JUnitFailure { message: String, jtype: String, call_stack: String }
+fun JUnitFailure.`+`(other_message: String): JUnitFailure =
     JUnitFailure {
         message: this.message + '\n' + other_message,
         jtype: this.jtype,
         call_stack: this.call_stack
     }
 
-data TestOutput { path: Path, content: string, failed: bool }
-data TestRun { outputs: list[TestOutput], written_files: list[Path], failure_summary: string, failed: bool }
+data TestOutput { path: Path, content: String, failed: bool }
+data TestRun { outputs: List[TestOutput], written_files: List[Path], failure_summary: String, failed: bool }
 
-fun run_tests(rtype: ReportType, test_files: list[TestFile]): list[TestOutput] =
+fun run_tests(rtype: ReportType, test_files: List[TestFile]): List[TestOutput] =
     match rtype with
     case JUNIT -> junit_run_tests(test_files)
 
-fun run_tests(rtype: ReportType, output_dir: Path, test_files: list[TestFile]): Effect[Result[TestRun]] =
+fun run_tests(rtype: ReportType, output_dir: Path, test_files: List[TestFile]): Effect[Result[TestRun]] =
     let outputs = run_tests(rtype, test_files)
     write_test_outputs(output_dir, outputs).flat_map(written_result =>
         match written_result with
@@ -173,7 +173,7 @@ fun run_tests(rtype: ReportType, output_dir: Path, test_files: list[TestFile]): 
             )
     )
 
-fun run_tests_and_print_summary(rtype: ReportType, output_dir: Path, test_files: list[TestFile]): Effect[Result[TestRun]] =
+fun run_tests_and_print_summary(rtype: ReportType, output_dir: Path, test_files: List[TestFile]): Effect[Result[TestRun]] =
     run_tests(rtype, output_dir, test_files).flat_map(run_result =>
         match run_result with
         case Error e -> pure(e)
@@ -182,7 +182,7 @@ fun run_tests_and_print_summary(rtype: ReportType, output_dir: Path, test_files:
     )
 
 /// Writes every test output under the given output directory and returns normalized relative paths.
-fun write_test_outputs(output_dir: Path, test_outputs: list[TestOutput]): Effect[Result[list[Path]]] =
+fun write_test_outputs(output_dir: Path, test_outputs: List[TestOutput]): Effect[Result[List[Path]]] =
     match test_outputs[0] with
     case None -> pure(Success { [] })
     case Some { test_output } ->
@@ -198,7 +198,7 @@ fun write_test_outputs(output_dir: Path, test_outputs: list[TestOutput]): Effect
         )
 
 /// Writes text only when the target file content is different.
-fun write_text_if_changed(path: Path, content: string): Effect[Result[string]] =
+fun write_text_if_changed(path: Path, content: String): Effect[Result[String]] =
     read_text(path).flat_map(existing =>
         match existing with
         case Success { existing_content } ->
@@ -229,13 +229,13 @@ private fun create_test_output_parent(path: Path): Effect[Result[Path]] =
 
 const OUTPUT_MANIFEST_FILE = '.capy-test-output-manifest'
 
-fun failure_summary(test_files: list[TestFile]): string =
+fun failure_summary(test_files: List[TestFile]): String =
     let failures = test_files |> '', (acc, test_file) => acc + failure_summary_file(test_file)
     if failures.is_empty
     then ''
     else '\nFailures:\n\n' + failures
 
-private fun failure_summary_file(test_file: TestFile): string =
+private fun failure_summary_file(test_file: TestFile): String =
     test_file.test_cases |> '', (acc, test_case) =>
         if test_case.failed()
         then acc
@@ -244,12 +244,12 @@ private fun failure_summary_file(test_file: TestFile): string =
             + '\n\n'
         else acc
 
-private fun failure_summary_message(test_case: TestCase): string =
+private fun failure_summary_message(test_case: TestCase): String =
     match test_case.result with
     case Passed -> ''
     case Failed { message, type } -> normalize_failure_message(message)
 
-fun normalize_failure_message(message: string): string =
+fun normalize_failure_message(message: String): String =
     message
         .replace('\\r\\n', '\n')
         .replace('\\n', '\n')
@@ -258,30 +258,30 @@ fun normalize_failure_message(message: string): string =
         .replace('\r', '\n')
         .replace('\\t', '\t')
 
-private fun print_failure_summary(summary: string): Effect[string] =
+private fun print_failure_summary(summary: String): Effect[String] =
     if summary.is_empty
     then pure(summary)
     else print(summary)
 
-private fun print_test_suite_started(log_type: LogType, suite_name: string): Effect[string] =
+private fun print_test_suite_started(log_type: LogType, suite_name: String): Effect[String] =
     match log_type with
     case NONE -> pure(suite_name)
     case LOG -> println("Test suite started: {suite_name}")
     case TEAM_CITY -> println("##teamcity[testSuiteStarted name='{team_city_escape(suite_name)}']")
 
-private fun print_test_suite_finished(log_type: LogType, suite_name: string): Effect[string] =
+private fun print_test_suite_finished(log_type: LogType, suite_name: String): Effect[String] =
     match log_type with
     case NONE -> pure(suite_name)
     case LOG -> println("Test suite finished: {suite_name}")
     case TEAM_CITY -> println("##teamcity[testSuiteFinished name='{team_city_escape(suite_name)}']")
 
-private fun print_test_started(log_type: LogType, test_name: string): Effect[string] =
+private fun print_test_started(log_type: LogType, test_name: String): Effect[String] =
     match log_type with
     case NONE -> pure(test_name)
     case LOG -> println("Test started: {test_name}")
     case TEAM_CITY -> println("##teamcity[testStarted name='{team_city_escape(test_name)}']")
 
-private fun print_test_failed(log_type: LogType, test_case: TestCase): Effect[string] =
+private fun print_test_failed(log_type: LogType, test_case: TestCase): Effect[String] =
     match test_case.result with
     case Passed -> pure('')
     case Failed { message, type } ->
@@ -294,22 +294,22 @@ private fun print_test_failed(log_type: LogType, test_case: TestCase): Effect[st
         case TEAM_CITY ->
             println("##teamcity[testFailed name='{team_city_escape(test_case.name)}' message='assertion failed' details='{team_city_escape(normalize_failure_message(message))}']")
 
-private fun print_test_finished(log_type: LogType, test_name: string): Effect[string] =
+private fun print_test_finished(log_type: LogType, test_name: String): Effect[String] =
     match log_type with
     case NONE -> pure(test_name)
     case LOG -> println("Test finished: {test_name}")
     case TEAM_CITY -> println("##teamcity[testFinished name='{team_city_escape(test_name)}']")
 
-fun test_log_lines(test_files: list[TestFile]): list[string] =
+fun test_log_lines(test_files: List[TestFile]): List[String] =
     test_files |> [], (acc, test_file) => acc + test_log_lines_file(test_file)
 
-private fun test_log_lines_file(test_file: TestFile): list[string] =
+private fun test_log_lines_file(test_file: TestFile): List[String] =
     let suite_name = test_suite_name(test_file.file_name)
     ["Test suite started: {suite_name}"]
         + (test_file.test_cases |> [], (acc, test_case) => acc + test_log_lines_case(test_case))
         + ["Test suite finished: {suite_name}"]
 
-private fun test_log_lines_case(test_case: TestCase): list[string] =
+private fun test_log_lines_case(test_case: TestCase): List[String] =
     let started = "Test started: {test_case.name}"
     let finished = "Test finished: {test_case.name}"
     match test_case.result with
@@ -321,16 +321,16 @@ private fun test_log_lines_case(test_case: TestCase): list[string] =
         finished
     ]
 
-fun team_city_messages(test_files: list[TestFile]): list[string] =
+fun team_city_messages(test_files: List[TestFile]): List[String] =
     test_files |> [], (acc, test_file) => acc + team_city_messages_file(test_file)
 
-private fun team_city_messages_file(test_file: TestFile): list[string] =
+private fun team_city_messages_file(test_file: TestFile): List[String] =
     let suite_name = team_city_escape(test_suite_name(test_file.file_name))
     ["##teamcity[testSuiteStarted name='{suite_name}']"]
         + (test_file.test_cases |> [], (acc, test_case) => acc + team_city_messages_case(test_case))
         + ["##teamcity[testSuiteFinished name='{suite_name}']"]
 
-private fun team_city_messages_case(test_case: TestCase): list[string] =
+private fun team_city_messages_case(test_case: TestCase): List[String] =
     let test_name = team_city_escape(test_case.name)
     let started = "##teamcity[testStarted name='{test_name}']"
     let finished = "##teamcity[testFinished name='{test_name}']"
@@ -342,8 +342,8 @@ private fun team_city_messages_case(test_case: TestCase): list[string] =
         finished
     ]
 
-fun team_city_escape(value: string): string =
-    fun rec __team_city_escape(value: string, acc: string): string =
+fun team_city_escape(value: String): String =
+    fun rec __team_city_escape(value: String, acc: String): String =
         match value[0] with
         case None -> acc
         case Some { '\'' } -> __team_city_escape(value[1:], acc + "|'")
@@ -356,9 +356,9 @@ fun team_city_escape(value: string): string =
     ---
     __team_city_escape(value, '')
 
-private fun test_suite_name(file_name: string): string = file_name
+private fun test_suite_name(file_name: String): String = file_name
 
-private fun prune_stale_outputs(output_dir: Path, expected_files: list[Path]): Effect[Result[list[Path]]] =
+private fun prune_stale_outputs(output_dir: Path, expected_files: List[Path]): Effect[Result[List[Path]]] =
     let manifest_file = output_dir / OUTPUT_MANIFEST_FILE
     stale_output_files(output_dir, manifest_file, expected_files).flat_map(stale_result =>
         match stale_result with
@@ -376,7 +376,7 @@ private fun prune_stale_outputs(output_dir: Path, expected_files: list[Path]): E
             )
     )
 
-private fun stale_output_files(output_dir: Path, manifest_file: Path, expected_files: list[Path]): Effect[Result[list[Path]]] =
+private fun stale_output_files(output_dir: Path, manifest_file: Path, expected_files: List[Path]): Effect[Result[List[Path]]] =
     read_text(manifest_file).flat_map(manifest_result =>
         match manifest_result with
         case Success { content } -> pure(Success { stale_files(manifest_paths(content), expected_files) })
@@ -390,8 +390,8 @@ private fun stale_output_files(output_dir: Path, manifest_file: Path, expected_f
             )
     )
 
-private fun stale_files(files: list[Path], expected_files: list[Path]): list[Path] =
-    fun rec __stale_files(files: list[Path], expected_files: list[Path], acc: list[Path]): list[Path] =
+private fun stale_files(files: List[Path], expected_files: List[Path]): List[Path] =
+    fun rec __stale_files(files: List[Path], expected_files: List[Path], acc: List[Path]): List[Path] =
         match files[0] with
         case None -> acc
         case Some { file } ->
@@ -402,7 +402,7 @@ private fun stale_files(files: list[Path], expected_files: list[Path]): list[Pat
     ---
     __stale_files(files, expected_files, [])
 
-private fun delete_stale_outputs(output_dir: Path, stale_files: list[Path]): Effect[Result[list[Path]]] =
+private fun delete_stale_outputs(output_dir: Path, stale_files: List[Path]): Effect[Result[List[Path]]] =
     match stale_files[0] with
     case None -> pure(Success { [] })
     case Some { stale_file } ->
@@ -438,14 +438,14 @@ private fun delete_empty_parent_directories(path: Path, output_dir: Path): Effec
             case Error _ -> pure(Success { parent })
         )
 
-private fun write_output_manifest(manifest_file: Path, expected_files: list[Path]): Effect[Result[string]] =
+private fun write_output_manifest(manifest_file: Path, expected_files: List[Path]): Effect[Result[String]] =
     write_text_if_changed(manifest_file, manifest_content(expected_files))
 
-private fun manifest_content(paths: list[Path]): string =
+private fun manifest_content(paths: List[Path]): String =
     paths |> '', (acc, path) => acc + path_to_manifest_line(path.normalize()) + '\n'
 
-private fun manifest_paths(content: string): list[Path] =
-    fun rec lines(value: string, current: string, acc: list[string]): list[string] =
+private fun manifest_paths(content: String): List[Path] =
+    fun rec lines(value: String, current: String, acc: List[String]): List[String] =
         match value[0] with
         case None ->
             if current.is_empty
@@ -460,14 +460,14 @@ private fun manifest_paths(content: string): list[Path] =
     ---
     lines(content, '', []) | line => from_string(line)
 
-private fun list_regular_files(path: Path): Effect[Result[list[Path]]] =
+private fun list_regular_files(path: Path): Effect[Result[List[Path]]] =
     list_entries(path).flat_map(entries_result =>
         match entries_result with
         case Error e -> pure(e)
         case Success { entries } -> list_regular_files_from_entries(entries)
     )
 
-private fun list_regular_files_from_entries(entries: list[Path]): Effect[Result[list[Path]]] =
+private fun list_regular_files_from_entries(entries: List[Path]): Effect[Result[List[Path]]] =
     match entries[0] with
     case None -> pure(Success { [] })
     case Some { entry } ->
@@ -497,7 +497,7 @@ private fun list_regular_files_from_entries(entries: list[Path]): Effect[Result[
 private fun relative_to(base: Path, path: Path): Path =
     from_string(path_segments_to_string(drop_prefix_segments(base.normalize().segments, path.normalize().segments)))
 
-private fun rec drop_prefix_segments(prefix: list[string], segments: list[string]): list[string] =
+private fun rec drop_prefix_segments(prefix: List[String], segments: List[String]): List[String] =
     match prefix[0] with
     case None -> segments
     case Some { expected } ->
@@ -508,14 +508,14 @@ private fun rec drop_prefix_segments(prefix: list[string], segments: list[string
             then drop_prefix_segments(prefix[1:], segments[1:])
             else segments
 
-private fun path_list_contains(paths: list[Path], path: Path): bool =
+private fun path_list_contains(paths: List[Path], path: Path): bool =
     paths |any? p => p.normalize() == path.normalize()
 
-private fun path_to_manifest_line(path: Path): string =
+private fun path_to_manifest_line(path: Path): String =
     path_segments_to_string(path.normalize().segments)
 
-private fun path_segments_to_string(segments: list[string]): string =
-    fun rec __path_segments_to_string(segments: list[string], acc: string): string =
+private fun path_segments_to_string(segments: List[String]): String =
+    fun rec __path_segments_to_string(segments: List[String], acc: String): String =
         match segments[0] with
         case None -> acc
         case Some { segment } ->
@@ -524,11 +524,11 @@ private fun path_segments_to_string(segments: list[string]): string =
     ---
     __path_segments_to_string(segments, '')
 
-private fun has_failures(test_outputs: list[TestOutput]): bool = test_outputs |any? output => output.failed
+private fun has_failures(test_outputs: List[TestOutput]): bool = test_outputs |any? output => output.failed
 
 const JUNIT_PREFIX = 'TEST-'
 
-private fun junit_run_tests(test_files: list[TestFile]): list[TestOutput] = test_files | :junit_run_test
+private fun junit_run_tests(test_files: List[TestFile]): List[TestOutput] = test_files | :junit_run_test
 
 private fun junit_run_test(test_file: TestFile): TestOutput =
     let tests = test_file.test_cases.size
@@ -545,7 +545,7 @@ private fun junit_run_test(test_file: TestFile): TestOutput =
         failed: failures > 0
     }
 
-private fun junit_run_test_case(file_name: string, test_case: TestCase): string =
+private fun junit_run_test_case(file_name: String, test_case: TestCase): String =
     let assertions = test_case.assertions_count
     let escaped_name = junit_escape_xml_attribute(test_case.name)
     let escaped_file_name = junit_escape_xml_attribute(file_name)
@@ -553,7 +553,7 @@ private fun junit_run_test_case(file_name: string, test_case: TestCase): string 
     + junit_run_test_case_message(test_case)
     + '</testcase>'
 
-private fun junit_run_test_case_message(test_case: TestCase): string =
+private fun junit_run_test_case_message(test_case: TestCase): String =
     match test_case.result with
     case Passed -> ''
     case Failed { message, type } ->
@@ -563,7 +563,7 @@ private fun junit_run_test_case_message(test_case: TestCase): string =
         + message
         + "]]></failure>"
 
-private fun junit_escape_xml_attribute(value: string): string =
+private fun junit_escape_xml_attribute(value: String): String =
     value
         .replace('&', '&amp;')
         .replace('<', '&lt;')

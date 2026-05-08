@@ -1,32 +1,32 @@
 from /capy/lang/Option import {*}
 
-fun foo(option: Option[string]): string =
+fun foo(option: Option[String]): String =
     match option with
     case Some { char } -> "other"
     case Some { char } when char == '-' -> "minus"
     case Some { char } when char == '+' -> "plus"
     case None -> "none"
 
-fun boo(option: Option[int]): string =
+fun boo(option: Option[int]): String =
     match option with
     case Some { value } -> '' + value
     case Some { value } when value == 1 -> "one"
     case Some { value } when value == 2 -> "two"
     case None -> "none"
 
-fun nested_guard(option: Option[int]): string =
+fun nested_guard(option: Option[int]): String =
     match option with
     case Some { value } when value > 10 -> "big"
     case Some { value } -> '' + value
     case None -> "none"
 
-data Sign { value: string, weight: int, enabled: bool }
+data Sign { value: String, weight: int, enabled: bool }
 
 type Letter = Vowel | Consonant
 single Vowel
 single Consonant
 
-fun sign(sign: Sign): string =
+fun sign(sign: Sign): String =
     match sign with
     case Sign { value, weight, enabled } when enabled & value == '-' & weight > 10 -> "heavy minus"
     case Sign { value, weight, enabled } when enabled & value == '+' & weight > 10 -> "heavy plus"
@@ -34,7 +34,7 @@ fun sign(sign: Sign): string =
     case Sign { value, _, _ } when value == '-' -> "minus"
     case Sign { value, _, _ } when value == '+' -> "plus"
 
-fun letter(letter: Letter): string =
+fun letter(letter: Letter): String =
     match letter with
     case Vowel when letter == Vowel {} -> "vowel"
     case Consonant when letter == Consonant {} -> "hard"
@@ -43,7 +43,7 @@ fun letter(letter: Letter): string =
 
 data Range { start: int, stop: int, step: int, enabled: bool }
 
-fun range_label(range: Range): string =
+fun range_label(range: Range): String =
     match range with
     case Range { start, stop, step, enabled } when enabled & start < stop & step == 1 -> "ascending"
     case Range { start, stop, step, enabled } when enabled & start > stop & step == -1 -> "descending"

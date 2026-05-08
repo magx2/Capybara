@@ -205,16 +205,16 @@ class JavaExpressionEvaluatorTest {
     void shouldKeepQualifiedOverrideOwnershipPerModule() {
         var program = compileProgram(List.of(
                 new RawModule("Left", "/alpha", """
-                        fun choose(values: list[int]): int = 100 + values.size
-                        fun choose(values: list[long]): int = 200 + values.size
+                        fun choose(values: List[int]): int = 100 + values.size
+                        fun choose(values: List[long]): int = 200 + values.size
                         """),
                 new RawModule("Right", "/beta", """
-                        fun choose(values: list[int]): int = 300 + values.size
-                        fun choose(values: list[long]): int = 400 + values.size
+                        fun choose(values: List[int]): int = 300 + values.size
+                        fun choose(values: List[long]): int = 400 + values.size
                         """),
                 new RawModule("Main", "/app", """
-                        fun ints(): list[int] = [1, 2, 3]
-                        fun longs(): list[long] = [1L, 2L, 3L]
+                        fun ints(): List[int] = [1, 2, 3]
+                        fun longs(): List[long] = [1L, 2L, 3L]
                         fun left_choice(): int = /alpha/Left.choose(ints())
                         fun left_choice_long(): int = /alpha/Left.choose(longs())
                         fun right_choice(): int = /beta/Right.choose(ints())
@@ -238,10 +238,10 @@ class JavaExpressionEvaluatorTest {
     void shouldGenerateCommentsForDataAndTypeDeclarations() {
         var program = compileProgram("""
                 /// Complete report
-                data JUnitTestSuite { name: string }
+                data JUnitTestSuite { name: String }
 
                 /// Complete report
-                data JUnitReport { suites: list[JUnitTestSuite] }
+                data JUnitReport { suites: List[JUnitTestSuite] }
 
                 /// Node type
                 type JUnitNode = JUnitReport
@@ -286,15 +286,15 @@ class JavaExpressionEvaluatorTest {
     @Test
     void shouldGenerateCapyTestMethodFromSourceForCapyTestModule() {
         var program = compileProgram("CapyTest", "/capy/test", """
-                data Assertion { result: bool, message: string, type: string }
-                data StringAssert { value: string, assertions: list[Assertion] }
-                type Assert { assertions: list[Assertion] } = StringAssert
+                data Assertion { result: bool, message: String, type: String }
+                data StringAssert { value: String, assertions: List[Assertion] }
+                type Assert { assertions: List[Assertion] } = StringAssert
                 single Passed
                 type TestResult = Passed
-                data TestCase { name: string, result: TestResult, assertions_count: int, execution_time: long }
+                data TestCase { name: String, result: TestResult, assertions_count: int, execution_time: long }
 
-                private fun execute(assertions: list[Assertion]): TestResult = Passed {}
-                fun test(name: string, assert_: Assert): TestCase =
+                private fun execute(assertions: List[Assertion]): TestResult = Passed {}
+                fun test(name: String, assert_: Assert): TestCase =
                     TestCase {
                         name: name,
                         result: execute(assert_.assertions),
@@ -315,15 +315,15 @@ class JavaExpressionEvaluatorTest {
     @Test
     void shouldGenerateCapyTestNamedMethodFromSourceOutsideCapyTestModule() {
         var program = compileProgram("NotCapyTest", "/foo/bar", """
-                data Assertion { result: bool, message: string, type: string }
-                data StringAssert { value: string, assertions: list[Assertion] }
-                type Assert { assertions: list[Assertion] } = StringAssert
+                data Assertion { result: bool, message: String, type: String }
+                data StringAssert { value: String, assertions: List[Assertion] }
+                type Assert { assertions: List[Assertion] } = StringAssert
                 single Passed
                 type TestResult = Passed
-                data TestCase { name: string, result: TestResult, assertions_count: int, execution_time: long }
+                data TestCase { name: String, result: TestResult, assertions_count: int, execution_time: long }
 
-                private fun execute(assertions: list[Assertion]): TestResult = Passed {}
-                fun test(name: string, assert_: Assert): TestCase =
+                private fun execute(assertions: List[Assertion]): TestResult = Passed {}
+                fun test(name: String, assert_: Assert): TestCase =
                     TestCase {
                         name: name,
                         result: execute(assert_.assertions),
@@ -343,7 +343,7 @@ class JavaExpressionEvaluatorTest {
     @Test
     void shouldGenerateRuntimeDataValueCarrierForRecords() {
         var generatedProgram = new JavaGenerator().generate(compileProgram("Consumer", "/foo/app", """
-                data User { name: string, age: int }
+                data User { name: String, age: int }
                 """));
         var generated = generatedProgram.modules().stream()
                 .map(dev.capylang.generator.GeneratedModule::code)
@@ -464,7 +464,7 @@ class JavaExpressionEvaluatorTest {
                 new RawModule("Consumer", "/foo/app", """
                         from /capy/meta_prog/Reflection import { DataValueInfo, reflection }
 
-                        data User { name: string }
+                        data User { name: String }
 
                         fun reflect_user(user: User): DataValueInfo = reflection(user)
                         """)
@@ -482,11 +482,11 @@ class JavaExpressionEvaluatorTest {
     @Test
     void shouldCastCollectionTypedPatternBindingsBeforeUse() {
         var generatedProgram = new JavaGenerator().generate(compileProgram("CollectionTypedMatch", "/foo/bar", """
-                fun stringify(value: any): list[string] =
+                fun stringify(value: any): List[String] =
                     match value with
-                    case list[any] items -> items | item => "" + item
-                    case set[any] items -> items |> [], (acc, item) => acc + ("" + item)
-                    case dict[any] items -> items |> [], (acc, key, item) => acc + (key + ":" + item)
+                    case List[any] items -> items | item => "" + item
+                    case Set[any] items -> items |> [], (acc, item) => acc + ("" + item)
+                    case Dict[any] items -> items |> [], (acc, key, item) => acc + (key + ":" + item)
                     case _ -> []
                 """));
         var generated = generatedProgram.modules().stream()
@@ -600,10 +600,10 @@ class JavaExpressionEvaluatorTest {
         var program = compileProgram("""
                 data Box[T] { value: T }
 
-                fun accept(value: double): string = "double"
-                fun accept(value: data): string = "data"
+                fun accept(value: double): String = "double"
+                fun accept(value: data): String = "data"
 
-                fun use_box(box: Box[double]): string =
+                fun use_box(box: Box[double]): String =
                     accept(box.value)
                 """);
 
@@ -656,8 +656,8 @@ class JavaExpressionEvaluatorTest {
     @Test
     void shouldNotGenerateDuplicateRecordToStringWhenCapybaraDefinesToString() {
         var program = compileProgram("Pretty", "/foo/bar", """
-                data Pretty { value: string }
-                fun Pretty.to_string(): string = "pretty:" + this.value
+                data Pretty { value: String }
+                fun Pretty.to_string(): String = "pretty:" + this.value
                 """);
 
         var generated = new JavaGenerator().generate(program).modules().stream()
@@ -671,7 +671,7 @@ class JavaExpressionEvaluatorTest {
     @Test
     void shouldUseCapybaraToStringUtilForGeneratedRecordToString() {
         var program = compileProgram("Pretty", "/foo/bar", """
-                data Pretty { value: string }
+                data Pretty { value: String }
                 """);
 
         var generated = new JavaGenerator().generate(program).modules().stream()
@@ -689,7 +689,7 @@ class JavaExpressionEvaluatorTest {
                 from /capy/lang/Result import { * }
 
                 fun parse(value: int): Result[int] =
-                    data __Parse[T] { buffer: string, value: T }
+                    data __Parse[T] { buffer: String, value: T }
                     fun __unwrap(parse: __Parse[Option[int]]): Result[__Parse[int]] =
                         match parse.value with
                         case Some { inner } -> Success { __Parse { buffer: parse.buffer, value: inner } }
@@ -710,7 +710,7 @@ class JavaExpressionEvaluatorTest {
     @Test
     void shouldGenerateRecordWithMethod() {
         var program = compileProgram("With", "/foo/bar", """
-                data Foo { a: int, b: string, c: double }
+                data Foo { a: int, b: String, c: double }
                 fun update(foo: Foo): Foo = foo.with(a: foo.a + 1, b: \"x\")
                 """);
 
@@ -725,7 +725,7 @@ class JavaExpressionEvaluatorTest {
     @Test
     void shouldGenerateChainedWithCalls() {
         var evaluated = JavaExpressionEvaluator.evaluateExpression(findFunction("update", compileProgram("With", "/foo/bar", """
-                data Foo { a: int, b: string, c: double }
+                data Foo { a: int, b: String, c: double }
                 fun update(foo: Foo): Foo = foo.with(a: foo.a + 1).with(b: \"x\")
                 """)).orElseThrow().expression());
 
@@ -738,7 +738,7 @@ class JavaExpressionEvaluatorTest {
         var generated = new JavaGenerator().generate(compileProgram("OptionMatch", "/foo/bar", """
                 from /capy/lang/Option import { Option, Some, None }
 
-                fun read(value: Option[string]): string =
+                fun read(value: Option[String]): String =
                     match value with
                     case None -> "none"
                     case Some -> "some"
@@ -753,7 +753,7 @@ class JavaExpressionEvaluatorTest {
     @Test
     void shouldGenerateBooleanLiteralMatchCasesUsingBooleanPatternGuards() {
         var generated = new JavaGenerator().generate(compileProgram("BoolMatch", "/foo/bar", """
-                fun mood(value: bool): string =
+                fun mood(value: bool): String =
                     match value with
                     case true -> "happy"
                     case false -> "sad"
@@ -772,10 +772,10 @@ class JavaExpressionEvaluatorTest {
     void shouldInferSharedParentForConcatenatedSubtypeLists() {
         var program = compileProgram("EmptyLiteralInference", "/foo/bar", """
                 type Outcome = ParseSucceeded | ParseFailed
-                data ParseSucceeded { source: string }
-                data ParseFailed { source: string }
+                data ParseSucceeded { source: String }
+                data ParseFailed { source: String }
 
-                fun merged_outcomes(values: list[string]) =
+                fun merged_outcomes(values: List[String]) =
                     let succeeded = values |> [], (acc, source) => acc + ParseSucceeded { source }
                     let failed = values |> [], (acc, source) => acc + ParseFailed { source }
                     succeeded + failed
@@ -793,14 +793,14 @@ class JavaExpressionEvaluatorTest {
     void shouldGenerateTypedConcatForSubtypeListsWithSharedParent() {
         var program = compileProgram("EmptyLiteralInference", "/foo/bar", """
                 type Outcome = ParseSucceeded | ParseFailed
-                data ParseSucceeded { source: string }
-                data ParseFailed { source: string }
-                data OutcomeBatch { outcomes: list[Outcome] }
+                data ParseSucceeded { source: String }
+                data ParseFailed { source: String }
+                data OutcomeBatch { outcomes: List[Outcome] }
 
-                fun batch_outcomes(outcomes: list[Outcome]): OutcomeBatch =
+                fun batch_outcomes(outcomes: List[Outcome]): OutcomeBatch =
                     OutcomeBatch { outcomes }
 
-                fun concat_inferred_parent_subtype_lists(values: list[string]): OutcomeBatch =
+                fun concat_inferred_parent_subtype_lists(values: List[String]): OutcomeBatch =
                     let succeeded = values |> [], (acc, source) => acc + ParseSucceeded { source }
                     let failed = values |> [], (acc, source) => acc + ParseFailed { source }
                     batch_outcomes(succeeded + failed)
@@ -818,7 +818,7 @@ class JavaExpressionEvaluatorTest {
         var generated = new JavaGenerator().generate(compileProgram("ResultMatch", "/foo/bar", """
                 from /capy/lang/Result import { * }
 
-                fun recover(value: Result[string]): string =
+                fun recover(value: Result[String]): String =
                     match value with
                     case Error -> "bad"
                     case Success { ok } -> ok
@@ -836,9 +836,9 @@ class JavaExpressionEvaluatorTest {
         var generated = new JavaGenerator().generate(compileProgram("ResultErrorCast", "/foo/bar", """
                 from /capy/lang/Result import { * }
 
-                fun fail(message: string): Result[int] = Error { message }
+                fun fail(message: String): Result[int] = Error { message }
 
-                fun nested(value: string): Result[int] =
+                fun nested(value: String): Result[int] =
                     match value with
                     case "x" -> fail(value)
                     case _ v ->
@@ -859,7 +859,7 @@ class JavaExpressionEvaluatorTest {
                 from /capy/lang/Result import { * }
                 from /capy/lang/Option import { * }
 
-                fun nested(value: string): Result[int] =
+                fun nested(value: String): Result[int] =
                     match value with
                     case "" -> Error { "empty" }
                     case _ v ->
@@ -880,11 +880,11 @@ class JavaExpressionEvaluatorTest {
         var generated = new JavaGenerator().generate(compileProgram("GenericResultBinding", "/foo/bar", """
                 from /capy/lang/Result import { * }
 
-                type Assert { assertions: list[() => string] } = StringAssert
-                data StringAssert { assertions: list[() => string] }
+                type Assert { assertions: List[() => String] } = StringAssert
+                data StringAssert { assertions: List[() => String] }
                 data ResultAssert[T] { value: Result[T] }
 
-                fun ResultAssert[T].succeeds(assert_: T => Assert): list[() => string] =
+                fun ResultAssert[T].succeeds(assert_: T => Assert): List[() => String] =
                     match this.value with
                     case Error e -> [() => e.message]
                     case Success { value } -> assert_(value).assertions
@@ -922,10 +922,10 @@ class JavaExpressionEvaluatorTest {
                     let assert: bool = is_valid
                     assert
 
-                fun test_keyword_lambda(values: list[Date]): list[int] =
+                fun test_keyword_lambda(values: List[Date]): List[int] =
                     values | assert => assert.day
 
-                fun test_keyword_reduce(values: list[int]): int =
+                fun test_keyword_reduce(values: List[int]): int =
                     let acc = 1
                     values |> 0, (acc, count) => acc + count
                 """));
@@ -959,10 +959,10 @@ class JavaExpressionEvaluatorTest {
     void shouldKeepPipeReduceMatchStatementsInsideReducerLambda() {
         var generatedProgram = new JavaGenerator().generate(compileProgram("ReduceMatchLambda", "/foo/bar", """
                 type Item = Text | Count
-                data Text { value: string }
+                data Text { value: String }
                 data Count { value: int }
 
-                fun summarize(items: list[Item]): string =
+                fun summarize(items: List[Item]): String =
                     items |> "", (acc, item) =>
                         acc + match item with
                         case Text { text } -> text
@@ -979,8 +979,8 @@ class JavaExpressionEvaluatorTest {
     @Test
     void shouldAvoidPipeReduceLambdaArgumentCollisionWithLetName() {
         var generatedProgram = new JavaGenerator().generate(compileProgram("ReduceLetNameCollision", "/foo/bar", """
-                fun flatten(asserts: list[list[int]]): list[int] =
-                    let assertions: list[int] = asserts |> [], (acc, assertions) => acc + assertions
+                fun flatten(asserts: List[List[int]]): List[int] =
+                    let assertions: List[int] = asserts |> [], (acc, assertions) => acc + assertions
                     assertions
                 """));
         var generated = generatedProgram.modules().stream()
@@ -994,7 +994,7 @@ class JavaExpressionEvaluatorTest {
     @Test
     void shouldParenthesizeIfExpressionsInsideStringConcatenation() {
         var generated = new JavaGenerator().generate(compileProgram("StringIfConcat", "/foo/bar", """
-                fun label(is_valid: bool): string =
+                fun label(is_valid: bool): String =
                     "Date should be " + (if is_valid then 'valid' else 'invalid')
                 """)).modules().stream()
                 .map(dev.capylang.generator.GeneratedModule::code)
@@ -1028,7 +1028,7 @@ class JavaExpressionEvaluatorTest {
     @Test
     void shouldNotGenerateUnsupportedHelperWhenNameAppearsInStringLiteral() {
         var generated = new JavaGenerator().generate(compileProgram("LiteralUnsupportedName", "/foo/bar", """
-                fun show(): string = "__capybaraUnsupported("
+                fun show(): String = "__capybaraUnsupported("
                 """)).modules().stream()
                 .map(dev.capylang.generator.GeneratedModule::code)
                 .collect(joining("\n"));
@@ -1041,7 +1041,7 @@ class JavaExpressionEvaluatorTest {
                 Arguments.of(
                         "wild_if",
                         """
-                                fun wild_if(x: int): string =
+                                fun wild_if(x: int): String =
                                     let a = "unsued?"
                                     if ({
                                         let a = x * 2
@@ -1130,7 +1130,7 @@ class JavaExpressionEvaluatorTest {
                 ),
                 Arguments.of(
                         "single_quote_string",
-                        "fun single_quote_string(): string = 'hello'",
+                        "fun single_quote_string(): String = 'hello'",
                         "return \"hello\";"
                 ),
                 Arguments.of(
@@ -1146,7 +1146,7 @@ class JavaExpressionEvaluatorTest {
                 Arguments.of(
                         "pipe_map",
                         """
-                                fun pipe_map(l: list[int]): list[int] =
+                                fun pipe_map(l: List[int]): List[int] =
                                     l | x => x * 2
                                 """,
                         "return l.stream().map(x -> ((x*2))).toList();"
@@ -1154,7 +1154,7 @@ class JavaExpressionEvaluatorTest {
                 Arguments.of(
                         "map",
                         """
-                                fun map(l: list[int]) = l | :double
+                                fun map(l: List[int]) = l | :double
 
                                 fun double(x: int) = x * x
                                 """,
@@ -1163,7 +1163,7 @@ class JavaExpressionEvaluatorTest {
                 Arguments.of(
                         "pipe_filter_out",
                         """
-                                fun pipe_filter_out(l: list[int]): list[int] =
+                                fun pipe_filter_out(l: List[int]): List[int] =
                                     l |- x => x > 2
                                 """,
                         "return l.stream().filter(x -> !((x>2))).toList();"
@@ -1171,7 +1171,7 @@ class JavaExpressionEvaluatorTest {
                 Arguments.of(
                         "pipe_reduce",
                         """
-                                fun pipe_reduce(l: list[int]): int =
+                                fun pipe_reduce(l: List[int]): int =
                                     l |> 0, (a, b) => a + b
                                 """,
                         "return l.stream().reduce((a, b) -> ((a+b))).orElse(0);"
@@ -1179,7 +1179,7 @@ class JavaExpressionEvaluatorTest {
                 Arguments.of(
                         "pipe_flat_map",
                         """
-                                fun pipe_flat_map(l: list[int]): list[int] =
+                                fun pipe_flat_map(l: List[int]): List[int] =
                                     l |* x => [x, x + 1]
                                 """,
                         "return l.stream().flatMap(x -> (java.util.List.of(x, (x+1))).stream()).toList();"
@@ -1189,7 +1189,7 @@ class JavaExpressionEvaluatorTest {
 
     private static RawModule reflectionMetadataModule() {
         return new RawModule("Reflection", "/capy/meta_prog", """
-                type AnyInfo { name: string, pkg: PackageInfo } =
+                type AnyInfo { name: String, pkg: PackageInfo } =
                     DataInfo
                     | InterfaceInfo
                     | ObjectInfo
@@ -1200,24 +1200,24 @@ class JavaExpressionEvaluatorTest {
                     | TupleInfo
                     | FunctionTypeInfo
 
-                data DataInfo { name: string, pkg: PackageInfo }
+                data DataInfo { name: String, pkg: PackageInfo }
 
-                data InterfaceInfo { methods: list[MethodInfo], parents: set[AnyInfo] }
-                data ObjectInfo { open: bool, fields: list[FieldInfo], methods: list[MethodInfo], parents: set[AnyInfo] }
-                data TraitInfo { methods: list[MethodInfo], parents: set[AnyInfo] }
-                data MethodInfo { name: string, pkg: PackageInfo, params: list[FieldInfo], return_type: AnyInfo }
+                data InterfaceInfo { methods: List[MethodInfo], parents: Set[AnyInfo] }
+                data ObjectInfo { open: bool, fields: List[FieldInfo], methods: List[MethodInfo], parents: Set[AnyInfo] }
+                data TraitInfo { methods: List[MethodInfo], parents: Set[AnyInfo] }
+                data MethodInfo { name: String, pkg: PackageInfo, params: List[FieldInfo], return_type: AnyInfo }
 
                 data ListInfo { element_type: AnyInfo }
                 data SetInfo { element_type: AnyInfo }
                 data DictInfo { value_type: AnyInfo }
 
-                data TupleInfo { elements: list[AnyInfo] }
-                data FunctionTypeInfo { params: list[AnyInfo], return_type: AnyInfo }
+                data TupleInfo { elements: List[AnyInfo] }
+                data FunctionTypeInfo { params: List[AnyInfo], return_type: AnyInfo }
 
-                data PackageInfo { name: string, path: string }
-                data FieldInfo { name: string, type: AnyInfo }
-                data FieldValueInfo { name: string, type: AnyInfo, value: any }
-                data DataValueInfo { name: string, pkg: PackageInfo, fields: list[FieldValueInfo] }
+                data PackageInfo { name: String, path: String }
+                data FieldInfo { name: String, type: AnyInfo }
+                data FieldValueInfo { name: String, type: AnyInfo, value: any }
+                data DataValueInfo { name: String, pkg: PackageInfo, fields: List[FieldValueInfo] }
 
                 fun reflection(obj: data): DataValueInfo = <native>
                 """);

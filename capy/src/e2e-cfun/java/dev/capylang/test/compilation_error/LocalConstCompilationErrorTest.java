@@ -16,7 +16,7 @@ class LocalConstCompilationErrorTest {
     void localConstRequiresPrivatePrefix() {
         var programResult = CapybaraCompiler.INSTANCE.compile(
                 List.of(new RawModule("LocalConst", "/foo/boo", """
-                        fun foo(x: string): bool =
+                        fun foo(x: String): bool =
                             const white_space = 1
                             ---
                             x == ""

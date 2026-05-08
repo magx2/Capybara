@@ -2,13 +2,13 @@ from /capy/lang/Result import { * }
 
 data Foo {
     a: int,
-    b: string,
+    b: String,
     c: double,
 }
 
 type Letter { x: int, } = A | B | C
 
-data A { a: string, }
+data A { a: String, }
 data B { b: int, }
 data C { c: double, }
 
@@ -53,14 +53,14 @@ fun chain_sanitized_counter(counter: SanitizedCounter): SanitizedCounter =
         .with(number: counter.number + 1)
         .with(number: 8)
 
-fun validated_counter_after_single_with(number: int): string =
+fun validated_counter_after_single_with(number: int): String =
     ValidatedCounter { number: number, constructor_runs: 0 }
         | value => value.with(number: value.number + 1)
         |>
             (value => "ok:" + value.number + ":" + value.constructor_runs,
             message => "err:" + message)
 
-fun validated_counter_after_multiple_withs(number: int): string =
+fun validated_counter_after_multiple_withs(number: int): String =
     ValidatedCounter { number: number, constructor_runs: 0 }
         | value => value.with(number: value.number + 1)
         | updated => updated.with(number: updated.number - 5)

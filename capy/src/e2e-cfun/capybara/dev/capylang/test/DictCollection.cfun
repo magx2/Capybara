@@ -1,50 +1,50 @@
-fun static_dict(): dict[int] = {
+fun static_dict(): Dict[int] = {
     "one": 1,
     "two": 2,
     "three": 3,
 }
 
-fun empty_static_dict(): dict[int] = {:}
+fun empty_static_dict(): Dict[int] = {:}
 
-fun empty_static_dict_with_spaces(): dict[int] = { : }
+fun empty_static_dict_with_spaces(): Dict[int] = { : }
 
-fun static_dict_with_trailing_comma(): dict[int] = {
+fun static_dict_with_trailing_comma(): Dict[int] = {
     "one": 1,
     "two": 2,
     "three": 3,
 }
 
-fun append(d: dict[int]): dict[int] = d + {
+fun append(d: Dict[int]): Dict[int] = d + {
     "four": 4,
 }
 
-fun append_dict(left: dict[int], right: dict[int]): dict[int] = left + right
+fun append_dict(left: Dict[int], right: Dict[int]): Dict[int] = left + right
 
-fun append_tuple(d: dict[int]): dict[int] = d + ("leet", 1337)
+fun append_tuple(d: Dict[int]): Dict[int] = d + ("leet", 1337)
 
-fun append_tuple_override(d: dict[int]): dict[int] = d + ("two", 200)
+fun append_tuple_override(d: Dict[int]): Dict[int] = d + ("two", 200)
 
-fun remove(d: dict[int]): dict[int] = d - "two"
+fun remove(d: Dict[int]): Dict[int] = d - "two"
 
-fun remove_dict(left: dict[int], right: dict[int]): dict[int] = left - right
+fun remove_dict(left: Dict[int], right: Dict[int]): Dict[int] = left - right
 
-fun contains(d: dict[int], key: string): bool = d ? key
+fun contains(d: Dict[int], key: String): bool = d ? key
 
-fun is_empty(d: dict[int]): bool = d.is_empty
+fun is_empty(d: Dict[int]): bool = d.is_empty
 
-data DictHolder { values: dict[int] }
+data DictHolder { values: Dict[int] }
 
-fun not_is_empty(d: dict[int]): bool = !d.is_empty
+fun not_is_empty(d: Dict[int]): bool = !d.is_empty
 
 fun not_nested_is_empty(holder: DictHolder): bool = !holder.values.is_empty
 
-fun size(d: dict[int]): int = d.size
+fun size(d: Dict[int]): int = d.size
 
-data Entry {k: string, v: int}
-fun dict_to_list(d: dict[int]): list[Entry] =
+data Entry {k: String, v: int}
+fun dict_to_list(d: Dict[int]): List[Entry] =
     d |> [], (acc, k, v) => acc + Entry {k:k, v:v}
 
-fun dict_to_string(d: dict[int]): string =
+fun dict_to_string(d: Dict[int]): String =
     d
         |> "", (acc, k, v) =>
             if acc == ""
@@ -52,5 +52,5 @@ fun dict_to_string(d: dict[int]): string =
             else acc + "," + k + " " + v
 
 fun let_named_dict(): int =
-    let dict: dict[int] = { "one": 1, "two": 2 }
+    let dict: Dict[int] = { "one": 1, "two": 2 }
     dict.size

@@ -28,7 +28,7 @@ class ReflectionFeatureTest {
         assertThat(b.fields()).extracting(Reflection.FieldValueInfo::value)
                 .containsExactly("letter-b", List.of("red", "blue"));
         assertThat(b.fields().get(1).type()).isInstanceOf(Reflection.ListInfo.class);
-        assertThat(((Reflection.ListInfo) b.fields().get(1).type()).element_type().name()).isEqualTo("string");
+        assertThat(((Reflection.ListInfo) b.fields().get(1).type()).element_type().name()).isEqualTo("String");
     }
 
     @Test
@@ -69,7 +69,7 @@ class ReflectionFeatureTest {
 
         assertThat(a.fields()).hasSize(2);
         assertThat(a.fields().get(0).name()).isEqualTo("name");
-        assertThat(a.fields().get(0).type().name()).isEqualTo("string");
+        assertThat(a.fields().get(0).type().name()).isEqualTo("String");
         assertThat(a.fields().get(1).name()).isEqualTo("a");
         assertThat(a.fields().get(1).type().name()).isEqualTo("int");
     }

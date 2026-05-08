@@ -52,13 +52,13 @@ public class CapybaraTypeCompiler {
     private static String typeCacheKey(Type type) {
         return switch (type) {
             case PrimitiveType primitiveType -> primitiveType.name();
-            case CollectionType.ListType listType -> "list[" + typeCacheKey(listType.elementType()) + "]";
-            case CollectionType.SetType setType -> "set[" + typeCacheKey(setType.elementType()) + "]";
-            case CollectionType.DictType dictType -> "dict[" + typeCacheKey(dictType.valueType()) + "]";
+            case CollectionType.ListType listType -> "List[" + typeCacheKey(listType.elementType()) + "]";
+            case CollectionType.SetType setType -> "Set[" + typeCacheKey(setType.elementType()) + "]";
+            case CollectionType.DictType dictType -> "Dict[" + typeCacheKey(dictType.valueType()) + "]";
             case DataType dataType -> dataType.name();
             case FunctionType functionType ->
                     "(" + typeCacheKey(functionType.argumentType()) + " => " + typeCacheKey(functionType.returnType()) + ")";
-            case TupleType tupleType -> "tuple[" + tupleType.elementTypes().stream()
+            case TupleType tupleType -> "Tuple[" + tupleType.elementTypes().stream()
                     .map(CapybaraTypeCompiler::typeCacheKey)
                     .collect(java.util.stream.Collectors.joining(", ")) + "]";
         };
@@ -121,16 +121,16 @@ public class CapybaraTypeCompiler {
         var parsed = PrimitiveType.find(trimmed)
                 .map(Type.class::cast)
                 .orElseGet(() -> {
-                    if (trimmed.startsWith("list[") && trimmed.endsWith("]")) {
+                    if (trimmed.startsWith("List[") && trimmed.endsWith("]")) {
                         return new ListType(parseTypeArgument(trimmed.substring(5, trimmed.length() - 1), linkCache));
                     }
-                    if (trimmed.startsWith("set[") && trimmed.endsWith("]")) {
+                    if (trimmed.startsWith("Set[") && trimmed.endsWith("]")) {
                         return new SetType(parseTypeArgument(trimmed.substring(4, trimmed.length() - 1), linkCache));
                     }
-                    if (trimmed.startsWith("dict[") && trimmed.endsWith("]")) {
+                    if (trimmed.startsWith("Dict[") && trimmed.endsWith("]")) {
                         return new DictType(parseTypeArgument(trimmed.substring(5, trimmed.length() - 1), linkCache));
                     }
-                    if (trimmed.startsWith("tuple[") && trimmed.endsWith("]")) {
+                    if (trimmed.startsWith("Tuple[") && trimmed.endsWith("]")) {
                         var inner = trimmed.substring(6, trimmed.length() - 1);
                         var elements = splitTopLevelTypeArguments(inner, linkCache).stream()
                                 .map(argument -> CapybaraTypeCompiler.parseTypeArgument(argument, linkCache))
@@ -185,6 +185,9 @@ public class CapybaraTypeCompiler {
 
     private static String stripOptionalParentheses(String value) {
         var trimmed = value.trim();
+        if ("()".equals(trimmed)) {
+            return "nothing";
+        }
         if (!trimmed.startsWith("(") || !trimmed.endsWith(")")) {
             return trimmed;
         }
@@ -241,6 +244,7 @@ public class CapybaraTypeCompiler {
                             dataType.comments(),
                             dataType.visibility(),
                             dataType.singleton(),
+                            dataType.nativeType(),
                             dataType.enumValue()
                     );
                 }
@@ -260,6 +264,7 @@ public class CapybaraTypeCompiler {
                         dataType.comments(),
                         dataType.visibility(),
                         dataType.singleton(),
+                        dataType.nativeType(),
                         dataType.enumValue()
                 );
             }
@@ -278,11 +283,11 @@ public class CapybaraTypeCompiler {
 
     private static String typeDescriptor(CompiledType type) {
         return switch (type) {
-            case PrimitiveLinkedType primitive -> primitive.name().toLowerCase();
-            case CompiledList linkedList -> "list[" + typeDescriptor(linkedList.elementType()) + "]";
-            case CompiledSet linkedSet -> "set[" + typeDescriptor(linkedSet.elementType()) + "]";
-            case CompiledDict linkedDict -> "dict[" + typeDescriptor(linkedDict.valueType()) + "]";
-            case CompiledTupleType linkedTupleType -> "tuple[" + linkedTupleType.elementTypes().stream()
+            case PrimitiveLinkedType primitive -> primitiveDescriptor(primitive);
+            case CompiledList linkedList -> "List[" + typeDescriptor(linkedList.elementType()) + "]";
+            case CompiledSet linkedSet -> "Set[" + typeDescriptor(linkedSet.elementType()) + "]";
+            case CompiledDict linkedDict -> "Dict[" + typeDescriptor(linkedDict.valueType()) + "]";
+            case CompiledTupleType linkedTupleType -> "Tuple[" + linkedTupleType.elementTypes().stream()
                     .map(CapybaraTypeCompiler::typeDescriptor)
                     .collect(java.util.stream.Collectors.joining(", ")) + "]";
             case CompiledFunctionType linkedFunctionType ->
@@ -295,6 +300,10 @@ public class CapybaraTypeCompiler {
                     : linkedDataParentType.name() + "[" + String.join(", ", linkedDataParentType.typeParameters()) + "]";
             case CompiledGenericTypeParameter linkedGenericTypeParameter -> linkedGenericTypeParameter.name();
         };
+    }
+
+    private static String primitiveDescriptor(PrimitiveLinkedType primitive) {
+        return primitive == PrimitiveLinkedType.STRING ? "String" : primitive.name().toLowerCase();
     }
 
     private static CompiledType substituteTypeParameters(CompiledType type, Map<String, CompiledType> substitutions) {
@@ -331,6 +340,7 @@ public class CapybaraTypeCompiler {
                     linkedDataType.comments(),
                     linkedDataType.visibility(),
                     linkedDataType.singleton(),
+                    linkedDataType.nativeType(),
                     linkedDataType.enumValue()
             );
             case CompiledDataParentType linkedDataParentType -> new CompiledDataParentType(
@@ -364,18 +374,18 @@ public class CapybaraTypeCompiler {
         if (direct != null) {
             return typeDescriptor(direct);
         }
-        if (trimmed.startsWith("list[") && trimmed.endsWith("]")) {
-            return "list[" + substituteTypeDescriptor(trimmed.substring(5, trimmed.length() - 1), substitutions) + "]";
+        if (trimmed.startsWith("List[") && trimmed.endsWith("]")) {
+            return "List[" + substituteTypeDescriptor(trimmed.substring(5, trimmed.length() - 1), substitutions) + "]";
         }
-        if (trimmed.startsWith("set[") && trimmed.endsWith("]")) {
-            return "set[" + substituteTypeDescriptor(trimmed.substring(4, trimmed.length() - 1), substitutions) + "]";
+        if (trimmed.startsWith("Set[") && trimmed.endsWith("]")) {
+            return "Set[" + substituteTypeDescriptor(trimmed.substring(4, trimmed.length() - 1), substitutions) + "]";
         }
-        if (trimmed.startsWith("dict[") && trimmed.endsWith("]")) {
-            return "dict[" + substituteTypeDescriptor(trimmed.substring(5, trimmed.length() - 1), substitutions) + "]";
+        if (trimmed.startsWith("Dict[") && trimmed.endsWith("]")) {
+            return "Dict[" + substituteTypeDescriptor(trimmed.substring(5, trimmed.length() - 1), substitutions) + "]";
         }
-        if (trimmed.startsWith("tuple[") && trimmed.endsWith("]")) {
+        if (trimmed.startsWith("Tuple[") && trimmed.endsWith("]")) {
             var inner = trimmed.substring(6, trimmed.length() - 1);
-            return "tuple[" + splitTopLevelTypeArguments(inner, new LinkCache()).stream()
+            return "Tuple[" + splitTopLevelTypeArguments(inner, new LinkCache()).stream()
                     .map(arg -> substituteTypeDescriptor(arg, substitutions))
                     .collect(java.util.stream.Collectors.joining(", ")) + "]";
         }
@@ -526,6 +536,7 @@ public class CapybaraTypeCompiler {
                     linkedDataType.comments(),
                     linkedDataType.visibility(),
                     linkedDataType.singleton(),
+                    linkedDataType.nativeType(),
                     linkedDataType.enumValue()
             );
             case CompiledDataParentType linkedDataParentType -> new CompiledDataParentType(
@@ -582,6 +593,5 @@ public class CapybaraTypeCompiler {
                 .map(CompiledTupleType::new);
     }
 }
-
 
 

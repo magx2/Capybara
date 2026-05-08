@@ -25,9 +25,10 @@ public class CapybaraParser {
     private static final String METHOD_INVOKE_PREFIX = "__invoke__";
     private static final String REGEX_MODULE_NAME = "/capy/lang/Regex";
     private static final String REGEX_FACTORY_NAME = "from_literal";
-    private static final Pattern COLLECTION_LIST_PATTERN = Pattern.compile("list\\[(.+?)]");
-    private static final Pattern COLLECTION_SET_PATTERN = Pattern.compile("set\\[(.+?)]");
-    private static final Pattern COLLECTION_DICT_PATTERN = Pattern.compile("dict\\[(.+?)]");
+    private static final Pattern LIST_PATTERN = Pattern.compile("List\\[(.+)]");
+    private static final Pattern SET_PATTERN = Pattern.compile("Set\\[(.+)]");
+    private static final Pattern DICT_PATTERN = Pattern.compile("Dict\\[(.+)]");
+    private static final Pattern TUPLE_PATTERN = Pattern.compile("Tuple\\[(.+)]");
     private static final Pattern NO_VIABLE_ALTERNATIVE_PATTERN = Pattern.compile("no viable alternative at input '(.+)'");
     private static final Pattern MISMATCHED_INPUT_PATTERN = Pattern.compile("mismatched input '(.+)' expecting '(.+)'");
     private static final Pattern CONST_NAME_PATTERN = Pattern.compile("^_?[A-Z_][A-Z0-9_]*$");
@@ -461,9 +462,12 @@ public class CapybaraParser {
 
     private DataDeclaration dataDeclaration(FunctionalParser.DataDeclarationContext context) {
         var declaration = context.genericTypeDeclaration();
-        var dataFields = dataFieldDeclarationList(context.fieldDeclarationList());
+        var nativeType = isNativeDataBody(context.dataBody());
+        var dataFields = dataFieldDeclarationList(fieldDeclarationList(context.dataBody()));
         var dataName = genericTypeName(declaration);
-        reportEmptyDataDeclaration(context, dataName, dataFields);
+        if (!nativeType) {
+            reportEmptyDataDeclaration(context, dataName, dataFields);
+        }
         return new DataDeclaration(
                 dataName,
                 dataFields.fields(),
@@ -475,6 +479,7 @@ public class CapybaraParser {
                         .map(comment -> stripDocComment(comment.getText()))
                         .toList(),
                 visibility(context.VISIBILITY()),
+                nativeType,
                 position(context)
         );
     }
@@ -890,8 +895,11 @@ public class CapybaraParser {
         if (mappedDataName == null) {
             throw new IllegalStateException("Unknown local data mapping for: " + localDataName);
         }
-        var dataFields = dataFieldDeclarationList(context.fieldDeclarationList());
-        reportEmptyDataDeclaration(context, localDataName, dataFields);
+        var nativeType = isNativeDataBody(context.dataBody());
+        var dataFields = dataFieldDeclarationList(fieldDeclarationList(context.dataBody()));
+        if (!nativeType) {
+            reportEmptyDataDeclaration(context, localDataName, dataFields);
+        }
         return new DataDeclaration(
                 mappedDataName,
                 dataFields.fields().stream()
@@ -907,6 +915,9 @@ public class CapybaraParser {
                 constructorExpression(context.constructorClause())
                         .map(expression -> rewriteLocalNames(expression, localFunctionNameMap, localTypeNameMap, localConstNameMap)),
                 List.of(),
+                List.of(),
+                null,
+                nativeType,
                 position(context)
         );
     }
@@ -1232,19 +1243,6 @@ public class CapybaraParser {
     }
 
     private static Type type(dev.capylang.parser.antlr.FunctionalParser.TypeContext context) {
-        if (context.getChildCount() > 0 && "tuple".equals(context.getChild(0).getText())) {
-            return new TupleType(context.type().stream().map(CapybaraParser::type).toList());
-        }
-        if (context.COLLECTION() != null) {
-            var collection = context.COLLECTION().getText();
-            var inner = type(context.type(0));
-            return switch (collection) {
-                case "list" -> new CollectionType.ListType(inner);
-                case "set" -> new CollectionType.SetType(inner);
-                case "dict" -> new CollectionType.DictType(inner);
-                default -> throw new IllegalStateException("Unknown collection type: " + collection);
-            };
-        }
         if (context.FAT_ARROW() != null) {
             if ("(".equals(context.getChild(0).getText())) {
                 var parts = context.type();
@@ -1267,14 +1265,142 @@ public class CapybaraParser {
         return PrimitiveType.find(name)
                 .map(Type.class::cast)
                 .or(() -> findCollectionType(name))
+                .or(() -> findTupleType(name))
+                .or(() -> findFunctionType(name))
                 .or(() -> findParameterizedDataType(name))
                 .orElseGet(() -> new DataType(name));
     }
 
     private static Optional<Type> findCollectionType(String name) {
-        return findCollectionType(name, COLLECTION_LIST_PATTERN, CollectionType.ListType::new)
-                .or(() -> findCollectionType(name, COLLECTION_SET_PATTERN, CollectionType.SetType::new))
-                .or(() -> findCollectionType(name, COLLECTION_DICT_PATTERN, CollectionType.DictType::new));
+        return findCollectionType(name, LIST_PATTERN, CollectionType.ListType::new)
+                .or(() -> findCollectionType(name, SET_PATTERN, CollectionType.SetType::new))
+                .or(() -> findCollectionType(name, DICT_PATTERN, CollectionType.DictType::new));
+    }
+
+    private static Optional<Type> findTupleType(String name) {
+        var matcher = TUPLE_PATTERN.matcher(name);
+        if (!matcher.matches()) {
+            return Optional.empty();
+        }
+        var elementTypes = splitTopLevelTypeArguments(matcher.group(1)).stream()
+                .map(CapybaraParser::type)
+                .toList();
+        if (elementTypes.size() < 2) {
+            return Optional.empty();
+        }
+        return Optional.of(new TupleType(elementTypes));
+    }
+
+    private static Optional<Type> findFunctionType(String name) {
+        var arrowIndex = indexOfTopLevelArrow(name);
+        if (arrowIndex < 0) {
+            return Optional.empty();
+        }
+        var left = name.substring(0, arrowIndex).trim();
+        var right = name.substring(arrowIndex + 2).trim();
+        var returnType = type(right);
+        if ("()".equals(left)) {
+            return Optional.of(new FunctionType(PrimitiveType.NOTHING, returnType));
+        }
+        var strippedLeft = stripOptionalParentheses(left);
+        var arguments = splitTopLevelTypeArguments(strippedLeft);
+        var functionType = returnType;
+        for (var i = arguments.size() - 1; i >= 0; i--) {
+            functionType = new FunctionType(type(arguments.get(i)), functionType);
+        }
+        return Optional.of(functionType);
+    }
+
+    private static int indexOfTopLevelArrow(String value) {
+        var square = 0;
+        var paren = 0;
+        for (var i = 0; i < value.length() - 1; i++) {
+            var ch = value.charAt(i);
+            if (ch == '[') {
+                square++;
+                continue;
+            }
+            if (ch == ']') {
+                square = Math.max(0, square - 1);
+                continue;
+            }
+            if (ch == '(') {
+                paren++;
+                continue;
+            }
+            if (ch == ')') {
+                paren = Math.max(0, paren - 1);
+                continue;
+            }
+            if (square == 0 && paren == 0 && value.startsWith("=>", i)) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    private static String stripOptionalParentheses(String value) {
+        var trimmed = value.trim();
+        if (!trimmed.startsWith("(") || !trimmed.endsWith(")")) {
+            return trimmed;
+        }
+        var depth = 0;
+        for (var i = 0; i < trimmed.length(); i++) {
+            var ch = trimmed.charAt(i);
+            if (ch == '(') {
+                depth++;
+            } else if (ch == ')') {
+                depth--;
+            }
+            if (depth == 0 && i < trimmed.length() - 1) {
+                return trimmed;
+            }
+        }
+        return trimmed.substring(1, trimmed.length() - 1).trim();
+    }
+
+    private static List<String> splitTopLevelTypeArguments(String content) {
+        var result = new ArrayList<String>();
+        var depth = 0;
+        var parenDepth = 0;
+        var current = new StringBuilder();
+        for (var i = 0; i < content.length(); i++) {
+            var ch = content.charAt(i);
+            if (ch == '[') {
+                depth++;
+                current.append(ch);
+                continue;
+            }
+            if (ch == ']') {
+                depth = Math.max(0, depth - 1);
+                current.append(ch);
+                continue;
+            }
+            if (ch == '(') {
+                parenDepth++;
+                current.append(ch);
+                continue;
+            }
+            if (ch == ')') {
+                parenDepth = Math.max(0, parenDepth - 1);
+                current.append(ch);
+                continue;
+            }
+            if (ch == ',' && depth == 0 && parenDepth == 0) {
+                var token = current.toString().trim();
+                if (!token.isEmpty()) {
+                    result.add(token);
+                }
+                current.setLength(0);
+                continue;
+            }
+            current.append(ch);
+        }
+        var token = current.toString().trim();
+        if (!token.isEmpty()) {
+            result.add(token);
+        }
+        return List.copyOf(result);
     }
 
     private static Optional<Type> findParameterizedDataType(String name) {
@@ -2248,6 +2374,16 @@ public class CapybaraParser {
     private MatchExpression.Pattern matchExpressionPattern(FunctionalParser.PatternContext context) {
         var type = context.TYPE();
         if (type != null) {
+            var typeName = type.getText();
+            if ("List".equals(typeName)) {
+                return new MatchExpression.TypedPattern(new CollectionType.ListType(PrimitiveType.ANY), "__ignored");
+            }
+            if ("Set".equals(typeName)) {
+                return new MatchExpression.TypedPattern(new CollectionType.SetType(PrimitiveType.ANY), "__ignored");
+            }
+            if ("Dict".equals(typeName)) {
+                return new MatchExpression.TypedPattern(new CollectionType.DictType(PrimitiveType.ANY), "__ignored");
+            }
             return new MatchExpression.VariablePattern(type.getText());
         }
 
@@ -2325,12 +2461,12 @@ public class CapybaraParser {
     }
 
     private static Type patternType(FunctionalParser.PatternTypeContext context) {
-        if (context.COLLECTION() != null && context.type().isEmpty()) {
-            return switch (context.COLLECTION().getText()) {
-                case "list" -> new CollectionType.ListType(PrimitiveType.ANY);
-                case "set" -> new CollectionType.SetType(PrimitiveType.ANY);
-                case "dict" -> new CollectionType.DictType(PrimitiveType.ANY);
-                default -> throw new IllegalStateException("Unknown collection type: " + context.COLLECTION().getText());
+        if (context.type().isEmpty()) {
+            return switch (context.getText()) {
+                case "List" -> new CollectionType.ListType(PrimitiveType.ANY);
+                case "Set" -> new CollectionType.SetType(PrimitiveType.ANY);
+                case "Dict" -> new CollectionType.DictType(PrimitiveType.ANY);
+                default -> type(context.getText());
             };
         }
         return type(context.getText());
@@ -2347,9 +2483,7 @@ public class CapybaraParser {
                         ? context.NAME().getText()
                         : context.REC() != null
                                 ? context.REC().getText()
-                                : context.COLLECTION() != null
-                                        ? context.COLLECTION().getText()
-                                        : context.getChild(0).getText();
+                                : context.getChild(0).getText();
         return new FunctionCall(moduleName, functionName, arguments, position(context));
     }
 
@@ -2454,6 +2588,17 @@ public class CapybaraParser {
             }
         }
         return new DataFieldDeclarations(List.copyOf(fields), List.copyOf(extendsTypes));
+    }
+
+    private boolean isNativeDataBody(FunctionalParser.DataBodyContext context) {
+        return context != null && context.NATIVE_LITERAL() != null;
+    }
+
+    private FunctionalParser.FieldDeclarationListContext fieldDeclarationList(FunctionalParser.DataBodyContext context) {
+        if (context == null) {
+            return null;
+        }
+        return context.fieldDeclarationList();
     }
 
     private void reportEmptyDataDeclaration(

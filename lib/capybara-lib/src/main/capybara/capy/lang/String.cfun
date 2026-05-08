@@ -1,0 +1,40 @@
+from /capy/lang/Result import { * }
+
+/// Native String type backed by the runtime String implementation.
+data String { <native> }
+
+/// Returns the number of characters in this String.
+fun String.length(): int = <native>
+
+/// Returns true when this String has no characters.
+fun String.is_empty(): bool = <native>
+
+/// Returns true when this String contains the given substring.
+fun String.contains(part: String): bool = <native>
+
+/// Returns true when this String starts with the given substring.
+fun String.starts_with(part: String): bool = <native>
+
+/// Returns true when this String ends with the given substring.
+fun String.end_with(part: String): bool = <native>
+
+/// Returns this String without leading and trailing whitespace.
+fun String.trim(): String = <native>
+
+/// Replaces every occurrence of old with new.
+fun String.replace(old: String, new: String): String = <native>
+
+/// Parses this String as an int.
+fun String.to_int(): Result[int] = <native>
+
+/// Parses this String as a long.
+fun String.to_long(): Result[long] = <native>
+
+/// Parses this String as a double.
+fun String.to_double(): Result[double] = <native>
+
+/// Parses this String as a float.
+fun String.to_float(): Result[float] = <native>
+
+/// Parses this String as a bool.
+fun String.to_bool(): Result[bool] = <native>

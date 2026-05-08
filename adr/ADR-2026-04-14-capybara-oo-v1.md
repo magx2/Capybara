@@ -93,8 +93,8 @@ Capybara OO v1 starts with a separate frontend boundary instead of extending `Fu
 - The standard stdout owner type is `/capy/io/Stdout`.
 - Preferred usage imports its static methods:
   - `from /capy/io/Stdout import { * }`
-  - `print(text: string): void`
-  - `println(text: string): void`
+  - `print(text: String): void`
+  - `println(text: String): void`
 - Output is an ordinary OO side effect and does not implicitly bridge to functional `/capy/lang/Program` or `Result.Error`.
 - Java is the reference backend:
   - imported `print` lowers through `/capy/io/Stdout.print`, then `System.out.print`

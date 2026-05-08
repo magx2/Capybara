@@ -3,23 +3,23 @@ from /capy/io/Path import { * }
 from /capy/lang/Effect import { * }
 from /capy/lang/Result import { * }
 
-fun read_text_file(path: Path): Effect[Result[string]] = read_text(path)
+fun read_text_file(path: Path): Effect[Result[String]] = read_text(path)
 
-fun read_lines_file(path: Path): Effect[Result[list[string]]] = read_lines(path)
+fun read_lines_file(path: Path): Effect[Result[List[String]]] = read_lines(path)
 
-fun read_bytes_file(path: Path): Effect[Result[list[byte]]] = read_bytes(path)
+fun read_bytes_file(path: Path): Effect[Result[List[byte]]] = read_bytes(path)
 
-fun write_text_file(path: Path, text: string): Effect[Result[string]] = write_text(path, text)
+fun write_text_file(path: Path, text: String): Effect[Result[String]] = write_text(path, text)
 
-fun write_lines_file(path: Path, lines: list[string]): Effect[Result[list[string]]] = write_lines(path, lines)
+fun write_lines_file(path: Path, lines: List[String]): Effect[Result[List[String]]] = write_lines(path, lines)
 
-fun write_bytes_file(path: Path, bytes: list[byte]): Effect[Result[list[byte]]] = write_bytes(path, bytes)
+fun write_bytes_file(path: Path, bytes: List[byte]): Effect[Result[List[byte]]] = write_bytes(path, bytes)
 
-fun append_text_file(path: Path, text: string): Effect[Result[string]] = append_text(path, text)
+fun append_text_file(path: Path, text: String): Effect[Result[String]] = append_text(path, text)
 
-fun append_lines_file(path: Path, lines: list[string]): Effect[Result[list[string]]] = append_lines(path, lines)
+fun append_lines_file(path: Path, lines: List[String]): Effect[Result[List[String]]] = append_lines(path, lines)
 
-fun append_bytes_file(path: Path, bytes: list[byte]): Effect[Result[list[byte]]] = append_bytes(path, bytes)
+fun append_bytes_file(path: Path, bytes: List[byte]): Effect[Result[List[byte]]] = append_bytes(path, bytes)
 
 fun exists_path(path: Path): Effect[bool] = exists(path)
 
@@ -35,7 +35,7 @@ fun create_directory_at(path: Path): Effect[Result[Path]] = create_directory(pat
 
 fun create_directories_at(path: Path): Effect[Result[Path]] = create_directories(path)
 
-fun list_directory(path: Path): Effect[Result[list[Path]]] = list_entries(path)
+fun list_directory(path: Path): Effect[Result[List[Path]]] = list_entries(path)
 
 fun delete_path(path: Path): Effect[Result[bool]] = delete(path)
 

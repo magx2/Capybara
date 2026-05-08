@@ -1,15 +1,15 @@
 interface X {
-    def print(): string
+    def print(): String
 }
 
 trait Y {
-    def bracket(name: string): string = "[" + name + "]"
+    def bracket(name: String): String = "[" + name + "]"
 }
 
-class Z(name: string): X, Y {
-    field name: string = name
+class Z(name: String): X, Y {
+    field name: String = name
 
-    def greet(): string = this.bracket(this.name)
+    def greet(): String = this.bracket(this.name)
 
-    override def print(): string = this.greet()
+    override def print(): String = this.greet()
 }
