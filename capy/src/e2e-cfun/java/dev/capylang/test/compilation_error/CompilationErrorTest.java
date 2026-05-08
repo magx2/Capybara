@@ -1204,7 +1204,7 @@ public class CompilationErrorTest {
                         + "fun _deserialize_json_null(json: string): Result[_Parse[JsonBool]] =\n"
                         + "    let parsed: _Parse[JsonNull] = _Parse {\n"
                         + "        JsonNull {  },\n"
-                        + "    ^ Expected `Result`, got `Success`\n"
+                        + "    ^ Expected `_Parse[JsonBool]`, but got `_Parse[JsonNull]`\n"
                 ),
                 Arguments.of(
                         "json_assertion_no_viable_alternative",

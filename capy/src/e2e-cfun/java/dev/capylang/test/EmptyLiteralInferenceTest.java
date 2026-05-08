@@ -1,8 +1,12 @@
 package dev.capylang.test;
 
+import capy.lang.Result;
 import org.junit.jupiter.api.Test;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -48,6 +52,44 @@ class EmptyLiteralInferenceTest {
     @Test
     void twoIndependentlyInferredReduceListsCanBeConcatenated() {
         assertThat(EmptyLiteralInference.reduceDictToTwoListsAndConcatSizes(java.util.Map.of("a", 1, "b", 2))).isEqualTo(4);
+    }
+
+    @Test
+    void reduceWithInlineSuccessEmptyListInfersResultListType() {
+        var result = EmptyLiteralInference.reduceListToSuccessValues(List.of(1, 2, 3));
+        assertThat(result).isInstanceOf(Result.Success.class);
+        assertThat(((Result.Success<List<Integer>>) result).value()).containsExactly(1, 2, 3);
+    }
+
+    @Test
+    void reduceWithInlineSuccessEmptySetInfersResultSetType() {
+        var result = EmptyLiteralInference.reduceSetToSuccessValues(Set.of("a", "b"));
+        assertThat(result).isInstanceOf(Result.Success.class);
+        assertThat(((Result.Success<Set<String>>) result).value()).containsExactlyInAnyOrder("a", "b");
+    }
+
+    @Test
+    void reduceWithInlineSuccessEmptyDictInfersResultDictType() {
+        var values = new LinkedHashMap<String, Integer>();
+        values.put("a", 1);
+        values.put("b", 2);
+
+        var result = EmptyLiteralInference.reduceDictToSuccessValues(values);
+
+        assertThat(result).isInstanceOf(Result.Success.class);
+        assertThat(((Result.Success<java.util.Map<String, Integer>>) result).value()).containsEntry("a", 1).containsEntry("b", 2);
+    }
+
+    @Test
+    void reduceWithInlineSomeEmptyListInfersOptionListType() {
+        assertThat(EmptyLiteralInference.reduceListToSomeValues(List.of(1, 2, 3)))
+                .isEqualTo(Optional.of(List.of(1, 2, 3)));
+    }
+
+    @Test
+    void reduceWithInlineGenericDataEmptyListInfersBoxListType() {
+        assertThat(EmptyLiteralInference.reduceListToBoxValues(List.of(1, 2, 3)).value())
+                .containsExactly(1, 2, 3);
     }
 
     @Test

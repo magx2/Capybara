@@ -2290,6 +2290,39 @@ public class CapybaraExpressionCompiler {
                     argument.position()
             );
         }
+        if (argument instanceof NewData newData && expected instanceof CompiledDataType expectedDataType) {
+            return linkNewDataAsType(newData, scope, expectedDataType)
+                    .flatMap(linkedArgument -> {
+                        var maybeCoerced = coerceArgument(linkedArgument, expected);
+                        if (maybeCoerced == null) {
+                            return withPosition(
+                                    Result.error("Expected `" + expected + "`, got `" + linkedArgument.type() + "`"),
+                                    argument.position()
+                            );
+                        }
+                        return Result.success(maybeCoerced);
+                    });
+        }
+        if (argument instanceof NewData newData && expected instanceof CompiledDataParentType expectedParentType) {
+            var expectedConstructorType = expectedConstructorTypeForParent(newData, scope, expectedParentType);
+            if (expectedConstructorType instanceof Result.Error<Optional<CompiledDataType>> error) {
+                return new Result.Error<>(error.errors());
+            }
+            var maybeExpectedConstructorType = ((Result.Success<Optional<CompiledDataType>>) expectedConstructorType).value();
+            var linkedArgument = maybeExpectedConstructorType
+                    .<Result<CompiledExpression>>map(type -> linkNewDataAsType(newData, scope, type))
+                    .orElseGet(() -> linkExpression(argument, scope));
+            return linkedArgument.flatMap(linked -> {
+                var maybeCoerced = coerceArgument(linked, expected);
+                if (maybeCoerced == null) {
+                    return withPosition(
+                            Result.error("Expected `" + expected + "`, got `" + linked.type() + "`"),
+                            argument.position()
+                    );
+                }
+                return Result.success(maybeCoerced);
+            });
+        }
         if (expected instanceof CompiledDataParentType
             || expected instanceof CompiledGenericTypeParameter
             || expected instanceof CompiledDataType) {
@@ -2395,12 +2428,24 @@ public class CapybaraExpressionCompiler {
         if (expectedResultParent.isEmpty()) {
             return withPosition(Result.error("Expected `Result[...]`, got `" + expected + "`"), argument.position());
         }
-        var linkedArgument = switch (argument) {
-            case IfExpression ifExpression -> linkIfExpression(ifExpression, scope, expected);
-            case MatchExpression matchExpression -> linkMatchExpression(matchExpression, scope, expected);
-            case LetExpression letExpression -> linkLetExpression(letExpression, scope, Optional.of(expected));
-            default -> linkExpression(argument, scope);
-        };
+        Result<CompiledExpression> linkedArgument;
+        if (argument instanceof NewData newData) {
+            var expectedConstructorType = expectedConstructorTypeForParent(newData, scope, expectedResultParent.orElseThrow());
+            if (expectedConstructorType instanceof Result.Error<Optional<CompiledDataType>> error) {
+                return new Result.Error<>(error.errors());
+            }
+            var maybeExpectedConstructorType = ((Result.Success<Optional<CompiledDataType>>) expectedConstructorType).value();
+            linkedArgument = maybeExpectedConstructorType
+                    .<Result<CompiledExpression>>map(type -> linkNewDataAsType(newData, scope, type))
+                    .orElseGet(() -> linkExpression(argument, scope));
+        } else {
+            linkedArgument = switch (argument) {
+                case IfExpression ifExpression -> linkIfExpression(ifExpression, scope, expected);
+                case MatchExpression matchExpression -> linkMatchExpression(matchExpression, scope, expected);
+                case LetExpression letExpression -> linkLetExpression(letExpression, scope, Optional.of(expected));
+                default -> linkExpression(argument, scope);
+            };
+        }
         return linkedArgument.flatMap(linked -> {
             var maybeCoerced = coerceArgument(linked, expected);
             if (maybeCoerced != null) {
@@ -2424,6 +2469,34 @@ public class CapybaraExpressionCompiler {
             }
             return Result.success(maybeCoerced);
         });
+    }
+
+    private Result<Optional<CompiledDataType>> expectedConstructorTypeForParent(
+            NewData newData,
+            Scope scope,
+            CompiledDataParentType expectedParent
+    ) {
+        var linkedType = linkNewDataType(newData.type(), scope);
+        if (linkedType instanceof Result.Error<CompiledType> error) {
+            return new Result.Error<>(error.errors());
+        }
+        var type = ((Result.Success<CompiledType>) linkedType).value();
+        if (!(type instanceof CompiledDataType dataType) || !isSubtypeOfParent(dataType, expectedParent)) {
+            return Result.success(Optional.empty());
+        }
+        var resolvedFields = resolveConstructorFields(dataType, expectedParent);
+        var typeParameters = dataType.typeParameters().isEmpty()
+                ? dataType.typeParameters()
+                : expectedParent.typeParameters();
+        return Result.success(Optional.of(new CompiledDataType(
+                dataType.name(),
+                resolvedFields,
+                typeParameters,
+                dataType.extendedTypes(),
+                dataType.comments(),
+                dataType.visibility(),
+                dataType.singleton()
+        )));
     }
 
     private Result<CoercedArgument> linkArgumentForExpectedEffectType(
@@ -2759,7 +2832,9 @@ public class CapybaraExpressionCompiler {
     }
 
     private CoercedArgument coerceArgument(CompiledExpression argument, CompiledType expected) {
-        if (argument.type().equals(expected)) {
+        if (!(argument.type() instanceof GenericDataType)
+            && !(expected instanceof GenericDataType)
+            && argument.type().equals(expected)) {
             return new CoercedArgument(argument, 0);
         }
         if (expected instanceof PrimitiveLinkedType expectedPrimitive
@@ -2845,7 +2920,8 @@ public class CapybaraExpressionCompiler {
         }
         if (expected instanceof CompiledDataParentType expectedParent
             && argument.type() instanceof CompiledDataParentType argumentParent
-            && sameRawTypeName(expectedParent.name(), argumentParent.name())
+            && (sameRawTypeName(expectedParent.name(), argumentParent.name())
+                || isParentSubtypeOfParent(argumentParent, expectedParent, new java.util.HashSet<>()))
             && areTypeParameterDescriptorsCompatible(argumentParent.typeParameters(), expectedParent.typeParameters())) {
             return new CoercedArgument(argument, 1);
         }
@@ -3012,6 +3088,11 @@ public class CapybaraExpressionCompiler {
                 };
                 return areTypeParameterDescriptorsCompatible(actualTypeParameters, expectedTypeParameters);
             }
+            if (expectedData instanceof CompiledDataParentType expectedParent
+                && actualData instanceof CompiledDataParentType actualParent
+                && isParentSubtypeOfParent(actualParent, expectedParent, new java.util.HashSet<>())) {
+                return areTypeParameterDescriptorsCompatible(actualParent.typeParameters(), expectedParent.typeParameters());
+            }
             if (expectedData instanceof CompiledDataParentType expectedParent && actualData instanceof CompiledDataType actualSubtype) {
                 if (!isSubtypeOfParent(actualSubtype, expectedParent)) {
                     return false;
@@ -3073,6 +3154,9 @@ public class CapybaraExpressionCompiler {
         var parsedActual = parseLinkedTypeDescriptor(actual);
         var parsedExpected = parseLinkedTypeDescriptor(expected);
         if (parsedActual.isPresent() && parsedExpected.isPresent()) {
+            if (hasKnownEmptyCollectionShape(parsedActual.get())) {
+                return true;
+            }
             return isTypeCompatible(parsedActual.get(), parsedExpected.get());
         }
         return sameRawTypeName(actual, expected);
@@ -3112,9 +3196,26 @@ public class CapybaraExpressionCompiler {
     }
 
     private boolean isSubtypeOfParent(CompiledDataType candidate, CompiledDataParentType expectedParentType) {
+        return isSubtypeOfParent(candidate, expectedParentType, new java.util.HashSet<>());
+    }
+
+    private boolean isSubtypeOfParent(
+            CompiledDataType candidate,
+            CompiledDataParentType expectedParentType,
+            java.util.Set<String> visitedParents
+    ) {
         if (expectedParentType.subTypes().stream()
                 .anyMatch(subType -> sameRawTypeName(subType.name(), candidate.name()))) {
             return true;
+        }
+        for (var parentType : knownParentTypes()) {
+            if (parentType.subTypes().stream().noneMatch(subType -> sameRawTypeName(subType.name(), candidate.name()))) {
+                continue;
+            }
+            if (sameRawTypeName(parentType.name(), expectedParentType.name())
+                || isParentSubtypeOfParent(parentType, expectedParentType, visitedParents)) {
+                return true;
+            }
         }
         if (!expectedParentType.subTypes().isEmpty()) {
             return false;
@@ -3125,6 +3226,31 @@ public class CapybaraExpressionCompiler {
         }
         return canonicalParent.subTypes().stream()
                 .anyMatch(subType -> sameRawTypeName(subType.name(), candidate.name()));
+    }
+
+    private boolean isParentSubtypeOfParent(
+            CompiledDataParentType candidateParent,
+            CompiledDataParentType expectedParent,
+            java.util.Set<String> visited
+    ) {
+        if (sameRawTypeName(candidateParent.name(), expectedParent.name())) {
+            return true;
+        }
+        if (!visited.add(simpleRawTypeName(normalizeTypeAlias(candidateParent.name())))) {
+            return false;
+        }
+        if (expectedParent.subTypes().stream().anyMatch(subType -> sameRawTypeName(subType.name(), candidateParent.name()))) {
+            return true;
+        }
+        if (!candidateParent.subTypes().isEmpty()
+            && candidateParent.subTypes().stream()
+                    .allMatch(subType -> isSubtypeOfParent(subType, expectedParent, new java.util.HashSet<>(visited)))) {
+            return true;
+        }
+        return knownParentTypes().stream()
+                .filter(parentType -> parentType.subTypes().stream()
+                        .anyMatch(subType -> sameRawTypeName(subType.name(), candidateParent.name())))
+                .anyMatch(parentType -> isParentSubtypeOfParent(parentType, expectedParent, visited));
     }
 
     private static boolean sameRawTypeName(String left, String right) {
@@ -4122,6 +4248,7 @@ public class CapybaraExpressionCompiler {
                     return linkExpression(reduceExpression.initialValue(), scope)
                             .flatMap(initial -> {
                                 var reduceScope = scope;
+                                var initialAccumulatorType = widenReduceAccumulatorBindingType(initial.type());
                                 if (reduceExpression.accumulatorName().contains("::") && reduceExpression.keyName().isPresent()) {
                                     return withPosition(
                                             Result.error("Reducer with four arguments is not supported for `dict`. Use `|>` mapper and then a standard reduce."),
@@ -4130,7 +4257,7 @@ public class CapybaraExpressionCompiler {
                                 } else {
                                     reduceScope = reduceScope.add(
                                             reduceExpression.accumulatorName(),
-                                            widenReduceAccumulatorBindingType(initial.type())
+                                            initialAccumulatorType
                                     );
                                 }
                                 if (reduceExpression.keyName().isPresent()) {
@@ -4146,7 +4273,11 @@ public class CapybaraExpressionCompiler {
                                 return linkExpression(reduceExpression.reducerExpression(), reduceScope)
                                         .flatMap(reducer -> {
                                             var resolvedInitial = initial;
-                                            var accumulatorType = initial.type();
+                                            var accumulatorType = initialAccumulatorType;
+                                            var initialCoercion = coerceArgument(initial, accumulatorType);
+                                            if (initialCoercion != null) {
+                                                resolvedInitial = initialCoercion.expression();
+                                            }
                                             var coercedReducer = coerceArgument(reducer, accumulatorType);
                                             if (coercedReducer == null) {
                                                 var coercedInitial = coerceArgument(initial, reducer.type());
@@ -4177,13 +4308,40 @@ public class CapybaraExpressionCompiler {
                                                 );
                                             }
                                             var inferredReduceType = inferReduceResultType(accumulatorType, reducer.type());
+                                            var finalReducer = coercedReducer.expression();
+                                            if (!linkedTypeDescriptor(inferredReduceType).equals(linkedTypeDescriptor(accumulatorType))) {
+                                                var refinedReduceScope = scope.add(reduceExpression.accumulatorName(), inferredReduceType);
+                                                if (reduceExpression.keyName().isPresent()) {
+                                                    refinedReduceScope = refinedReduceScope.add(reduceExpression.keyName().orElseThrow(), STRING);
+                                                }
+                                                refinedReduceScope = refinedReduceScope.add(reduceExpression.valueName(), elementType);
+                                                var refinedReducer = linkExpression(reduceExpression.reducerExpression(), refinedReduceScope);
+                                                if (refinedReducer instanceof Result.Error<CompiledExpression> error) {
+                                                    return new Result.Error<>(error.errors());
+                                                }
+                                                var refinedReducerExpression = ((Result.Success<CompiledExpression>) refinedReducer).value();
+                                                finalReducer = refinedReducerExpression;
+                                                var refinedCoercedReducer = coerceArgument(refinedReducerExpression, inferredReduceType);
+                                                if (refinedCoercedReducer != null) {
+                                                    finalReducer = refinedCoercedReducer.expression();
+                                                }
+                                                var refinedInitial = linkArgumentForExpectedType(
+                                                        reduceExpression.initialValue(),
+                                                        scope,
+                                                        inferredReduceType
+                                                );
+                                                if (refinedInitial instanceof Result.Error<CoercedArgument> error) {
+                                                    return new Result.Error<>(error.errors());
+                                                }
+                                                resolvedInitial = ((Result.Success<CoercedArgument>) refinedInitial).value().expression();
+                                            }
                                             return Result.success((CompiledExpression) new CompiledPipeReduceExpression(
                                                     left,
                                                     resolvedInitial,
                                                     reduceExpression.accumulatorName(),
                                                     reduceExpression.keyName(),
                                                     reduceExpression.valueName(),
-                                                    coercedReducer.expression(),
+                                                    finalReducer,
                                                     inferredReduceType
                                             ));
                                         });
@@ -4210,17 +4368,12 @@ public class CapybaraExpressionCompiler {
                 }
             }
         }
-        for (var type : dataTypes.values()) {
-            if (!(type instanceof CompiledDataParentType parentType)) {
-                continue;
-            }
-            var hasInitial = parentType.subTypes().stream()
-                    .anyMatch(subType -> sameRawTypeName(subType.name(), initialData.name()));
+        for (var parentType : knownParentTypes()) {
+            var hasInitial = hasMatchingSubtype(parentType, initialData);
             if (!hasInitial) {
                 continue;
             }
-            var hasReducer = parentType.subTypes().stream()
-                    .anyMatch(subType -> sameRawTypeName(subType.name(), reducerData.name()));
+            var hasReducer = hasMatchingSubtype(parentType, reducerData);
             if (!hasReducer) {
                 continue;
             }
@@ -4235,13 +4388,12 @@ public class CapybaraExpressionCompiler {
         if (!(initialType instanceof CompiledDataType initialData)) {
             return initialType;
         }
-        var sharedParents = dataTypes.values().stream()
-                .filter(CompiledDataParentType.class::isInstance)
-                .map(CompiledDataParentType.class::cast)
-                .filter(parent -> isSubtypeOfParent(initialData, parent))
+        var sharedParents = knownParentTypes().stream()
+                .filter(parent -> hasMatchingSubtype(parent, initialData))
                 .toList();
         if (sharedParents.size() == 1) {
-            return canonicalizeParentAlias(sharedParents.getFirst());
+            return specializedReduceParentType(initialData, sharedParents.getFirst())
+                    .orElseGet(() -> canonicalizeParentAlias(sharedParents.getFirst()));
         }
         if (!sharedParents.isEmpty()) {
             var uniqueByRawName = sharedParents.stream()
@@ -4252,10 +4404,95 @@ public class CapybaraExpressionCompiler {
                             java.util.LinkedHashMap::new
                     ));
             if (uniqueByRawName.size() == 1) {
-                return canonicalizeParentAlias(uniqueByRawName.values().iterator().next());
+                var parent = uniqueByRawName.values().iterator().next();
+                return specializedReduceParentType(initialData, parent)
+                        .orElseGet(() -> canonicalizeParentAlias(parent));
             }
         }
         return initialType;
+    }
+
+    private boolean hasMatchingSubtype(CompiledDataParentType parent, CompiledDataType dataType) {
+        return parent.subTypes().stream()
+                .anyMatch(subType -> sameRawTypeName(subType.name(), dataType.name())
+                                     && hasCompatibleSubtypeFields(subType, dataType));
+    }
+
+    private boolean hasCompatibleSubtypeFields(CompiledDataType declaredSubtype, CompiledDataType actualType) {
+        if (declaredSubtype.fields().size() != actualType.fields().size()) {
+            return false;
+        }
+        for (var i = 0; i < declaredSubtype.fields().size(); i++) {
+            if (!declaredSubtype.fields().get(i).name().equals(actualType.fields().get(i).name())) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private List<CompiledDataParentType> knownParentTypes() {
+        var parentsByRawName = new java.util.LinkedHashMap<String, CompiledDataParentType>();
+        dataTypes.values().stream()
+                .filter(CompiledDataParentType.class::isInstance)
+                .map(CompiledDataParentType.class::cast)
+                .forEach(parent -> putKnownParentType(parentsByRawName, parent));
+        linkCache.parentTypesByRawName.values().forEach(parent -> putKnownParentType(parentsByRawName, parent));
+        if (findOptionType() != null) {
+            putKnownParentType(parentsByRawName, findOptionType());
+        }
+        if (findResultType() != null) {
+            putKnownParentType(parentsByRawName, findResultType());
+        }
+        if (findEffectType() != null) {
+            putKnownParentType(parentsByRawName, findEffectType());
+        }
+        return List.copyOf(parentsByRawName.values());
+    }
+
+    private void putKnownParentType(
+            Map<String, CompiledDataParentType> parentsByRawName,
+            CompiledDataParentType parent
+    ) {
+        parentsByRawName.merge(
+                simpleRawTypeName(normalizeTypeAlias(parent.name())),
+                parent,
+                this::preferQualifiedParent
+        );
+    }
+
+    private Optional<CompiledDataParentType> specializedReduceParentType(
+            CompiledDataType subtype,
+            CompiledDataParentType parent
+    ) {
+        return subtype.extendedTypes().stream()
+                .map(this::parseLinkedTypeDescriptor)
+                .flatMap(Optional::stream)
+                .filter(CompiledDataParentType.class::isInstance)
+                .map(CompiledDataParentType.class::cast)
+                .filter(parentType -> sameRawTypeName(parentType.name(), parent.name()))
+                .findFirst()
+                .or(() -> instantiateExtendedParentFromSubtypeFields(subtype, parent)
+                        .filter(CompiledDataParentType.class::isInstance)
+                        .map(CompiledDataParentType.class::cast))
+                .or(() -> specializeParentFromSubtypeFields(subtype, parent)
+                        .filter(CompiledDataParentType.class::isInstance)
+                        .map(CompiledDataParentType.class::cast))
+                .map(this::canonicalizeSpecializedParentAlias);
+    }
+
+    private CompiledDataParentType canonicalizeSpecializedParentAlias(CompiledDataParentType parent) {
+        var canonical = canonicalizeParentAlias(parent);
+        if (canonical.name().equals(parent.name())
+            && canonical.typeParameters().equals(parent.typeParameters())) {
+            return parent;
+        }
+        return new CompiledDataParentType(
+                canonical.name(),
+                parent.fields(),
+                parent.subTypes(),
+                parent.typeParameters(),
+                canonical.enumType()
+        );
     }
 
     private String rawTypeName(String descriptor) {
@@ -4282,7 +4519,144 @@ public class CapybaraExpressionCompiler {
             && reducerDict.valueType() != ANY) {
             return reducerType;
         }
+        if (initialType instanceof GenericDataType initialDataType) {
+            var reducerDataType = comparableReduceGenericType(initialDataType, reducerType);
+            if (reducerDataType.isPresent()) {
+                return inferGenericReduceResultType(initialDataType, reducerDataType.orElseThrow());
+            }
+        }
         return initialType;
+    }
+
+    private Optional<GenericDataType> comparableReduceGenericType(GenericDataType initialType, CompiledType reducerType) {
+        if (initialType instanceof CompiledDataParentType initialParent) {
+            if (reducerType instanceof CompiledDataParentType reducerParent
+                && sameRawTypeName(initialParent.name(), reducerParent.name())) {
+                return Optional.of(reducerParent);
+            }
+            if (reducerType instanceof CompiledDataType reducerData && isSubtypeOfParent(reducerData, initialParent)) {
+                return specializedReduceParentType(reducerData, initialParent)
+                        .map(GenericDataType.class::cast);
+            }
+        }
+        if (initialType instanceof CompiledDataType initialData
+            && reducerType instanceof CompiledDataType reducerData
+            && sameRawTypeName(initialData.name(), reducerData.name())) {
+            return Optional.of(reducerData);
+        }
+        return Optional.empty();
+    }
+
+    private CompiledType inferGenericReduceResultType(GenericDataType initialType, GenericDataType reducerType) {
+        var initialTypeParameters = switch (initialType) {
+            case CompiledDataType dataType -> dataType.typeParameters();
+            case CompiledDataParentType parentType -> parentType.typeParameters();
+        };
+        var reducerTypeParameters = switch (reducerType) {
+            case CompiledDataType dataType -> dataType.typeParameters();
+            case CompiledDataParentType parentType -> parentType.typeParameters();
+        };
+        if (initialTypeParameters.size() != reducerTypeParameters.size() || initialTypeParameters.isEmpty()) {
+            return (CompiledType) initialType;
+        }
+        var refinedTypeParameters = new java.util.ArrayList<String>(initialTypeParameters.size());
+        var changed = false;
+        for (var i = 0; i < initialTypeParameters.size(); i++) {
+            var refined = inferReduceTypeDescriptor(initialTypeParameters.get(i), reducerTypeParameters.get(i));
+            refinedTypeParameters.add(refined);
+            changed = changed || !refined.equals(initialTypeParameters.get(i));
+        }
+        if (!changed) {
+            return (CompiledType) initialType;
+        }
+        return switch (initialType) {
+            case CompiledDataType dataType -> specializeDataTypeParameters(dataType, refinedTypeParameters);
+            case CompiledDataParentType parentType -> specializeParentTypeParameters(parentType, refinedTypeParameters);
+        };
+    }
+
+    private CompiledDataType specializeDataTypeParameters(
+            CompiledDataType dataType,
+            List<String> typeParameters
+    ) {
+        var rawType = resolveDataTypeByName(dataType.name());
+        if (!(rawType instanceof CompiledDataType rawDataType) || rawDataType.typeParameters().isEmpty()) {
+            return new CompiledDataType(
+                    dataType.name(),
+                    dataType.fields(),
+                    typeParameters,
+                    dataType.extendedTypes(),
+                    dataType.comments(),
+                    dataType.visibility(),
+                    dataType.singleton()
+            );
+        }
+        var substitutions = typeParameterSubstitutions(rawDataType.typeParameters(), typeParameters);
+        if (substitutions.isEmpty()) {
+            return dataType;
+        }
+        var substituted = (CompiledDataType) substituteTypeParameters(rawDataType, substitutions);
+        return new CompiledDataType(
+                substituted.name(),
+                substituted.fields(),
+                typeParameters,
+                substituted.extendedTypes(),
+                dataType.comments(),
+                dataType.visibility(),
+                substituted.singleton()
+        );
+    }
+
+    private CompiledDataParentType specializeParentTypeParameters(
+            CompiledDataParentType parentType,
+            List<String> typeParameters
+    ) {
+        var rawType = resolveDataTypeByName(parentType.name());
+        if (!(rawType instanceof CompiledDataParentType rawParentType) || rawParentType.typeParameters().isEmpty()) {
+            return new CompiledDataParentType(
+                    parentType.name(),
+                    parentType.fields(),
+                    parentType.subTypes(),
+                    typeParameters,
+                    parentType.enumType()
+            );
+        }
+        var substitutions = typeParameterSubstitutions(rawParentType.typeParameters(), typeParameters);
+        if (substitutions.isEmpty()) {
+            return parentType;
+        }
+        var substituted = (CompiledDataParentType) substituteTypeParameters(rawParentType, substitutions);
+        return new CompiledDataParentType(
+                substituted.name(),
+                substituted.fields(),
+                substituted.subTypes(),
+                typeParameters,
+                substituted.enumType()
+        );
+    }
+
+    private Map<String, CompiledType> typeParameterSubstitutions(
+            List<String> declaredTypeParameters,
+            List<String> actualTypeParameters
+    ) {
+        var substitutions = new java.util.LinkedHashMap<String, CompiledType>();
+        var max = Math.min(declaredTypeParameters.size(), actualTypeParameters.size());
+        for (var i = 0; i < max; i++) {
+            var declaredTypeParameter = declaredTypeParameters.get(i);
+            parseLinkedTypeDescriptor(actualTypeParameters.get(i))
+                    .ifPresent(type -> substitutions.put(declaredTypeParameter, type));
+        }
+        return substitutions;
+    }
+
+    private String inferReduceTypeDescriptor(String initialDescriptor, String reducerDescriptor) {
+        var initial = parseLinkedTypeDescriptor(initialDescriptor);
+        var reducer = parseLinkedTypeDescriptor(reducerDescriptor);
+        if (initial.isEmpty() || reducer.isEmpty()) {
+            return initialDescriptor;
+        }
+        var refined = inferReduceResultType(initial.orElseThrow(), reducer.orElseThrow());
+        return linkedTypeDescriptor(refined);
     }
 
     private Result<CompiledExpression> linkPipeFlatMapExpression(InfixExpression expression, Scope scope) {
@@ -4840,6 +5214,14 @@ public class CapybaraExpressionCompiler {
             return right;
         }
         if (right == ANY) {
+            return left;
+        }
+        if (left.equals(right)) {
+            return left;
+        }
+        if (left instanceof GenericDataType leftData
+            && right instanceof GenericDataType rightData
+            && sameRawTypeName(leftData.name(), rightData.name())) {
             return left;
         }
         var sharedDataParent = findSharedCollectionParentType(left, right);
@@ -6937,6 +7319,23 @@ public class CapybaraExpressionCompiler {
                 });
     }
 
+    private Result<CompiledExpression> linkNewDataAsType(
+            NewData newData,
+            Scope scope,
+            CompiledDataType expectedType
+    ) {
+        return rawLinkNewDataWithType(newData, scope, expectedType)
+                .flatMap(expression -> {
+                    if (!(expression instanceof CompiledNewData compiledNewData)) {
+                        return Result.success(expression);
+                    }
+                    if (newData.bypassConstructor()) {
+                        return validateConstructorBypass(compiledNewData, newData.position());
+                    }
+                    return applyProtectedConstructorIfNeeded(compiledNewData, newData.position());
+                });
+    }
+
     private Result<CompiledExpression> validateConstructorBypass(
             CompiledNewData newData,
             Optional<SourcePosition> position
@@ -6976,43 +7375,51 @@ public class CapybaraExpressionCompiler {
 
     private Result<CompiledExpression> rawLinkNewData(NewData newData, Scope scope) {
         return linkNewDataType(newData.type(), scope)
-                .flatMap(type -> linkSpreadAssignments(newData.spreads(), scope)
-                        .flatMap(spreadAssignments ->
-                                linkFieldAssignment(newData.assignments(), scope, type)
-                                        .flatMap(assignments -> linkPositionalAssignments(
-                                                type,
-                                                spreadAssignments,
-                                                assignments,
-                                                newData.positionalArguments(),
-                                                scope,
+                .flatMap(type -> rawLinkNewDataWithType(newData, scope, type));
+    }
+
+    private Result<CompiledExpression> rawLinkNewDataWithType(
+            NewData newData,
+            Scope scope,
+            CompiledType type
+    ) {
+        return linkSpreadAssignments(newData.spreads(), scope)
+                .flatMap(spreadAssignments ->
+                        linkFieldAssignment(newData.assignments(), scope, type)
+                                .flatMap(assignments -> linkPositionalAssignments(
+                                        type,
+                                        spreadAssignments,
+                                        assignments,
+                                        newData.positionalArguments(),
+                                        scope,
+                                        newData
+                                ).flatMap(positionalAssignments -> {
+                                    var allAssignments = new java.util.ArrayList<CompiledNewData.FieldAssignment>(
+                                            spreadAssignments.size() + assignments.size() + positionalAssignments.size()
+                                    );
+                                    allAssignments.addAll(spreadAssignments);
+                                    allAssignments.addAll(assignments);
+                                    allAssignments.addAll(positionalAssignments);
+                                    var validatedAssignments = validateRequiredAssignments(type, allAssignments, newData);
+                                    if (validatedAssignments instanceof Result.Error<List<CompiledNewData.FieldAssignment>> error) {
+                                        return new Result.Error<CompiledExpression>(error.errors());
+                                    }
+                                    return coerceAssignmentsForType(
+                                            type,
+                                            ((Result.Success<List<CompiledNewData.FieldAssignment>>) validatedAssignments).value(),
+                                            newData
+                                    ).flatMap(coercedAssignments -> {
+                                        var resolvedType = inferDataTypeFromAssignments(type, coercedAssignments);
+                                        return coerceAssignmentsForType(
+                                                resolvedType,
+                                                List.copyOf(coercedAssignments),
                                                 newData
-                                        ).flatMap(positionalAssignments -> {
-                                            var allAssignments = new java.util.ArrayList<CompiledNewData.FieldAssignment>(
-                                                    spreadAssignments.size() + assignments.size() + positionalAssignments.size()
-                                            );
-                                            allAssignments.addAll(spreadAssignments);
-                                            allAssignments.addAll(assignments);
-                                            allAssignments.addAll(positionalAssignments);
-                                            var validatedAssignments = validateRequiredAssignments(type, allAssignments, newData);
-                                            if (validatedAssignments instanceof Result.Error<List<CompiledNewData.FieldAssignment>> error) {
-                                                return new Result.Error<CompiledExpression>(error.errors());
-                                            }
-                                            return coerceAssignmentsForType(
-                                                    type,
-                                                    ((Result.Success<List<CompiledNewData.FieldAssignment>>) validatedAssignments).value(),
-                                                    newData
-                                            ).flatMap(coercedAssignments -> {
-                                                var resolvedType = inferDataTypeFromAssignments(type, coercedAssignments);
-                                                return coerceAssignmentsForType(
-                                                        resolvedType,
-                                                        List.copyOf(coercedAssignments),
-                                                        newData
-                                                ).map(resolvedAssignments -> (CompiledExpression) new CompiledNewData(
-                                                        resolvedType,
-                                                        List.copyOf(resolvedAssignments)
-                                                ));
-                                            });
-                                        }))));
+                                        ).map(resolvedAssignments -> (CompiledExpression) new CompiledNewData(
+                                                resolvedType,
+                                                List.copyOf(resolvedAssignments)
+                                        ));
+                                    });
+                                })));
     }
 
     private Result<CompiledType> linkNewDataType(Type type, Scope scope) {
@@ -7331,7 +7738,7 @@ public class CapybaraExpressionCompiler {
             return new Result.Error<>(error.errors());
         }
         var linkedSuccessType = ((Result.Success<CompiledDataType>) successType).value();
-        var valueField = linkedSuccessType.fields().stream()
+        var valueField = resolveConstructorFields(linkedSuccessType, resultParent).stream()
                 .filter(field -> field.name().equals("value"))
                 .findFirst();
         if (valueField.isEmpty()) {
@@ -7440,11 +7847,42 @@ public class CapybaraExpressionCompiler {
             }
             collectTypeSubstitutions(expectedType, assignment.value().type(), substitutions);
         }
-        substitutions.entrySet().removeIf(entry -> !isConcreteResolvedType(entry.getValue()));
+        substitutions.entrySet().removeIf(entry -> !isUsableInferredTypeArgument(entry.getValue()));
         if (substitutions.isEmpty()) {
             return type;
         }
         return substituteTypeParameters(type, substitutions);
+    }
+
+    private boolean isUsableInferredTypeArgument(CompiledType type) {
+        return isConcreteResolvedType(type) || hasKnownEmptyCollectionShape(type);
+    }
+
+    private boolean hasKnownEmptyCollectionShape(CompiledType type) {
+        return switch (type) {
+            case CompiledList linkedList ->
+                    linkedList.elementType() == ANY || hasKnownEmptyCollectionShape(linkedList.elementType());
+            case CompiledSet linkedSet ->
+                    linkedSet.elementType() == ANY || hasKnownEmptyCollectionShape(linkedSet.elementType());
+            case CompiledDict linkedDict ->
+                    linkedDict.valueType() == ANY || hasKnownEmptyCollectionShape(linkedDict.valueType());
+            case CompiledTupleType linkedTupleType ->
+                    linkedTupleType.elementTypes().stream().anyMatch(this::hasKnownEmptyCollectionShape);
+            case CompiledFunctionType linkedFunctionType ->
+                    hasKnownEmptyCollectionShape(linkedFunctionType.argumentType())
+                    || hasKnownEmptyCollectionShape(linkedFunctionType.returnType());
+            case CompiledDataType linkedDataType ->
+                    linkedDataType.typeParameters().stream()
+                            .map(this::parseLinkedTypeDescriptor)
+                            .flatMap(Optional::stream)
+                            .anyMatch(this::hasKnownEmptyCollectionShape);
+            case CompiledDataParentType linkedDataParentType ->
+                    linkedDataParentType.typeParameters().stream()
+                            .map(this::parseLinkedTypeDescriptor)
+                            .flatMap(Optional::stream)
+                            .anyMatch(this::hasKnownEmptyCollectionShape);
+            default -> false;
+        };
     }
 
     private boolean hasGenericTypeParameters(CompiledType type) {
@@ -7724,7 +8162,10 @@ public class CapybaraExpressionCompiler {
     }
 
     private boolean isHardFieldTypeMismatch(CompiledType expected, CompiledType actual) {
-        if (expected.equals(actual) || expected == ANY || actual == ANY || actual == NOTHING) {
+        if ((!(expected instanceof GenericDataType) && !(actual instanceof GenericDataType) && expected.equals(actual))
+            || expected == ANY
+            || actual == ANY
+            || actual == NOTHING) {
             return false;
         }
 
@@ -7754,7 +8195,10 @@ public class CapybaraExpressionCompiler {
             return true;
         }
 
-        if (expected instanceof GenericDataType) {
+        if (expected instanceof GenericDataType expectedGeneric) {
+            if (actual instanceof GenericDataType actualGeneric) {
+                return !isTypeCompatible(actualGeneric, expectedGeneric);
+            }
             return actual instanceof PrimitiveLinkedType;
         }
 
@@ -7996,7 +8440,7 @@ public class CapybaraExpressionCompiler {
             return new Result.Error<>(error.errors());
         }
         var successType = ((Result.Success<CompiledDataType>) successTypeResult).value();
-        var successValueField = successType.fields().stream()
+        var successValueField = resolveConstructorFields(successType, resultParent).stream()
                 .filter(field -> field.name().equals("value"))
                 .findFirst();
         if (successValueField.isEmpty()) {
@@ -8026,7 +8470,7 @@ public class CapybaraExpressionCompiler {
             return new Result.Error<>(error.errors());
         }
         var successType = ((Result.Success<CompiledDataType>) successTypeResult).value();
-        var successValueField = successType.fields().stream()
+        var successValueField = resolveConstructorFields(successType, resultParent).stream()
                 .filter(field -> field.name().equals("value"))
                 .findFirst();
         if (successValueField.isEmpty()) {
