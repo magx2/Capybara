@@ -104,7 +104,7 @@ class ReflectionFeatureTest {
 
     @Test
     void reflectsEmptyFunctionalDataValuesThroughGenericDataParameter() {
-        var empty = ReflectionFeature.reflectionData(new ReflectionFeature.ReflectedEmpty());
+        var empty = ReflectionFeature.reflectionData(ReflectionFeature.ReflectedEmpty.INSTANCE);
 
         assertThat(empty.name()).isEqualTo("ReflectedEmpty");
         assertThat(empty.fields()).isEmpty();

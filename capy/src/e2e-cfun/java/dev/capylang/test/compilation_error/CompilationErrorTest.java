@@ -64,7 +64,7 @@ public class CompilationErrorTest {
                         fun parse(value: int): int =
                             type __Token = __Number | __Stop
                             data __Number { value: int }
-                            data __Stop {}
+                            data __Stop { done: bool }
                             ---
                             let token: __Token = __Number { value }
                             match token with
@@ -950,6 +950,34 @@ public class CompilationErrorTest {
 
     static Stream<Arguments> simpleCompilationError() {
         return Stream.of(
+                Arguments.of(
+                        "empty_data_declaration",
+                        "data Empty {}",
+                        new Position(1, 0),
+                        """
+                                error: mismatched types
+                                 --> /foo/boo/empty_data_declaration.cfun:%d:%d
+                                data Empty {}
+                                ^ Data `Empty` must declare at least one field; use `single` for empty values
+                                """
+                ),
+                Arguments.of(
+                        "empty_local_data_declaration",
+                        """
+                                fun parse(): int =
+                                    data __Empty {}
+                                    ---
+                                    1
+                                """,
+                        new Position(2, 4),
+                        """
+                                error: mismatched types
+                                 --> /foo/boo/empty_local_data_declaration.cfun:%d:%d
+                                fun parse(): int =
+                                    data __Empty {}
+                                %s^ Data `__Empty` must declare at least one field; use `single` for empty values
+                                """
+                ),
                 Arguments.of(
                         "data_extension_conflicting_inherited_field_types",
                         """

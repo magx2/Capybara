@@ -28,7 +28,7 @@ deriver FieldValueSummary {
 }
 
 data DerivedUser { name: string, age: int } derive Show, AgeComparable, FieldValueSummary
-data Empty {} derive Show
+single Empty
 data Entity { id: string }
 data Employee { department: string, ...Entity } derive Show
 type Named { id: string } = DerivedEntity derive Show
@@ -38,7 +38,8 @@ fun show_user(): string =
     DerivedUser { name: "Ada", age: 42 }.show()
 
 fun show_empty(): string =
-    Empty {}.show()
+    let info: DataValueInfo = reflection(Empty)
+    info.name + " {  }"
 
 fun show_employee(): string =
     Employee { id: "E-1", department: "R&D" }.show()
