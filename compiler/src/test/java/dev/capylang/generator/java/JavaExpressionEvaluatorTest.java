@@ -392,6 +392,23 @@ class JavaExpressionEvaluatorTest {
     }
 
     @Test
+    void shouldGuardDataTypedPatternWithCapybaraDataValue() {
+        var generatedProgram = new JavaGenerator().generate(compileProgram("DataTypedMatch", "/foo/bar", """
+                fun is_data(value: any): bool =
+                    match value with
+                    case data d -> true
+                    case _ -> false
+                """));
+        var generated = generatedProgram.modules().stream()
+                .map(dev.capylang.generator.GeneratedModule::code)
+                .collect(joining("\n"));
+
+        assertThat(generated).contains("instanceof dev.capylang.CapybaraDataValue");
+        assertThat(generated).doesNotContain("instanceof java.util.List");
+        assertGeneratedJavaCompiles(generatedProgram);
+    }
+
+    @Test
     void shouldGenerateNativeRandomSeedMethod() {
         var program = compileProgram("Random", "/capy/lang", """
                 data Seed { value: long }

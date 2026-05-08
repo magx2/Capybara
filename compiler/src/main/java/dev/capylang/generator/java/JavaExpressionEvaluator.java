@@ -2592,14 +2592,7 @@ public class JavaExpressionEvaluator {
     }
 
     private static String dataGuard(String varName) {
-        return "!("
-               + varName + " instanceof java.lang.Number"
-               + " || " + varName + " instanceof java.lang.Boolean"
-               + " || " + varName + " instanceof java.lang.String"
-               + " || " + varName + " instanceof java.util.List"
-               + " || " + varName + " instanceof java.util.Set"
-               + " || " + varName + " instanceof java.util.Map"
-               + ")";
+        return varName + " instanceof dev.capylang.CapybaraDataValue";
     }
 
     private static String castMatchCaseExpression(String expression, dev.capylang.compiler.CompiledType resultType) {
