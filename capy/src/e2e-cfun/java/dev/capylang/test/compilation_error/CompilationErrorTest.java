@@ -1207,6 +1207,25 @@ public class CompilationErrorTest {
                         + "    ^ Expected `_Parse[JsonBool]`, but got `_Parse[JsonNull]`\n"
                 ),
                 Arguments.of(
+                        "empty_dict_result_not_compatible_with_list_result",
+                        """
+                                type Result[T] = Success[T] | Error
+                                data Success[T] { value: T }
+                                data Error { message: string }
+                                fun accepts_list(value: Result[list[int]]): int = 1
+                                fun broken(): int =
+                                    let x = Success { {:} }
+                                    accepts_list(x)
+                                """,
+                        new Position(7, 17),
+                        "error: mismatched types\n"
+                        + " --> /foo/boo/empty_dict_result_not_compatible_with_list_result.cfun:%d:%d\n"
+                        + "fun broken(): int =\n"
+                        + "    let x = Success {\n"
+                        + "        {}\n"
+                        + "%3$s^ Expected `Result[list[int]]`, got `Success[dict[any]]`\n"
+                ),
+                Arguments.of(
                         "json_assertion_no_viable_alternative",
                         """
                                 data JsonNumberLong { value: long }
