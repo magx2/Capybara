@@ -842,7 +842,7 @@ class CapybaraCompilerLibrariesTest {
                         """)
         ));
 
-        assertThat(error.message()).contains("Expected `Widget`, got `Success`");
+        assertThat(error.message()).contains("Expected `Widget`, got `Success[Widget]`");
     }
 
     @Test
