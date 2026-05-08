@@ -39,13 +39,14 @@ fun tests(): Effect[TestFile] =
         test("should convert data with collection fields to json object", () => should_convert_data_with_collection_fields_to_json_object()),
         test("should convert data with set field to json array", () => should_convert_data_with_set_field_to_json_array()),
         test("should convert data with wrapper and nested fields to json object", () => should_convert_data_with_wrapper_and_nested_fields_to_json_object()),
-        test("should convert lambda field to json null", () => should_convert_lambda_field_to_json_null()),
+        test("should fail converting lambda field", () => should_fail_converting_lambda_field()),
         test("should derive Jsonable to_json for primitive fields", () => should_derive_jsonable_to_json_for_primitive_fields()),
         test("should derive Jsonable to_json for nested and collection fields", () => should_derive_jsonable_to_json_for_nested_and_collection_fields()),
         test("should serialize simple object", () => test_serialize_simple_object()),
         test("should serialize empty object", () => test_empty()),
         test("should serialize object with primitive types", () => test_serialize_object_with_primitive_types()),
         test("should serialize object with list", () => test_serialize_object_with_list()),
+        test("should stringify top-level json values", () => should_stringify_top_level_json_values()),
         test("should deserialize simple object", () => should_deserialize_simple_object()),
         test("should deserialize object with number as long types", () => should_deserialize_object_with_number_as_long_types()),
         test("should deserialize object with number as double types", () => should_deserialize_object_with_number_as_double_types()),
@@ -70,7 +71,7 @@ fun should_convert_data_with_primitive_fields_to_json_object(): Assert =
         ratio: 0.75f,
         active: true
     }
-    assert_that(to_json(sample)).is_equal_to(JsonObject {
+    assert_that(to_json(sample)).succeeds(JsonObject {
         value: {
             "name": JsonString { value: "Ada" },
             "age": JsonNumberLong { value: 42 },
@@ -89,7 +90,7 @@ fun should_convert_data_with_collection_fields_to_json_object(): Assert =
             "stable": false,
         }
     }
-    assert_that(to_json(sample)).is_equal_to(JsonObject {
+    assert_that(to_json(sample)).succeeds(JsonObject {
         value: {
             "numbers": JsonArray {
                 value: [
@@ -108,17 +109,19 @@ fun should_convert_data_with_collection_fields_to_json_object(): Assert =
     })
 
 fun should_convert_data_with_set_field_to_json_array(): Assert =
-    match _json_field(to_json(JsonSetSample { tags: {"red", "blue"} }), "tags") with
-    case Some { tags } -> {
-        match tags with
-        case JsonArray { values } ->
-            assert_that(values)
-                .has_size(2)
-                .contains(JsonString { value: "red" })
-                .contains(JsonString { value: "blue" })
-        case _ -> assert_that(false).is_true()
-    }
-    case None -> assert_that(false).is_true()
+    assert_that(to_json(JsonSetSample { tags: {"red", "blue"} })).succeeds(obj =>
+        match _json_field(obj, "tags") with
+        case Some { tags } -> {
+            match tags with
+            case JsonArray { values } ->
+                assert_that(values)
+                    .has_size(2)
+                    .contains(JsonString { value: "red" })
+                    .contains(JsonString { value: "blue" })
+            case _ -> assert_that(false).is_true()
+        }
+        case None -> assert_that(false).is_true()
+    )
 
 fun should_convert_data_with_wrapper_and_nested_fields_to_json_object(): Assert =
     let sample = JsonWrapperSample {
@@ -129,7 +132,7 @@ fun should_convert_data_with_wrapper_and_nested_fields_to_json_object(): Assert 
         inner: JsonInnerSample { label: "child", count: 2 },
         raw: JsonArray { value: [JsonString { value: "kept" }] }
     }
-    assert_that(to_json(sample)).is_equal_to(JsonObject {
+    assert_that(to_json(sample)).succeeds(JsonObject {
         value: {
             "present": JsonString { value: "value" },
             "absent": JsonNull,
@@ -147,22 +150,18 @@ fun should_convert_data_with_wrapper_and_nested_fields_to_json_object(): Assert 
         }
     })
 
-fun should_convert_lambda_field_to_json_null(): Assert =
+fun should_fail_converting_lambda_field(): Assert =
     let sample = JsonLambdaSample {
         callback: () => "ignored"
     }
-    assert_that(to_json(sample)).is_equal_to(JsonObject {
-        value: {
-            "callback": JsonNull,
-        }
-    })
+    assert_that(to_json(sample)).fails("Cannot convert field `callback` to JSON: unsupported value")
 
 fun should_derive_jsonable_to_json_for_primitive_fields(): Assert =
     assert_that(JsonablePrimitiveSample {
         name: "Ada",
         age: 42,
         active: true
-    }.to_json()).is_equal_to(JsonObject {
+    }.to_json()).succeeds(JsonObject {
         value: {
             "name": JsonString { value: "Ada" },
             "age": JsonNumberLong { value: 42 },
@@ -176,7 +175,7 @@ fun should_derive_jsonable_to_json_for_nested_and_collection_fields(): Assert =
         labels: ["compiler", "json"],
         metadata: { "stars": 5 },
         raw: JsonArray { value: [JsonString { value: "kept" }] }
-    }.to_json()).is_equal_to(JsonObject {
+    }.to_json()).succeeds(JsonObject {
         value: {
             "user": JsonObject {
                 value: {
@@ -248,6 +247,17 @@ fun test_serialize_object_with_list(): Assert =
     let ser = serialize(json)
     assert_that(ser)
         .contains('"cars":["name",2010]')
+
+fun should_stringify_top_level_json_values(): Assert =
+    assert_all([
+        assert_that(stringify(JsonObject { value: { "name": JsonString { value: "Ada" } } })).is_equal_to('{"name":"Ada"}'),
+        assert_that(stringify(JsonArray { value: [JsonString { value: "Ada" }] })).is_equal_to('["Ada"]'),
+        assert_that(stringify(JsonString { value: "Ada" })).is_equal_to('"Ada"'),
+        assert_that(stringify(JsonNumberLong { value: 7L })).is_equal_to("7"),
+        assert_that(stringify(JsonNumberDouble { value: 1.5 })).is_equal_to("1.5"),
+        assert_that(stringify(JsonBool { value: true })).is_equal_to("true"),
+        assert_that(stringify(JsonNull)).is_equal_to("null"),
+    ])
 
 fun should_deserialize_simple_object(): Assert =
     assert_that(deserialize('{"foo":"boo"}'))

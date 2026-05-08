@@ -21,62 +21,93 @@ data JsonBool { value: bool }
 single JsonNull
 
 deriver Jsonable {
-    fun to_json(): JsonObject = to_json(receiver)
+    fun to_json(): Result[JsonObject] = to_json(receiver)
 }
 
-fun to_json(obj: data): JsonObject =
-    fun any_to_json(value: any): Json =
+fun to_json(obj: data): Result[JsonObject] =
+    data __JsonEntry { key: string, value: Result[Json] }
+    fun __merge_json_entry(acc: Result[dict[Json]], json_entry: __JsonEntry): Result[dict[Json]] =
+        let parsed_dict <- acc
+        let json <- json_entry.value
+        parsed_dict + { json_entry.key : json }
+
+    fun any_to_json(value: any): Result[Json] =
         match value with
-        case Json j -> j
-        case string s -> JsonString { s }
-        case int i -> JsonNumberLong { i }
-        case long l -> JsonNumberLong { l }
-        case double d -> JsonNumberDouble { d }
-        case float f -> JsonNumberDouble { f }
-        case bool b -> JsonBool { b }
-        case list l -> JsonArray { l | :any_to_json }
-        case set s -> JsonArray { s |> [], (acc, item) => acc + any_to_json(item) }
-        case dict d -> JsonObject { d | (k,v) => any_to_json(v) }
+        case Json j -> Success { j }
+        case string s -> Success { JsonString { s } }
+        case int i -> Success { JsonNumberLong { i } }
+        case long l -> Success { JsonNumberLong { l } }
+        case double d -> Success { JsonNumberDouble { d } }
+        case float f -> Success { JsonNumberDouble { f } }
+        case bool b -> Success { JsonBool { b } }
+        case list l -> {
+            let initial: Result[list[Json]] = Success { [] }
+            let values <- l |> initial, (acc_result, item) => {
+                let acc <- acc_result
+                let encoded <- any_to_json(item)
+                Success { acc + encoded }
+            }
+            JsonArray { values }
+        }
+        case set s -> {
+            let initial: Result[list[Json]] = Success { [] }
+            let values <- s |> initial, (acc_result, item) => {
+                let acc <- acc_result
+                let encoded <- any_to_json(item)
+                Success { acc + encoded }
+            }
+            JsonArray { values }
+        }
+        case dict d -> {
+            let initial: Result[dict[Json]] = Success { {:} }
+            d
+                | (key, item) => __JsonEntry { key, any_to_json(item) }
+                |> initial, (acc, entry) => __merge_json_entry(acc, entry)
+                | values => Success { JsonObject { values } }
+        }
         case Option o -> {
             match o with
             case Some { value } -> any_to_json(value)
-            case None -> JsonNull
+            case None -> Success { JsonNull }
         }
-        case Result[any] r -> {
+        case Result r -> {
             match r with
             case Success { value } -> any_to_json(value)
-            case Error { value } -> any_to_json(value)
+            case Error { message } -> any_to_json(message)
         }
-        case data d -> to_json(d)
-        // todo support enum
-        case _ -> JsonNull
+        case data d -> to_json(d) | object => Success { object }
+        case _ -> Error { "unsupported value" }
     ---
-    JsonObject {
-        reflection(obj).fields
-        |> {:}, (acc, field) => acc + { field.name : any_to_json(field.value) }
-    }
+    let initial: Result[dict[Json]] = Success { {:} }
+    let values <- reflection(obj).fields
+        |> initial, (acc_result, field) => {
+            let acc <- acc_result
+            match any_to_json(field.value) with
+            case Success { encoded } -> Success { acc + { field.name : encoded } }
+            case Error { message } -> Error { "Cannot convert field `" + field.name + "` to JSON: " + message }
+        }
+    JsonObject { values }
 
-fun serialize(obj: JsonObject) =
-    fun __serialize(json: Json): string =
-        match json with
-        case JsonObject { v } ->
-            "{"
-            + (v
-                |> (k,v) => "\"" + k + "\":" + __serialize(v)
-                |> "", (acc, item) => acc + "," + item)
-            + "}"
-        case JsonArray { value } ->  "["
-            + (value | :__serialize |> "", (acc, item) => acc + "," + item)
-            + "]"
-        case JsonString { value } -> "\"" + value + "\""
-        case JsonNumberDouble { value } -> value + ""
-        case JsonNumberLong { value } -> value + ""
-        case JsonValueObject { value } -> __serialize(value)
-        case JsonValueArray { value } -> __serialize(value)
-        case JsonBool { value } -> value + ""
-        case JsonNull -> "null"
-    ---
-    __serialize(obj)
+fun stringify(json: Json): string =
+    match json with
+    case JsonObject { v } ->
+        "{"
+        + (v
+            |> (k,v) => "\"" + k + "\":" + stringify(v)
+            |> "", (acc, item) => acc + "," + item)
+        + "}"
+    case JsonArray { value } ->  "["
+        + (value | :stringify |> "", (acc, item) => acc + "," + item)
+        + "]"
+    case JsonString { value } -> "\"" + value + "\""
+    case JsonNumberDouble { value } -> value + ""
+    case JsonNumberLong { value } -> value + ""
+    case JsonValueObject { value } -> stringify(value)
+    case JsonValueArray { value } -> stringify(value)
+    case JsonBool { value } -> value + ""
+    case JsonNull -> "null"
+
+fun serialize(obj: JsonObject): string = stringify(obj)
 
 fun deserialize(json: string): Result[JsonObject] =
     _deserialize_json_object(json)

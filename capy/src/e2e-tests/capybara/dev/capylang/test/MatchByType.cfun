@@ -56,16 +56,3 @@ fun bare_generic_type_pattern(value: any): int =
     case dict d -> 3
     case Option o -> 4
     case _ -> 0
-
-fun list_generic_type_pattern(l: list[any]): int =
-    match l with
-    case list[string] -> 1
-    case list[Option] -> 2
-    case list[int] -> 3
-    case list -> 99
-
-fun nested_generic_type_pattern(l: list[any]): int =
-    match l with
-    case list[Option[Result[int]]] -> 1
-    case list[Option] -> 2
-    case list -> 99
