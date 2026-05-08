@@ -3,7 +3,7 @@
 ## Project Structure & Module Organization
 This repository is a Gradle multi-project build (`settings.gradle`) with these main modules:
 - `compiler/`: Capybara parser, linker, and Java generator (`src/main/antlr/Functional.g4`, Java sources, unit tests).
-- `capy/`: CLI entrypoint (`dev.capylang.Capy`) and integration/e2e tests (`src/e2e-tests` source set).
+- `capy/`: CLI entrypoint (`dev.capylang.Capy`) and integration/e2e tests (`src/e2e-cfun` and `src/e2e-coo` source sets).
 - `lib/java-lib/`: shared Java helpers.
 - `lib/capybara-lib/`: standard library written in Capybara (`src/main/capybara`) plus generated Java tests.
 - `Intellij/`: editor syntax bundle and related docs.
@@ -14,7 +14,9 @@ Do not edit generated outputs under `build/generated/...`; change source `.cfun`
 Use the wrapper from repository root:
 - `./gradlew clean test`: full build and test for all modules.
 - `./gradlew :compiler:test`: run compiler unit tests only.
-- `./gradlew :capy:e2eTests`: run integration suite.
+- `./gradlew :capy:e2e-cfun`: run functional integration suite.
+- `./gradlew :capy:e2e-coo`: run object-oriented integration suite.
+- `./gradlew :capy:e2eTests`: run both integration suites.
 - `./gradlew :lib:capybara-lib:compileCapybara`: compile library Capybara sources to Java.
 - `./gradlew :lib:capybara-lib:testCapybara`: compile test Capybara sources and run generated `JsonTest` main.
 - If Gradle has sandbox or cache permission issues, run it with a temporary Gradle home, for example: `env GRADLE_USER_HOME=/tmp/gradle-home ./gradlew clean check`.
@@ -30,7 +32,7 @@ Use the wrapper from repository root:
 - Frameworks: JUnit 5 + AssertJ.
 - Add/update tests with every behavior change:
   - compiler behavior: `compiler/src/test/...`
-  - language/integration behavior: `capy/src/e2e-tests/capybara/...` + `capy/src/e2e-tests/java/...`
+  - language/integration behavior: `capy/src/e2e-cfun/...` and/or `capy/src/e2e-coo/...`
 - Prefer focused test names (e.g., `reduceDict`, `should_dict_of_obj`).
 
 ## Commit & Pull Request Guidelines
@@ -55,5 +57,4 @@ Use the wrapper from repository root:
   - semantic issue -> linker/validator/tests
   - output issue -> generator/tests
 - Do not fix source problems by editing generated Java under `build/generated/...`.
-
 

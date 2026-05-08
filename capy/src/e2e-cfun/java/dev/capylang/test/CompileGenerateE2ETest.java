@@ -19,7 +19,7 @@ class CompileGenerateE2ETest {
     @ParameterizedTest(name = "compile-generate fixture: {0}")
     @ValueSource(strings = {"simple", "imports"})
     void shouldCompileAndGenerateFromFixtures(String fixtureName, @TempDir Path tempDir) throws Exception {
-        var input = Path.of("src/e2e-tests/resources/compile-generate", fixtureName);
+        var input = Path.of("src/e2e-cfun/resources/compile-generate", fixtureName);
         var generatedOutput = tempDir.resolve("generated");
         var linkedOutput = tempDir.resolve("linked");
         var errors = new ByteArrayOutputStream();
