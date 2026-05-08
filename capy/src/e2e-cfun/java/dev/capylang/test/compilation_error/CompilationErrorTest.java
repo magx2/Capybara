@@ -1226,6 +1226,23 @@ public class CompilationErrorTest {
                         + "%3$s^ Expected `Result[list[int]]`, got `Success[dict[any]]`\n"
                 ),
                 Arguments.of(
+                        "any_list_result_not_compatible_with_list_result",
+                        """
+                                type Result[T] = Success[T] | Error
+                                data Success[T] { value: T }
+                                data Error { message: string }
+                                fun accepts_list(value: Result[list[int]]): int = 1
+                                fun broken(value: Result[list[any]]): int =
+                                    accepts_list(value)
+                                """,
+                        new Position(6, 17),
+                        "error: mismatched types\n"
+                        + " --> /foo/boo/any_list_result_not_compatible_with_list_result.cfun:%d:%d\n"
+                        + "fun broken(value: Result[list[any]]): int =\n"
+                        + "    accepts_list(value)\n"
+                        + "%3$s^ Expected `Result[list[int]]`, got `Result[list[any]]`\n"
+                ),
+                Arguments.of(
                         "json_assertion_no_viable_alternative",
                         """
                                 data JsonNumberLong { value: long }
