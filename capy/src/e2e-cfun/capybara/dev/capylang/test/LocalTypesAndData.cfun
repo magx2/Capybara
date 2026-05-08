@@ -51,7 +51,7 @@ fun local_single_used_in_local_type_and_function(use_stop: bool): string =
         case __Value { value } -> "value:" + value
         case Stop -> "stop"
     ---
-    describe(if use_stop then Stop else __Value { 7 })
+    describe(if use_stop then Stop {} else __Value { 7 })
 
 fun local_generic_data_field_access_followed_by_index(buffer: string): string =
     data __Parse[T] { buffer: string, value: T }

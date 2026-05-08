@@ -1,5 +1,6 @@
 package dev.capylang.generator.java;
 
+import java.util.Map;
 import java.util.Set;
 import java.util.SortedSet;
 
@@ -12,5 +13,6 @@ public record JavaClass(
         SortedSet<JavaMethod> staticMethods,
         SortedSet<JavaInterface> interfaces,
         SortedSet<JavaRecord> records,
-        SortedSet<JavaEnum> enums) {
+        SortedSet<JavaEnum> enums,
+        Map<String, String> enumValueOwnerOverrides) {
 }

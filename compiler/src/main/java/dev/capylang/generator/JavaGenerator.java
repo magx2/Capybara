@@ -30,10 +30,10 @@ public final class JavaGenerator implements Generator {
         var functionNameOverrides = buildFunctionNameOverrides(program);
         var astBuilder = new JavaAstBuilder(functionNameOverrides);
         JavaExpressionEvaluator.setFunctionNameOverrides(functionNameOverrides);
-        var modules = program.modules().stream()
-                .map(module -> modules(module, timings, astBuilder))
-                .flatMap(List::stream)
-                .collect(java.util.stream.Collectors.toCollection(ArrayList::new));
+        var modules = new ArrayList<GeneratedModule>();
+        for (var module : program.modules()) {
+            modules.addAll(modules(module, timings, astBuilder));
+        }
         modules.addAll(time(timings::addSourceRenderNanos, () -> objectOrientedJavaGenerator.generate(program.objectOrientedModules())));
         log.info(() -> "Java generation timings: AST build="
                        + Duration.ofNanos(timings.astBuildNanos())
@@ -44,51 +44,57 @@ public final class JavaGenerator implements Generator {
 
     private List<GeneratedModule> modules(CompiledModule module, GenerationTimings timings, JavaAstBuilder astBuilder) {
         var javaClass = time(timings::addAstBuildNanos, () -> astBuilder.build(module));
-        if (!hasTypeOrDataNameConflictWithFile(javaClass)) {
-            return List.of(new GeneratedModule(
-                    relativePath(javaClass, javaClass.name().toString()),
-                    time(timings::addSourceRenderNanos, () -> code(javaClass, javaClass.name().toString(), true))
-            ));
-        }
+        JavaExpressionEvaluator.setEnumValueOwnerOverrides(javaClass.enumValueOwnerOverrides());
+        try {
+            if (!hasTypeOrDataNameConflictWithFile(javaClass)) {
+                return List.of(new GeneratedModule(
+                        relativePath(javaClass, javaClass.name().toString()),
+                        time(timings::addSourceRenderNanos, () -> code(javaClass, javaClass.name().toString(), true))
+                ));
+            }
 
-        var ownerInterface = javaClass.interfaces().stream()
-                .filter(javaInterface -> javaInterface.name().toString().equals(javaClass.name().toString()))
-                .findFirst();
-        if (ownerInterface.isPresent()) {
-            return List.of(new GeneratedModule(
-                    relativePath(javaClass, javaClass.name().toString()),
-                    time(timings::addSourceRenderNanos, () -> codeNestedInOwnerInterface(javaClass, ownerInterface.get(), ownerInterface.get().name().toString()))
-            ));
-        }
+            var ownerInterface = javaClass.interfaces().stream()
+                    .filter(javaInterface -> javaInterface.name().toString().equals(javaClass.name().toString()))
+                    .findFirst();
+            if (ownerInterface.isPresent()) {
+                return List.of(new GeneratedModule(
+                        relativePath(javaClass, javaClass.name().toString()),
+                        time(timings::addSourceRenderNanos, () -> codeNestedInOwnerInterface(javaClass, ownerInterface.get(), ownerInterface.get().name().toString()))
+                ));
+            }
 
-        var helperCallOwnerName = javaClass.name() + "Module";
-        var compiled = new ArrayList<GeneratedModule>();
-        for (var declaration : topLevelDeclarations(javaClass, helperCallOwnerName)) {
-            compiled.add(new GeneratedModule(
-                    relativePath(javaClass, declaration.name()),
-                    time(timings::addSourceRenderNanos, () -> codeTopLevelDeclaration(javaClass, declaration.code()))
-            ));
-        }
+            var helperCallOwnerName = javaClass.name() + "Module";
+            var compiled = new ArrayList<GeneratedModule>();
+            for (var declaration : topLevelDeclarations(javaClass, helperCallOwnerName)) {
+                compiled.add(new GeneratedModule(
+                        relativePath(javaClass, declaration.name()),
+                        time(timings::addSourceRenderNanos, () -> codeTopLevelDeclaration(javaClass, declaration.code()))
+                ));
+            }
             var utilityStaticImports = new TreeSet<>(javaClass.staticImports());
             javaClass.enums().forEach(javaEnum -> utilityStaticImports.add(javaClass.javaPackage() + "." + javaEnum.name() + ".*"));
-        if (!javaClass.staticMethods().isEmpty() || !javaClass.staticConsts().isEmpty()) {
-            var utilityClass = new JavaClass(
-                    javaClass.annotations(),
-                    new JavaType(javaClass.name() + "Module"),
-                    javaClass.javaPackage(),
-                    utilityStaticImports,
-                    javaClass.staticConsts(),
-                    javaClass.staticMethods(),
-                    new TreeSet<>(),
-                    new TreeSet<>(),
-                    new TreeSet<>()
-            );
-            compiled.add(new GeneratedModule(
-                    relativePath(javaClass, utilityClass.name().toString()),
-                    time(timings::addSourceRenderNanos, () -> code(utilityClass, utilityClass.name().toString(), false))
-            ));
+            if (!javaClass.staticMethods().isEmpty() || !javaClass.staticConsts().isEmpty()) {
+                var utilityClass = new JavaClass(
+                        javaClass.annotations(),
+                        new JavaType(javaClass.name() + "Module"),
+                        javaClass.javaPackage(),
+                        utilityStaticImports,
+                        javaClass.staticConsts(),
+                        javaClass.staticMethods(),
+                        new TreeSet<>(),
+                        new TreeSet<>(),
+                        new TreeSet<>(),
+                        javaClass.enumValueOwnerOverrides()
+                );
+                compiled.add(new GeneratedModule(
+                        relativePath(javaClass, utilityClass.name().toString()),
+                        time(timings::addSourceRenderNanos, () -> code(utilityClass, utilityClass.name().toString(), false))
+                ));
+            }
+            return List.copyOf(compiled);
+        } finally {
+            JavaExpressionEvaluator.setEnumValueOwnerOverrides(java.util.Map.of());
         }
-        return List.copyOf(compiled);
     }
 
 

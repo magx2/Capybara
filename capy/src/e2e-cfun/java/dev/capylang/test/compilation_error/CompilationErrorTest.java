@@ -46,7 +46,7 @@ public class CompilationErrorTest {
                                                 case None -> Some { next_digit_parse.value }
                                         }
                                         __parse_digits(new_parse)
-                            __parse_digits(__Parse { buffer: version, value: None })|version_parse =>
+                            __parse_digits(__Parse { buffer: version, value: None {} })|version_parse =>
                                 if version_parse.buffer==false.is_empty then Error { "Unexpected characters after patch version: `"+version_parse.buffer+"`!" } else Success { version_parse.value }
                         """,
                 "local_names_in_errors");
@@ -77,6 +77,19 @@ public class CompilationErrorTest {
                 .contains("`match` is not exhaustive. Use wildcard `case _ -> ...` or add missing branches:`Stop`.")
                 .doesNotContain("__local_type_")
                 .doesNotContain("__local_single_");
+    }
+
+    @Test
+    void shouldRejectBareSingleExpression() {
+        var errors = compileProgram("""
+                        single Empty
+                        fun empty(): Empty = Empty
+                        """,
+                "bare_single_expression");
+
+        assertThat(errors).hasSize(1);
+        assertThat(errors.first().message())
+                .contains("Singleton data value `Empty` must be constructed with `Empty {}`");
     }
 
     @Test
@@ -740,7 +753,7 @@ public class CompilationErrorTest {
                                 from /capy/lang/Option import { * }
                                 fun foo(v: string): Option[string] =
                                     match v[0] with
-                                    case None -> None
+                                    case None -> None {}
                                     case Some { value } -> value + ""
                                 """,
                         new Position(5, 33),
@@ -998,7 +1011,7 @@ public class CompilationErrorTest {
                                 fun to_seq(list: list[int]): Seq[int] =
                                     if list.size > 0
                                     then Cons { list[0], to_seq(list[1:])
-                                    else End
+                                    else End {}
                                 """,
                         new Position(7, 4),
                         """
@@ -1010,7 +1023,7 @@ public class CompilationErrorTest {
                                 fun to_seq(list: list[int]): Seq[int] =
                                     if list.size > 0
                                     then Cons { list[0], to_seq(list[1:])
-                                    else End
+                                    else End {}
                                     ^ Syntax error near `iflist.size>0thenCons{list[0],to_seq(list[1:])else`
                                 """
                 ),
@@ -1073,7 +1086,7 @@ public class CompilationErrorTest {
                         """
                                 fun parse(): int =
                                     let new_parse: __Parse[Option[int] = __Parse {
-                                        value: None
+                                        value: None {}
                                     }
                                     1
                                 """,
@@ -1182,7 +1195,7 @@ public class CompilationErrorTest {
                                 data JsonBool { value: bool }
                                 single JsonNull
                                   fun _deserialize_json_null(json: string): Result[_Parse[JsonBool]] =
-                                    let parsed: _Parse[JsonNull] = _Parse { JsonNull, json[4:] }
+                                    let parsed: _Parse[JsonNull] = _Parse { JsonNull {}, json[4:] }
                                     Success { parsed }
                                 """,
                         new Position(9, 4),
@@ -1190,7 +1203,7 @@ public class CompilationErrorTest {
                         + " --> /foo/boo/function_json_null_wrong_generic_return_type.cfun:%d:%d\n"
                         + "fun _deserialize_json_null(json: string): Result[_Parse[JsonBool]] =\n"
                         + "    let parsed: _Parse[JsonNull] = _Parse {\n"
-                        + "        JsonNull(),\n"
+                        + "        JsonNull {  },\n"
                         + "    ^ Expected `Result`, got `Success`\n"
                 ),
                 Arguments.of(

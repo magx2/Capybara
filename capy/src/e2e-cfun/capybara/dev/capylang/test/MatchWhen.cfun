@@ -36,8 +36,8 @@ fun sign(sign: Sign): string =
 
 fun letter(letter: Letter): string =
     match letter with
-    case Vowel when letter == Vowel -> "vowel"
-    case Consonant when letter == Consonant -> "hard"
+    case Vowel when letter == Vowel {} -> "vowel"
+    case Consonant when letter == Consonant {} -> "hard"
     case Consonant -> "consonant"
     case Vowel -> "other vowel"
 
@@ -50,4 +50,3 @@ fun range_label(range: Range): string =
     case Range { start, _, _, enabled } when enabled == false -> "disabled " + start
     case Range { _, _, step, _ } when step == 0 -> "stuck"
     case Range -> "other"
-

@@ -36,10 +36,10 @@ fun from_string(string: string): Path =
     Path {
         root:
             if string.starts_with('/')
-            then PathRoot.ABSOLUTE
+            then PathRoot.ABSOLUTE {}
             else if string.starts_with('~')
-            then PathRoot.HOME
-            else PathRoot.RELATIVE,
+            then PathRoot.HOME {}
+            else PathRoot.RELATIVE {},
         prefix: None {},
         segments: __segments(value, "", [])
     }.normalize()
@@ -108,6 +108,5 @@ fun Path.normalize(): Path =
         prefix: this.prefix,
         segments: __normalize_path(this.root, this.segments, [])
     }
-
 
 
