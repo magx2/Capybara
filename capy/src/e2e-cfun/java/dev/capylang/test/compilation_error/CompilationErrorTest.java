@@ -136,6 +136,21 @@ public class CompilationErrorTest {
     }
 
     @Test
+    void shouldRejectEnumTypePatternForNonEnumStaticType() {
+        var errors = compileProgram("""
+                        fun classify(value: int): string =
+                            match value with
+                            case enum e -> e.name()
+                            case _ -> "other"
+                        """,
+                "enum_type_pattern_for_non_enum_static_type");
+
+        assertThat(errors).hasSize(1);
+        assertThat(errors.first().message())
+                .contains("Cannot match `INT` with typed pattern `ENUM`");
+    }
+
+    @Test
     void shouldRejectConstructorStarOutsideConstructor() {
         var errors = compileProgram("""
                         fun parse(): int =

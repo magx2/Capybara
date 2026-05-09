@@ -76,7 +76,7 @@ BOOL_LITERAL: 'true' | 'false';
 COLLECTION: 'list' | 'set' | 'dict';
 REC: 'rec';
 NAME : [_]* [a-z] [a-zA-Z0-9_]*;
-identifier: NAME | REC | COLLECTION | 'derive' | 'deriver' | 'fun' | 'type' | 'byte' | 'int' | 'long' | 'double' | 'bool' | 'string' | 'float' | 'nothing' | 'any';
+identifier: NAME | REC | COLLECTION | 'derive' | 'deriver' | 'fun' | 'type' | 'enum' | 'byte' | 'int' | 'long' | 'double' | 'bool' | 'string' | 'float' | 'nothing' | 'any';
 parameters: parameter (',' parameter)*;
 parameter: identifier ':' type;
 functionType: ':' type;
@@ -94,6 +94,7 @@ type: COLLECTION typeLbrack type RBRACK
     | 'float'
     | 'any'
     | 'data'
+    | 'enum'
     | 'nothing'
     | qualifiedType (typeLbrack type (',' type)* RBRACK)?;
 qualifiedType: TYPE (DOT TYPE)*;
@@ -235,6 +236,7 @@ patternType: COLLECTION (typeLbrack type RBRACK)?
            | 'float'
            | 'any'
            | 'data'
+           | 'enum'
            | 'nothing'
            | qualifiedType (typeLbrack type (',' type)* RBRACK)?;
 constructorPattern: TYPE '{' fieldPatternList? '}';

@@ -13,6 +13,7 @@ public enum PrimitiveType implements Type {
     FLOAT("float"),
     ANY("any"),
     DATA("data"),
+    ENUM("enum"),
     NOTHING("nothing");
 
     private final String name;
@@ -25,4 +26,3 @@ public enum PrimitiveType implements Type {
         return Arrays.stream(values()).filter(x -> x.name.equals(name)).findAny();
     }
 }
-

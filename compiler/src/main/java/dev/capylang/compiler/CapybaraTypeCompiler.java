@@ -550,6 +550,7 @@ public class CapybaraTypeCompiler {
             case FLOAT -> PrimitiveLinkedType.FLOAT;
             case ANY -> PrimitiveLinkedType.ANY;
             case DATA -> PrimitiveLinkedType.DATA;
+            case ENUM -> PrimitiveLinkedType.ENUM;
             case NOTHING -> PrimitiveLinkedType.NOTHING;
         };
     }
@@ -577,7 +578,6 @@ public class CapybaraTypeCompiler {
                 .map(CompiledTupleType::new);
     }
 }
-
 
 
 

@@ -446,6 +446,14 @@ public class CapybaraExpressionCompiler {
         }
         return linkExpression(fieldAccess.source(), scope)
                 .flatMap(source -> {
+                    if (source.type() == PrimitiveLinkedType.ENUM) {
+                        if ("order".equals(fieldAccess.field())) {
+                            return Result.success(new CompiledFieldAccess(source, "ordinal", PrimitiveLinkedType.INT));
+                        }
+                        if ("name".equals(fieldAccess.field())) {
+                            return Result.success(new CompiledFieldAccess(source, "name", PrimitiveLinkedType.STRING));
+                        }
+                    }
                     if (source.type() instanceof CompiledDataParentType linkedDataParentType && linkedDataParentType.enumType()) {
                         if ("order".equals(fieldAccess.field())) {
                             return Result.success(new CompiledFieldAccess(source, "ordinal", PrimitiveLinkedType.INT));
@@ -1561,6 +1569,16 @@ public class CapybaraExpressionCompiler {
                 .orElse(null);
     }
 
+    private boolean isEnumLikeType(CompiledType type) {
+        if (type == PrimitiveLinkedType.ENUM) {
+            return true;
+        }
+        if (type instanceof CompiledDataParentType parentType) {
+            return parentType.enumType();
+        }
+        return type instanceof CompiledDataType dataType && findEnumParentForValue(dataType.name()) != null;
+    }
+
     private CompiledDataParentType findEnumTypeByName(String enumName) {
         var normalizedLookup = enumName.replace('/', '.');
         return dataTypes.values().stream()
@@ -2018,6 +2036,10 @@ public class CapybaraExpressionCompiler {
         if (pipeAlias.isPresent()) {
             return pipeAlias;
         }
+        var enumNameMethod = resolveBuiltinEnumNameMethodInvoke(functionCall, scope, methodName);
+        if (enumNameMethod.isPresent()) {
+            return enumNameMethod;
+        }
         var supportsBoolTwoStrings = "contains".equals(methodName)
                 || "starts_with".equals(methodName)
                 || "end_with".equals(methodName);
@@ -2166,6 +2188,28 @@ public class CapybaraExpressionCompiler {
         return Optional.of(Result.success(new CompiledFunctionCall(
                 METHOD_DECL_PREFIX + "String__trim",
                 args,
+                STRING
+        )));
+    }
+
+    private Optional<Result<CompiledExpression>> resolveBuiltinEnumNameMethodInvoke(
+            FunctionCall functionCall,
+            Scope scope,
+            String methodName
+    ) {
+        if (!"name".equals(methodName) || functionCall.arguments().size() != 1) {
+            return Optional.empty();
+        }
+        var linkedArgument = linkExpression(functionCall.arguments().getFirst(), scope);
+        if (linkedArgument instanceof Result.Error<CompiledExpression> error) {
+            return Optional.of(new Result.Error<>(error.errors()));
+        }
+        if (!(linkedArgument instanceof Result.Success<CompiledExpression> value) || !isEnumLikeType(value.value().type())) {
+            return Optional.empty();
+        }
+        return Optional.of(Result.success(new CompiledFunctionCall(
+                METHOD_DECL_PREFIX + "Enum__name",
+                List.of(value.value()),
                 STRING
         )));
     }
@@ -3357,7 +3401,10 @@ public class CapybaraExpressionCompiler {
             return new CoercedArgument(argument, 0);
         }
         if (expected == PrimitiveLinkedType.DATA
-            && argument.type() instanceof GenericDataType) {
+            && (argument.type() instanceof GenericDataType || argument.type() == PrimitiveLinkedType.ENUM)) {
+            return new CoercedArgument(argument, 1);
+        }
+        if (expected == PrimitiveLinkedType.ENUM && isEnumLikeType(argument.type())) {
             return new CoercedArgument(argument, 1);
         }
         if (expected instanceof CompiledDataParentType expectedParent
@@ -3642,6 +3689,12 @@ public class CapybaraExpressionCompiler {
         if (expected == ANY || actual == ANY || actual == NOTHING) {
             return true;
         }
+        if (expected == DATA && actual == ENUM) {
+            return true;
+        }
+        if (expected == ENUM) {
+            return isEnumLikeType(actual);
+        }
         if (expected instanceof CompiledGenericTypeParameter || actual instanceof CompiledGenericTypeParameter) {
             return true;
         }
@@ -3750,6 +3803,7 @@ public class CapybaraExpressionCompiler {
             case NOTHING -> NOTHING;
             case ANY -> ANY;
             case DATA -> DATA;
+            case ENUM -> ENUM;
         };
     }
 
@@ -4409,7 +4463,7 @@ public class CapybaraExpressionCompiler {
 
     private boolean isBroadSpecificityType(CompiledType type) {
         return switch (type) {
-            case PrimitiveLinkedType primitive -> primitive == ANY || primitive == DATA;
+            case PrimitiveLinkedType primitive -> primitive == ANY || primitive == DATA || primitive == ENUM;
             case CompiledGenericTypeParameter ignored -> true;
             case CompiledDataType ignored -> false;
             case CompiledDataParentType ignored -> false;
@@ -5890,12 +5944,14 @@ public class CapybaraExpressionCompiler {
                    || right == STRING
                    || right == BOOL
                    || right == PrimitiveLinkedType.DATA
+                   || right == PrimitiveLinkedType.ENUM
                    || right == PrimitiveLinkedType.ANY ? STRING : null;
         }
         if (right == STRING) {
             return isNumericPrimitive(left)
                    || left == BOOL
                    || left == PrimitiveLinkedType.DATA
+                   || left == PrimitiveLinkedType.ENUM
                    || left == PrimitiveLinkedType.ANY ? STRING : null;
         }
         if (left == BOOL || right == BOOL) {
@@ -5908,7 +5964,7 @@ public class CapybaraExpressionCompiler {
     }
 
     private static boolean isDataLikeType(CompiledType type) {
-        return type == PrimitiveLinkedType.DATA || type instanceof GenericDataType;
+        return type == PrimitiveLinkedType.DATA || type == PrimitiveLinkedType.ENUM || type instanceof GenericDataType;
     }
 
     private static CompiledType findMathPrimitiveType(PrimitiveLinkedType left, PrimitiveLinkedType right) {
@@ -6590,6 +6646,9 @@ public class CapybaraExpressionCompiler {
     }
 
     private boolean typedPatternCoversStaticMatchType(CompiledType matchType, CompiledType patternType) {
+        if (patternType == ENUM && isEnumLikeType(matchType)) {
+            return true;
+        }
         if (matchType instanceof CompiledList matchList && patternType instanceof CompiledList patternList) {
             return patternArgumentCoversStaticType(matchList.elementType(), patternList.elementType());
         }
@@ -6958,7 +7017,16 @@ public class CapybaraExpressionCompiler {
         if (patternType == PrimitiveLinkedType.DATA && matchType instanceof GenericDataType) {
             return true;
         }
+        if (patternType == PrimitiveLinkedType.DATA && matchType == PrimitiveLinkedType.ENUM) {
+            return true;
+        }
         if (matchType == PrimitiveLinkedType.DATA && patternType instanceof GenericDataType) {
+            return true;
+        }
+        if (patternType == PrimitiveLinkedType.ENUM && (matchType == PrimitiveLinkedType.DATA || isEnumLikeType(matchType))) {
+            return true;
+        }
+        if (matchType == PrimitiveLinkedType.ENUM && isEnumLikeType(patternType)) {
             return true;
         }
         if (matchType.equals(patternType)) {

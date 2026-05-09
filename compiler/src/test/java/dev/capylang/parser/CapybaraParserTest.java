@@ -95,6 +95,16 @@ class CapybaraParserTest {
                                         x * 2
                                 """
                 ),
+                Arguments.of(
+                        "enum_type_pattern",
+                        """
+                                enum Status { READY, DONE }
+                                fun enum_type_pattern(value: any): string =
+                                    match value with
+                                    case enum e -> e.name()
+                                    case _ -> "other"
+                                """
+                ),
                 Arguments.of("const_usage", "const PI = 3.14\nfun const_usage(): double = PI"),
                 Arguments.of(
                         "block_comment",

@@ -79,6 +79,7 @@ fun to_json(obj: data): Result[JsonObject] =
             case Success { value } -> any_to_json(value)
             case Error { message } -> any_to_json(message)
         }
+        case enum e -> Success { JsonString { e.name() } }
         case data d -> to_json(d) | object => Success { object }
         case _ -> Error { "unsupported value" }
     ---

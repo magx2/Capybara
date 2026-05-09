@@ -4146,7 +4146,10 @@ public class CapybaraCompiler {
             return true;
         }
         if (expected == PrimitiveLinkedType.DATA) {
-            return actual instanceof GenericDataType || actual == PrimitiveLinkedType.DATA;
+            return actual instanceof GenericDataType || actual == PrimitiveLinkedType.DATA || actual == PrimitiveLinkedType.ENUM;
+        }
+        if (expected == PrimitiveLinkedType.ENUM) {
+            return isEnumLikeType(actual, dataTypes);
         }
         if (expected instanceof PrimitiveLinkedType expectedPrimitive
             && actual instanceof PrimitiveLinkedType actualPrimitive) {
@@ -4284,6 +4287,24 @@ public class CapybaraCompiler {
                 .collect(java.util.stream.Collectors.joining(", ")) + "]";
     }
 
+    private boolean isEnumLikeType(CompiledType type, Map<String, GenericDataType> dataTypes) {
+        if (type == PrimitiveLinkedType.ENUM) {
+            return true;
+        }
+        if (type instanceof CompiledDataParentType parentType) {
+            return parentType.enumType();
+        }
+        if (!(type instanceof CompiledDataType dataType)) {
+            return false;
+        }
+        return dataTypes.values().stream()
+                .filter(CompiledDataParentType.class::isInstance)
+                .map(CompiledDataParentType.class::cast)
+                .filter(CompiledDataParentType::enumType)
+                .flatMap(parentType -> parentType.subTypes().stream())
+                .anyMatch(subType -> sameTypeName(subType.name(), dataType.name()));
+    }
+
     private boolean isAssignablePrimitiveReturnType(PrimitiveLinkedType expected, PrimitiveLinkedType actual) {
         if (expected == actual) {
             return true;
@@ -4294,7 +4315,8 @@ public class CapybaraCompiler {
         if (expected == PrimitiveLinkedType.ANY) {
             return true;
         }
-        if (expected == PrimitiveLinkedType.DATA || actual == PrimitiveLinkedType.DATA) {
+        if (expected == PrimitiveLinkedType.DATA || actual == PrimitiveLinkedType.DATA
+            || expected == PrimitiveLinkedType.ENUM || actual == PrimitiveLinkedType.ENUM) {
             return false;
         }
         if (expected == PrimitiveLinkedType.BOOL || actual == PrimitiveLinkedType.BOOL) {
@@ -4923,6 +4945,7 @@ public class CapybaraCompiler {
             case NOTHING -> PrimitiveLinkedType.NOTHING;
             case ANY -> PrimitiveLinkedType.ANY;
             case DATA -> PrimitiveLinkedType.DATA;
+            case ENUM -> PrimitiveLinkedType.ENUM;
         };
     }
 
@@ -5309,6 +5332,7 @@ public class CapybaraCompiler {
                 case ANY -> PrimitiveType.ANY;
                 case NOTHING -> PrimitiveType.NOTHING;
                 case DATA -> PrimitiveType.DATA;
+                case ENUM -> PrimitiveType.ENUM;
             };
             case CollectionLinkedType.CompiledList compiledList ->
                     new CollectionType.ListType(compiledTypeToParserType(compiledList.elementType()));
@@ -5365,6 +5389,7 @@ public class CapybaraCompiler {
                 case FLOAT -> PrimitiveLinkedType.FLOAT;
                 case ANY -> PrimitiveLinkedType.ANY;
                 case DATA -> PrimitiveLinkedType.DATA;
+                case ENUM -> PrimitiveLinkedType.ENUM;
                 case NOTHING -> PrimitiveLinkedType.NOTHING;
             });
             case CollectionType.ListType listType ->

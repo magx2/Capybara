@@ -16,6 +16,7 @@ data JsonPrimitiveSample {
 data JsonCollectionSample { numbers: list[int], flags: dict[bool] }
 data JsonSetSample { tags: set[string] }
 data JsonInnerSample { label: string, count: int }
+enum JsonSampleStatus { PENDING, COMPLETE }
 data JsonLambdaSample { callback: () => string }
 data JsonWrapperSample {
     present: Option[string],
@@ -23,6 +24,7 @@ data JsonWrapperSample {
     success: Result[int],
     error: Result[int],
     inner: JsonInnerSample,
+    status: JsonSampleStatus,
     raw: Json
 }
 data JsonablePrimitiveSample { name: string, age: int, active: bool } derive Jsonable
@@ -39,6 +41,7 @@ fun tests(): Effect[TestFile] =
         test("should convert data with collection fields to json object", () => should_convert_data_with_collection_fields_to_json_object()),
         test("should convert data with set field to json array", () => should_convert_data_with_set_field_to_json_array()),
         test("should convert data with wrapper and nested fields to json object", () => should_convert_data_with_wrapper_and_nested_fields_to_json_object()),
+        test("should convert enum to json string", () => should_convert_enum_to_json_string()),
         test("should fail converting lambda field", () => should_fail_converting_lambda_field()),
         test("should derive Jsonable to_json for primitive fields", () => should_derive_jsonable_to_json_for_primitive_fields()),
         test("should derive Jsonable to_json for nested and collection fields", () => should_derive_jsonable_to_json_for_nested_and_collection_fields()),
@@ -132,6 +135,7 @@ fun should_convert_data_with_wrapper_and_nested_fields_to_json_object(): Assert 
         success: Success { value: 7 },
         error: Error { message: "bad" },
         inner: JsonInnerSample { label: "child", count: 2 },
+        status: COMPLETE {},
         raw: JsonArray { value: [JsonString { value: "kept" }] }
     }
     assert_that(to_json(sample)).succeeds(JsonObject {
@@ -146,11 +150,31 @@ fun should_convert_data_with_wrapper_and_nested_fields_to_json_object(): Assert 
                     "count": JsonNumberLong { value: 2 },
                 }
             },
+            "status": JsonString { value: "COMPLETE" },
             "raw": JsonArray {
                 value: [JsonString { value: "kept" }]
             },
         }
     })
+
+fun should_convert_enum_to_json_string(): Assert =
+    assert_that(to_json(JsonWrapperSample {
+        present: None {},
+        absent: None {},
+        success: Success { value: 1 },
+        error: Error { message: "ignored" },
+        inner: JsonInnerSample { label: "enum", count: 1 },
+        status: PENDING {},
+        raw: JsonNull {}
+    })).succeeds(obj =>
+        match _json_field(obj, "status") with
+        case Some { json } -> {
+            match json with
+            case JsonString { value } -> assert_that(value).is_equal_to("PENDING")
+            case _ -> assert_that(false).is_true()
+        }
+        case _ -> assert_that(false).is_true()
+    )
 
 fun should_fail_converting_lambda_field(): Assert =
     let sample = JsonLambdaSample {
