@@ -974,7 +974,7 @@ public class CapybaraExpressionCompiler {
                 if (singleton.isPresent()) {
                     var singletonType = singleton.orElseThrow();
                     var enumParent = singletonType.enumParent();
-                    if (enumParent.isEmpty()) {
+                    if (enumParent.isEmpty() && singletonType.type().enumValue()) {
                         enumParent = Optional.ofNullable(findEnumParentForValue(singletonType.type().name()));
                     }
                     if (enumParent.isPresent()) {
@@ -1513,6 +1513,18 @@ public class CapybaraExpressionCompiler {
             var qualifiedEnum = findEnumSingletonDataType(constructorName, qualified);
             if (qualifiedEnum.isPresent()) {
                 return qualifiedEnum;
+            }
+        }
+        if (qualified.isEmpty()) {
+            var regularSingleton = dataTypes.values().stream()
+                    .filter(CompiledDataType.class::isInstance)
+                    .map(CompiledDataType.class::cast)
+                    .filter(CompiledDataType::singleton)
+                    .filter(dataType -> !dataType.enumValue())
+                    .filter(dataType -> typeNameMatches(dataType.name(), constructorName))
+                    .findFirst();
+            if (regularSingleton.isPresent()) {
+                return regularSingleton.map(dataType -> new SingletonDataType(dataType, Optional.empty()));
             }
         }
         var direct = dataTypes.values().stream()

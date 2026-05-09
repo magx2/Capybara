@@ -420,6 +420,23 @@ class JavaExpressionEvaluatorTest {
     }
 
     @Test
+    void shouldStillRequireBracesForSingleValuesThatShareEnumValueNames() {
+        var libraries = compileProgram(List.of(new RawModule("Statuses", "/foo/lib", """
+                enum Status { DONE }
+                """))).modules();
+        var programResult = CapybaraCompiler.INSTANCE.compile(List.of(new RawModule("test", "/foo/boo", """
+                from /foo/lib/Statuses import { * }
+
+                single DONE
+                fun done(): DONE = DONE
+                """)), libraries);
+        assertThat(programResult).isInstanceOf(Result.Error.class);
+        var error = (Result.Error<CompiledProgram>) programResult;
+        assertThat(error.errors().stream().map(Result.Error.SingleError::message).collect(joining(",")))
+                .contains("Singleton data value `DONE` must be constructed with `DONE {}`");
+    }
+
+    @Test
     void shouldGenerateRuntimeCarrierCallForReflectionValueOnGenericData() {
         var generatedProgram = new JavaGenerator().generate(compileProgram(List.of(
                 reflectionMetadataModule(),
