@@ -48,3 +48,11 @@ fun between(min: int, value: int, max: int): bool =
     value >= min & value <= max
 
 fun is_age_valid(): int => bool = between(0, _, 150)
+
+fun invoke_partial_contains_method(): bool =
+    let f: string => bool = "capybara".contains(_)
+    f("pyb")
+
+fun invoke_partial_replace_method(): string =
+    let f: string => string = "banana".replace("a", _)
+    f("o")

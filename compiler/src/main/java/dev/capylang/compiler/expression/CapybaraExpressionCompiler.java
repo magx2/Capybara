@@ -1695,6 +1695,12 @@ public class CapybaraExpressionCompiler {
         var methodName = functionCall.name().substring(METHOD_INVOKE_PREFIX.length());
         var candidates = methodsByNameAndArity(functionSignatures, methodName, functionCall.arguments().size());
         if (candidates.isEmpty()) {
+            if (hasPlaceholderArguments(functionCall.arguments())) {
+                var partialBuiltin = resolvePartialBuiltinMethodInvoke(functionCall, scope, methodName, expectedType);
+                if (partialBuiltin.isPresent()) {
+                    return partialBuiltin.orElseThrow();
+                }
+            }
             return resolveBuiltinMethodInvoke(functionCall, scope, methodName)
                     .orElseGet(() -> withPosition(
                             Result.error("No method `" + methodName + "` with " + functionCall.arguments().size() + " argument(s)"),
@@ -1702,13 +1708,21 @@ public class CapybaraExpressionCompiler {
                     ));
         }
         if (hasPlaceholderArguments(functionCall.arguments())) {
-            return resolvePartialFunctionCall(
+            var partialMethod = resolvePartialFunctionCall(
                     functionCall,
                     scope,
                     expectedType,
                     candidates,
                     FunctionSignature::name
             );
+            if (partialMethod instanceof Result.Success<CompiledExpression>) {
+                return partialMethod;
+            }
+            var partialBuiltin = resolvePartialBuiltinMethodInvoke(functionCall, scope, methodName, expectedType);
+            if (partialBuiltin.isPresent() && partialBuiltin.orElseThrow() instanceof Result.Success<CompiledExpression>) {
+                return partialBuiltin.orElseThrow();
+            }
+            return partialMethod;
         }
 
         ResolvedFunctionCall best = null;
@@ -2192,6 +2206,95 @@ public class CapybaraExpressionCompiler {
                 args,
                 STRING
         )));
+    }
+
+    private Optional<Result<CompiledExpression>> resolvePartialBuiltinMethodInvoke(
+            FunctionCall functionCall,
+            Scope scope,
+            String methodName,
+            Optional<CompiledType> expectedType
+    ) {
+        var candidates = builtinMethodSignatures(methodName, functionCall.arguments().size());
+        if (candidates.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(resolvePartialFunctionCall(
+                functionCall,
+                scope,
+                expectedType,
+                candidates,
+                FunctionSignature::name
+        ));
+    }
+
+    private List<FunctionSignature> builtinMethodSignatures(String methodName, int arity) {
+        var signatures = new java.util.ArrayList<FunctionSignature>();
+        if (arity == 2 && ("contains".equals(methodName)
+                           || "starts_with".equals(methodName)
+                           || "end_with".equals(methodName))) {
+            signatures.add(builtinMethodSignature("String", methodName, List.of(STRING, STRING), BOOL));
+        }
+        if (arity == 3 && "replace".equals(methodName)) {
+            signatures.add(builtinMethodSignature("String", methodName, List.of(STRING, STRING, STRING), STRING));
+        }
+        if (arity != 1) {
+            return List.copyOf(signatures);
+        }
+        if ("trim".equals(methodName)) {
+            signatures.add(builtinMethodSignature("String", "trim", List.of(STRING), STRING));
+        }
+        if ("is_empty".equals(methodName)) {
+            signatures.add(builtinMethodSignature("String", "is_empty", List.of(STRING), BOOL));
+        }
+        if ("to_int".equals(methodName)) {
+            signatures.add(builtinMethodSignature("Long", "to_int", List.of(LONG), INT));
+            signatures.add(builtinMethodSignature("Float", "to_int", List.of(FLOAT), INT));
+            signatures.add(builtinMethodSignature("Double", "to_int", List.of(DOUBLE), INT));
+            var resultType = resultTypeFor(INT);
+            if (resultType != null) {
+                signatures.add(builtinMethodSignature("String", "to_int", List.of(STRING), resultType));
+            }
+        }
+        if ("to_long".equals(methodName)) {
+            signatures.add(builtinMethodSignature("Float", "to_long", List.of(FLOAT), LONG));
+            signatures.add(builtinMethodSignature("Double", "to_long", List.of(DOUBLE), LONG));
+            var resultType = resultTypeFor(LONG);
+            if (resultType != null) {
+                signatures.add(builtinMethodSignature("String", "to_long", List.of(STRING), resultType));
+            }
+        }
+        if ("to_double".equals(methodName)) {
+            var resultType = resultTypeFor(DOUBLE);
+            if (resultType != null) {
+                signatures.add(builtinMethodSignature("String", "to_double", List.of(STRING), resultType));
+            }
+        }
+        if ("to_float".equals(methodName)) {
+            var resultType = resultTypeFor(FLOAT);
+            if (resultType != null) {
+                signatures.add(builtinMethodSignature("String", "to_float", List.of(STRING), resultType));
+            }
+        }
+        if ("to_bool".equals(methodName)) {
+            var resultType = resultTypeFor(BOOL);
+            if (resultType != null) {
+                signatures.add(builtinMethodSignature("String", "to_bool", List.of(STRING), resultType));
+            }
+        }
+        return List.copyOf(signatures);
+    }
+
+    private FunctionSignature builtinMethodSignature(
+            String receiverType,
+            String methodName,
+            List<CompiledType> parameterTypes,
+            CompiledType returnType
+    ) {
+        return new FunctionSignature(
+                METHOD_DECL_PREFIX + receiverType + "__" + methodName,
+                parameterTypes,
+                returnType
+        );
     }
 
     private Optional<Result<CompiledExpression>> resolveBuiltinEnumNameMethodInvoke(

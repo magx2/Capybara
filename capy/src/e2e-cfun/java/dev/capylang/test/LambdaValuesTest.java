@@ -50,6 +50,12 @@ class LambdaValuesTest {
     }
 
     @Test
+    void invokesPartiallyBoundBuiltinMethods() {
+        assertThat(LambdaValues.invokePartialContainsMethod()).isTrue();
+        assertThat(LambdaValues.invokePartialReplaceMethod()).isEqualTo("bonono");
+    }
+
+    @Test
     void generatesSupplierReturnType() throws NoSuchMethodException {
         var returnType = (ParameterizedType) LambdaValues.class.getMethod("makeSupplier").getGenericReturnType();
         assertThat(returnType.getRawType().getTypeName()).isEqualTo(Supplier.class.getTypeName());
