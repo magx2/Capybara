@@ -15,3 +15,36 @@ fun invoke_field_supplier(): string =
     let holder = Holder { supplier: () => "hello", suppliers: [() => "x", () => "y"] }
     let supplier = holder.supplier
     supplier()
+
+fun add(a: int, b: int): int = a + b
+
+fun add_10(): int => int = add(10, _)
+
+fun invoke_partial_add(): int =
+    let f: int => int = add(10, _)
+    f(5)
+
+fun concat(a: string, b: string, c: string): string = a + b + c
+
+fun invoke_partial_concat(): string =
+    let f: (string, string) => string = concat(_, "-", _)
+    f("A", "B")
+
+fun combine(a: int, b: int, c: int): int =
+    a * 100 + b * 10 + c
+
+fun invoke_partial_combine(): int =
+    let f: (int, int) => int = combine(_, 5, _)
+    f(1, 9)
+
+fun pair(a: int, b: int): string =
+    a + ":" + b
+
+fun invoke_partial_pair(): string =
+    let f: (int, int) => string = pair(_, _)
+    f(1, 2)
+
+fun between(min: int, value: int, max: int): bool =
+    value >= min & value <= max
+
+fun is_age_valid(): int => bool = between(0, _, 150)

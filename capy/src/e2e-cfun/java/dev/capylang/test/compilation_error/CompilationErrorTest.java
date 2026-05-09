@@ -462,6 +462,31 @@ public class CompilationErrorTest {
     }
 
     @Test
+    void shouldRejectStandalonePlaceholder() {
+        var errors = compileProgram("""
+                        fun broken(): int => int = _
+                        """,
+                "standalone_placeholder");
+
+        assertThat(errors).hasSize(1);
+        assertThat(errors.first().message())
+                .contains("Placeholder `_` can only be used inside invocation arguments.");
+    }
+
+    @Test
+    void shouldRejectPlaceholderAsDataFieldValue() {
+        var errors = compileProgram("""
+                        data User { name: string, age: int }
+                        fun broken(): User = User { name: "Ada", age: _ }
+                        """,
+                "data_field_placeholder");
+
+        assertThat(errors).hasSize(1);
+        assertThat(errors.first().message())
+                .contains("Placeholder `_` cannot be used in data construction.");
+    }
+
+    @Test
     void shouldRejectResultBindOnNonResultExpression() {
         var errors = compileProgram("""
                         fun broken(): int =

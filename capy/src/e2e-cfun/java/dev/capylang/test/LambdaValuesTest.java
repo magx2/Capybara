@@ -25,6 +25,31 @@ class LambdaValuesTest {
     }
 
     @Test
+    void invokesPartiallyBoundFunction() {
+        assertThat(LambdaValues.add10().apply(5)).isEqualTo(15);
+        assertThat(LambdaValues.invokePartialAdd()).isEqualTo(15);
+    }
+
+    @Test
+    void invokesPartiallyBoundFunctionWithMultiplePlaceholders() {
+        assertThat(LambdaValues.invokePartialConcat()).isEqualTo("A-B");
+        assertThat(LambdaValues.invokePartialCombine()).isEqualTo(159);
+    }
+
+    @Test
+    void treatsEachPlaceholderAsSeparateParameter() {
+        assertThat(LambdaValues.invokePartialPair()).isEqualTo("1:2");
+    }
+
+    @Test
+    void invokesPartiallyBoundFunctionWithFixedOuterArguments() {
+        var isAgeValid = LambdaValues.isAgeValid();
+        assertThat(isAgeValid.apply(42)).isTrue();
+        assertThat(isAgeValid.apply(-1)).isFalse();
+        assertThat(isAgeValid.apply(200)).isFalse();
+    }
+
+    @Test
     void generatesSupplierReturnType() throws NoSuchMethodException {
         var returnType = (ParameterizedType) LambdaValues.class.getMethod("makeSupplier").getGenericReturnType();
         assertThat(returnType.getRawType().getTypeName()).isEqualTo(Supplier.class.getTypeName());

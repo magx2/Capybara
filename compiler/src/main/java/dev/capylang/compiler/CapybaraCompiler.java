@@ -2707,6 +2707,7 @@ public class CapybaraCompiler {
             case IntValue ignored -> false;
             case LongValue ignored -> false;
             case NothingValue ignored -> false;
+            case PlaceholderExpression ignored -> false;
             case StringValue ignored -> false;
             case WithExpression withExpression -> expressionMayProduceResult(withExpression.source());
         };
@@ -3884,6 +3885,7 @@ public class CapybaraCompiler {
             case ByteValue byteValue -> byteValue.byteValue();
             case BooleanValue booleanValue -> String.valueOf(booleanValue.value());
             case Value value -> restorePrivateFunctionNameForDisplay(value.name());
+            case PlaceholderExpression ignored -> "_";
             case FieldAccess fieldAccess -> formatExpressionPreview(fieldAccess.source()) + "." + fieldAccess.field();
             case IndexExpression indexExpression -> formatExpressionPreview(indexExpression.source())
                                                     + "[" + indexExpression.arguments().stream()

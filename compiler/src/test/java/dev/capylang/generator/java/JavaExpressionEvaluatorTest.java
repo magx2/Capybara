@@ -6,6 +6,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import dev.capylang.compiler.*;
+import dev.capylang.compiler.expression.CompiledLambdaExpression;
 import dev.capylang.compiler.parser.RawModule;
 import dev.capylang.generator.JavaGenerator;
 
@@ -156,6 +157,48 @@ class JavaExpressionEvaluatorTest {
         var error = (Result.Error<CompiledProgram>) programResult;
         assertThat(error.errors().stream().map(Result.Error.SingleError::message).collect(joining(",")))
                 .contains("dict keys must be of type `STRING`");
+    }
+
+    @Test
+    void shouldLowerPartialFunctionBindingToLambda() {
+        var program = compileProgram("""
+                fun add(a: int, b: int): int = a + b
+                fun add_10(): int => int = add(10, _)
+                """);
+
+        var expression = findFunction("add_10", program)
+                .map(CompiledFunction::expression)
+                .orElseThrow();
+
+        assertThat(expression).isInstanceOf(CompiledLambdaExpression.class);
+        var lambda = (CompiledLambdaExpression) expression;
+        assertThat(lambda.argumentName()).isEqualTo("__capybaraPartial1");
+        assertThat(lambda.functionType()).isEqualTo(new CompiledFunctionType(PrimitiveLinkedType.INT, PrimitiveLinkedType.INT));
+    }
+
+    @Test
+    void shouldLowerMultiplePartialFunctionBindingPlaceholdersInOrder() {
+        var program = compileProgram("""
+                fun foo(a: int, b: string, c: double, d: int): string = b
+                fun bind_b(b: string): (int, double, int) => string = foo(_, b, _, _)
+                """);
+
+        var expression = findFunction("bind_b", program)
+                .map(CompiledFunction::expression)
+                .orElseThrow();
+
+        assertThat(expression).isInstanceOf(CompiledLambdaExpression.class);
+        var first = (CompiledLambdaExpression) expression;
+        assertThat(first.argumentName()).isEqualTo("__capybaraPartial1");
+        assertThat(first.functionType().argumentType()).isEqualTo(PrimitiveLinkedType.INT);
+        assertThat(first.expression()).isInstanceOf(CompiledLambdaExpression.class);
+        var second = (CompiledLambdaExpression) first.expression();
+        assertThat(second.argumentName()).isEqualTo("__capybaraPartial2");
+        assertThat(second.functionType().argumentType()).isEqualTo(PrimitiveLinkedType.DOUBLE);
+        assertThat(second.expression()).isInstanceOf(CompiledLambdaExpression.class);
+        var third = (CompiledLambdaExpression) second.expression();
+        assertThat(third.argumentName()).isEqualTo("__capybaraPartial3");
+        assertThat(third.functionType().argumentType()).isEqualTo(PrimitiveLinkedType.INT);
     }
 
     @Test
