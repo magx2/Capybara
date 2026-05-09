@@ -1,6 +1,0 @@
-/// Native fixed-size ordered collection type backed by the runtime Tuple implementation.
-/// Tuple literals use parentheses with at least two values: (1, "two").
-data Tuple { <native> }
-
-/// Returns the value at idx using the same literal-index rules as tuple[idx].
-fun Tuple.get(idx: int): any = <native>

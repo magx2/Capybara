@@ -1,9 +1,6 @@
 from /capy/lang/String import { * }
 from /capy/lang/Option import { * }
-from /capy/lang/collection/List import { * }
-from /capy/lang/collection/Set import { * }
-from /capy/lang/collection/Dict import { * }
-from /capy/lang/collection/Tuple import { * }
+from /capy/lang/Collections import { * }
 
 fun string_length(value: String): int = value.length()
 
