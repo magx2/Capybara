@@ -1,5 +1,10 @@
 enum Color { RED, BLUE, GREEN_BLUE, YELLOW, BLACK, WHITE }
 
+data Palette {
+    primary: Color,
+    fallback: Color
+}
+
 fun color_match(c: Color): int =
     match c with
     case RED -> 1
@@ -24,3 +29,19 @@ fun color_values(): set[Color] = Color.values
 fun parse_color_name(name: string): /capy/lang/Result[Color] = Color.parse(name)
 
 fun parse_color_order(order: int): /capy/lang/Result[Color] = Color.parse(order)
+
+fun qualified_color_without_braces(): Color = Color.BLUE
+
+fun unqualified_color_without_braces(): Color = GREEN_BLUE
+
+fun inferred_color_without_braces() = RED
+
+fun color_name_without_braces(): string = YELLOW.name
+
+fun color_list_without_braces(): list[Color] = [RED, Color.BLUE, GREEN_BLUE]
+
+fun palette_without_braces(): Palette =
+    Palette {
+        primary: WHITE,
+        fallback: Color.BLACK
+    }

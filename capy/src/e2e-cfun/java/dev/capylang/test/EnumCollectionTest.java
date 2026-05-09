@@ -53,4 +53,29 @@ class EnumCollectionTest {
         assertThat(EnumCollection.parseColorOrder(99))
                 .isInstanceOf(Result.Error.class);
     }
+
+    @Test
+    void enumValuesCanBeUsedWithoutBracesInExpressions() {
+        assertThat(EnumCollection.qualifiedColorWithoutBraces())
+                .isEqualTo(EnumCollection.Color.BLUE);
+        assertThat(EnumCollection.unqualifiedColorWithoutBraces())
+                .isEqualTo(EnumCollection.Color.GREEN_BLUE);
+        assertThat(EnumCollection.inferredColorWithoutBraces())
+                .isEqualTo(EnumCollection.Color.RED);
+        assertThat(EnumCollection.colorNameWithoutBraces())
+                .isEqualTo("YELLOW");
+    }
+
+    @Test
+    void enumValuesCanBeUsedWithoutBracesInCompoundExpressions() {
+        assertThat(EnumCollection.colorListWithoutBraces())
+                .containsExactly(
+                        EnumCollection.Color.RED,
+                        EnumCollection.Color.BLUE,
+                        EnumCollection.Color.GREEN_BLUE);
+
+        var palette = EnumCollection.paletteWithoutBraces();
+        assertThat(palette.primary()).isEqualTo(EnumCollection.Color.WHITE);
+        assertThat(palette.fallback()).isEqualTo(EnumCollection.Color.BLACK);
+    }
 }
