@@ -20,6 +20,7 @@ fun match_int_ignore_binding(value: any): int =
 
 data Person { name: string }
 type Entity = Person
+enum MatchStatus { READY, DONE }
 
 fun is_data(value: any): bool =
     match value with
@@ -30,6 +31,18 @@ fun is_data_from_entity(value: Entity): bool =
     match value with
     case data d -> true
     case _ -> false
+
+fun classify_enum(value: any): string =
+    match value with
+    case enum e -> e.name()
+    case data d -> "data"
+    case _ -> "any"
+
+fun generic_enum_name(value: enum): string = value.name()
+
+fun exhaustive_enum_type_match(value: enum): string =
+    match value with
+    case enum e -> e.name()
 
 fun classify_json_char(first_char: string): string =
     match first_char with

@@ -1745,6 +1745,7 @@ public class JavaExpressionEvaluator {
                 case STRING -> "java.lang.String";
                 case BOOL -> "java.lang.Boolean";
                 case FLOAT -> "java.lang.Float";
+                case ENUM -> "java.lang.Enum<?>";
                 case NOTHING, ANY, DATA -> "java.lang.Object";
             };
             case dev.capylang.compiler.CollectionLinkedType.CompiledList linkedList ->
@@ -1785,6 +1786,7 @@ public class JavaExpressionEvaluator {
                 case STRING -> "java.lang.String";
                 case BOOL -> "boolean";
                 case FLOAT -> "float";
+                case ENUM -> "java.lang.Enum<?>";
                 case NOTHING, ANY, DATA -> "java.lang.Object";
             };
             default -> javaCastType(type);
@@ -1800,7 +1802,7 @@ public class JavaExpressionEvaluator {
                 case DOUBLE -> "((double) " + expression + ")";
                 case BOOL -> "((boolean) " + expression + ")";
                 case FLOAT -> "((float) " + expression + ")";
-                case STRING, NOTHING, ANY, DATA -> expression;
+                case STRING, NOTHING, ANY, DATA, ENUM -> expression;
             };
         }
         return expression;
@@ -2239,6 +2241,7 @@ public class JavaExpressionEvaluator {
             case "double" -> "java.lang.Double";
             case "string" -> "java.lang.String";
             case "bool" -> "java.lang.Boolean";
+            case "enum" -> "java.lang.Enum<?>";
             case "any", "nothing", "data" -> "java.lang.Object";
             default -> {
                 if (normalized.matches("[A-Z]")) {
@@ -2383,6 +2386,7 @@ public class JavaExpressionEvaluator {
         if (optionMatch
             || selectorType == dev.capylang.compiler.PrimitiveLinkedType.ANY
             || selectorType == dev.capylang.compiler.PrimitiveLinkedType.DATA
+            || selectorType == dev.capylang.compiler.PrimitiveLinkedType.ENUM
             || selectorType == dev.capylang.compiler.PrimitiveLinkedType.NOTHING
             || selectorType instanceof dev.capylang.compiler.CompiledGenericTypeParameter
             || selectorType instanceof dev.capylang.compiler.CompiledDataType
@@ -2437,6 +2441,9 @@ public class JavaExpressionEvaluator {
                 var patternBindingName = caseBindingNames.getOrDefault(typedPattern.name(), typedPattern.name());
                 if (typedPattern.type() == dev.capylang.compiler.PrimitiveLinkedType.DATA) {
                     yield "case java.lang.Object " + patternBindingName + " when " + dataGuard(patternBindingName);
+                }
+                if (typedPattern.type() == dev.capylang.compiler.PrimitiveLinkedType.ENUM) {
+                    yield "case java.lang.Enum " + patternBindingName;
                 }
                 if (typedPattern.type() instanceof CompiledDataType typedDataType) {
                     var resolvedTypedType = resolveConstructorType(matchType, typedDataType.name());
@@ -2562,6 +2569,7 @@ public class JavaExpressionEvaluator {
             case dev.capylang.compiler.PrimitiveLinkedType primitiveType -> switch (primitiveType) {
                 case ANY -> "true";
                 case DATA -> dataGuard(expression);
+                case ENUM -> enumGuard(expression);
                 case NOTHING -> expression + " == null";
                 default -> expression + " instanceof " + javaPatternType(primitiveType);
             };
@@ -2619,6 +2627,7 @@ public class JavaExpressionEvaluator {
         return switch (normalized) {
             case "any" -> "true";
             case "data" -> dataGuard(expression);
+            case "enum" -> enumGuard(expression);
             case "nothing" -> expression + " == null";
             case "byte" -> expression + " instanceof java.lang.Byte";
             case "int" -> expression + " instanceof java.lang.Integer";
@@ -2869,6 +2878,7 @@ public class JavaExpressionEvaluator {
             }
             if (type == dev.capylang.compiler.PrimitiveLinkedType.ANY
                 || type == dev.capylang.compiler.PrimitiveLinkedType.DATA
+                || type == dev.capylang.compiler.PrimitiveLinkedType.ENUM
                 || type == dev.capylang.compiler.PrimitiveLinkedType.NOTHING) {
                 continue;
             }
@@ -2881,9 +2891,14 @@ public class JavaExpressionEvaluator {
         return varName + " instanceof dev.capylang.CapybaraDataValue";
     }
 
+    private static String enumGuard(String varName) {
+        return varName + " instanceof java.lang.Enum<?>";
+    }
+
     private static String castMatchCaseExpression(String expression, dev.capylang.compiler.CompiledType resultType) {
         if (resultType == dev.capylang.compiler.PrimitiveLinkedType.ANY
             || resultType == dev.capylang.compiler.PrimitiveLinkedType.DATA
+            || resultType == dev.capylang.compiler.PrimitiveLinkedType.ENUM
             || resultType == dev.capylang.compiler.PrimitiveLinkedType.NOTHING
             || resultType instanceof dev.capylang.compiler.CompiledGenericTypeParameter) {
             return expression;
@@ -2901,6 +2916,7 @@ public class JavaExpressionEvaluator {
                 case STRING -> "java.lang.String";
                 case BOOL -> "java.lang.Boolean";
                 case FLOAT -> "java.lang.Float";
+                case ENUM -> "java.lang.Enum";
                 case NOTHING, ANY, DATA -> "java.lang.Object";
             };
             case dev.capylang.compiler.CompiledDataType dataType -> normalizeJavaTypeReference(dataType.name());

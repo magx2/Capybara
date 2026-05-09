@@ -22,7 +22,11 @@ public enum PrimitiveLinkedType implements CompiledType {
     /**
      * Super type for all user-defined data/type declarations.
      */
-    DATA;
+    DATA,
+    /**
+     * Super type for all enum declarations and enum values.
+     */
+    ENUM;
 
     public static Optional<PrimitiveLinkedType> find(String name) {
         return Arrays.stream(values()).filter(x -> x.name().equals(name)).findAny();

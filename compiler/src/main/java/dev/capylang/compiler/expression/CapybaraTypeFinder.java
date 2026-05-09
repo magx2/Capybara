@@ -5,6 +5,7 @@ import dev.capylang.compiler.PrimitiveLinkedType;
 
 import static dev.capylang.compiler.PrimitiveLinkedType.ANY;
 import static dev.capylang.compiler.PrimitiveLinkedType.DATA;
+import static dev.capylang.compiler.PrimitiveLinkedType.ENUM;
 import static dev.capylang.compiler.PrimitiveLinkedType.NOTHING;
 
 public class CapybaraTypeFinder {
@@ -85,7 +86,10 @@ public class CapybaraTypeFinder {
             return ANY;
         }
         if (left == DATA || right == DATA) {
-            return left == DATA && right == DATA ? DATA : ANY;
+            return ((left == DATA && right == DATA) || left == ENUM || right == ENUM) ? DATA : ANY;
+        }
+        if (left == ENUM || right == ENUM) {
+            return left == ENUM && right == ENUM ? ENUM : ANY;
         }
         if (left.ordinal() < right.ordinal()) {
             return right;

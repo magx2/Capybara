@@ -739,6 +739,7 @@ public class JavaAstBuilder {
             case NOTHING -> new JavaType("java.lang.Object");
             case ANY -> new JavaType("java.lang.Object");
             case DATA -> new JavaType("java.lang.Object");
+            case ENUM -> new JavaType("java.lang.Enum<?>");
         };
     }
 
@@ -763,6 +764,7 @@ public class JavaAstBuilder {
                 case NOTHING -> "java.lang.Object";
                 case ANY -> "java.lang.Object";
                 case DATA -> "java.lang.Object";
+                case ENUM -> "java.lang.Enum<?>";
             };
             case GenericDataType genericDataType -> buildGenericDataType(genericDataType).toString();
             case CollectionLinkedType collectionLinkedType -> buildCollectionLinkedType(collectionLinkedType).toString();

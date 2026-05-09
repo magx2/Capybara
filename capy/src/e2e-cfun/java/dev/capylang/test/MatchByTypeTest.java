@@ -41,6 +41,20 @@ class MatchByTypeTest {
 
         assertThat(MatchByType.isData(new MatchByType.Person("Tom"))).isTrue();
         assertThat(MatchByType.isDataFromEntity(new MatchByType.Person("Jerry"))).isTrue();
+        assertThat(MatchByType.isData(MatchByType.MatchStatus.READY)).isTrue();
+    }
+
+    @Test
+    void enumTypeMatchesOnlyEnums() {
+        assertThat(MatchByType.classifyEnum(MatchByType.MatchStatus.READY)).isEqualTo("READY");
+        assertThat(MatchByType.classifyEnum(new MatchByType.Person("Tom"))).isEqualTo("data");
+        assertThat(MatchByType.classifyEnum("x")).isEqualTo("any");
+    }
+
+    @Test
+    void enumValuesExposeGenericNameMethod() {
+        assertThat(MatchByType.genericEnumName(MatchByType.MatchStatus.DONE)).isEqualTo("DONE");
+        assertThat(MatchByType.exhaustiveEnumTypeMatch(MatchByType.MatchStatus.READY)).isEqualTo("READY");
     }
 
     @Test
