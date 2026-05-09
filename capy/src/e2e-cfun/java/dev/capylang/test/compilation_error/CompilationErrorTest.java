@@ -138,7 +138,7 @@ public class CompilationErrorTest {
     @Test
     void shouldRejectEnumTypePatternForNonEnumStaticType() {
         var errors = compileProgram("""
-                        fun classify(value: int): string =
+                        fun classify(value: int): String =
                             match value with
                             case enum e -> e.name()
                             case _ -> "other"
@@ -491,7 +491,7 @@ public class CompilationErrorTest {
     @Test
     void shouldRejectPlaceholderAsDataFieldValue() {
         var errors = compileProgram("""
-                        data User { name: string, age: int }
+                        data User { name: String, age: int }
                         fun broken(): User = User { name: "Ada", age: _ }
                         """,
                 "data_field_placeholder");

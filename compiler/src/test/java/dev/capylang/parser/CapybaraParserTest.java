@@ -99,7 +99,7 @@ class CapybaraParserTest {
                         "enum_type_pattern",
                         """
                                 enum Status { READY, DONE }
-                                fun enum_type_pattern(value: any): string =
+                                fun enum_type_pattern(value: any): String =
                                     match value with
                                     case enum e -> e.name()
                                     case _ -> "other"
@@ -171,8 +171,8 @@ class CapybaraParserTest {
     @DisplayName("should parse multiple placeholder arguments in order")
     void parseMultiplePlaceholderArgumentsInOrder() {
         var module = parseSuccess(new RawModule("Test", "/parser", """
-                fun foo(a: int, b: string, c: double, d: int): string = b
-                fun test(b: string): (int, double, int) => string = foo(_, b, _, _)
+                fun foo(a: int, b: String, c: double, d: int): String = b
+                fun test(b: String): (int, double, int) => String = foo(_, b, _, _)
                 """));
 
         var function = findFunction("test", module.functional());

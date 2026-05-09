@@ -179,8 +179,8 @@ class JavaExpressionEvaluatorTest {
     @Test
     void shouldLowerMultiplePartialFunctionBindingPlaceholdersInOrder() {
         var program = compileProgram("""
-                fun foo(a: int, b: string, c: double, d: int): string = b
-                fun bind_b(b: string): (int, double, int) => string = foo(_, b, _, _)
+                fun foo(a: int, b: String, c: double, d: int): String = b
+                fun bind_b(b: String): (int, double, int) => String = foo(_, b, _, _)
                 """);
 
         var expression = findFunction("bind_b", program)
@@ -395,7 +395,7 @@ class JavaExpressionEvaluatorTest {
                 enum PathRoot { RELATIVE, ABSOLUTE }
                 fun root(): PathRoot = PathRoot.ABSOLUTE
                 fun inferred_root() = RELATIVE
-                fun root_name(): string = ABSOLUTE.name
+                fun root_name(): String = ABSOLUTE.name
                 """));
         var generated = generatedProgram.modules().stream()
                 .map(dev.capylang.generator.GeneratedModule::code)
