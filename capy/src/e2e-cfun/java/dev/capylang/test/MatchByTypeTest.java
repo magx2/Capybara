@@ -58,6 +58,13 @@ class MatchByTypeTest {
     }
 
     @Test
+    void mergedEnumValuesPreserveEnumType() {
+        assertThat(MatchByType.mergedEnumName(true, MatchByType.MatchStatus.DONE)).isEqualTo("DONE");
+        assertThat(MatchByType.mergedEnumName(false, MatchByType.MatchStatus.DONE)).isEqualTo("READY");
+        assertThat(MatchByType.mergedEnumListNames(MatchByType.MatchStatus.DONE)).isEqualTo(List.of("DONE", "READY"));
+    }
+
+    @Test
     void matchCaseCanUseMultiplePatterns() {
         assertThat(MatchByType.classifyJsonChar("{")).isEqualTo("object");
         assertThat(MatchByType.classifyJsonChar("\"")).isEqualTo("string");

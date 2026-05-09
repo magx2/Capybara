@@ -44,6 +44,13 @@ fun exhaustive_enum_type_match(value: enum): string =
     match value with
     case enum e -> e.name()
 
+fun merged_enum_name(flag: bool, current_enum: enum): string =
+    let v = if flag then current_enum else READY {}
+    v.name()
+
+fun merged_enum_list_names(current_enum: enum): list[string] =
+    [current_enum, READY {}] | value => value.name()
+
 fun classify_json_char(first_char: string): string =
     match first_char with
     case '{' -> "object"
