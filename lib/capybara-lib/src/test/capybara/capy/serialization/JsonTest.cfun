@@ -135,7 +135,7 @@ fun should_convert_data_with_wrapper_and_nested_fields_to_json_object(): Assert 
         success: Success { value: 7 },
         error: Error { message: "bad" },
         inner: JsonInnerSample { label: "child", count: 2 },
-        status: COMPLETE {},
+        status: COMPLETE,
         raw: JsonArray { value: [JsonString { value: "kept" }] }
     }
     assert_that(to_json(sample)).succeeds(JsonObject {
@@ -164,7 +164,7 @@ fun should_convert_enum_to_json_string(): Assert =
         success: Success { value: 1 },
         error: Error { message: "ignored" },
         inner: JsonInnerSample { label: "enum", count: 1 },
-        status: PENDING {},
+        status: PENDING,
         raw: JsonNull {}
     })).succeeds(obj =>
         match _json_field(obj, "status") with
