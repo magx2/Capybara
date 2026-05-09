@@ -29,10 +29,10 @@ fun invoke_partial_add_with_generated_name_collision(): int =
     let f: int => int = add(__capybaraPartial1, _)
     f(5)
 
-fun concat(a: string, b: string, c: string): string = a + b + c
+fun concat(a: String, b: String, c: String): String = a + b + c
 
-fun invoke_partial_concat(): string =
-    let f: (string, string) => string = concat(_, "-", _)
+fun invoke_partial_concat(): String =
+    let f: (String, String) => String = concat(_, "-", _)
     f("A", "B")
 
 fun combine(a: int, b: int, c: int): int =
@@ -42,11 +42,11 @@ fun invoke_partial_combine(): int =
     let f: (int, int) => int = combine(_, 5, _)
     f(1, 9)
 
-fun pair(a: int, b: int): string =
+fun pair(a: int, b: int): String =
     a + ":" + b
 
-fun invoke_partial_pair(): string =
-    let f: (int, int) => string = pair(_, _)
+fun invoke_partial_pair(): String =
+    let f: (int, int) => String = pair(_, _)
     f(1, 2)
 
 fun between(min: int, value: int, max: int): bool =
@@ -55,9 +55,9 @@ fun between(min: int, value: int, max: int): bool =
 fun is_age_valid(): int => bool = between(0, _, 150)
 
 fun invoke_partial_contains_method(): bool =
-    let f: string => bool = "capybara".contains(_)
+    let f: String => bool = "capybara".contains(_)
     f("pyb")
 
-fun invoke_partial_replace_method(): string =
-    let f: string => string = "banana".replace("a", _)
+fun invoke_partial_replace_method(): String =
+    let f: String => String = "banana".replace("a", _)
     f("o")
