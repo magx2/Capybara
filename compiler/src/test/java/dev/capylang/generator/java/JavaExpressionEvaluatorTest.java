@@ -390,6 +390,36 @@ class JavaExpressionEvaluatorTest {
     }
 
     @Test
+    void shouldCompileEnumValuesWithoutBraces() {
+        var generatedProgram = new JavaGenerator().generate(compileProgram("Consumer", "/foo/app", """
+                enum PathRoot { RELATIVE, ABSOLUTE }
+                fun root(): PathRoot = PathRoot.ABSOLUTE
+                fun inferred_root() = RELATIVE
+                fun root_name(): string = ABSOLUTE.name
+                """));
+        var generated = generatedProgram.modules().stream()
+                .map(dev.capylang.generator.GeneratedModule::code)
+                .collect(joining("\n"));
+
+        assertThat(generated)
+                .contains("return PathRoot.ABSOLUTE;")
+                .contains("return PathRoot.RELATIVE;");
+        assertGeneratedJavaCompiles(generatedProgram);
+    }
+
+    @Test
+    void shouldStillRequireBracesForSingleValues() {
+        var programResult = CapybaraCompiler.INSTANCE.compile(List.of(new RawModule("test", "/foo/boo", """
+                single Done
+                fun done(): Done = Done
+                """)), new java.util.TreeSet<>());
+        assertThat(programResult).isInstanceOf(Result.Error.class);
+        var error = (Result.Error<CompiledProgram>) programResult;
+        assertThat(error.errors().stream().map(Result.Error.SingleError::message).collect(joining(",")))
+                .contains("Singleton data value `Done` must be constructed with `Done {}`");
+    }
+
+    @Test
     void shouldGenerateRuntimeCarrierCallForReflectionValueOnGenericData() {
         var generatedProgram = new JavaGenerator().generate(compileProgram(List.of(
                 reflectionMetadataModule(),

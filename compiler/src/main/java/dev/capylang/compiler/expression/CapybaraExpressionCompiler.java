@@ -972,6 +972,21 @@ public class CapybaraExpressionCompiler {
             if (functionCall.arguments().isEmpty()) {
                 var singleton = findSingletonDataType(functionCall.name());
                 if (singleton.isPresent()) {
+                    var singletonType = singleton.orElseThrow();
+                    var enumParent = singletonType.enumParent();
+                    if (enumParent.isEmpty()) {
+                        enumParent = Optional.ofNullable(findEnumParentForValue(singletonType.type().name()));
+                    }
+                    if (enumParent.isPresent()) {
+                        return linkNewData(new NewData(
+                                new DataType(functionCall.name()),
+                                false,
+                                List.of(),
+                                List.of(),
+                                List.of(),
+                                functionCall.position()
+                        ), scope);
+                    }
                     return withPosition(
                             Result.error("Singleton data value `" + functionCall.name() + "` must be constructed with `"
                                          + functionCall.name() + " {}`"),
