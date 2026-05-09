@@ -19,6 +19,7 @@ public class CapybaraExpressionCompiler {
     private static final Logger LOG = Logger.getLogger(CapybaraExpressionCompiler.class.getName());
     private static final String METHOD_DECL_PREFIX = "__method__";
     private static final String METHOD_INVOKE_PREFIX = "__invoke__";
+    private static final String PARTIAL_PLACEHOLDER_PREFIX = "$capybaraPartial";
     private static final String DICT_PIPE_ARGS_SEPARATOR = "::";
     private static final String TUPLE_PIPE_ARGS_SEPARATOR = ";;";
     private static final String REFLECTION_INTRINSIC_MODULE = "capy/meta_prog/Reflection";
@@ -617,6 +618,10 @@ public class CapybaraExpressionCompiler {
         return arguments.stream().anyMatch(PlaceholderExpression.class::isInstance);
     }
 
+    private String partialPlaceholderName(int index) {
+        return PARTIAL_PLACEHOLDER_PREFIX + index;
+    }
+
     private Result<CompiledExpression> resolvePartialFunctionCall(
             FunctionCall functionCall,
             Scope scope,
@@ -692,7 +697,7 @@ public class CapybaraExpressionCompiler {
             var argument = arguments.get(i);
             var expected = expectedTypes.get(i);
             if (argument instanceof PlaceholderExpression) {
-                var name = "__capybaraPartial" + (placeholderNames.size() + 1);
+                var name = partialPlaceholderName(placeholderNames.size() + 1);
                 placeholderNames.add(name);
                 placeholderTypes.add(expected);
                 callArguments.add(new CompiledVariable(name, expected));
@@ -2674,7 +2679,7 @@ public class CapybaraExpressionCompiler {
             }
             var expected = currentFunctionType.argumentType();
             if (argument instanceof PlaceholderExpression) {
-                var name = "__capybaraPartial" + (placeholderNames.size() + 1);
+                var name = partialPlaceholderName(placeholderNames.size() + 1);
                 placeholderNames.add(name);
                 placeholderTypes.add(expected);
                 callArguments.add(new CompiledVariable(name, expected));

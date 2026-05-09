@@ -28,6 +28,7 @@ class LambdaValuesTest {
     void invokesPartiallyBoundFunction() {
         assertThat(LambdaValues.add10().apply(5)).isEqualTo(15);
         assertThat(LambdaValues.invokePartialAdd()).isEqualTo(15);
+        assertThat(LambdaValues.invokePartialAddWithGeneratedNameCollision()).isEqualTo(15);
     }
 
     @Test
