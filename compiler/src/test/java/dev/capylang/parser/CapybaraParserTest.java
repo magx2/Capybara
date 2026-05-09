@@ -143,6 +143,49 @@ class CapybaraParserTest {
     }
 
     @Test
+    @DisplayName("should parse placeholder arguments in function calls")
+    void parsePlaceholderArgumentsInFunctionCalls() {
+        var module = parseSuccess(new RawModule("Test", "/parser", """
+                fun add(a: int, b: int): int = a + b
+                fun test(): int => int = add(1, _)
+                """));
+
+        var function = findFunction("test", module.functional());
+        assertThat(function.expression()).isInstanceOf(FunctionCall.class);
+        var call = (FunctionCall) function.expression();
+        assertThat(call.arguments()).hasSize(2);
+        assertThat(call.arguments().get(1)).isInstanceOf(PlaceholderExpression.class);
+    }
+
+    @Test
+    @DisplayName("should parse multiple placeholder arguments in order")
+    void parseMultiplePlaceholderArgumentsInOrder() {
+        var module = parseSuccess(new RawModule("Test", "/parser", """
+                fun foo(a: int, b: string, c: double, d: int): string = b
+                fun test(b: string): (int, double, int) => string = foo(_, b, _, _)
+                """));
+
+        var function = findFunction("test", module.functional());
+        assertThat(function.expression()).isInstanceOf(FunctionCall.class);
+        var call = (FunctionCall) function.expression();
+        assertThat(call.arguments()).hasSize(4);
+        assertThat(call.arguments().get(0)).isInstanceOf(PlaceholderExpression.class);
+        assertThat(call.arguments().get(2)).isInstanceOf(PlaceholderExpression.class);
+        assertThat(call.arguments().get(3)).isInstanceOf(PlaceholderExpression.class);
+    }
+
+    @Test
+    @DisplayName("should parse standalone placeholder for compiler diagnostics")
+    void parseStandalonePlaceholderForCompilerDiagnostics() {
+        var module = parseSuccess(new RawModule("Test", "/parser", """
+                fun test(): int => int = _
+                """));
+
+        var function = findFunction("test", module.functional());
+        assertThat(function.expression()).isInstanceOf(PlaceholderExpression.class);
+    }
+
+    @Test
     @DisplayName("should parse data extension from multiple parent data declarations")
     void parseDataExtensionFromMultipleParents() {
         var module = parseSuccess(new RawModule("Test", "/parser", """

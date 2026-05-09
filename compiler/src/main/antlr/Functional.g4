@@ -111,6 +111,7 @@ expressionNoLet: ifExpression
                | reduceExpression
                | functionReference
                | functionCall
+               | placeholder
                | new_list
                | new_dict
                | tupleLiteral
@@ -140,6 +141,7 @@ expressionNoLetNoPipe: ifExpression
                      | lambdaExpression
                      | functionReference
                      | functionCall
+                     | placeholder
                      | new_list
                      | new_dict
                      | tupleLiteral
@@ -165,6 +167,7 @@ tupleLiteral: LPAREN expression (COMMA expression)+ RPAREN;
 
 ifExpression: 'if' expression 'then' expression 'else' expression;
 functionReference: COLON identifier;
+placeholder: UNDERSCORE;
 functionCall: NAME '(' argumentList? ')'
             | REC '(' argumentList? ')'
             | COLLECTION '(' argumentList? ')'

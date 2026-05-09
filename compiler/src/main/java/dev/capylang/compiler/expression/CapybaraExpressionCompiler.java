@@ -222,6 +222,10 @@ public class CapybaraExpressionCompiler {
             case NewData newData -> linkNewData(newData, scope);
             case WithExpression withExpression -> linkWithExpression(withExpression, scope);
             case NothingValue nothingValue -> linkNothingValue(nothingValue);
+            case PlaceholderExpression placeholderExpression -> withPosition(
+                    Result.error("Placeholder `_` can only be used inside invocation arguments."),
+                    placeholderExpression.position()
+            );
             case StringValue stringValue -> linkStringValue(stringValue, scope);
             case TupleExpression tupleExpression -> linkTupleExpression(tupleExpression, scope);
             case Value value -> linkValue(value, scope);
@@ -601,6 +605,164 @@ public class CapybaraExpressionCompiler {
                 .flatMap(function -> resolveFunctionInvoke(functionInvoke, scope, function));
     }
 
+    private boolean hasPlaceholderArguments(List<Expression> arguments) {
+        return arguments.stream().anyMatch(PlaceholderExpression.class::isInstance);
+    }
+
+    private Result<CompiledExpression> resolvePartialFunctionCall(
+            FunctionCall functionCall,
+            Scope scope,
+            Optional<CompiledType> expectedType,
+            List<FunctionSignature> candidates,
+            java.util.function.Function<FunctionSignature, String> resolvedName
+    ) {
+        ResolvedPartialFunctionCall best = null;
+        Result.Error.SingleError deepestError = null;
+        for (var candidate : candidates) {
+            var maybeArguments = linkPartialArguments(functionCall.arguments(), scope, candidate.parameterTypes());
+            if (maybeArguments instanceof Result.Error<PartialArguments> error) {
+                deepestError = preferDeeperError(deepestError, firstError(error));
+                continue;
+            }
+            var partial = ((Result.Success<PartialArguments>) maybeArguments).value();
+            var unsafeCollectionError = findUnsafeCollectionArgumentError(functionCall.arguments(), partial.arguments(), candidate.parameterTypes());
+            if (unsafeCollectionError != null) {
+                deepestError = preferDeeperError(deepestError, unsafeCollectionError);
+                continue;
+            }
+            var returnType = resolveReturnType(candidate, partial.arguments());
+            var expression = wrapPartialArguments(
+                    partial,
+                    new CompiledFunctionCall(resolvedName.apply(candidate), partial.arguments(), returnType),
+                    returnType
+            );
+            var coercions = partial.coercions();
+            if (expectedType.isPresent()) {
+                var maybeCoerced = coerceArgument(expression, expectedType.orElseThrow());
+                if (maybeCoerced == null) {
+                    continue;
+                }
+                expression = maybeCoerced.expression();
+                coercions += maybeCoerced.coercions();
+            }
+            if (!(expression.type() instanceof CompiledFunctionType functionType)) {
+                continue;
+            }
+            var resolved = new ResolvedPartialFunctionCall(
+                    expression,
+                    candidate,
+                    partial.arguments(),
+                    coercions,
+                    functionType
+            );
+            if (isBetterResolvedPartialCall(resolved, expectedType, best)) {
+                best = resolved;
+            }
+        }
+        if (best == null) {
+            if (deepestError != null) {
+                return new Result.Error<>(deepestError);
+            }
+            return withPosition(
+                    Result.error("No matching partial function binding for argument types " + partialArgumentTypes(functionCall.arguments(), scope)),
+                    functionCall.position()
+            );
+        }
+        return Result.success(best.expression());
+    }
+
+    private Result<PartialArguments> linkPartialArguments(
+            List<Expression> arguments,
+            Scope scope,
+            List<CompiledType> expectedTypes
+    ) {
+        var callArguments = new java.util.ArrayList<CompiledExpression>(arguments.size());
+        var placeholderNames = new java.util.ArrayList<String>();
+        var placeholderTypes = new java.util.ArrayList<CompiledType>();
+        var coercions = 0;
+        for (var i = 0; i < arguments.size(); i++) {
+            var argument = arguments.get(i);
+            var expected = expectedTypes.get(i);
+            if (argument instanceof PlaceholderExpression) {
+                var name = "__capybaraPartial" + (placeholderNames.size() + 1);
+                placeholderNames.add(name);
+                placeholderTypes.add(expected);
+                callArguments.add(new CompiledVariable(name, expected));
+                continue;
+            }
+            var linked = linkArgumentForExpectedType(argument, scope, expected);
+            if (linked instanceof Result.Error<CoercedArgument> error) {
+                return new Result.Error<>(error.errors());
+            }
+            var coerced = ((Result.Success<CoercedArgument>) linked).value();
+            callArguments.add(coerced.expression());
+            coercions += coerced.coercions();
+        }
+        return Result.success(new PartialArguments(
+                List.copyOf(callArguments),
+                List.copyOf(placeholderNames),
+                List.copyOf(placeholderTypes),
+                coercions
+        ));
+    }
+
+    private CompiledExpression wrapPartialArguments(
+            PartialArguments partial,
+            CompiledExpression body,
+            CompiledType returnType
+    ) {
+        CompiledExpression expression = body;
+        var nestedType = returnType;
+        for (var i = partial.placeholderNames().size() - 1; i >= 0; i--) {
+            var functionType = new CompiledFunctionType(partial.placeholderTypes().get(i), nestedType);
+            expression = new CompiledLambdaExpression(partial.placeholderNames().get(i), expression, functionType);
+            nestedType = functionType;
+        }
+        return expression;
+    }
+
+    private boolean isBetterResolvedPartialCall(
+            ResolvedPartialFunctionCall candidate,
+            Optional<CompiledType> expectedType,
+            ResolvedPartialFunctionCall currentBest
+    ) {
+        if (currentBest == null) {
+            return true;
+        }
+        var candidateExactType = expectedType.isPresent() && candidate.functionType().equals(expectedType.orElseThrow());
+        var currentExactType = expectedType.isPresent() && currentBest.functionType().equals(expectedType.orElseThrow());
+        if (candidateExactType != currentExactType) {
+            return candidateExactType;
+        }
+        if (candidate.coercions() < currentBest.coercions()) {
+            return true;
+        }
+        if (candidate.coercions() > currentBest.coercions()) {
+            return false;
+        }
+        var candidateExactParameters = exactParameterMatches(candidate.signature(), candidate.arguments());
+        var currentExactParameters = exactParameterMatches(currentBest.signature(), currentBest.arguments());
+        if (candidateExactParameters != currentExactParameters) {
+            return candidateExactParameters > currentExactParameters;
+        }
+        return isSignatureMoreSpecific(candidate.signature(), currentBest.signature());
+    }
+
+    private List<String> partialArgumentTypes(List<Expression> arguments, Scope scope) {
+        var actualTypes = new java.util.ArrayList<String>();
+        for (var argument : arguments) {
+            if (argument instanceof PlaceholderExpression) {
+                actualTypes.add("_");
+                continue;
+            }
+            var linked = linkExpression(argument, scope);
+            if (linked instanceof Result.Success<CompiledExpression> value) {
+                actualTypes.add(value.value().type().name());
+            }
+        }
+        return List.copyOf(actualTypes);
+    }
+
     private Result<CompiledExpression> resolveQualifiedFunctionCall(
             FunctionCall functionCall,
             Scope scope,
@@ -629,6 +791,15 @@ public class CapybaraExpressionCompiler {
                             + functionCall.arguments().size() + " argument(s)"
                     ),
                     functionCall.position()
+            );
+        }
+        if (hasPlaceholderArguments(functionCall.arguments())) {
+            return resolvePartialFunctionCall(
+                    functionCall,
+                    scope,
+                    expectedType,
+                    candidates,
+                    candidate -> resolvedModule.javaModuleName() + "." + functionCall.name()
             );
         }
 
@@ -779,6 +950,12 @@ public class CapybaraExpressionCompiler {
         }
         var candidates = functionsByNameAndArity(functionSignatures, functionCall.name(), functionCall.arguments().size());
         if (candidates.isEmpty()) {
+            if (hasPlaceholderArguments(functionCall.arguments())) {
+                return withPosition(
+                        Result.error("No function `" + functionCall.name() + "` with " + functionCall.arguments().size() + " argument(s) for partial binding"),
+                        functionCall.position()
+                );
+            }
             if (functionCall.arguments().isEmpty()) {
                 var singleton = findSingletonDataType(functionCall.name());
                 if (singleton.isPresent()) {
@@ -794,6 +971,9 @@ public class CapybaraExpressionCompiler {
                     .map((Expression expression) -> linkExpression(expression, scope))
                     .collect(new ResultCollectionCollector<>())
                     .map(args -> (CompiledExpression) new CompiledFunctionCall(functionCall.name(), args, ANY));
+        }
+        if (hasPlaceholderArguments(functionCall.arguments())) {
+            return resolvePartialFunctionCall(functionCall, scope, expectedType, candidates, this::resolvedFunctionName);
         }
 
         ResolvedFunctionCall best = null;
@@ -1500,6 +1680,15 @@ public class CapybaraExpressionCompiler {
                             Result.error("No method `" + methodName + "` with " + functionCall.arguments().size() + " argument(s)"),
                             functionCall.position()
                     ));
+        }
+        if (hasPlaceholderArguments(functionCall.arguments())) {
+            return resolvePartialFunctionCall(
+                    functionCall,
+                    scope,
+                    expectedType,
+                    candidates,
+                    FunctionSignature::name
+            );
         }
 
         ResolvedFunctionCall best = null;
@@ -2241,6 +2430,9 @@ public class CapybaraExpressionCompiler {
         if (!(function.type() instanceof CompiledFunctionType functionType)) {
             return withPosition(Result.error("Variable `" + function.name() + "` is not callable"), functionCall.position());
         }
+        if (hasPlaceholderArguments(functionCall.arguments())) {
+            return resolvePartialFunctionInvoke(functionCall.arguments(), scope, function, functionCall.position(), "Function variable `" + function.name() + "`");
+        }
         if (functionCall.arguments().isEmpty()) {
             if (functionType.argumentType().equals(NOTHING)) {
                 return Result.success(new CompiledFunctionInvoke(function, List.of(), functionType.returnType()));
@@ -2279,6 +2471,9 @@ public class CapybaraExpressionCompiler {
         if (!(function.type() instanceof CompiledFunctionType functionType)) {
             return withPosition(Result.error("Expression is not callable, was `" + function.type() + "`"), functionInvoke.position());
         }
+        if (hasPlaceholderArguments(functionInvoke.arguments())) {
+            return resolvePartialFunctionInvoke(functionInvoke.arguments(), scope, function, functionInvoke.position(), "Callable expression");
+        }
         if (functionInvoke.arguments().isEmpty()) {
             if (functionType.argumentType().equals(NOTHING)) {
                 return Result.success(new CompiledFunctionInvoke(function, List.of(), functionType.returnType()));
@@ -2307,6 +2502,55 @@ public class CapybaraExpressionCompiler {
         }
 
         return Result.success(new CompiledFunctionInvoke(function, List.copyOf(coercedArguments), currentType));
+    }
+
+    private Result<CompiledExpression> resolvePartialFunctionInvoke(
+            List<Expression> arguments,
+            Scope scope,
+            CompiledExpression function,
+            Optional<SourcePosition> position,
+            String errorSubject
+    ) {
+        var callArguments = new java.util.ArrayList<CompiledExpression>(arguments.size());
+        var placeholderNames = new java.util.ArrayList<String>();
+        var placeholderTypes = new java.util.ArrayList<CompiledType>();
+        var currentType = function.type();
+        var coercions = 0;
+        for (var argument : arguments) {
+            if (!(currentType instanceof CompiledFunctionType currentFunctionType)) {
+                return withPosition(
+                        Result.error(errorSubject + " called with too many arguments"),
+                        position
+                );
+            }
+            var expected = currentFunctionType.argumentType();
+            if (argument instanceof PlaceholderExpression) {
+                var name = "__capybaraPartial" + (placeholderNames.size() + 1);
+                placeholderNames.add(name);
+                placeholderTypes.add(expected);
+                callArguments.add(new CompiledVariable(name, expected));
+            } else {
+                var linked = linkArgumentForExpectedType(argument, scope, expected);
+                if (linked instanceof Result.Error<CoercedArgument> error) {
+                    return withPosition(new Result.Error<>(error.errors()), argument.position());
+                }
+                var coerced = ((Result.Success<CoercedArgument>) linked).value();
+                callArguments.add(coerced.expression());
+                coercions += coerced.coercions();
+            }
+            currentType = currentFunctionType.returnType();
+        }
+        var partial = new PartialArguments(
+                List.copyOf(callArguments),
+                List.copyOf(placeholderNames),
+                List.copyOf(placeholderTypes),
+                coercions
+        );
+        return Result.success(wrapPartialArguments(
+                partial,
+                new CompiledFunctionInvoke(function, partial.arguments(), currentType),
+                currentType
+        ));
     }
 
     private Result<CoercedArguments> linkArgumentsForExpectedTypes(
@@ -7717,6 +7961,13 @@ public class CapybaraExpressionCompiler {
             Scope scope,
             CompiledType type
     ) {
+        var directPlaceholder = directDataPlaceholder(newData);
+        if (directPlaceholder.isPresent()) {
+            return withPosition(
+                    Result.error("Placeholder `_` cannot be used in data construction."),
+                    directPlaceholder.orElseThrow().position()
+            );
+        }
         return linkSpreadAssignments(newData.spreads(), scope)
                 .flatMap(spreadAssignments ->
                         linkFieldAssignment(newData.assignments(), scope, type)
@@ -7754,6 +8005,28 @@ public class CapybaraExpressionCompiler {
                                         ));
                                     });
                                 })));
+    }
+
+    private Optional<PlaceholderExpression> directDataPlaceholder(NewData newData) {
+        var fieldPlaceholder = newData.assignments().stream()
+                .map(NewData.FieldAssignment::value)
+                .filter(PlaceholderExpression.class::isInstance)
+                .map(PlaceholderExpression.class::cast)
+                .findFirst();
+        if (fieldPlaceholder.isPresent()) {
+            return fieldPlaceholder;
+        }
+        var positionalPlaceholder = newData.positionalArguments().stream()
+                .filter(PlaceholderExpression.class::isInstance)
+                .map(PlaceholderExpression.class::cast)
+                .findFirst();
+        if (positionalPlaceholder.isPresent()) {
+            return positionalPlaceholder;
+        }
+        return newData.spreads().stream()
+                .filter(PlaceholderExpression.class::isInstance)
+                .map(PlaceholderExpression.class::cast)
+                .findFirst();
     }
 
     private Result<CompiledType> linkNewDataType(Type type, Scope scope) {
@@ -9567,11 +9840,28 @@ public class CapybaraExpressionCompiler {
     private record CoercedArguments(List<CompiledExpression> arguments, int coercions) {
     }
 
+    private record PartialArguments(
+            List<CompiledExpression> arguments,
+            List<String> placeholderNames,
+            List<CompiledType> placeholderTypes,
+            int coercions
+    ) {
+    }
+
     private record ResolvedFunctionCall(
             FunctionSignature signature,
             List<CompiledExpression> arguments,
             int coercions,
             CompiledType returnType
+    ) {
+    }
+
+    private record ResolvedPartialFunctionCall(
+            CompiledExpression expression,
+            FunctionSignature signature,
+            List<CompiledExpression> arguments,
+            int coercions,
+            CompiledFunctionType functionType
     ) {
     }
 

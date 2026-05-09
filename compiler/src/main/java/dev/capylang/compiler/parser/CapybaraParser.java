@@ -1124,6 +1124,7 @@ public class CapybaraParser {
                             .toList(),
                     tupleExpression.position()
             );
+            case PlaceholderExpression placeholderExpression -> placeholderExpression;
             default -> expression;
         };
     }
@@ -1348,6 +1349,9 @@ public class CapybaraParser {
 
         if (expression.functionCall() != null) {
             return functionCall(expression.functionCall());
+        }
+        if (expression.placeholder() != null) {
+            return new PlaceholderExpression(position(expression.placeholder()));
         }
         if (expression.new_list() != null) {
             return newListExpression(expression.new_list());
@@ -1638,6 +1642,9 @@ public class CapybaraParser {
         }
         if (expression.functionReference() != null) {
             return functionReference(expression.functionReference());
+        }
+        if (expression.placeholder() != null) {
+            return new PlaceholderExpression(position(expression.placeholder()));
         }
         if (expression.new_list() != null) {
             return newListExpression(expression.new_list());
@@ -2822,6 +2829,7 @@ public class CapybaraParser {
                     value.values().stream().map(argument -> shiftInterpolationPositions(argument, stringPosition, interpolationOffset)).toList(),
                     shiftPosition(value.position(), stringPosition, interpolationOffset)
             );
+            case PlaceholderExpression value -> new PlaceholderExpression(shiftPosition(value.position(), stringPosition, interpolationOffset));
             case Value value -> new Value(value.name(), shiftPosition(value.position(), stringPosition, interpolationOffset));
         };
     }
