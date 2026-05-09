@@ -24,6 +24,11 @@ fun invoke_partial_add(): int =
     let f: int => int = add(10, _)
     f(5)
 
+fun invoke_partial_add_with_generated_name_collision(): int =
+    let __capybaraPartial1 = 10
+    let f: int => int = add(__capybaraPartial1, _)
+    f(5)
+
 fun concat(a: string, b: string, c: string): string = a + b + c
 
 fun invoke_partial_concat(): string =

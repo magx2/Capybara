@@ -172,7 +172,7 @@ class JavaExpressionEvaluatorTest {
 
         assertThat(expression).isInstanceOf(CompiledLambdaExpression.class);
         var lambda = (CompiledLambdaExpression) expression;
-        assertThat(lambda.argumentName()).isEqualTo("__capybaraPartial1");
+        assertThat(lambda.argumentName()).isEqualTo("$capybaraPartial1");
         assertThat(lambda.functionType()).isEqualTo(new CompiledFunctionType(PrimitiveLinkedType.INT, PrimitiveLinkedType.INT));
     }
 
@@ -189,15 +189,15 @@ class JavaExpressionEvaluatorTest {
 
         assertThat(expression).isInstanceOf(CompiledLambdaExpression.class);
         var first = (CompiledLambdaExpression) expression;
-        assertThat(first.argumentName()).isEqualTo("__capybaraPartial1");
+        assertThat(first.argumentName()).isEqualTo("$capybaraPartial1");
         assertThat(first.functionType().argumentType()).isEqualTo(PrimitiveLinkedType.INT);
         assertThat(first.expression()).isInstanceOf(CompiledLambdaExpression.class);
         var second = (CompiledLambdaExpression) first.expression();
-        assertThat(second.argumentName()).isEqualTo("__capybaraPartial2");
+        assertThat(second.argumentName()).isEqualTo("$capybaraPartial2");
         assertThat(second.functionType().argumentType()).isEqualTo(PrimitiveLinkedType.DOUBLE);
         assertThat(second.expression()).isInstanceOf(CompiledLambdaExpression.class);
         var third = (CompiledLambdaExpression) second.expression();
-        assertThat(third.argumentName()).isEqualTo("__capybaraPartial3");
+        assertThat(third.argumentName()).isEqualTo("$capybaraPartial3");
         assertThat(third.functionType().argumentType()).isEqualTo(PrimitiveLinkedType.INT);
     }
 
