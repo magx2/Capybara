@@ -1307,7 +1307,8 @@ public class CapybaraExpressionCompiler {
                 dataType.extendedTypes(),
                 dataType.comments(),
                 dataType.visibility(),
-                dataType.singleton()
+                dataType.singleton(),
+                dataType.enumValue()
         );
     }
 
@@ -1576,7 +1577,8 @@ public class CapybaraExpressionCompiler {
         if (type instanceof CompiledDataParentType parentType) {
             return parentType.enumType();
         }
-        return type instanceof CompiledDataType dataType && findEnumParentForValue(dataType.name()) != null;
+        return type instanceof CompiledDataType dataType
+               && (dataType.enumValue() || findEnumParentForValue(dataType.name()) != null);
     }
 
     private CompiledDataParentType findEnumTypeByName(String enumName) {
@@ -2950,7 +2952,8 @@ public class CapybaraExpressionCompiler {
                 dataType.extendedTypes(),
                 dataType.comments(),
                 dataType.visibility(),
-                dataType.singleton()
+                dataType.singleton(),
+                dataType.enumValue()
         )));
     }
 
@@ -3587,7 +3590,8 @@ public class CapybaraExpressionCompiler {
                 expectedSubtype.extendedTypes(),
                 expectedSubtype.comments(),
                 expectedSubtype.visibility(),
-                expectedSubtype.singleton()
+                expectedSubtype.singleton(),
+                expectedSubtype.enumValue()
         );
     }
 
@@ -5207,7 +5211,8 @@ public class CapybaraExpressionCompiler {
                     dataType.extendedTypes(),
                     dataType.comments(),
                     dataType.visibility(),
-                    dataType.singleton()
+                    dataType.singleton(),
+                    dataType.enumValue()
             );
         }
         var substitutions = typeParameterSubstitutions(rawDataType.typeParameters(), typeParameters);
@@ -5222,7 +5227,8 @@ public class CapybaraExpressionCompiler {
                 substituted.extendedTypes(),
                 dataType.comments(),
                 dataType.visibility(),
-                substituted.singleton()
+                substituted.singleton(),
+                substituted.enumValue()
         );
     }
 
@@ -7300,7 +7306,10 @@ public class CapybaraExpressionCompiler {
                     linkedDataType.extendedTypes().stream()
                             .map(typeDescriptor -> substituteTypeDescriptor(typeDescriptor, substitutions))
                             .toList(),
-                    linkedDataType.singleton()
+                    linkedDataType.comments(),
+                    linkedDataType.visibility(),
+                    linkedDataType.singleton(),
+                    linkedDataType.enumValue()
             );
             case CompiledDataParentType linkedDataParentType -> new CompiledDataParentType(
                     linkedDataParentType.name(),
@@ -7436,7 +7445,10 @@ public class CapybaraExpressionCompiler {
                                 dataType.fields(),
                                 typeArgumentDescriptors,
                                 dataType.extendedTypes(),
-                                dataType.singleton()
+                                dataType.comments(),
+                                dataType.visibility(),
+                                dataType.singleton(),
+                                dataType.enumValue()
                         );
                     }
                     var substitutions = new java.util.LinkedHashMap<String, CompiledType>();
@@ -7455,7 +7467,10 @@ public class CapybaraExpressionCompiler {
                             substitutedFields,
                             typeArgumentDescriptors,
                             dataType.extendedTypes(),
-                            dataType.singleton()
+                            dataType.comments(),
+                            dataType.visibility(),
+                            dataType.singleton(),
+                            dataType.enumValue()
                     );
                 }
             });
@@ -8134,7 +8149,8 @@ public class CapybaraExpressionCompiler {
                 singleton.type().extendedTypes(),
                 singleton.type().comments(),
                 singleton.type().visibility(),
-                singleton.type().singleton()
+                singleton.type().singleton(),
+                singleton.type().enumValue()
         );
     }
 
@@ -9812,7 +9828,10 @@ public class CapybaraExpressionCompiler {
                             .toList(),
                     linkedDataType.typeParameters(),
                     linkedDataType.extendedTypes(),
-                    linkedDataType.singleton()
+                    linkedDataType.comments(),
+                    linkedDataType.visibility(),
+                    linkedDataType.singleton(),
+                    linkedDataType.enumValue()
             );
             case CompiledDataParentType linkedDataParentType -> new CompiledDataParentType(
                     linkedDataParentType.name(),

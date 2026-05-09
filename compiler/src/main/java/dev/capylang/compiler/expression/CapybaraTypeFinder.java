@@ -1,5 +1,7 @@
 package dev.capylang.compiler.expression;
 
+import dev.capylang.compiler.CompiledDataParentType;
+import dev.capylang.compiler.CompiledDataType;
 import dev.capylang.compiler.CompiledType;
 import dev.capylang.compiler.PrimitiveLinkedType;
 
@@ -14,6 +16,8 @@ public class CapybaraTypeFinder {
         if (left == NOTHING) return right;
         if (right == NOTHING) return left;
         if (left == ANY || right == ANY) return ANY;
+        if (left == ENUM && isEnumLikeType(right)) return ENUM;
+        if (right == ENUM && isEnumLikeType(left)) return ENUM;
         if (left == DATA && !(right instanceof PrimitiveLinkedType)) return DATA;
         if (right == DATA && !(left instanceof PrimitiveLinkedType)) return DATA;
 
@@ -35,6 +39,16 @@ public class CapybaraTypeFinder {
         // for now returning ANY
         // todo: get data types and find common types there
         return ANY;
+    }
+
+    private static boolean isEnumLikeType(CompiledType type) {
+        if (type == ENUM) {
+            return true;
+        }
+        if (type instanceof CompiledDataParentType parentType) {
+            return parentType.enumType();
+        }
+        return type instanceof CompiledDataType dataType && dataType.enumValue();
     }
 
     /// `int`:

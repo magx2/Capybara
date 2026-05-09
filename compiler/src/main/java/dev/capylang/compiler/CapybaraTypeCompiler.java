@@ -240,7 +240,8 @@ public class CapybaraTypeCompiler {
                             dataType.extendedTypes(),
                             dataType.comments(),
                             dataType.visibility(),
-                            dataType.singleton()
+                            dataType.singleton(),
+                            dataType.enumValue()
                     );
                 }
                 var substitutions = substitutionsFor(dataType.typeParameters(), typeArguments);
@@ -258,7 +259,8 @@ public class CapybaraTypeCompiler {
                                 .toList(),
                         dataType.comments(),
                         dataType.visibility(),
-                        dataType.singleton()
+                        dataType.singleton(),
+                        dataType.enumValue()
                 );
             }
             default -> linkedType;
@@ -328,7 +330,8 @@ public class CapybaraTypeCompiler {
                             .toList(),
                     linkedDataType.comments(),
                     linkedDataType.visibility(),
-                    linkedDataType.singleton()
+                    linkedDataType.singleton(),
+                    linkedDataType.enumValue()
             );
             case CompiledDataParentType linkedDataParentType -> new CompiledDataParentType(
                     linkedDataParentType.name(),
@@ -522,7 +525,8 @@ public class CapybaraTypeCompiler {
                     linkedDataType.extendedTypes(),
                     linkedDataType.comments(),
                     linkedDataType.visibility(),
-                    linkedDataType.singleton()
+                    linkedDataType.singleton(),
+                    linkedDataType.enumValue()
             );
             case CompiledDataParentType linkedDataParentType -> new CompiledDataParentType(
                     requestedName,
@@ -578,7 +582,6 @@ public class CapybaraTypeCompiler {
                 .map(CompiledTupleType::new);
     }
 }
-
 
 
 

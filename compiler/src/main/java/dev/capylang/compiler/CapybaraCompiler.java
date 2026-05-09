@@ -894,7 +894,8 @@ public class CapybaraCompiler {
                     linkedDataType.extendedTypes(),
                     linkedDataType.comments(),
                     linkedDataType.visibility(),
-                    linkedDataType.singleton()
+                    linkedDataType.singleton(),
+                    linkedDataType.enumValue()
             );
             case CompiledDataParentType linkedDataParentType -> new CompiledDataParentType(
                     linkedDataParentType.name(),
@@ -1178,7 +1179,8 @@ public class CapybaraCompiler {
                     linkedDataType.extendedTypes(),
                     linkedDataType.comments(),
                     linkedDataType.visibility(),
-                    linkedDataType.singleton()
+                    linkedDataType.singleton(),
+                    linkedDataType.enumValue()
             );
             case CompiledDataParentType linkedDataParentType -> new CompiledDataParentType(
                     requestedName,
@@ -5488,7 +5490,10 @@ public class CapybaraCompiler {
                             dataType.fields(),
                             mappedTypeArguments,
                             dataType.extendedTypes(),
-                            dataType.singleton()
+                            dataType.comments(),
+                            dataType.visibility(),
+                            dataType.singleton(),
+                            dataType.enumValue()
                     );
                 }
                 var substitutions = new LinkedHashMap<String, CompiledType>();
@@ -5504,7 +5509,10 @@ public class CapybaraCompiler {
                         substitutedFields,
                         mappedTypeArguments,
                         dataType.extendedTypes(),
-                        dataType.singleton()
+                        dataType.comments(),
+                        dataType.visibility(),
+                        dataType.singleton(),
+                        dataType.enumValue()
                 );
             }
             default -> linkedType;
@@ -6070,7 +6078,7 @@ public class CapybaraCompiler {
 
     private CompiledDataParentType linkEnumDeclaration(EnumDeclaration enumDeclaration) {
         var values = enumDeclaration.values().stream()
-                .map(value -> new CompiledDataType(value, List.of(), List.of(), List.of(), true))
+                .map(value -> new CompiledDataType(value, List.of(), List.of(), List.of(), List.of(), null, true, true))
                 .toList();
         return new CompiledDataParentType(
                 enumDeclaration.name(),
@@ -6190,7 +6198,8 @@ public class CapybaraCompiler {
                     dataType.extendedTypes(),
                     dataType.comments(),
                     dataType.visibility(),
-                    dataType.singleton()
+                    dataType.singleton(),
+                    dataType.enumValue()
             );
             default -> placeholder;
         };
@@ -6406,7 +6415,8 @@ public class CapybaraCompiler {
                 childType.extendedTypes(),
                 childType.comments(),
                 childType.visibility(),
-                childType.singleton()
+                childType.singleton(),
+                childType.enumValue()
         ));
     }
 
