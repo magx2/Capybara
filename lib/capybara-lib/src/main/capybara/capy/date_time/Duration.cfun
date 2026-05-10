@@ -1,5 +1,6 @@
 from /capy/lang/Result import { * }
 from /capy/lang/Option import { * }
+from /capy/lang/String import { * }
 
 /// [ISO 8601 - Durations](https://en.wikipedia.org/wiki/ISO_860101)
 ///

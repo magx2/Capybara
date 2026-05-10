@@ -1,5 +1,6 @@
 from /capy/lang/Option import { * }
 from /capy/lang/Result import { * }
+from /capy/lang/String import { * }
 from /capy/meta_prog/Reflection import { DataValueInfo, reflection }
 
 type Json = JsonObject | JsonArray | JsonValue

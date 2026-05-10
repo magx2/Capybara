@@ -31,8 +31,10 @@ public final class JavaGenerator implements Generator {
     public GeneratedProgram generate(CompiledProgram program) {
         var timings = new GenerationTimings();
         var functionNameOverrides = buildFunctionNameOverrides(program);
+        var staticExtensionMethodOwners = buildStaticExtensionMethodOwners(program);
         var astBuilder = new JavaAstBuilder(functionNameOverrides);
         JavaExpressionEvaluator.setFunctionNameOverrides(functionNameOverrides);
+        JavaExpressionEvaluator.setStaticExtensionMethodOwners(staticExtensionMethodOwners);
         var modules = new ArrayList<GeneratedModule>();
         for (var module : program.modules()) {
             modules.addAll(modules(module, timings, astBuilder));
@@ -100,6 +102,94 @@ public final class JavaGenerator implements Generator {
         }
     }
 
+
+    private java.util.Map<String, String> buildStaticExtensionMethodOwners(CompiledProgram program) {
+        var nativeTypeNames = program.modules().stream()
+                .flatMap(module -> module.types().values().stream())
+                .filter(dev.capylang.compiler.CompiledDataType.class::isInstance)
+                .map(dev.capylang.compiler.CompiledDataType.class::cast)
+                .filter(dev.capylang.compiler.CompiledDataType::nativeType)
+                .map(dev.capylang.compiler.CompiledDataType::name)
+                .collect(java.util.stream.Collectors.toSet());
+        var owners = new java.util.LinkedHashMap<String, String>();
+        for (var module : program.modules()) {
+            var ownerClassName = staticMethodOwnerClassName(module);
+            for (var function : module.functions()) {
+                if (!isStaticExtensionMethod(function, nativeTypeNames)) {
+                    continue;
+                }
+                owners.put(function.name(), ownerClassName);
+            }
+        }
+        return java.util.Map.copyOf(owners);
+    }
+
+    private String staticMethodOwnerClassName(CompiledModule module) {
+        var packageName = buildJavaPackageName(module.path());
+        var className = normalizeJavaIdentifier(module.name(), true);
+        var simpleName = staticMethodsAreNestedInOwner(module)
+                ? className
+                : className + "Module";
+        return packageName.isBlank() ? simpleName : packageName + "." + simpleName;
+    }
+
+    private boolean staticMethodsAreNestedInOwner(CompiledModule module) {
+        var fileClassName = normalizeJavaIdentifier(module.name(), true);
+        var hasNameConflict = false;
+        var hasOwnerInterface = false;
+        for (var type : module.types().values()) {
+            if (type instanceof dev.capylang.compiler.CompiledDataParentType parentType) {
+                var typeClassName = normalizeJavaIdentifier(parentType.name(), true);
+                if (typeClassName.equals(fileClassName)) {
+                    hasNameConflict = true;
+                    if (!parentType.enumType()) {
+                        hasOwnerInterface = true;
+                    }
+                }
+            } else if (type instanceof dev.capylang.compiler.CompiledDataType dataType
+                       && !dataType.singleton()
+                       && !dataType.nativeType()
+                       && normalizeJavaIdentifier(dataType.name(), true).equals(fileClassName)) {
+                hasNameConflict = true;
+            }
+        }
+        return !hasNameConflict || hasOwnerInterface;
+    }
+
+    private String buildJavaPackageName(String rawPath) {
+        var normalized = rawPath.replace('\\', '/');
+        return java.util.stream.Stream.of(normalized.split("/"))
+                .filter(part -> !part.isBlank())
+                .map(part -> normalizeJavaIdentifier(part, false))
+                .collect(joining("."));
+    }
+
+    private boolean isStaticExtensionMethod(
+            dev.capylang.compiler.CompiledFunction function,
+            Set<String> nativeTypeNames
+    ) {
+        return methodOwnerType(function.name())
+                .filter(nativeTypeNames::contains)
+                .filter(ignored -> !isNativeExpression(function))
+                .isPresent();
+    }
+
+    private java.util.Optional<String> methodOwnerType(String functionName) {
+        if (!functionName.startsWith(METHOD_DECL_PREFIX)) {
+            return java.util.Optional.empty();
+        }
+        var separatorIndex = functionName.indexOf("__", METHOD_DECL_PREFIX.length());
+        if (separatorIndex < 0) {
+            return java.util.Optional.empty();
+        }
+        return java.util.Optional.of(functionName.substring(METHOD_DECL_PREFIX.length(), separatorIndex));
+    }
+
+    private boolean isNativeExpression(dev.capylang.compiler.CompiledFunction function) {
+        return function.expression() instanceof dev.capylang.compiler.expression.CompiledNothingValue nothingValue
+               && (nothingValue.message().contains("`<native>`")
+                   || nothingValue.message().contains("native expression in function"));
+    }
 
     private java.util.Map<String, String> buildFunctionNameOverrides(CompiledProgram program) {
         var overrides = new java.util.LinkedHashMap<String, String>();

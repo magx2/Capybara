@@ -1,5 +1,6 @@
 from /capy/lang/Result import {*}
 from /capy/lang/Option import { * }
+from /capy/lang/String import { * }
 
 /// Clock time represented in 24-hour format.
 /// The constructor validates `hour`, `minute`, `second`, and optional UTC offset.

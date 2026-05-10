@@ -1,5 +1,6 @@
 from /capy/lang/Option import { * }
 from /capy/lang/Seq import { * }
+from /capy/lang/String import { * }
 
 data Regex { pattern: String, flags: String }
 data Match { group_value: String }
