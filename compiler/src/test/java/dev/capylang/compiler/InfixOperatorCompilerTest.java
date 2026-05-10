@@ -27,6 +27,8 @@ class InfixOperatorCompilerTest {
     @Test
     void shouldAllowPlusForCollectionAndSubtypeElement() {
         var compiled = compileProgram("""
+                from /capy/lang/Collections import { * }
+
                 type Json = JsonArray | JsonNull
                 data JsonArray { value: List[Json] }
                 single JsonNull
@@ -47,6 +49,8 @@ class InfixOperatorCompilerTest {
     @Test
     void shouldAllowSubtypeElementsForDeclaredListParentReturnType() {
         var compiled = compileProgram("""
+                from /capy/lang/Collections import { * }
+
                 type Assert = ResultAssert | StringAssert
                 data ResultAssert { value: bool }
                 data StringAssert { value: String }
@@ -68,6 +72,8 @@ class InfixOperatorCompilerTest {
     @Test
     void shouldAllowGenericSubtypeElementsForDeclaredListParentReturnType() {
         var compiled = compileProgram("""
+                from /capy/lang/Collections import { * }
+
                 type Result[T] = Success[T] | Error
                 data Success[T] { value: T }
                 data Error { message: String }
@@ -94,6 +100,8 @@ class InfixOperatorCompilerTest {
     @Test
     void shouldAllowSubtypeElementsFromPipeMapperForDeclaredListParentReturnType() {
         var compiled = compileProgram("""
+                from /capy/lang/Collections import { * }
+
                 type Assert = ResultAssert | StringAssert
                 data ResultAssert { value: bool }
                 data StringAssert { value: String }
@@ -115,6 +123,8 @@ class InfixOperatorCompilerTest {
     @Test
     void shouldAllowGenericSubtypeElementsFromPipeMapperForDeclaredListParentReturnType() {
         var compiled = compileProgram("""
+                from /capy/lang/Collections import { * }
+
                 type Result[T] = Success[T] | Error
                 data Success[T] { value: T }
                 data Error { message: String }
@@ -206,6 +216,8 @@ class InfixOperatorCompilerTest {
     @Test
     void shouldAllowStringFilterNamedMethod() {
         var compiled = compileProgram("""
+                from /capy/lang/String import { * }
+
                 fun keep_non_b(value: String): String =
                     value.filter(ch => ch != "b")
                 """);
@@ -221,6 +233,8 @@ class InfixOperatorCompilerTest {
     @Test
     void shouldAllowStringFilterSymbolicMethod() {
         var compiled = compileProgram("""
+                from /capy/lang/String import { * }
+
                 fun keep_non_b(value: String): String =
                     value.`|-`(ch => ch != "b")
                 """);

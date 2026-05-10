@@ -36,8 +36,6 @@ public class CompiledExpressionPrinter {
                     printLinkedMatchExpression(linkedMatchExpression, level);
             case CompiledNothingValue linkedNothingValue -> printLinkedNothingValue(linkedNothingValue, level);
             case CompiledNumericWidening linkedNumericWidening -> printLinkedNumericWidening(linkedNumericWidening, level);
-            case CompiledPipeAllExpression linkedPipeAllExpression -> printLinkedPipeAllExpression(linkedPipeAllExpression, level);
-            case CompiledPipeAnyExpression linkedPipeAnyExpression -> printLinkedPipeAnyExpression(linkedPipeAnyExpression, level);
             case CompiledPipeFlatMapExpression linkedPipeFlatMapExpression -> printLinkedPipeFlatMapExpression(linkedPipeFlatMapExpression, level);
             case CompiledPipeFilterOutExpression linkedPipeFilterOutExpression -> printLinkedPipeFilterOutExpression(linkedPipeFilterOutExpression, level);
             case CompiledPipeExpression linkedPipeExpression -> printLinkedPipeExpression(linkedPipeExpression, level);
@@ -152,22 +150,6 @@ public class CompiledExpressionPrinter {
                + linkedPipeExpression.argumentName()
                + " => "
                + printExpression(linkedPipeExpression.mapper(), level);
-    }
-
-    private static String printLinkedPipeAnyExpression(CompiledPipeAnyExpression linkedPipeAnyExpression, int level) {
-        return printExpression(linkedPipeAnyExpression.source(), level)
-               + " |any? "
-               + linkedPipeAnyExpression.argumentName()
-               + " => "
-               + printExpression(linkedPipeAnyExpression.predicate(), level);
-    }
-
-    private static String printLinkedPipeAllExpression(CompiledPipeAllExpression linkedPipeAllExpression, int level) {
-        return printExpression(linkedPipeAllExpression.source(), level)
-               + " |all? "
-               + linkedPipeAllExpression.argumentName()
-               + " => "
-               + printExpression(linkedPipeAllExpression.predicate(), level);
     }
 
     private static String printLinkedPipeFilterOutExpression(CompiledPipeFilterOutExpression linkedPipeFilterOutExpression, int level) {

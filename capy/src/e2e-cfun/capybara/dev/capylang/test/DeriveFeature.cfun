@@ -1,4 +1,5 @@
 from /capy/meta_prog/Reflection import { DataValueInfo, reflection }
+from /capy/lang/Collections import { * }
 
 deriver Show {
     fun show(): String =
@@ -15,8 +16,8 @@ deriver AgeComparable {
 
     fun matches_age_metadata(extra: int, limit: AgeLimit): bool =
         let info: DataValueInfo = reflection(receiver)
-        let has_name_field: bool = info.fields |any? field => field.name == "name"
-        let has_age_field: bool = info.fields |any? field => field.name == "age"
+        let has_name_field: bool = info.fields.any(field => field.name == "name")
+        let has_age_field: bool = info.fields.any(field => field.name == "age")
         (info.name == "DerivedUser") & has_name_field & has_age_field & (receiver.age + extra > limit.value)
 }
 

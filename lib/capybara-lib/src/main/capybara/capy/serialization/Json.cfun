@@ -1,4 +1,5 @@
 from /capy/lang/Option import { * }
+from /capy/lang/Collections import { * }
 from /capy/lang/Result import { * }
 from /capy/lang/String import { * }
 from /capy/meta_prog/Reflection import { DataValueInfo, reflection }
@@ -8,7 +9,8 @@ data JsonObject { value: Dict[Json] }
 fun JsonObject.`+`(other: JsonObject): JsonObject = JsonObject { value: this.value + other.value }
 fun JsonObject.`+`(other: Tuple[String, Json]): JsonObject = JsonObject { value: this.value + other }
 fun JsonObject.get(key: String): Option[Json] =
-    this.value |> None {}, (acc, item_key, item_value) =>
+    let initial: Option[Json] = None {}
+    this.value |> initial, (acc, item_key, item_value) =>
         if item_key == key then Some { item_value } else acc
 
 data JsonArray { value: List[Json] }
@@ -49,7 +51,8 @@ fun to_json(obj: data): Result[JsonObject] =
         case float f -> Success { JsonNumberDouble { f } }
         case bool b -> Success { JsonBool { b } }
         case List l -> {
-            let values <- l |> Success { [] }, (acc_result, item) => {
+            let initial: Result[List[Json]] = Success { [] }
+            let values <- l |> initial, (acc_result, item) => {
                 let acc <- acc_result
                 let encoded <- any_to_json(item)
                 Success { acc + encoded }
@@ -57,7 +60,8 @@ fun to_json(obj: data): Result[JsonObject] =
             JsonArray { values }
         }
         case Set s -> {
-            let values <- s |> Success { [] }, (acc_result, item) => {
+            let initial: Result[List[Json]] = Success { [] }
+            let values <- s |> initial, (acc_result, item) => {
                 let acc <- acc_result
                 let encoded <- any_to_json(item)
                 Success { acc + encoded }
@@ -65,9 +69,9 @@ fun to_json(obj: data): Result[JsonObject] =
             JsonArray { values }
         }
         case Dict d -> {
+            let initial: Result[Dict[Json]] = Success { {:} }
             d
-                | (key, item) => __JsonEntry { key, any_to_json(item) }
-                |> Success { {:} }, (acc, entry) => __merge_json_entry(acc, entry)
+                |> initial, (acc, key, item) => __merge_json_entry(acc, __JsonEntry { key, any_to_json(item) })
                 | values => Success { JsonObject { values } }
         }
         case Option o -> {
@@ -84,8 +88,9 @@ fun to_json(obj: data): Result[JsonObject] =
         case data d -> to_json(d) | object => Success { object }
         case _ -> Error { "unsupported value" }
     ---
+    let initial: Result[Dict[Json]] = Success { {:} }
     let values <- reflection(obj).fields
-        |> Success { {:} }, (acc_result, field) => {
+        |> initial, (acc_result, field) => {
             let acc <- acc_result
             match any_to_json(field.value) with
             case Success { encoded } -> Success { acc + { field.name : encoded } }
@@ -97,12 +102,16 @@ fun stringify(json: Json): String =
     match json with
     case JsonObject { v } ->
         "{"
-        + (v
-            |> (k,v) => "\"" + k + "\":" + stringify(v)
-            |> "", (acc, item) => acc + "," + item)
+        + (v |> "", (acc, k, item) =>
+            if acc == ""
+            then "\"" + k + "\":" + stringify(item)
+            else acc + "," + "\"" + k + "\":" + stringify(item))
         + "}"
     case JsonArray { value } ->  "["
-        + (value | :stringify |> "", (acc, item) => acc + "," + item)
+        + (value | :stringify |> "", (acc, item) =>
+            if acc == ""
+            then item
+            else acc + "," + item)
         + "]"
     case JsonString { value } -> "\"" + value + "\""
     case JsonNumberDouble { value } -> value + ""
@@ -357,27 +366,23 @@ fun _is_white_space(s: String): bool =
     __is_white_space(s, __white_spaces)
 
 fun deserialize(dict: Dict[any]): Result[JsonObject] =
-    data __Entry { key: String, value: Result[Json] }
     fun __initial_result(): Result[Dict[Json]] = Success { {:} }
-    fun __merge(acc: Result[Dict[Json]], e: __Entry): Result[Dict[Json]] =
+    fun __to_json_value(value: any): Result[Json] =
+        match value with
+        case String s -> Success { JsonString { s } }
+        case int i -> Success { JsonNumberLong { i } }
+        case long l -> Success { JsonNumberLong { l } }
+        case double d -> Success { JsonNumberDouble { d } }
+        case float f -> Success { JsonNumberDouble { f } }
+        case Dict d -> deserialize(d)
+        case Json j -> Success { j }
+        case _ x -> Error { "Don't know how to deserialize: " + x }
+    fun __merge(acc: Result[Dict[Json]], key: String, value: any): Result[Dict[Json]] =
         let parsed_dict <- acc
-        let json <- e.value
-        parsed_dict + { e.key : json }
+        let json <- __to_json_value(value)
+        parsed_dict + { key : json }
     ---
     let initial_result: Result[Dict[Json]] = __initial_result()
     dict
-        // Dict[any] => Dict[Result[Json]]
-        | (k,v) =>
-            match v with
-            case String s -> Success { JsonString { s } }
-            case int i -> Success { JsonNumberLong { i } }
-            case long l -> Success { JsonNumberLong { l } }
-            case double d -> Success { JsonNumberDouble { d } }
-            case float f -> Success { JsonNumberDouble { f } }
-            case Dict[any] d -> deserialize(d)
-            case Json j -> Success { j }
-            case _ x -> Error { "Don't know how to deserialize: " + x }
-        // Dict[Result[Json]] => Result[Dict[Json]]
-        | (k,v) => __Entry { k, v }
-        |> initial_result, (acc, e) => __merge(acc, e)
+        |> initial_result, (acc, k, v) => __merge(acc, k, v)
         | d => Success { JsonObject { d } }

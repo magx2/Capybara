@@ -1,4 +1,5 @@
 from /capy/meta_prog/Reflection import { DataValueInfo, reflection }
+from /capy/lang/Collections import { * }
 
 type Letter { name: String } = A | B
 data A { a: int }

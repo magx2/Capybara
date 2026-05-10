@@ -4,6 +4,7 @@ from /capy/date_time/DateTime import { * }
 from /capy/date_time/Duration import { * }
 from /capy/date_time/Time import { * }
 from /capy/lang/Result import { * }
+from /capy/lang/Collections import { * }
 from /capy/test/Assert import { * }
 from /capy/lang/Effect import { * }
 from /capy/test/CapyTest import { * }
@@ -97,9 +98,8 @@ fun tests(): Effect[TestFile] =
         "2007-03-01/P1DT2H" : "Invalid ISO 8601 interval format: interval endpoints must be UTC date-times",
         "2008-05-11T15:30:00Z/2007-03-01T13:00:00Z" : "Invalid ISO 8601 interval format: interval start must not be after interval end",
         "2007-03-01--2007-03-02--P1D" : "Invalid ISO 8601 interval format: expected exactly one interval separator",
-    } |> [], (acc, iso, expected_message) =>
-        acc + test("should fail parsing {iso}",
-            () => assert_that(/capy/date_time/Interval.from_iso_8601(iso)).fails(expected_message))
+    }.entries() | (iso, expected_message) => test("should fail parsing {iso}",
+        () => assert_that(/capy/date_time/Interval.from_iso_8601(iso)).fails(expected_message))
 
     test_file("/capy/date_time/Interval.cfun", success_test_cases + failed_test_cases)
 

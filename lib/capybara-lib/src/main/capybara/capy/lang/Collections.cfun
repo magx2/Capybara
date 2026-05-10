@@ -10,9 +10,110 @@ fun List[T].size(): int = <native>
 /// Returns true when this List has no values.
 fun List[T].is_empty(): bool = this.size() == 0
 
+/// Returns a new List with `value` appended.
+fun List[T].`+`(value: T): List[T] = <native>
+
+/// Returns a new List with all values from `other` appended.
+fun List[T].`+`(other: List[T]): List[T] = <native>
+
+/// Returns a new List with `value` appended.
+fun List[T].plus(value: T): List[T] = this + value
+
+/// Returns a new List with all values from `other` appended.
+fun List[T].plus(other: List[T]): List[T] = this + other
+
+/// Returns a new List without values equal to `value`.
+fun List[T].`-`(value: T): List[T] = <native>
+
+/// Returns a new List without values contained in `other`.
+fun List[T].`-`(other: List[T]): List[T] = <native>
+
+/// Returns a new List without values equal to `value`.
+fun List[T].minus(value: T): List[T] = this - value
+
+/// Returns a new List without values contained in `other`.
+fun List[T].minus(other: List[T]): List[T] = this - other
+
+/// Returns true when at least one value satisfies `predicate`.
+fun List[T].any(predicate: T => bool): bool =
+    fun rec __any(list: List[T], idx: int, predicate: T => bool, acc: bool): bool =
+        match list[idx] with
+        case None -> acc
+        case Some { value } ->
+            if acc
+            then true
+            else __any(list, idx + 1, predicate, predicate(value))
+    ---
+    __any(this, 0, predicate, false)
+
+/// Returns true when every value satisfies `predicate`.
+///
+/// Empty lists return true.
+fun List[T].all(predicate: T => bool): bool =
+    fun rec __all(list: List[T], idx: int, predicate: T => bool, acc: bool): bool =
+        match list[idx] with
+        case None -> acc
+        case Some { value } ->
+            if !acc
+            then false
+            else __all(list, idx + 1, predicate, predicate(value))
+    ---
+    __all(this, 0, predicate, true)
+
 /// Returns true when this List contains the given value.
 fun List[T].contains(value: T): bool =
-    this |> false, (found, item) => (found | item == value)
+    this.any(item => item == value)
+
+/// Returns true when this List contains the given value.
+fun List[T].`?`(value: T): bool = this.contains(value)
+
+/// Combines all values from left to right.
+fun List[T].reduce(initial: R, reducer: (R, T) => R): R =
+    fun rec __reduce(list: List[T], idx: int, acc: R, reducer: (R, T) => R): R =
+        match list[idx] with
+        case None -> acc
+        case Some { value } -> __reduce(list, idx + 1, reducer(acc, value), reducer)
+    ---
+    __reduce(this, 0, initial, reducer)
+
+/// Combines all values from left to right.
+fun List[T].`|>`(initial: R, reducer: (R, T) => R): R = this.reduce(initial, reducer)
+
+/// Combines all values from left to right.
+fun List[T].reduce_left(initial: R, reducer: (R, T) => R): R = this.reduce(initial, reducer)
+
+/// Combines all values from left to right.
+fun List[T].`|l>`(initial: R, reducer: (R, T) => R): R = this.reduce_left(initial, reducer)
+
+/// Transforms each value using `map`.
+fun List[T].map(map: T => Y): List[Y] =
+    let initial: List[Y] = []
+    this.reduce(initial, (acc, value) => acc + map(value))
+
+/// Transforms each value using `map`.
+fun List[T].`|`(map: T => Y): List[Y] = this.map(map)
+
+/// Returns a new List without values that satisfy `predicate`.
+fun List[T].filter(predicate: T => bool): List[T] =
+    let initial: List[T] = []
+    this.reduce(initial, (acc, value) =>
+        if predicate(value)
+        then acc
+        else acc + value)
+
+/// Returns a new List without values that satisfy `predicate`.
+fun List[T].`|-`(predicate: T => bool): List[T] = this.filter(predicate)
+
+/// Applies `map` to each value and concatenates the resulting lists.
+fun List[T].flat_map(map: T => List[Y]): List[Y] =
+    let initial: List[Y] = []
+    this.reduce(initial, (acc, value) => acc + map(value))
+
+/// Applies `map` to each value and concatenates the resulting lists.
+fun List[T].flatMap(map: T => List[Y]): List[Y] = this.flat_map(map)
+
+/// Applies `map` to each value and concatenates the resulting lists.
+fun List[T].`|*`(map: T => List[Y]): List[Y] = this.flat_map(map)
 
 /// Returns the value at idx using the same bounds and negative-index rules as list[idx].
 fun List[T].get(idx: int): Option[T] = <native>
@@ -30,9 +131,90 @@ fun Set[T].size(): int = <native>
 /// Returns true when this Set has no values.
 fun Set[T].is_empty(): bool = this.size() == 0
 
+/// Returns the Set values as a List.
+fun Set[T].to_list(): List[T] = <native>
+
+/// Returns a new Set with `value` included.
+fun Set[T].`+`(value: T): Set[T] = <native>
+
+/// Returns a new Set with all values from `other` included.
+fun Set[T].`+`(other: Set[T]): Set[T] = <native>
+
+/// Returns a new Set with `value` included.
+fun Set[T].plus(value: T): Set[T] = this + value
+
+/// Returns a new Set with all values from `other` included.
+fun Set[T].plus(other: Set[T]): Set[T] = this + other
+
+/// Returns a new Set without `value`.
+fun Set[T].`-`(value: T): Set[T] = <native>
+
+/// Returns a new Set without values contained in `other`.
+fun Set[T].`-`(other: Set[T]): Set[T] = <native>
+
+/// Returns a new Set without `value`.
+fun Set[T].minus(value: T): Set[T] = this - value
+
+/// Returns a new Set without values contained in `other`.
+fun Set[T].minus(other: Set[T]): Set[T] = this - other
+
+/// Returns true when at least one value satisfies `predicate`.
+fun Set[T].any(predicate: T => bool): bool = this.to_list().any(predicate)
+
+/// Returns true when every value satisfies `predicate`.
+///
+/// Empty sets return true.
+fun Set[T].all(predicate: T => bool): bool = this.to_list().all(predicate)
+
 /// Returns true when this Set contains the given value.
 fun Set[T].contains(value: T): bool =
-    this |> false, (found, item) => (found | item == value)
+    this.any(item => item == value)
+
+/// Returns true when this Set contains the given value.
+fun Set[T].`?`(value: T): bool = this.contains(value)
+
+/// Combines all values from left to right.
+fun Set[T].reduce(initial: R, reducer: (R, T) => R): R =
+    this.to_list().reduce(initial, reducer)
+
+/// Combines all values from left to right.
+fun Set[T].`|>`(initial: R, reducer: (R, T) => R): R = this.reduce(initial, reducer)
+
+/// Combines all values from left to right.
+fun Set[T].reduce_left(initial: R, reducer: (R, T) => R): R = this.reduce(initial, reducer)
+
+/// Combines all values from left to right.
+fun Set[T].`|l>`(initial: R, reducer: (R, T) => R): R = this.reduce_left(initial, reducer)
+
+/// Transforms each value using `map`.
+fun Set[T].map(map: T => Y): Set[Y] =
+    let initial: Set[Y] = {}
+    this.reduce(initial, (acc, value) => acc + map(value))
+
+/// Transforms each value using `map`.
+fun Set[T].`|`(map: T => Y): Set[Y] = this.map(map)
+
+/// Returns a new Set without values that satisfy `predicate`.
+fun Set[T].filter(predicate: T => bool): Set[T] =
+    let initial: Set[T] = {}
+    this.reduce(initial, (acc, value) =>
+        if predicate(value)
+        then acc
+        else acc + value)
+
+/// Returns a new Set without values that satisfy `predicate`.
+fun Set[T].`|-`(predicate: T => bool): Set[T] = this.filter(predicate)
+
+/// Applies `map` to each value and unions the resulting sets.
+fun Set[T].flat_map(map: T => Set[Y]): Set[Y] =
+    let initial: Set[Y] = {}
+    this.reduce(initial, (acc, value) => acc + map(value))
+
+/// Applies `map` to each value and unions the resulting sets.
+fun Set[T].flatMap(map: T => Set[Y]): Set[Y] = this.flat_map(map)
+
+/// Applies `map` to each value and unions the resulting sets.
+fun Set[T].`|*`(map: T => Set[Y]): Set[Y] = this.flat_map(map)
 
 /// Native String-keyed map type backed by the runtime Dict implementation.
 /// Dict literals use braces with String keys: {"one": 1, "two": 2}.
@@ -44,9 +226,92 @@ fun Dict[T].size(): int = <native>
 /// Returns true when this Dict has no entries.
 fun Dict[T].is_empty(): bool = this.size() == 0
 
+/// Returns this Dict as a List of `(key, value)` tuples.
+fun Dict[T].entries(): List[Tuple[String, T]] = <native>
+
+/// Returns a new Dict with `entry` added or replaced.
+fun Dict[T].`+`(entry: Tuple[String, T]): Dict[T] = <native>
+
+/// Returns a new Dict with all entries from `other` added or replaced.
+fun Dict[T].`+`(other: Dict[T]): Dict[T] = <native>
+
+/// Returns a new Dict with `entry` added or replaced.
+fun Dict[T].plus(entry: Tuple[String, T]): Dict[T] = this + entry
+
+/// Returns a new Dict with all entries from `other` added or replaced.
+fun Dict[T].plus(other: Dict[T]): Dict[T] = this + other
+
+/// Returns a new Dict without `key`.
+fun Dict[T].`-`(key: String): Dict[T] = <native>
+
+/// Returns a new Dict without keys contained in `other`.
+fun Dict[T].`-`(other: Dict[T]): Dict[T] = <native>
+
+/// Returns a new Dict without `key`.
+fun Dict[T].minus(key: String): Dict[T] = this - key
+
+/// Returns a new Dict without keys contained in `other`.
+fun Dict[T].minus(other: Dict[T]): Dict[T] = this - other
+
+/// Returns true when at least one entry satisfies `predicate`.
+fun Dict[T].any(predicate: (String, T) => bool): bool =
+    this.entries().any(entry => predicate(entry[0], entry[1]))
+
+/// Returns true when every entry satisfies `predicate`.
+///
+/// Empty dicts return true.
+fun Dict[T].all(predicate: (String, T) => bool): bool =
+    this.entries().all(entry => predicate(entry[0], entry[1]))
+
 /// Returns true when this Dict contains the given key.
 fun Dict[T].contains_key(key: String): bool =
-    this |> false, (found, item_key, _) => (found | item_key == key)
+    this.any((item_key, _) => item_key == key)
+
+/// Returns true when this Dict contains the given key.
+fun Dict[T].`?`(key: String): bool = this.contains_key(key)
+
+/// Combines all entries from left to right.
+fun Dict[T].reduce(initial: R, reducer: (R, String, T) => R): R =
+    this.entries().reduce(initial, (acc, entry) => reducer(acc, entry[0], entry[1]))
+
+/// Combines all entries from left to right.
+fun Dict[T].`|>`(initial: R, reducer: (R, String, T) => R): R = this.reduce(initial, reducer)
+
+/// Combines all entries from left to right.
+fun Dict[T].reduce_left(initial: R, reducer: (R, String, T) => R): R = this.reduce(initial, reducer)
+
+/// Combines all entries from left to right.
+fun Dict[T].`|l>`(initial: R, reducer: (R, String, T) => R): R = this.reduce_left(initial, reducer)
+
+/// Transforms each entry using `map`.
+fun Dict[T].map(map: (String, T) => Y): Dict[Y] =
+    let initial: Dict[Y] = {:}
+    this.entries().reduce(initial, (acc, entry) => acc + (entry[0], map(entry[0], entry[1])))
+
+/// Transforms each entry using `map`.
+fun Dict[T].`|`(map: (String, T) => Y): Dict[Y] = this.map(map)
+
+/// Returns a new Dict without entries that satisfy `predicate`.
+fun Dict[T].filter(predicate: (String, T) => bool): Dict[T] =
+    let initial: Dict[T] = {:}
+    this.entries().reduce(initial, (acc, entry) =>
+        if predicate(entry[0], entry[1])
+        then acc
+        else acc + entry)
+
+/// Returns a new Dict without entries that satisfy `predicate`.
+fun Dict[T].`|-`(predicate: (String, T) => bool): Dict[T] = this.filter(predicate)
+
+/// Applies `map` to each entry and concatenates the resulting lists.
+fun Dict[T].flat_map(map: (String, T) => List[Y]): List[Y] =
+    let initial: List[Y] = []
+    this.entries().reduce(initial, (acc, entry) => acc + map(entry[0], entry[1]))
+
+/// Applies `map` to each entry and concatenates the resulting lists.
+fun Dict[T].flatMap(map: (String, T) => List[Y]): List[Y] = this.flat_map(map)
+
+/// Applies `map` to each entry and concatenates the resulting lists.
+fun Dict[T].`|*`(map: (String, T) => List[Y]): List[Y] = this.flat_map(map)
 
 /// Returns the value for key; equivalent to dict[key].
 fun Dict[T].get(key: String): Option[T] = <native>

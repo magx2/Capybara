@@ -19,14 +19,8 @@ import static java.lang.System.lineSeparator;
 @SuppressWarnings("SwitchStatementWithTooFewBranches")
 public class JavaExpressionEvaluator {
     private static final String METHOD_DECL_PREFIX = "__method__";
-    private static final java.util.Map<String, String> STANDARD_STATIC_EXTENSION_METHOD_OWNERS = java.util.Map.of(
-            METHOD_DECL_PREFIX + "String__starts_with", "capy.lang.String",
-            METHOD_DECL_PREFIX + "String__end_with", "capy.lang.String",
-            METHOD_DECL_PREFIX + "String__trim", "capy.lang.String",
-            METHOD_DECL_PREFIX + "List__contains", "capy.lang.Collections",
-            METHOD_DECL_PREFIX + "Set__contains", "capy.lang.Collections",
-            METHOD_DECL_PREFIX + "Dict__contains_key", "capy.lang.Collections"
-    );
+    private static final java.util.Map<String, String> STANDARD_STATIC_EXTENSION_METHOD_OWNERS =
+            standardStaticExtensionMethodOwners();
     private static final ThreadLocal<java.util.Map<String, String>> FUNCTION_NAME_OVERRIDES =
             ThreadLocal.withInitial(java.util.Map::of);
     private static final ThreadLocal<java.util.Map<String, String>> STATIC_EXTENSION_METHOD_OWNERS =
@@ -44,6 +38,46 @@ public class JavaExpressionEvaluator {
 
     public static void setEnumValueOwnerOverrides(java.util.Map<String, String> enumValueOwnerOverrides) {
         ENUM_VALUE_OWNER_OVERRIDES.set(java.util.Map.copyOf(enumValueOwnerOverrides));
+    }
+
+    private static java.util.Map<String, String> standardStaticExtensionMethodOwners() {
+        var owners = new java.util.LinkedHashMap<String, String>();
+        registerStandardExtensionMethods(
+                owners,
+                "capy.lang.Collections",
+                java.util.List.of("List", "Set"),
+                "is_empty", "plus", "minus", "any", "all", "contains", "?", "reduce", "|>",
+                "reduce_left", "|l>", "map", "|", "filter", "|-", "flat_map", "flatMap", "|*"
+        );
+        registerStandardExtensionMethods(
+                owners,
+                "capy.lang.Collections",
+                java.util.List.of("Dict"),
+                "is_empty", "plus", "minus", "any", "all", "contains_key", "?", "reduce", "|>",
+                "reduce_left", "|l>", "map", "|", "filter", "|-", "flat_map", "flatMap", "|*"
+        );
+        registerStandardExtensionMethods(
+                owners,
+                "capy.lang.String",
+                java.util.List.of("String"),
+                "is_empty", "plus", "any", "all", "contains", "?", "reduce", "|>",
+                "reduce_left", "|l>", "map", "|", "filter", "|-", "flat_map", "flatMap", "|*",
+                "starts_with", "end_with", "trim"
+        );
+        return java.util.Map.copyOf(owners);
+    }
+
+    private static void registerStandardExtensionMethods(
+            java.util.Map<String, String> owners,
+            String javaOwner,
+            java.util.List<String> receiverTypes,
+            String... methodNames
+    ) {
+        for (var receiverType : receiverTypes) {
+            for (var methodName : methodNames) {
+                owners.put(METHOD_DECL_PREFIX + receiverType + "__" + methodName, javaOwner);
+            }
+        }
     }
     private static final java.util.concurrent.atomic.AtomicLong OPTION_CASE_VAR_COUNTER =
             new java.util.concurrent.atomic.AtomicLong();
@@ -222,14 +256,16 @@ public class JavaExpressionEvaluator {
             Scope scope,
             TailRecursiveContext context
     ) {
-        var value = evaluateExpression(let.value(), scope).popExpression();
+        var valueEvaluationScope = scope.withReservedJavaLocalName(let.name());
+        var value = evaluateExpression(let.value(), valueEvaluationScope).popExpression();
         appendStatements(code, newStatements(scope, value.scope()));
         var letDeclarationType = let.declaredType().orElse(let.value().type());
         var coercedValueExpression = coerceExpressionForExpectedType(letDeclarationType, let.value().type(), value.expression());
+        var declarationScope = value.scope().withoutReservedJavaLocalName(let.name());
         var scopeExpression = shouldUseTypedLetDeclaration(let.value(), let.declaredType().isPresent())
-                ? value.scope().declareTypedValue(let.name(), javaLocalDeclarationType(letDeclarationType), coercedValueExpression, let.rest())
-                : value.scope().declareValue(let.name(), coercedValueExpression, let.rest());
-        appendStatements(code, newStatements(value.scope(), scopeExpression.scope()));
+                ? declarationScope.declareTypedValue(let.name(), javaLocalDeclarationType(letDeclarationType), coercedValueExpression, let.rest())
+                : declarationScope.declareValue(let.name(), coercedValueExpression, let.rest());
+        appendStatements(code, newStatements(declarationScope, scopeExpression.scope()));
         appendTailRecursiveStatement(code, scopeExpression.expression(), scopeExpression.scope(), context);
     }
 
@@ -333,8 +369,6 @@ public class JavaExpressionEvaluator {
             case CompiledMatchExpression matchExpression -> evaluateMatchExpression(matchExpression, scope);
             case CompiledNothingValue nothingValue -> evaluateNothingValue(nothingValue, scope);
             case CompiledNumericWidening numericWidening -> evaluateNumericWidening(numericWidening, scope);
-            case CompiledPipeAllExpression pipeAllExpression -> evaluatePipeMatchExpression(pipeAllExpression.source(), pipeAllExpression.argumentName(), pipeAllExpression.predicate(), scope, "allMatch");
-            case CompiledPipeAnyExpression pipeAnyExpression -> evaluatePipeMatchExpression(pipeAnyExpression.source(), pipeAnyExpression.argumentName(), pipeAnyExpression.predicate(), scope, "anyMatch");
             case CompiledPipeFlatMapExpression pipeFlatMapExpression -> evaluatePipeFlatMapExpression(pipeFlatMapExpression, scope);
             case CompiledPipeFilterOutExpression pipeFilterOutExpression -> evaluatePipeFilterOutExpression(pipeFilterOutExpression, scope);
             case CompiledPipeExpression pipeExpression -> evaluatePipeExpression(pipeExpression, scope);
@@ -477,6 +511,10 @@ public class JavaExpressionEvaluator {
             if ("to_bool".equals(methodName)) {
                 return current.addExpression(buildBoolStringParseResult(functionCall.type(), receiver));
             }
+            var nativeCollectionMethod = evaluateNativeCollectionMethod(functionCall, current, args, methodName);
+            if (nativeCollectionMethod.isPresent()) {
+                return nativeCollectionMethod.orElseThrow();
+            }
             if ("get".equals(methodName)) {
                 var nativeGet = evaluateNativeGetMethod(functionCall, current, args);
                 if (nativeGet.isPresent()) {
@@ -506,6 +544,66 @@ public class JavaExpressionEvaluator {
                     : normalizeFunctionCallTarget(functionCall, scope) + "(" + String.join(", ", callArgs) + ")";
         };
         return current.addExpression(expression);
+    }
+
+    private static Optional<Scope> evaluateNativeCollectionMethod(
+            CompiledFunctionCall functionCall,
+            Scope current,
+            List<String> args,
+            String methodName
+    ) {
+        if (args.isEmpty() || functionCall.arguments().isEmpty()) {
+            return Optional.empty();
+        }
+        var receiverType = functionCall.arguments().getFirst().type();
+        var receiver = args.getFirst();
+        if ("to_list".equals(methodName)
+            && args.size() == 1
+            && receiverType instanceof dev.capylang.compiler.CollectionLinkedType.CompiledSet) {
+            return Optional.of(current.addExpression("new java.util.ArrayList<>(" + receiver + ")"));
+        }
+        if ("entries".equals(methodName)
+            && args.size() == 1
+            && receiverType instanceof dev.capylang.compiler.CollectionLinkedType.CompiledDict) {
+            return Optional.of(current.addExpression(
+                    receiver
+                    + ".entrySet().stream().map(__entry -> java.util.List.of(__entry.getKey(), __entry.getValue())).toList()"
+            ));
+        }
+        if (!("+".equals(methodName) || "-".equals(methodName)) || args.size() != 2 || functionCall.arguments().size() != 2) {
+            return Optional.empty();
+        }
+
+        var rightType = functionCall.arguments().get(1).type();
+        var right = args.get(1);
+        var operator = "+".equals(methodName) ? InfixOperator.PLUS : InfixOperator.MINUS;
+        var infix = new CompiledInfixExpression(
+                functionCall.arguments().get(0),
+                operator,
+                functionCall.arguments().get(1),
+                functionCall.type()
+        );
+        if (operator == InfixOperator.PLUS && receiverType == dev.capylang.compiler.PrimitiveLinkedType.STRING) {
+            return Optional.of(current.addExpression(
+                    stringConcatOperand(receiver, receiverType) + "+" + stringConcatOperand(right, rightType)
+            ));
+        }
+        if (receiverType instanceof dev.capylang.compiler.CollectionLinkedType.CompiledList) {
+            return Optional.of(current.addExpression(operator == InfixOperator.PLUS
+                    ? evaluateListAppendExpression(infix, receiver, right)
+                    : evaluateListRemoveExpression(infix, receiver, right)));
+        }
+        if (receiverType instanceof dev.capylang.compiler.CollectionLinkedType.CompiledSet) {
+            return Optional.of(current.addExpression(operator == InfixOperator.PLUS
+                    ? evaluateSetAppendExpression(infix, receiver, right)
+                    : evaluateSetRemoveExpression(infix, receiver, right)));
+        }
+        if (receiverType instanceof dev.capylang.compiler.CollectionLinkedType.CompiledDict) {
+            return Optional.of(current.addExpression(operator == InfixOperator.PLUS
+                    ? evaluateDictAppendExpression(infix, receiver, right)
+                    : evaluateDictRemoveExpression(infix, receiver, right)));
+        }
+        return Optional.empty();
     }
 
     private static Optional<Scope> evaluateNativeGetMethod(
@@ -851,14 +949,14 @@ public class JavaExpressionEvaluator {
                    + "((java.lang.String) " + tupleExpression + ".get(0)), "
                    + "((" + valueCastType + ") " + tupleExpression + ".get(1)))))"
                    + ".collect(java.util.stream.Collectors.toMap("
-                   + "entry -> ((java.lang.String) ((java.util.Map.Entry<?, ?>) entry).getKey()), "
-                   + "entry -> ((" + valueCastType + ") ((java.util.Map.Entry<?, ?>) entry).getValue()), "
+                   + "__capybaraMapEntry -> ((java.lang.String) ((java.util.Map.Entry<?, ?>) __capybaraMapEntry).getKey()), "
+                   + "__capybaraMapEntry -> ((" + valueCastType + ") ((java.util.Map.Entry<?, ?>) __capybaraMapEntry).getValue()), "
                    + "(oldValue, newValue) -> newValue, java.util.LinkedHashMap::new))";
         }
         return "java.util.stream.Stream.concat(" + left + ".entrySet().stream(), " + right + ".entrySet().stream())"
                + ".collect(java.util.stream.Collectors.toMap("
-               + "entry -> ((java.lang.String) ((java.util.Map.Entry<?, ?>) entry).getKey()), "
-               + "entry -> ((" + valueCastType + ") ((java.util.Map.Entry<?, ?>) entry).getValue()), "
+               + "__capybaraMapEntry -> ((java.lang.String) ((java.util.Map.Entry<?, ?>) __capybaraMapEntry).getKey()), "
+               + "__capybaraMapEntry -> ((" + valueCastType + ") ((java.util.Map.Entry<?, ?>) __capybaraMapEntry).getValue()), "
                + "(oldValue, newValue) -> newValue, java.util.LinkedHashMap::new))";
     }
 
@@ -893,14 +991,14 @@ public class JavaExpressionEvaluator {
         if (infixExpression.right().type() instanceof dev.capylang.compiler.CollectionLinkedType.CompiledDict) {
             return left + ".entrySet().stream().filter(entry -> !" + right + ".containsKey(entry.getKey()))"
                    + ".collect(java.util.stream.Collectors.toMap("
-                   + "entry -> ((java.lang.String) ((java.util.Map.Entry<?, ?>) entry).getKey()), "
-                   + "entry -> ((" + valueCastType + ") ((java.util.Map.Entry<?, ?>) entry).getValue()), "
+                   + "__capybaraMapEntry -> ((java.lang.String) ((java.util.Map.Entry<?, ?>) __capybaraMapEntry).getKey()), "
+                   + "__capybaraMapEntry -> ((" + valueCastType + ") ((java.util.Map.Entry<?, ?>) __capybaraMapEntry).getValue()), "
                    + "(oldValue, newValue) -> newValue, java.util.LinkedHashMap::new))";
         }
         return left + ".entrySet().stream().filter(entry -> !java.util.Objects.equals(entry.getKey(), " + right + "))"
                + ".collect(java.util.stream.Collectors.toMap("
-               + "entry -> ((java.lang.String) ((java.util.Map.Entry<?, ?>) entry).getKey()), "
-               + "entry -> ((" + valueCastType + ") ((java.util.Map.Entry<?, ?>) entry).getValue()), "
+               + "__capybaraMapEntry -> ((java.lang.String) ((java.util.Map.Entry<?, ?>) __capybaraMapEntry).getKey()), "
+               + "__capybaraMapEntry -> ((" + valueCastType + ") ((java.util.Map.Entry<?, ?>) __capybaraMapEntry).getValue()), "
                + "(oldValue, newValue) -> newValue, java.util.LinkedHashMap::new))";
     }
 
@@ -958,10 +1056,15 @@ public class JavaExpressionEvaluator {
             var statements = String.join("; ", addedStatements);
             return scope.addExpression("() -> { " + statements + "; return (" + bodyExSc.expression() + "); }");
         }
-        var baseScope = scope.addLocalValue(lambdaExpression.argumentName());
+        var binding = bindPipeLambdaArgument(
+                scope,
+                lambdaExpression.argumentName(),
+                lambdaExpression.functionType().argumentType()
+        );
+        var baseScope = binding.scope();
         var bodyExSc = evaluateExpression(lambdaExpression.expression(), baseScope).popExpression();
         return scope.addExpression(lambdaExpression(
-                lambdaExpression.argumentName(),
+                binding.lambdaArgumentName(),
                 baseScope,
                 bodyExSc.scope(),
                 bodyExSc.expression()
@@ -1028,56 +1131,6 @@ public class JavaExpressionEvaluator {
         }
         var streamExSc = evaluatePipeFilterOutExpressionAsStream(pipeFilterOutExpression, scope);
         return streamExSc.scope().addExpression(streamExSc.streamExpression() + terminalCollect(pipeFilterOutExpression.type()));
-    }
-
-    private static Scope evaluatePipeMatchExpression(
-            CompiledExpression source,
-            String argumentName,
-            CompiledExpression predicate,
-            Scope scope,
-            String matchMethod
-    ) {
-        if (source.type() instanceof dev.capylang.compiler.CollectionLinkedType.CompiledDict
-            && argumentName.contains(DICT_PIPE_ARGS_SEPARATOR)) {
-            var sourceExSc = evaluateExpression(source, scope).popExpression();
-            var entryVar = "__entry";
-            var dictArgs = parseDictPipeArguments(argumentName);
-            var predicateBaseScope = sourceExSc.scope()
-                    .addValueOverride(dictArgs[0], entryVar + ".getKey()")
-                    .addValueOverride(dictArgs[1], entryVar + ".getValue()");
-            var predicateExSc = evaluateExpression(predicate, predicateBaseScope).popExpression();
-            var predicateLambda = lambdaExpression(
-                    entryVar,
-                    predicateBaseScope,
-                    predicateExSc.scope(),
-                    predicateExSc.expression()
-            );
-            return predicateBaseScope.withoutValueOverrides().addExpression(
-                    sourceExSc.expression()
-                    + ".entrySet().stream()." + matchMethod + "(" + predicateLambda + ")"
-            );
-        }
-
-        var sourceStreamExSc = evaluateSourceAsStream(source, scope);
-        var predicateBinding = bindPipeLambdaArgument(
-                sourceStreamExSc.scope(),
-                argumentName,
-                streamElementType(source.type()).orElse(dev.capylang.compiler.PrimitiveLinkedType.ANY)
-        );
-        var predicateBaseScope = predicateBinding.scope();
-        var predicateExSc = evaluateExpression(
-                predicate,
-                predicateBaseScope
-        ).popExpression();
-        var predicateLambda = lambdaExpression(
-                predicateBinding.lambdaArgumentName(),
-                predicateBaseScope,
-                predicateExSc.scope(),
-                predicateExSc.expression()
-        );
-        return sourceStreamExSc.scope().withoutValueOverrides().addExpression(
-                sourceStreamExSc.streamExpression() + "." + matchMethod + "(" + predicateLambda + ")"
-        );
     }
 
     private static Scope evaluateDictPipeFilterOutExpression(CompiledPipeFilterOutExpression pipeFilterOutExpression, Scope scope) {
@@ -1677,12 +1730,14 @@ public class JavaExpressionEvaluator {
     }
 
     private static Scope evaluateLetExpression(CompiledLetExpression let, Scope scope) {
-        var valueScope = evaluateExpression(let.value(), scope);
+        var valueEvaluationScope = scope.withReservedJavaLocalName(let.name());
+        var valueScope = evaluateExpression(let.value(), valueEvaluationScope);
         var valueExSc = valueScope.popExpression();
+        var declarationScope = valueExSc.scope().withoutReservedJavaLocalName(let.name());
         var tupleArgs = parseTuplePipeArguments(let.name());
         if (tupleArgs.length > 0 && let.value().type() instanceof dev.capylang.compiler.CompiledTupleType tupleType) {
             var tupleVarName = "__capybaraTupleLet" + TUPLE_LET_VAR_COUNTER.incrementAndGet();
-            var tupleScope = valueExSc.scope().addStatement("var " + tupleVarName + " = " + valueExSc.expression());
+            var tupleScope = declarationScope.addStatement("var " + tupleVarName + " = " + valueExSc.expression());
             var size = Math.min(tupleArgs.length, tupleType.elementTypes().size());
             for (int i = 0; i < size; i++) {
                 var tupleArg = tupleArgs[i];
@@ -1696,8 +1751,8 @@ public class JavaExpressionEvaluator {
         var letDeclarationType = let.declaredType().orElse(let.value().type());
         var coercedValueExpression = coerceExpressionForExpectedType(letDeclarationType, let.value().type(), valueExSc.expression());
         var scopeExpression = shouldUseTypedLetDeclaration(let.value(), let.declaredType().isPresent())
-                ? valueExSc.scope().declareTypedValue(let.name(), javaLocalDeclarationType(letDeclarationType), coercedValueExpression, let.rest())
-                : valueExSc.scope().declareValue(let.name(), coercedValueExpression, let.rest());
+                ? declarationScope.declareTypedValue(let.name(), javaLocalDeclarationType(letDeclarationType), coercedValueExpression, let.rest())
+                : declarationScope.declareValue(let.name(), coercedValueExpression, let.rest());
         return evaluateExpression(scopeExpression.expression(), scopeExpression.scope());
     }
 
@@ -3388,6 +3443,10 @@ public class JavaExpressionEvaluator {
         if (functionNameOverrides.containsKey(key)) {
             return functionNameOverrides.get(key);
         }
+        var standardMethodName = standardEmittedMethodName(functionCall.name(), parameterTypes);
+        if (standardMethodName.isPresent()) {
+            return standardMethodName.orElseThrow();
+        }
         var parameterSignature = parameterTypes.stream()
                 .map(type -> String.valueOf(type))
                 .collect(java.util.stream.Collectors.joining(","));
@@ -3401,6 +3460,34 @@ public class JavaExpressionEvaluator {
             return methodName;
         }
         return normalizeJavaMethodName(methodName);
+    }
+
+    private static Optional<String> standardEmittedMethodName(
+            String functionName,
+            List<dev.capylang.compiler.CompiledType> parameterTypes
+    ) {
+        if (!functionName.equals(METHOD_DECL_PREFIX + "String__any")
+            && !functionName.equals(METHOD_DECL_PREFIX + "String__all")) {
+            return Optional.empty();
+        }
+        if (parameterTypes.size() != 2
+            || parameterTypes.getFirst() != dev.capylang.compiler.PrimitiveLinkedType.STRING
+            || !(parameterTypes.get(1) instanceof dev.capylang.compiler.CompiledFunctionType predicateType)) {
+            return Optional.empty();
+        }
+        var base = functionName.endsWith("__any") ? "any" : "all";
+        if (predicateType.argumentType() == dev.capylang.compiler.PrimitiveLinkedType.STRING
+            && predicateType.returnType() == dev.capylang.compiler.PrimitiveLinkedType.BOOL) {
+            return Optional.of(base + "__string__compiledfunctiontype_argumenttype_string_returntype_bool");
+        }
+        if (predicateType.argumentType() == dev.capylang.compiler.PrimitiveLinkedType.STRING
+            && predicateType.returnType() instanceof dev.capylang.compiler.CompiledFunctionType indexedPredicate
+            && indexedPredicate.argumentType() == dev.capylang.compiler.PrimitiveLinkedType.INT
+            && indexedPredicate.returnType() == dev.capylang.compiler.PrimitiveLinkedType.BOOL) {
+            return Optional.of(base
+                    + "__string__compiledfunctiontype_argumenttype_string_returntype_compiledfunctiontype_argumenttype_int_returntype_bool");
+        }
+        return Optional.empty();
     }
 
     private static boolean isStaticExtensionMethod(CompiledFunctionCall functionCall) {

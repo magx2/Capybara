@@ -57,31 +57,36 @@ fun reduce_dict_to_two_lists_and_concat_sizes(values: Dict[int]): int =
     (parse_test_cases + format_test_cases).size()
 
 fun reduce_list_to_success_values(values: List[int]): Result[List[int]] =
-    values |> Success { [] }, (acc_result, item) => {
+    let initial: Result[List[int]] = Success { [] }
+    values |> initial, (acc_result, item) => {
         let acc <- acc_result
         Success { acc + item }
     }
 
 fun reduce_set_to_success_values(values: Set[String]): Result[Set[String]] =
-    values |> Success { {} }, (acc_result, item) => {
+    let initial: Result[Set[String]] = Success { {} }
+    values |> initial, (acc_result, item) => {
         let acc <- acc_result
         Success { acc + item }
     }
 
 fun reduce_dict_to_success_values(values: Dict[int]): Result[Dict[int]] =
-    values |> Success { {:} }, (acc_result, key, value) => {
+    let initial: Result[Dict[int]] = Success { {:} }
+    values |> initial, (acc_result, key, value) => {
         let acc <- acc_result
         Success { acc + { key : value } }
     }
 
 fun reduce_list_to_some_values(values: List[int]): Option[List[int]] =
-    values |> Some { [] }, (acc_option, item) =>
+    let initial: Option[List[int]] = Some { [] }
+    values |> initial, (acc_option, item) =>
         match acc_option with
         case Some { acc } -> Some { acc + item }
         case None -> None {}
 
 fun reduce_list_to_box_values(values: List[int]): Box[List[int]] =
-    values |> Box { [] }, (acc_box, item) => Box { acc_box.value + item }
+    let initial: Box[List[int]] = Box { [] }
+    values |> initial, (acc_box, item) => Box { acc_box.value + item }
 
 type SeqEnd[T] = ConsEnd[T] | EndEnd
 data ConsEnd[T] { value: T, rest: () => SeqEnd[T] }
@@ -93,8 +98,9 @@ data ParseFailed { source: String }
 data OutcomeBatch { outcomes: List[Outcome] }
 
 fun to_seq_using_end_literal(list: List[T]): SeqEnd[T] =
+    let initial: SeqEnd[T] = EndEnd {}
     list
-        |> EndEnd {}, (acc, value) => ConsEnd { value, () => acc }
+        |> initial, (acc, value) => ConsEnd { value, () => acc }
 
 fun seq_end_head_or_default(s: SeqEnd[int], d: int): int =
     match s with
@@ -105,12 +111,13 @@ fun batch_outcomes(outcomes: List[Outcome]): OutcomeBatch =
     OutcomeBatch { outcomes }
 
 fun concat_inferred_parent_subtype_lists(values: List[String]): OutcomeBatch =
-    let succeeded = values |> [], (acc, source) => acc + ParseSucceeded { source }
-    let failed = values |> [], (acc, source) => acc + ParseFailed { source }
+    let initial: List[Outcome] = []
+    let succeeded = values |> initial, (acc, source) => acc + ParseSucceeded { source }
+    let failed = values |> initial, (acc, source) => acc + ParseFailed { source }
     batch_outcomes(succeeded + failed)
 
 fun build_test_file_from_three_inferred_test_case_lists(): int =
-    let parse_test_cases = ["1.2.3"] |> [], (acc, value) => acc + test("parse {value}", () => assert_that(value).is_equal_to(value))
-    let to_string_test_cases = ["1.2.3"] |> [], (acc, value) => acc + test("stringify {value}", () => assert_that(value).is_equal_to(value))
-    let failed_test_cases = ["1"] |> [], (acc, value) => acc + test("fail {value}", () => assert_that(value).is_equal_to(value))
+    let parse_test_cases = ["1.2.3"] | (value => test("parse {value}", () => assert_that(value).is_equal_to(value)))
+    let to_string_test_cases = ["1.2.3"] | (value => test("stringify {value}", () => assert_that(value).is_equal_to(value)))
+    let failed_test_cases = ["1"] | (value => test("fail {value}", () => assert_that(value).is_equal_to(value)))
     test_file("/dev/capylang/test/EmptyLiteralInference.cfun", parse_test_cases + to_string_test_cases + failed_test_cases).unsafe_run().test_cases.size()

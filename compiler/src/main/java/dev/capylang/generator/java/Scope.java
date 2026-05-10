@@ -118,6 +118,33 @@ class Scope {
         return new Scope(reserved.nextValueIdx(), updated, updatedJavaValues, updatedMappings, statements, expression, moduleHelperClass);
     }
 
+    Scope withReservedJavaLocalName(String name) {
+        var javaName = normalizeJavaLocalIdentifier(name);
+        if (javaLocalValues.contains(javaName)) {
+            return this;
+        }
+        var updatedJavaValues = new HashSet<>(javaLocalValues);
+        updatedJavaValues.add(javaName);
+        return new Scope(valueIdx, localValues, updatedJavaValues, valueNameToUniqueName, statements, expression, moduleHelperClass);
+    }
+
+    Scope withoutReservedJavaLocalName(String name) {
+        var javaName = normalizeJavaLocalIdentifier(name);
+        if (localValues.contains(name) || Objects.equals(valueNameToUniqueName.get(name), javaName)) {
+            return this;
+        }
+        if (localValues.stream().map(Scope::normalizeJavaLocalIdentifier).anyMatch(javaName::equals)
+            || valueNameToUniqueName.containsValue(javaName)) {
+            return this;
+        }
+        if (!javaLocalValues.contains(javaName)) {
+            return this;
+        }
+        var updatedJavaValues = new HashSet<>(javaLocalValues);
+        updatedJavaValues.remove(javaName);
+        return new Scope(valueIdx, localValues, updatedJavaValues, valueNameToUniqueName, statements, expression, moduleHelperClass);
+    }
+
     private Scope addStatementUnchecked(String statement) {
         var updated = new ArrayList<>(statements);
         updated.add(statement);

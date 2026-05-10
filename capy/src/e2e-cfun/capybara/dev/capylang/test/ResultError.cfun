@@ -1,5 +1,6 @@
 from /capy/lang/Result import { * }
 from /capy/lang/String import { * }
+from /capy/lang/Collections import { * }
 
 data ParseState { value: String, parsing_string: String }
 
@@ -28,5 +29,5 @@ private fun empty_result(): Result[String] = Success { value: "" }
 
 fun dict_reduce_then_map(d: Dict[int]): Result[String] =
     d
-        |> empty_result(), (acc, k, v) => append_dict_entry(acc, k, v)
-        | text => Success { value: text + "done" }
+        .reduce(empty_result(), (acc, k, v) => append_dict_entry(acc, k, v))
+        .map(text => Success { value: text + "done" })

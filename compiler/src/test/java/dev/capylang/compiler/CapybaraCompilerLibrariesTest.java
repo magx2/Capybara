@@ -145,6 +145,7 @@ class CapybaraCompilerLibrariesTest {
     void shouldExpandDeriverIntoGeneratedTypeMethod() {
         var libraries = compileProgram(List.of(reflectionMetadataModule()), new java.util.TreeSet<>()).modules();
         var compiled = compileProgram(List.of(new RawModule("Consumer", "/foo/app", """
+                from /capy/lang/Collections import { * }
                 from /capy/meta_prog/Reflection import { DataValueInfo, reflection }
 
                 deriver Show {
@@ -162,8 +163,8 @@ class CapybaraCompilerLibrariesTest {
 
                     fun matches_age_metadata(extra: int, limit: AgeLimit): bool =
                         let info: DataValueInfo = reflection(receiver)
-                        let has_name_field: bool = info.fields |any? field => field.name == "name"
-                        let has_age_field: bool = info.fields |any? field => field.name == "age"
+                        let has_name_field: bool = info.fields.any(field => field.name == "name")
+                        let has_age_field: bool = info.fields.any(field => field.name == "age")
                         (info.name == "User") & has_name_field & has_age_field & (receiver.age + extra > limit.value)
                 }
 
@@ -381,6 +382,8 @@ class CapybaraCompilerLibrariesTest {
     @Test
     void shouldPreserveReceiverShadowingInsideDeriverLocalScopes() {
         var compiled = compileProgram(List.of(new RawModule("Consumer", "/foo/app", """
+                from /capy/lang/Collections import { * }
+
                 deriver Shadow {
                     fun shadow_let(): String =
                         let receiver: String = "local"
@@ -973,12 +976,12 @@ class CapybaraCompilerLibrariesTest {
                         from /foo/model/Widget import { * }
 
                         fun broken() =
-                            assert_that(Success { value: Widget { size: 1 } } | widget => Success { value: widget.wrap() })
+                            assert_that(Success { value: Widget { size: 1 }.wrap() })
                                 .is_equal_to(Success { value: Widget { size: 2 } })
                         """)
         ));
 
-        assertThat(error.message()).contains("Expected `Widget`, got `Success[Widget]`");
+        assertThat(error.message()).contains("Expected `Result[Widget]`, but got `Widget`");
     }
 
     @Test
@@ -1254,6 +1257,8 @@ class CapybaraCompilerLibrariesTest {
         return new RawModule("Collections", "/capy/lang", """
                 data List[T] { <native> }
                 fun List[T].size(): int = <native>
+                fun List[T].`|`(map: T => Y): List[Y] = <native>
+                fun List[T].`|>`(initial: R, reducer: (R, T) => R): R = <native>
                 """);
     }
 

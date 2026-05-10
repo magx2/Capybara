@@ -3,6 +3,7 @@ from /capy/test/Assert import { * }
 from /capy/lang/Effect import { * }
 from /capy/lang/Math import { * }
 from /capy/lang/Result import { * }
+from /capy/lang/Collections import { * }
 from /capy/test/CapyTest import { * }
 
 fun tests(): Effect[TestFile] =

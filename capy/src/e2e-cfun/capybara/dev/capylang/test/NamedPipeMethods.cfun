@@ -1,6 +1,8 @@
 from /capy/lang/Option import { * }
 from /capy/lang/Result import { * }
 from /capy/lang/Seq import { * }
+from /capy/lang/Collections import { * }
+from /capy/lang/String import { * }
 
 fun sum_int(acc: int, value: int): int = acc + value
 fun double_int(value: int): int = value * 2
@@ -41,11 +43,11 @@ fun set_reduce_left_symbolic(values: Set[int]): int = values.`|l>`(0, (acc, valu
 fun dict_map_named(values: Dict[int]): Dict[String] = values.map((key, value) => key + ":" + value)
 fun dict_map_operator(values: Dict[int]): Dict[String] = values | (key, value) => key + ":" + value
 
-fun dict_filter_named(values: Dict[int]): Dict[int] = values.filter(value => value > 10)
-fun dict_filter_operator(values: Dict[int]): Dict[int] = values |- value => value > 10
+fun dict_filter_named(values: Dict[int]): Dict[int] = values.filter((_, value) => value > 10)
+fun dict_filter_operator(values: Dict[int]): Dict[int] = values |- (_, value) => value > 10
 
-fun dict_flat_map_named(values: Dict[int]): List[int] = values.flat_map(value => [value, value + 10])
-fun dict_flat_map_operator(values: Dict[int]): List[int] = values |* value => [value, value + 10]
+fun dict_flat_map_named(values: Dict[int]): List[int] = values.flat_map((_, value) => [value, value + 10])
+fun dict_flat_map_operator(values: Dict[int]): List[int] = values |* (_, value) => [value, value + 10]
 
 fun dict_reduce_named(values: Dict[int]): String = values.reduce("", (acc, key, value) => acc + key + ":" + value + ",")
 fun dict_reduce_operator(values: Dict[int]): String = values |> "", (acc, key, value) => acc + key + ":" + value + ","

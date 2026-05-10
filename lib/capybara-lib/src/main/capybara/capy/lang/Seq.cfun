@@ -70,15 +70,18 @@ fun Seq[T].as_list(): List[T] =
 
 /// Converts a `List` into a finite `Seq`.
 fun to_seq(list: List[T]): Seq[T] =
-    list |> End {}, (acc, value) => acc + Cons { value, () => End {} }
+    let initial: Seq[T] = End {}
+    list |> initial, (acc, value) => acc + Cons { value, () => End {} }
 
 /// Converts a `Set` into a finite `Seq`.
 fun to_seq(list: Set[T]): Seq[T] =
-    list |> End {}, (acc, value) => acc + Cons { value, () => End {} }
+    let initial: Seq[T] = End {}
+    list |> initial, (acc, value) => acc + Cons { value, () => End {} }
 
 /// Converts a `Dict` into a finite `Seq` of `(key, value)` tuples.
 fun to_seq(list: Dict[T]): Seq[Tuple[String, T]] =
-    list |> End {}, (acc, key, value) => acc + Cons { (key, value), () => End {} }
+    let initial: Seq[Tuple[String, T]] = End {}
+    list |> initial, (acc, key, value) => acc + Cons { (key, value), () => End {} }
 
 /// Collects the last `n` elements into a `List`.
 ///

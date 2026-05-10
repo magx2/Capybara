@@ -498,11 +498,19 @@ class JavaExpressionEvaluatorTest {
     @Test
     void shouldCastCollectionTypedPatternBindingsBeforeUse() {
         var generatedProgram = new JavaGenerator().generate(compileProgram("CollectionTypedMatch", "/foo/bar", """
+                from /capy/lang/Collections import { * }
+
                 fun stringify(value: any): List[String] =
                     match value with
                     case List[any] items -> items | item => "" + item
-                    case Set[any] items -> items |> [], (acc, item) => acc + ("" + item)
-                    case Dict[any] items -> items |> [], (acc, key, item) => acc + (key + ":" + item)
+                    case Set[any] items -> {
+                        let initial: List[String] = []
+                        items |> initial, (acc, item) => acc + ("" + item)
+                    }
+                    case Dict[any] items -> {
+                        let initial: List[String] = []
+                        items |> initial, (acc, key, item) => acc + (key + ":" + item)
+                    }
                     case _ -> []
                 """));
         var generated = generatedProgram.modules().stream()
@@ -787,13 +795,16 @@ class JavaExpressionEvaluatorTest {
     @Test
     void shouldInferSharedParentForConcatenatedSubtypeLists() {
         var program = compileProgram("EmptyLiteralInference", "/foo/bar", """
+                from /capy/lang/Collections import { * }
+
                 type Outcome = ParseSucceeded | ParseFailed
                 data ParseSucceeded { source: String }
                 data ParseFailed { source: String }
 
                 fun merged_outcomes(values: List[String]) =
-                    let succeeded = values |> [], (acc, source) => acc + ParseSucceeded { source }
-                    let failed = values |> [], (acc, source) => acc + ParseFailed { source }
+                    let initial: List[Outcome] = []
+                    let succeeded = values |> initial, (acc, source) => acc + ParseSucceeded { source }
+                    let failed = values |> initial, (acc, source) => acc + ParseFailed { source }
                     succeeded + failed
                 """);
 
@@ -808,6 +819,8 @@ class JavaExpressionEvaluatorTest {
     @Test
     void shouldGenerateTypedConcatForSubtypeListsWithSharedParent() {
         var program = compileProgram("EmptyLiteralInference", "/foo/bar", """
+                from /capy/lang/Collections import { * }
+
                 type Outcome = ParseSucceeded | ParseFailed
                 data ParseSucceeded { source: String }
                 data ParseFailed { source: String }
@@ -817,8 +830,9 @@ class JavaExpressionEvaluatorTest {
                     OutcomeBatch { outcomes }
 
                 fun concat_inferred_parent_subtype_lists(values: List[String]): OutcomeBatch =
-                    let succeeded = values |> [], (acc, source) => acc + ParseSucceeded { source }
-                    let failed = values |> [], (acc, source) => acc + ParseFailed { source }
+                    let initial: List[Outcome] = []
+                    let succeeded = values |> initial, (acc, source) => acc + ParseSucceeded { source }
+                    let failed = values |> initial, (acc, source) => acc + ParseFailed { source }
                     batch_outcomes(succeeded + failed)
                 """);
 
@@ -932,6 +946,8 @@ class JavaExpressionEvaluatorTest {
     @Test
     void shouldSanitizeJavaKeywordsUsedAsLocalNames() {
         var generatedProgram = new JavaGenerator().generate(compileProgram("KeywordLocalNames", "/foo/bar", """
+                from /capy/lang/Collections import { * }
+
                 data Date { day: int }
 
                 fun test_keyword_let(is_valid: bool): bool =
@@ -951,7 +967,7 @@ class JavaExpressionEvaluatorTest {
 
         assertThat(generated).contains("boolean assert_ =");
         assertThat(generated).contains("return assert_;");
-        assertThat(generated).contains(".stream().map(assert_ ->");
+        assertThat(generated).contains("capy.lang.Collections.pipe(values, assert_ ->");
         assertGeneratedJavaCompiles(generatedProgram);
     }
 
@@ -974,6 +990,8 @@ class JavaExpressionEvaluatorTest {
     @Test
     void shouldKeepPipeReduceMatchStatementsInsideReducerLambda() {
         var generatedProgram = new JavaGenerator().generate(compileProgram("ReduceMatchLambda", "/foo/bar", """
+                from /capy/lang/Collections import { * }
+
                 type Item = Text | Count
                 data Text { value: String }
                 data Count { value: int }
@@ -995,8 +1013,11 @@ class JavaExpressionEvaluatorTest {
     @Test
     void shouldAvoidPipeReduceLambdaArgumentCollisionWithLetName() {
         var generatedProgram = new JavaGenerator().generate(compileProgram("ReduceLetNameCollision", "/foo/bar", """
+                from /capy/lang/Collections import { * }
+
                 fun flatten(asserts: List[List[int]]): List[int] =
-                    let assertions: List[int] = asserts |> [], (acc, assertions) => acc + assertions
+                    let initial: List[int] = []
+                    let assertions: List[int] = asserts |> initial, (acc, assertions) => acc + assertions
                     assertions
                 """));
         var generated = generatedProgram.modules().stream()
@@ -1162,43 +1183,53 @@ class JavaExpressionEvaluatorTest {
                 Arguments.of(
                         "pipe_map",
                         """
+                                from /capy/lang/Collections import { * }
+
                                 fun pipe_map(l: List[int]): List[int] =
                                     l | x => x * 2
                                 """,
-                        "return l.stream().map(x -> ((x*2))).toList();"
+                        "return capy.lang.Collections.pipe(l, x -> ((x*2)));"
                 ),
                 Arguments.of(
                         "map",
                         """
+                                from /capy/lang/Collections import { * }
+
                                 fun map(l: List[int]) = l | :double
 
                                 fun double(x: int) = x * x
                                 """,
-                        "return l.stream().map(it -> (double_(((int) it)))).toList();"
+                        "return capy.lang.Collections.pipe(l, arg0 -> (foo.boo.test.double_(((int) arg0))));"
                 ),
                 Arguments.of(
                         "pipe_filter_out",
                         """
+                                from /capy/lang/Collections import { * }
+
                                 fun pipe_filter_out(l: List[int]): List[int] =
                                     l |- x => x > 2
                                 """,
-                        "return l.stream().filter(x -> !((x>2))).toList();"
+                        "return capy.lang.Collections.pipeMinus(l, x -> ((x>2)));"
                 ),
                 Arguments.of(
                         "pipe_reduce",
                         """
+                                from /capy/lang/Collections import { * }
+
                                 fun pipe_reduce(l: List[int]): int =
                                     l |> 0, (a, b) => a + b
                                 """,
-                        "return l.stream().reduce((a, b) -> ((a+b))).orElse(0);"
+                        "return capy.lang.Collections.pipeGreater(l, ((int) 0), a -> (b -> ((a+b))));"
                 ),
                 Arguments.of(
                         "pipe_flat_map",
                         """
+                                from /capy/lang/Collections import { * }
+
                                 fun pipe_flat_map(l: List[int]): List[int] =
                                     l |* x => [x, x + 1]
                                 """,
-                        "return l.stream().flatMap(x -> (java.util.List.of(x, (x+1))).stream()).toList();"
+                        "return capy.lang.Collections.pipeStar(l, x -> (java.util.List.of(x, (x+1))));"
                 )
         );
     }

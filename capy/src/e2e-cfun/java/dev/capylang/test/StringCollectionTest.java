@@ -21,6 +21,30 @@ class StringCollectionTest {
     }
 
     @Test
+    void any() {
+        assertThat(StringCollection.any("capybara")).isTrue();
+        assertThat(StringCollection.any("capibara")).isFalse();
+    }
+
+    @Test
+    void anyWithIndex() {
+        assertThat(StringCollection.anyWithIndex("capybara")).isTrue();
+        assertThat(StringCollection.anyWithIndex("ycapi")).isFalse();
+    }
+
+    @Test
+    void all() {
+        assertThat(StringCollection.all("capybara")).isTrue();
+        assertThat(StringCollection.all("capy bara")).isFalse();
+    }
+
+    @Test
+    void allWithIndex() {
+        assertThat(StringCollection.allWithIndex("capybara")).isTrue();
+        assertThat(StringCollection.allWithIndex("capy bara")).isFalse();
+    }
+
+    @Test
     void containsEmptySubstring() {
         assertThat(StringCollection.contains("capybara", "")).isTrue();
         assertThat(StringCollection.contains("", "")).isTrue();

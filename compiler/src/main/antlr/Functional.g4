@@ -268,8 +268,6 @@ infixOperator: PLUS
              | PIPE_MINUS
              | PIPE_FLATMAP
              | PIPE_REDUCE
-             | PIPE_ANY
-             | PIPE_ALL
              | QUESTION
              | TILDE
              | TILDE_TILDE
@@ -336,8 +334,6 @@ BITWISE_NOT : '.not.';
 PIPE_MINUS : '|-';
 PIPE_FLATMAP : '|*';
 PIPE_REDUCE : '|>';
-PIPE_ANY : '|any?';
-PIPE_ALL : '|all?';
 PIPE : '|';
 COLON : ':';
 EQUAL : '==';

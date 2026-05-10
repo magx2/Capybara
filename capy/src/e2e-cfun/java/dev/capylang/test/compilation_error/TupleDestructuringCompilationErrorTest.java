@@ -15,22 +15,28 @@ class TupleDestructuringCompilationErrorTest {
     void shouldFailWhenTupleDestructuringIsUsedForNonTupleElements() {
         var error = compileFailure(
                 "tuple_destructuring_requires_tuple_elements",
-                "fun foo(values: List[int]) = values | (a, b) => a + b"
+                """
+                from /capy/lang/Collections import { * }
+                fun foo(values: List[int]) = values | (a, b) => a + b
+                """
         );
 
         assertThat(error.file()).isEqualTo("/foo/boo/tuple_destructuring_requires_tuple_elements.cfun");
-        assertThat(error.message()).contains("Right side lambda of `|` can use tuple destructuring only for tuple elements");
+        assertThat(error.message()).contains("Tuple destructuring can only be used for tuple elements");
     }
 
     @Test
     void shouldFailWhenTupleDestructuringArityDoesNotMatchTupleSize() {
         var error = compileFailure(
                 "tuple_destructuring_arity_mismatch",
-                "fun foo(values: List[Tuple[int, int]]) = values | (a, b, c) => a + b + c"
+                """
+                from /capy/lang/Collections import { * }
+                fun foo(values: List[Tuple[int, int]]) = values | (a, b, c) => a + b + c
+                """
         );
 
         assertThat(error.file()).isEqualTo("/foo/boo/tuple_destructuring_arity_mismatch.cfun");
-        assertThat(error.message()).contains("Tuple destructuring in `|` expects 2 arguments, got 3");
+        assertThat(error.message()).contains("Tuple destructuring expects 2 arguments, got 3");
     }
 
     private static Result.Error.SingleError compileFailure(String moduleName, String code) {

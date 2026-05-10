@@ -1,5 +1,6 @@
 from /capy/lang/Option import { * }
 from /capy/lang/Result import { * }
+from /capy/lang/Collections import { * }
 
 fun match_string(value: any): String =
     match value with

@@ -1,3 +1,5 @@
+from /capy/lang/Collections import { * }
+
 fun map(l: List[int]) = l | :double
 
 fun double(x: int) = x * x
