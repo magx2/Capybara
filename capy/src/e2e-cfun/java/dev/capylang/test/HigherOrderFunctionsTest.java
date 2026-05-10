@@ -9,7 +9,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class HigherOrderFunctionsTest {
     @Test
     void mapWithFunctionReference() {
-        assertThat(HigherOrderFunctions.map(List.of(1, 2, 3)))
+        assertThat(HigherOrderFunctions.map(List.of(1, 2, 3)).asList())
                 .isEqualTo(List.of(1, 4, 9));
     }
 

@@ -13,7 +13,7 @@ class ResultBindTest {
         var result = ResultBind.users("Ann", "Bob", "Cid");
 
         assertThat(result).isInstanceOf(Result.Success.class);
-        var value = ((Result.Success<List<Object>>) result).value();
+        var value = ((Result.Success<List<?>>) result).value();
         assertThat(value).hasSize(3);
         assertThat(((ResultBind.User) value.get(0)).name()).isEqualTo("Ann");
         assertThat(((ResultBind.User) value.get(1)).name()).isEqualTo("Bob");

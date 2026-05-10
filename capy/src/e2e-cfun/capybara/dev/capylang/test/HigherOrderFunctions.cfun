@@ -1,4 +1,5 @@
 from /capy/lang/Collections import { * }
+from /capy/lang/Seq import { * }
 
 fun map(l: List[int]) = l | :double
 

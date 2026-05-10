@@ -391,7 +391,7 @@ private fun stale_output_files(output_dir: Path, manifest_file: Path, expected_f
                 match files_result with
                 case Error e -> e
                 case Success { files } ->
-                    let relative_files = files | file => relative_to(output_dir, file)
+                    let relative_files = (files | file => relative_to(output_dir, file)).as_list()
                     Success { stale_files(relative_files, expected_files) }
             )
     )
@@ -464,7 +464,7 @@ private fun manifest_paths(content: String): List[Path] =
             else lines(value[1, value.length()], '', acc + current)
         case Some { c } -> lines(value[1, value.length()], current + c, acc)
     ---
-    lines(content, '', []) | line => from_string(line)
+    (lines(content, '', []) | line => from_string(line)).as_list()
 
 private fun list_regular_files(path: Path): Effect[Result[List[Path]]] =
     list_entries(path).flat_map(entries_result =>
@@ -534,7 +534,7 @@ private fun has_failures(test_outputs: List[TestOutput]): bool = test_outputs.an
 
 const JUNIT_PREFIX = 'TEST-'
 
-private fun junit_run_tests(test_files: List[TestFile]): List[TestOutput] = test_files | :junit_run_test
+private fun junit_run_tests(test_files: List[TestFile]): List[TestOutput] = (test_files | :junit_run_test).as_list()
 
 private fun junit_run_test(test_file: TestFile): TestOutput =
     let tests = test_file.test_cases.size()

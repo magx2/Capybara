@@ -1,4 +1,5 @@
 from /capy/lang/Option import { * }
+from /capy/lang/Seq import { * }
 
 /// Native ordered collection type backed by the runtime List implementation.
 /// List literals use square brackets: [1, 2, 3].
@@ -86,28 +87,38 @@ fun List[T].reduce(initial: R, reducer: (R, T) => R): R =
 fun List[T].`|>`(initial: R, reducer: (R, T) => R): R = this.reduce(initial, reducer)
 
 /// Transforms each value using `map`.
-fun List[T].map(map: T => Y): List[Y] =
-    this.reduce(_empty_collection_mapped_list(map), (acc, value) => acc + map(value))
+fun List[T].map(map: T => Y): Seq[Y] =
+    fun __map(list: List[T], idx: int, map: T => Y): Seq[Y] =
+        match list[idx] with
+        case None -> End {}
+        case Some { value } -> Cons { value: map(value), rest: () => __map(list, idx + 1, map) }
+    ---
+    __map(this, 0, map)
 
 /// Transforms each value using `map`.
-fun List[T].`|`(map: T => Y): List[Y] = this.map(map)
+fun List[T].`|`(map: T => Y): Seq[Y] = this.map(map)
 
-/// Returns a new List without values that satisfy `predicate`.
-fun List[T].filter(predicate: T => bool): List[T] =
-    this.reduce(_empty_collection_list(), (acc, value) =>
-        if predicate(value)
-        then acc
-        else acc + value)
+/// Returns a sequence without values that satisfy `predicate`.
+fun List[T].filter(predicate: T => bool): Seq[T] =
+    fun __filter(list: List[T], idx: int, predicate: T => bool): Seq[T] =
+        match list[idx] with
+        case None -> End {}
+        case Some { value } ->
+            if predicate(value)
+            then __filter(list, idx + 1, predicate)
+            else Cons { value: value, rest: () => __filter(list, idx + 1, predicate) }
+    ---
+    __filter(this, 0, predicate)
 
-/// Returns a new List without values that satisfy `predicate`.
-fun List[T].`|-`(predicate: T => bool): List[T] = this.filter(predicate)
+/// Returns a sequence without values that satisfy `predicate`.
+fun List[T].`|-`(predicate: T => bool): Seq[T] = this.filter(predicate)
 
 /// Applies `map` to each value and concatenates the resulting lists.
-fun List[T].flat_map(map: T => List[Y]): List[Y] =
-    this.reduce(_empty_collection_flat_mapped_list(map), (acc, value) => acc + map(value))
+fun List[T].flat_map(map: T => List[Y]): Seq[Y] =
+    to_seq(this.reduce(_empty_collection_flat_mapped_list(map), (acc, value) => acc + map(value)))
 
 /// Applies `map` to each value and concatenates the resulting lists.
-fun List[T].`|*`(map: T => List[Y]): List[Y] = this.flat_map(map)
+fun List[T].`|*`(map: T => List[Y]): Seq[Y] = this.flat_map(map)
 
 /// Returns the value at idx using the same bounds and negative-index rules as list[idx].
 fun List[T].get(idx: int): Option[T] = <native>
@@ -182,28 +193,23 @@ fun Set[T].reduce(initial: R, reducer: (R, T) => R): R =
 fun Set[T].`|>`(initial: R, reducer: (R, T) => R): R = this.reduce(initial, reducer)
 
 /// Transforms each value using `map`.
-fun Set[T].map(map: T => Y): Set[Y] =
-    this.reduce(_empty_collection_mapped_set(map), (acc, value) => acc + map(value))
+fun Set[T].map(map: T => Y): Seq[Y] = this.to_list().map(map)
 
 /// Transforms each value using `map`.
-fun Set[T].`|`(map: T => Y): Set[Y] = this.map(map)
+fun Set[T].`|`(map: T => Y): Seq[Y] = this.map(map)
 
-/// Returns a new Set without values that satisfy `predicate`.
-fun Set[T].filter(predicate: T => bool): Set[T] =
-    this.reduce(_empty_collection_set(), (acc, value) =>
-        if predicate(value)
-        then acc
-        else acc + value)
+/// Returns a sequence without values that satisfy `predicate`.
+fun Set[T].filter(predicate: T => bool): Seq[T] = this.to_list().filter(predicate)
 
-/// Returns a new Set without values that satisfy `predicate`.
-fun Set[T].`|-`(predicate: T => bool): Set[T] = this.filter(predicate)
+/// Returns a sequence without values that satisfy `predicate`.
+fun Set[T].`|-`(predicate: T => bool): Seq[T] = this.filter(predicate)
 
-/// Applies `map` to each value and unions the resulting sets.
-fun Set[T].flat_map(map: T => Set[Y]): Set[Y] =
-    this.reduce(_empty_collection_flat_mapped_set(map), (acc, value) => acc + map(value))
+/// Applies `map` to each value and concatenates the resulting sets.
+fun Set[T].flat_map(map: T => Set[Y]): Seq[Y] =
+    this.to_list().flat_map(value => map(value).to_list())
 
-/// Applies `map` to each value and unions the resulting sets.
-fun Set[T].`|*`(map: T => Set[Y]): Set[Y] = this.flat_map(map)
+/// Applies `map` to each value and concatenates the resulting sets.
+fun Set[T].`|*`(map: T => Set[Y]): Seq[Y] = this.flat_map(map)
 
 /// Native String-keyed map type backed by the runtime Dict implementation.
 /// Dict literals use braces with String keys: {"one": 1, "two": 2}.

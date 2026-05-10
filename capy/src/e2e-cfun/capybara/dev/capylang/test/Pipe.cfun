@@ -3,19 +3,19 @@ from /capy/lang/Option import { * }
 from /capy/lang/String import { * }
 from /capy/lang/Collections import { * }
 
-fun map1(l: List[int]): List[int] =
+fun map1(l: List[int]): Seq[int] =
     l | x => x * 2
 
-fun map2(l: List[int]): List[int] =
+fun map2(l: List[int]): Seq[int] =
     l
         .map(x => x * 2)
         .map(x => x - 1)
 
-fun map3(l: List[int]): List[String] = l | x => "Hello " + x
+fun map3(l: List[int]): Seq[String] = l | x => "Hello " + x
 
-fun filter1(l: List[int]): List[int] = l |- x => x > 0
+fun filter1(l: List[int]): Seq[int] = l |- x => x > 0
 
-fun filter2(l: List[int]): List[int] =
+fun filter2(l: List[int]): Seq[int] =
     l
         |- x => x > 2
         |- x => x == 1
@@ -43,9 +43,9 @@ fun reduce_string1(l: List[String]): String = l |> "", (acc, v) => acc + v
 fun reduce_string2(l: List[String]): String =
     l |> "start: ", (acc, v) => acc + (if acc == "start: " then "" else " ") + v
 
-fun string_map(s: String): List[String] = s | ch => "[" + ch + "]"
+fun string_map(s: String): Seq[String] = s | ch => "[" + ch + "]"
 
-fun string_filter(s: String): String = s |- ch => ch == "b"
+fun string_filter(s: String): Seq[String] = s |- ch => ch == "b"
 
 fun string_reduce(s: String): String = s |> "", (acc, ch) => acc + ch
 
@@ -54,24 +54,24 @@ fun reduce_to_data(l: List[String]): Foo = l
     | v => Foo {value:v}
     |> Foo {value:""}, (acc, v) => Foo { value: acc.value + v.value }
 
-fun flatMap1(l: List[int]): List[int] = l |* x => [x, x+1, x+2]
+fun flatMap1(l: List[int]): Seq[int] = l |* x => [x, x+1, x+2]
 
-fun flatMap2(l: List[int]): List[int] =
+fun flatMap2(l: List[int]): Seq[int] =
     l
         | (x => x * 2)
         |- (x => x > 0)
-        |* (x => [x, x+1, x+2])
+        |* (x => to_seq([x, x+1, x+2]))
 
-fun setMap1(s: Set[int]): Set[int] = s | x => x * 2
+fun setMap1(s: Set[int]): Seq[int] = s | x => x * 2
 
-fun setFilter1(s: Set[int]): Set[int] = s |- x => x > 0
+fun setFilter1(s: Set[int]): Seq[int] = s |- x => x > 0
 
 fun setReduce1(s: Set[int]): int = s |> 0, (a,b) => a+b
 
 fun set_reduce_string2(s: Set[String]): String =
     s |> "start: ", (acc, v) => acc + (if acc == "start: " then "" else " ") + v
 
-fun setFlatMap1(s: Set[int]): Set[int] = s |* x => {x, x+10}
+fun setFlatMap1(s: Set[int]): Seq[int] = s |* x => {x, x+10}
 
 fun mapDict(d: Dict[int]): Dict[String] = d | (k,v) => v + ""
 
@@ -95,7 +95,7 @@ fun dict_unused_key_to_sum(d: Dict[int]): int =
 fun dict_unused_reduce_key(d: Dict[int]): int =
     d |> 0, (acc, _, v) => acc + v
 
-fun list_unused_lambda_arg(l: List[int]): List[int] = l | _ => 1
+fun list_unused_lambda_arg(l: List[int]): Seq[int] = l | _ => 1
 
 data Value { x: int }
 
@@ -131,7 +131,7 @@ fun type_pipe_optional(x: int): /capy/lang/Option[Boxed] =
 
 fun pipe_then_chain_after_lambda(): int =
     match ([1, 2, 3]
-        | (value => value + 1))[1] with
+        | (value => value + 1)).as_list()[1] with
     case Some { value } -> value
     case None -> 0
 
@@ -146,13 +146,13 @@ fun pipe_then_chain_methods_after_lambda(): String =
     case Some { value } -> value
     case None -> ""
 
-fun pipe_lambda_body_multiline_without_parentheses(): List[String] =
+fun pipe_lambda_body_multiline_without_parentheses(): Seq[String] =
     [" x ", " y "]
         | value =>
             value
                 .trim()
 
-fun pipe_filter_lambda_body_multiline_without_parentheses(): List[String] =
+fun pipe_filter_lambda_body_multiline_without_parentheses(): Seq[String] =
     [" a ", "bb", " c "]
         |- value =>
             value

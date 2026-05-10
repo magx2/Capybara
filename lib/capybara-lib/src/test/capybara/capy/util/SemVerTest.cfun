@@ -4,6 +4,7 @@ from /capy/test/CapyTest import { * }
 from /capy/util/SemVer import { * }
 from /capy/lang/Option import { * }
 from /capy/lang/Collections import { * }
+from /capy/lang/Seq import { * }
 
 fun tests(): Effect[TestFile] =
     let test_cases = {
@@ -25,10 +26,10 @@ fun tests(): Effect[TestFile] =
         // "0" prefix in  build
         "1.2.3+007.build.008" : SemVer { 1, 2, 3, None {}, Some { '007.build.008' } },
     }
-    let parse_test_cases = test_cases.entries() | (str, expected) => test("should parse {str} to {expected}", () => should_parse_sem_ver(str, expected))
-    let to_string_test_cases = test_cases.entries() | (expected, sem_ver) => test("{sem_ver}.to_string() is equal to {expected}", () => should_stringify_sem_ver(sem_ver, expected))
+    let parse_test_cases = (test_cases.entries() | (str, expected) => test("should parse {str} to {expected}", () => should_parse_sem_ver(str, expected))).as_list()
+    let to_string_test_cases = (test_cases.entries() | (expected, sem_ver) => test("{sem_ver}.to_string() is equal to {expected}", () => should_stringify_sem_ver(sem_ver, expected))).as_list()
 
-    let failed_test_cases = {
+    let failed_test_cases = ({
         "1" : "Unexpected end of version string!",
         "1.2" : "Unexpected end of version string!",
         "1,2.3" : "Expected `.` after major version, but got `,`!",
@@ -45,7 +46,7 @@ fun tests(): Effect[TestFile] =
         "1.2.3-a%d" : "Expected end of version string or `.` for next pre-release identifier, but got `%`!",
         "1.2.3-a#d" : "Expected end of version string or `.` for next pre-release identifier, but got `#`!",
         "1.2.3-asd+QĘT" : "Expected end of version string or `.` for next build identifier, but got `Ę`!", }
-        .entries() | (sem_ver, expected_message) => test("should fail parsing {sem_ver}", () => should_fail_parse_with_message(sem_ver, expected_message))
+        .entries() | (sem_ver, expected_message) => test("should fail parsing {sem_ver}", () => should_fail_parse_with_message(sem_ver, expected_message))).as_list()
 
     test_file("/capy/util/SemVer.cfun", parse_test_cases + to_string_test_cases + failed_test_cases)
 
