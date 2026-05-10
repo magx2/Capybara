@@ -5,12 +5,6 @@ from /capy/lang/Seq import { * }
 /// Set literals use braces with values: {1, 2, 3}.
 data Set[T] { <native> }
 
-private fun _empty_collection_set(): Set[T] = {}
-
-private fun _empty_collection_mapped_set(map: T => Y): Set[Y] = {}
-
-private fun _empty_collection_flat_mapped_set(map: T => Set[Y]): Set[Y] = {}
-
 /// Returns the number of values in this Set.
 fun Set[T].size(): int = <native>
 
