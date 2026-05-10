@@ -1,6 +1,8 @@
 from /capy/lang/Result import { * }
 from /capy/lang/String import { * }
-from /capy/lang/Collections import { * }
+from /capy/collection/List import { * }
+from /capy/collection/Set import { * }
+from /capy/collection/Dict import { * }
 
 data ParseState { value: String, parsing_string: String }
 

@@ -1,5 +1,7 @@
 from /capy/lang/Result import { * }
-from /capy/lang/Collections import { * }
+from /capy/collection/List import { * }
+from /capy/collection/Set import { * }
+from /capy/collection/Dict import { * }
 
 data Foo {
     a: int,

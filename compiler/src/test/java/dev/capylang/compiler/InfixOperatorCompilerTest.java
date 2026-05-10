@@ -27,7 +27,9 @@ class InfixOperatorCompilerTest {
     @Test
     void shouldAllowPlusForCollectionAndSubtypeElement() {
         var compiled = compileProgram("""
-                from /capy/lang/Collections import { * }
+                from /capy/collection/List import { * }
+                from /capy/collection/Set import { * }
+                from /capy/collection/Dict import { * }
 
                 type Json = JsonArray | JsonNull
                 data JsonArray { value: List[Json] }
@@ -49,7 +51,9 @@ class InfixOperatorCompilerTest {
     @Test
     void shouldAllowSubtypeElementsForDeclaredListParentReturnType() {
         var compiled = compileProgram("""
-                from /capy/lang/Collections import { * }
+                from /capy/collection/List import { * }
+                from /capy/collection/Set import { * }
+                from /capy/collection/Dict import { * }
 
                 type Assert = ResultAssert | StringAssert
                 data ResultAssert { value: bool }
@@ -72,7 +76,9 @@ class InfixOperatorCompilerTest {
     @Test
     void shouldAllowGenericSubtypeElementsForDeclaredListParentReturnType() {
         var compiled = compileProgram("""
-                from /capy/lang/Collections import { * }
+                from /capy/collection/List import { * }
+                from /capy/collection/Set import { * }
+                from /capy/collection/Dict import { * }
 
                 type Result[T] = Success[T] | Error
                 data Success[T] { value: T }
@@ -100,7 +106,9 @@ class InfixOperatorCompilerTest {
     @Test
     void shouldAllowSubtypeElementsFromPipeMapperForDeclaredListParentReturnType() {
         var compiled = compileProgram("""
-                from /capy/lang/Collections import { * }
+                from /capy/collection/List import { * }
+                from /capy/collection/Set import { * }
+                from /capy/collection/Dict import { * }
                 from /capy/lang/Seq import { * }
 
                 type Assert = ResultAssert | StringAssert
@@ -124,7 +132,9 @@ class InfixOperatorCompilerTest {
     @Test
     void shouldAllowGenericSubtypeElementsFromPipeMapperForDeclaredListParentReturnType() {
         var compiled = compileProgram("""
-                from /capy/lang/Collections import { * }
+                from /capy/collection/List import { * }
+                from /capy/collection/Set import { * }
+                from /capy/collection/Dict import { * }
                 from /capy/lang/Seq import { * }
 
                 type Result[T] = Success[T] | Error

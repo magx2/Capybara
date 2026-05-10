@@ -16,7 +16,7 @@ class TupleDestructuringCompilationErrorTest {
         var error = compileFailure(
                 "tuple_destructuring_requires_tuple_elements",
                 """
-                from /capy/lang/Collections import { * }
+                from /capy/collection/List import { * }
                 fun foo(values: List[int]) = values | (a, b) => a + b
                 """
         );
@@ -30,7 +30,7 @@ class TupleDestructuringCompilationErrorTest {
         var error = compileFailure(
                 "tuple_destructuring_arity_mismatch",
                 """
-                from /capy/lang/Collections import { * }
+                from /capy/collection/List import { * }
                 fun foo(values: List[Tuple[int, int]]) = values | (a, b, c) => a + b + c
                 """
         );
@@ -41,7 +41,13 @@ class TupleDestructuringCompilationErrorTest {
 
     private static Result.Error.SingleError compileFailure(String moduleName, String code) {
         var result = CapybaraCompiler.INSTANCE.compile(
-                List.of(new RawModule(moduleName, "/foo/boo", code)),
+                List.of(
+                        new RawModule("List", "/capy/collection", """
+                                data List[T] { <native> }
+                                fun List[T].`|`(map: T => Y): List[Y] = <native>
+                                """),
+                        new RawModule(moduleName, "/foo/boo", code)
+                ),
                 new java.util.TreeSet<>()
         );
         if (result instanceof Result.Success<CompiledProgram> value) {

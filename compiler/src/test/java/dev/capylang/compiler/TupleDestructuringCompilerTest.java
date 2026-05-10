@@ -15,7 +15,9 @@ class TupleDestructuringCompilerTest {
                 "TuplePipes",
                 "/foo/boo",
                 """
-                        from /capy/lang/Collections import { * }
+                        from /capy/collection/List import { * }
+                        from /capy/collection/Set import { * }
+                        from /capy/collection/Dict import { * }
                         from /capy/lang/Seq import { * }
 
                         fun map_pairs(values: List[Tuple[int, int]]): Seq[String] = values | (number, expected) => "digits(" + number + ") should return " + expected
@@ -40,7 +42,9 @@ class TupleDestructuringCompilerTest {
                 "TuplePipes",
                 "/foo/boo",
                 """
-                        from /capy/lang/Collections import { * }
+                        from /capy/collection/List import { * }
+                        from /capy/collection/Set import { * }
+                        from /capy/collection/Dict import { * }
                         from /capy/lang/Seq import { * }
 
                         fun filter_pairs(values: List[Tuple[int, int]]): Seq[Tuple[int, int]] = values |- (left, right) => left == right
@@ -61,7 +65,9 @@ class TupleDestructuringCompilerTest {
     @Test
     void shouldFailWhenTupleDestructuringIsUsedForNonTupleElements() {
         var error = compileFailure("""
-                from /capy/lang/Collections import { * }
+                from /capy/collection/List import { * }
+                from /capy/collection/Set import { * }
+                from /capy/collection/Dict import { * }
 
                 fun foo(values: List[int]) = values | (a, b) => a + b
                 """);
@@ -72,7 +78,9 @@ class TupleDestructuringCompilerTest {
     @Test
     void shouldFailWhenTupleDestructuringArityDoesNotMatchTupleSize() {
         var error = compileFailure("""
-                from /capy/lang/Collections import { * }
+                from /capy/collection/List import { * }
+                from /capy/collection/Set import { * }
+                from /capy/collection/Dict import { * }
 
                 fun foo(values: List[Tuple[int, int]]) = values |* (a, b, c) => [a, b, c]
                 """);

@@ -1,5 +1,7 @@
 from /capy/lang/Effect import { * }
-from /capy/lang/Collections import { * }
+from /capy/collection/List import { * }
+from /capy/collection/Set import { * }
+from /capy/collection/Dict import { * }
 
 fun main(args: List[String]): /capy/lang/Effect[/capy/lang/Program] =
     let count <- pure(args.size())

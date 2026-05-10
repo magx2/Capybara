@@ -1,6 +1,8 @@
 from /capy/lang/Option import { * }
 from /capy/lang/Result import { * }
-from /capy/lang/Collections import { * }
+from /capy/collection/List import { * }
+from /capy/collection/Set import { * }
+from /capy/collection/Dict import { * }
 from /capy/lang/Seq import { * }
 
 fun match_string(value: any): String =

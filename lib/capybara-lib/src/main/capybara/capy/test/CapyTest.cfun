@@ -6,7 +6,9 @@ from /capy/io/IO import { * }
 from /capy/io/Console import { * }
 from /capy/lang/Seq import {*}
 from /capy/lang/String import { * }
-from /capy/lang/Collections import { * }
+from /capy/collection/List import { * }
+from /capy/collection/Set import { * }
+from /capy/collection/Dict import { * }
 from /capy/lang/Effect import { * }
 from /capy/date_time/Clock import { now }
 from /capy/date_time/DateTime import { * }
