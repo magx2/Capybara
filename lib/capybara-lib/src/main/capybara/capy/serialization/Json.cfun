@@ -116,7 +116,7 @@ fun serialize(obj: JsonObject): String = stringify(obj)
 fun deserialize(json: String): Result[JsonObject] =
     _deserialize_json_object(json)
     | parse =>
-        if parse.parsing_string.is_empty()
+        if parse.parsing_string.size == 0
         then Success { value: parse.value }
         else Error { "Expected string to end, but still got `{parse.parsing_string}`" }
 

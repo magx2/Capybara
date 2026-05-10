@@ -8,7 +8,7 @@ data List[T] { <native> }
 fun List[T].size(): int = <native>
 
 /// Returns true when this List has no values.
-fun List[T].is_empty(): bool = <native>
+fun List[T].is_empty(): bool = this.size() == 0
 
 /// Returns true when this List contains the given value.
 fun List[T].contains(value: T): bool = <native>
@@ -27,7 +27,7 @@ data Set[T] { <native> }
 fun Set[T].size(): int = <native>
 
 /// Returns true when this Set has no values.
-fun Set[T].is_empty(): bool = <native>
+fun Set[T].is_empty(): bool = this.size() == 0
 
 /// Returns true when this Set contains the given value.
 fun Set[T].contains(value: T): bool = <native>
@@ -40,7 +40,7 @@ data Dict[T] { <native> }
 fun Dict[T].size(): int = <native>
 
 /// Returns true when this Dict has no entries.
-fun Dict[T].is_empty(): bool = <native>
+fun Dict[T].is_empty(): bool = this.size() == 0
 
 /// Returns true when this Dict contains the given key.
 fun Dict[T].contains_key(key: String): bool = <native>
