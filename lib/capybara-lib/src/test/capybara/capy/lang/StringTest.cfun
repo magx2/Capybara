@@ -1,0 +1,124 @@
+from /capy/test/Assert import { * }
+from /capy/lang/Effect import { * }
+from /capy/lang/Seq import { * }
+from /capy/lang/String import { * }
+from /capy/test/CapyTest import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/capy/lang/String.cfun", [
+        test("should report length and emptiness", () => should_report_length_and_emptiness()),
+        test("should get characters by index", () => should_get_characters_by_index()),
+        test("should get substrings by range", () => should_get_substrings_by_range()),
+        test("should concatenate values", () => should_concatenate_values()),
+        test("should test any and all characters", () => should_test_any_and_all_characters()),
+        test("should test any and all characters with index", () => should_test_any_and_all_characters_with_index()),
+        test("should detect contained substrings", () => should_detect_contained_substrings()),
+        test("should reduce characters", () => should_reduce_characters()),
+        test("should map characters", () => should_map_characters()),
+        test("should filter characters out", () => should_filter_characters_out()),
+        test("should flat map characters", () => should_flat_map_characters()),
+        test("should detect prefixes and suffixes", () => should_detect_prefixes_and_suffixes()),
+        test("should trim whitespace", () => should_trim_whitespace()),
+        test("should replace all occurrences", () => should_replace_all_occurrences()),
+    ])
+
+fun should_report_length_and_emptiness(): Assert =
+    assert_all([
+        assert_that("capy".length()).is_equal_to(4),
+        assert_that("".is_empty()).is_equal_to(true),
+        assert_that("capy".is_empty()).is_equal_to(false),
+    ])
+
+fun should_get_characters_by_index(): Assert =
+    let value = "capybara"
+    assert_all([
+        assert_that(value[0]).contains("c"),
+        assert_that(value.get(2)).contains("p"),
+        assert_that(value[-1]).contains("a"),
+        assert_that(value[100]).is_empty(),
+        assert_that(value[-100]).is_empty(),
+    ])
+
+fun should_get_substrings_by_range(): Assert =
+    let value = "capybara"
+    assert_all([
+        assert_that(value[0, 4]).is_equal_to("capy"),
+        assert_that(value.get(4, 8)).is_equal_to("bara"),
+        assert_that(value[-4, -1]).is_equal_to("bar"),
+    ])
+
+fun should_concatenate_values(): Assert =
+    assert_all([
+        assert_that("capy" + "bara").is_equal_to("capybara"),
+        assert_that("count: ".plus(3)).is_equal_to("count: 3"),
+    ])
+
+fun should_test_any_and_all_characters(): Assert =
+    assert_all([
+        assert_that("capybara".any(ch => ch == "y")).is_equal_to(true),
+        assert_that("capybara".any(ch => ch == "z")).is_equal_to(false),
+        assert_that("aaa".all(ch => ch == "a")).is_equal_to(true),
+        assert_that("aba".all(ch => ch == "a")).is_equal_to(false),
+        assert_that("".all(ch => ch == "a")).is_equal_to(true),
+    ])
+
+fun should_test_any_and_all_characters_with_index(): Assert =
+    assert_all([
+        assert_that("capy".any((ch, idx) => ch == "p" & idx == 2)).is_equal_to(true),
+        assert_that("capy".any((ch, idx) => ch == "p" & idx == 1)).is_equal_to(false),
+        assert_that("capy".all((_, idx) => idx < 4)).is_equal_to(true),
+        assert_that("capy".all((_, idx) => idx < 3)).is_equal_to(false),
+    ])
+
+fun should_detect_contained_substrings(): Assert =
+    assert_all([
+        assert_that("capybara".contains("pyb")).is_equal_to(true),
+        assert_that("capybara" ? "bar").is_equal_to(true),
+        assert_that("capybara".contains("z")).is_equal_to(false),
+        assert_that("capybara".contains("")).is_equal_to(true),
+    ])
+
+fun should_reduce_characters(): Assert =
+    assert_all([
+        assert_that("capy" |> "", (acc, ch) => ch + acc).is_equal_to("ypac"),
+        assert_that("".reduce("seed", (acc, ch) => acc + ch)).is_equal_to("seed"),
+    ])
+
+fun should_map_characters(): Assert =
+    assert_all([
+        assert_that(("abc" | ch => "[" + ch + "]").as_list()).is_equal_to(["[a]", "[b]", "[c]"]),
+        assert_that("xy".map(ch => ch + ch).as_list()).is_equal_to(["xx", "yy"]),
+    ])
+
+fun should_filter_characters_out(): Assert =
+    assert_all([
+        assert_that(("banana" |- ch => ch == "a").as_list()).is_equal_to(["b", "n", "n"]),
+        assert_that("capy".filter(ch => ch == "c").as_list()).is_equal_to(["a", "p", "y"]),
+    ])
+
+fun should_flat_map_characters(): Assert =
+    assert_all([
+        assert_that(("ab" |* ch => [ch, ch + "!"]).as_list()).is_equal_to(["a", "a!", "b", "b!"]),
+        assert_that("xy".flat_map(ch => [ch + ch]).as_list()).is_equal_to(["xx", "yy"]),
+    ])
+
+fun should_detect_prefixes_and_suffixes(): Assert =
+    assert_all([
+        assert_that("capybara".starts_with("capy")).is_equal_to(true),
+        assert_that("capybara".starts_with("bara")).is_equal_to(false),
+        assert_that("capybara".end_with("bara")).is_equal_to(true),
+        assert_that("capybara".end_with("capy")).is_equal_to(false),
+    ])
+
+fun should_trim_whitespace(): Assert =
+    assert_all([
+        assert_that((" " + '\t' + "capybara" + '\n' + " ").trim()).is_equal_to("capybara"),
+        assert_that("     ".trim()).is_equal_to(""),
+        assert_that("capy".trim()).is_equal_to("capy"),
+    ])
+
+fun should_replace_all_occurrences(): Assert =
+    assert_all([
+        assert_that("banana".replace("na", "NA")).is_equal_to("baNANA"),
+        assert_that("capy".replace("z", "x")).is_equal_to("capy"),
+    ])
