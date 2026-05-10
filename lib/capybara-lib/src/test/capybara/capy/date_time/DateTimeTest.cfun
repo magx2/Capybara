@@ -5,6 +5,7 @@ from /capy/date_time/Duration import { * }
 from /capy/lang/Option import { * }
 from /capy/lang/Result import { * }
 from /capy/lang/Collections import { * }
+from /capy/lang/Seq import { * }
 from /capy/test/Assert import { * }
 from /capy/lang/Effect import { * }
 from /capy/test/CapyTest import { * }
@@ -53,7 +54,7 @@ fun _datetime_test_to_iso_8601(): List[Effect[TestCase]] =
     ]
 
 fun _test_timestamp(): List[Effect[TestCase]] =
-    [
+    ([
         (_at(0, 0), 0L),
         (_at(1, 0), 86400L),
         (_at(0, 3600), 3600L),
@@ -63,7 +64,7 @@ fun _test_timestamp(): List[Effect[TestCase]] =
         (_at(1, 3600), 90000L),
     ] | (datetime, expected) => test(
         "{datetime}.timestamp() should return the correct Unix timestamp",
-        () => assert_that(datetime.timestamp()).is_equal_to(expected))
+        () => assert_that(datetime.timestamp()).is_equal_to(expected))).as_list()
 
 fun _test_plus(): List[Effect[TestCase]] =
     let epoch_date = UNIX_DATE
@@ -142,7 +143,7 @@ fun _test_comparisons(): List[Effect[TestCase]] =
     ]
 
 fun _datetime_test_from_iso_8601_success(): List[Effect[TestCase]] =
-    [
+    ([
         ("1970-01-01T00:00:00Z", _at(0, 0)),
         ("19700101T000000Z", _at(0, 0)),
         ("1970-01-01T00:00:00+00:00", _at(0, 0)),
@@ -164,10 +165,10 @@ fun _datetime_test_from_iso_8601_success(): List[Effect[TestCase]] =
                 assert_that(datetime).has_time(expected.time),
                 assert_that(datetime.time).has_offset_minutes(None {}),
                 assert_that(datetime.to_iso_8601()).is_equal_to(expected.to_iso_8601()),
-            ])))
+            ])))).as_list()
 
 fun _datetime_test_from_iso_8601_failure(): List[Effect[TestCase]] =
-    [
+    ([
         "1970-01-01T00:00:00",
         "1970-01-01 00:00:00Z",
         "1970-01-01T00:00:00+00:61",
@@ -180,4 +181,4 @@ fun _datetime_test_from_iso_8601_failure(): List[Effect[TestCase]] =
         "19700101T00:00:00Z",
     ] | iso => test(
         "DateTime.from_iso_8601 should fail for {iso}",
-        () => assert_that(/capy/date_time/DateTime.from_iso_8601(iso)).fails())
+        () => assert_that(/capy/date_time/DateTime.from_iso_8601(iso)).fails())).as_list()

@@ -101,12 +101,13 @@ class InfixOperatorCompilerTest {
     void shouldAllowSubtypeElementsFromPipeMapperForDeclaredListParentReturnType() {
         var compiled = compileProgram("""
                 from /capy/lang/Collections import { * }
+                from /capy/lang/Seq import { * }
 
                 type Assert = ResultAssert | StringAssert
                 data ResultAssert { value: bool }
                 data StringAssert { value: String }
 
-                fun collect(values: List[bool]): List[Assert] =
+                fun collect(values: List[bool]): Seq[Assert] =
                     values | value => ResultAssert { value: value }
                 """);
 
@@ -115,15 +116,16 @@ class InfixOperatorCompilerTest {
                 .findFirst()
                 .orElseThrow();
 
-        assertThat(function.returnType()).isInstanceOf(CompiledList.class);
-        assertThat(((CompiledList) function.returnType()).elementType()).isInstanceOf(CompiledDataParentType.class);
-        assertThat(((CompiledDataParentType) ((CompiledList) function.returnType()).elementType()).name()).isEqualTo("Assert");
+        assertThat(function.returnType()).isInstanceOf(CompiledDataParentType.class);
+        assertThat(((CompiledDataParentType) function.returnType()).name()).isEqualTo("Seq");
+        assertThat(((CompiledDataParentType) function.returnType()).typeParameters()).containsExactly("Assert");
     }
 
     @Test
     void shouldAllowGenericSubtypeElementsFromPipeMapperForDeclaredListParentReturnType() {
         var compiled = compileProgram("""
                 from /capy/lang/Collections import { * }
+                from /capy/lang/Seq import { * }
 
                 type Result[T] = Success[T] | Error
                 data Success[T] { value: T }
@@ -133,7 +135,7 @@ class InfixOperatorCompilerTest {
                 data ResultAssert[T] { value: Result[T] }
                 data StringAssert { value: String }
 
-                fun collect(values: List[bool]): List[Assert[bool]] =
+                fun collect(values: List[bool]): Seq[Assert[bool]] =
                     values | value => ResultAssert { value: Success { value: value } }
                 """);
 
@@ -142,10 +144,9 @@ class InfixOperatorCompilerTest {
                 .findFirst()
                 .orElseThrow();
 
-        assertThat(function.returnType()).isInstanceOf(CompiledList.class);
-        assertThat(((CompiledList) function.returnType()).elementType()).isInstanceOf(CompiledDataParentType.class);
-        assertThat(((CompiledDataParentType) ((CompiledList) function.returnType()).elementType()).name()).isEqualTo("Assert");
-        assertThat(((CompiledDataParentType) ((CompiledList) function.returnType()).elementType()).typeParameters()).containsExactly("bool");
+        assertThat(function.returnType()).isInstanceOf(CompiledDataParentType.class);
+        assertThat(((CompiledDataParentType) function.returnType()).name()).isEqualTo("Seq");
+        assertThat(((CompiledDataParentType) function.returnType()).typeParameters()).containsExactly("Assert[bool]");
     }
 
     @Test
@@ -217,8 +218,9 @@ class InfixOperatorCompilerTest {
     void shouldAllowStringFilterNamedMethod() {
         var compiled = compileProgram("""
                 from /capy/lang/String import { * }
+                from /capy/lang/Seq import { * }
 
-                fun keep_non_b(value: String): String =
+                fun keep_non_b(value: String): Seq[String] =
                     value.filter(ch => ch != "b")
                 """);
 
@@ -227,15 +229,18 @@ class InfixOperatorCompilerTest {
                 .findFirst()
                 .orElseThrow();
 
-        assertThat(function.returnType()).isEqualTo(PrimitiveLinkedType.STRING);
+        assertThat(function.returnType()).isInstanceOf(CompiledDataParentType.class);
+        assertThat(((CompiledDataParentType) function.returnType()).name()).isEqualTo("Seq");
+        assertThat(((CompiledDataParentType) function.returnType()).typeParameters()).containsExactly("String");
     }
 
     @Test
     void shouldAllowStringFilterSymbolicMethod() {
         var compiled = compileProgram("""
                 from /capy/lang/String import { * }
+                from /capy/lang/Seq import { * }
 
-                fun keep_non_b(value: String): String =
+                fun keep_non_b(value: String): Seq[String] =
                     value.`|-`(ch => ch != "b")
                 """);
 
@@ -244,7 +249,9 @@ class InfixOperatorCompilerTest {
                 .findFirst()
                 .orElseThrow();
 
-        assertThat(function.returnType()).isEqualTo(PrimitiveLinkedType.STRING);
+        assertThat(function.returnType()).isInstanceOf(CompiledDataParentType.class);
+        assertThat(((CompiledDataParentType) function.returnType()).name()).isEqualTo("Seq");
+        assertThat(((CompiledDataParentType) function.returnType()).typeParameters()).containsExactly("String");
     }
 
     private static CompiledProgram compileProgram(String code) {

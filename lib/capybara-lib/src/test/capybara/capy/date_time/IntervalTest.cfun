@@ -5,6 +5,7 @@ from /capy/date_time/Duration import { * }
 from /capy/date_time/Time import { * }
 from /capy/lang/Result import { * }
 from /capy/lang/Collections import { * }
+from /capy/lang/Seq import { * }
 from /capy/test/Assert import { * }
 from /capy/lang/Effect import { * }
 from /capy/test/CapyTest import { * }
@@ -89,7 +90,7 @@ fun tests(): Effect[TestFile] =
             DateDuration { years: 0, months: 0, days: 2, hours: 2, minutes: 30, seconds: 10 }
         ),
     ]
-    let failed_test_cases = {
+    let failed_test_cases = ({
         "P1D/P2D" : "Invalid ISO 8601 interval format: interval cannot contain a duration on both sides",
         "2007-03-01/2008-05-11" : "Invalid ISO 8601 interval format: interval endpoints must be UTC date-times",
         "2007-03-01/P2W" : "Invalid ISO 8601 interval format: interval endpoints must be UTC date-times",
@@ -99,7 +100,7 @@ fun tests(): Effect[TestFile] =
         "2008-05-11T15:30:00Z/2007-03-01T13:00:00Z" : "Invalid ISO 8601 interval format: interval start must not be after interval end",
         "2007-03-01--2007-03-02--P1D" : "Invalid ISO 8601 interval format: expected exactly one interval separator",
     }.entries() | (iso, expected_message) => test("should fail parsing {iso}",
-        () => assert_that(/capy/date_time/Interval.from_iso_8601(iso)).fails(expected_message))
+        () => assert_that(/capy/date_time/Interval.from_iso_8601(iso)).fails(expected_message))).as_list()
 
     test_file("/capy/date_time/Interval.cfun", success_test_cases + failed_test_cases)
 

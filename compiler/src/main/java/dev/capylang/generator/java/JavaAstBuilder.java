@@ -28,6 +28,7 @@ public class JavaAstBuilder {
     private final Map<String, String> normalizedRawTypeReferenceCache = new HashMap<>();
     private final Map<String, String> mappedTypeParameterDescriptorCache = new HashMap<>();
     private final Map<String, List<String>> topLevelDescriptorSplitCache = new HashMap<>();
+    private Set<String> localTypeNames = Set.of();
 
     @SafeVarargs
     private static <T extends Comparable<? super T>> SortedSet<T> sortedSetOf(T... values) {
@@ -48,6 +49,18 @@ public class JavaAstBuilder {
     );
 
     public JavaClass build(CompiledModule module) {
+        var previousLocalTypeNames = localTypeNames;
+        localTypeNames = module.types().keySet().stream()
+                .map(JavaAstBuilder::simpleTypeName)
+                .collect(toUnmodifiableSet());
+        try {
+            return buildModule(module);
+        } finally {
+            localTypeNames = previousLocalTypeNames;
+        }
+    }
+
+    private JavaClass buildModule(CompiledModule module) {
         var typeIndex = indexTypes(module.types());
         var functionsByOwnerPrefix = indexFunctionsByOwnerPrefix(module.functions());
         var javaPackageName = buildJavaPackageName(module.path());
@@ -571,6 +584,9 @@ public class JavaAstBuilder {
         if ("Program".equals(rawTypeName) || isProgramTypeName(rawTypeName)) {
             return withTypeParametersIfGeneric(type, "capy.lang.Program");
         }
+        if (shouldUseStandardSeqTypeName(rawTypeName)) {
+            return withTypeParametersIfGeneric(type, "capy.lang.Seq");
+        }
         if ("Result".equals(rawTypeName) || isResultTypeName(rawTypeName)) {
             return withTypeParametersIfGeneric(type, "capy.lang.Result");
         }
@@ -582,7 +598,7 @@ public class JavaAstBuilder {
             if (slashIndex > 0 && slashIndex < rawTypeName.length() - 1) {
                 var packageName = buildJavaPackageName(rawTypeName.substring(1, slashIndex));
                 var className = buildClassName(rawTypeName.substring(slashIndex + 1));
-                return new JavaType(packageName + "." + className);
+                return withTypeParametersIfGeneric(type, packageName + "." + className);
             }
         }
         if (rawTypeName.contains("/") && rawTypeName.contains(".")) {
@@ -594,9 +610,9 @@ public class JavaAstBuilder {
                 var moduleName = buildClassName(rawTypeName.substring(slashIndex + 1, dotIndex));
                 var nestedType = buildClassName(rawTypeName.substring(dotIndex + 1));
                 if (moduleName.equals(nestedType)) {
-                    return new JavaType(modulePath + "." + moduleName);
+                    return withTypeParametersIfGeneric(type, modulePath + "." + moduleName);
                 }
-                return new JavaType(modulePath + "." + moduleName + "." + nestedType);
+                return withTypeParametersIfGeneric(type, modulePath + "." + moduleName + "." + nestedType);
             }
         }
         if (rawTypeName.contains(".")) {
@@ -636,12 +652,15 @@ public class JavaAstBuilder {
     }
 
     private String mapTypeParameterDescriptor(String descriptor) {
-        var cached = mappedTypeParameterDescriptorCache.get(descriptor);
+        var cacheKey = descriptor.contains("Seq")
+                ? descriptor + "#localSeq=" + localTypeNames.contains("Seq")
+                : descriptor;
+        var cached = mappedTypeParameterDescriptorCache.get(cacheKey);
         if (cached != null) {
             return cached;
         }
         var mapped = computeTypeParameterDescriptor(descriptor);
-        mappedTypeParameterDescriptorCache.put(descriptor, mapped);
+        mappedTypeParameterDescriptorCache.put(cacheKey, mapped);
         return mapped;
     }
 
@@ -673,7 +692,7 @@ public class JavaAstBuilder {
                     yield "java.util.Map<java.lang.String, " + mapTypeParameterDescriptor(inner) + ">";
                 }
                 if (normalized.startsWith("Tuple[") && normalized.endsWith("]")) {
-                    yield "java.util.List<java.lang.Object>";
+                    yield "java.util.List<?>";
                 }
                 var genericStart = normalized.indexOf('[');
                 if (genericStart > 0 && normalized.endsWith("]")) {
@@ -716,7 +735,10 @@ public class JavaAstBuilder {
     }
 
     private String normalizeRawTypeReference(String rawTypeName) {
-        return normalizedRawTypeReferenceCache.computeIfAbsent(rawTypeName, this::computeNormalizedRawTypeReference);
+        var cacheKey = "Seq".equals(rawTypeName)
+                ? rawTypeName + "#local=" + localTypeNames.contains("Seq")
+                : rawTypeName;
+        return normalizedRawTypeReferenceCache.computeIfAbsent(cacheKey, ignored -> computeNormalizedRawTypeReference(rawTypeName));
     }
 
     private String computeNormalizedRawTypeReference(String rawTypeName) {
@@ -728,6 +750,9 @@ public class JavaAstBuilder {
         }
         if ("Program".equals(rawTypeName) || isProgramTypeName(rawTypeName)) {
             return "capy.lang.Program";
+        }
+        if (shouldUseStandardSeqTypeName(rawTypeName)) {
+            return "capy.lang.Seq";
         }
         if ("Result".equals(rawTypeName) || isResultTypeName(rawTypeName)) {
             return "capy.lang.Result";
@@ -836,6 +861,20 @@ public class JavaAstBuilder {
                || normalized.endsWith("/Result.Result");
     }
 
+    private boolean isSeqTypeName(String name) {
+        var normalized = normalizeQualifiedTypeName(name);
+        return normalized.equals("/cap/lang/Seq")
+               || normalized.equals("/capy/lang/Seq")
+               || normalized.equals("/cap/lang/Seq.Seq")
+               || normalized.equals("/capy/lang/Seq.Seq")
+               || normalized.endsWith("/Seq")
+               || normalized.endsWith("/Seq.Seq");
+    }
+
+    private boolean shouldUseStandardSeqTypeName(String name) {
+        return "Seq".equals(name) ? !localTypeNames.contains("Seq") : isSeqTypeName(name);
+    }
+
     private boolean isEffectTypeName(String name) {
         var normalized = normalizeQualifiedTypeName(name);
         return normalized.equals("/cap/lang/Effect")
@@ -888,6 +927,19 @@ public class JavaAstBuilder {
             normalized = "/" + normalized;
         }
         return normalized;
+    }
+
+    private static String simpleTypeName(String typeName) {
+        var normalized = baseTypeName(typeName).replace('\\', '/');
+        var slash = normalized.lastIndexOf('/');
+        var dot = normalized.lastIndexOf('.');
+        var index = Math.max(slash, dot);
+        return index >= 0 ? normalized.substring(index + 1) : normalized;
+    }
+
+    private static String baseTypeName(String typeName) {
+        var genericStart = typeName.indexOf('[');
+        return genericStart > 0 ? typeName.substring(0, genericStart) : typeName;
     }
 
     private List<JavaMethod.JavaFunctionParameter> buildJavaFunctionParameters(List<CompiledFunction.CompiledFunctionParameter> parameters) {

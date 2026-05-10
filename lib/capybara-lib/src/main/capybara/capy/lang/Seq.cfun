@@ -115,6 +115,17 @@ fun Seq[T].filter(pred: T => bool): Seq[T] =
     ---
     __filter(this, pred)
 
+fun Seq[T].`|-`(pred: T => bool): Seq[T] =
+    fun __filter_minus(seq: Seq[T], pred: T => bool): Seq[T] =
+        match seq with
+        case End -> End {}
+        case Cons { value, rest } ->
+            if pred(value)
+            then __filter_minus(rest(), pred)
+            else Cons { value, () => __filter_minus(rest(), pred) }
+    ---
+    __filter_minus(this, pred)
+
 /// Skips the first `n` elements of the sequence.
 fun Seq[T].drop(n: int): Seq[T] =
     fun rec __drop(seq: Seq[T], n: int) =
@@ -212,6 +223,8 @@ fun Seq[T].reduce(initial: R, reducer: (R, T) => R): R =
         case Cons { value, rest } -> __reduce(rest(), reducer(acc, value), reducer)
     ---
     __reduce(this, initial, reducer)
+
+fun Seq[T].`|>`(initial: R, reducer: (R, T) => R): R = this.reduce(initial, reducer)
 
 fun Seq[T].reduce_left(initial: R, reducer: (R, T) => R): R = this.reduce(initial, reducer)
 

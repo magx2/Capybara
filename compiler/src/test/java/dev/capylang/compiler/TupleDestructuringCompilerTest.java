@@ -16,8 +16,9 @@ class TupleDestructuringCompilerTest {
                 "/foo/boo",
                 """
                         from /capy/lang/Collections import { * }
+                        from /capy/lang/Seq import { * }
 
-                        fun map_pairs(values: List[Tuple[int, int]]): List[String] = values | (number, expected) => "digits(" + number + ") should return " + expected
+                        fun map_pairs(values: List[Tuple[int, int]]): Seq[String] = values | (number, expected) => "digits(" + number + ") should return " + expected
                         """
         )));
 
@@ -40,8 +41,9 @@ class TupleDestructuringCompilerTest {
                 "/foo/boo",
                 """
                         from /capy/lang/Collections import { * }
+                        from /capy/lang/Seq import { * }
 
-                        fun filter_pairs(values: List[Tuple[int, int]]): List[Tuple[int, int]] = values |- (left, right) => left == right
+                        fun filter_pairs(values: List[Tuple[int, int]]): Seq[Tuple[int, int]] = values |- (left, right) => left == right
                         """
         )));
 

@@ -9,19 +9,19 @@ import static org.assertj.core.api.Assertions.assertThat;
 class TupleDestructuringTest {
     @Test
     void mapPairs() {
-        assertThat(TupleDestructuring.mapPairs(List.of(List.of(10, 2), List.of(99, 2))))
+        assertThat(TupleDestructuring.mapPairs(List.of(List.of(10, 2), List.of(99, 2))).asList())
                 .isEqualTo(List.of("digits(10) should return 2", "digits(99) should return 2"));
     }
 
     @Test
     void filterPairs() {
-        assertThat(TupleDestructuring.filterPairs(List.of(List.of(1, 2), List.of(3, 2), List.of(5, 5))))
+        assertThat(TupleDestructuring.filterPairs(List.of(List.of(1, 2), List.of(3, 2), List.of(5, 5))).asList())
                 .isEqualTo(List.of(List.of(3, 2), List.of(5, 5)));
     }
 
     @Test
     void flatMapPairs() {
-        assertThat(TupleDestructuring.flatMapPairs(List.of(List.of(1, 2), List.of(3, 4))))
+        assertThat(TupleDestructuring.flatMapPairs(List.of(List.of(1, 2), List.of(3, 4))).asList())
                 .isEqualTo(List.of(1, 2, 3, 4));
     }
 

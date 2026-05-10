@@ -16,9 +16,9 @@ class NamedPipeMethodsTest {
     void listAliasesMatchOperators() {
         var values = List.of(-1, 0, 1, 2);
 
-        assertThat(NamedPipeMethods.listMapNamed(values)).isEqualTo(NamedPipeMethods.listMapOperator(values));
-        assertThat(NamedPipeMethods.listFilterNamed(values)).isEqualTo(NamedPipeMethods.listFilterOperator(values));
-        assertThat(NamedPipeMethods.listFlatMapNamed(List.of(1, 2))).isEqualTo(NamedPipeMethods.listFlatMapOperator(List.of(1, 2)));
+        assertThat(NamedPipeMethods.listMapNamed(values).asList()).isEqualTo(NamedPipeMethods.listMapOperator(values).asList());
+        assertThat(NamedPipeMethods.listFilterNamed(values).asList()).isEqualTo(NamedPipeMethods.listFilterOperator(values).asList());
+        assertThat(NamedPipeMethods.listFlatMapNamed(List.of(1, 2)).asList()).isEqualTo(NamedPipeMethods.listFlatMapOperator(List.of(1, 2)).asList());
         assertThat(NamedPipeMethods.listReduceNamed(values)).isEqualTo(NamedPipeMethods.listReduceOperator(values));
     }
 
@@ -26,9 +26,9 @@ class NamedPipeMethodsTest {
     void setAliasesMatchOperators() {
         var values = Set.of(-1, 0, 1, 2);
 
-        assertThat(NamedPipeMethods.setMapNamed(values)).isEqualTo(NamedPipeMethods.setMapOperator(values));
-        assertThat(NamedPipeMethods.setFilterNamed(values)).isEqualTo(NamedPipeMethods.setFilterOperator(values));
-        assertThat(NamedPipeMethods.setFlatMapNamed(Set.of(1, 2))).isEqualTo(NamedPipeMethods.setFlatMapOperator(Set.of(1, 2)));
+        assertThat(NamedPipeMethods.setMapNamed(values).asList()).isEqualTo(NamedPipeMethods.setMapOperator(values).asList());
+        assertThat(NamedPipeMethods.setFilterNamed(values).asList()).isEqualTo(NamedPipeMethods.setFilterOperator(values).asList());
+        assertThat(NamedPipeMethods.setFlatMapNamed(Set.of(1, 2)).asList()).isEqualTo(NamedPipeMethods.setFlatMapOperator(Set.of(1, 2)).asList());
         assertThat(NamedPipeMethods.setReduceNamed(values)).isEqualTo(NamedPipeMethods.setReduceOperator(values));
     }
 
@@ -56,8 +56,8 @@ class NamedPipeMethodsTest {
 
     @Test
     void stringFilterAliasesMatchExpectedResults() {
-        assertThat(NamedPipeMethods.stringFilterNamed("abc")).isEqualTo("ac");
-        assertThat(NamedPipeMethods.stringFilterNamed("abc")).isEqualTo(NamedPipeMethods.stringFilterSymbolic("abc"));
+        assertThat(NamedPipeMethods.stringFilterNamed("abc").asList()).isEqualTo(List.of("a", "c"));
+        assertThat(NamedPipeMethods.stringFilterNamed("abc").asList()).isEqualTo(NamedPipeMethods.stringFilterSymbolic("abc").asList());
     }
 
     @Test

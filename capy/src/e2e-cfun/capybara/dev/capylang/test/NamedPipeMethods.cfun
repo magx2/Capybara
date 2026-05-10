@@ -12,26 +12,26 @@ fun expand_set(value: int): Set[int] = {value, value + 10}
 fun expand_seq(value: int): Seq[int] = to_seq([value, value + 1])
 fun nested_success(value: int): Result[Result[String]] = Success { value: Success { value: "v=" + value } }
 
-fun list_map_named(values: List[int]): List[int] = values.map(x => x * 2)
-fun list_map_operator(values: List[int]): List[int] = values | x => x * 2
+fun list_map_named(values: List[int]): Seq[int] = values.map(x => x * 2)
+fun list_map_operator(values: List[int]): Seq[int] = values | x => x * 2
 
-fun list_filter_named(values: List[int]): List[int] = values.filter(x => x > 0)
-fun list_filter_operator(values: List[int]): List[int] = values |- x => x > 0
+fun list_filter_named(values: List[int]): Seq[int] = values.filter(x => x > 0)
+fun list_filter_operator(values: List[int]): Seq[int] = values |- x => x > 0
 
-fun list_flat_map_named(values: List[int]): List[int] = values.flat_map(x => expand_list(x))
-fun list_flat_map_operator(values: List[int]): List[int] = values |* x => expand_list(x)
+fun list_flat_map_named(values: List[int]): Seq[int] = values.flat_map(x => expand_list(x))
+fun list_flat_map_operator(values: List[int]): Seq[int] = values |* x => expand_list(x)
 
 fun list_reduce_named(values: List[int]): int = values.reduce(0, (acc, value) => acc + value)
 fun list_reduce_operator(values: List[int]): int = values |> 0, (acc, value) => acc + value
 
-fun set_map_named(values: Set[int]): Set[int] = values.map(x => x * 2)
-fun set_map_operator(values: Set[int]): Set[int] = values | x => x * 2
+fun set_map_named(values: Set[int]): Seq[int] = values.map(x => x * 2)
+fun set_map_operator(values: Set[int]): Seq[int] = values | x => x * 2
 
-fun set_filter_named(values: Set[int]): Set[int] = values.filter(x => x > 0)
-fun set_filter_operator(values: Set[int]): Set[int] = values |- x => x > 0
+fun set_filter_named(values: Set[int]): Seq[int] = values.filter(x => x > 0)
+fun set_filter_operator(values: Set[int]): Seq[int] = values |- x => x > 0
 
-fun set_flat_map_named(values: Set[int]): Set[int] = values.flat_map(x => expand_set(x))
-fun set_flat_map_operator(values: Set[int]): Set[int] = values |* x => expand_set(x)
+fun set_flat_map_named(values: Set[int]): Seq[int] = values.flat_map(x => expand_set(x))
+fun set_flat_map_operator(values: Set[int]): Seq[int] = values |* x => expand_set(x)
 
 fun set_reduce_named(values: Set[int]): int = values.reduce(0, (acc, value) => acc + value)
 fun set_reduce_operator(values: Set[int]): int = values |> 0, (acc, value) => acc + value
@@ -54,8 +54,8 @@ fun seq_flat_map_operator(values: List[int]): List[int] = (to_seq(values) |* x =
 fun seq_reduce_named(values: List[int]): int = to_seq(values).reduce(0, :sum_int)
 fun seq_reduce_left_named(values: List[int]): int = to_seq(values).reduce_left(0, :sum_int)
 
-fun string_filter_named(value: String): String = value.filter(ch => ch == "b")
-fun string_filter_symbolic(value: String): String = value.`|-`(ch => ch == "b")
+fun string_filter_named(value: String): Seq[String] = value.filter(ch => ch == "b")
+fun string_filter_symbolic(value: String): Seq[String] = value.`|-`(ch => ch == "b")
 
 fun option_map_named(value: Option[String]): Option[String] = value.map(text => text + "!")
 fun option_map_operator(value: Option[String]): Option[String] = value | text => text + "!"

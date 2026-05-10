@@ -2,10 +2,11 @@ from /capy/test/Assert import { * }
 from /capy/lang/Effect import { * }
 from /capy/lang/Math import { * }
 from /capy/lang/Collections import { * }
+from /capy/lang/Seq import { * }
 from /capy/test/CapyTest import { * }
 
 fun tests(): Effect[TestFile] =
-    let digits_test_cases = [
+    let digits_test_cases = ([
         (0, 1),
         (1, 1),
         (9, 1),
@@ -25,9 +26,9 @@ fun tests(): Effect[TestFile] =
         // min int value
         (-2147483648, 10),
     ] | (number, expected) =>
-        test("digits(" + number + ") should return " + expected, () => _test_digits(number, expected))
+        test("digits(" + number + ") should return " + expected, () => _test_digits(number, expected))).as_list()
 
-    let floor_div_cases = [
+    let floor_div_cases = ([
         (7, 3, 2),
         (0, 3, 0),
         (-1, 3, -1),
@@ -38,9 +39,9 @@ fun tests(): Effect[TestFile] =
         (-1, -3, 0),
         (-7, -3, 2),
     ] | (a, b, expected) =>
-        test("floor_div(" + a + ", " + b + ") should return " + expected, () => _test_floor_div(a, b, expected))
+        test("floor_div(" + a + ", " + b + ") should return " + expected, () => _test_floor_div(a, b, expected))).as_list()
 
-    let floor_mod_cases = [
+    let floor_mod_cases = ([
         (7, 3, 1),
         (0, 3, 0),
         (-1, 3, 2),
@@ -51,39 +52,39 @@ fun tests(): Effect[TestFile] =
         (-1, -3, -1),
         (-7, -3, -1),
     ] | (a, b, expected) =>
-        test("floor_mod(" + a + ", " + b + ") should return " + expected, () => _test_floor_mod(a, b, expected))
+        test("floor_mod(" + a + ", " + b + ") should return " + expected, () => _test_floor_mod(a, b, expected))).as_list()
 
-    let min_int_cases = [
+    let min_int_cases = ([
         (1, 2, 1),
         (2, 1, 1),
         (-5, 3, -5),
         (4, 4, 4),
     ] | (a, b, expected) =>
-        test("min(" + a + ", " + b + ") should return " + expected, () => _test_min_int(a, b, expected))
+        test("min(" + a + ", " + b + ") should return " + expected, () => _test_min_int(a, b, expected))).as_list()
 
-    let max_int_cases = [
+    let max_int_cases = ([
         (1, 2, 2),
         (2, 1, 2),
         (-5, 3, 3),
         (4, 4, 4),
     ] | (a, b, expected) =>
-        test("max(" + a + ", " + b + ") should return " + expected, () => _test_max_int(a, b, expected))
+        test("max(" + a + ", " + b + ") should return " + expected, () => _test_max_int(a, b, expected))).as_list()
 
-    let min_long_cases = [
+    let min_long_cases = ([
         (1L, 2L, 1L),
         (2L, 1L, 1L),
         (-5L, 3L, -5L),
         (4L, 4L, 4L),
     ] | (a, b, expected) =>
-        test("min(" + a + "L, " + b + "L) should return " + expected + "L", () => _test_min_long(a, b, expected))
+        test("min(" + a + "L, " + b + "L) should return " + expected + "L", () => _test_min_long(a, b, expected))).as_list()
 
-    let max_long_cases = [
+    let max_long_cases = ([
         (1L, 2L, 2L),
         (2L, 1L, 2L),
         (-5L, 3L, 3L),
         (4L, 4L, 4L),
     ] | (a, b, expected) =>
-        test("max(" + a + "L, " + b + "L) should return " + expected + "L", () => _test_max_long(a, b, expected))
+        test("max(" + a + "L, " + b + "L) should return " + expected + "L", () => _test_max_long(a, b, expected))).as_list()
 
     let list_int_cases = [
         test("min([3, 1, 2]) should return Some { 1 }", () => _test_min_values_int(1)),

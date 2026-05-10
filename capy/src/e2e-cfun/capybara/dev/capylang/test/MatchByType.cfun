@@ -1,6 +1,7 @@
 from /capy/lang/Option import { * }
 from /capy/lang/Result import { * }
 from /capy/lang/Collections import { * }
+from /capy/lang/Seq import { * }
 
 fun match_string(value: any): String =
     match value with
@@ -50,7 +51,7 @@ fun merged_enum_name(flag: bool, current_enum: enum): String =
     v.name()
 
 fun merged_enum_list_names(current_enum: enum): List[String] =
-    [current_enum, READY {}] | value => value.name()
+    ([current_enum, READY {}] | value => value.name()).as_list()
 
 fun classify_json_char(first_char: String): String =
     match first_char with

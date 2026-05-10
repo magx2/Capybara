@@ -1,5 +1,6 @@
 from /capy/lang/Option import { * }
 from /capy/lang/Collections import { * }
+from /capy/lang/Seq import { * }
 
 /// Native String type backed by the runtime String implementation.
 /// String literals use quotes: "hello".
@@ -104,28 +105,38 @@ fun String.reduce(initial: R, reducer: (R, String) => R): R =
 fun String.`|>`(initial: R, reducer: (R, String) => R): R = this.reduce(initial, reducer)
 
 /// Transforms each character using `map`.
-fun String.map(map: String => Y): List[Y] =
-    this.reduce(_empty_string_mapped_list(map), (acc, char) => acc + map(char))
+fun String.map(map: String => Y): Seq[Y] =
+    fun __map(value: String, idx: int, map: String => Y): Seq[Y] =
+        match value[idx] with
+        case None -> End {}
+        case Some { char } -> Cons { value: map(char), rest: () => __map(value, idx + 1, map) }
+    ---
+    __map(this, 0, map)
 
 /// Transforms each character using `map`.
-fun String.`|`(map: String => Y): List[Y] = this.map(map)
+fun String.`|`(map: String => Y): Seq[Y] = this.map(map)
 
-/// Returns this String without characters that satisfy `predicate`.
-fun String.filter(predicate: String => bool): String =
-    this.reduce("", (acc, char) =>
-        if predicate(char)
-        then acc
-        else acc + char)
+/// Returns a sequence without characters that satisfy `predicate`.
+fun String.filter(predicate: String => bool): Seq[String] =
+    fun __filter(value: String, idx: int, predicate: String => bool): Seq[String] =
+        match value[idx] with
+        case None -> End {}
+        case Some { char } ->
+            if predicate(char)
+            then __filter(value, idx + 1, predicate)
+            else Cons { value: char, rest: () => __filter(value, idx + 1, predicate) }
+    ---
+    __filter(this, 0, predicate)
 
-/// Returns this String without characters that satisfy `predicate`.
-fun String.`|-`(predicate: String => bool): String = this.filter(predicate)
+/// Returns a sequence without characters that satisfy `predicate`.
+fun String.`|-`(predicate: String => bool): Seq[String] = this.filter(predicate)
 
 /// Applies `map` to each character and concatenates the resulting lists.
-fun String.flat_map(map: String => List[Y]): List[Y] =
-    this.reduce(_empty_string_flat_mapped_list(map), (acc, char) => acc + map(char))
+fun String.flat_map(map: String => List[Y]): Seq[Y] =
+    to_seq(this.reduce(_empty_string_flat_mapped_list(map), (acc, char) => acc + map(char)))
 
 /// Applies `map` to each character and concatenates the resulting lists.
-fun String.`|*`(map: String => List[Y]): List[Y] = this.flat_map(map)
+fun String.`|*`(map: String => List[Y]): Seq[Y] = this.flat_map(map)
 
 /// Returns true when this String starts with the given substring.
 fun String.starts_with(part: String): bool =

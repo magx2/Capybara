@@ -499,19 +499,23 @@ class JavaExpressionEvaluatorTest {
     void shouldCastCollectionTypedPatternBindingsBeforeUse() {
         var generatedProgram = new JavaGenerator().generate(compileProgram("CollectionTypedMatch", "/foo/bar", """
                 from /capy/lang/Collections import { * }
+                from /capy/lang/Seq import { * }
 
-                fun stringify(value: any): List[String] =
+                fun stringify(value: any): Seq[String] =
                     match value with
                     case List[any] items -> items | item => "" + item
                     case Set[any] items -> {
                         let initial: List[String] = []
-                        items |> initial, (acc, item) => acc + ("" + item)
+                        to_seq(items |> initial, (acc, item) => acc + ("" + item))
                     }
                     case Dict[any] items -> {
                         let initial: List[String] = []
-                        items |> initial, (acc, key, item) => acc + (key + ":" + item)
+                        to_seq(items |> initial, (acc, key, item) => acc + (key + ":" + item))
                     }
-                    case _ -> []
+                    case _ -> {
+                        let empty: List[String] = []
+                        to_seq(empty)
+                    }
                 """));
         var generated = generatedProgram.modules().stream()
                 .map(dev.capylang.generator.GeneratedModule::code)
@@ -796,6 +800,7 @@ class JavaExpressionEvaluatorTest {
     void shouldInferSharedParentForConcatenatedSubtypeLists() {
         var program = compileProgram("EmptyLiteralInference", "/foo/bar", """
                 from /capy/lang/Collections import { * }
+                from /capy/lang/Seq import { * }
 
                 type Outcome = ParseSucceeded | ParseFailed
                 data ParseSucceeded { source: String }
@@ -947,6 +952,7 @@ class JavaExpressionEvaluatorTest {
     void shouldSanitizeJavaKeywordsUsedAsLocalNames() {
         var generatedProgram = new JavaGenerator().generate(compileProgram("KeywordLocalNames", "/foo/bar", """
                 from /capy/lang/Collections import { * }
+                from /capy/lang/Seq import { * }
 
                 data Date { day: int }
 
@@ -954,7 +960,7 @@ class JavaExpressionEvaluatorTest {
                     let assert: bool = is_valid
                     assert
 
-                fun test_keyword_lambda(values: List[Date]): List[int] =
+                fun test_keyword_lambda(values: List[Date]): Seq[int] =
                     values | assert => assert.day
 
                 fun test_keyword_reduce(values: List[int]): int =
@@ -1184,8 +1190,9 @@ class JavaExpressionEvaluatorTest {
                         "pipe_map",
                         """
                                 from /capy/lang/Collections import { * }
+                                from /capy/lang/Seq import { * }
 
-                                fun pipe_map(l: List[int]): List[int] =
+                                fun pipe_map(l: List[int]): Seq[int] =
                                     l | x => x * 2
                                 """,
                         "return capy.lang.Collections.pipe(l, x -> ((x*2)));"
@@ -1194,6 +1201,7 @@ class JavaExpressionEvaluatorTest {
                         "map",
                         """
                                 from /capy/lang/Collections import { * }
+                                from /capy/lang/Seq import { * }
 
                                 fun map(l: List[int]) = l | :double
 
@@ -1205,8 +1213,9 @@ class JavaExpressionEvaluatorTest {
                         "pipe_filter_out",
                         """
                                 from /capy/lang/Collections import { * }
+                                from /capy/lang/Seq import { * }
 
-                                fun pipe_filter_out(l: List[int]): List[int] =
+                                fun pipe_filter_out(l: List[int]): Seq[int] =
                                     l |- x => x > 2
                                 """,
                         "return capy.lang.Collections.pipeMinus(l, x -> ((x>2)));"
@@ -1225,8 +1234,9 @@ class JavaExpressionEvaluatorTest {
                         "pipe_flat_map",
                         """
                                 from /capy/lang/Collections import { * }
+                                from /capy/lang/Seq import { * }
 
-                                fun pipe_flat_map(l: List[int]): List[int] =
+                                fun pipe_flat_map(l: List[int]): Seq[int] =
                                     l |* x => [x, x + 1]
                                 """,
                         "return capy.lang.Collections.pipeStar(l, x -> (java.util.List.of(x, (x+1))));"
