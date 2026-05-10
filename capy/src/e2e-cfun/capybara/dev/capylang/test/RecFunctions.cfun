@@ -1,4 +1,5 @@
 from /capy/lang/Result import { Result, Success, Error }
+from /capy/lang/String import { * }
 
 fun rec sum(n: int, acc: int): int =
     if n <= 0 then acc else sum(n - 1, acc + n)
@@ -51,7 +52,7 @@ fun rec sum_present_values(values: List[int], acc: int): int =
 private fun parse_length(value: String): Result[int] =
     if value == "bad"
     then Error { message: "bad length" }
-    else Success { value: value.size }
+    else Success { value: value.length() }
 
 fun rec sum_lengths_until_error(values: List[String], acc: int): String =
     match values[0] with

@@ -446,6 +446,36 @@ class CapybaraCompilerLibrariesTest {
     }
 
     @Test
+    void shouldRejectCollectionSizeFieldAccessWithoutParentheses() {
+        var error = compileFailure(List.of(new RawModule("Consumer", "/foo/app", """
+                fun broken(values: List[int]): int = values.size
+                """)));
+
+        assertThat(error.message())
+                .contains("Field access requires data type, was `List[int]`");
+    }
+
+    @Test
+    void shouldRejectStringIsEmptyFieldAccessWithoutParentheses() {
+        var error = compileFailure(List.of(new RawModule("Consumer", "/foo/app", """
+                fun broken(value: String): bool = value.is_empty
+                """)));
+
+        assertThat(error.message())
+                .contains("Field access requires data type, was `String`");
+    }
+
+    @Test
+    void shouldRejectStringSizeFieldAccessWithoutParentheses() {
+        var error = compileFailure(List.of(new RawModule("Consumer", "/foo/app", """
+                fun broken(value: String): int = value.size
+                """)));
+
+        assertThat(error.message())
+                .contains("Field access requires data type, was `String`");
+    }
+
+    @Test
     void shouldRejectDerivedMethodCollision() {
         var error = compileFailure(List.of(new RawModule("Consumer", "/foo/app", """
                 deriver Show {
@@ -528,9 +558,10 @@ class CapybaraCompilerLibrariesTest {
     void shouldApplyLibraryTypeConstructorWhenInstantiatingImportedSubtype() {
         var librarySource = """
                 from /capy/lang/Result import { * }
+                from /capy/lang/String import { * }
 
                 type ValidatedName { name: String } with constructor {
-                   if name.size == 0 then
+                   if name.length() == 0 then
                        Error { message: "Name was empty" }
                    else
                        Success { value: * { name: name } }
@@ -538,7 +569,7 @@ class CapybaraCompilerLibrariesTest {
 
                 data NamedUser { name: String, role: String }
                 """;
-        var libraries = compileProgram(List.of(new RawModule("Library", "/foo/lib", librarySource)), new java.util.TreeSet<>()).modules();
+        var libraries = compileProgram(List.of(stringModule(), new RawModule("Library", "/foo/lib", librarySource)), new java.util.TreeSet<>()).modules();
 
         var consumerSource = """
                 from Library import { * }
@@ -556,9 +587,10 @@ class CapybaraCompilerLibrariesTest {
     void shouldApplyTransitiveLibraryTypeConstructorWhenInstantiatingImportedSubtype() {
         var librarySource = """
                 from /capy/lang/Result import { * }
+                from /capy/lang/String import { * }
 
                 type ValidatedName { name: String } with constructor {
-                   if name.size == 0 then
+                   if name.length() == 0 then
                        Error { message: "Name was empty" }
                    else
                        Success { value: * { name: name } }
@@ -568,7 +600,7 @@ class CapybaraCompilerLibrariesTest {
 
                 data NamedUser { name: String, role: String }
                 """;
-        var libraries = compileProgram(List.of(new RawModule("Library", "/foo/lib", librarySource)), new java.util.TreeSet<>()).modules();
+        var libraries = compileProgram(List.of(stringModule(), new RawModule("Library", "/foo/lib", librarySource)), new java.util.TreeSet<>()).modules();
 
         var consumerSource = """
                 from Library import { * }
@@ -611,6 +643,7 @@ class CapybaraCompilerLibrariesTest {
     @Test
     void shouldResolveImportedParentTypeFieldsAcrossModules() {
         var compiled = compileProgram(List.of(
+                collectionsModule(),
                 new RawModule("Assert", "/capy/test", """
                         data Assertion { result: bool, message: String }
                         type Assert { assertions: List[Assertion] } = StringAssert
@@ -618,17 +651,18 @@ class CapybaraCompilerLibrariesTest {
                         """),
                 new RawModule("CapyTest", "/capy/test", """
                         from Assert import { * }
+                        from /capy/lang/Collections import { * }
 
                         data TestCase { asserts: List[Assert] }
                         fun assertion_count(test_case: TestCase): int =
                             test_case.asserts
-                                |> 0, (acc, a) => acc + a.assertions.size
+                                |> 0, (acc, a) => acc + a.assertions.size()
                         """)
         ), new java.util.TreeSet<>());
 
         assertThat(compiled.modules())
                 .extracting(CompiledModule::name)
-                .containsExactlyInAnyOrder("Assert", "CapyTest");
+                .containsExactlyInAnyOrder("Collections", "Assert", "CapyTest");
         assertThat(compiled.modules().stream()
                 .filter(module -> module.name().equals("CapyTest"))
                 .findFirst()
@@ -642,21 +676,23 @@ class CapybaraCompilerLibrariesTest {
     @Test
     void shouldResolveImportedDataFieldsNestedInCollectionsAcrossModules() {
         var compiled = compileProgram(List.of(
+                collectionsModule(),
                 new RawModule("CapyTest", "/capy/test", """
                         data TestCase { asserts: List[String] }
                         data TestFile { test_cases: List[TestCase] }
                         """),
                 new RawModule("Runtime", "/capy/test", """
                         from CapyTest import { * }
+                        from /capy/lang/Collections import { * }
 
                         fun assertion_count(test_file: TestFile): int =
-                            test_file.test_cases | tc => tc.asserts.size |> 0, (acc, count) => acc + count
+                            test_file.test_cases | tc => tc.asserts.size() |> 0, (acc, count) => acc + count
                         """)
         ), new java.util.TreeSet<>());
 
         assertThat(compiled.modules())
                 .extracting(CompiledModule::name)
-                .containsExactlyInAnyOrder("CapyTest", "Runtime");
+                .containsExactlyInAnyOrder("Collections", "CapyTest", "Runtime");
         assertThat(compiled.modules().stream()
                 .filter(module -> module.name().equals("Runtime"))
                 .findFirst()
@@ -1205,6 +1241,20 @@ class CapybaraCompilerLibrariesTest {
         var errors = ((Result.Error<CompiledProgram>) result).errors();
         assertThat(errors).isNotEmpty();
         return errors.first();
+    }
+
+    private static RawModule stringModule() {
+        return new RawModule("String", "/capy/lang", """
+                data String { <native> }
+                fun String.length(): int = <native>
+                """);
+    }
+
+    private static RawModule collectionsModule() {
+        return new RawModule("Collections", "/capy/lang", """
+                data List[T] { <native> }
+                fun List[T].size(): int = <native>
+                """);
     }
 
     private static RawModule reflectionMetadataModule() {

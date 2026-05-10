@@ -1,5 +1,7 @@
-fun choose(values: List[int]): int = 100 + values.size
-fun choose(values: List[long]): int = 200 + values.size
+from /capy/lang/Collections import { * }
+
+fun choose(values: List[int]): int = 100 + values.size()
+fun choose(values: List[long]): int = 200 + values.size()
 
 fun ints(): List[int] = [1, 2, 3]
 fun longs(): List[long] = [1L, 2L, 3L]

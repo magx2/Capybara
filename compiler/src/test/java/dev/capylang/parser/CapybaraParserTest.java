@@ -786,8 +786,9 @@ class CapybaraParserTest {
     @DisplayName("should parse bang over nested field access")
     void parseBangOverNestedFieldAccess() {
         var module = parseSuccess(new RawModule("Test", "/parser", """
-                data Parse { buffer: String }
-                fun test(parse: Parse): bool = !parse.buffer.is_empty
+                data Buffer { done: bool }
+                data Parse { buffer: Buffer }
+                fun test(parse: Parse): bool = !parse.buffer.done
                 """));
 
         var function = findFunction("test", module.functional());
@@ -796,7 +797,7 @@ class CapybaraParserTest {
         assertThat(expression.operator()).isEqualTo(InfixOperator.EQUAL);
         assertThat(expression.left()).isInstanceOf(FieldAccess.class);
         var outerFieldAccess = (FieldAccess) expression.left();
-        assertThat(outerFieldAccess.field()).isEqualTo("is_empty");
+        assertThat(outerFieldAccess.field()).isEqualTo("done");
         assertThat(outerFieldAccess.source()).isInstanceOf(FieldAccess.class);
         var innerFieldAccess = (FieldAccess) outerFieldAccess.source();
         assertThat(innerFieldAccess.field()).isEqualTo("buffer");

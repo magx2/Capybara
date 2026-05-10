@@ -1,5 +1,6 @@
 from /capy/lang/Option import { Option, Some, None }
 from /capy/lang/Result import {*}
+from /capy/lang/String import { * }
 
 /// Given a version number MAJOR.MINOR.PATCH, increment the:
 ///
@@ -27,7 +28,7 @@ data SemVer {
 /// ```
 fun parse_semver(version: String): Result[SemVer] =
     data __Parse[T] { buffer: String, value: T }
-    fun __tail(value: String): String = value[1, value.size]
+    fun __tail(value: String): String = value[1, value.length()]
     /// ```
     /// <version core> ::= <major> "." <minor> "." <patch>
     /// ```
@@ -312,7 +313,7 @@ fun parse_semver(version: String): Result[SemVer] =
     ---
     __parse_version_core(version)
     | version_parse =>
-        if !version_parse.buffer.is_empty
+        if !version_parse.buffer.is_empty()
         then Error { 'Unexpected characters after patch version: `' + version_parse.buffer + '`!' }
         else Success { version_parse.value }
 

@@ -1,5 +1,6 @@
 from /capy/test/Assert import { * }
 from /capy/lang/Effect import { * }
+from /capy/lang/Collections import { * }
 from /capy/test/CapyTest import { * }
 
 fun tests(): Effect[TestFile] =
@@ -14,25 +15,24 @@ fun tests(): Effect[TestFile] =
 
 fun should_assert_list(): Assert =
     let l = [1, 2, 3]
-    assert_that(l.size).is_equal_to(3)
+    assert_that(l.size()).is_equal_to(3)
 
 fun should_assert_empty_list(): Assert =
-    assert_that([].size).is_equal_to(0)
+    let empty: List[int] = []
+    assert_that(empty.size()).is_equal_to(0)
 
 fun should_assert_set(): Assert =
     let s = {1, 2, 3}
-    assert_that(s.size).is_equal_to(3)
+    assert_that(s.size()).is_equal_to(3)
 
 fun should_assert_empty_set(): Assert =
     let empty_set: Set[int] = {1, 2} - 1 - 2
-    assert_that(empty_set.size).is_equal_to(0)
+    assert_that(empty_set.size()).is_equal_to(0)
 
 fun should_assert_dict(): Assert =
     let d: Dict[int] = {"one": 1, "two": 2}
-    assert_that(d.size).is_equal_to(2)
+    assert_that(d.size()).is_equal_to(2)
 
 fun should_assert_empty_dict(): Assert =
     let d: Dict[int] = {:}
-    assert_that(d.size).is_equal_to(0)
-
-
+    assert_that(d.size()).is_equal_to(0)

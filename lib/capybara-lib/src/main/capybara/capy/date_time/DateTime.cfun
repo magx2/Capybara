@@ -5,6 +5,7 @@ from /capy/lang/Math import { * }
 from /capy/lang/Result import { * }
 from /capy/lang/Primitives import { * }
 from /capy/lang/Option import { * }
+from /capy/lang/String import { * }
 
 /// Combination of a UTC calendar date and time of day.
 data DateTime { date: Date, time: Time }
@@ -132,37 +133,37 @@ fun from_iso_8601(iso: String): Result[DateTime] =
     data __SplitScan { left: String, right: String, seen_separator: bool }
     fun __invalid(message: String): String = "Invalid ISO 8601 date-time format: " + message
     fun rec __scan_split(value: String, scan: __SplitScan): Result[__Split] =
-        if value.is_empty
+        if value.is_empty()
         then if !scan.seen_separator
             then Error { __invalid("expected `T` separator between date and time") }
-            else if scan.left.is_empty | scan.right.is_empty
+            else if scan.left.is_empty() | scan.right.is_empty()
             then Error { __invalid("date-time parts must not be empty") }
             else Success { __Split { left: scan.left, right: scan.right } }
         else if value[0, 1] == "T"
             then if scan.seen_separator
                 then Error { __invalid("expected exactly one `T` separator") }
-                else __scan_split(value[1, value.size], __SplitScan {
+                else __scan_split(value[1, value.length()], __SplitScan {
                     left: scan.left,
                     right: "",
                     seen_separator: true
                 })
             else if scan.seen_separator
-                then __scan_split(value[1, value.size], __SplitScan {
+                then __scan_split(value[1, value.length()], __SplitScan {
                     left: scan.left,
                     right: scan.right + value[0, 1],
                     seen_separator: true
                 })
-                else __scan_split(value[1, value.size], __SplitScan {
+                else __scan_split(value[1, value.length()], __SplitScan {
                     left: scan.left + value[0, 1],
                     right: scan.right,
                     seen_separator: false
                 })
     fun __is_extended_date(value: String): bool =
-        if value.size == 10
+        if value.length() == 10
         then value[4, 5] == "-" & value[7, 8] == "-"
         else false
     fun __is_extended_time(value: String): bool =
-        if value.size >= 8
+        if value.length() >= 8
         then value[2, 3] == ":" & value[5, 6] == ":"
         else false
     ---

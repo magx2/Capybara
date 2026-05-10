@@ -1,3 +1,5 @@
+from /capy/lang/Collections import { * }
+
 fun static_set(): Set[int] = {1,2,3}
 
 fun empty_static_set(): Set[int] = {}
@@ -16,16 +18,16 @@ fun remove_set(left: Set[int], right: Set[int]): Set[int] = left - right
 
 fun contains(s: Set[int], value: int): bool = s ? value
 
-fun is_empty(s: Set[int]): bool = s.is_empty
+fun is_empty(s: Set[int]): bool = s.is_empty()
 
 data SetHolder { values: Set[int] }
 
-fun not_is_empty(s: Set[int]): bool = !s.is_empty
+fun not_is_empty(s: Set[int]): bool = !s.is_empty()
 
-fun not_nested_is_empty(holder: SetHolder): bool = !holder.values.is_empty
+fun not_nested_is_empty(holder: SetHolder): bool = !holder.values.is_empty()
 
-fun size(s: Set[int]): int = s.size
+fun size(s: Set[int]): int = s.size()
 
 fun let_named_set(): int =
     let set: Set[int] = {1, 2, 3}
-    set.size
+    set.size()

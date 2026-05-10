@@ -1,3 +1,5 @@
+from /capy/lang/Collections import { * }
+
 const PI: double = 3.14
 const E: double = 2.
 private const HIDDEN: int = 11
@@ -41,7 +43,7 @@ fun list_const_sum(): int = LIST_V |> 0, (acc, v) => acc + v
 
 fun set_const_has_a(): bool = SET_V ? "a"
 
-fun dict_const_size(): int = DICT_V.size
+fun dict_const_size(): int = (DICT_V).size()
 
 fun dog_data_name(): String = DOG_DATA.name
 

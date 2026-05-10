@@ -76,9 +76,9 @@ class StringCollectionTest {
     }
 
     @Test
-    void size() {
-        assertThat(StringCollection.size("capybara")).isEqualTo(8);
-        assertThat(StringCollection.size("")).isZero();
+    void length() {
+        assertThat(StringCollection.length("capybara")).isEqualTo(8);
+        assertThat(StringCollection.length("")).isZero();
     }
 
     @Test
@@ -150,4 +150,3 @@ class StringCollectionTest {
                 .hasMessage("Cannot parse string to bool: abc");
     }
 }
-

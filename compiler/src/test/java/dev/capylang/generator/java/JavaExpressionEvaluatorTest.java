@@ -98,6 +98,13 @@ class JavaExpressionEvaluatorTest {
         return compileProgram(List.of(new RawModule(name, path, source)));
     }
 
+    private static RawModule collectionsModule() {
+        return new RawModule("Collections", "/capy/lang", """
+                data List[T] { <native> }
+                fun List[T].size(): int = <native>
+                """);
+    }
+
     private static CompiledProgram compileProgram(List<RawModule> modules) {
         var programResult = CapybaraCompiler.INSTANCE.compile(modules, new java.util.TreeSet<>());
         if (programResult instanceof Result.Error<CompiledProgram> er) {
@@ -204,13 +211,18 @@ class JavaExpressionEvaluatorTest {
     @Test
     void shouldKeepQualifiedOverrideOwnershipPerModule() {
         var program = compileProgram(List.of(
+                collectionsModule(),
                 new RawModule("Left", "/alpha", """
-                        fun choose(values: List[int]): int = 100 + values.size
-                        fun choose(values: List[long]): int = 200 + values.size
+                        from /capy/lang/Collections import { * }
+
+                        fun choose(values: List[int]): int = 100 + values.size()
+                        fun choose(values: List[long]): int = 200 + values.size()
                         """),
                 new RawModule("Right", "/beta", """
-                        fun choose(values: List[int]): int = 300 + values.size
-                        fun choose(values: List[long]): int = 400 + values.size
+                        from /capy/lang/Collections import { * }
+
+                        fun choose(values: List[int]): int = 300 + values.size()
+                        fun choose(values: List[long]): int = 400 + values.size()
                         """),
                 new RawModule("Main", "/app", """
                         fun ints(): List[int] = [1, 2, 3]
@@ -285,7 +297,9 @@ class JavaExpressionEvaluatorTest {
 
     @Test
     void shouldGenerateCapyTestMethodFromSourceForCapyTestModule() {
-        var program = compileProgram("CapyTest", "/capy/test", """
+        var program = compileProgram(List.of(collectionsModule(), new RawModule("CapyTest", "/capy/test", """
+                from /capy/lang/Collections import { * }
+
                 data Assertion { result: bool, message: String, type: String }
                 data StringAssert { value: String, assertions: List[Assertion] }
                 type Assert { assertions: List[Assertion] } = StringAssert
@@ -298,10 +312,10 @@ class JavaExpressionEvaluatorTest {
                     TestCase {
                         name: name,
                         result: execute(assert_.assertions),
-                        assertions_count: assert_.assertions.size,
+                        assertions_count: assert_.assertions.size(),
                         execution_time: -1
                     }
-                """);
+                """)));
 
         var generated = new JavaGenerator().generate(program).modules().stream()
                 .map(dev.capylang.generator.GeneratedModule::code)
@@ -314,7 +328,9 @@ class JavaExpressionEvaluatorTest {
 
     @Test
     void shouldGenerateCapyTestNamedMethodFromSourceOutsideCapyTestModule() {
-        var program = compileProgram("NotCapyTest", "/foo/bar", """
+        var program = compileProgram(List.of(collectionsModule(), new RawModule("NotCapyTest", "/foo/bar", """
+                from /capy/lang/Collections import { * }
+
                 data Assertion { result: bool, message: String, type: String }
                 data StringAssert { value: String, assertions: List[Assertion] }
                 type Assert { assertions: List[Assertion] } = StringAssert
@@ -327,17 +343,17 @@ class JavaExpressionEvaluatorTest {
                     TestCase {
                         name: name,
                         result: execute(assert_.assertions),
-                        assertions_count: assert_.assertions.size,
+                        assertions_count: assert_.assertions.size(),
                         execution_time: -1
                     }
-                """);
+                """)));
 
         var generated = new JavaGenerator().generate(program).modules().stream()
                 .map(dev.capylang.generator.GeneratedModule::code)
                 .collect(joining("\n"));
 
         assertThat(generated).doesNotContain("var start = System.currentTimeMillis();");
-        assertThat(generated).contains("return new TestCase(name, foo.bar.NotCapyTest.execute((assert_).assertions()), ((assert_).assertions()).size(), (((long) 0)-((long) 1)));");
+        assertThat(generated).contains("return new TestCase(name, foo.bar.NotCapyTest.execute((assert_).assertions()), (assert_).assertions().size(), (((long) 0)-((long) 1)));");
     }
 
     @Test

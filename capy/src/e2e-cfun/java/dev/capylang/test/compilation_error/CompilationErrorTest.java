@@ -20,10 +20,11 @@ public class CompilationErrorTest {
     @Test
     void shouldKeepOriginalLocalNamesInUserVisibleErrors() {
         var errors = compileProgram("""
+                        from /capy/lang/String import { * }
                         fun parse_semver(version: String): Result[int] =
                             data __Parse[T] { buffer: String, value: T }
                             fun __parse_digit(buffer: String): Result[__Parse[int]] =
-                                Success { __Parse { buffer: buffer[1, buffer.size], value: 1 } }
+                                Success { __Parse { buffer: buffer[1, buffer.length()], value: 1 } }
                             fun __parse_digits(parse: __Parse[Option[int]]): Result[__Parse[int]] =
                                 match parse.buffer[0] with
                                 case None ->
@@ -35,7 +36,7 @@ public class CompilationErrorTest {
                                     match next_digit with
                                     case Error error ->
                                         match parse.value with
-                                        case Some { value } -> Success { __Parse { parse.buffer[1, parse.buffer.size], value } }
+                                        case Some { value } -> Success { __Parse { parse.buffer[1, parse.buffer.length()], value } }
                                         case None -> error
                                     case Success { next_digit_parse } ->
                                         let new_parse: __Parse[Option[int]] = __Parse {
@@ -47,7 +48,7 @@ public class CompilationErrorTest {
                                         }
                                         __parse_digits(new_parse)
                             __parse_digits(__Parse { buffer: version, value: None {} })|version_parse =>
-                                if version_parse.buffer==false.is_empty then Error { "Unexpected characters after patch version: `"+version_parse.buffer+"`!" } else Success { version_parse.value }
+                                if version_parse.buffer==false.is_empty() then Error { "Unexpected characters after patch version: `"+version_parse.buffer+"`!" } else Success { version_parse.value }
                         """,
                 "local_names_in_errors");
 
@@ -223,8 +224,9 @@ public class CompilationErrorTest {
     void shouldRequireResultDataConstructorWhenParentTypeConstructorReturnsResult() {
                 var errors = compileProgram("""
                         from /capy/lang/Result import { * }
+                        from /capy/lang/String import { * }
                         type Parent { foo: String } with constructor {
-                           if foo.size == 0 then
+                           if foo.length() == 0 then
                                Error { message: "missing" }
                            else
                                Success { value: * { foo: foo } }
@@ -1114,7 +1116,7 @@ public class CompilationErrorTest {
                                 data Cons[T] { value: T, rest: Seq[T] }
                                 single End
                                 fun to_seq(list: List[int]): Seq[int] =
-                                    if list.size > 0
+                                    if list.size() > 0
                                     then Cons { list[0], to_seq(list[1:])
                                     else End {}
                                 """,
@@ -1126,10 +1128,10 @@ public class CompilationErrorTest {
                                 data Cons[T] { value: T, rest: Seq[T] }
                                 single End
                                 fun to_seq(list: List[int]): Seq[int] =
-                                    if list.size > 0
+                                    if list.size() > 0
                                     then Cons { list[0], to_seq(list[1:])
                                     else End {}
-                                    ^ Syntax error near `iflist.size>0thenCons{list[0],to_seq(list[1:])else`
+                                    ^ Syntax error near `iflist.size()>0thenCons{list[0],to_seq(list[1:])else`
                                 """
                 ),
                 Arguments.of(
@@ -1254,7 +1256,7 @@ public class CompilationErrorTest {
                                 error: mismatched types
                                  --> /foo/boo/function_field_access_requires_data_type.cfun:1:17
                                 fun foo(): int = "abc".foo
-                                                 ^ Field `foo` not found in type `STRING`
+                                                 ^ Field access requires data type, was `String`
                                 """
                 ),
                 Arguments.of(
@@ -1299,11 +1301,12 @@ public class CompilationErrorTest {
                                 data _Parse[T] { value: T, parsing_string: String }
                                 data JsonBool { value: bool }
                                 single JsonNull
+                                from /capy/lang/String import { * }
                                   fun _deserialize_json_null(json: String): Result[_Parse[JsonBool]] =
-                                    let parsed: _Parse[JsonNull] = _Parse { JsonNull {}, json[4, json.size] }
+                                    let parsed: _Parse[JsonNull] = _Parse { JsonNull {}, json[4, json.length()] }
                                     Success { parsed }
                                 """,
-                        new Position(9, 4),
+                        new Position(10, 4),
                         "error: mismatched types\n"
                         + " --> /foo/boo/function_json_null_wrong_generic_return_type.cfun:%d:%d\n"
                         + "fun _deserialize_json_null(json: String): Result[_Parse[JsonBool]] =\n"
@@ -1753,6 +1756,10 @@ public class CompilationErrorTest {
 
 
     private static final List<RawModule> DEFAULT_MODULES = List.of(
+            new RawModule("String", "/capy/lang", """
+                    data String { <native> }
+                    fun String.length(): int = <native>
+                    """),
             new RawModule("Name", "/capy/compilation_test", """
                     type Name[T] = Foo[T] | Boo
                     data Foo[T] { value: T }
