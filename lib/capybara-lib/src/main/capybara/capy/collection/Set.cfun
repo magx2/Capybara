@@ -3,6 +3,9 @@ from /capy/lang/Seq import { * }
 
 /// Native unique-value collection type backed by the runtime Set implementation.
 /// Set literals use braces with values: {1, 2, 3}.
+///
+/// For a one-value Set, include a trailing comma: {1,}.
+/// Without the comma, {1} is parsed as a grouped expression, not as a Set.
 data Set[T] { <native> }
 
 /// Returns the number of values in this Set.
@@ -53,6 +56,239 @@ private fun Set[T]._contains_native(value: T): bool = <native>
 
 /// Returns true when this Set contains the given value.
 fun Set[T].`?`(value: T): bool = this.contains(value)
+
+/// Returns true when every value in this Set exists in `other`.
+///
+/// Examples and counter-examples:
+/// ```cfun
+/// {1, 2}.is_subset_of({1, 2, 3}) == true
+/// {1, 2} ⊆ {1, 2, 3} == true
+/// {1, 4} ⊆ {1, 2, 3} == false
+/// {1, 2} ⊆ {1, 2} == true
+/// ```
+fun Set[T].is_subset_of(other: Set[T]): bool = this.all(value => other.contains(value))
+
+/// Returns true when every value in this Set exists in `other`.
+///
+/// Examples and counter-examples:
+/// ```cfun
+/// {1, 2} ⊆ {1, 2, 3} == true
+/// {1, 4} ⊆ {1, 2, 3} == false
+/// {1, 2} ⊆ {1, 2} == true
+/// ```
+///
+/// Symbolic alias for `is_subset_of`.
+fun Set[T].`⊆`(other: Set[T]): bool = this.is_subset_of(other)
+
+/// Returns true when this Set is strictly contained in `other`.
+///
+/// This is the same as `is_subset_of`, but the Sets must not be equal.
+///
+/// Examples and counter-examples:
+/// ```cfun
+/// {1, 2}.is_proper_subset_of({1, 2, 3}) == true
+/// {1, 2} ⊂ {1, 2, 3} == true
+/// {1, 2} ⊂ {1, 2} == false
+/// ```
+fun Set[T].is_proper_subset_of(other: Set[T]): bool =
+    this.is_subset_of(other) & this.size() < other.size()
+
+/// Returns true when this Set is strictly contained in `other`.
+///
+/// Examples and counter-examples:
+/// ```cfun
+/// {1, 2} ⊂ {1, 2, 3} == true
+/// {1, 2} ⊂ {1, 2} == false
+/// ```
+///
+/// Symbolic alias for `is_proper_subset_of`.
+fun Set[T].`⊂`(other: Set[T]): bool = this.is_proper_subset_of(other)
+
+/// Returns true when this Set contains every value in `other`.
+///
+/// Examples and counter-examples:
+/// ```cfun
+/// {1, 2, 3}.is_superset_of({1, 2}) == true
+/// {1, 2, 3} ⊇ {1, 2} == true
+/// {1, 2, 3} ⊇ {1, 4} == false
+/// {1, 2} ⊇ {1, 2} == true
+/// ```
+fun Set[T].is_superset_of(other: Set[T]): bool = other.is_subset_of(this)
+
+/// Returns true when this Set contains every value in `other`.
+///
+/// Examples and counter-examples:
+/// ```cfun
+/// {1, 2, 3} ⊇ {1, 2} == true
+/// {1, 2, 3} ⊇ {1, 4} == false
+/// {1, 2} ⊇ {1, 2} == true
+/// ```
+///
+/// Symbolic alias for `is_superset_of`.
+fun Set[T].`⊇`(other: Set[T]): bool = this.is_superset_of(other)
+
+/// Returns true when this Set strictly contains `other`.
+///
+/// This is the same as `is_superset_of`, but the Sets must not be equal.
+///
+/// Examples and counter-examples:
+/// ```cfun
+/// {1, 2, 3}.is_proper_superset_of({1, 2}) == true
+/// {1, 2, 3} ⊃ {1, 2} == true
+/// {1, 2} ⊃ {1, 2} == false
+/// ```
+fun Set[T].is_proper_superset_of(other: Set[T]): bool = other.is_proper_subset_of(this)
+
+/// Returns true when this Set strictly contains `other`.
+///
+/// Examples and counter-examples:
+/// ```cfun
+/// {1, 2, 3} ⊃ {1, 2} == true
+/// {1, 2} ⊃ {1, 2} == false
+/// ```
+///
+/// Symbolic alias for `is_proper_superset_of`.
+fun Set[T].`⊃`(other: Set[T]): bool = this.is_proper_superset_of(other)
+
+/// Combines all values from both Sets.
+///
+/// Duplicate values appear once in the result.
+///
+/// Examples and counter-examples:
+/// ```cfun
+/// {1, 2}.union({2, 3}) == {1, 2, 3}
+/// {1, 2} ∪ {2, 3} == {1, 2, 3}
+/// {1, 2} ∪ {} == {1, 2}
+/// ```
+fun Set[T].union(other: Set[T]): Set[T] = this + other
+
+/// Combines all values from both Sets.
+///
+/// Examples and counter-examples:
+/// ```cfun
+/// {1, 2} ∪ {2, 3} == {1, 2, 3}
+/// {1, 2} ∪ {} == {1, 2}
+/// ```
+///
+/// Symbolic alias for `union`.
+fun Set[T].`∪`(other: Set[T]): Set[T] = this.union(other)
+
+/// Returns values present in both Sets.
+///
+/// If the Sets have no shared values, the result is empty.
+///
+/// Examples and counter-examples:
+/// ```cfun
+/// {1, 2, 3}.intersection({2, 3, 4}) == {2, 3}
+/// {1, 2, 3} ∩ {2, 3, 4} == {2, 3}
+/// {1, 2} ∩ {3, 4} == {}
+/// ```
+fun Set[T].intersection(other: Set[T]): Set[T] =
+    this.reduce({}, (acc, value) =>
+        if other.contains(value)
+        then acc + value
+        else acc)
+
+/// Returns values present in both Sets.
+///
+/// Examples and counter-examples:
+/// ```cfun
+/// {1, 2, 3} ∩ {2, 3, 4} == {2, 3}
+/// {1, 2} ∩ {3, 4} == {}
+/// ```
+///
+/// Symbolic alias for `intersection`.
+fun Set[T].`∩`(other: Set[T]): Set[T] = this.intersection(other)
+
+/// Returns values present in this Set but not in `other`.
+///
+/// Direction matters: `left.difference(right)` keeps values from `left`.
+///
+/// Examples and counter-examples:
+/// ```cfun
+/// {1, 2, 3}.difference({2,}) == {1, 3}
+/// {1, 2}.difference({2, 3}) == {1,}
+/// {2, 3}.difference({1, 2}) == {3,}
+/// ```
+fun Set[T].difference(other: Set[T]): Set[T] = this - other
+
+/// Returns values present in exactly one of the Sets.
+///
+/// Values present in both Sets are removed.
+///
+/// Examples:
+/// ```cfun
+/// {1, 2, 3}.symmetric_difference({2, 3, 4}) == {1, 4}
+/// {1, 2, 3} △ {2, 3, 4} == {1, 4}
+/// {1, 2} △ {1, 2} == {}
+/// ```
+fun Set[T].symmetric_difference(other: Set[T]): Set[T] =
+    this.difference(other) + other.difference(this)
+
+/// Returns values present in exactly one of the Sets.
+///
+/// Examples:
+/// ```cfun
+/// {1, 2, 3} △ {2, 3, 4} == {1, 4}
+/// {1, 2} △ {1, 2} == {}
+/// ```
+///
+/// Symbolic alias for `symmetric_difference`.
+fun Set[T].`△`(other: Set[T]): Set[T] = this.symmetric_difference(other)
+
+/// Returns all ordered pairs from this Set and `other`.
+///
+/// The left Set supplies the first tuple value and the right Set supplies the second.
+/// If either Set is empty, the result is empty.
+///
+/// Examples:
+/// ```cfun
+/// {1, 2}.cartesian_product({"a", "b"}) == {(1, "a"), (1, "b"), (2, "a"), (2, "b")}
+/// {1, 2} × {"a", "b"} == {(1, "a"), (1, "b"), (2, "a"), (2, "b")}
+/// {} × {"a", "b"} == {}
+/// ```
+fun Set[T].cartesian_product(other: Set[U]): Set[Tuple[T, U]] =
+    this.reduce({}, (acc, left) =>
+        other.reduce(acc, (pairs, right) => pairs + (left, right)))
+
+/// Returns all ordered pairs from this Set and `other`.
+///
+/// Examples:
+/// ```cfun
+/// {1, 2} × {"a", "b"} == {(1, "a"), (1, "b"), (2, "a"), (2, "b")}
+/// {} × {"a", "b"} == {}
+/// ```
+///
+/// Symbolic alias for `cartesian_product`.
+fun Set[T].`×`(other: Set[U]): Set[Tuple[T, U]] = this.cartesian_product(other)
+
+/// Returns the Set of all subsets of this Set.
+///
+/// The result always includes the empty Set and the original Set.
+/// A Set with `n` values has `2^n` subsets.
+///
+/// Examples:
+/// ```cfun
+/// {1, 2}.power_set() == {{}, {1,}, {2,}, {1, 2}}
+/// {1, 2}.℘() == {{}, {1,}, {2,}, {1, 2}}
+/// {}.power_set() == {{},}
+/// ```
+fun Set[T].power_set(): Set[Set[T]] =
+    fun _set_power_subset(subset: Set[T], value: T): Set[Set[T]] = {subset + value,}
+    ---
+    this.reduce({{},}, (subsets, value) =>
+        subsets.reduce(subsets, (acc, subset) => acc + _set_power_subset(subset, value)))
+
+/// Returns the Set of all subsets of this Set.
+///
+/// Examples:
+/// ```cfun
+/// {1, 2}.℘() == {{}, {1,}, {2,}, {1, 2}}
+/// {}.℘() == {{},}
+/// ```
+///
+/// Symbolic alias for `power_set`.
+fun Set[T].`℘`(): Set[Set[T]] = this.power_set()
 
 /// Combines all values from left to right.
 fun Set[T].reduce(initial: R, reducer: (R, T) => R): R =

@@ -264,6 +264,24 @@ class InfixOperatorCompilerTest {
         assertThat(((CompiledDataParentType) function.returnType()).typeParameters()).containsExactly("String");
     }
 
+    @Test
+    void shouldAllowBareSymbolicMethodLiterals() {
+        var compiled = compileProgram("""
+                data Sum { value: int }
+
+                fun Sum.`$-`(x: int): Sum = Sum { value: this.value - x - 1 }
+                fun Sum.`⊆`(x: int): bool = this.value <= x
+
+                fun dollar_minus(sum: Sum): Sum = sum $- 2
+                fun subset_infix(sum: Sum): bool = sum ⊆ 10
+                fun subset_method(sum: Sum): bool = sum.⊆(10)
+                """);
+
+        assertThat(compiled.modules().first().functions())
+                .extracting(CompiledFunction::name)
+                .contains("dollar_minus", "subset_infix", "subset_method");
+    }
+
     private static CompiledProgram compileProgram(String code) {
         return compileProgram(List.of(new RawModule("InfixOperators", "/foo/boo", code)));
     }

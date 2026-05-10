@@ -1,23 +1,16 @@
 package dev.capylang.compiler.parser;
 
 
-import org.antlr.v4.runtime.CharStreams;
-import org.antlr.v4.runtime.CommonTokenStream;
-import org.antlr.v4.runtime.ParserRuleContext;
-import org.antlr.v4.runtime.RecognitionException;
-import org.antlr.v4.runtime.Token;
-import org.antlr.v4.runtime.Recognizer;
-import org.antlr.v4.runtime.tree.TerminalNode;
 import dev.capylang.compiler.ImportDeclaration;
 import dev.capylang.compiler.Result;
 import dev.capylang.parser.antlr.FunctionalParser;
+import org.antlr.v4.runtime.*;
+import org.antlr.v4.runtime.tree.TerminalNode;
 
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
-
-import static java.util.stream.Collectors.toSet;
 
 public class CapybaraParser {
     public static final CapybaraParser INSTANCE = new CapybaraParser();
@@ -1616,9 +1609,8 @@ public class CapybaraParser {
             return new FunctionInvoke(function, args, position(expression));
         }
 
-        if (expression.INFIX_METHOD_LITERAL() != null && expression.expressionNoLet().size() == 2) {
-            var text = expression.INFIX_METHOD_LITERAL().getText();
-            var methodName = text.substring(1, text.length() - 1);
+        if (expression.infixMethodLiteral() != null && expression.expressionNoLet().size() == 2) {
+            var methodName = infixMethodName(expression.infixMethodLiteral().getText());
             return new FunctionCall(
                     Optional.empty(),
                     METHOD_INVOKE_PREFIX + methodName,
@@ -1909,9 +1901,8 @@ public class CapybaraParser {
             return new FunctionInvoke(function, args, position(expression));
         }
 
-        if (expression.INFIX_METHOD_LITERAL() != null && expression.expressionNoLetNoPipe().size() == 2) {
-            var text = expression.INFIX_METHOD_LITERAL().getText();
-            var methodName = text.substring(1, text.length() - 1);
+        if (expression.infixMethodLiteral() != null && expression.expressionNoLetNoPipe().size() == 2) {
+            var methodName = infixMethodName(expression.infixMethodLiteral().getText());
             return new FunctionCall(
                     Optional.empty(),
                     METHOD_INVOKE_PREFIX + methodName,
@@ -3111,17 +3102,16 @@ public class CapybaraParser {
         if (context.identifier() != null) {
             return identifier(context.identifier());
         }
-        var methodIdentifier = context.methodIdentifier();
+        var methodIdentifier = context.declarationMethodIdentifier();
         if (methodIdentifier == null) {
             throw new IllegalStateException("Missing function name");
         }
         if (methodIdentifier.identifier() != null) {
             return identifier(methodIdentifier.identifier());
         }
-        var infixLiteral = methodIdentifier.INFIX_METHOD_LITERAL();
+        var infixLiteral = methodIdentifier.BACKTICKED_INFIX_METHOD_LITERAL();
         if (infixLiteral != null) {
-            var text = infixLiteral.getText();
-            return text.substring(1, text.length() - 1);
+            return infixMethodName(infixLiteral.getText());
         }
         throw new IllegalStateException("Unknown function name declaration: " + context.getText());
     }
@@ -3195,12 +3185,21 @@ public class CapybaraParser {
         if ("with".equals(context.getText())) {
             return "with";
         }
-        var infixLiteral = context.INFIX_METHOD_LITERAL();
+        var infixLiteral = context.infixMethodLiteral();
         if (infixLiteral != null) {
-            var text = infixLiteral.getText();
-            return text.substring(1, text.length() - 1);
+            return infixMethodName(infixLiteral.getText());
+        }
+        if (context.infixOperator() != null) {
+            return context.infixOperator().getText();
         }
         throw new IllegalStateException("Unknown method identifier: " + context.getText());
+    }
+
+    private static String infixMethodName(String text) {
+        if (text.length() >= 2 && text.startsWith("`") && text.endsWith("`")) {
+            return text.substring(1, text.length() - 1);
+        }
+        return text;
     }
 
     private static String localConstName(FunctionalParser.PrivateLocalConstNameContext context) {
