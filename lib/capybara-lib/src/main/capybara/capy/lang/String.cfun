@@ -1,4 +1,3 @@
-from /capy/lang/Result import { * }
 from /capy/lang/Option import { * }
 
 /// Native String type backed by the runtime String implementation.
@@ -28,18 +27,3 @@ fun String.trim(): String = <native>
 
 /// Replaces every occurrence of old with new.
 fun String.replace(old: String, new: String): String = <native>
-
-/// Parses this String as an int.
-fun String.to_int(): Result[int] = <native>
-
-/// Parses this String as a long.
-fun String.to_long(): Result[long] = <native>
-
-/// Parses this String as a double.
-fun String.to_double(): Result[double] = <native>
-
-/// Parses this String as a float.
-fun String.to_float(): Result[float] = <native>
-
-/// Parses this String as a bool.
-fun String.to_bool(): Result[bool] = <native>
