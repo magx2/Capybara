@@ -2449,20 +2449,6 @@ public class CapybaraExpressionCompiler {
                     optionType
             )));
         }
-        if (sourceType instanceof CompiledSet linkedSet) {
-            if (!canCoerceToExpectedType(index.type(), linkedSet.elementType())) {
-                return Optional.empty();
-            }
-            var optionType = optionTypeFor(linkedSet.elementType());
-            if (optionType == null) {
-                return Optional.of(withPosition(Result.error("Option type not found"), functionCall.position()));
-            }
-            return Optional.of(Result.success(new CompiledFunctionCall(
-                    METHOD_DECL_PREFIX + "Set__get",
-                    args,
-                    optionType
-            )));
-        }
         return Optional.empty();
     }
 

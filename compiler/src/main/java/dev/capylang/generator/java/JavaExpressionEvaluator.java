@@ -530,9 +530,6 @@ public class JavaExpressionEvaluator {
         if (receiverType instanceof dev.capylang.compiler.CollectionLinkedType.CompiledDict) {
             return Optional.of(current.addExpression("java.util.Optional.ofNullable((" + source + ").get(" + index + "))"));
         }
-        if (receiverType instanceof dev.capylang.compiler.CollectionLinkedType.CompiledSet) {
-            return Optional.of(current.addExpression("((" + source + ").contains(" + index + ") ? java.util.Optional.of(" + index + ") : java.util.Optional.empty())"));
-        }
         if (receiverType instanceof dev.capylang.compiler.CompiledTupleType) {
             var sizeExpression = "(" + source + ").size()";
             var normalizedIndex = normalizeSliceIndex(index, sizeExpression);

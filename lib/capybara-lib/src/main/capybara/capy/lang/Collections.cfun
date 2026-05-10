@@ -32,9 +32,6 @@ fun Set[T].is_empty(): bool = <native>
 /// Returns true when this Set contains the given value.
 fun Set[T].contains(value: T): bool = <native>
 
-/// Returns value when this Set contains it; equivalent to set[value].
-fun Set[T].get(value: T): Option[T] = <native>
-
 /// Native String-keyed map type backed by the runtime Dict implementation.
 /// Dict literals use braces with String keys: {"one": 1, "two": 2}.
 data Dict[T] { <native> }
