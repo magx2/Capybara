@@ -1,0 +1,104 @@
+from /capy/test/Assert import { * }
+from /capy/lang/Effect import { * }
+from /capy/lang/Seq import { * }
+from /capy/lang/String import { * }
+from /capy/collection/Dict import { * }
+from /capy/test/CapyTest import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/capy/collection/Dict.cfun", [
+        test("should report size and emptiness", () => dict_should_report_size_and_emptiness()),
+        test("should expose entries", () => dict_should_expose_entries()),
+        test("should add entries and dicts", () => dict_should_add_entries_and_dicts()),
+        test("should remove keys and dict keys", () => dict_should_remove_keys_and_dict_keys()),
+        test("should test any and all entries", () => dict_should_test_any_and_all_entries()),
+        test("should detect contained keys", () => dict_should_detect_contained_keys()),
+        test("should reduce entries", () => dict_should_reduce_entries()),
+        test("should map entries", () => dict_should_map_entries()),
+        test("should filter entries out", () => dict_should_filter_entries_out()),
+        test("should get values by key", () => dict_should_get_values_by_key()),
+    ])
+
+fun dict_should_report_size_and_emptiness(): Assert =
+    let empty: Dict[int] = {:}
+    assert_all([
+        assert_that({"one": 1, "two": 2}.size()).is_equal_to(2),
+        assert_that(empty.is_empty()).is_equal_to(true),
+        assert_that({"one": 1}.is_empty()).is_equal_to(false),
+    ])
+
+fun dict_should_expose_entries(): Assert =
+    let entries = {"one": 1, "two": 2}.entries()
+    assert_that(entries)
+        .has_size(2)
+        .contains(("one", 1))
+        .contains(("two", 2))
+
+fun dict_should_add_entries_and_dicts(): Assert =
+    let base: Dict[int] = {"one": 1}
+    let other: Dict[int] = {"two": 2, "one": 10}
+    let added_entry: Dict[int] = {"one": 1} + ("two", 2)
+    let added_entry_named: Dict[int] = {"one": 1}.plus(("two", 2))
+    let replaced_entry: Dict[int] = {"one": 1} + ("one", 10)
+    let merged_dict: Dict[int] = {"one": 1} + {"two": 2, "one": 10}
+    let merged_dict_named: Dict[int] = base.plus(other)
+    assert_all([
+        assert_that(added_entry).is_equal_to({"one": 1, "two": 2}),
+        assert_that(added_entry_named).is_equal_to({"one": 1, "two": 2}),
+        assert_that(replaced_entry).is_equal_to({"one": 10}),
+        assert_that(merged_dict).is_equal_to({"one": 10, "two": 2}),
+        assert_that(merged_dict_named).is_equal_to({"one": 10, "two": 2}),
+    ])
+
+fun dict_should_remove_keys_and_dict_keys(): Assert =
+    let base: Dict[int] = {"one": 1, "two": 2, "three": 3}
+    let other: Dict[int] = {"two": 20, "missing": 0}
+    let removed_key: Dict[int] = {"one": 1, "two": 2, "three": 3} - "two"
+    let removed_key_named: Dict[int] = {"one": 1, "two": 2, "three": 3}.minus("two")
+    let removed_other: Dict[int] = {"one": 1, "two": 2, "three": 3} - {"two": 20, "missing": 0}
+    let removed_other_named: Dict[int] = base.minus(other)
+    assert_all([
+        assert_that(removed_key).is_equal_to({"one": 1, "three": 3}),
+        assert_that(removed_key_named).is_equal_to({"one": 1, "three": 3}),
+        assert_that(removed_other).is_equal_to({"one": 1, "three": 3}),
+        assert_that(removed_other_named).is_equal_to({"one": 1, "three": 3}),
+    ])
+
+fun dict_should_test_any_and_all_entries(): Assert =
+    let empty: Dict[int] = {:}
+    assert_all([
+        assert_that({"one": 1, "two": 2}.any((key, value) => key == "two" & value == 2)).is_equal_to(true),
+        assert_that({"one": 1, "two": 2}.any((_, value) => value > 5)).is_equal_to(false),
+        assert_that({"one": 1, "two": 2}.all((key, value) => key.length() > 0 & value > 0)).is_equal_to(true),
+        assert_that({"one": 1, "two": -2}.all((_, value) => value > 0)).is_equal_to(false),
+        assert_that(empty.all((_, value) => value > 0)).is_equal_to(true),
+    ])
+
+fun dict_should_detect_contained_keys(): Assert =
+    assert_all([
+        assert_that({"one": 1, "two": 2}.contains_key("one")).is_equal_to(true),
+        assert_that({"one": 1, "two": 2} ? "missing").is_equal_to(false),
+    ])
+
+fun dict_should_reduce_entries(): Assert =
+    let empty: Dict[int] = {:}
+    assert_all([
+        assert_that({"a": 1, "b": 2} |> "", (acc, key, value) => acc + key + value).is_equal_to("a1b2"),
+        assert_that(empty.reduce("seed", (acc, key, value) => acc + key + value)).is_equal_to("seed"),
+    ])
+
+fun dict_should_map_entries(): Assert =
+    let mapped: Dict[String] = {"a": 1, "b": 2} | (key, value) => key + value
+    assert_that(mapped).is_equal_to({"a": "a1", "b": "b2"})
+
+fun dict_should_filter_entries_out(): Assert =
+    let filtered: Dict[int] = {"a": 1, "b": 2, "c": 3} |- (_, value) => value % 2 == 0
+    assert_that(filtered).is_equal_to({"a": 1, "c": 3})
+
+fun dict_should_get_values_by_key(): Assert =
+    let values = {"one": 1, "two": 2}
+    assert_all([
+        assert_that(values["one"]).contains(1),
+        assert_that(values.get("two")).contains(2),
+        assert_that(values["missing"]).is_empty(),
+    ])

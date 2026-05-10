@@ -1,0 +1,104 @@
+from /capy/test/Assert import { * }
+from /capy/lang/Effect import { * }
+from /capy/lang/Seq import { * }
+from /capy/collection/Set import { * }
+from /capy/test/CapyTest import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/capy/collection/Set.cfun", [
+        test("should report size and emptiness", () => set_should_report_size_and_emptiness()),
+        test("should convert to list", () => set_should_convert_to_list()),
+        test("should add values and sets", () => set_should_add_values_and_sets()),
+        test("should remove values and sets", () => set_should_remove_values_and_sets()),
+        test("should test any and all values", () => set_should_test_any_and_all_values()),
+        test("should detect contained values", () => set_should_detect_contained_values()),
+        test("should reduce values", () => set_should_reduce_values()),
+        test("should map values", () => set_should_map_values()),
+        test("should filter values out", () => set_should_filter_values_out()),
+        test("should flat map values", () => set_should_flat_map_values()),
+    ])
+
+fun _empty_int_set(): Set[int] = {1, 2} - {1, 2}
+
+fun set_should_report_size_and_emptiness(): Assert =
+    let empty = _empty_int_set()
+    let non_empty = {1, 2} - 2
+    assert_all([
+        assert_that({1, 2, 3}.size()).is_equal_to(3),
+        assert_that(empty.is_empty()).is_equal_to(true),
+        assert_that(non_empty.is_empty()).is_equal_to(false),
+    ])
+
+fun set_should_convert_to_list(): Assert =
+    let values = {1, 2, 3}.to_list()
+    assert_that(values)
+        .has_size(3)
+        .contains(1)
+        .contains(2)
+        .contains(3)
+
+fun set_should_add_values_and_sets(): Assert =
+    let base: Set[int] = {1, 2}
+    let other: Set[int] = {2, 3}
+    assert_all([
+        assert_that({1, 2} + 3).is_equal_to({1, 2, 3}),
+        assert_that({1, 2}.plus(3)).is_equal_to({1, 2, 3}),
+        assert_that({1, 2} + {2, 3}).is_equal_to({1, 2, 3}),
+        assert_that(base.plus(other)).is_equal_to({1, 2, 3}),
+    ])
+
+fun set_should_remove_values_and_sets(): Assert =
+    let base: Set[int] = {1, 2, 3, 4}
+    let other: Set[int] = {2, 4}
+    assert_all([
+        assert_that({1, 2, 3} - 2).is_equal_to({1, 3}),
+        assert_that({1, 2, 3}.minus(2)).is_equal_to({1, 3}),
+        assert_that({1, 2, 3, 4} - {2, 4}).is_equal_to({1, 3}),
+        assert_that(base.minus(other)).is_equal_to({1, 3}),
+    ])
+
+fun set_should_test_any_and_all_values(): Assert =
+    let empty = _empty_int_set()
+    assert_all([
+        assert_that({1, 2, 3}.any(value => value > 2)).is_equal_to(true),
+        assert_that({1, 2, 3}.any(value => value > 5)).is_equal_to(false),
+        assert_that({2, 4, 6}.all(value => value % 2 == 0)).is_equal_to(true),
+        assert_that({2, 3, 6}.all(value => value % 2 == 0)).is_equal_to(false),
+        assert_that(empty.all(value => value > 0)).is_equal_to(true),
+    ])
+
+fun set_should_detect_contained_values(): Assert =
+    assert_all([
+        assert_that({1, 2, 3}.contains(2)).is_equal_to(true),
+        assert_that({1, 2, 3} ? 4).is_equal_to(false),
+    ])
+
+fun set_should_reduce_values(): Assert =
+    assert_all([
+        assert_that({1, 2, 3} |> 0, (acc, value) => acc + value).is_equal_to(6),
+        assert_that(_empty_int_set().reduce(10, (acc, value) => acc + value)).is_equal_to(10),
+    ])
+
+fun set_should_map_values(): Assert =
+    let mapped = ({1, 2, 3} | value => value * 2).as_list()
+    assert_that(mapped)
+        .has_size(3)
+        .contains(2)
+        .contains(4)
+        .contains(6)
+
+fun set_should_filter_values_out(): Assert =
+    let filtered = ({1, 2, 3, 4} |- value => value % 2 == 0).as_list()
+    assert_that(filtered)
+        .has_size(2)
+        .contains(1)
+        .contains(3)
+
+fun set_should_flat_map_values(): Assert =
+    let mapped = ({1, 2} |* value => {value, value + 10}).as_list()
+    assert_that(mapped)
+        .has_size(4)
+        .contains(1)
+        .contains(2)
+        .contains(11)
+        .contains(12)
