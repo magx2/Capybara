@@ -18,6 +18,21 @@ const FLOAT_BOUND_AS_FLOAT: float = 16777216.0f
 /// Floating-point representation of `DOUBLE_BOUND`.
 const DOUBLE_BOUND_AS_DOUBLE: double = 9007199254740992.0
 
+/// Parses this String as an int.
+fun to_int(s: String): Result[int] = <native>
+
+/// Parses this String as a long.
+fun to_long(s: String): Result[long] = <native>
+
+/// Parses this String as a double.
+fun to_double(s: String): Result[double] = <native>
+
+/// Parses this String as a float.
+fun to_float(s: String): Result[float] = <native>
+
+/// Parses this String as a bool.
+fun to_bool(s: String): Result[bool] = <native>
+
 fun clamp_long_to_int(value: long): int =
     if value > MAX_INT_VALUE
     then MAX_INT_VALUE

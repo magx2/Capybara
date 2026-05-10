@@ -63,6 +63,51 @@ class CapybaraCompilerLibrariesTest {
     }
 
     @Test
+    void shouldCompileStringParseFunctionsInPrimitivesModule() {
+        var compiled = compileProgram(List.of(
+                new RawModule("Result", "/capy/lang", """
+                        type Result[T] = Success[T] | Error
+                        data Success[T] { value: T }
+                        data Error { message: String }
+                        """),
+                new RawModule("String", "/capy/lang", """
+                        data String { <native> }
+                        """),
+                new RawModule("Primitives", "/capy/lang", """
+                        from /capy/lang/Result import { * }
+
+                        fun to_int(s: String): Result[int] = <native>
+                        fun to_long(s: String): Result[long] = <native>
+                        fun to_double(s: String): Result[double] = <native>
+                        fun to_float(s: String): Result[float] = <native>
+                        fun to_bool(s: String): Result[bool] = <native>
+                        """),
+                new RawModule("Consumer", "/foo/app", """
+                        from /capy/lang/Result import { * }
+
+                        fun parse(s: String): Result[int] = s.to_int()
+                        """)
+        ), new java.util.TreeSet<>());
+
+        var primitives = compiled.modules().stream()
+                .filter(module -> module.name().equals("Primitives"))
+                .findFirst()
+                .orElseThrow();
+        assertThat(primitives.functions())
+                .extracting(CompiledFunction::name)
+                .contains(
+                        "to_int",
+                        "to_long",
+                        "to_double",
+                        "to_float",
+                        "to_bool"
+                );
+        assertThat(compiledFunction(compiled, "Consumer", "parse").expression())
+                .isInstanceOfSatisfying(CompiledFunctionCall.class, call ->
+                        assertThat(call.name()).isEqualTo("capy.lang.Primitives.to_int"));
+    }
+
+    @Test
     void shouldUseImportedDeriverWithDeriverModuleImports() {
         var reflectionLibraries = compileProgram(List.of(reflectionMetadataModule()), new java.util.TreeSet<>()).modules();
         var serdeLibraries = compileProgram(List.of(new RawModule("Serde", "/foo/lib", """

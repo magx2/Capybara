@@ -20,6 +20,7 @@ public class CapybaraExpressionCompiler {
     private static final String METHOD_DECL_PREFIX = "__method__";
     private static final String METHOD_INVOKE_PREFIX = "__invoke__";
     private static final String PARTIAL_PLACEHOLDER_PREFIX = "$capybaraPartial";
+    private static final String PRIMITIVES_FUNCTION_PREFIX = "capy.lang.Primitives.";
     private static final String DICT_PIPE_ARGS_SEPARATOR = "::";
     private static final String TUPLE_PIPE_ARGS_SEPARATOR = ";;";
     private static final String REFLECTION_INTRINSIC_MODULE = "capy/meta_prog/Reflection";
@@ -2193,7 +2194,7 @@ public class CapybaraExpressionCompiler {
                 return Optional.of(withPosition(Result.error("Result type not found"), functionCall.position()));
             }
             return Optional.of(Result.success(new CompiledFunctionCall(
-                    METHOD_DECL_PREFIX + "String__to_int",
+                    primitiveStringParseFunctionName("to_int"),
                     args,
                     resultType
             )));
@@ -2204,7 +2205,7 @@ public class CapybaraExpressionCompiler {
                 return Optional.of(withPosition(Result.error("Result type not found"), functionCall.position()));
             }
             return Optional.of(Result.success(new CompiledFunctionCall(
-                    METHOD_DECL_PREFIX + "String__to_long",
+                    primitiveStringParseFunctionName("to_long"),
                     args,
                     resultType
             )));
@@ -2215,7 +2216,7 @@ public class CapybaraExpressionCompiler {
                 return Optional.of(withPosition(Result.error("Result type not found"), functionCall.position()));
             }
             return Optional.of(Result.success(new CompiledFunctionCall(
-                    METHOD_DECL_PREFIX + "String__to_double",
+                    primitiveStringParseFunctionName("to_double"),
                     args,
                     resultType
             )));
@@ -2226,7 +2227,7 @@ public class CapybaraExpressionCompiler {
                 return Optional.of(withPosition(Result.error("Result type not found"), functionCall.position()));
             }
             return Optional.of(Result.success(new CompiledFunctionCall(
-                    METHOD_DECL_PREFIX + "String__to_float",
+                    primitiveStringParseFunctionName("to_float"),
                     args,
                     resultType
             )));
@@ -2237,7 +2238,7 @@ public class CapybaraExpressionCompiler {
                 return Optional.of(withPosition(Result.error("Result type not found"), functionCall.position()));
             }
             return Optional.of(Result.success(new CompiledFunctionCall(
-                    METHOD_DECL_PREFIX + "String__to_bool",
+                    primitiveStringParseFunctionName("to_bool"),
                     args,
                     resultType
             )));
@@ -2293,7 +2294,7 @@ public class CapybaraExpressionCompiler {
             signatures.add(builtinMethodSignature("Double", "to_int", List.of(DOUBLE), INT));
             var resultType = resultTypeFor(INT);
             if (resultType != null) {
-                signatures.add(builtinMethodSignature("String", "to_int", List.of(STRING), resultType));
+                signatures.add(primitiveStringParseSignature("to_int", resultType));
             }
         }
         if ("to_long".equals(methodName)) {
@@ -2301,28 +2302,40 @@ public class CapybaraExpressionCompiler {
             signatures.add(builtinMethodSignature("Double", "to_long", List.of(DOUBLE), LONG));
             var resultType = resultTypeFor(LONG);
             if (resultType != null) {
-                signatures.add(builtinMethodSignature("String", "to_long", List.of(STRING), resultType));
+                signatures.add(primitiveStringParseSignature("to_long", resultType));
             }
         }
         if ("to_double".equals(methodName)) {
             var resultType = resultTypeFor(DOUBLE);
             if (resultType != null) {
-                signatures.add(builtinMethodSignature("String", "to_double", List.of(STRING), resultType));
+                signatures.add(primitiveStringParseSignature("to_double", resultType));
             }
         }
         if ("to_float".equals(methodName)) {
             var resultType = resultTypeFor(FLOAT);
             if (resultType != null) {
-                signatures.add(builtinMethodSignature("String", "to_float", List.of(STRING), resultType));
+                signatures.add(primitiveStringParseSignature("to_float", resultType));
             }
         }
         if ("to_bool".equals(methodName)) {
             var resultType = resultTypeFor(BOOL);
             if (resultType != null) {
-                signatures.add(builtinMethodSignature("String", "to_bool", List.of(STRING), resultType));
+                signatures.add(primitiveStringParseSignature("to_bool", resultType));
             }
         }
         return List.copyOf(signatures);
+    }
+
+    private FunctionSignature primitiveStringParseSignature(String functionName, CompiledType returnType) {
+        return new FunctionSignature(
+                primitiveStringParseFunctionName(functionName),
+                List.of(STRING),
+                returnType
+        );
+    }
+
+    private String primitiveStringParseFunctionName(String functionName) {
+        return PRIMITIVES_FUNCTION_PREFIX + functionName;
     }
 
     private FunctionSignature builtinMethodSignature(

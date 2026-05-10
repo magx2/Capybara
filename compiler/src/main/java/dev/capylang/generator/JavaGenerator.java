@@ -3,6 +3,9 @@ package dev.capylang.generator;
 import dev.capylang.generator.java.*;
 import dev.capylang.compiler.CompiledModule;
 import dev.capylang.compiler.CompiledProgram;
+import dev.capylang.compiler.PrimitiveLinkedType;
+import dev.capylang.compiler.expression.CompiledFunctionCall;
+import dev.capylang.compiler.expression.CompiledVariable;
 
 import java.nio.file.Path;
 import java.time.Duration;
@@ -864,6 +867,9 @@ public final class JavaGenerator implements Generator {
         if (isCapyLangRandomSeedMethod(ownerPackage, ownerName, method)) {
             return mapCapyLangRandomSeedMethod(method, visibility, methodTypeParameters);
         }
+        if (isCapyLangPrimitivesStringParseMethod(ownerPackage, ownerName, method)) {
+            return mapCapyLangPrimitivesStringParseMethod(method, visibility, methodTypeParameters);
+        }
         if (isCapyTestCurrentLogTypeMethod(ownerPackage, ownerName, method)) {
             return mapCapyTestCurrentLogTypeMethod(method, visibility, methodTypeParameters);
         }
@@ -942,6 +948,32 @@ public final class JavaGenerator implements Generator {
                + visibility + "static " + methodTypeParameters + method.returnType() + " " + mapMethodName(method.name()) + "() {\n"
                + "return new Seed(java.util.concurrent.ThreadLocalRandom.current().nextLong());\n"
                + "}\n";
+    }
+
+    private boolean isCapyLangPrimitivesStringParseMethod(String ownerPackage, String ownerName, JavaMethod method) {
+        return "capy.lang".equals(ownerPackage)
+               && "Primitives".equals(ownerName)
+               && method.parameters().size() == 1
+               && method.sourceParameterTypes().size() == 1
+               && method.sourceParameterTypes().getFirst() == PrimitiveLinkedType.STRING
+               && isNativeExpression(method)
+               && switch (method.sourceName()) {
+                   case "to_int", "to_long", "to_double", "to_float", "to_bool" -> true;
+                   default -> false;
+               };
+    }
+
+    private String mapCapyLangPrimitivesStringParseMethod(JavaMethod method, String visibility, String methodTypeParameters) {
+        var parameter = method.parameters().getFirst();
+        var syntheticMethodCall = new CompiledFunctionCall(
+                METHOD_DECL_PREFIX + "String__" + method.sourceName(),
+                List.of(new CompiledVariable(parameter.sourceName(), PrimitiveLinkedType.STRING)),
+                method.sourceReturnType()
+        );
+        return mapJavaDoc(method.comments())
+               + visibility + "static " + methodTypeParameters + method.returnType() + " " + mapMethodName(method.name()) + "(" + mapFunctionParameters(method.parameters()) + ") {\n"
+               + evaluateExpression(syntheticMethodCall, method.parameters(), null)
+               + "\n}\n";
     }
 
     private boolean isNativeExpression(JavaMethod method) {
