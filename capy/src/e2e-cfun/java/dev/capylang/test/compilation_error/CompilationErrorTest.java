@@ -121,6 +121,31 @@ public class CompilationErrorTest {
     }
 
     @Test
+    void shouldRejectSetGetMethod() {
+        var errors = compileProgram("""
+                        fun broken(values: Set[int]) = values.get(1)
+                        """,
+                "set_get_method");
+
+        assertThat(errors).hasSize(1);
+        assertThat(errors.first().message())
+                .contains("No method `get` with 2 argument(s)");
+    }
+
+    @Test
+    void shouldRejectSetIndexAccess() {
+        var errors = compileProgram("""
+                        fun broken(values: Set[int]) = values[1]
+                        """,
+                "set_index_access");
+
+        assertThat(errors).hasSize(1);
+        assertThat(errors.first().message())
+                .contains("Type 'Set' cannot be indexed with arguments: int.")
+                .contains("No matching method 'Set.get(int)' found.");
+    }
+
+    @Test
     void shouldRejectStringSliceSyntax() {
         var errors = compileProgram("""
                         fun broken(): String = "afa"[1:2]

@@ -24,10 +24,6 @@ fun set_is_empty(values: Set[int]): bool = values.is_empty()
 
 fun set_contains(values: Set[int], value: int): bool = values.contains(value)
 
-fun set_get(values: Set[int], value: int): Option[int] = values.get(value)
-
-fun set_index(values: Set[int], value: int): Option[int] = values[value]
-
 fun dict_size(values: Dict[int]): int = values.size()
 
 fun dict_contains_key(values: Dict[int], key: String): bool = values.contains_key(key)

@@ -71,10 +71,6 @@ class NativeTypesTest {
         assertThat(NativeTypes.setIsEmpty(Set.of())).isTrue();
         assertThat(NativeTypes.setContains(Set.of(1, 2, 3), 2)).isTrue();
         assertThat(NativeTypes.setContains(Set.of(1, 2, 3), 9)).isFalse();
-        assertThat(NativeTypes.setGet(Set.of(1, 2, 3), 2)).isEqualTo(Optional.of(2));
-        assertThat(NativeTypes.setGet(Set.of(1, 2, 3), 9)).isEqualTo(Optional.empty());
-        assertThat(NativeTypes.setIndex(Set.of(1, 2, 3), 2)).isEqualTo(Optional.of(2));
-        assertThat(NativeTypes.setIndex(Set.of(1, 2, 3), 9)).isEqualTo(Optional.empty());
     }
 
     @Test
