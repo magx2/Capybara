@@ -18,6 +18,8 @@ fun remove_set(left: Set[int], right: Set[int]): Set[int] = left - right
 
 fun contains(s: Set[int], value: int): bool = s ? value
 
+fun contains_method(s: Set[int], value: int): bool = s.contains(value)
+
 fun any(s: Set[int]): bool = s.any(value => value > 2)
 
 fun any_empty(s: Set[int]): bool = s.any(value => value > 2)

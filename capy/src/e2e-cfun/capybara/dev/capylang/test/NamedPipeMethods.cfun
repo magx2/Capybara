@@ -23,8 +23,6 @@ fun list_flat_map_operator(values: List[int]): List[int] = values |* x => expand
 
 fun list_reduce_named(values: List[int]): int = values.reduce(0, (acc, value) => acc + value)
 fun list_reduce_operator(values: List[int]): int = values |> 0, (acc, value) => acc + value
-fun list_reduce_left_named(values: List[int]): int = values.reduce_left(0, (acc, value) => acc + value)
-fun list_reduce_left_symbolic(values: List[int]): int = values.`|l>`(0, (acc, value) => acc + value)
 
 fun set_map_named(values: Set[int]): Set[int] = values.map(x => x * 2)
 fun set_map_operator(values: Set[int]): Set[int] = values | x => x * 2
@@ -37,8 +35,6 @@ fun set_flat_map_operator(values: Set[int]): Set[int] = values |* x => expand_se
 
 fun set_reduce_named(values: Set[int]): int = values.reduce(0, (acc, value) => acc + value)
 fun set_reduce_operator(values: Set[int]): int = values |> 0, (acc, value) => acc + value
-fun set_reduce_left_named(values: Set[int]): int = values.reduce_left(0, (acc, value) => acc + value)
-fun set_reduce_left_symbolic(values: Set[int]): int = values.`|l>`(0, (acc, value) => acc + value)
 
 fun dict_map_named(values: Dict[int]): Dict[String] = values.map((key, value) => key + ":" + value)
 fun dict_map_operator(values: Dict[int]): Dict[String] = values | (key, value) => key + ":" + value
@@ -46,13 +42,8 @@ fun dict_map_operator(values: Dict[int]): Dict[String] = values | (key, value) =
 fun dict_filter_named(values: Dict[int]): Dict[int] = values.filter((_, value) => value > 10)
 fun dict_filter_operator(values: Dict[int]): Dict[int] = values |- (_, value) => value > 10
 
-fun dict_flat_map_named(values: Dict[int]): List[int] = values.flat_map((_, value) => [value, value + 10])
-fun dict_flat_map_operator(values: Dict[int]): List[int] = values |* (_, value) => [value, value + 10]
-
 fun dict_reduce_named(values: Dict[int]): String = values.reduce("", (acc, key, value) => acc + key + ":" + value + ",")
 fun dict_reduce_operator(values: Dict[int]): String = values |> "", (acc, key, value) => acc + key + ":" + value + ","
-fun dict_reduce_left_named(values: Dict[int]): String = values.reduce_left("", (acc, key, value) => acc + key + ":" + value + ",")
-fun dict_reduce_left_symbolic(values: Dict[int]): String = values.`|l>`("", (acc, key, value) => acc + key + ":" + value + ",")
 
 fun seq_map_named(values: List[int]): List[int] = to_seq(values).map(x => x * 3).as_list()
 fun seq_map_operator(values: List[int]): List[int] = (to_seq(values) | x => x * 3).as_list()

@@ -570,6 +570,13 @@ public class JavaExpressionEvaluator {
                     + ".entrySet().stream().map(__entry -> java.util.List.of(__entry.getKey(), __entry.getValue())).toList()"
             ));
         }
+        if (("_contains_native".equals(methodName) || "contains_native".equals(methodName))
+            && args.size() == 2
+            && functionCall.arguments().size() == 2
+            && receiverType instanceof dev.capylang.compiler.CollectionLinkedType.CompiledSet) {
+            var value = coercePrimitiveCallArgument(functionCall.arguments().get(1).type(), args.get(1));
+            return Optional.of(current.addExpression(receiver + ".contains(" + value + ")"));
+        }
         if (!("+".equals(methodName) || "-".equals(methodName)) || args.size() != 2 || functionCall.arguments().size() != 2) {
             return Optional.empty();
         }

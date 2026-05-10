@@ -5,6 +5,10 @@ from /capy/lang/Collections import { * }
 /// String literals use quotes: "hello".
 data String { <native> }
 
+private fun _empty_string_mapped_list(map: String => Y): List[Y] = []
+
+private fun _empty_string_flat_mapped_list(map: String => List[Y]): List[Y] = []
+
 /// Returns the number of characters in this String.
 fun String.length(): int = <native>
 
@@ -25,27 +29,27 @@ fun String.plus(value: any): String = this + value
 
 /// Returns true when at least one character satisfies `predicate`.
 fun String.any(predicate: String => bool): bool =
-    fun rec __any(value: String, idx: int, predicate: String => bool, acc: bool): bool =
+    fun rec __any(value: String, idx: int, predicate: String => bool): bool =
         match value[idx] with
-        case None -> acc
+        case None -> false
         case Some { char } ->
-            if acc
+            if predicate(char)
             then true
-            else __any(value, idx + 1, predicate, predicate(char))
+            else __any(value, idx + 1, predicate)
     ---
-    __any(this, 0, predicate, false)
+    __any(this, 0, predicate)
 
 /// Returns true when at least one character and index pair satisfies `predicate`.
 fun String.any(predicate: (String, int) => bool): bool =
-    fun rec __any(value: String, idx: int, predicate: (String, int) => bool, acc: bool): bool =
+    fun rec __any(value: String, idx: int, predicate: (String, int) => bool): bool =
         match value[idx] with
-        case None -> acc
+        case None -> false
         case Some { char } ->
-            if acc
+            if predicate(char, idx)
             then true
-            else __any(value, idx + 1, predicate, predicate(char, idx))
+            else __any(value, idx + 1, predicate)
     ---
-    __any(this, 0, predicate, false)
+    __any(this, 0, predicate)
 
 /// Returns true when every character satisfies `predicate`.
 ///
@@ -99,16 +103,9 @@ fun String.reduce(initial: R, reducer: (R, String) => R): R =
 /// Combines all characters from left to right.
 fun String.`|>`(initial: R, reducer: (R, String) => R): R = this.reduce(initial, reducer)
 
-/// Combines all characters from left to right.
-fun String.reduce_left(initial: R, reducer: (R, String) => R): R = this.reduce(initial, reducer)
-
-/// Combines all characters from left to right.
-fun String.`|l>`(initial: R, reducer: (R, String) => R): R = this.reduce_left(initial, reducer)
-
 /// Transforms each character using `map`.
 fun String.map(map: String => Y): List[Y] =
-    let initial: List[Y] = []
-    this.reduce(initial, (acc, char) => acc + map(char))
+    this.reduce(_empty_string_mapped_list(map), (acc, char) => acc + map(char))
 
 /// Transforms each character using `map`.
 fun String.`|`(map: String => Y): List[Y] = this.map(map)
@@ -125,11 +122,7 @@ fun String.`|-`(predicate: String => bool): String = this.filter(predicate)
 
 /// Applies `map` to each character and concatenates the resulting lists.
 fun String.flat_map(map: String => List[Y]): List[Y] =
-    let initial: List[Y] = []
-    this.reduce(initial, (acc, char) => acc + map(char))
-
-/// Applies `map` to each character and concatenates the resulting lists.
-fun String.flatMap(map: String => List[Y]): List[Y] = this.flat_map(map)
+    this.reduce(_empty_string_flat_mapped_list(map), (acc, char) => acc + map(char))
 
 /// Applies `map` to each character and concatenates the resulting lists.
 fun String.`|*`(map: String => List[Y]): List[Y] = this.flat_map(map)

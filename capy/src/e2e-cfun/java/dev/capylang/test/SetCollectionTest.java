@@ -79,6 +79,12 @@ class SetCollectionTest {
     }
 
     @Test
+    void containsMethod() {
+        assertThat(SetCollection.containsMethod(Set.of(1, 2, 3), 2)).isTrue();
+        assertThat(SetCollection.containsMethod(Set.of(1, 2, 3), 9)).isFalse();
+    }
+
+    @Test
     void any() {
         assertThat(SetCollection.any(Set.of(1, 2, 3))).isTrue();
         assertThat(SetCollection.any(Set.of(0, 1, 2))).isFalse();
