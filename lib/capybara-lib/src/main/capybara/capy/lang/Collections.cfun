@@ -11,7 +11,8 @@ fun List[T].size(): int = <native>
 fun List[T].is_empty(): bool = this.size() == 0
 
 /// Returns true when this List contains the given value.
-fun List[T].contains(value: T): bool = <native>
+fun List[T].contains(value: T): bool =
+    this |> false, (found, item) => (found | item == value)
 
 /// Returns the value at idx using the same bounds and negative-index rules as list[idx].
 fun List[T].get(idx: int): Option[T] = <native>
@@ -30,7 +31,8 @@ fun Set[T].size(): int = <native>
 fun Set[T].is_empty(): bool = this.size() == 0
 
 /// Returns true when this Set contains the given value.
-fun Set[T].contains(value: T): bool = <native>
+fun Set[T].contains(value: T): bool =
+    this |> false, (found, item) => (found | item == value)
 
 /// Native String-keyed map type backed by the runtime Dict implementation.
 /// Dict literals use braces with String keys: {"one": 1, "two": 2}.
@@ -43,7 +45,8 @@ fun Dict[T].size(): int = <native>
 fun Dict[T].is_empty(): bool = this.size() == 0
 
 /// Returns true when this Dict contains the given key.
-fun Dict[T].contains_key(key: String): bool = <native>
+fun Dict[T].contains_key(key: String): bool =
+    this |> false, (found, item_key, _) => (found | item_key == key)
 
 /// Returns the value for key; equivalent to dict[key].
 fun Dict[T].get(key: String): Option[T] = <native>

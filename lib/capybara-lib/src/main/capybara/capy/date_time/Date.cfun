@@ -1,5 +1,6 @@
 from /capy/lang/Result import {*}
 from /capy/lang/Math import { * }
+from /capy/lang/String import { * }
 
 /// Checks whether a year is a leap year in the Gregorian calendar.
 fun _leap_year(year: int): bool = (year % 4 == 0 & year % 100 != 0) | year % 400 == 0

@@ -55,6 +55,10 @@ public class JavaAstBuilder {
         var reflectionFallbackPackagePath = reflectionFallbackPackagePath(module);
         var staticMethodsClassName = staticMethodsClassName(module, javaClassName.toString());
         var staticMethodsSelfCallClassNames = staticMethodsSelfCallClassNames(module, javaPackageName, staticMethodsClassName);
+        var nativeTypeNames = typeIndex.dataTypes().stream()
+                .filter(CompiledDataType::nativeType)
+                .map(CompiledDataType::name)
+                .collect(toSet());
         var interfaces = buildInterfaces(typeIndex.dataParentTypes().stream()
                 .filter(parentType -> !parentType.enumType())
                 .collect(toCollection(TreeSet::new)), functionsByOwnerPrefix);
@@ -68,7 +72,7 @@ public class JavaAstBuilder {
                         .map(staticImport -> normalizeJavaClassReference(staticImport.className()) + "." + buildJavaStaticImportMember(staticImport.memberName()))
                         .collect(toCollection(TreeSet::new)),
                 buildStaticConsts(module.functions()),
-                buildStaticMethods(module.functions(), staticMethodsSelfCallClassNames),
+                buildStaticMethods(module.functions(), staticMethodsSelfCallClassNames, nativeTypeNames),
                 interfaces,
                 buildRecords(typeIndex.dataTypes(), subClassToInterface, functionsByOwnerPrefix, reflectionFallbackPackagePath),
                 buildEnums(typeIndex, subClassToInterface, reflectionFallbackPackagePath),
@@ -196,12 +200,41 @@ public class JavaAstBuilder {
         return new JavaType(normalizeJavaTypeIdentifier(name));
     }
 
-    private SortedSet<JavaMethod> buildStaticMethods(Set<CompiledFunction> functions, List<String> qualifiedJavaClassNames) {
+    private SortedSet<JavaMethod> buildStaticMethods(
+            Set<CompiledFunction> functions,
+            List<String> qualifiedJavaClassNames,
+            Set<String> nativeTypeNames
+    ) {
         return functions.stream()
-                .filter(function -> !function.name().startsWith(METHOD_DECL_PREFIX))
                 .filter(function -> !isConstFunction(function))
+                .filter(function -> !function.name().startsWith(METHOD_DECL_PREFIX)
+                                    || isStaticNativeTypeMethod(function, nativeTypeNames))
                 .map(function -> buildStaticMethod(function, qualifiedJavaClassNames))
                 .collect(toCollection(TreeSet::new));
+    }
+
+    private boolean isStaticNativeTypeMethod(CompiledFunction function, Set<String> nativeTypeNames) {
+        return methodOwnerType(function.name())
+                .filter(nativeTypeNames::contains)
+                .filter(ignored -> !isNativeExpression(function))
+                .isPresent();
+    }
+
+    private Optional<String> methodOwnerType(String functionName) {
+        if (!functionName.startsWith(METHOD_DECL_PREFIX)) {
+            return Optional.empty();
+        }
+        var separatorIndex = functionName.indexOf("__", METHOD_DECL_PREFIX.length());
+        if (separatorIndex < 0) {
+            return Optional.empty();
+        }
+        return Optional.of(functionName.substring(METHOD_DECL_PREFIX.length(), separatorIndex));
+    }
+
+    private boolean isNativeExpression(CompiledFunction function) {
+        return function.expression() instanceof dev.capylang.compiler.expression.CompiledNothingValue nothingValue
+               && (nothingValue.message().contains("`<native>`")
+                   || nothingValue.message().contains("native expression in function"));
     }
 
     private SortedSet<JavaConst> buildStaticConsts(Set<CompiledFunction> functions) {
@@ -239,7 +272,7 @@ public class JavaAstBuilder {
         return new JavaMethod(
                 emittedFunctionName(function),
                 function.name(),
-                function.name().startsWith("_") || function.visibility() == Visibility.PRIVATE,
+                isPrivateFunction(function),
                 function.programMain(),
                 function.tailRecursive(),
                 selfCallNames(function, qualifiedJavaClassNames),
@@ -253,6 +286,11 @@ public class JavaAstBuilder {
                 expression,
                 function.comments()
         );
+    }
+
+    private boolean isPrivateFunction(CompiledFunction function) {
+        var userVisibleName = baseMethodName(function.name());
+        return userVisibleName.startsWith("_") || function.visibility() == Visibility.PRIVATE;
     }
 
     private dev.capylang.compiler.expression.CompiledExpression specializeReturnNewData(

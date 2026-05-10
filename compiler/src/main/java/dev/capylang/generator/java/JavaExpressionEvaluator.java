@@ -18,13 +18,28 @@ import static java.lang.System.lineSeparator;
 
 @SuppressWarnings("SwitchStatementWithTooFewBranches")
 public class JavaExpressionEvaluator {
+    private static final String METHOD_DECL_PREFIX = "__method__";
+    private static final java.util.Map<String, String> STANDARD_STATIC_EXTENSION_METHOD_OWNERS = java.util.Map.of(
+            METHOD_DECL_PREFIX + "String__starts_with", "capy.lang.String",
+            METHOD_DECL_PREFIX + "String__end_with", "capy.lang.String",
+            METHOD_DECL_PREFIX + "String__trim", "capy.lang.String",
+            METHOD_DECL_PREFIX + "List__contains", "capy.lang.Collections",
+            METHOD_DECL_PREFIX + "Set__contains", "capy.lang.Collections",
+            METHOD_DECL_PREFIX + "Dict__contains_key", "capy.lang.Collections"
+    );
     private static final ThreadLocal<java.util.Map<String, String>> FUNCTION_NAME_OVERRIDES =
+            ThreadLocal.withInitial(java.util.Map::of);
+    private static final ThreadLocal<java.util.Map<String, String>> STATIC_EXTENSION_METHOD_OWNERS =
             ThreadLocal.withInitial(java.util.Map::of);
     private static final ThreadLocal<java.util.Map<String, String>> ENUM_VALUE_OWNER_OVERRIDES =
             ThreadLocal.withInitial(java.util.Map::of);
 
     public static void setFunctionNameOverrides(java.util.Map<String, String> functionNameOverrides) {
         FUNCTION_NAME_OVERRIDES.set(java.util.Map.copyOf(functionNameOverrides));
+    }
+
+    public static void setStaticExtensionMethodOwners(java.util.Map<String, String> staticExtensionMethodOwners) {
+        STATIC_EXTENSION_METHOD_OWNERS.set(java.util.Map.copyOf(staticExtensionMethodOwners));
     }
 
     public static void setEnumValueOwnerOverrides(java.util.Map<String, String> enumValueOwnerOverrides) {
@@ -49,7 +64,6 @@ public class JavaExpressionEvaluator {
     private static final ConcurrentMap<String, String> NORMALIZED_QUALIFIED_TYPE_NAME_CACHE = new ConcurrentHashMap<>();
     private static final String DICT_PIPE_ARGS_SEPARATOR = "::";
     private static final String TUPLE_PIPE_ARGS_SEPARATOR = ";;";
-    private static final String METHOD_DECL_PREFIX = "__method__";
     private static final java.util.regex.Pattern CONST_NAME_PATTERN = java.util.regex.Pattern.compile("^_?[A-Z_][A-Z0-9_]*$");
     private static final java.util.Set<String> JAVA_KEYWORDS = java.util.Set.of(
             "abstract", "assert", "boolean", "break", "byte", "case", "catch", "char", "class",
@@ -410,10 +424,13 @@ public class JavaExpressionEvaluator {
             var methodName = idx >= 0 && idx + 2 < functionCall.name().length()
                     ? functionCall.name().substring(idx + 2)
                     : functionCall.name();
-            if ("end_with".equals(methodName)) {
-                methodName = "ends_with";
-            }
             var normalizedMethodName = emittedMethodName(functionCall);
+            if (isStaticExtensionMethod(functionCall)) {
+                var invokeArgs = java.util.stream.IntStream.range(0, args.size())
+                        .mapToObj(i -> coercePrimitiveCallArgument(functionCall.arguments().get(i).type(), args.get(i)))
+                        .collect(java.util.stream.Collectors.joining(", "));
+                return current.addExpression(staticExtensionMethodOwner(functionCall) + "." + normalizedMethodName + "(" + invokeArgs + ")");
+            }
             var receiver = args.get(0);
             var typedReceiver = maybeCastGenericMethodReceiver(functionCall, receiver, normalizedMethodName);
             if (functionCall.name().contains("Long__to_int")
@@ -3383,10 +3400,19 @@ public class JavaExpressionEvaluator {
         if (methodName.contains("__compiled")) {
             return methodName;
         }
-        if ("end_with".equals(methodName)) {
-            methodName = "ends_with";
-        }
         return normalizeJavaMethodName(methodName);
+    }
+
+    private static boolean isStaticExtensionMethod(CompiledFunctionCall functionCall) {
+        return STATIC_EXTENSION_METHOD_OWNERS.get().containsKey(functionCall.name())
+               || STANDARD_STATIC_EXTENSION_METHOD_OWNERS.containsKey(functionCall.name());
+    }
+
+    private static String staticExtensionMethodOwner(CompiledFunctionCall functionCall) {
+        return STATIC_EXTENSION_METHOD_OWNERS.get().getOrDefault(
+                functionCall.name(),
+                STANDARD_STATIC_EXTENSION_METHOD_OWNERS.get(functionCall.name())
+        );
     }
 
     private static String keyName(String signatureKey) {

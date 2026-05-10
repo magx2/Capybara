@@ -1767,6 +1767,18 @@ public class CapybaraExpressionCompiler {
             }
             return partialMethod;
         }
+        if (!functionCall.arguments().isEmpty()) {
+            var linkedReceiver = linkExpression(functionCall.arguments().get(0), scope);
+            if (linkedReceiver instanceof Result.Success<CompiledExpression> value) {
+                var ownerNames = methodOwnerCandidates(value.value().type());
+                var ownerCandidates = candidates.stream()
+                        .filter(signature -> matchesMethodOwner(signature.name(), ownerNames, methodName))
+                        .toList();
+                if (!ownerCandidates.isEmpty()) {
+                    candidates = ownerCandidates;
+                }
+            }
+        }
 
         ResolvedFunctionCall best = null;
         Result.Error.SingleError deepestError = null;
@@ -2103,18 +2115,14 @@ public class CapybaraExpressionCompiler {
         if (enumNameMethod.isPresent()) {
             return enumNameMethod;
         }
-        var supportsBoolTwoStrings = "contains".equals(methodName)
-                || "starts_with".equals(methodName)
-                || "end_with".equals(methodName);
+        var supportsBoolTwoStrings = "contains".equals(methodName);
         var supportsStringThreeArgs = "replace".equals(methodName);
-        var supportsTrim = "trim".equals(methodName);
         var supportsToInt = "to_int".equals(methodName);
         var supportsToLong = "to_long".equals(methodName);
         var supportsToDouble = "to_double".equals(methodName);
         var supportsToFloat = "to_float".equals(methodName);
         var supportsToBool = "to_bool".equals(methodName);
-        var supportsSingleString = supportsTrim
-                                   || supportsToInt || supportsToLong || supportsToDouble || supportsToFloat || supportsToBool;
+        var supportsSingleString = supportsToInt || supportsToLong || supportsToDouble || supportsToFloat || supportsToBool;
         if ((!supportsBoolTwoStrings && !supportsStringThreeArgs && !supportsSingleString)
                 || (supportsBoolTwoStrings && functionCall.arguments().size() != 2)
                 || (supportsStringThreeArgs && functionCall.arguments().size() != 3)
@@ -2240,11 +2248,7 @@ public class CapybaraExpressionCompiler {
                     resultType
             )));
         }
-        return Optional.of(Result.success(new CompiledFunctionCall(
-                METHOD_DECL_PREFIX + "String__trim",
-                args,
-                STRING
-        )));
+        return Optional.empty();
     }
 
     private Optional<Result<CompiledExpression>> resolvePartialBuiltinMethodInvoke(
@@ -2268,9 +2272,7 @@ public class CapybaraExpressionCompiler {
 
     private List<FunctionSignature> builtinMethodSignatures(String methodName, int arity) {
         var signatures = new java.util.ArrayList<FunctionSignature>();
-        if (arity == 2 && ("contains".equals(methodName)
-                           || "starts_with".equals(methodName)
-                           || "end_with".equals(methodName))) {
+        if (arity == 2 && "contains".equals(methodName)) {
             signatures.add(builtinMethodSignature("String", methodName, List.of(STRING, STRING), BOOL));
         }
         if (arity == 3 && "replace".equals(methodName)) {
@@ -2278,9 +2280,6 @@ public class CapybaraExpressionCompiler {
         }
         if (arity != 1) {
             return List.copyOf(signatures);
-        }
-        if ("trim".equals(methodName)) {
-            signatures.add(builtinMethodSignature("String", "trim", List.of(STRING), STRING));
         }
         if ("to_int".equals(methodName)) {
             signatures.add(builtinMethodSignature("Long", "to_int", List.of(LONG), INT));
@@ -4711,6 +4710,9 @@ public class CapybaraExpressionCompiler {
         var receiverBase = baseTypeName(receiverType.name());
         var receiverSimple = simpleTypeName(receiverBase);
         ownerNames.add(receiverBase);
+        if (receiverType == STRING) {
+            ownerNames.add("String");
+        }
         ownerNames.addAll(linkCache.methodOwnerCandidatesBySimpleType.getOrDefault(receiverSimple, Set.of()));
         if (receiverType instanceof CompiledDataType) {
             ownerNames.addAll(linkCache.subtypeParentOwnerCandidatesBySimpleType.getOrDefault(receiverSimple, Set.of()));
@@ -7508,6 +7510,10 @@ public class CapybaraExpressionCompiler {
         if (type instanceof CompiledGenericTypeParameter genericTypeParameter) {
             return substitutions.getOrDefault(genericTypeParameter.name(), type);
         }
+        if (substitutions.isEmpty()
+            || !containsSubstitutionTarget(type, substitutions.keySet(), Collections.newSetFromMap(new IdentityHashMap<>()))) {
+            return type;
+        }
         return switch (type) {
             case CompiledList linkedList -> new CompiledList(substituteTypeParameters(linkedList.elementType(), substitutions));
             case CompiledSet linkedSet -> new CompiledSet(substituteTypeParameters(linkedSet.elementType(), substitutions));
@@ -7559,6 +7565,72 @@ public class CapybaraExpressionCompiler {
             );
             default -> type;
         };
+    }
+
+    private boolean containsSubstitutionTarget(
+            CompiledType type,
+            Set<String> targetNames,
+            Set<CompiledType> visited
+    ) {
+        if (type == null) {
+            return false;
+        }
+        if (type instanceof CompiledGenericTypeParameter genericTypeParameter) {
+            return targetNames.contains(genericTypeParameter.name());
+        }
+        if (!visited.add(type)) {
+            return false;
+        }
+        return switch (type) {
+            case CompiledList linkedList -> containsSubstitutionTarget(linkedList.elementType(), targetNames, visited);
+            case CompiledSet linkedSet -> containsSubstitutionTarget(linkedSet.elementType(), targetNames, visited);
+            case CompiledDict linkedDict -> containsSubstitutionTarget(linkedDict.valueType(), targetNames, visited);
+            case CompiledFunctionType functionType ->
+                    containsSubstitutionTarget(functionType.argumentType(), targetNames, visited)
+                    || containsSubstitutionTarget(functionType.returnType(), targetNames, visited);
+            case CompiledTupleType linkedTupleType -> linkedTupleType.elementTypes().stream()
+                    .anyMatch(elementType -> containsSubstitutionTarget(elementType, targetNames, visited));
+            case CompiledDataType linkedDataType ->
+                    descriptorsContainSubstitutionTarget(linkedDataType.typeParameters(), targetNames, visited)
+                    || linkedDataType.fields().stream()
+                            .map(CompiledDataType.CompiledField::type)
+                            .anyMatch(fieldType -> containsSubstitutionTarget(fieldType, targetNames, visited))
+                    || descriptorsContainSubstitutionTarget(linkedDataType.extendedTypes(), targetNames, visited);
+            case CompiledDataParentType linkedDataParentType ->
+                    descriptorsContainSubstitutionTarget(linkedDataParentType.typeParameters(), targetNames, visited)
+                    || linkedDataParentType.fields().stream()
+                            .map(CompiledDataType.CompiledField::type)
+                            .anyMatch(fieldType -> containsSubstitutionTarget(fieldType, targetNames, visited))
+                    || linkedDataParentType.subTypes().stream()
+                            .anyMatch(subType -> containsSubstitutionTarget(subType, targetNames, visited));
+            default -> false;
+        };
+    }
+
+    private boolean descriptorsContainSubstitutionTarget(
+            List<String> descriptors,
+            Set<String> targetNames,
+            Set<CompiledType> visited
+    ) {
+        return descriptors.stream()
+                .anyMatch(descriptor -> descriptorContainsSubstitutionTarget(descriptor, targetNames, visited));
+    }
+
+    private boolean descriptorContainsSubstitutionTarget(
+            String descriptor,
+            Set<String> targetNames,
+            Set<CompiledType> visited
+    ) {
+        var normalized = descriptor == null ? "" : descriptor.trim();
+        if (normalized.isEmpty()) {
+            return false;
+        }
+        if (targetNames.contains(normalized)) {
+            return true;
+        }
+        return parseLinkedTypeDescriptor(normalized)
+                .map(parsed -> containsSubstitutionTarget(parsed, targetNames, visited))
+                .orElse(false);
     }
 
     private String substituteTypeDescriptor(String descriptor, Map<String, CompiledType> substitutions) {

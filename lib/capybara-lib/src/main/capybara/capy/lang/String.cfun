@@ -20,13 +20,35 @@ fun String.is_empty(): bool = this.length() == 0
 fun String.contains(part: String): bool = <native>
 
 /// Returns true when this String starts with the given substring.
-fun String.starts_with(part: String): bool = <native>
+fun String.starts_with(part: String): bool =
+    if this.size < part.size
+    then false
+    else this[0, part.size] == part
 
 /// Returns true when this String ends with the given substring.
-fun String.end_with(part: String): bool = <native>
+fun String.end_with(part: String): bool =
+    if this.size < part.size
+    then false
+    else this[this.size - part.size, this.size] == part
 
 /// Returns this String without leading and trailing whitespace.
-fun String.trim(): String = <native>
+fun String.trim(): String =
+    fun _is_trim_whitespace(char: String): bool =
+        char == " " | char == '\t' | char == '\n' | char == '\r' | char == '\f'
+    fun rec __trim_left(value: String): String =
+        if value.size == 0
+        then ""
+        else if _is_trim_whitespace(value[0, 1])
+            then __trim_left(value[1, value.size])
+            else value
+    fun rec __trim_right(value: String): String =
+        if value.size == 0
+        then ""
+        else if _is_trim_whitespace(value[value.size - 1, value.size])
+            then __trim_right(value[0, value.size - 1])
+            else value
+    ---
+    __trim_right(__trim_left(this))
 
 /// Replaces every occurrence of old with new.
 fun String.replace(old: String, new: String): String = <native>
