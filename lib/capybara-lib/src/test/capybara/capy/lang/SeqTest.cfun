@@ -20,6 +20,8 @@ fun tests(): Effect[TestFile] =
         test("should return empty when first match missing", () => should_return_empty_when_first_match_missing()),
         test("should detect any matching element", () => should_detect_any_matching_element()),
         test("should detect no matching element", () => should_detect_no_matching_element()),
+        test("iterator any should scan deeply without stack overflow", () => iterator_any_should_scan_deeply_without_stack_overflow()),
+        test("iterator all should scan deeply without stack overflow", () => iterator_all_should_scan_deeply_without_stack_overflow()),
         test("should iterate sequence", () => should_iterate_sequence()),
     ])
 
@@ -88,6 +90,16 @@ fun should_detect_any_matching_element(): Assert =
 fun should_detect_no_matching_element(): Assert =
     let seq = to_seq([1, 2, 3])
     assert_that(seq.any(x => x > 10)).is_equal_to(false)
+
+fun iterator_any_should_scan_deeply_without_stack_overflow(): Assert =
+    match natural_seq().iterator() with
+    case None -> assert_that(false).is_equal_to(true)
+    case Some { iterator } -> assert_that(iterator.any(x => x == 50_000)).is_equal_to(true)
+
+fun iterator_all_should_scan_deeply_without_stack_overflow(): Assert =
+    match natural_seq().iterator() with
+    case None -> assert_that(false).is_equal_to(true)
+    case Some { iterator } -> assert_that(iterator.all(x => x < 50_000)).is_equal_to(false)
 
 fun should_iterate_sequence(): Assert =
     let seq = to_seq([1, 2, 3])

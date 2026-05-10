@@ -6,25 +6,31 @@ data IteratorValue[T] { element: T, next: () => Option[Iterator[T]] }
 
 /// Returns true when at least one value satisfies `predicate`.
 fun Iterator[T].any(predicate: T => bool): bool =
-    match this with
-    case IteratorValue { element, next } ->
-        if predicate(element)
-        then true
-        else
-            match next() with
-            case None -> false
-            case Some { value } -> value.any(predicate)
+    fun rec __any(iterator: Iterator[T], predicate: T => bool): bool =
+        match iterator with
+        case IteratorValue { element, next } ->
+            if predicate(element)
+            then true
+            else
+                match next() with
+                case None -> false
+                case Some { value } -> __any(value, predicate)
+    ---
+    __any(this, predicate)
 
 /// Returns true when every value satisfies `predicate`.
 fun Iterator[T].all(predicate: T => bool): bool =
-    match this with
-    case IteratorValue { element, next } ->
-        if !predicate(element)
-        then false
-        else
-            match next() with
-            case None -> true
-            case Some { value } -> value.all(predicate)
+    fun rec __all(iterator: Iterator[T], predicate: T => bool): bool =
+        match iterator with
+        case IteratorValue { element, next } ->
+            if !predicate(element)
+            then false
+            else
+                match next() with
+                case None -> true
+                case Some { value } -> __all(value, predicate)
+    ---
+    __all(this, predicate)
 
 /// Combines all values from left to right.
 fun Iterator[T].reduce(initial: R, reducer: (R, T) => R): R =
