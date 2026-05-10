@@ -122,8 +122,8 @@ fun List[T].reject(predicate: T => bool): Seq[T] =
     ---
     __reject(this, 0, predicate)
 
-/// Returns a sequence without values that satisfy `predicate`.
-fun List[T].`|-`(predicate: T => bool): Seq[T] = this.reject(predicate)
+/// Returns a sequence containing only values that satisfy `predicate`.
+fun List[T].`|-`(predicate: T => bool): Seq[T] = this.filter(predicate)
 
 /// Applies `map` to each value and concatenates the resulting lists.
 fun List[T].flat_map(map: T => List[Y]): Seq[Y] =

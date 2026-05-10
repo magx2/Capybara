@@ -92,7 +92,7 @@ fun should_map_characters(): Assert =
 
 fun should_filter_and_reject_characters(): Assert =
     assert_all([
-        assert_that(("banana" |- ch => ch == "a").as_list()).is_equal_to(["b", "n", "n"]),
+        assert_that(("banana".`|-`(ch => ch == "a")).as_list()).is_equal_to(["a", "a", "a"]),
         assert_that("banana".filter(ch => ch == "a").as_list()).is_equal_to(["a", "a", "a"]),
         assert_that("capy".reject(ch => ch == "c").as_list()).is_equal_to(["a", "p", "y"]),
     ])

@@ -16,7 +16,7 @@ class TupleDestructuringTest {
     @Test
     void filterPairs() {
         assertThat(TupleDestructuring.filterPairs(List.of(List.of(1, 2), List.of(3, 2), List.of(5, 5))).asList())
-                .isEqualTo(List.of(List.of(3, 2), List.of(5, 5)));
+                .isEqualTo(List.of(List.of(1, 2)));
     }
 
     @Test

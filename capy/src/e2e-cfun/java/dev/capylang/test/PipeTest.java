@@ -24,12 +24,12 @@ class PipeTest {
 
     @Test
     void filter1() {
-        assertThat(Pipe.filter1(List.of(-1, 0, 1, 2)).asList()).isEqualTo(List.of(-1, 0));
+        assertThat(Pipe.filter1(List.of(-1, 0, 1, 2)).asList()).isEqualTo(List.of(1, 2));
     }
 
     @Test
     void filter2() {
-        assertThat(Pipe.filter2(List.of(1, 2, 3, 4)).asList()).isEqualTo(List.of(2));
+        assertThat(Pipe.filter2(List.of(1, 2, 3, 4)).asList()).isEmpty();
     }
 
     @Test
@@ -63,7 +63,7 @@ class PipeTest {
 
     @Test
     void reduce2() {
-        assertThat(Pipe.reduce2(List.of(-1, 1, 2, 3))).isEqualTo(12);
+        assertThat(Pipe.reduce2(List.of(-1, 1, 2, 3))).isEqualTo(-2);
     }
 
     @Test
@@ -88,7 +88,7 @@ class PipeTest {
 
     @Test
     void stringFilter() {
-        assertThat(Pipe.stringFilter("abc").asList()).isEqualTo(List.of("a", "c"));
+        assertThat(Pipe.stringFilter("abc").asList()).isEqualTo(List.of("b"));
     }
 
     @Test
@@ -134,7 +134,7 @@ class PipeTest {
 
     @Test
     void flatMap2() {
-        assertThat(Pipe.flatMap2(List.of(-1, 1, 2)).asList()).isEqualTo(List.of(-2, -1, 0));
+        assertThat(Pipe.flatMap2(List.of(-1, 1, 2)).asList()).isEqualTo(List.of(2, 3, 4, 4, 5, 6));
     }
 
     @Test
@@ -144,7 +144,7 @@ class PipeTest {
 
     @Test
     void setFilter1() {
-        assertThat(Pipe.setFilter1(Set.of(-1, 0, 1, 2)).asList()).containsExactlyInAnyOrder(-1, 0);
+        assertThat(Pipe.setFilter1(Set.of(-1, 0, 1, 2)).asList()).containsExactlyInAnyOrder(1, 2);
     }
 
     @Test
@@ -263,7 +263,7 @@ class PipeTest {
 
     @Test
     void pipeFilterLambdaBodyMultilineWithoutParentheses() {
-        assertThat(Pipe.pipeFilterLambdaBodyMultilineWithoutParentheses().asList()).isEqualTo(List.of(" a ", " c "));
+        assertThat(Pipe.pipeFilterLambdaBodyMultilineWithoutParentheses().asList()).isEqualTo(List.of("bb"));
     }
 
     @Test
