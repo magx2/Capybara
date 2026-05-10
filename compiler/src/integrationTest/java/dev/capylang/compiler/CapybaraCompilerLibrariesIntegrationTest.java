@@ -41,6 +41,9 @@ class CapybaraCompilerLibrariesIntegrationTest {
     @Test
     void shouldCompileRegexOperatorsWhenRegexLibraryProvided() {
         var regexLibrarySource = """
+                from /capy/lang/Option import { * }
+                from /capy/lang/String import { * }
+
                 data Regex { pattern: String, flags: String }
                 data Match { group_value: String }
                 fun from_literal(pattern: String, flags: String): Regex = Regex { pattern, flags }
@@ -64,10 +67,16 @@ class CapybaraCompilerLibrariesIntegrationTest {
                     if index == 0 then /capy/lang/Option.Some { value: this.group_value } else /capy/lang/Option.None {}
                 fun Match.groups(): List[/capy/lang/Option[String]] = [/capy/lang/Option.Some { value: this.group_value }]
                 """;
-        var libraries = compileProgram(List.of(new RawModule("Regex", "/capy/lang", regexLibrarySource)), new TreeSet<>()).modules();
+        var libraries = compileProgram(List.of(
+                optionModule(),
+                stringModule(),
+                collectionsModule(),
+                new RawModule("Regex", "/capy/lang", regexLibrarySource)
+        ), new TreeSet<>()).modules();
 
         var consumerSource = """
                 from /capy/lang/Regex import { * }
+                from /capy/lang/Option import { * }
                 from /capy/lang/Collections import { * }
                 fun matches_named(input: String): bool = regex/\\\\d+/.matches(input)
                 fun matches_alias(input: String): bool = regex/\\\\d+/ ? input
@@ -100,5 +109,29 @@ class CapybaraCompilerLibrariesIntegrationTest {
             fail(error.errors().toString());
         }
         return ((Result.Success<CompiledProgram>) result).value();
+    }
+
+    private static RawModule optionModule() {
+        return new RawModule("Option", "/capy/lang", """
+                type Option[T] = Some[T] | None
+                data Some[T] { value: T }
+                single None
+                """);
+    }
+
+    private static RawModule stringModule() {
+        return new RawModule("String", "/capy/lang", """
+                data String { <native> }
+                fun String.`?`(part: String): bool = <native>
+                fun String.replace(old: String, new: String): String = <native>
+                """);
+    }
+
+    private static RawModule collectionsModule() {
+        return new RawModule("Collections", "/capy/lang", """
+                data List[T] { <native> }
+                fun List[T].`|`(map: T => Y): List[Y] = <native>
+                fun List[T].size(): int = <native>
+                """);
     }
 }
