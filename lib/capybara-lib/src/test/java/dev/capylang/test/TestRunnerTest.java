@@ -16,6 +16,7 @@ import java.io.PrintStream;
 import java.nio.file.Files;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -273,6 +274,191 @@ class TestRunnerTest {
         });
 
         assertEquals(CapyTest.LogType.NONE, arguments.logType());
+    }
+
+    @Test
+    void shouldParseRepeatedTestSelectors() {
+        var arguments = TestRunner.parseArguments(new String[]{
+                "-o", tempDir.toString(),
+                "-rt", "JUNIT",
+                "--tests", "/capy/lang/EffectTest",
+                "--tests", "/capy/lang/EffectTest.\"should run pure value\""
+        });
+
+        assertEquals(
+                List.of(
+                        "/capy/lang/EffectTest",
+                        "/capy/lang/EffectTest.\"should run pure value\""
+                ),
+                arguments.testSelectors()
+        );
+    }
+
+    @Test
+    void shouldParseAvailableTestsWithoutReportOutputOptions() {
+        var arguments = TestRunner.parseArguments(new String[]{"--available-tests"});
+
+        assertTrue(arguments.availableTests());
+        assertTrue(arguments.testSelectors().isEmpty());
+    }
+
+    @Test
+    void shouldListAvailableTestsAsRunnableSelectors() {
+        var testFiles = List.of(
+                testFile(
+                        "/capy/lang/EffectTest.cfun",
+                        passed("should run pure value"),
+                        passed("should map \"quoted\" value")
+                ),
+                testFile("/capy/lang/StringTest.cfun", passed("should escape \\ values"))
+        );
+
+        assertEquals(
+                List.of(
+                        "/capy/lang/EffectTest.\"should run pure value\"",
+                        "/capy/lang/EffectTest.\"should map \\\"quoted\\\" value\"",
+                        "/capy/lang/StringTest.\"should escape \\\\ values\""
+                ),
+                TestRunner.availableTests(testFiles)
+        );
+    }
+
+    @Test
+    void shouldFilterAllTestsFromSelectedFile() {
+        var testFiles = List.of(
+                testFile(
+                        "/capy/lang/EffectTest.cfun",
+                        passed("should run pure value"),
+                        passed("should map value")
+                ),
+                testFile("/capy/lang/StringTest.cfun", passed("should start with prefix"))
+        );
+
+        var filtered = TestRunner.filterTestFiles(testFiles, List.of("/capy/lang/EffectTest"));
+
+        assertEquals(1, filtered.size());
+        assertEquals("/capy/lang/EffectTest.cfun", filtered.getFirst().file_name());
+        assertEquals(
+                List.of("should run pure value", "should map value"),
+                filtered.getFirst().test_cases().stream().map(TestCase::name).toList()
+        );
+    }
+
+    @Test
+    void shouldFilterOnlySelectedTestCase() {
+        var testFiles = List.of(testFile(
+                "/capy/lang/EffectTest.cfun",
+                passed("should run pure value"),
+                passed("should map value")
+        ));
+
+        var filtered = TestRunner.filterTestFiles(
+                testFiles,
+                List.of("/capy/lang/EffectTest.\"should run pure value\"")
+        );
+
+        assertEquals(1, filtered.size());
+        assertEquals(
+                List.of("should run pure value"),
+                filtered.getFirst().test_cases().stream().map(TestCase::name).toList()
+        );
+    }
+
+    @Test
+    void shouldUnescapeSelectedTestCaseName() {
+        var testFiles = List.of(testFile(
+                "/capy/lang/EffectTest.cfun",
+                passed("should map \"quoted\" value"),
+                passed("should escape \\ values")
+        ));
+
+        var filtered = TestRunner.filterTestFiles(
+                testFiles,
+                List.of(
+                        "/capy/lang/EffectTest.\"should map \\\"quoted\\\" value\"",
+                        "/capy/lang/EffectTest.\"should escape \\\\ values\""
+                )
+        );
+
+        assertEquals(
+                List.of("should map \"quoted\" value", "should escape \\ values"),
+                filtered.getFirst().test_cases().stream().map(TestCase::name).toList()
+        );
+    }
+
+    @Test
+    void shouldFailWhenSelectedTestDoesNotExist() {
+        var testFiles = List.of(testFile("/capy/lang/EffectTest.cfun", passed("should run pure value")));
+
+        var exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> TestRunner.filterTestFiles(testFiles, List.of("/capy/lang/EffectTest.\"missing\""))
+        );
+
+        assertEquals(
+                "Test selector `/capy/lang/EffectTest.\"missing\"` did not match any test",
+                exception.getMessage()
+        );
+    }
+
+    @Test
+    void shouldNotExecuteUnselectedTestBodies() {
+        var executed = new AtomicInteger();
+        var previousSelection = TestSelection.setSelection(TestSelection.Selection.from(
+                List.of("/capy/lang/SelectionTest.\"selected\""),
+                false
+        ));
+        try {
+            var testFile = CapyTest.testFile(
+                    "/capy/lang/SelectionTest.cfun",
+                    List.of(
+                            CapyTest.test("selected", () -> {
+                                executed.incrementAndGet();
+                                return capy.test.Assert.assertThat("capybara").startsWith("capy");
+                            }),
+                            CapyTest.test("skipped", () -> {
+                                executed.addAndGet(100);
+                                return capy.test.Assert.assertThat("capybara").startsWith("capy");
+                            })
+                    )
+            ).unsafeRun();
+
+            assertEquals(1, executed.get());
+            assertEquals(
+                    List.of("selected"),
+                    testFile.test_cases().stream().map(TestCase::name).toList()
+            );
+        } finally {
+            TestSelection.restoreSelection(previousSelection);
+        }
+    }
+
+    @Test
+    void shouldListAvailableTestsWithoutExecutingBodies() {
+        var previousSelection = TestSelection.setSelection(TestSelection.Selection.from(List.of(), true));
+        try {
+            var testFile = CapyTest.testFile(
+                    "/capy/lang/SelectionTest.cfun",
+                    List.of(
+                            CapyTest.test("first", () -> {
+                                throw new AssertionError("available tests should not execute bodies");
+                            }),
+                            CapyTest.test("second", () -> {
+                                throw new AssertionError("available tests should not execute bodies");
+                            })
+                    )
+            ).unsafeRun();
+
+            assertEquals(
+                    List.of(
+                            "/capy/lang/SelectionTest.\"first\"",
+                            "/capy/lang/SelectionTest.\"second\""
+                    ),
+                    TestRunner.availableTests(List.of(testFile))
+            );
+        } finally {
+            TestSelection.restoreSelection(previousSelection);
+        }
     }
 
     @Test

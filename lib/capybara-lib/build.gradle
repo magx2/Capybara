@@ -4,6 +4,7 @@ import org.gradle.api.Task
 import org.gradle.api.artifacts.component.ProjectComponentIdentifier
 import org.gradle.api.file.ConfigurableFileCollection
 import org.gradle.api.file.DirectoryProperty
+import org.gradle.api.provider.ListProperty
 import org.gradle.api.provider.Property
 import org.gradle.api.services.BuildService
 import org.gradle.api.services.BuildServiceParameters
@@ -19,6 +20,7 @@ import org.gradle.api.tasks.PathSensitive
 import org.gradle.api.tasks.PathSensitivity
 import org.gradle.api.tasks.TaskAction
 import org.gradle.api.tasks.compile.JavaCompile
+import org.gradle.api.tasks.options.Option
 
 import java.io.ByteArrayOutputStream
 import java.io.PrintStream
@@ -136,7 +138,7 @@ class CapyRuntimeBridge implements Closeable {
         ) as Integer
     }
 
-    int runTests(Path outputPath, String reportType, String logType) {
+    int runTests(Path outputPath, String reportType, String logType, List<String> tests, boolean availableTests) {
         ensureTestRunnerLoaded()
         def originalContextClassLoader = Thread.currentThread().contextClassLoader
         try {
@@ -147,6 +149,12 @@ class CapyRuntimeBridge implements Closeable {
             ]
             if (logType != null && !logType.isBlank() && !logType.equalsIgnoreCase('NONE')) {
                 args.addAll(['-l', logType])
+            }
+            tests.each { test ->
+                args.addAll(['--tests', test])
+            }
+            if (availableTests) {
+                args.add('--available-tests')
             }
 
             def parsedArguments = parseArgumentsMethod.invoke(null, [args.toArray(new String[0])] as Object[])
@@ -294,12 +302,34 @@ abstract class InProcessCapybaraTestTask extends DefaultTask {
     @Input
     abstract Property<String> getLogType()
 
+    @Input
+    abstract ListProperty<String> getTests()
+
+    @Input
+    abstract Property<Boolean> getPrintAvailableTests()
+
+    @Option(option = 'tests', description = 'Run only matching Capybara tests. Can be provided multiple times.')
+    void addTest(String test) {
+        getTests().add(test)
+    }
+
+    @Option(option = 'available-tests', description = 'Print available Capybara tests without running them.')
+    void setAvailableTests(boolean availableTests) {
+        getPrintAvailableTests().set(availableTests)
+    }
+
     @TaskAction
     void runCapybaraTests() {
         outputDir.get().asFile.mkdirs()
 
         def bridge = runtimeService.get().bridgeFor(runtimeClasspath.files)
-        def exitCode = bridge.runTests(outputDir.get().asFile.toPath(), reportType.get(), logType.getOrElse('NONE'))
+        def exitCode = bridge.runTests(
+                outputDir.get().asFile.toPath(),
+                reportType.get(),
+                logType.getOrElse('NONE'),
+                getTests().getOrElse([]),
+                getPrintAvailableTests().getOrElse(false)
+        )
         if (exitCode != 0) {
             throw new GradleException("Capybara tests failed with exit code ${exitCode}")
         }
@@ -321,6 +351,8 @@ tasks.withType(InProcessCapybaraCompileTask).configureEach {
 tasks.withType(InProcessCapybaraTestTask).configureEach {
     runtimeService.set(capyRuntimeService)
     logType.set('TC')
+    getTests().convention([])
+    getPrintAvailableTests().convention(false)
 }
 
 def capyProject = project(':capy')

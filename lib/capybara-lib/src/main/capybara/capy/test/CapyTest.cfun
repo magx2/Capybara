@@ -19,11 +19,23 @@ enum LogType { NONE, LOG, TEAM_CITY }
 
 fun test_file(file_name: string, test_cases: list[Effect[TestCase]]): Effect[TestFile] =
     let current <- now()
+    let pushed_file <- push_test_file(file_name)
+    let include_file <- should_include_test_file(file_name)
     let log_type <- current_log_type()
     let suite_name = test_suite_name(file_name)
-    let started <- print_test_suite_started(log_type, suite_name)
-    let executed_test_cases <- execute_test_cases(test_cases)
-    let finished <- print_test_suite_finished(log_type, suite_name)
+    let started <-
+        if include_file
+        then print_test_suite_started(log_type, suite_name)
+        else pure(suite_name)
+    let executed_test_cases <-
+        if include_file
+        then execute_test_cases(test_cases)
+        else pure(empty_test_cases())
+    let finished <-
+        if include_file
+        then print_test_suite_finished(log_type, suite_name)
+        else pure(suite_name)
+    let popped_file <- pop_test_file()
     TestFile {
         file_name: file_name,
         test_cases: executed_test_cases,
@@ -31,31 +43,50 @@ fun test_file(file_name: string, test_cases: list[Effect[TestCase]]): Effect[Tes
     }
 
 fun test(name: string, assert_supplier: () => Assert): Effect[TestCase] =
-    let log_type <- current_log_type()
-    let started <- print_test_started(log_type, name)
-    let start <- nano_time()
-    let assert = assert_supplier()
-    let result = execute(assert.assertions)
-    let end <- nano_time()
-    let test_case = TestCase {
+    let should_execute <- should_execute_test(name)
+    if !should_execute
+    then pure(TestCase {
         name: name,
-        result: result,
-        assertions_count: assert.assertions.size,
-        execution_time: (end - start) / 1000000000.0
-    }
-    let failed <- print_test_failed(log_type, test_case)
-    let finished <- print_test_finished(log_type, name)
-    test_case
+        result: Passed {},
+        assertions_count: 0,
+        execution_time: 0.0
+    })
+    else
+        let log_type <- current_log_type()
+        let started <- print_test_started(log_type, name)
+        let start <- nano_time()
+        let assert = assert_supplier()
+        let result = execute(assert.assertions)
+        let end <- nano_time()
+        let test_case = TestCase {
+            name: name,
+            result: result,
+            assertions_count: assert.assertions.size,
+            execution_time: (end - start) / 1000000000.0
+        }
+        let failed <- print_test_failed(log_type, test_case)
+        let finished <- print_test_finished(log_type, name)
+        test_case
 
 private fun current_log_type(): Effect[LogType] = <native>
+private fun push_test_file(file_name: string): Effect[string] = <native>
+private fun pop_test_file(): Effect[string] = <native>
+private fun should_include_test_file(file_name: string): Effect[bool] = <native>
+private fun should_execute_test(test_name: string): Effect[bool] = <native>
+private fun should_include_test(test_name: string): Effect[bool] = <native>
+
+private fun empty_test_cases(): list[TestCase] = []
 
 private fun execute_test_cases(test_cases: list[Effect[TestCase]]): Effect[list[TestCase]] =
     match test_cases[0] with
     case None -> pure([])
     case Some { test_case } ->
         let executed_test_case <- test_case
+        let include_test_case <- should_include_test(executed_test_case.name)
         let executed_test_cases <- execute_test_cases(test_cases[1:])
-        [executed_test_case] + executed_test_cases
+        if include_test_case
+        then [executed_test_case] + executed_test_cases
+        else executed_test_cases
 
 private fun execute(assertions: list[() => Assertion]): TestResult =
     let failed_assertion = to_seq(assertions)
