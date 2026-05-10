@@ -4,6 +4,12 @@ from /capy/lang/Option import { * }
 /// List literals use square brackets: [1, 2, 3].
 data List[T] { <native> }
 
+private fun _empty_collection_list(): List[T] = []
+
+private fun _empty_collection_mapped_list(map: T => Y): List[Y] = []
+
+private fun _empty_collection_flat_mapped_list(map: T => List[Y]): List[Y] = []
+
 /// Returns the number of values in this List.
 fun List[T].size(): int = <native>
 
@@ -36,15 +42,15 @@ fun List[T].minus(other: List[T]): List[T] = this - other
 
 /// Returns true when at least one value satisfies `predicate`.
 fun List[T].any(predicate: T => bool): bool =
-    fun rec __any(list: List[T], idx: int, predicate: T => bool, acc: bool): bool =
+    fun rec __any(list: List[T], idx: int, predicate: T => bool): bool =
         match list[idx] with
-        case None -> acc
+        case None -> false
         case Some { value } ->
-            if acc
+            if predicate(value)
             then true
-            else __any(list, idx + 1, predicate, predicate(value))
+            else __any(list, idx + 1, predicate)
     ---
-    __any(this, 0, predicate, false)
+    __any(this, 0, predicate)
 
 /// Returns true when every value satisfies `predicate`.
 ///
@@ -79,24 +85,16 @@ fun List[T].reduce(initial: R, reducer: (R, T) => R): R =
 /// Combines all values from left to right.
 fun List[T].`|>`(initial: R, reducer: (R, T) => R): R = this.reduce(initial, reducer)
 
-/// Combines all values from left to right.
-fun List[T].reduce_left(initial: R, reducer: (R, T) => R): R = this.reduce(initial, reducer)
-
-/// Combines all values from left to right.
-fun List[T].`|l>`(initial: R, reducer: (R, T) => R): R = this.reduce_left(initial, reducer)
-
 /// Transforms each value using `map`.
 fun List[T].map(map: T => Y): List[Y] =
-    let initial: List[Y] = []
-    this.reduce(initial, (acc, value) => acc + map(value))
+    this.reduce(_empty_collection_mapped_list(map), (acc, value) => acc + map(value))
 
 /// Transforms each value using `map`.
 fun List[T].`|`(map: T => Y): List[Y] = this.map(map)
 
 /// Returns a new List without values that satisfy `predicate`.
 fun List[T].filter(predicate: T => bool): List[T] =
-    let initial: List[T] = []
-    this.reduce(initial, (acc, value) =>
+    this.reduce(_empty_collection_list(), (acc, value) =>
         if predicate(value)
         then acc
         else acc + value)
@@ -106,11 +104,7 @@ fun List[T].`|-`(predicate: T => bool): List[T] = this.filter(predicate)
 
 /// Applies `map` to each value and concatenates the resulting lists.
 fun List[T].flat_map(map: T => List[Y]): List[Y] =
-    let initial: List[Y] = []
-    this.reduce(initial, (acc, value) => acc + map(value))
-
-/// Applies `map` to each value and concatenates the resulting lists.
-fun List[T].flatMap(map: T => List[Y]): List[Y] = this.flat_map(map)
+    this.reduce(_empty_collection_flat_mapped_list(map), (acc, value) => acc + map(value))
 
 /// Applies `map` to each value and concatenates the resulting lists.
 fun List[T].`|*`(map: T => List[Y]): List[Y] = this.flat_map(map)
@@ -124,6 +118,12 @@ fun List[T].get(from: int, to: int): List[T] = <native>
 /// Native unique-value collection type backed by the runtime Set implementation.
 /// Set literals use braces with values: {1, 2, 3}.
 data Set[T] { <native> }
+
+private fun _empty_collection_set(): Set[T] = {}
+
+private fun _empty_collection_mapped_set(map: T => Y): Set[Y] = {}
+
+private fun _empty_collection_flat_mapped_set(map: T => Set[Y]): Set[Y] = {}
 
 /// Returns the number of values in this Set.
 fun Set[T].size(): int = <native>
@@ -167,8 +167,9 @@ fun Set[T].any(predicate: T => bool): bool = this.to_list().any(predicate)
 fun Set[T].all(predicate: T => bool): bool = this.to_list().all(predicate)
 
 /// Returns true when this Set contains the given value.
-fun Set[T].contains(value: T): bool =
-    this.any(item => item == value)
+fun Set[T].contains(value: T): bool = this._contains_native(value)
+
+private fun Set[T]._contains_native(value: T): bool = <native>
 
 /// Returns true when this Set contains the given value.
 fun Set[T].`?`(value: T): bool = this.contains(value)
@@ -180,24 +181,16 @@ fun Set[T].reduce(initial: R, reducer: (R, T) => R): R =
 /// Combines all values from left to right.
 fun Set[T].`|>`(initial: R, reducer: (R, T) => R): R = this.reduce(initial, reducer)
 
-/// Combines all values from left to right.
-fun Set[T].reduce_left(initial: R, reducer: (R, T) => R): R = this.reduce(initial, reducer)
-
-/// Combines all values from left to right.
-fun Set[T].`|l>`(initial: R, reducer: (R, T) => R): R = this.reduce_left(initial, reducer)
-
 /// Transforms each value using `map`.
 fun Set[T].map(map: T => Y): Set[Y] =
-    let initial: Set[Y] = {}
-    this.reduce(initial, (acc, value) => acc + map(value))
+    this.reduce(_empty_collection_mapped_set(map), (acc, value) => acc + map(value))
 
 /// Transforms each value using `map`.
 fun Set[T].`|`(map: T => Y): Set[Y] = this.map(map)
 
 /// Returns a new Set without values that satisfy `predicate`.
 fun Set[T].filter(predicate: T => bool): Set[T] =
-    let initial: Set[T] = {}
-    this.reduce(initial, (acc, value) =>
+    this.reduce(_empty_collection_set(), (acc, value) =>
         if predicate(value)
         then acc
         else acc + value)
@@ -207,11 +200,7 @@ fun Set[T].`|-`(predicate: T => bool): Set[T] = this.filter(predicate)
 
 /// Applies `map` to each value and unions the resulting sets.
 fun Set[T].flat_map(map: T => Set[Y]): Set[Y] =
-    let initial: Set[Y] = {}
-    this.reduce(initial, (acc, value) => acc + map(value))
-
-/// Applies `map` to each value and unions the resulting sets.
-fun Set[T].flatMap(map: T => Set[Y]): Set[Y] = this.flat_map(map)
+    this.reduce(_empty_collection_flat_mapped_set(map), (acc, value) => acc + map(value))
 
 /// Applies `map` to each value and unions the resulting sets.
 fun Set[T].`|*`(map: T => Set[Y]): Set[Y] = this.flat_map(map)
@@ -219,6 +208,10 @@ fun Set[T].`|*`(map: T => Set[Y]): Set[Y] = this.flat_map(map)
 /// Native String-keyed map type backed by the runtime Dict implementation.
 /// Dict literals use braces with String keys: {"one": 1, "two": 2}.
 data Dict[T] { <native> }
+
+private fun _empty_collection_dict(): Dict[T] = {:}
+
+private fun _empty_collection_mapped_dict(map: (String, T) => Y): Dict[Y] = {:}
 
 /// Returns the number of entries in this Dict.
 fun Dict[T].size(): int = <native>
@@ -277,41 +270,22 @@ fun Dict[T].reduce(initial: R, reducer: (R, String, T) => R): R =
 /// Combines all entries from left to right.
 fun Dict[T].`|>`(initial: R, reducer: (R, String, T) => R): R = this.reduce(initial, reducer)
 
-/// Combines all entries from left to right.
-fun Dict[T].reduce_left(initial: R, reducer: (R, String, T) => R): R = this.reduce(initial, reducer)
-
-/// Combines all entries from left to right.
-fun Dict[T].`|l>`(initial: R, reducer: (R, String, T) => R): R = this.reduce_left(initial, reducer)
-
 /// Transforms each entry using `map`.
 fun Dict[T].map(map: (String, T) => Y): Dict[Y] =
-    let initial: Dict[Y] = {:}
-    this.entries().reduce(initial, (acc, entry) => acc + (entry[0], map(entry[0], entry[1])))
+    this.entries().reduce(_empty_collection_mapped_dict(map), (acc, entry) => acc + (entry[0], map(entry[0], entry[1])))
 
 /// Transforms each entry using `map`.
 fun Dict[T].`|`(map: (String, T) => Y): Dict[Y] = this.map(map)
 
 /// Returns a new Dict without entries that satisfy `predicate`.
 fun Dict[T].filter(predicate: (String, T) => bool): Dict[T] =
-    let initial: Dict[T] = {:}
-    this.entries().reduce(initial, (acc, entry) =>
+    this.entries().reduce(_empty_collection_dict(), (acc, entry) =>
         if predicate(entry[0], entry[1])
         then acc
         else acc + entry)
 
 /// Returns a new Dict without entries that satisfy `predicate`.
 fun Dict[T].`|-`(predicate: (String, T) => bool): Dict[T] = this.filter(predicate)
-
-/// Applies `map` to each entry and concatenates the resulting lists.
-fun Dict[T].flat_map(map: (String, T) => List[Y]): List[Y] =
-    let initial: List[Y] = []
-    this.entries().reduce(initial, (acc, entry) => acc + map(entry[0], entry[1]))
-
-/// Applies `map` to each entry and concatenates the resulting lists.
-fun Dict[T].flatMap(map: (String, T) => List[Y]): List[Y] = this.flat_map(map)
-
-/// Applies `map` to each entry and concatenates the resulting lists.
-fun Dict[T].`|*`(map: (String, T) => List[Y]): List[Y] = this.flat_map(map)
 
 /// Returns the value for key; equivalent to dict[key].
 fun Dict[T].get(key: String): Option[T] = <native>

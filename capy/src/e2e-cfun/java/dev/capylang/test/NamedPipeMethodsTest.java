@@ -20,7 +20,6 @@ class NamedPipeMethodsTest {
         assertThat(NamedPipeMethods.listFilterNamed(values)).isEqualTo(NamedPipeMethods.listFilterOperator(values));
         assertThat(NamedPipeMethods.listFlatMapNamed(List.of(1, 2))).isEqualTo(NamedPipeMethods.listFlatMapOperator(List.of(1, 2)));
         assertThat(NamedPipeMethods.listReduceNamed(values)).isEqualTo(NamedPipeMethods.listReduceOperator(values));
-        assertThat(NamedPipeMethods.listReduceLeftNamed(values)).isEqualTo(NamedPipeMethods.listReduceLeftSymbolic(values));
     }
 
     @Test
@@ -31,7 +30,6 @@ class NamedPipeMethodsTest {
         assertThat(NamedPipeMethods.setFilterNamed(values)).isEqualTo(NamedPipeMethods.setFilterOperator(values));
         assertThat(NamedPipeMethods.setFlatMapNamed(Set.of(1, 2))).isEqualTo(NamedPipeMethods.setFlatMapOperator(Set.of(1, 2)));
         assertThat(NamedPipeMethods.setReduceNamed(values)).isEqualTo(NamedPipeMethods.setReduceOperator(values));
-        assertThat(NamedPipeMethods.setReduceLeftNamed(values)).isEqualTo(NamedPipeMethods.setReduceLeftSymbolic(values));
     }
 
     @Test
@@ -43,9 +41,7 @@ class NamedPipeMethodsTest {
 
         assertThat(NamedPipeMethods.dictMapNamed(values)).isEqualTo(NamedPipeMethods.dictMapOperator(values));
         assertThat(NamedPipeMethods.dictFilterNamed(values)).isEqualTo(NamedPipeMethods.dictFilterOperator(values));
-        assertThat(NamedPipeMethods.dictFlatMapNamed(values)).isEqualTo(NamedPipeMethods.dictFlatMapOperator(values));
         assertThat(NamedPipeMethods.dictReduceNamed(values)).isEqualTo(NamedPipeMethods.dictReduceOperator(values));
-        assertThat(NamedPipeMethods.dictReduceLeftNamed(values)).isEqualTo(NamedPipeMethods.dictReduceLeftSymbolic(values));
     }
 
     @Test
