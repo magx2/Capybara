@@ -1926,7 +1926,7 @@ public class CapybaraExpressionCompiler {
 
     private void collectTypeSubstitutions(CompiledType expected, CompiledType actual, Map<String, CompiledType> substitutions) {
         if (expected instanceof CompiledGenericTypeParameter genericTypeParameter) {
-            substitutions.putIfAbsent(genericTypeParameter.name(), actual);
+            putTypeSubstitution(substitutions, genericTypeParameter.name(), actual);
             return;
         }
         if (expected instanceof CompiledList expectedList && actual instanceof CompiledList actualList) {
@@ -2006,6 +2006,13 @@ public class CapybaraExpressionCompiler {
                         substitutions
                 );
             }
+        }
+    }
+
+    private void putTypeSubstitution(Map<String, CompiledType> substitutions, String name, CompiledType actual) {
+        var existing = substitutions.get(name);
+        if (existing == null || (!isResolvedTypeForInference(existing) && isResolvedTypeForInference(actual))) {
+            substitutions.put(name, actual);
         }
     }
 
@@ -2807,10 +2814,43 @@ public class CapybaraExpressionCompiler {
             coerced.add(value.expression());
             coercions += value.coercions();
             collectTypeSubstitutions(expected, value.expression().type(), substitutions);
+            if (!expected.equals(expectedTypes.get(i))) {
+                collectTypeSubstitutions(expectedTypes.get(i), value.expression().type(), substitutions);
+            }
             if (expected instanceof CompiledFunctionType expectedFunction
                 && value.expression() instanceof CompiledLambdaExpression lambdaExpression) {
                 collectLambdaReturnTypeSubstitutions(expectedFunction, lambdaExpression, substitutions);
             }
+            if (!expected.equals(expectedTypes.get(i))
+                && expectedTypes.get(i) instanceof CompiledFunctionType rawExpectedFunction
+                && value.expression() instanceof CompiledLambdaExpression lambdaExpression) {
+                collectLambdaReturnTypeSubstitutions(rawExpectedFunction, lambdaExpression, substitutions);
+            }
+        }
+        if (!substitutions.isEmpty()
+            && arguments.stream().anyMatch(this::hasKnownEmptyCollectionShapeExpression)) {
+            return relinkArgumentsForSubstitutedExpectedTypes(arguments, scope, expectedTypes, substitutions);
+        }
+        return Result.success(new CoercedArguments(List.copyOf(coerced), coercions));
+    }
+
+    private Result<CoercedArguments> relinkArgumentsForSubstitutedExpectedTypes(
+            List<Expression> arguments,
+            Scope scope,
+            List<CompiledType> expectedTypes,
+            Map<String, CompiledType> substitutions
+    ) {
+        var coerced = new java.util.ArrayList<CompiledExpression>(arguments.size());
+        var coercions = 0;
+        for (var i = 0; i < arguments.size(); i++) {
+            var expected = substituteTypeParameters(expectedTypes.get(i), substitutions);
+            var maybeCoerced = linkArgumentForExpectedType(arguments.get(i), scope, expected);
+            if (maybeCoerced instanceof Result.Error<CoercedArgument> error) {
+                return new Result.Error<>(error.errors());
+            }
+            var value = ((Result.Success<CoercedArgument>) maybeCoerced).value();
+            coerced.add(value.expression());
+            coercions += value.coercions();
         }
         return Result.success(new CoercedArguments(List.copyOf(coerced), coercions));
     }
@@ -6583,6 +6623,10 @@ public class CapybaraExpressionCompiler {
         if (left.equals(right)) {
             return left;
         }
+        var mergedCollectionType = mergeCollectionBranchTypes(left, right);
+        if (mergedCollectionType != null) {
+            return mergedCollectionType;
+        }
         if (left instanceof CompiledDataParentType leftParent && right instanceof CompiledDataType rightData) {
             if (isSubtypeOfParent(rightData, leftParent)) {
                 return canonicalizeParentAlias(leftParent);
@@ -6620,6 +6664,46 @@ public class CapybaraExpressionCompiler {
             }
         }
         return findHigherType(left, right);
+    }
+
+    private CompiledType mergeCollectionBranchTypes(CompiledType left, CompiledType right) {
+        if (left instanceof CompiledList leftList
+            && leftList.elementType() == ANY
+            && right instanceof CompiledList rightList
+            && rightList.elementType() != ANY) {
+            return right;
+        }
+        if (right instanceof CompiledList rightList
+            && rightList.elementType() == ANY
+            && left instanceof CompiledList leftList
+            && leftList.elementType() != ANY) {
+            return left;
+        }
+        if (left instanceof CompiledSet leftSet
+            && leftSet.elementType() == ANY
+            && right instanceof CompiledSet rightSet
+            && rightSet.elementType() != ANY) {
+            return right;
+        }
+        if (right instanceof CompiledSet rightSet
+            && rightSet.elementType() == ANY
+            && left instanceof CompiledSet leftSet
+            && leftSet.elementType() != ANY) {
+            return left;
+        }
+        if (left instanceof CompiledDict leftDict
+            && leftDict.valueType() == ANY
+            && right instanceof CompiledDict rightDict
+            && rightDict.valueType() != ANY) {
+            return right;
+        }
+        if (right instanceof CompiledDict rightDict
+            && rightDict.valueType() == ANY
+            && left instanceof CompiledDict leftDict
+            && leftDict.valueType() != ANY) {
+            return left;
+        }
+        return null;
     }
 
     private CompiledDataParentType specializeSharedParent(

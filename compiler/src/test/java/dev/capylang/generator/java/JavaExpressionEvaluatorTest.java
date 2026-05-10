@@ -1055,6 +1055,27 @@ class JavaExpressionEvaluatorTest {
     }
 
     @Test
+    void shouldPreserveTupleValueTypeWhenReducingIntoEmptyDict() {
+        var generatedProgram = new JavaGenerator().generate(compileProgram("DictReduceEmptyInitial", "/foo/bar", """
+                from /capy/collection/List import { * }
+                from /capy/collection/Set import { * }
+                from /capy/collection/Dict import { * }
+
+                fun keep(values: Dict[int], predicate: (String, int) => bool): Dict[int] =
+                    values.entries().reduce({:}, (acc, entry) =>
+                        if predicate(entry[0], entry[1])
+                        then acc
+                        else acc + entry)
+                """));
+        var generated = generatedProgram.modules().stream()
+                .map(dev.capylang.generator.GeneratedModule::code)
+                .collect(joining("\n"));
+
+        assertThat(generated).contains("((java.lang.Integer) ((java.util.List<?>) (entry)).get(1))");
+        assertGeneratedJavaCompiles(generatedProgram);
+    }
+
+    @Test
     void shouldParenthesizeIfExpressionsInsideStringConcatenation() {
         var generated = new JavaGenerator().generate(compileProgram("StringIfConcat", "/foo/bar", """
                 fun label(is_valid: bool): String =

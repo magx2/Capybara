@@ -1020,6 +1020,10 @@ public class JavaExpressionEvaluator {
         if (type instanceof dev.capylang.compiler.CollectionLinkedType.CompiledDict linkedDict) {
             return javaCastType(linkedDict.valueType());
         }
+        if (type instanceof dev.capylang.compiler.CompiledTupleType tupleType
+            && tupleType.elementTypes().size() >= 2) {
+            return javaCastType(tupleType.elementTypes().get(1));
+        }
         return "java.lang.Object";
     }
 
