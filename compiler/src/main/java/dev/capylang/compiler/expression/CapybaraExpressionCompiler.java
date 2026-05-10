@@ -1762,7 +1762,7 @@ public class CapybaraExpressionCompiler {
                     return partialBuiltin.orElseThrow();
                 }
             }
-            return resolveBuiltinMethodInvoke(functionCall, scope, methodName)
+            return resolveBuiltinMethodInvoke(functionCall, scope, methodName, expectedType)
                     .orElseGet(() -> withPosition(
                             Result.error("No method `" + methodName + "` with " + functionCall.arguments().size() + " argument(s)"),
                             functionCall.position()
@@ -1825,7 +1825,7 @@ public class CapybaraExpressionCompiler {
             }
         }
         if (best == null) {
-            var builtin = resolveBuiltinMethodInvoke(functionCall, scope, methodName);
+            var builtin = resolveBuiltinMethodInvoke(functionCall, scope, methodName, expectedType);
             if (builtin.isPresent()) {
                 return builtin.get();
             }
@@ -2120,7 +2120,16 @@ public class CapybaraExpressionCompiler {
     }
 
     private Optional<Result<CompiledExpression>> resolveBuiltinMethodInvoke(FunctionCall functionCall, Scope scope, String methodName) {
-        var rewrittenReduceMethod = rewriteReduceMethodInvoke(functionCall, scope, methodName);
+        return resolveBuiltinMethodInvoke(functionCall, scope, methodName, Optional.empty());
+    }
+
+    private Optional<Result<CompiledExpression>> resolveBuiltinMethodInvoke(
+            FunctionCall functionCall,
+            Scope scope,
+            String methodName,
+            Optional<CompiledType> expectedType
+    ) {
+        var rewrittenReduceMethod = rewriteReduceMethodInvoke(functionCall, scope, methodName, expectedType);
         if (rewrittenReduceMethod.isPresent()) {
             return rewrittenReduceMethod;
         }
@@ -2458,7 +2467,8 @@ public class CapybaraExpressionCompiler {
     private Optional<Result<CompiledExpression>> rewriteReduceMethodInvoke(
             FunctionCall functionCall,
             Scope scope,
-            String methodName
+            String methodName,
+            Optional<CompiledType> expectedType
     ) {
         if (!"reduce".equals(methodName) && !"reduce_left".equals(methodName) && !"|l>".equals(methodName)) {
             return Optional.empty();
@@ -2483,7 +2493,7 @@ public class CapybaraExpressionCompiler {
                 ),
                 functionCall.position()
         );
-        return Optional.of(resolveMethodInvokeCall(rewritten, scope));
+        return Optional.of(resolveMethodInvokeCall(rewritten, scope, expectedType));
     }
 
     private Optional<Result<CompiledExpression>> resolveBuiltinOptionMethodInvoke(
@@ -2955,6 +2965,19 @@ public class CapybaraExpressionCompiler {
                     argument.position()
             );
         }
+        if (argument instanceof FunctionCall functionCall) {
+            return linkFunctionCallWithExpectedFallback(functionCall, scope, expected)
+                    .flatMap(linkedArgument -> {
+                        var maybeCoerced = coerceArgument(linkedArgument, expected);
+                        if (maybeCoerced == null) {
+                            return withPosition(
+                                    Result.error(expectedGotMessage(expected, linkedArgument.type())),
+                                    argument.position()
+                            );
+                        }
+                        return Result.success(maybeCoerced);
+                    });
+        }
         if (argument instanceof NewData newData && expected instanceof CompiledDataType expectedDataType) {
             return linkNewDataAsType(newData, scope, expectedDataType)
                     .flatMap(linkedArgument -> {
@@ -2992,19 +3015,6 @@ public class CapybaraExpressionCompiler {
             || expected instanceof CompiledGenericTypeParameter
             || expected instanceof CompiledDataType) {
             return linkExpression(argument, scope)
-                    .flatMap(linkedArgument -> {
-                        var maybeCoerced = coerceArgument(linkedArgument, expected);
-                        if (maybeCoerced == null) {
-                            return withPosition(
-                                    Result.error(expectedGotMessage(expected, linkedArgument.type())),
-                                    argument.position()
-                            );
-                        }
-                        return Result.success(maybeCoerced);
-                    });
-        }
-        if (argument instanceof FunctionCall functionCall) {
-            return linkFunctionCall(functionCall, scope, Optional.of(expected))
                     .flatMap(linkedArgument -> {
                         var maybeCoerced = coerceArgument(linkedArgument, expected);
                         if (maybeCoerced == null) {
@@ -8865,6 +8875,9 @@ public class CapybaraExpressionCompiler {
                     withExpression.assignments().stream()
                             .map(NewData.FieldAssignment::value)
                             .anyMatch(this::hasKnownEmptyCollectionShapeExpression);
+            case ReduceExpression reduceExpression ->
+                    hasKnownEmptyCollectionShapeExpression(reduceExpression.initialValue())
+                    || hasKnownEmptyCollectionShapeExpression(reduceExpression.reducerExpression());
             default -> false;
         };
     }
