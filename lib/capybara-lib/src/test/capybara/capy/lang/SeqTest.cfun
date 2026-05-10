@@ -1,4 +1,5 @@
 from /capy/test/Assert import { * }
+from /capy/lang/Collections import { * }
 from /capy/lang/Effect import { * }
 from /capy/lang/Seq import { * }
 from /capy/test/CapyTest import { * }
@@ -19,6 +20,7 @@ fun tests(): Effect[TestFile] =
         test("should return empty when first match missing", () => should_return_empty_when_first_match_missing()),
         test("should detect any matching element", () => should_detect_any_matching_element()),
         test("should detect no matching element", () => should_detect_no_matching_element()),
+        test("should iterate sequence", () => should_iterate_sequence()),
     ])
 
 fun should_assert_finite_sequence(): Assert =
@@ -86,3 +88,11 @@ fun should_detect_any_matching_element(): Assert =
 fun should_detect_no_matching_element(): Assert =
     let seq = to_seq([1, 2, 3])
     assert_that(seq.any(x => x > 10)).is_equal_to(false)
+
+fun should_iterate_sequence(): Assert =
+    let seq = to_seq([1, 2, 3])
+    let sum =
+        match seq.iterator() with
+        case None -> 0
+        case Some { iterator } -> iterator.reduce(0, (acc, value) => acc + value)
+    assert_that(sum).is_equal_to(6)

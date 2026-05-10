@@ -1,5 +1,6 @@
 from /capy/collection/List import { * }
 from /capy/lang/Option import { * }
+from /capy/lang/Collections import { * }
 
 /// Native String-keyed map type backed by the runtime Dict implementation.
 /// Dict literals use braces with String keys: {"one": 1, "two": 2}.
@@ -13,6 +14,15 @@ fun Dict[T].is_empty(): bool = this.size() == 0
 
 /// Returns this Dict as a List of `(key, value)` tuples.
 fun Dict[T].entries(): List[Tuple[String, T]] = <native>
+
+/// Returns an iterator over this Dict's `(key, value)` entries, or `None` when the Dict is empty.
+fun Dict[T].iterator(): Option[/capy/lang/Collections.Iterator[Tuple[String, T]]] =
+    fun __iterator(dict: Dict[T], idx: int): Option[/capy/lang/Collections.Iterator[Tuple[String, T]]] =
+        match dict.entries()[idx] with
+        case None -> None {}
+        case Some { value } -> Some { /capy/lang/Collections.IteratorValue { value, () => __iterator(dict, idx + 1) } }
+    ---
+    __iterator(this, 0)
 
 /// Returns a new Dict with `entry` added or replaced.
 fun Dict[T].`+`(entry: Tuple[String, T]): Dict[T] = <native>

@@ -1,6 +1,8 @@
 from /capy/collection/List import { * }
 from /capy/collection/Set import { * }
 from /capy/collection/Dict import { * }
+from /capy/lang/Collections import { * }
+from /capy/lang/Option import { * }
 
 fun static_list(): List[int] = [1,2,3]
 
@@ -39,3 +41,18 @@ fun size(l: List[int]): int = l.size()
 fun let_named_list(): int =
     let list: List[int] = [1, 2, 3, 4]
     list.size()
+
+fun iterator_sum(l: List[int]): int =
+    match l.iterator() with
+    case None -> 0
+    case Some { iterator } -> iterator.reduce(0, (acc, value) => acc + value)
+
+fun iterator_empty(l: List[int]): bool =
+    match l.iterator() with
+    case None -> true
+    case Some { _ } -> false
+
+fun iterator_map_sum(l: List[int]): int =
+    match l.iterator() with
+    case None -> 0
+    case Some { iterator } -> iterator.map(value => value * 2).reduce(0, (acc, value) => acc + value)

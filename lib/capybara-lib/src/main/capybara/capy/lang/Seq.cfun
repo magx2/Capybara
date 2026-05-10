@@ -1,10 +1,18 @@
 from /capy/collection/List import { * }
 from /capy/collection/Set import { * }
 from /capy/collection/Dict import { * }
+from /capy/lang/Collections import { * }
+from /capy/lang/Option import { * }
 
 type Seq[T] = Cons[T] | End
 data Cons[T] { value: T, rest: () => Seq[T] }
 single End
+
+/// Returns an iterator over this Seq, or `None` when the Seq is empty.
+fun Seq[T].iterator(): Option[/capy/lang/Collections.Iterator[T]] =
+    match this with
+    case End -> None {}
+    case Cons { value, rest } -> Some { /capy/lang/Collections.IteratorValue { value, () => rest().iterator() } }
 
 /// Returns an infinite sequence of natural numbers starting at `0`.
 ///

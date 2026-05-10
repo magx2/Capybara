@@ -1,6 +1,8 @@
 from /capy/collection/List import { * }
 from /capy/collection/Set import { * }
 from /capy/collection/Dict import { * }
+from /capy/lang/Collections import { * }
+from /capy/lang/Option import { * }
 from /capy/lang/String import { * }
 
 fun static_dict(): Dict[int] = {
@@ -68,3 +70,8 @@ fun dict_to_string(d: Dict[int]): String =
 fun let_named_dict(): int =
     let dict: Dict[int] = { "one": 1, "two": 2 }
     dict.size()
+
+fun iterator_value_sum(d: Dict[int]): int =
+    match d.iterator() with
+    case None -> 0
+    case Some { iterator } -> iterator.reduce(0, (acc, entry) => acc + entry[1])

@@ -1,5 +1,6 @@
 from /capy/lang/Option import { * }
 from /capy/lang/Seq import { * }
+from /capy/lang/Collections import { * }
 
 /// Native ordered collection type backed by the runtime List implementation.
 /// List literals use square brackets: [1, 2, 3].
@@ -16,6 +17,15 @@ fun List[T].size(): int = <native>
 
 /// Returns true when this List has no values.
 fun List[T].is_empty(): bool = this.size() == 0
+
+/// Returns an iterator over this List, or `None` when the List is empty.
+fun List[T].iterator(): Option[/capy/lang/Collections.Iterator[T]] =
+    fun __iterator(list: List[T], idx: int): Option[/capy/lang/Collections.Iterator[T]] =
+        match list[idx] with
+        case None -> None {}
+        case Some { value } -> Some { /capy/lang/Collections.IteratorValue { value, () => __iterator(list, idx + 1) } }
+    ---
+    __iterator(this, 0)
 
 /// Returns a new List with `value` appended.
 fun List[T].`+`(value: T): List[T] = <native>

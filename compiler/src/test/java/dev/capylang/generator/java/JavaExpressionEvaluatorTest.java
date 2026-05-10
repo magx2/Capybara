@@ -789,6 +789,45 @@ class JavaExpressionEvaluatorTest {
     }
 
     @Test
+    void shouldGenerateRecursiveGenericOptionPayloadCasts() {
+        var generatedProgram = new JavaGenerator().generate(compileProgram("IteratorMatch", "/foo/bar", """
+                from /capy/lang/Option import { * }
+
+                type Iterator[T] = IteratorValue[T]
+                data IteratorValue[T] { element: T, next: () => Option[Iterator[T]] }
+
+                fun Iterator[T].reduce(initial: R, reducer: (R, T) => R): R =
+                    fun rec __reduce(iterator: Iterator[T], acc: R, reducer: (R, T) => R): R =
+                        match iterator with
+                        case IteratorValue { element, next } ->
+                            let next_acc = reducer(acc, element)
+                            match next() with
+                            case None -> next_acc
+                            case Some { value } -> __reduce(value, next_acc, reducer)
+                    ---
+                    __reduce(this, initial, reducer)
+
+                fun Iterator[T].map(map: T => Y): Iterator[Y] =
+                    match this with
+                    case IteratorValue { element, next } ->
+                        IteratorValue { map(element), () =>
+                            match next() with
+                            case None -> None {}
+                            case Some { value } -> Some { value.map(map) }
+                        }
+
+                fun sum(iterator: Iterator[int]): int =
+                    iterator.map(value => value * 2).reduce(0, (acc, value) => acc + value)
+                """));
+        var generated = generatedProgram.modules().stream()
+                .map(dev.capylang.generator.GeneratedModule::code)
+                .collect(joining("\n"));
+
+        assertThat(generated).contains("((Iterator<T>)");
+        assertThat(generated).doesNotContain("((Iterator<java.lang.Object>)");
+    }
+
+    @Test
     void shouldGenerateBooleanLiteralMatchCasesUsingBooleanPatternGuards() {
         var generated = new JavaGenerator().generate(compileProgram("BoolMatch", "/foo/bar", """
                 fun mood(value: bool): String =

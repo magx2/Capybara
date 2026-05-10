@@ -134,4 +134,10 @@ class SetCollectionTest {
     void letNamedSet() {
         assertThat(SetCollection.letNamedSet()).isEqualTo(3);
     }
+
+    @Test
+    void iteratorSum() {
+        assertThat(SetCollection.iteratorSum(Set.of(1, 2, 3))).isEqualTo(6);
+        assertThat(SetCollection.iteratorSum(Set.of())).isZero();
+    }
 }

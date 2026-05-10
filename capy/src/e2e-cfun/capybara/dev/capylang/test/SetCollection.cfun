@@ -1,6 +1,8 @@
 from /capy/collection/List import { * }
 from /capy/collection/Set import { * }
 from /capy/collection/Dict import { * }
+from /capy/lang/Collections import { * }
+from /capy/lang/Option import { * }
 
 fun static_set(): Set[int] = {1,2,3}
 
@@ -43,3 +45,8 @@ fun size(s: Set[int]): int = s.size()
 fun let_named_set(): int =
     let set: Set[int] = {1, 2, 3}
     set.size()
+
+fun iterator_sum(s: Set[int]): int =
+    match s.iterator() with
+    case None -> 0
+    case Some { iterator } -> iterator.reduce(0, (acc, value) => acc + value)

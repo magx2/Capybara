@@ -199,4 +199,10 @@ class DictCollectionTest {
         var result = DictCollection.dictToString(EXPECTED);
         assertThat(result).isEqualTo("one 1, two 2, three 3");
     }
+
+    @Test
+    void iteratorValueSum() {
+        assertThat(DictCollection.iteratorValueSum(EXPECTED)).isEqualTo(6);
+        assertThat(DictCollection.iteratorValueSum(Map.of())).isZero();
+    }
 }

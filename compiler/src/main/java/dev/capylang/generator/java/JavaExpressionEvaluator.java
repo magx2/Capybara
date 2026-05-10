@@ -46,28 +46,28 @@ public class JavaExpressionEvaluator {
                 owners,
                 "capy.collection.List",
                 java.util.List.of("List"),
-                "is_empty", "plus", "minus", "any", "all", "contains", "?", "reduce", "|>",
+                "is_empty", "iterator", "plus", "minus", "any", "all", "contains", "?", "reduce", "|>",
                 "reduce_left", "|l>", "map", "|", "filter", "reject", "|-", "flat_map", "flatMap", "|*"
         );
         registerStandardExtensionMethods(
                 owners,
                 "capy.collection.Set",
                 java.util.List.of("Set"),
-                "is_empty", "plus", "minus", "any", "all", "contains", "?", "reduce", "|>",
+                "is_empty", "iterator", "plus", "minus", "any", "all", "contains", "?", "reduce", "|>",
                 "reduce_left", "|l>", "map", "|", "filter", "reject", "|-", "flat_map", "flatMap", "|*"
         );
         registerStandardExtensionMethods(
                 owners,
                 "capy.collection.Dict",
                 java.util.List.of("Dict"),
-                "is_empty", "plus", "minus", "any", "all", "contains_key", "?", "reduce", "|>",
+                "is_empty", "iterator", "plus", "minus", "any", "all", "contains_key", "?", "reduce", "|>",
                 "reduce_left", "|l>", "map", "|", "filter", "reject", "|-", "flat_map", "flatMap", "|*"
         );
         registerStandardExtensionMethods(
                 owners,
                 "capy.lang.String",
                 java.util.List.of("String"),
-                "is_empty", "plus", "any", "all", "contains", "?", "reduce", "|>",
+                "is_empty", "iterator", "plus", "any", "all", "contains", "?", "reduce", "|>",
                 "reduce_left", "|l>", "map", "|", "filter", "reject", "|-", "flat_map", "flatMap", "|*",
                 "starts_with", "end_with", "trim"
         );
@@ -2365,7 +2365,64 @@ public class JavaExpressionEvaluator {
         if (!normalized.endsWith("/Option") && !normalized.endsWith(".Option") && !"Option".equals(parentType.name())) {
             return null;
         }
-        return sanitizePatternCastType(javaCastTypeFromDescriptor(parentType.typeParameters().getFirst()));
+        var castType = optionPayloadJavaCastTypeFromDescriptor(parentType.typeParameters().getFirst());
+        return "java.lang.Object".equals(castType) ? null : castType;
+    }
+
+    private static String optionPayloadJavaCastTypeFromDescriptor(String descriptor) {
+        var normalized = descriptor == null ? "" : descriptor.trim();
+        if (normalized.isEmpty()) {
+            return "java.lang.Object";
+        }
+        return switch (normalized) {
+            case "byte" -> "java.lang.Byte";
+            case "int" -> "java.lang.Integer";
+            case "long" -> "java.lang.Long";
+            case "float" -> "java.lang.Float";
+            case "double" -> "java.lang.Double";
+            case "String" -> "java.lang.String";
+            case "bool" -> "java.lang.Boolean";
+            case "enum" -> "java.lang.Enum<?>";
+            case "any", "nothing", "data" -> "java.lang.Object";
+            default -> {
+                if (normalized.matches("[A-Z]")) {
+                    yield normalized;
+                }
+                if (normalized.startsWith("List[") && normalized.endsWith("]")) {
+                    var inner = normalized.substring("List[".length(), normalized.length() - 1);
+                    yield "java.util.List<" + optionPayloadJavaCastTypeFromDescriptor(inner) + ">";
+                }
+                if (normalized.startsWith("Set[") && normalized.endsWith("]")) {
+                    var inner = normalized.substring("Set[".length(), normalized.length() - 1);
+                    yield "java.util.Set<" + optionPayloadJavaCastTypeFromDescriptor(inner) + ">";
+                }
+                if (normalized.startsWith("Dict[") && normalized.endsWith("]")) {
+                    var inner = normalized.substring("Dict[".length(), normalized.length() - 1);
+                    yield "java.util.Map<java.lang.String, " + optionPayloadJavaCastTypeFromDescriptor(inner) + ">";
+                }
+                if (normalized.startsWith("Tuple[") && normalized.endsWith("]")) {
+                    yield "java.util.List<?>";
+                }
+                var genericStart = normalized.indexOf('[');
+                if (genericStart > 0 && normalized.endsWith("]")) {
+                    var rawType = normalized.substring(0, genericStart).trim();
+                    var argsDescriptor = normalized.substring(genericStart + 1, normalized.length() - 1);
+                    var javaArgs = splitTopLevelDescriptors(argsDescriptor).stream()
+                            .map(JavaExpressionEvaluator::optionPayloadJavaCastTypeFromDescriptor)
+                            .toList();
+                    if (isOptionSomeTypeName(rawType) || isOptionNoneTypeName(rawType)) {
+                        var optionalElementType = javaArgs.isEmpty() ? "java.lang.Object" : javaArgs.getFirst();
+                        yield "java.util.Optional<" + optionalElementType + ">";
+                    }
+                    yield normalizeJavaTypeReference(rawType) + "<" + String.join(", ", javaArgs) + ">";
+                }
+                if ("Error".equals(normalized)
+                    || normalizeQualifiedTypeName(normalized).endsWith("/Result.Error")) {
+                    yield resultErrorJavaTypeReference(normalized);
+                }
+                yield normalizeJavaTypeReference(normalized);
+            }
+        };
     }
 
     private static java.util.Map<String, String> resolveGenericTypeCasts(

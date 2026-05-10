@@ -1,3 +1,53 @@
+from /capy/lang/Option import { * }
+
+/// Non-empty lazy iterator over values of type `T`.
+type Iterator[T] = IteratorValue[T]
+data IteratorValue[T] { element: T, next: () => Option[Iterator[T]] }
+
+/// Returns true when at least one value satisfies `predicate`.
+fun Iterator[T].any(predicate: T => bool): bool =
+    match this with
+    case IteratorValue { element, next } ->
+        if predicate(element)
+        then true
+        else
+            match next() with
+            case None -> false
+            case Some { value } -> value.any(predicate)
+
+/// Returns true when every value satisfies `predicate`.
+fun Iterator[T].all(predicate: T => bool): bool =
+    match this with
+    case IteratorValue { element, next } ->
+        if !predicate(element)
+        then false
+        else
+            match next() with
+            case None -> true
+            case Some { value } -> value.all(predicate)
+
+/// Combines all values from left to right.
+fun Iterator[T].reduce(initial: R, reducer: (R, T) => R): R =
+    fun rec __reduce(iterator: Iterator[T], acc: R, reducer: (R, T) => R): R =
+        match iterator with
+        case IteratorValue { element, next } ->
+            let next_acc = reducer(acc, element)
+            match next() with
+            case None -> next_acc
+            case Some { value } -> __reduce(value, next_acc, reducer)
+    ---
+    __reduce(this, initial, reducer)
+
+/// Transforms each value lazily using `map`.
+fun Iterator[T].map(map: T => Y): Iterator[Y] =
+    match this with
+    case IteratorValue { element, next } ->
+        IteratorValue { map(element), () =>
+            match next() with
+            case None -> None {}
+            case Some { value } -> Some { value.map(map) }
+        }
+
 /// Native fixed-size ordered collection type backed by the runtime Tuple implementation.
 /// Tuple literals use parentheses with at least two values: (1, "two").
 data Tuple { <native> }

@@ -7478,7 +7478,7 @@ public class CapybaraExpressionCompiler {
             return substitutions.getOrDefault(genericTypeParameter.name(), type);
         }
         if (substitutions.isEmpty()
-            || !containsSubstitutionTarget(type, substitutions.keySet(), Collections.newSetFromMap(new IdentityHashMap<>()))) {
+            || !containsSubstitutionTarget(type, substitutions.keySet(), new HashSet<>())) {
             return type;
         }
         return switch (type) {
@@ -7595,6 +7595,9 @@ public class CapybaraExpressionCompiler {
         if (targetNames.contains(normalized)) {
             return true;
         }
+        if (descriptorReferencesTargetName(normalized, targetNames)) {
+            return true;
+        }
         return parseLinkedTypeDescriptor(normalized)
                 .map(parsed -> containsSubstitutionTarget(parsed, targetNames, visited))
                 .orElse(false);
@@ -7604,15 +7607,68 @@ public class CapybaraExpressionCompiler {
         if (descriptor == null || descriptor.isBlank()) {
             return descriptor;
         }
-        var direct = substitutions.get(descriptor.trim());
+        var normalized = descriptor.trim();
+        var direct = substitutions.get(normalized);
         if (direct != null) {
             return linkedTypeDescriptor(direct);
         }
-        var parsed = parseLinkedTypeDescriptor(descriptor.trim());
-        if (parsed.isPresent()) {
-            return linkedTypeDescriptor(substituteTypeParameters(parsed.get(), substitutions));
+        if (!descriptorReferencesTargetName(normalized, substitutions.keySet())) {
+            return normalized;
         }
-        return descriptor;
+        return substituteDescriptorReferences(normalized, substitutions);
+    }
+
+    private boolean descriptorReferencesTargetName(String descriptor, Set<String> targetNames) {
+        return targetNames.stream().anyMatch(targetName -> descriptorContainsTypeToken(descriptor, targetName));
+    }
+
+    private String substituteDescriptorReferences(String descriptor, Map<String, CompiledType> substitutions) {
+        var substituted = descriptor;
+        for (var entry : substitutions.entrySet()) {
+            substituted = replaceTypeToken(substituted, entry.getKey(), linkedTypeDescriptor(entry.getValue()));
+        }
+        return substituted;
+    }
+
+    private String replaceTypeToken(String descriptor, String targetName, String replacement) {
+        var result = new StringBuilder();
+        var offset = 0;
+        var index = descriptor.indexOf(targetName);
+        while (index >= 0) {
+            if (isTypeTokenBoundary(descriptor, index, targetName.length())) {
+                result.append(descriptor, offset, index);
+                result.append(replacement);
+                offset = index + targetName.length();
+            }
+            index = descriptor.indexOf(targetName, index + targetName.length());
+        }
+        if (offset == 0) {
+            return descriptor;
+        }
+        result.append(descriptor, offset, descriptor.length());
+        return result.toString();
+    }
+
+    private boolean descriptorContainsTypeToken(String descriptor, String targetName) {
+        var index = descriptor.indexOf(targetName);
+        while (index >= 0) {
+            if (isTypeTokenBoundary(descriptor, index, targetName.length())) {
+                return true;
+            }
+            index = descriptor.indexOf(targetName, index + targetName.length());
+        }
+        return false;
+    }
+
+    private boolean isTypeTokenBoundary(String descriptor, int index, int length) {
+        var before = index == 0 || !isTypeNamePart(descriptor.charAt(index - 1));
+        var afterIndex = index + length;
+        var after = afterIndex >= descriptor.length() || !isTypeNamePart(descriptor.charAt(afterIndex));
+        return before && after;
+    }
+
+    private boolean isTypeNamePart(char ch) {
+        return Character.isLetterOrDigit(ch) || ch == '_';
     }
 
     private Optional<CompiledType> parseLinkedTypeDescriptor(String descriptor) {

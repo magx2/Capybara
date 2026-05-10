@@ -1,5 +1,7 @@
 from /capy/collection/List import { * }
 from /capy/lang/Seq import { * }
+from /capy/lang/Collections import { * }
+from /capy/lang/Option import { * }
 
 /// Native unique-value collection type backed by the runtime Set implementation.
 /// Set literals use braces with values: {1, 2, 3}.
@@ -13,6 +15,9 @@ fun Set[T].is_empty(): bool = this.size() == 0
 
 /// Returns the Set values as a List.
 fun Set[T].to_list(): List[T] = <native>
+
+/// Returns an iterator over this Set, or `None` when the Set is empty.
+fun Set[T].iterator(): Option[/capy/lang/Collections.Iterator[T]] = this.to_list().iterator()
 
 /// Returns a new Set with `value` included.
 fun Set[T].`+`(value: T): Set[T] = <native>

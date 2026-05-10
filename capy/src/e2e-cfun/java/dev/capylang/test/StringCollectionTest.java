@@ -173,4 +173,16 @@ class StringCollectionTest {
                 .isInstanceOf(CapybaraException.class)
                 .hasMessage("Cannot parse string to bool: abc");
     }
+
+    @Test
+    void iteratorCopy() {
+        assertThat(StringCollection.iteratorCopy("capybara")).isEqualTo("capybara");
+        assertThat(StringCollection.iteratorCopy("")).isEmpty();
+    }
+
+    @Test
+    void iteratorEmpty() {
+        assertThat(StringCollection.iteratorEmpty("")).isTrue();
+        assertThat(StringCollection.iteratorEmpty("capybara")).isFalse();
+    }
 }

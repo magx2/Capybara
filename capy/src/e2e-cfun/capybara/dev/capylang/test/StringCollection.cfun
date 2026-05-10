@@ -1,4 +1,6 @@
 from /capy/lang/Result import { * }
+from /capy/lang/Collections import { * }
+from /capy/lang/Option import { * }
 from /capy/lang/String import { * }
 
 fun contains(s: String, part: String): bool = s ? part
@@ -42,3 +44,13 @@ fun to_double_method(s: String): Result[double] = s.to_double()
 fun to_float_method(s: String): Result[float] = s.to_float()
 
 fun to_bool_method(s: String): Result[bool] = s.to_bool()
+
+fun iterator_copy(s: String): String =
+    match s.iterator() with
+    case None -> ""
+    case Some { iterator } -> iterator.reduce("", (acc, ch) => acc + ch)
+
+fun iterator_empty(s: String): bool =
+    match s.iterator() with
+    case None -> true
+    case Some { _ } -> false

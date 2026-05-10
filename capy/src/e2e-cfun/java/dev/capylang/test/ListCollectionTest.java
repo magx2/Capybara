@@ -123,4 +123,21 @@ class ListCollectionTest {
     void letNamedList() {
         assertThat(ListCollection.letNamedList()).isEqualTo(4);
     }
+
+    @Test
+    void iteratorSum() {
+        assertThat(ListCollection.iteratorSum(List.of(1, 2, 3))).isEqualTo(6);
+        assertThat(ListCollection.iteratorSum(List.of())).isZero();
+    }
+
+    @Test
+    void iteratorEmpty() {
+        assertThat(ListCollection.iteratorEmpty(List.of())).isTrue();
+        assertThat(ListCollection.iteratorEmpty(List.of(1))).isFalse();
+    }
+
+    @Test
+    void iteratorMapSum() {
+        assertThat(ListCollection.iteratorMapSum(List.of(1, 2, 3))).isEqualTo(12);
+    }
 }

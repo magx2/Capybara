@@ -20,6 +20,15 @@ fun String.get(from: int, to: int): String = <native>
 /// Returns true when this String has no characters.
 fun String.is_empty(): bool = this.length() == 0
 
+/// Returns an iterator over this String's characters, or `None` when the String is empty.
+fun String.iterator(): Option[/capy/lang/Collections.Iterator[String]] =
+    fun __iterator(value: String, idx: int): Option[/capy/lang/Collections.Iterator[String]] =
+        match value[idx] with
+        case None -> None {}
+        case Some { char } -> Some { /capy/lang/Collections.IteratorValue { char, () => __iterator(value, idx + 1) } }
+    ---
+    __iterator(this, 0)
+
 /// Returns this String with `value` appended.
 fun String.`+`(value: any): String = <native>
 
