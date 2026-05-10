@@ -5,10 +5,6 @@ from /capy/lang/Option import { * }
 /// Dict literals use braces with String keys: {"one": 1, "two": 2}.
 data Dict[T] { <native> }
 
-private fun _empty_collection_dict(): Dict[T] = {:}
-
-private fun _empty_collection_mapped_dict(map: (String, T) => Y): Dict[Y] = {:}
-
 /// Returns the number of entries in this Dict.
 fun Dict[T].size(): int = <native>
 
@@ -68,14 +64,14 @@ fun Dict[T].`|>`(initial: R, reducer: (R, String, T) => R): R = this.reduce(init
 
 /// Transforms each entry using `map`.
 fun Dict[T].map(map: (String, T) => Y): Dict[Y] =
-    this.entries().reduce(_empty_collection_mapped_dict(map), (acc, entry) => acc + (entry[0], map(entry[0], entry[1])))
+    this.entries().reduce({:}, (acc, entry) => acc + (entry[0], map(entry[0], entry[1])))
 
 /// Transforms each entry using `map`.
 fun Dict[T].`|`(map: (String, T) => Y): Dict[Y] = this.map(map)
 
 /// Returns a new Dict without entries that satisfy `predicate`.
 fun Dict[T].filter(predicate: (String, T) => bool): Dict[T] =
-    this.entries().reduce(_empty_collection_dict(), (acc, entry) =>
+    this.entries().reduce({:}, (acc, entry) =>
         if predicate(entry[0], entry[1])
         then acc
         else acc + entry)
