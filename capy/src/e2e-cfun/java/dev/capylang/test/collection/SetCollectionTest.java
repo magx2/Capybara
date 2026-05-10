@@ -1,4 +1,4 @@
-package dev.capylang.test;
+package dev.capylang.test.collection;
 
 import org.junit.jupiter.api.Test;
 
