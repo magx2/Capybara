@@ -1076,6 +1076,33 @@ class JavaExpressionEvaluatorTest {
     }
 
     @Test
+    void shouldPropagateExpectedTypeThroughMethodReduceIntoGenericDataParentCall() {
+        var generatedProgram = new JavaGenerator().generate(compileProgram("TextFlatMapExpectedType", "/foo/bar", """
+                from /capy/collection/List import { * }
+
+                type TestSeq[T] = TestSeqEnd
+                single TestSeqEnd
+
+                data Text { chars: List[String] }
+
+                fun Text.reduce(initial: R, reducer: (R, String) => R): R =
+                    this.chars.reduce(initial, reducer)
+
+                fun to_test_seq(list: List[T]): TestSeq[T] = TestSeqEnd {}
+
+                fun Text.flat_map(map: String => List[Y]): TestSeq[Y] =
+                    to_test_seq(this.reduce([], (acc, char) => acc + map(char)))
+                """));
+        var generated = generatedProgram.modules().stream()
+                .map(dev.capylang.generator.GeneratedModule::code)
+                .collect(joining("\n"));
+
+        assertThat(generated).contains("java.util.List.<Y>of()");
+        assertThat(generated).doesNotContain("java.util.List.<T>of()");
+        assertGeneratedJavaCompiles(generatedProgram);
+    }
+
+    @Test
     void shouldParenthesizeIfExpressionsInsideStringConcatenation() {
         var generated = new JavaGenerator().generate(compileProgram("StringIfConcat", "/foo/bar", """
                 fun label(is_valid: bool): String =

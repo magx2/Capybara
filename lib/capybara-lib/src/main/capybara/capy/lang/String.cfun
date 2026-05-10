@@ -8,10 +8,6 @@ from /capy/lang/Seq import { * }
 /// String literals use quotes: "hello".
 data String { <native> }
 
-private fun _empty_string_mapped_list(map: String => Y): List[Y] = []
-
-private fun _empty_string_flat_mapped_list(map: String => List[Y]): List[Y] = []
-
 /// Returns the number of characters in this String.
 fun String.length(): int = <native>
 
@@ -134,8 +130,7 @@ fun String.filter(predicate: String => bool): Seq[String] =
 fun String.`|-`(predicate: String => bool): Seq[String] = this.filter(predicate)
 
 /// Applies `map` to each character and concatenates the resulting lists.
-fun String.flat_map(map: String => List[Y]): Seq[Y] =
-    to_seq(this.reduce(_empty_string_flat_mapped_list(map), (acc, char) => acc + map(char)))
+fun String.flat_map(map: String => List[Y]): Seq[Y] = to_seq(this.reduce([], (acc, char) => acc + map(char)))
 
 /// Applies `map` to each character and concatenates the resulting lists.
 fun String.`|*`(map: String => List[Y]): Seq[Y] = this.flat_map(map)
