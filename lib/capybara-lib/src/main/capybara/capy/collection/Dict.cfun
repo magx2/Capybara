@@ -69,15 +69,22 @@ fun Dict[T].map(map: (String, T) => Y): Dict[Y] =
 /// Transforms each entry using `map`.
 fun Dict[T].`|`(map: (String, T) => Y): Dict[Y] = this.map(map)
 
-/// Returns a new Dict without entries that satisfy `predicate`.
+/// Returns a new Dict containing only entries that satisfy `predicate`.
 fun Dict[T].filter(predicate: (String, T) => bool): Dict[T] =
+    this.entries().reduce({:}, (acc, entry) =>
+        if predicate(entry[0], entry[1])
+        then acc + entry
+        else acc)
+
+/// Returns a new Dict without entries that satisfy `predicate`.
+fun Dict[T].reject(predicate: (String, T) => bool): Dict[T] =
     this.entries().reduce({:}, (acc, entry) =>
         if predicate(entry[0], entry[1])
         then acc
         else acc + entry)
 
 /// Returns a new Dict without entries that satisfy `predicate`.
-fun Dict[T].`|-`(predicate: (String, T) => bool): Dict[T] = this.filter(predicate)
+fun Dict[T].`|-`(predicate: (String, T) => bool): Dict[T] = this.reject(predicate)
 
 /// Returns the value for key; equivalent to dict[key].
 fun Dict[T].get(key: String): Option[T] = <native>

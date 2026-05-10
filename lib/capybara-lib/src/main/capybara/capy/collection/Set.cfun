@@ -67,11 +67,14 @@ fun Set[T].map(map: T => Y): Seq[Y] = this.to_list().map(map)
 /// Transforms each value using `map`.
 fun Set[T].`|`(map: T => Y): Seq[Y] = this.map(map)
 
-/// Returns a sequence without values that satisfy `predicate`.
+/// Returns a sequence containing only values that satisfy `predicate`.
 fun Set[T].filter(predicate: T => bool): Seq[T] = this.to_list().filter(predicate)
 
 /// Returns a sequence without values that satisfy `predicate`.
-fun Set[T].`|-`(predicate: T => bool): Seq[T] = this.filter(predicate)
+fun Set[T].reject(predicate: T => bool): Seq[T] = this.to_list().reject(predicate)
+
+/// Returns a sequence without values that satisfy `predicate`.
+fun Set[T].`|-`(predicate: T => bool): Seq[T] = this.reject(predicate)
 
 /// Applies `map` to each value and concatenates the resulting sets.
 fun Set[T].flat_map(map: T => Set[Y]): Seq[Y] =

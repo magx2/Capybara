@@ -15,7 +15,7 @@ fun tests(): Effect[TestFile] =
         test("should detect contained keys", () => dict_should_detect_contained_keys()),
         test("should reduce entries", () => dict_should_reduce_entries()),
         test("should map entries", () => dict_should_map_entries()),
-        test("should filter entries out", () => dict_should_filter_entries_out()),
+        test("should filter and reject entries", () => dict_should_filter_and_reject_entries()),
         test("should get values by key", () => dict_should_get_values_by_key()),
     ])
 
@@ -91,9 +91,13 @@ fun dict_should_map_entries(): Assert =
     let mapped: Dict[String] = {"a": 1, "b": 2} | (key, value) => key + value
     assert_that(mapped).is_equal_to({"a": "a1", "b": "b2"})
 
-fun dict_should_filter_entries_out(): Assert =
-    let filtered: Dict[int] = {"a": 1, "b": 2, "c": 3} |- (_, value) => value % 2 == 0
-    assert_that(filtered).is_equal_to({"a": 1, "c": 3})
+fun dict_should_filter_and_reject_entries(): Assert =
+    let values: Dict[int] = {"a": 1, "b": 2, "c": 3}
+    assert_all([
+        assert_that(values.filter((_, value) => value % 2 == 0)).is_equal_to({"b": 2}),
+        assert_that(values.reject((_, value) => value % 2 == 0)).is_equal_to({"a": 1, "c": 3}),
+        assert_that((values |- (_, value) => value % 2 == 0)).is_equal_to({"a": 1, "c": 3}),
+    ])
 
 fun dict_should_get_values_by_key(): Assert =
     let values = {"one": 1, "two": 2}

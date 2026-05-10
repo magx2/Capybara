@@ -14,7 +14,7 @@ fun tests(): Effect[TestFile] =
         test("should detect contained values", () => set_should_detect_contained_values()),
         test("should reduce values", () => set_should_reduce_values()),
         test("should map values", () => set_should_map_values()),
-        test("should filter values out", () => set_should_filter_values_out()),
+        test("should filter and reject values", () => set_should_filter_and_reject_values()),
         test("should flat map values", () => set_should_flat_map_values()),
     ])
 
@@ -87,12 +87,15 @@ fun set_should_map_values(): Assert =
         .contains(4)
         .contains(6)
 
-fun set_should_filter_values_out(): Assert =
-    let filtered = ({1, 2, 3, 4} |- value => value % 2 == 0).as_list()
-    assert_that(filtered)
-        .has_size(2)
-        .contains(1)
-        .contains(3)
+fun set_should_filter_and_reject_values(): Assert =
+    let filtered = {1, 2, 3, 4}.filter(value => value % 2 == 0).as_list()
+    let rejected = {1, 2, 3, 4}.reject(value => value % 2 == 0).as_list()
+    let rejected_symbolic = ({1, 2, 3, 4} |- value => value % 2 == 0).as_list()
+    assert_all([
+        assert_that(filtered).has_size(2).contains(2).contains(4),
+        assert_that(rejected).has_size(2).contains(1).contains(3),
+        assert_that(rejected_symbolic).has_size(2).contains(1).contains(3),
+    ])
 
 fun set_should_flat_map_values(): Assert =
     let mapped = ({1, 2} |* value => {value, value + 10}).as_list()
