@@ -98,20 +98,32 @@ fun List[T].map(map: T => Y): Seq[Y] =
 /// Transforms each value using `map`.
 fun List[T].`|`(map: T => Y): Seq[Y] = this.map(map)
 
-/// Returns a sequence without values that satisfy `predicate`.
+/// Returns a sequence containing only values that satisfy `predicate`.
 fun List[T].filter(predicate: T => bool): Seq[T] =
     fun __filter(list: List[T], idx: int, predicate: T => bool): Seq[T] =
         match list[idx] with
         case None -> End {}
         case Some { value } ->
             if predicate(value)
-            then __filter(list, idx + 1, predicate)
-            else Cons { value: value, rest: () => __filter(list, idx + 1, predicate) }
+            then Cons { value: value, rest: () => __filter(list, idx + 1, predicate) }
+            else __filter(list, idx + 1, predicate)
     ---
     __filter(this, 0, predicate)
 
 /// Returns a sequence without values that satisfy `predicate`.
-fun List[T].`|-`(predicate: T => bool): Seq[T] = this.filter(predicate)
+fun List[T].reject(predicate: T => bool): Seq[T] =
+    fun __reject(list: List[T], idx: int, predicate: T => bool): Seq[T] =
+        match list[idx] with
+        case None -> End {}
+        case Some { value } ->
+            if predicate(value)
+            then __reject(list, idx + 1, predicate)
+            else Cons { value: value, rest: () => __reject(list, idx + 1, predicate) }
+    ---
+    __reject(this, 0, predicate)
+
+/// Returns a sequence without values that satisfy `predicate`.
+fun List[T].`|-`(predicate: T => bool): Seq[T] = this.reject(predicate)
 
 /// Applies `map` to each value and concatenates the resulting lists.
 fun List[T].flat_map(map: T => List[Y]): Seq[Y] =

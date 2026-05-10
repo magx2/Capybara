@@ -15,7 +15,7 @@ fun tests(): Effect[TestFile] =
         test("should detect contained substrings", () => should_detect_contained_substrings()),
         test("should reduce characters", () => should_reduce_characters()),
         test("should map characters", () => should_map_characters()),
-        test("should filter characters out", () => should_filter_characters_out()),
+        test("should filter and reject characters", () => should_filter_and_reject_characters()),
         test("should flat map characters", () => should_flat_map_characters()),
         test("should detect prefixes and suffixes", () => should_detect_prefixes_and_suffixes()),
         test("should trim whitespace", () => should_trim_whitespace()),
@@ -90,10 +90,11 @@ fun should_map_characters(): Assert =
         assert_that("xy".map(ch => ch + ch).as_list()).is_equal_to(["xx", "yy"]),
     ])
 
-fun should_filter_characters_out(): Assert =
+fun should_filter_and_reject_characters(): Assert =
     assert_all([
         assert_that(("banana" |- ch => ch == "a").as_list()).is_equal_to(["b", "n", "n"]),
-        assert_that("capy".filter(ch => ch == "c").as_list()).is_equal_to(["a", "p", "y"]),
+        assert_that("banana".filter(ch => ch == "a").as_list()).is_equal_to(["a", "a", "a"]),
+        assert_that("capy".reject(ch => ch == "c").as_list()).is_equal_to(["a", "p", "y"]),
     ])
 
 fun should_flat_map_characters(): Assert =

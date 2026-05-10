@@ -19,6 +19,7 @@ fun list_map_operator(values: List[int]): Seq[int] = values | x => x * 2
 
 fun list_filter_named(values: List[int]): Seq[int] = values.filter(x => x > 0)
 fun list_filter_operator(values: List[int]): Seq[int] = values |- x => x > 0
+fun list_reject_named(values: List[int]): Seq[int] = values.reject(x => x > 0)
 
 fun list_flat_map_named(values: List[int]): Seq[int] = values.flat_map(x => expand_list(x))
 fun list_flat_map_operator(values: List[int]): Seq[int] = values |* x => expand_list(x)
@@ -31,6 +32,7 @@ fun set_map_operator(values: Set[int]): Seq[int] = values | x => x * 2
 
 fun set_filter_named(values: Set[int]): Seq[int] = values.filter(x => x > 0)
 fun set_filter_operator(values: Set[int]): Seq[int] = values |- x => x > 0
+fun set_reject_named(values: Set[int]): Seq[int] = values.reject(x => x > 0)
 
 fun set_flat_map_named(values: Set[int]): Seq[int] = values.flat_map(x => expand_set(x))
 fun set_flat_map_operator(values: Set[int]): Seq[int] = values |* x => expand_set(x)
@@ -43,6 +45,7 @@ fun dict_map_operator(values: Dict[int]): Dict[String] = values | (key, value) =
 
 fun dict_filter_named(values: Dict[int]): Dict[int] = values.filter((_, value) => value > 10)
 fun dict_filter_operator(values: Dict[int]): Dict[int] = values |- (_, value) => value > 10
+fun dict_reject_named(values: Dict[int]): Dict[int] = values.reject((_, value) => value > 10)
 
 fun dict_reduce_named(values: Dict[int]): String = values.reduce("", (acc, key, value) => acc + key + ":" + value + ",")
 fun dict_reduce_operator(values: Dict[int]): String = values |> "", (acc, key, value) => acc + key + ":" + value + ","
@@ -58,6 +61,7 @@ fun seq_reduce_left_named(values: List[int]): int = to_seq(values).reduce_left(0
 
 fun string_filter_named(value: String): Seq[String] = value.filter(ch => ch == "b")
 fun string_filter_symbolic(value: String): Seq[String] = value.`|-`(ch => ch == "b")
+fun string_reject_named(value: String): Seq[String] = value.reject(ch => ch == "b")
 
 fun option_map_named(value: Option[String]): Option[String] = value.map(text => text + "!")
 fun option_map_operator(value: Option[String]): Option[String] = value | text => text + "!"

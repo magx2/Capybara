@@ -47,28 +47,28 @@ public class JavaExpressionEvaluator {
                 "capy.collection.List",
                 java.util.List.of("List"),
                 "is_empty", "plus", "minus", "any", "all", "contains", "?", "reduce", "|>",
-                "reduce_left", "|l>", "map", "|", "filter", "|-", "flat_map", "flatMap", "|*"
+                "reduce_left", "|l>", "map", "|", "filter", "reject", "|-", "flat_map", "flatMap", "|*"
         );
         registerStandardExtensionMethods(
                 owners,
                 "capy.collection.Set",
                 java.util.List.of("Set"),
                 "is_empty", "plus", "minus", "any", "all", "contains", "?", "reduce", "|>",
-                "reduce_left", "|l>", "map", "|", "filter", "|-", "flat_map", "flatMap", "|*"
+                "reduce_left", "|l>", "map", "|", "filter", "reject", "|-", "flat_map", "flatMap", "|*"
         );
         registerStandardExtensionMethods(
                 owners,
                 "capy.collection.Dict",
                 java.util.List.of("Dict"),
                 "is_empty", "plus", "minus", "any", "all", "contains_key", "?", "reduce", "|>",
-                "reduce_left", "|l>", "map", "|", "filter", "|-", "flat_map", "flatMap", "|*"
+                "reduce_left", "|l>", "map", "|", "filter", "reject", "|-", "flat_map", "flatMap", "|*"
         );
         registerStandardExtensionMethods(
                 owners,
                 "capy.lang.String",
                 java.util.List.of("String"),
                 "is_empty", "plus", "any", "all", "contains", "?", "reduce", "|>",
-                "reduce_left", "|l>", "map", "|", "filter", "|-", "flat_map", "flatMap", "|*",
+                "reduce_left", "|l>", "map", "|", "filter", "reject", "|-", "flat_map", "flatMap", "|*",
                 "starts_with", "end_with", "trim"
         );
         return java.util.Map.copyOf(owners);

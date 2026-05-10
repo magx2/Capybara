@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -13,21 +14,25 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class NamedPipeMethodsTest {
     @Test
-    void listAliasesMatchOperators() {
+    void listNamedMethodsProduceExpectedResults() {
         var values = List.of(-1, 0, 1, 2);
 
         assertThat(NamedPipeMethods.listMapNamed(values).asList()).isEqualTo(NamedPipeMethods.listMapOperator(values).asList());
-        assertThat(NamedPipeMethods.listFilterNamed(values).asList()).isEqualTo(NamedPipeMethods.listFilterOperator(values).asList());
+        assertThat(NamedPipeMethods.listFilterNamed(values).asList()).isEqualTo(List.of(1, 2));
+        assertThat(NamedPipeMethods.listRejectNamed(values).asList()).isEqualTo(List.of(-1, 0));
+        assertThat(NamedPipeMethods.listRejectNamed(values).asList()).isEqualTo(NamedPipeMethods.listFilterOperator(values).asList());
         assertThat(NamedPipeMethods.listFlatMapNamed(List.of(1, 2)).asList()).isEqualTo(NamedPipeMethods.listFlatMapOperator(List.of(1, 2)).asList());
         assertThat(NamedPipeMethods.listReduceNamed(values)).isEqualTo(NamedPipeMethods.listReduceOperator(values));
     }
 
     @Test
-    void setAliasesMatchOperators() {
+    void setNamedMethodsProduceExpectedResults() {
         var values = Set.of(-1, 0, 1, 2);
 
         assertThat(NamedPipeMethods.setMapNamed(values).asList()).isEqualTo(NamedPipeMethods.setMapOperator(values).asList());
-        assertThat(NamedPipeMethods.setFilterNamed(values).asList()).isEqualTo(NamedPipeMethods.setFilterOperator(values).asList());
+        assertThat(NamedPipeMethods.setFilterNamed(values).asList()).containsExactlyInAnyOrder(1, 2);
+        assertThat(NamedPipeMethods.setRejectNamed(values).asList()).containsExactlyInAnyOrder(-1, 0);
+        assertThat(NamedPipeMethods.setRejectNamed(values).asList()).containsExactlyInAnyOrderElementsOf(NamedPipeMethods.setFilterOperator(values).asList());
         assertThat(NamedPipeMethods.setFlatMapNamed(Set.of(1, 2)).asList()).isEqualTo(NamedPipeMethods.setFlatMapOperator(Set.of(1, 2)).asList());
         assertThat(NamedPipeMethods.setReduceNamed(values)).isEqualTo(NamedPipeMethods.setReduceOperator(values));
     }
@@ -40,7 +45,9 @@ class NamedPipeMethodsTest {
         values.put("last", 11);
 
         assertThat(NamedPipeMethods.dictMapNamed(values)).isEqualTo(NamedPipeMethods.dictMapOperator(values));
-        assertThat(NamedPipeMethods.dictFilterNamed(values)).isEqualTo(NamedPipeMethods.dictFilterOperator(values));
+        assertThat(NamedPipeMethods.dictFilterNamed(values)).isEqualTo(Map.of("last", 11));
+        assertThat(NamedPipeMethods.dictRejectNamed(values)).isEqualTo(Map.of("keep", 1, "drop", 2));
+        assertThat(NamedPipeMethods.dictRejectNamed(values)).isEqualTo(NamedPipeMethods.dictFilterOperator(values));
         assertThat(NamedPipeMethods.dictReduceNamed(values)).isEqualTo(NamedPipeMethods.dictReduceOperator(values));
     }
 
@@ -55,9 +62,10 @@ class NamedPipeMethodsTest {
     }
 
     @Test
-    void stringFilterAliasesMatchExpectedResults() {
-        assertThat(NamedPipeMethods.stringFilterNamed("abc").asList()).isEqualTo(List.of("a", "c"));
-        assertThat(NamedPipeMethods.stringFilterNamed("abc").asList()).isEqualTo(NamedPipeMethods.stringFilterSymbolic("abc").asList());
+    void stringFilterAndRejectProduceExpectedResults() {
+        assertThat(NamedPipeMethods.stringFilterNamed("abc").asList()).isEqualTo(List.of("b"));
+        assertThat(NamedPipeMethods.stringRejectNamed("abc").asList()).isEqualTo(List.of("a", "c"));
+        assertThat(NamedPipeMethods.stringRejectNamed("abc").asList()).isEqualTo(NamedPipeMethods.stringFilterSymbolic("abc").asList());
     }
 
     @Test
