@@ -73,8 +73,8 @@ fun Set[T].filter(predicate: T => bool): Seq[T] = this.to_list().filter(predicat
 /// Returns a sequence without values that satisfy `predicate`.
 fun Set[T].reject(predicate: T => bool): Seq[T] = this.to_list().reject(predicate)
 
-/// Returns a sequence without values that satisfy `predicate`.
-fun Set[T].`|-`(predicate: T => bool): Seq[T] = this.reject(predicate)
+/// Returns a sequence containing only values that satisfy `predicate`.
+fun Set[T].`|-`(predicate: T => bool): Seq[T] = this.filter(predicate)
 
 /// Applies `map` to each value and concatenates the resulting sets.
 fun Set[T].flat_map(map: T => Set[Y]): Seq[Y] =

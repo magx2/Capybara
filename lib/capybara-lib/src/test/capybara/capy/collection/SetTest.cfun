@@ -90,11 +90,11 @@ fun set_should_map_values(): Assert =
 fun set_should_filter_and_reject_values(): Assert =
     let filtered = {1, 2, 3, 4}.filter(value => value % 2 == 0).as_list()
     let rejected = {1, 2, 3, 4}.reject(value => value % 2 == 0).as_list()
-    let rejected_symbolic = ({1, 2, 3, 4} |- value => value % 2 == 0).as_list()
+    let filtered_symbolic = ({1, 2, 3, 4}.`|-`(value => value % 2 == 0)).as_list()
     assert_all([
         assert_that(filtered).has_size(2).contains(2).contains(4),
         assert_that(rejected).has_size(2).contains(1).contains(3),
-        assert_that(rejected_symbolic).has_size(2).contains(1).contains(3),
+        assert_that(filtered_symbolic).has_size(2).contains(2).contains(4),
     ])
 
 fun set_should_flat_map_values(): Assert =

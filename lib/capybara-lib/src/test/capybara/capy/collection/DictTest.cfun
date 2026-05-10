@@ -96,7 +96,7 @@ fun dict_should_filter_and_reject_entries(): Assert =
     assert_all([
         assert_that(values.filter((_, value) => value % 2 == 0)).is_equal_to({"b": 2}),
         assert_that(values.reject((_, value) => value % 2 == 0)).is_equal_to({"a": 1, "c": 3}),
-        assert_that((values |- (_, value) => value % 2 == 0)).is_equal_to({"a": 1, "c": 3}),
+        assert_that(values.`|-`((_, value) => value % 2 == 0)).is_equal_to({"b": 2}),
     ])
 
 fun dict_should_get_values_by_key(): Assert =

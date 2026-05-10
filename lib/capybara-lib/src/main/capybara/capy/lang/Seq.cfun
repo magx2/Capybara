@@ -117,16 +117,19 @@ fun Seq[T].filter(pred: T => bool): Seq[T] =
     ---
     __filter(this, pred)
 
-fun Seq[T].`|-`(pred: T => bool): Seq[T] =
-    fun __filter_minus(seq: Seq[T], pred: T => bool): Seq[T] =
+fun Seq[T].`|-`(pred: T => bool): Seq[T] = this.filter(pred)
+
+/// Returns a sequence without elements that satisfy `pred`.
+fun Seq[T].reject(pred: T => bool): Seq[T] =
+    fun __reject(seq: Seq[T], pred: T => bool): Seq[T] =
         match seq with
         case End -> End {}
         case Cons { value, rest } ->
             if pred(value)
-            then __filter_minus(rest(), pred)
-            else Cons { value, () => __filter_minus(rest(), pred) }
+            then __reject(rest(), pred)
+            else Cons { value, () => __reject(rest(), pred) }
     ---
-    __filter_minus(this, pred)
+    __reject(this, pred)
 
 /// Skips the first `n` elements of the sequence.
 fun Seq[T].drop(n: int): Seq[T] =

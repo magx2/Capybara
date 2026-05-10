@@ -10,7 +10,7 @@ fun tests(): Effect[TestFile] =
         test("should take from infinite sequence", () => should_take_from_infinite_sequence()),
         test("should convert sequence to list", () => should_convert_sequence_to_list()),
         test("should drop and until", () => should_drop_and_until()),
-        test("should filter values", () => should_filter_values()),
+        test("should filter and reject values", () => should_filter_and_reject_values()),
         test("should zip two sequences", () => should_zip_two_sequences()),
         test("should generate powers of two", () => should_generate_powers_of_two()),
         test("should return first element", () => should_return_first_element()),
@@ -47,9 +47,13 @@ fun should_drop_and_until(): Assert =
     let seq = natural_seq().drop(2).until(x => x > 5)
     assert_that(seq).has_size(4)
 
-fun should_filter_values(): Assert =
+fun should_filter_and_reject_values(): Assert =
     let seq = natural_seq().until(x => x > 10).filter(x => x < 5)
-    assert_that(seq).has_size(5)
+    assert_all([
+        assert_that(seq).has_size(5),
+        assert_that((to_seq([1, 2, 3, 4]) |- x => x % 2 == 0).as_list()).is_equal_to([2, 4]),
+        assert_that(to_seq([1, 2, 3, 4]).reject(x => x % 2 == 0).as_list()).is_equal_to([1, 3]),
+    ])
 
 fun should_zip_two_sequences(): Assert =
     let zipped = natural_seq().drop(1).zip(ones_seq()).take(3)
@@ -82,4 +86,3 @@ fun should_detect_any_matching_element(): Assert =
 fun should_detect_no_matching_element(): Assert =
     let seq = to_seq([1, 2, 3])
     assert_that(seq.any(x => x > 10)).is_equal_to(false)
-

@@ -83,8 +83,8 @@ fun Dict[T].reject(predicate: (String, T) => bool): Dict[T] =
         then acc
         else acc + entry)
 
-/// Returns a new Dict without entries that satisfy `predicate`.
-fun Dict[T].`|-`(predicate: (String, T) => bool): Dict[T] = this.reject(predicate)
+/// Returns a new Dict containing only entries that satisfy `predicate`.
+fun Dict[T].`|-`(predicate: (String, T) => bool): Dict[T] = this.filter(predicate)
 
 /// Returns the value for key; equivalent to dict[key].
 fun Dict[T].get(key: String): Option[T] = <native>

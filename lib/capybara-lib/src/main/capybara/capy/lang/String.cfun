@@ -138,8 +138,8 @@ fun String.reject(predicate: String => bool): Seq[String] =
     ---
     __reject(this, 0, predicate)
 
-/// Returns a sequence without characters that satisfy `predicate`.
-fun String.`|-`(predicate: String => bool): Seq[String] = this.reject(predicate)
+/// Returns a sequence containing only characters that satisfy `predicate`.
+fun String.`|-`(predicate: String => bool): Seq[String] = this.filter(predicate)
 
 /// Applies `map` to each character and concatenates the resulting lists.
 fun String.flat_map(map: String => List[Y]): Seq[Y] = to_seq(this.reduce([], (acc, char) => acc + map(char)))
