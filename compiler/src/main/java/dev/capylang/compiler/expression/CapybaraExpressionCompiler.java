@@ -2108,13 +2108,12 @@ public class CapybaraExpressionCompiler {
                 || "end_with".equals(methodName);
         var supportsStringThreeArgs = "replace".equals(methodName);
         var supportsTrim = "trim".equals(methodName);
-        var supportsIsEmpty = "is_empty".equals(methodName);
         var supportsToInt = "to_int".equals(methodName);
         var supportsToLong = "to_long".equals(methodName);
         var supportsToDouble = "to_double".equals(methodName);
         var supportsToFloat = "to_float".equals(methodName);
         var supportsToBool = "to_bool".equals(methodName);
-        var supportsSingleString = supportsTrim || supportsIsEmpty
+        var supportsSingleString = supportsTrim
                                    || supportsToInt || supportsToLong || supportsToDouble || supportsToFloat || supportsToBool;
         if ((!supportsBoolTwoStrings && !supportsStringThreeArgs && !supportsSingleString)
                 || (supportsBoolTwoStrings && functionCall.arguments().size() != 2)
@@ -2185,13 +2184,6 @@ public class CapybaraExpressionCompiler {
         }
         if (args.get(0).type() != STRING) {
             return Optional.empty();
-        }
-        if (supportsIsEmpty) {
-            return Optional.of(Result.success(new CompiledFunctionCall(
-                    METHOD_DECL_PREFIX + "String__is_empty",
-                    args,
-                    BOOL
-            )));
         }
         if (supportsToInt) {
             var resultType = resultTypeFor(INT);
@@ -2289,9 +2281,6 @@ public class CapybaraExpressionCompiler {
         }
         if ("trim".equals(methodName)) {
             signatures.add(builtinMethodSignature("String", "trim", List.of(STRING), STRING));
-        }
-        if ("is_empty".equals(methodName)) {
-            signatures.add(builtinMethodSignature("String", "is_empty", List.of(STRING), BOOL));
         }
         if ("to_int".equals(methodName)) {
             signatures.add(builtinMethodSignature("Long", "to_int", List.of(LONG), INT));

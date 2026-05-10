@@ -14,7 +14,7 @@ fun String.get(idx: int): Option[String] = <native>
 fun String.get(from: int, to: int): String = <native>
 
 /// Returns true when this String has no characters.
-fun String.is_empty(): bool = <native>
+fun String.is_empty(): bool = this.length() == 0
 
 /// Returns true when this String contains the given substring.
 fun String.contains(part: String): bool = <native>
