@@ -54,7 +54,14 @@ public class JavaExpressionEvaluator {
                 "capy.collection.Set",
                 java.util.List.of("Set"),
                 "is_empty", "plus", "minus", "any", "all", "contains", "?", "reduce", "|>",
-                "reduce_left", "|l>", "map", "|", "filter", "reject", "|-", "flat_map", "flatMap", "|*"
+                "reduce_left", "|l>", "map", "|", "filter", "reject", "|-", "flat_map", "flatMap", "|*",
+                "does_not_contain", "∈", "∉", "equals", "not_equals", "=", "≠",
+                "is_subset_of", "⊆", "is_proper_subset_of", "⊂",
+                "is_superset_of", "⊇", "is_proper_superset_of", "⊃",
+                "union", "∪", "intersection", "∩", "difference",
+                "relative_complement", "\\", "symmetric_difference", "△",
+                "cartesian_product", "×", "is_disjoint_with", "∩=∅",
+                "power_set", "℘"
         );
         registerStandardExtensionMethods(
                 owners,

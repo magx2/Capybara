@@ -22,6 +22,44 @@ fun contains(s: Set[int], value: int): bool = s ? value
 
 fun contains_method(s: Set[int], value: int): bool = s.contains(value)
 
+fun subset_named(left: Set[int], right: Set[int]): bool = left.is_subset_of(right)
+
+fun subset_symbol(left: Set[int], right: Set[int]): bool = left ⊆ right
+
+fun proper_subset_named(left: Set[int], right: Set[int]): bool = left.is_proper_subset_of(right)
+
+fun proper_subset_symbol(left: Set[int], right: Set[int]): bool = left ⊂ right
+
+fun superset_named(left: Set[int], right: Set[int]): bool = left.is_superset_of(right)
+
+fun superset_symbol(left: Set[int], right: Set[int]): bool = left ⊇ right
+
+fun proper_superset_named(left: Set[int], right: Set[int]): bool = left.is_proper_superset_of(right)
+
+fun proper_superset_symbol(left: Set[int], right: Set[int]): bool = left ⊃ right
+
+fun union_named(left: Set[int], right: Set[int]): Set[int] = left.union(right)
+
+fun union_symbol(left: Set[int], right: Set[int]): Set[int] = left ∪ right
+
+fun intersection_named(left: Set[int], right: Set[int]): Set[int] = left.intersection(right)
+
+fun intersection_symbol(left: Set[int], right: Set[int]): Set[int] = left ∩ right
+
+fun difference_named(left: Set[int], right: Set[int]): Set[int] = left.difference(right)
+
+fun symmetric_difference_named(left: Set[int], right: Set[int]): Set[int] = left.symmetric_difference(right)
+
+fun symmetric_difference_symbol(left: Set[int], right: Set[int]): Set[int] = left △ right
+
+fun cartesian_product_named(left: Set[int], right: Set[String]): Set[Tuple[int, String]] = left.cartesian_product(right)
+
+fun cartesian_product_symbol(left: Set[int], right: Set[String]): Set[Tuple[int, String]] = left × right
+
+fun power_set_named(values: Set[int]): Set[Set[int]] = values.power_set()
+
+fun power_set_symbol(values: Set[int]): Set[Set[int]] = values.℘()
+
 fun any(s: Set[int]): bool = s.any(value => value > 2)
 
 fun any_empty(s: Set[int]): bool = s.any(value => value > 2)

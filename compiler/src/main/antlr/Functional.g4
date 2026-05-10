@@ -49,8 +49,10 @@ localDataDeclaration: 'data' genericTypeDeclaration '{' dataBody? '}' constructo
 localSingleDeclaration: 'single' TYPE;
 localConstDeclaration: docComment* 'const' privateLocalConstName (':' type)? '=' expressionNoLet;
 privateLocalConstName: NAME | TYPE;
-functionNameDeclaration: identifier | genericTypeDeclaration DOT methodIdentifier;
-methodIdentifier: identifier | 'with' | INFIX_METHOD_LITERAL;
+functionNameDeclaration: identifier | genericTypeDeclaration DOT declarationMethodIdentifier;
+declarationMethodIdentifier: identifier | 'with' | BACKTICKED_INFIX_METHOD_LITERAL;
+methodIdentifier: identifier | 'with' | infixMethodLiteral | infixOperator;
+infixMethodLiteral: BACKTICKED_INFIX_METHOD_LITERAL | INFIX_METHOD_LITERAL;
 docComment: DOC_COMMENT;
 
 typeDeclaration: docComment* VISIBILITY? 'type' genericTypeDeclaration constructorClause? '=' genericTypeDeclaration (PIPE genericTypeDeclaration)* deriveClause?
@@ -98,7 +100,6 @@ qualifiedType: TYPE (DOT TYPE)*;
 TYPE: [_]* [A-Z][a-zA-Z0-9_]*
       | TYPE_FULL ;
 TYPE_FULL: '/' [A-Za-z_][a-zA-Z0-9_]* ( '/' [A-Za-z_][a-zA-Z0-9_]* )+;
-INFIX_METHOD_LITERAL: '`' ('|l>' | [+\-*/\\^%$#@~!:<>|?]+) '`';
 expression: letExpression* expressionNoLet;
 letExpression: 'let' identifier (':' type)? letBindingOperator expressionNoLet ';'?;
 expressionNoPipe: letExpressionNoPipe* expressionNoLetNoPipe;
@@ -123,7 +124,7 @@ expressionNoLet: ifExpression
                | expressionNoLet LBRACK argumentList? RBRACK
                | expressionNoLet LPAREN argumentList? RPAREN
                | expressionNoLet DOT methodIdentifier LPAREN methodArgumentList? RPAREN
-               | expressionNoLet INFIX_METHOD_LITERAL expressionNoLet
+               | expressionNoLet infixMethodLiteral expressionNoLet
                | expressionNoLet DOT identifier
                | expressionNoLet infixOperator expressionNoLet
                | value
@@ -153,7 +154,7 @@ expressionNoLetNoPipe: ifExpression
                      | expressionNoLetNoPipe LBRACK argumentList? RBRACK
                      | expressionNoLetNoPipe LPAREN argumentList? RPAREN
                      | expressionNoLetNoPipe DOT methodIdentifier LPAREN methodArgumentList? RPAREN
-                     | expressionNoLetNoPipe INFIX_METHOD_LITERAL expressionNoLetNoPipe
+                     | expressionNoLetNoPipe infixMethodLiteral expressionNoLetNoPipe
                      | expressionNoLetNoPipe DOT identifier
                      | expressionNoLetNoPipe infixOperatorNoPipe expressionNoLetNoPipe
                      | value
@@ -366,4 +367,6 @@ URSHIFT_ASSIGN : '>>>=';
 DOC_COMMENT : '///' ~[\r\n]*;
 LINE_COMMENT : '//' ~[\r\n]* -> skip;
 BLOCK_COMMENT : '/*' .*? '*/' { if (containsNewline(getText())) lineStart = true; } -> skip;
+BACKTICKED_INFIX_METHOD_LITERAL: '`' ('|l>' | [+\-*/\\^%$#@~!:<>|?=∈∉≠⊆⊂⊇⊃∪∩△×℘∅]+) '`';
+INFIX_METHOD_LITERAL: '|l>' | [\\$#@∈∉≠⊆⊂⊇⊃∪∩△×℘∅] [+\-*/\\^%$#@~!:<>|?=∈∉≠⊆⊂⊇⊃∪∩△×℘∅]*;
 WS : [ \t\r\n]+ { if (containsNewline(getText())) lineStart = true; } -> skip;
