@@ -23,7 +23,7 @@ public class CompilationErrorTest {
                         fun parse_semver(version: String): Result[int] =
                             data __Parse[T] { buffer: String, value: T }
                             fun __parse_digit(buffer: String): Result[__Parse[int]] =
-                                Success { __Parse { buffer: buffer[1:], value: 1 } }
+                                Success { __Parse { buffer: buffer[1, buffer.size], value: 1 } }
                             fun __parse_digits(parse: __Parse[Option[int]]): Result[__Parse[int]] =
                                 match parse.buffer[0] with
                                 case None ->
@@ -35,7 +35,7 @@ public class CompilationErrorTest {
                                     match next_digit with
                                     case Error error ->
                                         match parse.value with
-                                        case Some { value } -> Success { __Parse { parse.buffer[1:], value } }
+                                        case Some { value } -> Success { __Parse { parse.buffer[1, parse.buffer.size], value } }
                                         case None -> error
                                     case Success { next_digit_parse } ->
                                         let new_parse: __Parse[Option[int]] = __Parse {
@@ -118,6 +118,18 @@ public class CompilationErrorTest {
         assertThat(errors.first().message())
                 .contains("Type 'Box' cannot be indexed with arguments: int.")
                 .contains("No matching method 'Box.get(int)' found.");
+    }
+
+    @Test
+    void shouldRejectStringSliceSyntax() {
+        var errors = compileProgram("""
+                        fun broken(): String = "afa"[1:2]
+                        """,
+                "string_slice_syntax");
+
+        assertThat(errors).hasSize(1);
+        assertThat(errors.first().message())
+                .contains("String slice syntax is not supported; use `string[from, to]` instead.");
     }
 
     @Test
@@ -1263,7 +1275,7 @@ public class CompilationErrorTest {
                                 data JsonBool { value: bool }
                                 single JsonNull
                                   fun _deserialize_json_null(json: String): Result[_Parse[JsonBool]] =
-                                    let parsed: _Parse[JsonNull] = _Parse { JsonNull {}, json[4:] }
+                                    let parsed: _Parse[JsonNull] = _Parse { JsonNull {}, json[4, json.size] }
                                     Success { parsed }
                                 """,
                         new Position(9, 4),

@@ -496,6 +496,17 @@ public class JavaExpressionEvaluator {
             Scope current,
             List<String> args
     ) {
+        if (args.size() == 3 && functionCall.arguments().size() == 3) {
+            var receiverType = functionCall.arguments().getFirst().type();
+            var source = args.get(0);
+            var from = args.get(1);
+            var to = args.get(2);
+            var isString = receiverType == dev.capylang.compiler.PrimitiveLinkedType.STRING;
+            if (!isString && !(receiverType instanceof dev.capylang.compiler.CollectionLinkedType.CompiledList)) {
+                return Optional.empty();
+            }
+            return Optional.of(current.addExpression(renderSliceExpression(source, Optional.of(from), Optional.of(to), isString)));
+        }
         if (args.size() != 2 || functionCall.arguments().size() != 2) {
             return Optional.empty();
         }
@@ -1704,6 +1715,19 @@ public class JavaExpressionEvaluator {
 
         var source = sourceExSc.expression();
         var isString = expression.type() == dev.capylang.compiler.PrimitiveLinkedType.STRING;
+        var slice = renderSliceExpression(source, start, end, isString);
+        if (expression.type() instanceof dev.capylang.compiler.CompiledTupleType) {
+            slice = "new java.util.ArrayList<java.lang.Object>(" + slice + ")";
+        }
+        return current.addExpression(slice);
+    }
+
+    private static String renderSliceExpression(
+            String source,
+            Optional<String> start,
+            Optional<String> end,
+            boolean isString
+    ) {
         var sizeExpression = "(" + source + ")." + (isString ? "length()" : "size()");
         var startExpression = start
                 .map(idx -> normalizeSliceIndex(idx, sizeExpression))
@@ -1711,14 +1735,18 @@ public class JavaExpressionEvaluator {
         var endExpression = end
                 .map(idx -> normalizeSliceIndex(idx, sizeExpression))
                 .orElse(sizeExpression);
+        return renderSliceExpression(source, startExpression, endExpression, isString);
+    }
 
-        var slice = isString
+    private static String renderSliceExpression(
+            String source,
+            String startExpression,
+            String endExpression,
+            boolean isString
+    ) {
+        return isString
                 ? source + ".substring(" + startExpression + ", " + endExpression + ")"
                 : source + ".subList(" + startExpression + ", " + endExpression + ")";
-        if (expression.type() instanceof dev.capylang.compiler.CompiledTupleType) {
-            slice = "new java.util.ArrayList<java.lang.Object>(" + slice + ")";
-        }
-        return current.addExpression(slice);
     }
 
     private static Scope evaluateIndexExpression(CompiledIndexExpression expression, Scope scope) {

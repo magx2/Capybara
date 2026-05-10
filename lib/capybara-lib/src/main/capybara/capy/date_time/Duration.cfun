@@ -113,23 +113,24 @@ fun from_iso_8601(iso: String): Result[Duration] =
         has_time_component: bool
     }
     fun __invalid(message: String): String = "Invalid ISO 8601 duration format: " + message
+    fun __tail(value: String): String = value[1, value.size]
     fun __parse_positive_digit(value: String): Result[__Parse[int]] =
         match value[0] with
         case None -> Error { __invalid("unexpected end of string while parsing digits") }
-        case Some { '1' }  -> Success { __Parse { buffer: value[1:], value: 1 } }
-        case Some { '2' }  -> Success { __Parse { buffer: value[1:], value: 2 } }
-        case Some { '3' }  -> Success { __Parse { buffer: value[1:], value: 3 } }
-        case Some { '4' }  -> Success { __Parse { buffer: value[1:], value: 4 } }
-        case Some { '5' }  -> Success { __Parse { buffer: value[1:], value: 5 } }
-        case Some { '6' }  -> Success { __Parse { buffer: value[1:], value: 6 } }
-        case Some { '7' }  -> Success { __Parse { buffer: value[1:], value: 7 } }
-        case Some { '8' }  -> Success { __Parse { buffer: value[1:], value: 8 } }
-        case Some { '9' }  -> Success { __Parse { buffer: value[1:], value: 9 } }
+        case Some { '1' }  -> Success { __Parse { buffer: __tail(value), value: 1 } }
+        case Some { '2' }  -> Success { __Parse { buffer: __tail(value), value: 2 } }
+        case Some { '3' }  -> Success { __Parse { buffer: __tail(value), value: 3 } }
+        case Some { '4' }  -> Success { __Parse { buffer: __tail(value), value: 4 } }
+        case Some { '5' }  -> Success { __Parse { buffer: __tail(value), value: 5 } }
+        case Some { '6' }  -> Success { __Parse { buffer: __tail(value), value: 6 } }
+        case Some { '7' }  -> Success { __Parse { buffer: __tail(value), value: 7 } }
+        case Some { '8' }  -> Success { __Parse { buffer: __tail(value), value: 8 } }
+        case Some { '9' }  -> Success { __Parse { buffer: __tail(value), value: 9 } }
         case Some { char } -> Error { __invalid("expected digit between `1` and `9`, got `" + char + "`") }
     fun __parse_digit(value: String): Result[__Parse[int]] =
         match value[0] with
         case None -> Error { __invalid("unexpected end of string while parsing digits") }
-        case Some { '0' } -> Success { __Parse { buffer: value[1:], value: 0 } }
+        case Some { '0' } -> Success { __Parse { buffer: __tail(value), value: 0 } }
         case Some -> __parse_positive_digit(value)
     fun rec __parse_rest_digits(value: String, parsed: int): Result[__Parse[int]] =
         match value[0] with
@@ -157,23 +158,23 @@ fun from_iso_8601(iso: String): Result[Duration] =
         case Error -> false
     fun __is_combined_basic(value: String): bool =
         if value.size == 15
-        then __is_exact_digits(value[0:8])
-            & value[8:9] == "T"
-            & __is_exact_digits(value[9:15])
+        then __is_exact_digits(value[0, 8])
+            & value[8, 9] == "T"
+            & __is_exact_digits(value[9, 15])
         else false
     fun __is_combined_extended(value: String): bool =
         if value.size == 19
-        then __is_exact_digits(value[0:4])
-            & value[4:5] == "-"
-            & __is_exact_digits(value[5:7])
-            & value[7:8] == "-"
-            & __is_exact_digits(value[8:10])
-            & value[10:11] == "T"
-            & __is_exact_digits(value[11:13])
-            & value[13:14] == ":"
-            & __is_exact_digits(value[14:16])
-            & value[16:17] == ":"
-            & __is_exact_digits(value[17:19])
+        then __is_exact_digits(value[0, 4])
+            & value[4, 5] == "-"
+            & __is_exact_digits(value[5, 7])
+            & value[7, 8] == "-"
+            & __is_exact_digits(value[8, 10])
+            & value[10, 11] == "T"
+            & __is_exact_digits(value[11, 13])
+            & value[13, 14] == ":"
+            & __is_exact_digits(value[14, 16])
+            & value[16, 17] == ":"
+            & __is_exact_digits(value[17, 19])
         else false
     fun __to_duration(parts: __Parts): Duration =
         if parts.weeks != 0
@@ -199,12 +200,12 @@ fun from_iso_8601(iso: String): Result[Duration] =
         then Error { __invalid("combined duration second component must be between 0 and 59") }
         else Success { __to_duration(parts) }
     fun __parse_combined_basic(value: String): Result[Duration] =
-        let years <- __parse_exact_digits(value[0:4], "years")
-        let months <- __parse_exact_digits(value[4:6], "months")
-        let days <- __parse_exact_digits(value[6:8], "days")
-        let hours <- __parse_exact_digits(value[9:11], "hours")
-        let minutes <- __parse_exact_digits(value[11:13], "minutes")
-        let seconds <- __parse_exact_digits(value[13:15], "seconds")
+        let years <- __parse_exact_digits(value[0, 4], "years")
+        let months <- __parse_exact_digits(value[4, 6], "months")
+        let days <- __parse_exact_digits(value[6, 8], "days")
+        let hours <- __parse_exact_digits(value[9, 11], "hours")
+        let minutes <- __parse_exact_digits(value[11, 13], "minutes")
+        let seconds <- __parse_exact_digits(value[13, 15], "seconds")
         __validate_combined(__Parts {
             years,
             months,
@@ -215,12 +216,12 @@ fun from_iso_8601(iso: String): Result[Duration] =
             seconds
         })
     fun __parse_combined_extended(value: String): Result[Duration] =
-        let years <- __parse_exact_digits(value[0:4], "years")
-        let months <- __parse_exact_digits(value[5:7], "months")
-        let days <- __parse_exact_digits(value[8:10], "days")
-        let hours <- __parse_exact_digits(value[11:13], "hours")
-        let minutes <- __parse_exact_digits(value[14:16], "minutes")
-        let seconds <- __parse_exact_digits(value[17:19], "seconds")
+        let years <- __parse_exact_digits(value[0, 4], "years")
+        let months <- __parse_exact_digits(value[5, 7], "months")
+        let days <- __parse_exact_digits(value[8, 10], "days")
+        let hours <- __parse_exact_digits(value[11, 13], "hours")
+        let minutes <- __parse_exact_digits(value[14, 16], "minutes")
+        let seconds <- __parse_exact_digits(value[17, 19], "seconds")
         __validate_combined(__Parts {
             years,
             months,
@@ -315,7 +316,7 @@ fun from_iso_8601(iso: String): Result[Duration] =
             else if parse.value.weeks != 0
             then Error { __invalid("week durations cannot be combined with time components") }
             else __parse_designator_duration(__DurationParse {
-                buffer: parse.buffer[1:],
+                buffer: __tail(parse.buffer),
                 value: parse.value,
                 in_time: true,
                 previous_order: 4,
@@ -335,7 +336,7 @@ fun from_iso_8601(iso: String): Result[Duration] =
                     if designator == 'S'
                     then {
                         let next_parse <- __apply_seconds_component(__DurationParse {
-                            buffer: parse_number.buffer[1:],
+                            buffer: __tail(parse_number.buffer),
                             value: parse.value,
                             in_time: parse.in_time,
                             previous_order: parse.previous_order,
@@ -348,7 +349,7 @@ fun from_iso_8601(iso: String): Result[Duration] =
                         match ("" + parse_number.value).to_int() with
                         case Success { amount } -> {
                             let next_parse <- __apply_component(__DurationParse {
-                                buffer: parse_number.buffer[1:],
+                                buffer: __tail(parse_number.buffer),
                                 value: parse.value,
                                 in_time: parse.in_time,
                                 previous_order: parse.previous_order,
@@ -365,7 +366,7 @@ fun from_iso_8601(iso: String): Result[Duration] =
     if !iso.starts_with("P")
     then Error { __invalid("must start with `P`") }
     else {
-        let duration = iso[1:]
+        let duration = __tail(iso)
         if duration.is_empty
         then Error { __invalid("missing components") }
         else if __is_combined_basic(duration)

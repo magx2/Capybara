@@ -346,13 +346,13 @@ fun team_city_escape(value: String): String =
     fun rec __team_city_escape(value: String, acc: String): String =
         match value[0] with
         case None -> acc
-        case Some { '\'' } -> __team_city_escape(value[1:], acc + "|'")
-        case Some { '\n' } -> __team_city_escape(value[1:], acc + '|n')
-        case Some { '\r' } -> __team_city_escape(value[1:], acc + '|r')
-        case Some { '|' } -> __team_city_escape(value[1:], acc + '||')
-        case Some { '[' } -> __team_city_escape(value[1:], acc + '|[')
-        case Some { ']' } -> __team_city_escape(value[1:], acc + '|]')
-        case Some { c } -> __team_city_escape(value[1:], acc + c)
+        case Some { '\'' } -> __team_city_escape(value[1, value.size], acc + "|'")
+        case Some { '\n' } -> __team_city_escape(value[1, value.size], acc + '|n')
+        case Some { '\r' } -> __team_city_escape(value[1, value.size], acc + '|r')
+        case Some { '|' } -> __team_city_escape(value[1, value.size], acc + '||')
+        case Some { '[' } -> __team_city_escape(value[1, value.size], acc + '|[')
+        case Some { ']' } -> __team_city_escape(value[1, value.size], acc + '|]')
+        case Some { c } -> __team_city_escape(value[1, value.size], acc + c)
     ---
     __team_city_escape(value, '')
 
@@ -451,12 +451,12 @@ private fun manifest_paths(content: String): List[Path] =
             if current.is_empty
             then acc
             else acc + current
-        case Some { '\r' } -> lines(value[1:], current, acc)
+        case Some { '\r' } -> lines(value[1, value.size], current, acc)
         case Some { '\n' } ->
             if current.is_empty
-            then lines(value[1:], '', acc)
-            else lines(value[1:], '', acc + current)
-        case Some { c } -> lines(value[1:], current + c, acc)
+            then lines(value[1, value.size], '', acc)
+            else lines(value[1, value.size], '', acc + current)
+        case Some { c } -> lines(value[1, value.size], current + c, acc)
     ---
     lines(content, '', []) | line => from_string(line)
 
@@ -540,7 +540,7 @@ private fun junit_run_test(test_file: TestFile): TestOutput =
     + (test_file.test_cases | tc => junit_run_test_case(test_file.file_name, tc) |> '', (acc, tc) => acc + tc)
     + '</testsuite>'
     TestOutput {
-        path: from_string(JUNIT_PREFIX + test_file.file_name[1:].replace('/', '.') + '.xml'),
+        path: from_string(JUNIT_PREFIX + test_file.file_name[1, test_file.file_name.size].replace('/', '.') + '.xml'),
         content: content,
         failed: failures > 0
     }

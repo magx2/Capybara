@@ -13,7 +13,7 @@ fun _drop_prefix(value: String, size: int): String =
         else
             match value[0] with
             case None -> ""
-            case Some { _ } -> __drop_prefix(value[1:], size - 1)
+            case Some { _ } -> __drop_prefix(value[1, value.size], size - 1)
     ---
     __drop_prefix(value, size)
 
@@ -27,7 +27,7 @@ fun _find_all(pattern: String, input: String, acc: List[Match]): List[Match] =
             case Some { _ } ->
                 if input.starts_with(pattern)
                 then __find_all(pattern, _drop_prefix(input, pattern.size), acc + Match { group_value: pattern })
-                else __find_all(pattern, input[1:], acc)
+                else __find_all(pattern, input[1, input.size], acc)
     ---
     __find_all(pattern, input, acc)
 
@@ -41,7 +41,7 @@ fun _split(pattern: String, input: String, current: String, acc: List[String]): 
             case Some { c } ->
                 if input.starts_with(pattern)
                 then __split(pattern, _drop_prefix(input, pattern.size), "", acc + current)
-                else __split(pattern, input[1:], current + c, acc)
+                else __split(pattern, input[1, input.size], current + c, acc)
     ---
     __split(pattern, input, current, acc)
 

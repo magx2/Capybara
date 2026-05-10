@@ -278,11 +278,16 @@ public class CapybaraExpressionCompiler {
     private Result<CompiledExpression> linkSliceExpression(SliceExpression expression, Scope scope) {
         return linkExpression(expression.source(), scope)
                 .flatMap(source -> {
+                    if (source.type() == STRING) {
+                        return withPosition(
+                                Result.error("String slice syntax is not supported; use `string[from, to]` instead."),
+                                expression.position()
+                        );
+                    }
                     if (!(source.type() instanceof CompiledList)
-                        && source.type() != STRING
                         && !(source.type() instanceof CompiledTupleType)) {
                         return withPosition(
-                                Result.error("Slice source has to be `List`, `String` or `Tuple`, was `" + source.type() + "`"),
+                                Result.error("Slice source has to be `List` or `Tuple`, was `" + source.type() + "`"),
                                 expression.position()
                         );
                     }
@@ -2378,7 +2383,8 @@ public class CapybaraExpressionCompiler {
             Scope scope,
             String methodName
     ) {
-        if (!"get".equals(methodName) || functionCall.arguments().size() != 2) {
+        if (!"get".equals(methodName)
+            || (functionCall.arguments().size() != 2 && functionCall.arguments().size() != 3)) {
             return Optional.empty();
         }
         var linkedArguments = functionCall.arguments().stream()
@@ -2394,6 +2400,19 @@ public class CapybaraExpressionCompiler {
         var source = args.get(0);
         var index = args.get(1);
         var sourceType = source.type();
+        if (functionCall.arguments().size() == 3) {
+            var end = args.get(2);
+            if ((sourceType instanceof CompiledList || sourceType == STRING)
+                && index.type() == INT
+                && end.type() == INT) {
+                return Optional.of(Result.success(new CompiledFunctionCall(
+                        METHOD_DECL_PREFIX + (sourceType == STRING ? "String" : "List") + "__get",
+                        args,
+                        sourceType
+                )));
+            }
+            return Optional.empty();
+        }
         if (sourceType instanceof CompiledList || sourceType == STRING) {
             if (index.type() != INT) {
                 return Optional.empty();
