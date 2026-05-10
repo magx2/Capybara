@@ -617,6 +617,15 @@ class CapybaraPluginTest {
         assertEquals("NONE", testCapybara.getLogType().get());
     }
 
+    @Test
+    void shouldDefaultCapybaraTestSelectionOptions() {
+        var project = newProject(List.of("check"));
+        var testCapybara = project.getTasks().named("testCapybara", CapybaraTestTask.class).get();
+
+        assertTrue(testCapybara.getTests().get().isEmpty());
+        assertFalse(testCapybara.getPrintAvailableTests().get());
+    }
+
     @ParameterizedTest
     @MethodSource("fusedCapybaraLifecycleTasks")
     void shouldWireLifecycleBuildJavaCompilationDirectlyToFusedCompileTask(String requestedTask) {

@@ -9,6 +9,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
@@ -32,12 +33,22 @@ public class TestRunner {
         var capyTestRuntimeClass = loadCapyTestRuntime();
         var gatherTestsMethod = loadGatherTestsMethod(capyTestRuntimeClass);
         var previousLogType = TestLog.currentLogType();
-        TestLog.setLogType(arguments.logType());
+        var previousSelection = TestSelection.setSelection(TestSelection.Selection.from(
+                arguments.testSelectors(),
+                arguments.availableTests()
+        ));
+        TestLog.setLogType(arguments.availableTests() ? CapyTest.LogType.NONE : arguments.logType());
         try {
             var testFiles = invokeGatherTests(gatherTestsMethod);
+            if (arguments.availableTests()) {
+                availableTests(testFiles).forEach(System.out::println);
+                return 0;
+            }
+            testFiles = filterTestFiles(testFiles, arguments.testSelectors());
             var testRun = invokeRunTests(arguments.reportType(), arguments.outputDir(), testFiles);
             return testRun.failed() ? 1 : 0;
         } finally {
+            TestSelection.restoreSelection(previousSelection);
             TestLog.setLogType(previousLogType);
         }
     }
@@ -46,6 +57,8 @@ public class TestRunner {
         Path outputDir = null;
         ReportType reportType = null;
         CapyTest.LogType logType = CapyTest.LogType.NONE;
+        var testSelectors = new ArrayList<String>();
+        var availableTests = false;
         for (int i = 0; i < args.length; i++) {
             switch (args[i]) {
                 case "-o", "--output-dir" -> {
@@ -66,6 +79,13 @@ public class TestRunner {
                     }
                     logType = parseLogType(args[++i]);
                 }
+                case "--tests" -> {
+                    if (i + 1 >= args.length) {
+                        throw new IllegalArgumentException("Missing value for " + args[i]);
+                    }
+                    testSelectors.add(args[++i]);
+                }
+                case "--available-tests" -> availableTests = true;
                 case "-h", "--help" -> {
                     printHelp();
                     System.exit(0);
@@ -73,29 +93,49 @@ public class TestRunner {
                 default -> throw new IllegalArgumentException("Unknown argument: " + args[i]);
             }
         }
-        return new Arguments(outputDir, reportType, logType);
+        return new Arguments(outputDir, reportType, logType, testSelectors, availableTests);
     }
 
-    public record Arguments(Path outputDir, ReportType reportType, CapyTest.LogType logType) {
+    public record Arguments(
+            Path outputDir,
+            ReportType reportType,
+            CapyTest.LogType logType,
+            List<String> testSelectors,
+            boolean availableTests
+    ) {
         public Arguments(Path outputDir, ReportType reportType) {
-            this(outputDir, reportType, CapyTest.LogType.NONE);
+            this(outputDir, reportType, CapyTest.LogType.NONE, List.of(), false);
+        }
+
+        public Arguments(Path outputDir, ReportType reportType, CapyTest.LogType logType) {
+            this(outputDir, reportType, logType, List.of(), false);
         }
 
         public Arguments {
-            if (outputDir == null) {
+            if (!availableTests && outputDir == null) {
                 throw new IllegalArgumentException("Output directory not specified");
             }
-            if (!Files.exists(outputDir)) {
+            if (outputDir != null && !Files.exists(outputDir)) {
                 throw new IllegalArgumentException("Output directory `%s` doesn't exist".formatted(outputDir));
             }
-            if (!Files.isDirectory(outputDir)) {
+            if (outputDir != null && !Files.isDirectory(outputDir)) {
                 throw new IllegalArgumentException("Output directory `%s` is not a directory".formatted(outputDir));
             }
-            if (reportType == null) {
+            if (!availableTests && reportType == null) {
                 throw new IllegalArgumentException("Report type is null");
             }
             if (logType == null) {
                 logType = CapyTest.LogType.NONE;
+            }
+            if (testSelectors == null) {
+                testSelectors = List.of();
+            } else {
+                testSelectors = List.copyOf(testSelectors);
+            }
+            for (var testSelector : testSelectors) {
+                if (testSelector == null || testSelector.isBlank()) {
+                    throw new IllegalArgumentException("Test selector must not be blank");
+                }
             }
         }
     }
@@ -111,8 +151,21 @@ public class TestRunner {
                   -o, --output-dir <dir>    Output directory for test reports (required)
                   -rt, --report-type <type> Report type (required, e.g., JUNIT)
                   -l, --log <type>          Log output type (optional, LOG, TC, TEAM_CITY)
+                  --tests <selector>        Run only tests matching selector; can be repeated
+                  --available-tests         Print available test selectors and exit
                   -h, --help                Show this help message
                 """);
+    }
+
+    static List<String> availableTests(List<CapyTest.TestFile> testFiles) {
+        return TestSelection.availableTests(testFiles);
+    }
+
+    static List<CapyTest.TestFile> filterTestFiles(
+            List<CapyTest.TestFile> testFiles,
+            List<String> testSelectors
+    ) {
+        return TestSelection.filterTestFiles(testFiles, testSelectors);
     }
 
     private static CapyTest.LogType parseLogType(String value) {

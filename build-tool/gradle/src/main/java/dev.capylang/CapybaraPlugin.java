@@ -246,6 +246,8 @@ public class CapybaraPlugin implements Plugin<Project> {
                         task.getOutputDir().set(capybaraTestResultsDir);
                         task.getReportType().set("JUNIT");
                         task.getLogType().set("NONE");
+                        task.getTests().convention(List.of());
+                        task.getPrintAvailableTests().convention(false);
                         task.setEnabled(hasCapybaraTestSources);
                         if (!hasCapybaraTestSources) {
                             task.setDependsOn(java.util.List.of());
