@@ -5,12 +5,6 @@ from /capy/lang/Seq import { * }
 /// List literals use square brackets: [1, 2, 3].
 data List[T] { <native> }
 
-private fun _empty_collection_list(): List[T] = []
-
-private fun _empty_collection_mapped_list(map: T => Y): List[Y] = []
-
-private fun _empty_collection_flat_mapped_list(map: T => List[Y]): List[Y] = []
-
 /// Returns the number of values in this List.
 fun List[T].size(): int = <native>
 
@@ -126,8 +120,7 @@ fun List[T].reject(predicate: T => bool): Seq[T] =
 fun List[T].`|-`(predicate: T => bool): Seq[T] = this.filter(predicate)
 
 /// Applies `map` to each value and concatenates the resulting lists.
-fun List[T].flat_map(map: T => List[Y]): Seq[Y] =
-    to_seq(this.reduce(_empty_collection_flat_mapped_list(map), (acc, value) => acc + map(value)))
+fun List[T].flat_map(map: T => List[Y]): Seq[Y] = to_seq(this.reduce([], (acc, value) => acc + map(value)))
 
 /// Applies `map` to each value and concatenates the resulting lists.
 fun List[T].`|*`(map: T => List[Y]): Seq[Y] = this.flat_map(map)
