@@ -138,32 +138,32 @@ fun from_iso_8601(iso: String): Result[DateTime] =
             else if scan.left.is_empty | scan.right.is_empty
             then Error { __invalid("date-time parts must not be empty") }
             else Success { __Split { left: scan.left, right: scan.right } }
-        else if value[0:1] == "T"
+        else if value[0, 1] == "T"
             then if scan.seen_separator
                 then Error { __invalid("expected exactly one `T` separator") }
-                else __scan_split(value[1:], __SplitScan {
+                else __scan_split(value[1, value.size], __SplitScan {
                     left: scan.left,
                     right: "",
                     seen_separator: true
                 })
             else if scan.seen_separator
-                then __scan_split(value[1:], __SplitScan {
+                then __scan_split(value[1, value.size], __SplitScan {
                     left: scan.left,
-                    right: scan.right + value[0:1],
+                    right: scan.right + value[0, 1],
                     seen_separator: true
                 })
-                else __scan_split(value[1:], __SplitScan {
-                    left: scan.left + value[0:1],
+                else __scan_split(value[1, value.size], __SplitScan {
+                    left: scan.left + value[0, 1],
                     right: scan.right,
                     seen_separator: false
                 })
     fun __is_extended_date(value: String): bool =
         if value.size == 10
-        then value[4:5] == "-" & value[7:8] == "-"
+        then value[4, 5] == "-" & value[7, 8] == "-"
         else false
     fun __is_extended_time(value: String): bool =
         if value.size >= 8
-        then value[2:3] == ":" & value[5:6] == ":"
+        then value[2, 3] == ":" & value[5, 6] == ":"
         else false
     ---
     let split <- __scan_split(iso, __SplitScan { left: "", right: "", seen_separator: false })

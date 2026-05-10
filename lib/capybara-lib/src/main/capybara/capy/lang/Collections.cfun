@@ -16,6 +16,9 @@ fun List[T].contains(value: T): bool = <native>
 /// Returns the value at idx using the same bounds and negative-index rules as list[idx].
 fun List[T].get(idx: int): Option[T] = <native>
 
+/// Returns the values in the half-open range [from, to) using the same bounds and negative-index rules as list[from:to].
+fun List[T].get(from: int, to: int): List[T] = <native>
+
 /// Native unique-value collection type backed by the runtime Set implementation.
 /// Set literals use braces with values: {1, 2, 3}.
 data Set[T] { <native> }

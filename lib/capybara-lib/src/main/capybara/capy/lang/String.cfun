@@ -10,6 +10,9 @@ fun String.length(): int = <native>
 /// Returns the character at idx as a String using the same bounds and negative-index rules as string[idx].
 fun String.get(idx: int): Option[String] = <native>
 
+/// Returns the substring in the half-open range [from, to) using negative-index rules.
+fun String.get(from: int, to: int): String = <native>
+
 /// Returns true when this String has no characters.
 fun String.is_empty(): bool = <native>
 

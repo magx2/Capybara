@@ -21,7 +21,7 @@ fun grouped_guarded_match_is_exhaustive(input: String): Result[String] =
     let parse_patch: __Parse[String] = __Parse { input, "base" }
     match parse_patch.buffer[0] with
     case Some { ch } when ch == '-' -> {
-        parse_tail(parse_patch.buffer[1:])
+        parse_tail(parse_patch.buffer[1, parse_patch.buffer.size])
         | parse_tail => Success { __Parse {
             buffer: parse_tail.buffer,
             value: "pre:" + parse_tail.value
@@ -30,14 +30,14 @@ fun grouped_guarded_match_is_exhaustive(input: String): Result[String] =
             match parse.buffer[0] with
             case None -> Success { parse.value }
             case Some { ch } when ch == '+' -> {
-                parse_build(parse.buffer[1:])
+                parse_build(parse.buffer[1, parse.buffer.size])
                 | parse_build => Success { "plus:" + parse.value + ":" + parse_build.value }
             }
             case Some { ch } -> Error { "bad:" + ch }
         }
     }
     case Some { ch } when ch == '+' ->
-        parse_build(parse_patch.buffer[1:])
+        parse_build(parse_patch.buffer[1, parse_patch.buffer.size])
         | parse_build => Success { "plus:" + parse_build.value }
     case Some { ch } -> Success { "other:" + ch }
     case None -> Success { "none" }
@@ -53,7 +53,7 @@ fun semver_style_mixed_case_pipe_bodies(input: String): Result[String] =
     let raw_sem_ver = "1.2.3"
     match parse_patch.buffer[0] with
     case Some { next_char } when next_char == '-' -> {
-        parse_pre_release(parse_patch.buffer[1:])
+        parse_pre_release(parse_patch.buffer[1, parse_patch.buffer.size])
         | parse_pre_release => Success { __Parse {
             buffer: parse_pre_release.buffer,
             value: raw_sem_ver + "-" + parse_pre_release.value
@@ -62,14 +62,14 @@ fun semver_style_mixed_case_pipe_bodies(input: String): Result[String] =
             match parse.buffer[0] with
             case None -> Success { parse.value }
             case Some { char } when char == '+' -> {
-                parse_build(parse.buffer[1:])
+                parse_build(parse.buffer[1, parse.buffer.size])
                 | parse_build => Success { parse.value + "+" + parse_build.value }
             }
             case Some { char } -> Error { "bad:" + char }
         }
     }
     case Some { next_char } when next_char == '+' ->
-        parse_build(parse_patch.buffer[1:])
+        parse_build(parse_patch.buffer[1, parse_patch.buffer.size])
         | parse_build => Success { raw_sem_ver + "+" + parse_build.value }
     case Some { next_char } -> Error { "unexpected:" + next_char }
     case None -> Success { raw_sem_ver }
@@ -85,7 +85,7 @@ fun inner_ungrouped_pipe_in_match_inside_lambda(input: String): Result[String] =
     let raw_sem_ver = "1.2.3"
     match parse_patch.buffer[0] with
     case Some { next_char } when next_char == '-' -> {
-        parse_pre_release(parse_patch.buffer[1:])
+        parse_pre_release(parse_patch.buffer[1, parse_patch.buffer.size])
         | parse_pre_release => Success { __Parse {
             buffer: parse_pre_release.buffer,
             value: raw_sem_ver + "-" + parse_pre_release.value
@@ -94,13 +94,13 @@ fun inner_ungrouped_pipe_in_match_inside_lambda(input: String): Result[String] =
             match parse.buffer[0] with
             case None -> Success { parse.value }
             case Some { char } when char == '+' ->
-                parse_build(parse.buffer[1:])
+                parse_build(parse.buffer[1, parse.buffer.size])
                 | parse_build => Success { parse.value + "+" + parse_build.value }
             case Some { char } -> Error { "bad:" + char }
         }
     }
     case Some { next_char } when next_char == '+' -> {
-        parse_build(parse_patch.buffer[1:])
+        parse_build(parse_patch.buffer[1, parse_patch.buffer.size])
         | parse_build => Success { raw_sem_ver + "+" + parse_build.value }
     }
     case Some { next_char } -> Error { "unexpected:" + next_char }
@@ -113,7 +113,7 @@ fun nested_result_error_match_case(input: String): Result[int] =
         match head with
         case 'x' -> Success { 1 }
         case _ other -> {
-            let tail = input[1:]
+            let tail = input[1, input.size]
             match tail with
             case "" -> Error { "bad:" + other + ":end" }
             case _ -> Error { "bad:" + other + ":" + tail }

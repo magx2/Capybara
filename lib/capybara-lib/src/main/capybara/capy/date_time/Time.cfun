@@ -95,21 +95,21 @@ fun from_iso_8601(iso: String): Result[Time] =
         else
             match value[0] with
             case None -> ""
-            case Some { _ } -> __drop_prefix(value[1:], size - 1)
+            case Some { _ } -> __drop_prefix(value[1, value.size], size - 1)
     fun rec __take_prefix(value: String, size: int, acc: String): String =
         if size <= 0
         then acc
         else
             match value[0] with
             case None -> acc
-            case Some { char } -> __take_prefix(value[1:], size - 1, acc + char)
+            case Some { char } -> __take_prefix(value[1, value.size], size - 1, acc + char)
     fun __slice(value: String, start: int, size: int): String = __take_prefix(__drop_prefix(value, start), size, "")
     fun __parse_single_digit(value: String): Result[__Parse[int]] =
         match value[0] with
         case None -> Error { __invalid("unexpected end of string while parsing digits") }
         case Some { char } ->
             match ("" + char).to_int() with
-            case Success { digit } -> Success { __Parse { buffer: value[1:], value: digit } }
+            case Success { digit } -> Success { __Parse { buffer: value[1, value.size], value: digit } }
             case Error -> Error { __invalid("expected digit, got `" + char + "`") }
     fun rec __parse_rest_digits(value: String, parsed: int): Result[__Parse[int]] =
         if value.is_empty
@@ -174,12 +174,12 @@ fun from_iso_8601(iso: String): Result[Time] =
         case Error { message } -> Error { __invalid(message) }
     }
     ---
-    let value = if iso.starts_with("T") then iso[1:] else iso
+    let value = if iso.starts_with("T") then iso[1, iso.size] else iso
     let zone <- __parse_zone(value)
     if zone.buffer.size == 8
-    then if zone.buffer[2:3] == ":" & zone.buffer[5:6] == ":"
-        then __parse_parts(zone.buffer[0:2], zone.buffer[3:5], zone.buffer[6:8], zone.offset_minutes)
+    then if zone.buffer[2, 3] == ":" & zone.buffer[5, 6] == ":"
+        then __parse_parts(zone.buffer[0, 2], zone.buffer[3, 5], zone.buffer[6, 8], zone.offset_minutes)
         else Error { __invalid("expected time in `HH:MM:SS`, `HHMMSS`, `THH:MM:SS`, or `THHMMSS` format, got `" + iso + "`") }
     else if zone.buffer.size == 6
-        then __parse_parts(zone.buffer[0:2], zone.buffer[2:4], zone.buffer[4:6], zone.offset_minutes)
+        then __parse_parts(zone.buffer[0, 2], zone.buffer[2, 4], zone.buffer[4, 6], zone.offset_minutes)
         else Error { __invalid("expected time in `HH:MM:SS`, `HHMMSS`, `THH:MM:SS`, or `THHMMSS` format, got `" + iso + "`") }

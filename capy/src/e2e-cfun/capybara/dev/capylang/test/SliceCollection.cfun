@@ -8,12 +8,12 @@ fun list_1_2(l: List[int]): List[int] = l[1:2]
 
 fun list_1_minus_2(l: List[int]): List[int] = l[1:-2]
 
-fun string_from_1(s: String): String = s[1:]
+fun string_from_1(s: String): String = s[1, s.size]
 
-fun string_to_5(s: String): String = s[:5]
+fun string_to_5(s: String): String = s[0, 5]
 
-fun string_to_minus_3(s: String): String = s[:-3]
+fun string_to_minus_3(s: String): String = s[0, -3]
 
-fun string_1_2(s: String): String = s[1:2]
+fun string_1_2(s: String): String = s[1, 2]
 
-fun string_1_minus_2(s: String): String = s[1:-2]
+fun string_1_minus_2(s: String): String = s[1, -2]

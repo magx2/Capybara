@@ -138,7 +138,7 @@ fun from_iso_8601(iso: String): Result[Date] =
         case None -> Error { __invalid("unexpected end of string while parsing digits") }
         case Some { char } ->
             match ("" + char).to_int() with
-            case Success { digit } -> Success { __Parse { buffer: value[1:], value: digit } }
+            case Success { digit } -> Success { __Parse { buffer: value[1, value.size], value: digit } }
             case Error -> Error { __invalid("expected digit, got `" + char + "`") }
     fun rec __parse_rest_digits(value: String, parsed: int): Result[__Parse[int]] =
         if value.is_empty
@@ -161,14 +161,14 @@ fun from_iso_8601(iso: String): Result[Date] =
         else
             match value[0] with
             case None -> ""
-            case Some { _ } -> __drop_prefix(value[1:], size - 1)
+            case Some { _ } -> __drop_prefix(value[1, value.size], size - 1)
     fun rec __take_prefix(value: String, size: int, acc: String): String =
         if size <= 0
         then acc
         else
             match value[0] with
             case None -> acc
-            case Some { char } -> __take_prefix(value[1:], size - 1, acc + char)
+            case Some { char } -> __take_prefix(value[1, value.size], size - 1, acc + char)
     fun __slice(value: String, start: int, size: int): String = __take_prefix(__drop_prefix(value, start), size, "")
     fun __parse_year(value: String): Result[int] =
         if value.is_empty
@@ -177,14 +177,14 @@ fun from_iso_8601(iso: String): Result[Date] =
             then if value.size < 5
                 then Error { __invalid("expected expanded year, got `" + value + "`") }
                 else {
-                    let year <- __parse_exact_digits(value[1:], "year")
+                    let year <- __parse_exact_digits(value[1, value.size], "year")
                     Success { year }
                 }
             else if value.starts_with("-")
                 then if value.size < 5
                     then Error { __invalid("expected expanded year, got `" + value + "`") }
                     else {
-                        let year <- __parse_exact_digits(value[1:], "year")
+                        let year <- __parse_exact_digits(value[1, value.size], "year")
                         Success { 0 - year }
                     }
                 else if value.size < 4
