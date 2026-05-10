@@ -3,7 +3,7 @@ from /capy/lang/Option import { * }
 from /capy/collection/List import { * }
 from /capy/collection/Set import { * }
 from /capy/collection/Dict import { * }
-from /capy/lang/Collections import { * }
+from /capy/collection/Tuple import { * }
 
 fun string_length(value: String): int = value.length()
 
