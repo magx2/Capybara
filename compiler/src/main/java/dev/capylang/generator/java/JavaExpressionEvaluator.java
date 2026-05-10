@@ -44,14 +44,21 @@ public class JavaExpressionEvaluator {
         var owners = new java.util.LinkedHashMap<String, String>();
         registerStandardExtensionMethods(
                 owners,
-                "capy.lang.Collections",
-                java.util.List.of("List", "Set"),
+                "capy.collection.List",
+                java.util.List.of("List"),
                 "is_empty", "plus", "minus", "any", "all", "contains", "?", "reduce", "|>",
                 "reduce_left", "|l>", "map", "|", "filter", "|-", "flat_map", "flatMap", "|*"
         );
         registerStandardExtensionMethods(
                 owners,
-                "capy.lang.Collections",
+                "capy.collection.Set",
+                java.util.List.of("Set"),
+                "is_empty", "plus", "minus", "any", "all", "contains", "?", "reduce", "|>",
+                "reduce_left", "|l>", "map", "|", "filter", "|-", "flat_map", "flatMap", "|*"
+        );
+        registerStandardExtensionMethods(
+                owners,
+                "capy.collection.Dict",
                 java.util.List.of("Dict"),
                 "is_empty", "plus", "minus", "any", "all", "contains_key", "?", "reduce", "|>",
                 "reduce_left", "|l>", "map", "|", "filter", "|-", "flat_map", "flatMap", "|*"

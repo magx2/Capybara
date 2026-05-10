@@ -1,0 +1,127 @@
+from /capy/lang/Option import { * }
+from /capy/lang/Seq import { * }
+
+/// Native ordered collection type backed by the runtime List implementation.
+/// List literals use square brackets: [1, 2, 3].
+data List[T] { <native> }
+
+private fun _empty_collection_list(): List[T] = []
+
+private fun _empty_collection_mapped_list(map: T => Y): List[Y] = []
+
+private fun _empty_collection_flat_mapped_list(map: T => List[Y]): List[Y] = []
+
+/// Returns the number of values in this List.
+fun List[T].size(): int = <native>
+
+/// Returns true when this List has no values.
+fun List[T].is_empty(): bool = this.size() == 0
+
+/// Returns a new List with `value` appended.
+fun List[T].`+`(value: T): List[T] = <native>
+
+/// Returns a new List with all values from `other` appended.
+fun List[T].`+`(other: List[T]): List[T] = <native>
+
+/// Returns a new List with `value` appended.
+fun List[T].plus(value: T): List[T] = this + value
+
+/// Returns a new List with all values from `other` appended.
+fun List[T].plus(other: List[T]): List[T] = this + other
+
+/// Returns a new List without values equal to `value`.
+fun List[T].`-`(value: T): List[T] = <native>
+
+/// Returns a new List without values contained in `other`.
+fun List[T].`-`(other: List[T]): List[T] = <native>
+
+/// Returns a new List without values equal to `value`.
+fun List[T].minus(value: T): List[T] = this - value
+
+/// Returns a new List without values contained in `other`.
+fun List[T].minus(other: List[T]): List[T] = this - other
+
+/// Returns true when at least one value satisfies `predicate`.
+fun List[T].any(predicate: T => bool): bool =
+    fun rec __any(list: List[T], idx: int, predicate: T => bool): bool =
+        match list[idx] with
+        case None -> false
+        case Some { value } ->
+            if predicate(value)
+            then true
+            else __any(list, idx + 1, predicate)
+    ---
+    __any(this, 0, predicate)
+
+/// Returns true when every value satisfies `predicate`.
+///
+/// Empty lists return true.
+fun List[T].all(predicate: T => bool): bool =
+    fun rec __all(list: List[T], idx: int, predicate: T => bool, acc: bool): bool =
+        match list[idx] with
+        case None -> acc
+        case Some { value } ->
+            if !acc
+            then false
+            else __all(list, idx + 1, predicate, predicate(value))
+    ---
+    __all(this, 0, predicate, true)
+
+/// Returns true when this List contains the given value.
+fun List[T].contains(value: T): bool =
+    this.any(item => item == value)
+
+/// Returns true when this List contains the given value.
+fun List[T].`?`(value: T): bool = this.contains(value)
+
+/// Combines all values from left to right.
+fun List[T].reduce(initial: R, reducer: (R, T) => R): R =
+    fun rec __reduce(list: List[T], idx: int, acc: R, reducer: (R, T) => R): R =
+        match list[idx] with
+        case None -> acc
+        case Some { value } -> __reduce(list, idx + 1, reducer(acc, value), reducer)
+    ---
+    __reduce(this, 0, initial, reducer)
+
+/// Combines all values from left to right.
+fun List[T].`|>`(initial: R, reducer: (R, T) => R): R = this.reduce(initial, reducer)
+
+/// Transforms each value using `map`.
+fun List[T].map(map: T => Y): Seq[Y] =
+    fun __map(list: List[T], idx: int, map: T => Y): Seq[Y] =
+        match list[idx] with
+        case None -> End {}
+        case Some { value } -> Cons { value: map(value), rest: () => __map(list, idx + 1, map) }
+    ---
+    __map(this, 0, map)
+
+/// Transforms each value using `map`.
+fun List[T].`|`(map: T => Y): Seq[Y] = this.map(map)
+
+/// Returns a sequence without values that satisfy `predicate`.
+fun List[T].filter(predicate: T => bool): Seq[T] =
+    fun __filter(list: List[T], idx: int, predicate: T => bool): Seq[T] =
+        match list[idx] with
+        case None -> End {}
+        case Some { value } ->
+            if predicate(value)
+            then __filter(list, idx + 1, predicate)
+            else Cons { value: value, rest: () => __filter(list, idx + 1, predicate) }
+    ---
+    __filter(this, 0, predicate)
+
+/// Returns a sequence without values that satisfy `predicate`.
+fun List[T].`|-`(predicate: T => bool): Seq[T] = this.filter(predicate)
+
+/// Applies `map` to each value and concatenates the resulting lists.
+fun List[T].flat_map(map: T => List[Y]): Seq[Y] =
+    to_seq(this.reduce(_empty_collection_flat_mapped_list(map), (acc, value) => acc + map(value)))
+
+/// Applies `map` to each value and concatenates the resulting lists.
+fun List[T].`|*`(map: T => List[Y]): Seq[Y] = this.flat_map(map)
+
+/// Returns the value at idx using the same bounds and negative-index rules as list[idx].
+fun List[T].get(idx: int): Option[T] = <native>
+
+/// Returns the values in the half-open range [from, to) using the same bounds and negative-index rules as list[from:to].
+fun List[T].get(from: int, to: int): List[T] = <native>

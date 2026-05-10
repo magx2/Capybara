@@ -1,5 +1,7 @@
 from /capy/meta_prog/Reflection import { DataValueInfo, reflection }
-from /capy/lang/Collections import { * }
+from /capy/collection/List import { * }
+from /capy/collection/Set import { * }
+from /capy/collection/Dict import { * }
 
 deriver Show {
     fun show(): String =

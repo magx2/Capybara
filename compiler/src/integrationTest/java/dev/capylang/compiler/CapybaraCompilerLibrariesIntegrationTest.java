@@ -77,7 +77,9 @@ class CapybaraCompilerLibrariesIntegrationTest {
         var consumerSource = """
                 from /capy/lang/Regex import { * }
                 from /capy/lang/Option import { * }
-                from /capy/lang/Collections import { * }
+                from /capy/collection/List import { * }
+                from /capy/collection/Set import { * }
+                from /capy/collection/Dict import { * }
                 fun matches_named(input: String): bool = regex/\\\\d+/.matches(input)
                 fun matches_alias(input: String): bool = regex/\\\\d+/ ? input
                 fun find_like(input: String): String = (regex/\\\\d+/ ~ input).group_value
@@ -128,7 +130,7 @@ class CapybaraCompilerLibrariesIntegrationTest {
     }
 
     private static RawModule collectionsModule() {
-        return new RawModule("Collections", "/capy/lang", """
+        return new RawModule("List", "/capy/collection", """
                 data List[T] { <native> }
                 fun List[T].`|`(map: T => Y): List[Y] = <native>
                 fun List[T].size(): int = <native>

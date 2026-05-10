@@ -145,7 +145,9 @@ class CapybaraCompilerLibrariesTest {
     void shouldExpandDeriverIntoGeneratedTypeMethod() {
         var libraries = compileProgram(List.of(reflectionMetadataModule()), new java.util.TreeSet<>()).modules();
         var compiled = compileProgram(List.of(new RawModule("Consumer", "/foo/app", """
-                from /capy/lang/Collections import { * }
+                from /capy/collection/List import { * }
+                from /capy/collection/Set import { * }
+                from /capy/collection/Dict import { * }
                 from /capy/meta_prog/Reflection import { DataValueInfo, reflection }
 
                 deriver Show {
@@ -382,7 +384,9 @@ class CapybaraCompilerLibrariesTest {
     @Test
     void shouldPreserveReceiverShadowingInsideDeriverLocalScopes() {
         var compiled = compileProgram(List.of(new RawModule("Consumer", "/foo/app", """
-                from /capy/lang/Collections import { * }
+                from /capy/collection/List import { * }
+                from /capy/collection/Set import { * }
+                from /capy/collection/Dict import { * }
 
                 deriver Shadow {
                     fun shadow_let(): String =
@@ -654,7 +658,9 @@ class CapybaraCompilerLibrariesTest {
                         """),
                 new RawModule("CapyTest", "/capy/test", """
                         from Assert import { * }
-                        from /capy/lang/Collections import { * }
+                        from /capy/collection/List import { * }
+                        from /capy/collection/Set import { * }
+                        from /capy/collection/Dict import { * }
 
                         data TestCase { asserts: List[Assert] }
                         fun assertion_count(test_case: TestCase): int =
@@ -665,7 +671,7 @@ class CapybaraCompilerLibrariesTest {
 
         assertThat(compiled.modules())
                 .extracting(CompiledModule::name)
-                .containsExactlyInAnyOrder("Collections", "Assert", "CapyTest");
+                .containsExactlyInAnyOrder("List", "Assert", "CapyTest");
         assertThat(compiled.modules().stream()
                 .filter(module -> module.name().equals("CapyTest"))
                 .findFirst()
@@ -686,7 +692,9 @@ class CapybaraCompilerLibrariesTest {
                         """),
                 new RawModule("Runtime", "/capy/test", """
                         from CapyTest import { * }
-                        from /capy/lang/Collections import { * }
+                        from /capy/collection/List import { * }
+                        from /capy/collection/Set import { * }
+                        from /capy/collection/Dict import { * }
 
                         fun assertion_count(test_file: TestFile): int =
                             test_file.test_cases | tc => tc.asserts.size() |> 0, (acc, count) => acc + count
@@ -695,7 +703,7 @@ class CapybaraCompilerLibrariesTest {
 
         assertThat(compiled.modules())
                 .extracting(CompiledModule::name)
-                .containsExactlyInAnyOrder("Collections", "CapyTest", "Runtime");
+                .containsExactlyInAnyOrder("List", "CapyTest", "Runtime");
         assertThat(compiled.modules().stream()
                 .filter(module -> module.name().equals("Runtime"))
                 .findFirst()
@@ -1254,7 +1262,7 @@ class CapybaraCompilerLibrariesTest {
     }
 
     private static RawModule collectionsModule() {
-        return new RawModule("Collections", "/capy/lang", """
+        return new RawModule("List", "/capy/collection", """
                 data List[T] { <native> }
                 fun List[T].size(): int = <native>
                 fun List[T].`|`(map: T => Y): List[Y] = <native>

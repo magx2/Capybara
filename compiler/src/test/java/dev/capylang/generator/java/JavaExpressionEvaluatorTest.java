@@ -99,7 +99,7 @@ class JavaExpressionEvaluatorTest {
     }
 
     private static RawModule collectionsModule() {
-        return new RawModule("Collections", "/capy/lang", """
+        return new RawModule("List", "/capy/collection", """
                 data List[T] { <native> }
                 fun List[T].size(): int = <native>
                 """);
@@ -213,13 +213,17 @@ class JavaExpressionEvaluatorTest {
         var program = compileProgram(List.of(
                 collectionsModule(),
                 new RawModule("Left", "/alpha", """
-                        from /capy/lang/Collections import { * }
+                        from /capy/collection/List import { * }
+                        from /capy/collection/Set import { * }
+                        from /capy/collection/Dict import { * }
 
                         fun choose(values: List[int]): int = 100 + values.size()
                         fun choose(values: List[long]): int = 200 + values.size()
                         """),
                 new RawModule("Right", "/beta", """
-                        from /capy/lang/Collections import { * }
+                        from /capy/collection/List import { * }
+                        from /capy/collection/Set import { * }
+                        from /capy/collection/Dict import { * }
 
                         fun choose(values: List[int]): int = 300 + values.size()
                         fun choose(values: List[long]): int = 400 + values.size()
@@ -298,7 +302,9 @@ class JavaExpressionEvaluatorTest {
     @Test
     void shouldGenerateCapyTestMethodFromSourceForCapyTestModule() {
         var program = compileProgram(List.of(collectionsModule(), new RawModule("CapyTest", "/capy/test", """
-                from /capy/lang/Collections import { * }
+                from /capy/collection/List import { * }
+                from /capy/collection/Set import { * }
+                from /capy/collection/Dict import { * }
 
                 data Assertion { result: bool, message: String, type: String }
                 data StringAssert { value: String, assertions: List[Assertion] }
@@ -329,7 +335,9 @@ class JavaExpressionEvaluatorTest {
     @Test
     void shouldGenerateCapyTestNamedMethodFromSourceOutsideCapyTestModule() {
         var program = compileProgram(List.of(collectionsModule(), new RawModule("NotCapyTest", "/foo/bar", """
-                from /capy/lang/Collections import { * }
+                from /capy/collection/List import { * }
+                from /capy/collection/Set import { * }
+                from /capy/collection/Dict import { * }
 
                 data Assertion { result: bool, message: String, type: String }
                 data StringAssert { value: String, assertions: List[Assertion] }
@@ -498,7 +506,9 @@ class JavaExpressionEvaluatorTest {
     @Test
     void shouldCastCollectionTypedPatternBindingsBeforeUse() {
         var generatedProgram = new JavaGenerator().generate(compileProgram("CollectionTypedMatch", "/foo/bar", """
-                from /capy/lang/Collections import { * }
+                from /capy/collection/List import { * }
+                from /capy/collection/Set import { * }
+                from /capy/collection/Dict import { * }
                 from /capy/lang/Seq import { * }
 
                 fun stringify(value: any): Seq[String] =
@@ -799,7 +809,9 @@ class JavaExpressionEvaluatorTest {
     @Test
     void shouldInferSharedParentForConcatenatedSubtypeLists() {
         var program = compileProgram("EmptyLiteralInference", "/foo/bar", """
-                from /capy/lang/Collections import { * }
+                from /capy/collection/List import { * }
+                from /capy/collection/Set import { * }
+                from /capy/collection/Dict import { * }
                 from /capy/lang/Seq import { * }
 
                 type Outcome = ParseSucceeded | ParseFailed
@@ -824,7 +836,9 @@ class JavaExpressionEvaluatorTest {
     @Test
     void shouldGenerateTypedConcatForSubtypeListsWithSharedParent() {
         var program = compileProgram("EmptyLiteralInference", "/foo/bar", """
-                from /capy/lang/Collections import { * }
+                from /capy/collection/List import { * }
+                from /capy/collection/Set import { * }
+                from /capy/collection/Dict import { * }
 
                 type Outcome = ParseSucceeded | ParseFailed
                 data ParseSucceeded { source: String }
@@ -951,7 +965,9 @@ class JavaExpressionEvaluatorTest {
     @Test
     void shouldSanitizeJavaKeywordsUsedAsLocalNames() {
         var generatedProgram = new JavaGenerator().generate(compileProgram("KeywordLocalNames", "/foo/bar", """
-                from /capy/lang/Collections import { * }
+                from /capy/collection/List import { * }
+                from /capy/collection/Set import { * }
+                from /capy/collection/Dict import { * }
                 from /capy/lang/Seq import { * }
 
                 data Date { day: int }
@@ -973,7 +989,7 @@ class JavaExpressionEvaluatorTest {
 
         assertThat(generated).contains("boolean assert_ =");
         assertThat(generated).contains("return assert_;");
-        assertThat(generated).contains("capy.lang.Collections.pipe(values, assert_ ->");
+        assertThat(generated).contains("capy.collection.List.pipe(values, assert_ ->");
         assertGeneratedJavaCompiles(generatedProgram);
     }
 
@@ -996,7 +1012,9 @@ class JavaExpressionEvaluatorTest {
     @Test
     void shouldKeepPipeReduceMatchStatementsInsideReducerLambda() {
         var generatedProgram = new JavaGenerator().generate(compileProgram("ReduceMatchLambda", "/foo/bar", """
-                from /capy/lang/Collections import { * }
+                from /capy/collection/List import { * }
+                from /capy/collection/Set import { * }
+                from /capy/collection/Dict import { * }
 
                 type Item = Text | Count
                 data Text { value: String }
@@ -1019,7 +1037,9 @@ class JavaExpressionEvaluatorTest {
     @Test
     void shouldAvoidPipeReduceLambdaArgumentCollisionWithLetName() {
         var generatedProgram = new JavaGenerator().generate(compileProgram("ReduceLetNameCollision", "/foo/bar", """
-                from /capy/lang/Collections import { * }
+                from /capy/collection/List import { * }
+                from /capy/collection/Set import { * }
+                from /capy/collection/Dict import { * }
 
                 fun flatten(asserts: List[List[int]]): List[int] =
                     let initial: List[int] = []
@@ -1189,57 +1209,67 @@ class JavaExpressionEvaluatorTest {
                 Arguments.of(
                         "pipe_map",
                         """
-                                from /capy/lang/Collections import { * }
+                                from /capy/collection/List import { * }
+                                from /capy/collection/Set import { * }
+                                from /capy/collection/Dict import { * }
                                 from /capy/lang/Seq import { * }
 
                                 fun pipe_map(l: List[int]): Seq[int] =
                                     l | x => x * 2
                                 """,
-                        "return capy.lang.Collections.pipe(l, x -> ((x*2)));"
+                        "return capy.collection.List.pipe(l, x -> ((x*2)));"
                 ),
                 Arguments.of(
                         "map",
                         """
-                                from /capy/lang/Collections import { * }
+                                from /capy/collection/List import { * }
+                                from /capy/collection/Set import { * }
+                                from /capy/collection/Dict import { * }
                                 from /capy/lang/Seq import { * }
 
                                 fun map(l: List[int]) = l | :double
 
                                 fun double(x: int) = x * x
                                 """,
-                        "return capy.lang.Collections.pipe(l, arg0 -> (foo.boo.test.double_(((int) arg0))));"
+                        "return capy.collection.List.pipe(l, arg0 -> (foo.boo.test.double_(((int) arg0))));"
                 ),
                 Arguments.of(
                         "pipe_filter_out",
                         """
-                                from /capy/lang/Collections import { * }
+                                from /capy/collection/List import { * }
+                                from /capy/collection/Set import { * }
+                                from /capy/collection/Dict import { * }
                                 from /capy/lang/Seq import { * }
 
                                 fun pipe_filter_out(l: List[int]): Seq[int] =
                                     l |- x => x > 2
                                 """,
-                        "return capy.lang.Collections.pipeMinus(l, x -> ((x>2)));"
+                        "return capy.collection.List.pipeMinus(l, x -> ((x>2)));"
                 ),
                 Arguments.of(
                         "pipe_reduce",
                         """
-                                from /capy/lang/Collections import { * }
+                                from /capy/collection/List import { * }
+                                from /capy/collection/Set import { * }
+                                from /capy/collection/Dict import { * }
 
                                 fun pipe_reduce(l: List[int]): int =
                                     l |> 0, (a, b) => a + b
                                 """,
-                        "return capy.lang.Collections.pipeGreater(l, ((int) 0), a -> (b -> ((a+b))));"
+                        "return capy.collection.List.pipeGreater(l, ((int) 0), a -> (b -> ((a+b))));"
                 ),
                 Arguments.of(
                         "pipe_flat_map",
                         """
-                                from /capy/lang/Collections import { * }
+                                from /capy/collection/List import { * }
+                                from /capy/collection/Set import { * }
+                                from /capy/collection/Dict import { * }
                                 from /capy/lang/Seq import { * }
 
                                 fun pipe_flat_map(l: List[int]): Seq[int] =
                                     l |* x => [x, x + 1]
                                 """,
-                        "return capy.lang.Collections.pipeStar(l, x -> (java.util.List.of(x, (x+1))));"
+                        "return capy.collection.List.pipeStar(l, x -> (java.util.List.of(x, (x+1))));"
                 )
         );
     }

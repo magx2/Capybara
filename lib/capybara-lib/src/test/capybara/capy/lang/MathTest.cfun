@@ -1,7 +1,9 @@
 from /capy/test/Assert import { * }
 from /capy/lang/Effect import { * }
 from /capy/lang/Math import { * }
-from /capy/lang/Collections import { * }
+from /capy/collection/List import { * }
+from /capy/collection/Set import { * }
+from /capy/collection/Dict import { * }
 from /capy/lang/Seq import { * }
 from /capy/test/CapyTest import { * }
 
