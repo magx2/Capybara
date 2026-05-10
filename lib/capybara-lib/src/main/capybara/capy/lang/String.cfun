@@ -54,29 +54,29 @@ fun String.any(predicate: (String, int) => bool): bool =
 ///
 /// Empty strings return true.
 fun String.all(predicate: String => bool): bool =
-    fun rec __all(value: String, idx: int, predicate: String => bool, acc: bool): bool =
+    fun rec __all(value: String, idx: int, predicate: String => bool): bool =
         match value[idx] with
-        case None -> acc
+        case None -> true
         case Some { char } ->
-            if !acc
+            if !predicate(char)
             then false
-            else __all(value, idx + 1, predicate, predicate(char))
+            else __all(value, idx + 1, predicate)
     ---
-    __all(this, 0, predicate, true)
+    __all(this, 0, predicate)
 
 /// Returns true when every character and index pair satisfies `predicate`.
 ///
 /// Empty strings return true.
 fun String.all(predicate: (String, int) => bool): bool =
-    fun rec __all(value: String, idx: int, predicate: (String, int) => bool, acc: bool): bool =
+    fun rec __all(value: String, idx: int, predicate: (String, int) => bool): bool =
         match value[idx] with
-        case None -> acc
+        case None -> true
         case Some { char } ->
-            if !acc
+            if !predicate(char, idx)
             then false
-            else __all(value, idx + 1, predicate, predicate(char, idx))
+            else __all(value, idx + 1, predicate)
     ---
-    __all(this, 0, predicate, true)
+    __all(this, 0, predicate)
 
 /// Returns true when this String contains the given substring.
 fun String.contains(part: String): bool =
