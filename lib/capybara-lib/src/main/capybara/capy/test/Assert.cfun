@@ -18,7 +18,7 @@ type Assert { assertions: List[() => Assertion] } =
     | DateAssert | TimeAssert | DateTimeAssert | DurationAssert | IntervalAssert
     | ListAssert | SetAssert | DictAssert | SeqAssert
 
-fun Assert.failed(): bool = this.assertions | supplier => supplier().result |any? r => !r
+fun Assert.failed(): bool = (this.assertions | supplier => supplier().result).any(r => !r)
 
 fun Assert.succeeded(): bool = !this.failed()
 
@@ -43,7 +43,8 @@ data DictAssert[T] { value: Dict[T] }
 data SeqAssert[T] { value: Seq[T] }
 
 fun assert_all(asserts: List[Assert]): Assert =
-    let assertions: List[() => Assertion] = asserts | assert => assert.assertions |> [], (acc, assertions) => acc + assertions
+    let initial: List[() => Assertion] = []
+    let assertions: List[() => Assertion] = asserts |> initial, (acc, assert) => acc + assert.assertions
     _TechnicalAssert { assertions: assertions }
 
 fun StringAssert.is_equal_to(other: String): StringAssert =
@@ -898,7 +899,7 @@ fun ListAssert[T].is_empty(): ListAssert[T] =
 
 fun ListAssert[T].contains(other: T): ListAssert[T] =
     let assertion = Assertion {
-        result: this.value |any? v => v == other,
+        result: this.value.any(v => v == other),
         message: "Expected list:\n" + this.value + "\nto contain:\n" + other,
         type: 'ListAssert[T].contains'
     }
@@ -909,7 +910,7 @@ fun ListAssert[T].contains(other: T): ListAssert[T] =
 
 fun ListAssert[T].does_not_contain(other: T): ListAssert[T] =
     let assertion = Assertion {
-        result: (this.value |any? v => v == other) == false,
+        result: this.value.any(v => v == other) == false,
         message: "Expected list:\n" + this.value + "\nnot to contain:\n" + other,
         type: 'ListAssert[T].does_not_contain'
     }
@@ -953,7 +954,7 @@ fun SetAssert[T].is_empty(): SetAssert[T] =
 
 fun SetAssert[T].contains(other: T): SetAssert[T] =
     let assertion = Assertion {
-        result: this.value |any? v => v == other,
+        result: this.value.any(v => v == other),
         message: "Expected set:\n" + this.value + "\nto contain:\n" + other,
         type: 'SetAssert[T].contains'
     }
@@ -964,7 +965,7 @@ fun SetAssert[T].contains(other: T): SetAssert[T] =
 
 fun SetAssert[T].does_not_contain(other: T): SetAssert[T] =
     let assertion = Assertion {
-        result: (this.value |any? v => v == other) == false,
+        result: this.value.any(v => v == other) == false,
         message: "Expected set:\n" + this.value + "\nnot to contain:\n" + other,
         type: 'SetAssert[T].does_not_contain'
     }
@@ -1008,7 +1009,7 @@ fun DictAssert[T].is_empty(): DictAssert[T] =
 
 fun DictAssert[T].contains_key(other: String): DictAssert[T] =
     let assertion = Assertion {
-        result: this.value |any? (k, v) => k == other,
+        result: this.value.any((k, v) => k == other),
         message: "Expected dict:\n" + this.value + "\nto contain key:\n" + other,
         type: 'DictAssert[T].contains_key'
     }
@@ -1019,7 +1020,7 @@ fun DictAssert[T].contains_key(other: String): DictAssert[T] =
 
 fun DictAssert[T].does_not_contain_key(other: String): DictAssert[T] =
     let assertion = Assertion {
-        result: (this.value |any? (k, v) => k == other) == false,
+        result: this.value.any((k, v) => k == other) == false,
         message: "Expected dict:\n" + this.value + "\nnot to contain key:\n" + other,
         type: 'DictAssert[T].does_not_contain_key'
     }
@@ -1030,7 +1031,7 @@ fun DictAssert[T].does_not_contain_key(other: String): DictAssert[T] =
 
 fun DictAssert[T].contains_value(other: T): DictAssert[T] =
     let assertion = Assertion {
-        result: this.value |any? (k, v) => v == other,
+        result: this.value.any((k, v) => v == other),
         message: "Expected dict:\n" + this.value + "\nto contain value:\n" + other,
         type: 'DictAssert[T].contains_value'
     }
@@ -1074,7 +1075,7 @@ fun SeqAssert[T].is_empty(): SeqAssert[T] =
 
 fun SeqAssert[T].contains(other: T): SeqAssert[T] =
     let assertion = Assertion {
-        result: this.value.as_list() |any? v => v == other,
+        result: this.value.as_list().any(v => v == other),
         message: "Expected sequence:\n" + this.value.as_list() + "\nto contain:\n" + other,
         type: 'SeqAssert[T].contains'
     }
@@ -1085,7 +1086,7 @@ fun SeqAssert[T].contains(other: T): SeqAssert[T] =
 
 fun SeqAssert[T].does_not_contain(other: T): SeqAssert[T] =
     let assertion = Assertion {
-        result: (this.value.as_list() |any? v => v == other) == false,
+        result: this.value.as_list().any(v => v == other) == false,
         message: "Expected sequence:\n" + this.value.as_list() + "\nnot to contain:\n" + other,
         type: 'SeqAssert[T].does_not_contain'
     }

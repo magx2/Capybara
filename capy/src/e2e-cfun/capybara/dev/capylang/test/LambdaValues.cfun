@@ -1,4 +1,5 @@
 from /capy/lang/Option import {*}
+from /capy/lang/String import { * }
 
 data Holder {
     supplier: () => String,

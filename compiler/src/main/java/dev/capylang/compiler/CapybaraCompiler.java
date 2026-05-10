@@ -122,6 +122,9 @@ public class CapybaraCompiler {
 
     private static SortedSet<CompiledModule> loadBundledLibrariesUncached(Collection<RawModule> rawModules) {
         try {
+            if (isStdlibBootstrap(rawModules)) {
+                return new TreeSet<>();
+            }
             var resource = CapybaraCompiler.class.getClassLoader().getResource("capy");
             if (resource != null) {
                 try (var paths = Files.walk(resourcePath(resource.toURI()))) {
@@ -133,9 +136,6 @@ public class CapybaraCompiler {
                 try (var paths = Files.walk(fallbackPath)) {
                     return readBundledLibraries(paths);
                 }
-            }
-            if (isStdlibBootstrap(rawModules)) {
-                return new TreeSet<>();
             }
             throw new IllegalStateException("Unable to find bundled Capybara libraries resource `capy`");
         } catch (IllegalStateException e) {
@@ -2994,14 +2994,6 @@ public class CapybaraCompiler {
                     analyzeTailRecursion(selfCallNames, parameters, pipeFilterOutExpression.source(), false),
                     analyzeTailRecursion(selfCallNames, parameters, pipeFilterOutExpression.predicate(), false)
             );
-            case CompiledPipeAllExpression pipeAllExpression -> merge(
-                    analyzeTailRecursion(selfCallNames, parameters, pipeAllExpression.source(), false),
-                    analyzeTailRecursion(selfCallNames, parameters, pipeAllExpression.predicate(), false)
-            );
-            case CompiledPipeAnyExpression pipeAnyExpression -> merge(
-                    analyzeTailRecursion(selfCallNames, parameters, pipeAnyExpression.source(), false),
-                    analyzeTailRecursion(selfCallNames, parameters, pipeAnyExpression.predicate(), false)
-            );
             case CompiledPipeReduceExpression pipeReduceExpression -> merge(
                     analyzeTailRecursion(selfCallNames, parameters, pipeReduceExpression.source(), false),
                     analyzeTailRecursion(selfCallNames, parameters, pipeReduceExpression.initialValue(), false),
@@ -4645,20 +4637,6 @@ public class CapybaraCompiler {
             case dev.capylang.compiler.expression.CompiledNumericWidening value ->
                     new dev.capylang.compiler.expression.CompiledNumericWidening(
                             enrichNothing(value.expression(), functionName, moduleSourceFile),
-                            value.type()
-                    );
-            case dev.capylang.compiler.expression.CompiledPipeAllExpression value ->
-                    new dev.capylang.compiler.expression.CompiledPipeAllExpression(
-                            enrichNothing(value.source(), functionName, moduleSourceFile),
-                            value.argumentName(),
-                            enrichNothing(value.predicate(), functionName, moduleSourceFile),
-                            value.type()
-                    );
-            case dev.capylang.compiler.expression.CompiledPipeAnyExpression value ->
-                    new dev.capylang.compiler.expression.CompiledPipeAnyExpression(
-                            enrichNothing(value.source(), functionName, moduleSourceFile),
-                            value.argumentName(),
-                            enrichNothing(value.predicate(), functionName, moduleSourceFile),
                             value.type()
                     );
             case dev.capylang.compiler.expression.CompiledPipeFlatMapExpression value ->

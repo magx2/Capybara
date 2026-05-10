@@ -1,4 +1,5 @@
 from /capy/lang/Result import { * }
+from /capy/lang/Collections import { * }
 
 data Foo {
     a: int,

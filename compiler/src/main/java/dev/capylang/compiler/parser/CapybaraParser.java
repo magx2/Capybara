@@ -1979,9 +1979,7 @@ public class CapybaraParser {
         return operator == InfixOperator.PIPE
                || operator == InfixOperator.PIPE_MINUS
                || operator == InfixOperator.PIPE_FLATMAP
-               || operator == InfixOperator.PIPE_REDUCE
-               || operator == InfixOperator.PIPE_ANY
-               || operator == InfixOperator.PIPE_ALL;
+               || operator == InfixOperator.PIPE_REDUCE;
     }
 
     private IllegalStateException invalidPipeLambdaPostfix(SourcePosition position) {

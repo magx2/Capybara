@@ -1,4 +1,5 @@
 from /capy/lang/Option import { * }
+from /capy/lang/Collections import { * }
 
 /// Native String type backed by the runtime String implementation.
 /// String literals use quotes: "hello".
@@ -16,8 +17,122 @@ fun String.get(from: int, to: int): String = <native>
 /// Returns true when this String has no characters.
 fun String.is_empty(): bool = this.length() == 0
 
+/// Returns this String with `value` appended.
+fun String.`+`(value: any): String = <native>
+
+/// Returns this String with `value` appended.
+fun String.plus(value: any): String = this + value
+
+/// Returns true when at least one character satisfies `predicate`.
+fun String.any(predicate: String => bool): bool =
+    fun rec __any(value: String, idx: int, predicate: String => bool, acc: bool): bool =
+        match value[idx] with
+        case None -> acc
+        case Some { char } ->
+            if acc
+            then true
+            else __any(value, idx + 1, predicate, predicate(char))
+    ---
+    __any(this, 0, predicate, false)
+
+/// Returns true when at least one character and index pair satisfies `predicate`.
+fun String.any(predicate: (String, int) => bool): bool =
+    fun rec __any(value: String, idx: int, predicate: (String, int) => bool, acc: bool): bool =
+        match value[idx] with
+        case None -> acc
+        case Some { char } ->
+            if acc
+            then true
+            else __any(value, idx + 1, predicate, predicate(char, idx))
+    ---
+    __any(this, 0, predicate, false)
+
+/// Returns true when every character satisfies `predicate`.
+///
+/// Empty strings return true.
+fun String.all(predicate: String => bool): bool =
+    fun rec __all(value: String, idx: int, predicate: String => bool, acc: bool): bool =
+        match value[idx] with
+        case None -> acc
+        case Some { char } ->
+            if !acc
+            then false
+            else __all(value, idx + 1, predicate, predicate(char))
+    ---
+    __all(this, 0, predicate, true)
+
+/// Returns true when every character and index pair satisfies `predicate`.
+///
+/// Empty strings return true.
+fun String.all(predicate: (String, int) => bool): bool =
+    fun rec __all(value: String, idx: int, predicate: (String, int) => bool, acc: bool): bool =
+        match value[idx] with
+        case None -> acc
+        case Some { char } ->
+            if !acc
+            then false
+            else __all(value, idx + 1, predicate, predicate(char, idx))
+    ---
+    __all(this, 0, predicate, true)
+
 /// Returns true when this String contains the given substring.
-fun String.contains(part: String): bool = <native>
+fun String.contains(part: String): bool =
+    if part.length() == 0
+    then true
+    else this.any((_, idx) =>
+        if idx + part.length() <= this.length()
+        then this[idx, idx + part.length()] == part
+        else false)
+
+/// Returns true when this String contains the given substring.
+fun String.`?`(part: String): bool = this.contains(part)
+
+/// Combines all characters from left to right.
+fun String.reduce(initial: R, reducer: (R, String) => R): R =
+    fun rec __reduce(value: String, idx: int, acc: R, reducer: (R, String) => R): R =
+        match value[idx] with
+        case None -> acc
+        case Some { char } -> __reduce(value, idx + 1, reducer(acc, char), reducer)
+    ---
+    __reduce(this, 0, initial, reducer)
+
+/// Combines all characters from left to right.
+fun String.`|>`(initial: R, reducer: (R, String) => R): R = this.reduce(initial, reducer)
+
+/// Combines all characters from left to right.
+fun String.reduce_left(initial: R, reducer: (R, String) => R): R = this.reduce(initial, reducer)
+
+/// Combines all characters from left to right.
+fun String.`|l>`(initial: R, reducer: (R, String) => R): R = this.reduce_left(initial, reducer)
+
+/// Transforms each character using `map`.
+fun String.map(map: String => Y): List[Y] =
+    let initial: List[Y] = []
+    this.reduce(initial, (acc, char) => acc + map(char))
+
+/// Transforms each character using `map`.
+fun String.`|`(map: String => Y): List[Y] = this.map(map)
+
+/// Returns this String without characters that satisfy `predicate`.
+fun String.filter(predicate: String => bool): String =
+    this.reduce("", (acc, char) =>
+        if predicate(char)
+        then acc
+        else acc + char)
+
+/// Returns this String without characters that satisfy `predicate`.
+fun String.`|-`(predicate: String => bool): String = this.filter(predicate)
+
+/// Applies `map` to each character and concatenates the resulting lists.
+fun String.flat_map(map: String => List[Y]): List[Y] =
+    let initial: List[Y] = []
+    this.reduce(initial, (acc, char) => acc + map(char))
+
+/// Applies `map` to each character and concatenates the resulting lists.
+fun String.flatMap(map: String => List[Y]): List[Y] = this.flat_map(map)
+
+/// Applies `map` to each character and concatenates the resulting lists.
+fun String.`|*`(map: String => List[Y]): List[Y] = this.flat_map(map)
 
 /// Returns true when this String starts with the given substring.
 fun String.starts_with(part: String): bool =

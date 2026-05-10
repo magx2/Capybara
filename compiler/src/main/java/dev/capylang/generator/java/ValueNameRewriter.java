@@ -38,10 +38,6 @@ public class ValueNameRewriter {
             case CompiledNothingValue linkedNothingValue -> linkedNothingValue;
             case CompiledNumericWidening linkedNumericWidening ->
                     rewriteValueInLinkedNumericWidening(name, uniqueName, linkedNumericWidening);
-            case CompiledPipeAllExpression linkedPipeAllExpression ->
-                    rewriteValueInLinkedPipeAllExpression(name, uniqueName, linkedPipeAllExpression);
-            case CompiledPipeAnyExpression linkedPipeAnyExpression ->
-                    rewriteValueInLinkedPipeAnyExpression(name, uniqueName, linkedPipeAnyExpression);
             case CompiledPipeFlatMapExpression linkedPipeFlatMapExpression ->
                     rewriteValueInLinkedPipeFlatMapExpression(name, uniqueName, linkedPipeFlatMapExpression);
             case CompiledPipeFilterOutExpression linkedPipeFilterOutExpression ->
@@ -321,50 +317,6 @@ public class ValueNameRewriter {
                 linkedReflectionValue.packagePath(),
                 linkedReflectionValue.fields(),
                 linkedReflectionValue.type()
-        );
-    }
-
-    private static CompiledExpression rewriteValueInLinkedPipeAnyExpression(
-            String name,
-            String uniqueName,
-            CompiledPipeAnyExpression linkedPipeAnyExpression
-    ) {
-        var source = rewriteValueInExpression(name, uniqueName, linkedPipeAnyExpression.source());
-        if (linkedPipeAnyExpression.argumentName().equals(name)) {
-            return new CompiledPipeAnyExpression(
-                    source,
-                    linkedPipeAnyExpression.argumentName(),
-                    linkedPipeAnyExpression.predicate(),
-                    linkedPipeAnyExpression.type()
-            );
-        }
-        return new CompiledPipeAnyExpression(
-                source,
-                linkedPipeAnyExpression.argumentName(),
-                rewriteValueInExpression(name, uniqueName, linkedPipeAnyExpression.predicate()),
-                linkedPipeAnyExpression.type()
-        );
-    }
-
-    private static CompiledExpression rewriteValueInLinkedPipeAllExpression(
-            String name,
-            String uniqueName,
-            CompiledPipeAllExpression linkedPipeAllExpression
-    ) {
-        var source = rewriteValueInExpression(name, uniqueName, linkedPipeAllExpression.source());
-        if (linkedPipeAllExpression.argumentName().equals(name)) {
-            return new CompiledPipeAllExpression(
-                    source,
-                    linkedPipeAllExpression.argumentName(),
-                    linkedPipeAllExpression.predicate(),
-                    linkedPipeAllExpression.type()
-            );
-        }
-        return new CompiledPipeAllExpression(
-                source,
-                linkedPipeAllExpression.argumentName(),
-                rewriteValueInExpression(name, uniqueName, linkedPipeAllExpression.predicate()),
-                linkedPipeAllExpression.type()
         );
     }
 

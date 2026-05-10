@@ -312,8 +312,6 @@ infixOperator
     | PIPE_MINUS
     | PIPE_FLATMAP
     | PIPE_REDUCE
-    | PIPE_ANY
-    | PIPE_ALL
     | PIPE
     | QUESTION
     | AND
@@ -369,8 +367,6 @@ BITWISE_NOT : '.not.';
 PIPE_MINUS : '|-';
 PIPE_FLATMAP : '|*';
 PIPE_REDUCE : '|>';
-PIPE_ANY : '|any?';
-PIPE_ALL : '|all?';
 PIPE : '|';
 COLON : ':';
 EQUAL : '==';

@@ -1,4 +1,5 @@
 from /capy/lang/Collections import { * }
+from /capy/lang/String import { * }
 
 fun static_dict(): Dict[int] = {
     "one": 1,
@@ -32,6 +33,14 @@ fun remove_dict(left: Dict[int], right: Dict[int]): Dict[int] = left - right
 
 fun contains(d: Dict[int], key: String): bool = d ? key
 
+fun any_value(d: Dict[int]): bool = d.any((_, value) => value > 2)
+
+fun any_entry(d: Dict[int]): bool = d.any((key, value) => key.starts_with("t") & value == 2)
+
+fun all_values(d: Dict[int]): bool = d.all((_, value) => value > 0)
+
+fun all_entries(d: Dict[int]): bool = d.all((key, value) => key.length() > 0 & value > 0)
+
 fun is_empty(d: Dict[int]): bool = d.is_empty()
 
 data DictHolder { values: Dict[int] }
@@ -44,14 +53,15 @@ fun size(d: Dict[int]): int = d.size()
 
 data Entry {k: String, v: int}
 fun dict_to_list(d: Dict[int]): List[Entry] =
-    d |> [], (acc, k, v) => acc + Entry {k:k, v:v}
+    let initial: List[Entry] = []
+    d |> initial, (acc, k, v) => acc + Entry {k:k, v:v}
 
 fun dict_to_string(d: Dict[int]): String =
     d
         |> "", (acc, k, v) =>
             if acc == ""
             then k + " " + v
-            else acc + "," + k + " " + v
+            else acc + ", " + k + " " + v
 
 fun let_named_dict(): int =
     let dict: Dict[int] = { "one": 1, "two": 2 }

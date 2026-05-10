@@ -5,6 +5,14 @@ fun contains(s: String, part: String): bool = s ? part
 
 fun contains_method(s: String, part: String): bool = s.contains(part)
 
+fun any(s: String): bool = s.any(ch => ch == "y")
+
+fun any_with_index(s: String): bool = s.any((ch, idx) => ch == "y" & idx == 3)
+
+fun all(s: String): bool = s.all(ch => ch != " ")
+
+fun all_with_index(s: String): bool = s.all((ch, idx) => ch != " " & idx >= 0)
+
 fun starts_with_method(s: String, part: String): bool = s.starts_with(part)
 
 fun end_with_method(s: String, part: String): bool = s.end_with(part)

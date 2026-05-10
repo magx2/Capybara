@@ -14,7 +14,11 @@ class TupleDestructuringCompilerTest {
         var compiled = compileProgram(List.of(new RawModule(
                 "TuplePipes",
                 "/foo/boo",
-                "fun map_pairs(values: List[Tuple[int, int]]): List[String] = values | (number, expected) => \"digits(\" + number + \") should return \" + expected"
+                """
+                        from /capy/lang/Collections import { * }
+
+                        fun map_pairs(values: List[Tuple[int, int]]): List[String] = values | (number, expected) => "digits(" + number + ") should return " + expected
+                        """
         )));
 
         var function = compiled.modules().first().functions().stream()
@@ -23,7 +27,8 @@ class TupleDestructuringCompilerTest {
                 .orElseThrow();
 
         assertThat(CompiledExpressionPrinter.printExpression(function.expression(), 0))
-                .contains("| number;;expected =>")
+                .contains("__method__List__|")
+                .contains("number;;expected =>")
                 .contains("(number: INT)")
                 .contains("(expected: INT)");
     }
@@ -33,7 +38,11 @@ class TupleDestructuringCompilerTest {
         var compiled = compileProgram(List.of(new RawModule(
                 "TuplePipes",
                 "/foo/boo",
-                "fun filter_pairs(values: List[Tuple[int, int]]): List[Tuple[int, int]] = values |- (left, right) => left == right"
+                """
+                        from /capy/lang/Collections import { * }
+
+                        fun filter_pairs(values: List[Tuple[int, int]]): List[Tuple[int, int]] = values |- (left, right) => left == right
+                        """
         )));
 
         var function = compiled.modules().first().functions().stream()
@@ -42,22 +51,31 @@ class TupleDestructuringCompilerTest {
                 .orElseThrow();
 
         assertThat(CompiledExpressionPrinter.printExpression(function.expression(), 0))
-                .contains("|- left;;right =>")
+                .contains("__method__List__|-")
+                .contains("left;;right =>")
                 .contains("(left: INT) == (right: INT)");
     }
 
     @Test
     void shouldFailWhenTupleDestructuringIsUsedForNonTupleElements() {
-        var error = compileFailure("fun foo(values: List[int]) = values | (a, b) => a + b");
+        var error = compileFailure("""
+                from /capy/lang/Collections import { * }
 
-        assertThat(error.message()).contains("Right side lambda of `|` can use tuple destructuring only for tuple elements");
+                fun foo(values: List[int]) = values | (a, b) => a + b
+                """);
+
+        assertThat(error.message()).contains("Tuple destructuring can only be used for tuple elements");
     }
 
     @Test
     void shouldFailWhenTupleDestructuringArityDoesNotMatchTupleSize() {
-        var error = compileFailure("fun foo(values: List[Tuple[int, int]]) = values |* (a, b, c) => [a, b, c]");
+        var error = compileFailure("""
+                from /capy/lang/Collections import { * }
 
-        assertThat(error.message()).contains("Tuple destructuring in `|*` expects 2 arguments, got 3");
+                fun foo(values: List[Tuple[int, int]]) = values |* (a, b, c) => [a, b, c]
+                """);
+
+        assertThat(error.message()).contains("Tuple destructuring expects 2 arguments, got 3");
     }
 
     private static CompiledProgram compileProgram(List<RawModule> rawModules) {

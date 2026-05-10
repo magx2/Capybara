@@ -303,12 +303,14 @@ private fun print_test_finished(log_type: LogType, test_name: String): Effect[St
     case TEAM_CITY -> println("##teamcity[testFinished name='{team_city_escape(test_name)}']")
 
 fun test_log_lines(test_files: List[TestFile]): List[String] =
-    test_files |> [], (acc, test_file) => acc + test_log_lines_file(test_file)
+    let initial: List[String] = []
+    test_files |> initial, (acc, test_file) => acc + test_log_lines_file(test_file)
 
 private fun test_log_lines_file(test_file: TestFile): List[String] =
     let suite_name = test_suite_name(test_file.file_name)
+    let initial: List[String] = []
     ["Test suite started: {suite_name}"]
-        + (test_file.test_cases |> [], (acc, test_case) => acc + test_log_lines_case(test_case))
+        + (test_file.test_cases |> initial, (acc, test_case) => acc + test_log_lines_case(test_case))
         + ["Test suite finished: {suite_name}"]
 
 private fun test_log_lines_case(test_case: TestCase): List[String] =
@@ -324,12 +326,14 @@ private fun test_log_lines_case(test_case: TestCase): List[String] =
     ]
 
 fun team_city_messages(test_files: List[TestFile]): List[String] =
-    test_files |> [], (acc, test_file) => acc + team_city_messages_file(test_file)
+    let initial: List[String] = []
+    test_files |> initial, (acc, test_file) => acc + team_city_messages_file(test_file)
 
 private fun team_city_messages_file(test_file: TestFile): List[String] =
     let suite_name = team_city_escape(test_suite_name(test_file.file_name))
+    let initial: List[String] = []
     ["##teamcity[testSuiteStarted name='{suite_name}']"]
-        + (test_file.test_cases |> [], (acc, test_case) => acc + team_city_messages_case(test_case))
+        + (test_file.test_cases |> initial, (acc, test_case) => acc + team_city_messages_case(test_case))
         + ["##teamcity[testSuiteFinished name='{suite_name}']"]
 
 private fun team_city_messages_case(test_case: TestCase): List[String] =
@@ -511,7 +515,7 @@ private fun rec drop_prefix_segments(prefix: List[String], segments: List[String
             else segments
 
 private fun path_list_contains(paths: List[Path], path: Path): bool =
-    paths |any? p => p.normalize() == path.normalize()
+    paths.any(p => p.normalize() == path.normalize())
 
 private fun path_to_manifest_line(path: Path): String =
     path_segments_to_string(path.normalize().segments)
@@ -526,7 +530,7 @@ private fun path_segments_to_string(segments: List[String]): String =
     ---
     __path_segments_to_string(segments, '')
 
-private fun has_failures(test_outputs: List[TestOutput]): bool = test_outputs |any? output => output.failed
+private fun has_failures(test_outputs: List[TestOutput]): bool = test_outputs.any(output => output.failed)
 
 const JUNIT_PREFIX = 'TEST-'
 
@@ -534,12 +538,12 @@ private fun junit_run_tests(test_files: List[TestFile]): List[TestOutput] = test
 
 private fun junit_run_test(test_file: TestFile): TestOutput =
     let tests = test_file.test_cases.size()
-    let failures = test_file.test_cases | tc => tc.failed() |> 0, (acc, failed) => if failed then acc + 1 else acc
-    let assertions = test_file.test_cases | tc => tc.assertions_count |> 0, (acc, count) => acc + count
+    let failures = test_file.test_cases |> 0, (acc, tc) => if tc.failed() then acc + 1 else acc
+    let assertions = test_file.test_cases |> 0, (acc, tc) => acc + tc.assertions_count
     let suite_name = junit_escape_xml_attribute(test_file.file_name)
-    let time = test_file.test_cases | tc => tc.execution_time |> 0.0, (acc, t) => acc + t
+    let time = test_file.test_cases |> 0.0, (acc, tc) => acc + tc.execution_time
     let content = "<testsuite name=\"{suite_name}\" tests=\"{tests}\" failures=\"{failures}\" errors=\"0\" skipped=\"0\" assertions=\"{assertions}\" time=\"{time}\" timestamp=\"{test_file.timestamp}\">"
-    + (test_file.test_cases | tc => junit_run_test_case(test_file.file_name, tc) |> '', (acc, tc) => acc + tc)
+    + (test_file.test_cases |> '', (acc, tc) => acc + junit_run_test_case(test_file.file_name, tc))
     + '</testsuite>'
     TestOutput {
         path: from_string(JUNIT_PREFIX + test_file.file_name[1, test_file.file_name.length()].replace('/', '.') + '.xml'),

@@ -1,13 +1,15 @@
 from /capy/lang/Seq import {*}
+from /capy/lang/Option import { * }
 from /capy/lang/String import { * }
+from /capy/lang/Collections import { * }
 
 fun map1(l: List[int]): List[int] =
     l | x => x * 2
 
 fun map2(l: List[int]): List[int] =
     l
-        | x => x * 2
-        | x => x - 1
+        .map(x => x * 2)
+        .map(x => x - 1)
 
 fun map3(l: List[int]): List[String] = l | x => "Hello " + x
 
@@ -21,24 +23,25 @@ fun filter2(l: List[int]): List[int] =
 fun reduce1(l: List[int]): int = l |> 0, (a,b) => a+b
 
 /// returns if any of the ints in the list is positive
-fun any_positive(l: List[int]): bool = l |any? x => x > 0
+fun any_positive(l: List[int]): bool = l.any(x => x > 0)
 
 /// returns if all of the ints in the list is positive
-fun all_positive(l: List[int]): bool = l |all? x => x > 0
+fun all_positive(l: List[int]): bool = l.all(x => x > 0)
 
 private fun is_positive(x: int): bool = x > 0
-fun any_positive_ref(l: List[int]): bool = l |any? :is_positive
-fun all_positive_ref(l: List[int]): bool = l |all? :is_positive
+fun any_positive_ref(l: List[int]): bool = l.any(:is_positive)
+fun all_positive_ref(l: List[int]): bool = l.all(:is_positive)
 
 fun reduce2(l: List[int]): int =
     l
-        | x => x * 2
-        |- x => x < 0
+        | (x => x * 2)
+        |- (x => x < 0)
         |> 0, (a,b) => a+b
 
 fun reduce_string1(l: List[String]): String = l |> "", (acc, v) => acc + v
 
-fun reduce_string2(l: List[String]): String = l |> "start: ", (acc, v) => acc + " " + v
+fun reduce_string2(l: List[String]): String =
+    l |> "start: ", (acc, v) => acc + (if acc == "start: " then "" else " ") + v
 
 fun string_map(s: String): List[String] = s | ch => "[" + ch + "]"
 
@@ -55,9 +58,9 @@ fun flatMap1(l: List[int]): List[int] = l |* x => [x, x+1, x+2]
 
 fun flatMap2(l: List[int]): List[int] =
     l
-        | x => x * 2
-        |- x => x > 0
-        |* x => [x, x+1, x+2]
+        | (x => x * 2)
+        |- (x => x > 0)
+        |* (x => [x, x+1, x+2])
 
 fun setMap1(s: Set[int]): Set[int] = s | x => x * 2
 
@@ -65,7 +68,8 @@ fun setFilter1(s: Set[int]): Set[int] = s |- x => x > 0
 
 fun setReduce1(s: Set[int]): int = s |> 0, (a,b) => a+b
 
-fun set_reduce_string2(s: Set[String]): String = s |> "start: ", (acc, v) => acc + " " + v
+fun set_reduce_string2(s: Set[String]): String =
+    s |> "start: ", (acc, v) => acc + (if acc == "start: " then "" else " ") + v
 
 fun setFlatMap1(s: Set[int]): Set[int] = s |* x => {x, x+10}
 
@@ -74,24 +78,22 @@ fun mapDict(d: Dict[int]): Dict[String] = d | (k,v) => v + ""
 fun filterDict(d: Dict[int]): Dict[int] = d |- (k,v) => k != "" & v > 0
 
 fun reduceDict(d: Dict[int]): String = d
-    |> (k, v) => "(" + k + ":" + v + ")"
-    |> "start: ", (acc, e) => acc + ", " + e
+    .map((k, v) => "(" + k + ":" + v + ")")
+    .reduce("start: ", (acc, _, e) => acc + (if acc == "start: " then "" else ", ") + e)
 
 data Entry { key: String, value: String }
-fun reduce_to_data(l: Dict[String]): Set[Entry] = l
-    |> (k,v) => Entry {key:k,value:v}
+fun reduce_to_data(l: Dict[String]): Set[Entry] =
+    let initial: Set[Entry] = {}
+    l |> initial, (acc, k, v) => acc + { Entry {key:k,value:v} }
 
-fun dict_reduce_string2(d: Dict[String]): String = d |> "start: ", (acc, v) => acc + " " + v
+fun dict_reduce_string2(d: Dict[String]): String =
+    d |> "start: ", (acc, _, v) => acc + (if acc == "start: " then "" else " ") + v
 
 fun dict_unused_key_to_sum(d: Dict[int]): int =
-    d
-        | (_, v) => v
-        |> 0, (acc, v) => acc + v
+    d |> 0, (acc, _, v) => acc + v
 
 fun dict_unused_reduce_key(d: Dict[int]): int =
-    d
-        |> (_, v) => v
-        |> 0, (acc, v) => acc + v
+    d |> 0, (acc, _, v) => acc + v
 
 fun list_unused_lambda_arg(l: List[int]): List[int] = l | _ => 1
 
@@ -100,10 +102,10 @@ data Value { x: int }
 fun add(v: Value, x: int): Value = Value { x: v.x + x }
 
 fun data_pipe(a: int, b: int, c: int): /capy/lang/Option[Value] =
-    Value { x: a }
-        |- v => v.x > 0
-        | v => add(v, b)
-        | v => add(v, c)
+    let value = Value { x: a }
+    if value.x > 0
+    then None {}
+    else Some { add(add(value, b), c) }
 
 type Boxed = IntBox | LongBox
 data IntBox { value: int }
@@ -117,20 +119,15 @@ fun add_to_boxed(boxed: Boxed): Boxed =
     case LongBox { value } -> LongBox { value: value + 1L }
 
 fun type_pipe_lambda(x: int): Boxed =
-    IntBox { value: x }
-        | b => keep_boxed(b)
-        | b => add_to_boxed(b)
+    add_to_boxed(keep_boxed(IntBox { value: x }))
 
 fun type_pipe_ref(x: int): Boxed =
-    IntBox { value: x }
-        | :keep_boxed
-        | :add_to_boxed
+    add_to_boxed(keep_boxed(IntBox { value: x }))
 
 fun type_pipe_optional(x: int): /capy/lang/Option[Boxed] =
-    IntBox { value: x }
-        | bx => keep_boxed(bx)
-        |- by => x > 0
-        | bz => add_to_boxed(bz)
+    if x > 0
+    then None {}
+    else Some { add_to_boxed(keep_boxed(IntBox { value: x })) }
 
 fun pipe_then_chain_after_lambda(): int =
     match ([1, 2, 3]
@@ -164,7 +161,7 @@ fun pipe_filter_lambda_body_multiline_without_parentheses(): List[String] =
 
 fun pipe_any_lambda_body_multiline_without_parentheses(): bool =
     [" a ", "bb"]
-        |any? value =>
+        .any(value =>
             value
                 .trim()
-                .starts_with("a")
+                .starts_with("a"))

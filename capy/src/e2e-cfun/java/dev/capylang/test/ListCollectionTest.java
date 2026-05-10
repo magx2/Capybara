@@ -74,6 +74,28 @@ class ListCollectionTest {
     }
 
     @Test
+    void any() {
+        assertThat(ListCollection.any(List.of(1, 2, 3))).isTrue();
+        assertThat(ListCollection.any(List.of(0, 1, 2))).isFalse();
+    }
+
+    @Test
+    void anyEmpty() {
+        assertThat(ListCollection.anyEmpty(List.of())).isFalse();
+    }
+
+    @Test
+    void all() {
+        assertThat(ListCollection.all(List.of(1, 2, 3))).isTrue();
+        assertThat(ListCollection.all(List.of(0, 1, 2))).isFalse();
+    }
+
+    @Test
+    void allEmpty() {
+        assertThat(ListCollection.allEmpty(List.of())).isTrue();
+    }
+
+    @Test
     void isEmpty() {
         assertThat(ListCollection.isEmpty(List.of())).isTrue();
         assertThat(ListCollection.isEmpty(List.of(1, 2, 3))).isFalse();

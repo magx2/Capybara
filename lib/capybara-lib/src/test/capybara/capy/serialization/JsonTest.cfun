@@ -2,6 +2,7 @@ from /capy/test/Assert import { * }
 from /capy/lang/Effect import { * }
 from /capy/lang/Option import { * }
 from /capy/lang/Result import { * }
+from /capy/lang/Collections import { * }
 from /capy/test/CapyTest import { * }
 from /capy/serialization/Json import { * }
 
@@ -228,7 +229,8 @@ fun should_derive_jsonable_to_json_for_nested_and_collection_fields(): Assert =
     })
 
 fun _json_field(json: JsonObject, name: String): Option[Json] =
-    json.value |> None {}, (acc, key, value) =>
+    let initial: Option[Json] = None {}
+    json.value |> initial, (acc, key, value) =>
         if key == name then Some { value } else acc
 
 fun should_index_json_object_and_array_containers(): Assert =

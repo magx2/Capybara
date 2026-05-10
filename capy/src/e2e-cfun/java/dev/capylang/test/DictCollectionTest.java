@@ -132,6 +132,30 @@ class DictCollectionTest {
     }
 
     @Test
+    void anyValue() {
+        assertThat(DictCollection.anyValue(EXPECTED)).isTrue();
+        assertThat(DictCollection.anyValue(Map.of("zero", 0, "one", 1))).isFalse();
+    }
+
+    @Test
+    void anyEntry() {
+        assertThat(DictCollection.anyEntry(EXPECTED)).isTrue();
+        assertThat(DictCollection.anyEntry(Map.of("two", 3))).isFalse();
+    }
+
+    @Test
+    void allValues() {
+        assertThat(DictCollection.allValues(EXPECTED)).isTrue();
+        assertThat(DictCollection.allValues(Map.of("zero", 0, "one", 1))).isFalse();
+    }
+
+    @Test
+    void allEntries() {
+        assertThat(DictCollection.allEntries(EXPECTED)).isTrue();
+        assertThat(DictCollection.allEntries(Map.of("", 1))).isFalse();
+    }
+
+    @Test
     void isEmpty() {
         assertThat(DictCollection.isEmpty(Map.of())).isTrue();
         assertThat(DictCollection.isEmpty(EXPECTED)).isFalse();

@@ -79,6 +79,28 @@ class SetCollectionTest {
     }
 
     @Test
+    void any() {
+        assertThat(SetCollection.any(Set.of(1, 2, 3))).isTrue();
+        assertThat(SetCollection.any(Set.of(0, 1, 2))).isFalse();
+    }
+
+    @Test
+    void anyEmpty() {
+        assertThat(SetCollection.anyEmpty(Set.of())).isFalse();
+    }
+
+    @Test
+    void all() {
+        assertThat(SetCollection.all(Set.of(1, 2, 3))).isTrue();
+        assertThat(SetCollection.all(Set.of(0, 1, 2))).isFalse();
+    }
+
+    @Test
+    void allEmpty() {
+        assertThat(SetCollection.allEmpty(Set.of())).isTrue();
+    }
+
+    @Test
     void isEmpty() {
         assertThat(SetCollection.isEmpty(Set.of())).isTrue();
         assertThat(SetCollection.isEmpty(Set.of(1, 2, 3))).isFalse();

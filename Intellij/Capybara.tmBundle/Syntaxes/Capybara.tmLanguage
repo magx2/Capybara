@@ -140,15 +140,15 @@
     </dict>
     <dict>
       <key>name</key><string>meta.pipe.lambda.grouped.single.capybara</string>
-      <key>match</key><string>(\|all\?|\|any\?|\|>|\|\*|\|-|\|)\s*(\()\s*([A-Za-z_][A-Za-z0-9_]*|_)\s*(=&gt;)</string>
+      <key>match</key><string>(\|>|\|\*|\|-|\|)\s*(\()\s*([A-Za-z_][A-Za-z0-9_]*|_)\s*(=&gt;)</string>
     </dict>
     <dict>
       <key>name</key><string>meta.pipe.lambda.grouped.tuple.capybara</string>
-      <key>match</key><string>(\|all\?|\|any\?|\|>|\|\*|\|-|\|)\s*(\()\s*([A-Za-z_][A-Za-z0-9_]*|_)(\s*,\s*([A-Za-z_][A-Za-z0-9_]*|_))+\s*(\))\s*(=&gt;)</string>
+      <key>match</key><string>(\|>|\|\*|\|-|\|)\s*(\()\s*([A-Za-z_][A-Za-z0-9_]*|_)(\s*,\s*([A-Za-z_][A-Za-z0-9_]*|_))+\s*(\))\s*(=&gt;)</string>
     </dict>
     <dict>
       <key>name</key><string>meta.pipe.lambda.grouped.no-args.capybara</string>
-      <key>match</key><string>(\|all\?|\|any\?|\|>|\|\*|\|-|\|)\s*(\()\s*(\))\s*(=&gt;)</string>
+      <key>match</key><string>(\|>|\|\*|\|-|\|)\s*(\()\s*(\))\s*(=&gt;)</string>
     </dict>
     <dict>
       <key>name</key><string>variable.parameter.unused.capybara</string>
@@ -167,7 +167,7 @@
       <key>match</key><string>((?:\.with\(|,)\s*)([A-Za-z_][A-Za-z0-9_]*)(\s*=)</string>
     </dict>
     <dict><key>name</key><string>keyword.operator.function-type.capybara</string><key>match</key><string>=&gt;</string></dict>
-    <dict><key>name</key><string>keyword.operator.pipe.capybara</string><key>match</key><string>\|all\?|\|any\?|\|>|\|\*|\|-|\||\.\.\.|\.and\.|\.nand\.|\.or\.|\.xor\.|\.not\.|==|!=|&lt;-|&lt;=|&gt;=|=&gt;|\+|\-|\*|/|%|\^|&lt;|&gt;|=|&amp;|\?|:|,</string></dict>
+    <dict><key>name</key><string>keyword.operator.pipe.capybara</string><key>match</key><string>\|>|\|\*|\|-|\||\.\.\.|\.and\.|\.nand\.|\.or\.|\.xor\.|\.not\.|==|!=|&lt;-|&lt;=|&gt;=|=&gt;|\+|\-|\*|/|%|\^|&lt;|&gt;|=|&amp;|\?|:|,</string></dict>
     <dict>
       <key>name</key><string>meta.index.capybara</string>
       <key>begin</key><string>\[</string>
@@ -198,7 +198,7 @@
           </array>
         </dict>
         <dict><key>name</key><string>keyword.operator.capybara</string><key>match</key><string>:</string></dict>
-        <dict><key>name</key><string>keyword.operator.pipe.capybara</string><key>match</key><string>\|all\?|\|any\?|\|>|\|\*|\|-|\||\.\.\.|\.and\.|\.nand\.|\.or\.|\.xor\.|\.not\.|==|!=|&lt;-|&lt;=|&gt;=|=&gt;|\+|\-|\*|/|%|\^|&lt;|&gt;|=|&amp;|\?|:|,</string></dict>
+        <dict><key>name</key><string>keyword.operator.pipe.capybara</string><key>match</key><string>\|>|\|\*|\|-|\||\.\.\.|\.and\.|\.nand\.|\.or\.|\.xor\.|\.not\.|==|!=|&lt;-|&lt;=|&gt;=|=&gt;|\+|\-|\*|/|%|\^|&lt;|&gt;|=|&amp;|\?|:|,</string></dict>
         <dict><key>name</key><string>constant.numeric.int.capybara</string><key>match</key><string>-?\d+</string></dict>
       </array>
     </dict>

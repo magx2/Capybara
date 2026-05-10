@@ -2121,10 +2121,6 @@ public class CapybaraExpressionCompiler {
         if (optionAlias.isPresent()) {
             return optionAlias;
         }
-        var pipeAlias = resolveBuiltinPipeAliasMethodInvoke(functionCall, scope, methodName);
-        if (pipeAlias.isPresent()) {
-            return pipeAlias;
-        }
         var getAlias = resolveBuiltinGetMethodInvoke(functionCall, scope, methodName);
         if (getAlias.isPresent()) {
             return getAlias;
@@ -2133,7 +2129,6 @@ public class CapybaraExpressionCompiler {
         if (enumNameMethod.isPresent()) {
             return enumNameMethod;
         }
-        var supportsBoolTwoStrings = "contains".equals(methodName);
         var supportsStringThreeArgs = "replace".equals(methodName);
         var supportsToInt = "to_int".equals(methodName);
         var supportsToLong = "to_long".equals(methodName);
@@ -2141,8 +2136,7 @@ public class CapybaraExpressionCompiler {
         var supportsToFloat = "to_float".equals(methodName);
         var supportsToBool = "to_bool".equals(methodName);
         var supportsSingleString = supportsToInt || supportsToLong || supportsToDouble || supportsToFloat || supportsToBool;
-        if ((!supportsBoolTwoStrings && !supportsStringThreeArgs && !supportsSingleString)
-                || (supportsBoolTwoStrings && functionCall.arguments().size() != 2)
+        if ((!supportsStringThreeArgs && !supportsSingleString)
                 || (supportsStringThreeArgs && functionCall.arguments().size() != 3)
                 || (supportsSingleString && functionCall.arguments().size() != 1)) {
             return Optional.empty();
@@ -2196,16 +2190,15 @@ public class CapybaraExpressionCompiler {
                 )));
             }
         }
-        if (supportsBoolTwoStrings || supportsStringThreeArgs) {
+        if (supportsStringThreeArgs) {
             var allStrings = args.stream().allMatch(argument -> argument.type() == STRING);
             if (!allStrings) {
                 return Optional.empty();
             }
-            var returnType = supportsBoolTwoStrings ? BOOL : STRING;
             return Optional.of(Result.success(new CompiledFunctionCall(
                     METHOD_DECL_PREFIX + "String__" + methodName,
                     args,
-                    returnType
+                    STRING
             )));
         }
         if (args.get(0).type() != STRING) {
@@ -2290,9 +2283,6 @@ public class CapybaraExpressionCompiler {
 
     private List<FunctionSignature> builtinMethodSignatures(String methodName, int arity) {
         var signatures = new java.util.ArrayList<FunctionSignature>();
-        if (arity == 2 && "contains".equals(methodName)) {
-            signatures.add(builtinMethodSignature("String", methodName, List.of(STRING, STRING), BOOL));
-        }
         if (arity == 3 && "replace".equals(methodName)) {
             signatures.add(builtinMethodSignature("String", methodName, List.of(STRING, STRING, STRING), STRING));
         }
@@ -2463,7 +2453,7 @@ public class CapybaraExpressionCompiler {
             Scope scope,
             String methodName
     ) {
-        if (!"reduce".equals(methodName) && !"reduce_left".equals(methodName)) {
+        if (!"reduce".equals(methodName) && !"reduce_left".equals(methodName) && !"|l>".equals(methodName)) {
             return Optional.empty();
         }
         if (functionCall.arguments().size() != 2 || !(functionCall.arguments().get(1) instanceof ReduceExpression reduceExpression)) {
@@ -2511,85 +2501,27 @@ public class CapybaraExpressionCompiler {
             case "flat_map" -> functionCall.arguments().size() == 2
                     ? Optional.of(linkBuiltinOptionFlatMapMethodInvoke(functionCall, scope))
                     : Optional.empty();
+            case "map" -> functionCall.arguments().size() == 2
+                    ? Optional.of(linkInfixExpression(new InfixExpression(
+                            functionCall.arguments().get(0),
+                            InfixOperator.PIPE,
+                            functionCall.arguments().get(1),
+                            functionCall.position()
+                    ), scope))
+                    : Optional.empty();
+            case "filter", "|-" -> functionCall.arguments().size() == 2
+                    ? Optional.of(linkInfixExpression(new InfixExpression(
+                            functionCall.arguments().get(0),
+                            InfixOperator.PIPE_MINUS,
+                            functionCall.arguments().get(1),
+                            functionCall.position()
+                    ), scope))
+                    : Optional.empty();
             case "reduce", "reduce_left" -> (functionCall.arguments().size() == 2 || functionCall.arguments().size() == 3)
                     ? Optional.of(linkBuiltinOptionReduceMethodInvoke(functionCall, scope))
                     : Optional.empty();
             default -> Optional.empty();
         };
-    }
-
-    private Optional<Result<CompiledExpression>> resolveBuiltinPipeAliasMethodInvoke(
-            FunctionCall functionCall,
-            Scope scope,
-            String methodName
-    ) {
-        var arguments = functionCall.arguments();
-        return switch (methodName) {
-            case "map" -> arguments.size() == 2
-                    ? Optional.of(linkBuiltinPipeAliasMethod(scope, arguments.get(0), InfixOperator.PIPE, arguments.get(1), functionCall.position()))
-                    : Optional.empty();
-            case "filter", "|-" -> arguments.size() == 2
-                    ? Optional.of(linkBuiltinPipeAliasMethod(scope, arguments.get(0), InfixOperator.PIPE_MINUS, arguments.get(1), functionCall.position()))
-                    : Optional.empty();
-            case "flat_map" -> arguments.size() == 2
-                    ? Optional.of(linkBuiltinPipeAliasMethod(scope, arguments.get(0), InfixOperator.PIPE_FLATMAP, arguments.get(1), functionCall.position()))
-                    : Optional.empty();
-            case "reduce" -> (arguments.size() == 2 || arguments.size() == 3)
-                    ? Optional.of(linkBuiltinReduceMethodInvoke(functionCall, scope))
-                    : Optional.empty();
-            case "reduce_left", "|l>" -> (arguments.size() == 2 || arguments.size() == 3)
-                    ? Optional.of(linkBuiltinReduceMethodInvoke(functionCall, scope))
-                    : Optional.empty();
-            default -> Optional.empty();
-        };
-    }
-
-    private Result<CompiledExpression> linkBuiltinPipeAliasMethod(
-            Scope scope,
-            Expression source,
-            InfixOperator operator,
-            Expression mapper,
-            Optional<SourcePosition> position
-    ) {
-        return linkInfixExpression(new InfixExpression(source, operator, mapper, position), scope);
-    }
-
-    private Result<CompiledExpression> linkBuiltinReduceMethodInvoke(FunctionCall functionCall, Scope scope) {
-        var source = functionCall.arguments().getFirst();
-        ReduceExpression reduceExpression;
-        if (functionCall.arguments().size() == 2 && functionCall.arguments().get(1) instanceof ReduceExpression parsedReduceExpression) {
-            reduceExpression = parsedReduceExpression;
-        } else {
-            var initialValue = functionCall.arguments().get(1);
-            var reducer = functionCall.arguments().get(2);
-            if (!(reducer instanceof LambdaExpression lambdaExpression)) {
-                return withPosition(
-                        Result.error("Reducer in `.reduce(...)` has to be a lambda expression"),
-                        reducer.position()
-                );
-            }
-
-            var reducerArguments = lambdaExpression.argumentNames();
-            if (reducerArguments.size() != 2 && reducerArguments.size() != 3) {
-                return withPosition(
-                        Result.error("Reducer in `.reduce(...)` has to have two or three arguments"),
-                        lambdaExpression.position()
-                );
-            }
-
-            reduceExpression = new ReduceExpression(
-                    initialValue,
-                    reducerArguments.get(0),
-                    reducerArguments.size() == 3 ? Optional.of(reducerArguments.get(1)) : Optional.empty(),
-                    reducerArguments.get(reducerArguments.size() - 1),
-                    lambdaExpression.expression(),
-                    lambdaExpression.position()
-            );
-        }
-        return linkInfixExpression(
-                new InfixExpression(source, InfixOperator.PIPE_REDUCE, reduceExpression, functionCall.position()),
-                scope
-        );
     }
 
     private Result<CompiledExpression> linkBuiltinOptionFlatMapMethodInvoke(FunctionCall functionCall, Scope scope) {
@@ -3044,21 +2976,6 @@ public class CapybaraExpressionCompiler {
                         return Result.success(maybeCoerced);
                     });
         }
-        if (argument instanceof InfixExpression infixExpression
-            && infixExpression.operator() == InfixOperator.PIPE
-            && (expected instanceof CompiledList || expected instanceof CompiledSet || expected instanceof CompiledDict)) {
-            return linkPipeExpression(infixExpression, scope, expected)
-                    .flatMap(linkedArgument -> {
-                        var maybeCoerced = coerceArgument(linkedArgument, expected);
-                        if (maybeCoerced == null) {
-                            return withPosition(
-                                    Result.error(expectedGotMessage(expected, linkedArgument.type())),
-                                    argument.position()
-                            );
-                        }
-                        return Result.success(maybeCoerced);
-                    });
-        }
         if (argument instanceof NewListExpression newListExpression && expected instanceof CompiledList expectedList) {
             return linkNewListExpression(newListExpression, scope, expectedList.elementType())
                     .flatMap(linkedArgument -> {
@@ -3425,6 +3342,7 @@ public class CapybaraExpressionCompiler {
         }
 
         CompiledExpression expression = new CompiledFunctionCall(resolvedFunctionName(candidate), List.copyOf(callArguments), candidate.returnType());
+        var inferredReturnType = expectedShape.returnType();
         var returnCoerced = coerceArgument(expression, expectedShape.returnType());
         if (returnCoerced == null) {
             if (candidate.returnType() != ANY) {
@@ -3436,9 +3354,14 @@ public class CapybaraExpressionCompiler {
         } else {
             expression = returnCoerced.expression();
             coercions += returnCoerced.coercions();
+            if (expectedShape.returnType() instanceof CompiledGenericTypeParameter
+                && !(expression.type() instanceof CompiledGenericTypeParameter)
+                && isResolvedTypeForInference(expression.type())) {
+                inferredReturnType = expression.type();
+            }
         }
 
-        var nestedType = expectedShape.returnType();
+        var nestedType = inferredReturnType;
         for (int i = argumentNames.size() - 1; i >= 0; i--) {
             var functionType = new CompiledFunctionType(expectedShape.parameterTypes().get(i), nestedType);
             expression = new CompiledLambdaExpression(argumentNames.get(i), expression, functionType);
@@ -3454,6 +3377,23 @@ public class CapybaraExpressionCompiler {
             CompiledFunctionType expectedType
     ) {
         var argumentNames = lambdaExpression.argumentNames();
+        var expectedShape = flattenFunctionType(expectedType);
+        if (argumentNames.size() > 1 && expectedShape.parameterTypes().size() == 1) {
+            if (!(expectedType.argumentType() instanceof CompiledTupleType tupleType)) {
+                return withPosition(
+                        Result.error("Tuple destructuring can only be used for tuple elements"),
+                        lambdaExpression.position()
+                );
+            }
+            if (argumentNames.size() != tupleType.elementTypes().size()) {
+                return withPosition(
+                        Result.error("Tuple destructuring expects " + tupleType.elementTypes().size()
+                                     + " arguments, got " + argumentNames.size()),
+                        lambdaExpression.position()
+                );
+            }
+            return linkTupleDestructuringLambdaExpression(lambdaExpression, scope, expectedType, tupleType);
+        }
         var noArgsLambda = argumentNames.isEmpty();
         if (noArgsLambda && !expectedType.argumentType().equals(NOTHING)) {
             return withPosition(
@@ -3519,6 +3459,50 @@ public class CapybaraExpressionCompiler {
                 });
     }
 
+    private Result<CompiledLambdaExpression> linkTupleDestructuringLambdaExpression(
+            LambdaExpression lambdaExpression,
+            Scope scope,
+            CompiledFunctionType expectedType,
+            CompiledTupleType tupleType
+    ) {
+        var argumentNames = lambdaExpression.argumentNames();
+        var returnType = expectedType.returnType();
+        var tupleElementTypes = tupleType.elementTypes();
+        var lambdaScope = scope;
+        for (int idx = 0; idx < argumentNames.size(); idx++) {
+            lambdaScope = addLambdaBinding(lambdaScope, argumentNames.get(idx), tupleElementTypes.get(idx));
+        }
+
+        return linkExpression(lambdaExpression.expression(), lambdaScope)
+                .flatMap(linkedBody -> {
+                    var maybeCoerced = coerceArgument(linkedBody, returnType);
+                    if (maybeCoerced == null) {
+                        return withPosition(
+                                Result.error(
+                                        "Lambda has to return `" + returnType
+                                        + "`, got `" + linkedBody.type() + "`"
+                                ),
+                                lambdaExpression.position()
+                        );
+                    }
+
+                    var nested = maybeCoerced.expression();
+                    var nestedType = returnType;
+                    if (!(nested.type() instanceof CompiledGenericTypeParameter)
+                        && isResolvedTypeForInference(nested.type())) {
+                        nestedType = nested.type();
+                    } else if (returnType instanceof CompiledGenericTypeParameter
+                               && !(nested.type() instanceof CompiledGenericTypeParameter)) {
+                        nestedType = nested.type();
+                    }
+                    return Result.success(new CompiledLambdaExpression(
+                            encodeTuplePipeArguments(argumentNames),
+                            nested,
+                            new CompiledFunctionType(tupleType, nestedType)
+                    ));
+                });
+    }
+
     private Optional<CompiledType> expectedReturnTypeForLambda(CompiledFunctionType expectedType, int argumentCount, boolean noArgsLambda) {
         if (noArgsLambda) {
             return expectedType.argumentType().equals(NOTHING)
@@ -3575,15 +3559,33 @@ public class CapybaraExpressionCompiler {
             && linkedNewList.values().isEmpty()) {
             return new CoercedArgument(new CompiledNewList(List.of(), new CompiledList(expectedList.elementType())), 1);
         }
+        if (expected instanceof CompiledList expectedList
+            && argument.type() instanceof CompiledList argumentList
+            && argumentList.elementType() == ANY
+            && expectedList.elementType() instanceof CompiledGenericTypeParameter) {
+            return new CoercedArgument(argument, 1);
+        }
         if (expected instanceof CompiledSet expectedSet
             && argument instanceof CompiledNewSet linkedNewSet
             && linkedNewSet.values().isEmpty()) {
             return new CoercedArgument(new CompiledNewSet(List.of(), new CompiledSet(expectedSet.elementType())), 1);
         }
+        if (expected instanceof CompiledSet expectedSet
+            && argument.type() instanceof CompiledSet argumentSet
+            && argumentSet.elementType() == ANY
+            && expectedSet.elementType() instanceof CompiledGenericTypeParameter) {
+            return new CoercedArgument(argument, 1);
+        }
         if (expected instanceof CompiledDict expectedDict
             && argument instanceof CompiledNewSet linkedNewSet
             && linkedNewSet.values().isEmpty()) {
             return new CoercedArgument(new CompiledNewDict(List.of(), new CompiledDict(expectedDict.valueType())), 1);
+        }
+        if (expected instanceof CompiledDict expectedDict
+            && argument.type() instanceof CompiledDict argumentDict
+            && argumentDict.valueType() == ANY
+            && expectedDict.valueType() instanceof CompiledGenericTypeParameter) {
+            return new CoercedArgument(argument, 1);
         }
         if (expected instanceof CompiledDict expectedDict
             && argument instanceof CompiledNewDict linkedNewDict
@@ -3917,19 +3919,25 @@ public class CapybaraExpressionCompiler {
             return true;
         }
         if (expected instanceof CompiledList expectedList && actual instanceof CompiledList actualList) {
-            if (actualList.elementType() == ANY && expectedList.elementType() != ANY) {
+            if (actualList.elementType() == ANY
+                && expectedList.elementType() != ANY
+                && !(expectedList.elementType() instanceof CompiledGenericTypeParameter)) {
                 return false;
             }
             return isTypeCompatible(actualList.elementType(), expectedList.elementType());
         }
         if (expected instanceof CompiledSet expectedSet && actual instanceof CompiledSet actualSet) {
-            if (actualSet.elementType() == ANY && expectedSet.elementType() != ANY) {
+            if (actualSet.elementType() == ANY
+                && expectedSet.elementType() != ANY
+                && !(expectedSet.elementType() instanceof CompiledGenericTypeParameter)) {
                 return false;
             }
             return isTypeCompatible(actualSet.elementType(), expectedSet.elementType());
         }
         if (expected instanceof CompiledDict expectedDict && actual instanceof CompiledDict actualDict) {
-            if (actualDict.valueType() == ANY && expectedDict.valueType() != ANY) {
+            if (actualDict.valueType() == ANY
+                && expectedDict.valueType() != ANY
+                && !(expectedDict.valueType() instanceof CompiledGenericTypeParameter)) {
                 return false;
             }
             return isTypeCompatible(actualDict.valueType(), expectedDict.valueType());
@@ -4209,97 +4217,150 @@ public class CapybaraExpressionCompiler {
         if (expression.operator() == InfixOperator.PIPE) {
             return linkExpression(expression.left(), scope)
                     .flatMap(left -> {
-                        if (left.type() instanceof GenericDataType) {
-                            var methodCall = resolveMethodInfixCall(
-                                    expression.operator().symbol(),
-                                    left,
-                                    expression.right(),
-                                    scope,
-                                    expression.position()
-                            );
-                            if (methodCall instanceof Result.Success<CompiledExpression> value) {
-                                return value;
-                            }
-                            if (methodCall instanceof Result.Error<CompiledExpression> error
-                                && !error.errors().isEmpty()) {
-                                return methodCall;
-                            }
+                        var methodCall = resolveMethodInfixCall(
+                                expression.operator().symbol(),
+                                left,
+                                expression.right(),
+                                scope,
+                                expression.position()
+                        );
+                        if (methodCall instanceof Result.Success<CompiledExpression> value) {
+                            return value;
                         }
-                        if (isPipeMapExpression(expression)) {
-                            return linkPipeExpression(expression, scope);
+                        if (methodCall instanceof Result.Error<CompiledExpression> error
+                            && !error.errors().isEmpty()) {
+                            return methodCall;
                         }
-                        return linkExpression(expression.right(), scope)
-                                .flatMap(right ->
-                                        getLinkedInfixExpression(left, expression.operator(), right, expression.position())
-                                                .map(linked -> (CompiledExpression) linked));
+                        if (!isPipeMapExpression(expression)) {
+                            return linkExpression(expression.right(), scope)
+                                    .flatMap(right ->
+                                            getLinkedInfixExpression(left, expression.operator(), right, expression.position())
+                                                    .map(linked -> (CompiledExpression) linked));
+                        }
+                        if (resolveSpecializedOptionType(left.type()).isPresent()) {
+                            return linkOptionPipeExpression(expression, scope, left, optionElementType(left));
+                        }
+                        return withPosition(
+                                Result.error("`|` operator is not defined for `" + left.type() + "`"),
+                                expression.position()
+                        );
                     });
         }
         if (expression.operator() == InfixOperator.PIPE_MINUS) {
-            return linkPipeFilterOutExpression(expression, scope);
+            return linkExpression(expression.left(), scope)
+                    .flatMap(left -> {
+                        var methodCall = resolveMethodInfixCall(
+                                expression.operator().symbol(),
+                                left,
+                                expression.right(),
+                                scope,
+                                expression.position()
+                        );
+                        if (methodCall instanceof Result.Success<CompiledExpression> value) {
+                            return value;
+                        }
+                        if (methodCall instanceof Result.Error<CompiledExpression> error
+                            && !error.errors().isEmpty()) {
+                            return methodCall;
+                        }
+                        if (resolveSpecializedOptionType(left.type()).isPresent()) {
+                            return linkPipeFilterOutExpression(expression, scope);
+                        }
+                        return withPosition(
+                                Result.error("`|-` operator is not defined for `" + left.type() + "`"),
+                                expression.position()
+                        );
+                    });
         }
         if (expression.operator() == InfixOperator.PIPE_FLATMAP) {
             return linkExpression(expression.left(), scope)
                     .flatMap(left -> {
-                        if (left.type() instanceof GenericDataType) {
-                            var methodCall = resolveMethodInfixCall(
-                                    expression.operator().symbol(),
-                                    left,
-                                    expression.right(),
-                                    scope,
-                                    expression.position()
-                            );
-                            if (methodCall instanceof Result.Success<CompiledExpression> value) {
-                                return value;
-                            }
-                            if (methodCall instanceof Result.Error<CompiledExpression> error
-                                && !error.errors().isEmpty()) {
-                                return methodCall;
-                            }
+                        var methodCall = resolveMethodInfixCall(
+                                expression.operator().symbol(),
+                                left,
+                                expression.right(),
+                                scope,
+                                expression.position()
+                        );
+                        if (methodCall instanceof Result.Success<CompiledExpression> value) {
+                            return value;
                         }
-                        return linkPipeFlatMapExpression(expression, scope);
+                        if (methodCall instanceof Result.Error<CompiledExpression> error
+                            && !error.errors().isEmpty()) {
+                            return methodCall;
+                        }
+                        return withPosition(
+                                Result.error("`|*` operator is not defined for `" + left.type() + "`"),
+                                expression.position()
+                        );
                     });
         }
         if (expression.operator() == InfixOperator.PIPE_REDUCE) {
+            var methodReduce = linkPipeReduceMethodExpression(expression, scope);
+            if (methodReduce.isPresent()) {
+                return methodReduce.orElseThrow();
+            }
             return linkExpression(expression.left(), scope)
                     .flatMap(left -> {
-                        if (left.type() instanceof GenericDataType) {
-                            var methodCall = resolveMethodInfixCall(
-                                    expression.operator().symbol(),
-                                    left,
-                                    expression.right(),
-                                    scope,
-                                    expression.position()
-                            );
-                            if (methodCall instanceof Result.Success<CompiledExpression> value) {
-                                return value;
-                            }
-                            if (methodCall instanceof Result.Error<CompiledExpression> error
-                                && !error.errors().isEmpty()) {
-                                return methodCall;
-                            }
+                        var methodCall = resolveMethodInfixCall(
+                                expression.operator().symbol(),
+                                left,
+                                expression.right(),
+                                scope,
+                                expression.position()
+                        );
+                        if (methodCall instanceof Result.Success<CompiledExpression> value) {
+                            return value;
                         }
-                        return linkPipeReduceExpression(expression, scope);
+                        if (methodCall instanceof Result.Error<CompiledExpression> error
+                            && !error.errors().isEmpty()) {
+                            return methodCall;
+                        }
+                        return withPosition(
+                                Result.error("`|>` operator is not defined for `" + left.type() + "`"),
+                                expression.position()
+                        );
                     });
-        }
-        if (expression.operator() == InfixOperator.PIPE_ANY) {
-            return linkPipeAnyAllExpression(expression, scope, true);
-        }
-        if (expression.operator() == InfixOperator.PIPE_ALL) {
-            return linkPipeAnyAllExpression(expression, scope, false);
         }
         return linkExpression(expression.left(), scope)
                 .flatMap(left ->
                         linkExpression(expression.right(), scope)
                                 .flatMap(right -> {
-                                    if (left.type() instanceof GenericDataType) {
-                                        var methodCall = resolveMethodInfixCall(expression.operator().symbol(), left, right, expression.position());
-                                        if (methodCall instanceof Result.Success<CompiledExpression> value) {
-                                            return value;
-                                        }
+                                    var methodCall = resolveMethodInfixCall(expression.operator().symbol(), left, right, expression.position());
+                                    if (methodCall instanceof Result.Success<CompiledExpression> value) {
+                                        return value;
+                                    }
+                                    if (methodCall instanceof Result.Error<CompiledExpression> error
+                                        && !error.errors().isEmpty()) {
+                                        return methodCall;
                                     }
                                     return getLinkedInfixExpression(left, expression.operator(), right, expression.position())
                                             .map(linked -> (CompiledExpression) linked);
                                 }));
+    }
+
+    private Optional<Result<CompiledExpression>> linkPipeReduceMethodExpression(InfixExpression expression, Scope scope) {
+        if (!(expression.right() instanceof ReduceExpression reduceExpression)) {
+            return Optional.empty();
+        }
+        if (methodsByNameAndArity(functionSignatures, expression.operator().symbol(), 3).isEmpty()) {
+            return Optional.empty();
+        }
+        var lambdaArguments = new java.util.ArrayList<String>();
+        lambdaArguments.add(reduceExpression.accumulatorName());
+        reduceExpression.keyName().ifPresent(lambdaArguments::add);
+        lambdaArguments.add(reduceExpression.valueName());
+        var methodCall = new FunctionCall(
+                Optional.empty(),
+                METHOD_INVOKE_PREFIX + expression.operator().symbol(),
+                List.of(
+                        expression.left(),
+                        reduceExpression.initialValue(),
+                        new LambdaExpression(lambdaArguments, reduceExpression.reducerExpression(), reduceExpression.position())
+                ),
+                expression.position()
+        );
+        return Optional.of(resolveMethodInvokeCall(methodCall, scope));
     }
 
     private InfixExpression normalizePipeAssociativity(InfixExpression expression) {
@@ -4432,9 +4493,7 @@ public class CapybaraExpressionCompiler {
         return operator == InfixOperator.PIPE
                || operator == InfixOperator.PIPE_MINUS
                || operator == InfixOperator.PIPE_FLATMAP
-               || operator == InfixOperator.PIPE_REDUCE
-               || operator == InfixOperator.PIPE_ANY
-               || operator == InfixOperator.PIPE_ALL;
+               || operator == InfixOperator.PIPE_REDUCE;
     }
 
     private Result<CompiledExpression> resolveMethodInfixCall(
@@ -5654,146 +5713,6 @@ public class CapybaraExpressionCompiler {
                 });
     }
 
-    private Result<CompiledExpression> linkPipeAnyAllExpression(
-            InfixExpression expression,
-            Scope scope,
-            boolean any
-    ) {
-        return linkExpression(expression.left(), scope)
-                .flatMap(left -> {
-                    if (left.type() instanceof CompiledDict dictType) {
-                        return linkDictPipeAnyAllExpression(expression, scope, left, dictType, any);
-                    }
-                    var elementType = switch (left.type()) {
-                        case CompiledList linkedList -> linkedList.elementType();
-                        case CompiledSet linkedSet -> linkedSet.elementType();
-                        case PrimitiveLinkedType primitive when primitive == STRING -> STRING;
-                        default -> null;
-                    };
-                    if (elementType == null) {
-                        return withPosition(
-                                Result.error("Left side of `" + expression.operator().symbol() + "` has to be a collection or string, was `" + left.type() + "`"),
-                                expression.left().position()
-                        );
-                    }
-                    if (!(expression.right() instanceof LambdaExpression lambdaExpression)) {
-                        if (expression.right() instanceof FunctionReference functionReference) {
-                            return resolvePipeFunctionReference(functionReference, elementType)
-                                    .flatMap(linked -> {
-                                        if (linked.expression().type() != BOOL) {
-                                            return withPosition(
-                                                    Result.error("Function reference in `" + expression.operator().symbol() + "` has to return `BOOL`, was `" + linked.expression().type() + "`"),
-                                                    functionReference.position()
-                                            );
-                                        }
-                                        return Result.success(
-                                                any
-                                                        ? (CompiledExpression) new CompiledPipeAnyExpression(left, linked.argumentName(), linked.expression(), BOOL)
-                                                        : (CompiledExpression) new CompiledPipeAllExpression(left, linked.argumentName(), linked.expression(), BOOL)
-                                        );
-                                    });
-                        }
-                        return withPosition(
-                                Result.error("Right side of `" + expression.operator().symbol() + "` has to be a lambda expression or function reference"),
-                                expression.right().position()
-                        );
-                    }
-                    return linkPipeLambdaArguments(scope, lambdaExpression, elementType, expression.operator().symbol())
-                            .flatMap(lambdaBinding -> linkExpression(lambdaExpression.expression(), lambdaBinding.scope())
-                            .flatMap(predicate -> {
-                                if (predicate.type() != BOOL) {
-                                    return withPosition(
-                                            Result.error("Lambda in `" + expression.operator().symbol() + "` has to return `BOOL`, was `" + predicate.type() + "`"),
-                                            lambdaExpression.position()
-                                    );
-                                }
-                                return Result.success(
-                                        any
-                                                ? (CompiledExpression) new CompiledPipeAnyExpression(left, lambdaBinding.argumentName(), predicate, BOOL)
-                                                : (CompiledExpression) new CompiledPipeAllExpression(left, lambdaBinding.argumentName(), predicate, BOOL)
-                                );
-                            }));
-                });
-    }
-
-    private Result<CompiledExpression> linkDictPipeAnyAllExpression(
-            InfixExpression expression,
-            Scope scope,
-            CompiledExpression left,
-            CompiledDict dictType,
-            boolean any
-    ) {
-        if (!(expression.right() instanceof LambdaExpression lambdaExpression)) {
-            if (expression.right() instanceof FunctionReference functionReference) {
-                return resolvePipeFunctionReference(functionReference, dictType.valueType())
-                        .flatMap(linked -> {
-                            if (linked.expression().type() != BOOL) {
-                                return withPosition(
-                                        Result.error("Function reference in `" + expression.operator().symbol() + "` has to return `BOOL`, was `" + linked.expression().type() + "`"),
-                                        functionReference.position()
-                                );
-                            }
-                            return Result.success(
-                                    any
-                                            ? (CompiledExpression) new CompiledPipeAnyExpression(left, linked.argumentName(), linked.expression(), BOOL)
-                                            : (CompiledExpression) new CompiledPipeAllExpression(left, linked.argumentName(), linked.expression(), BOOL)
-                            );
-                        });
-            }
-            return withPosition(
-                    Result.error("Right side of `" + expression.operator().symbol() + "` has to be a lambda expression or function reference"),
-                    expression.right().position()
-            );
-        }
-        var argumentNames = lambdaExpression.argumentNames();
-        if (argumentNames.size() == 1) {
-            var valueName = argumentNames.get(0);
-            var lambdaScope = addLambdaBinding(scope, valueName, dictType.valueType());
-            return linkExpression(lambdaExpression.expression(), lambdaScope)
-                    .flatMap(predicate -> {
-                        if (predicate.type() != BOOL) {
-                            return withPosition(
-                                    Result.error("Lambda in `" + expression.operator().symbol() + "` has to return `BOOL`, was `" + predicate.type() + "`"),
-                                    lambdaExpression.position()
-                            );
-                        }
-                        return Result.success(
-                                any
-                                        ? (CompiledExpression) new CompiledPipeAnyExpression(left, valueName, predicate, BOOL)
-                                        : (CompiledExpression) new CompiledPipeAllExpression(left, valueName, predicate, BOOL)
-                        );
-                    });
-        }
-        if (argumentNames.size() == 2) {
-            var keyName = argumentNames.get(0);
-            var valueName = argumentNames.get(1);
-            var lambdaScope = addLambdaBinding(
-                    addLambdaBinding(scope, keyName, STRING),
-                    valueName,
-                    dictType.valueType()
-            );
-            return linkExpression(lambdaExpression.expression(), lambdaScope)
-                    .flatMap(predicate -> {
-                        if (predicate.type() != BOOL) {
-                            return withPosition(
-                                    Result.error("Lambda in `" + expression.operator().symbol() + "` has to return `BOOL`, was `" + predicate.type() + "`"),
-                                    lambdaExpression.position()
-                            );
-                        }
-                        var encodedArgName = encodeDictPipeArguments(keyName, valueName);
-                        return Result.success(
-                                any
-                                        ? (CompiledExpression) new CompiledPipeAnyExpression(left, encodedArgName, predicate, BOOL)
-                                        : (CompiledExpression) new CompiledPipeAllExpression(left, encodedArgName, predicate, BOOL)
-                        );
-                    });
-        }
-        return withPosition(
-                Result.error("Right side lambda of `" + expression.operator().symbol() + "` for dict has to have one or two arguments"),
-                lambdaExpression.position()
-        );
-    }
-
     private Result<CompiledExpression> linkDictPipeFilterOutExpression(
             InfixExpression expression,
             Scope scope,
@@ -5946,7 +5865,7 @@ public class CapybaraExpressionCompiler {
             case AND, PIPE -> findLogicalType(left.type(), right.type());
             case QUESTION -> findQuestionType(left.type(), right.type());
             case TILDE, TILDE_TILDE, TILDE_GT, DIV_GT -> null;
-            case PIPE_MINUS, PIPE_FLATMAP, PIPE_REDUCE, PIPE_ANY, PIPE_ALL -> null;
+            case PIPE_MINUS, PIPE_FLATMAP, PIPE_REDUCE -> null;
         };
         if (type == null) {
             var op = operator.symbol();
@@ -6013,29 +5932,6 @@ public class CapybaraExpressionCompiler {
     }
 
     private CompiledType findPlusType(CompiledType left, CompiledType right) {
-        if (left instanceof CompiledList leftList) {
-            if (right instanceof CompiledList rightList) {
-                return new CompiledList(mergeCollectionElementType(leftList.elementType(), rightList.elementType()));
-            }
-            return new CompiledList(mergeCollectionElementType(leftList.elementType(), right));
-        }
-        if (left instanceof CompiledSet leftSet) {
-            if (right instanceof CompiledSet rightSet) {
-                return new CompiledSet(mergeCollectionElementType(leftSet.elementType(), rightSet.elementType()));
-            }
-            return new CompiledSet(mergeCollectionElementType(leftSet.elementType(), right));
-        }
-        if (left instanceof CompiledDict leftDict) {
-            if (right instanceof CompiledDict rightDict) {
-                return new CompiledDict(mergeCollectionElementType(leftDict.valueType(), rightDict.valueType()));
-            }
-            if (right instanceof CompiledTupleType tupleType
-                && tupleType.elementTypes().size() == 2
-                && tupleType.elementTypes().getFirst() == STRING) {
-                return new CompiledDict(mergeCollectionElementType(leftDict.valueType(), tupleType.elementTypes().get(1)));
-            }
-            return null;
-        }
         if (left == STRING && right != NOTHING) {
             return STRING;
         }
@@ -6049,27 +5945,6 @@ public class CapybaraExpressionCompiler {
     }
 
     private CompiledType findMinusType(CompiledType left, CompiledType right) {
-        if (left instanceof CompiledList leftList) {
-            if (right instanceof CompiledList rightList) {
-                return new CompiledList(mergeCollectionElementType(leftList.elementType(), rightList.elementType()));
-            }
-            return new CompiledList(mergeCollectionElementType(leftList.elementType(), right));
-        }
-        if (left instanceof CompiledSet leftSet) {
-            if (right instanceof CompiledSet rightSet) {
-                return new CompiledSet(mergeCollectionElementType(leftSet.elementType(), rightSet.elementType()));
-            }
-            return new CompiledSet(mergeCollectionElementType(leftSet.elementType(), right));
-        }
-        if (left instanceof CompiledDict leftDict) {
-            if (right instanceof CompiledDict rightDict) {
-                return new CompiledDict(mergeCollectionElementType(leftDict.valueType(), rightDict.valueType()));
-            }
-            if (right == STRING) {
-                return new CompiledDict(leftDict.valueType());
-            }
-            return null;
-        }
         if (left instanceof PrimitiveLinkedType leftPrimitive && right instanceof PrimitiveLinkedType rightPrimitive) {
             return findMathPrimitiveType(leftPrimitive, rightPrimitive);
         }
@@ -6276,26 +6151,6 @@ public class CapybaraExpressionCompiler {
     }
 
     private static CompiledType findQuestionType(CompiledType left, CompiledType right) {
-        if (left instanceof CompiledList leftList) {
-            if (right instanceof CompiledList) {
-                return null;
-            }
-            var elementType = findHigherType(leftList.elementType(), right);
-            return elementType == ANY ? null : BOOL;
-        }
-        if (left instanceof CompiledSet leftSet) {
-            if (right instanceof CompiledSet) {
-                return null;
-            }
-            var elementType = findHigherType(leftSet.elementType(), right);
-            return elementType == ANY ? null : BOOL;
-        }
-        if (left instanceof CompiledDict) {
-            return right == STRING ? BOOL : null;
-        }
-        if (left == STRING) {
-            return right == STRING ? BOOL : null;
-        }
         return null;
     }
 

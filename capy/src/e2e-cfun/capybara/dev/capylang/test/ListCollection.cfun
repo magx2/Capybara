@@ -16,6 +16,14 @@ fun remove_list(left: List[int], right: List[int]): List[int] = left - right
 
 fun contains(l: List[int], value: int): bool = l ? value
 
+fun any(l: List[int]): bool = l.any(value => value > 2)
+
+fun any_empty(l: List[int]): bool = l.any(value => value > 2)
+
+fun all(l: List[int]): bool = l.all(value => value > 0)
+
+fun all_empty(l: List[int]): bool = l.all(value => value > 0)
+
 fun is_empty(l: List[int]): bool = l.is_empty()
 
 data ListHolder { values: List[int] }

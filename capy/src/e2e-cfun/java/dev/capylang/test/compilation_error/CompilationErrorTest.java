@@ -607,6 +607,11 @@ public class CompilationErrorTest {
                         type Result[T] = Success[T] | Error
                         data Success[T] { value: T }
                         data Error { message: String }
+
+                        fun Result[T].`|`(map: T => Result[Y]): Result[Y] =
+                            match this with
+                            case Error e -> e
+                            case Success s -> map(s.value)
                         """),
                 new RawModule("Assert", "/capy/test", """
                         from /capy/lang/Result import { * }
@@ -632,7 +637,8 @@ public class CompilationErrorTest {
                         from /foo/model/Widget import { * }
 
                         fun broken(): ResultAssert[Widget] =
-                            assert_that(Success { value: Widget { size: 1 } } | widget => Success { value: widget.wrap() })
+                            let source: Result[Widget] = Success { value: Widget { size: 1 } }
+                            assert_that(source | widget => Success { value: widget.wrap() })
                                 .is_equal_to(Success { value: Widget { size: 2 } })
                         """)
         ), new java.util.TreeSet<>());
@@ -641,7 +647,7 @@ public class CompilationErrorTest {
         var errors = ((Result.Error<CompiledProgram>) result).errors();
         assertThat(errors).hasSize(1);
         assertThat(errors.first().message())
-                .contains("Expected `Widget`, got `Success[Widget]`");
+                .contains("Expected `Result[Widget]`, but got `Widget`");
     }
 
     @ParameterizedTest(name = "{index}: should fail when compiling `{0}.cfun`")
