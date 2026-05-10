@@ -5,6 +5,8 @@ from /capy/io/Path import {*}
 from /capy/io/IO import { * }
 from /capy/io/Console import { * }
 from /capy/lang/Seq import {*}
+from /capy/lang/String import { * }
+from /capy/lang/Collections import { * }
 from /capy/lang/Effect import { * }
 from /capy/date_time/Clock import { now }
 from /capy/date_time/DateTime import { * }
@@ -61,7 +63,7 @@ fun test(name: String, assert_supplier: () => Assert): Effect[TestCase] =
         let test_case = TestCase {
             name: name,
             result: result,
-            assertions_count: assert.assertions.size,
+            assertions_count: assert.assertions.size(),
             execution_time: (end - start) / 1000000000.0
         }
         let failed <- print_test_failed(log_type, test_case)
@@ -231,7 +233,7 @@ const OUTPUT_MANIFEST_FILE = '.capy-test-output-manifest'
 
 fun failure_summary(test_files: List[TestFile]): String =
     let failures = test_files |> '', (acc, test_file) => acc + failure_summary_file(test_file)
-    if failures.is_empty
+    if failures.is_empty()
     then ''
     else '\nFailures:\n\n' + failures
 
@@ -259,7 +261,7 @@ fun normalize_failure_message(message: String): String =
         .replace('\\t', '\t')
 
 private fun print_failure_summary(summary: String): Effect[String] =
-    if summary.is_empty
+    if summary.is_empty()
     then pure(summary)
     else print(summary)
 
@@ -346,13 +348,13 @@ fun team_city_escape(value: String): String =
     fun rec __team_city_escape(value: String, acc: String): String =
         match value[0] with
         case None -> acc
-        case Some { '\'' } -> __team_city_escape(value[1, value.size], acc + "|'")
-        case Some { '\n' } -> __team_city_escape(value[1, value.size], acc + '|n')
-        case Some { '\r' } -> __team_city_escape(value[1, value.size], acc + '|r')
-        case Some { '|' } -> __team_city_escape(value[1, value.size], acc + '||')
-        case Some { '[' } -> __team_city_escape(value[1, value.size], acc + '|[')
-        case Some { ']' } -> __team_city_escape(value[1, value.size], acc + '|]')
-        case Some { c } -> __team_city_escape(value[1, value.size], acc + c)
+        case Some { '\'' } -> __team_city_escape(value[1, value.length()], acc + "|'")
+        case Some { '\n' } -> __team_city_escape(value[1, value.length()], acc + '|n')
+        case Some { '\r' } -> __team_city_escape(value[1, value.length()], acc + '|r')
+        case Some { '|' } -> __team_city_escape(value[1, value.length()], acc + '||')
+        case Some { '[' } -> __team_city_escape(value[1, value.length()], acc + '|[')
+        case Some { ']' } -> __team_city_escape(value[1, value.length()], acc + '|]')
+        case Some { c } -> __team_city_escape(value[1, value.length()], acc + c)
     ---
     __team_city_escape(value, '')
 
@@ -448,15 +450,15 @@ private fun manifest_paths(content: String): List[Path] =
     fun rec lines(value: String, current: String, acc: List[String]): List[String] =
         match value[0] with
         case None ->
-            if current.is_empty
+            if current.is_empty()
             then acc
             else acc + current
-        case Some { '\r' } -> lines(value[1, value.size], current, acc)
+        case Some { '\r' } -> lines(value[1, value.length()], current, acc)
         case Some { '\n' } ->
-            if current.is_empty
-            then lines(value[1, value.size], '', acc)
-            else lines(value[1, value.size], '', acc + current)
-        case Some { c } -> lines(value[1, value.size], current + c, acc)
+            if current.is_empty()
+            then lines(value[1, value.length()], '', acc)
+            else lines(value[1, value.length()], '', acc + current)
+        case Some { c } -> lines(value[1, value.length()], current + c, acc)
     ---
     lines(content, '', []) | line => from_string(line)
 
@@ -519,7 +521,7 @@ private fun path_segments_to_string(segments: List[String]): String =
         match segments[0] with
         case None -> acc
         case Some { segment } ->
-            let next = if acc.is_empty then segment else acc + '/' + segment
+            let next = if acc.is_empty() then segment else acc + '/' + segment
             __path_segments_to_string(segments[1:], next)
     ---
     __path_segments_to_string(segments, '')
@@ -531,7 +533,7 @@ const JUNIT_PREFIX = 'TEST-'
 private fun junit_run_tests(test_files: List[TestFile]): List[TestOutput] = test_files | :junit_run_test
 
 private fun junit_run_test(test_file: TestFile): TestOutput =
-    let tests = test_file.test_cases.size
+    let tests = test_file.test_cases.size()
     let failures = test_file.test_cases | tc => tc.failed() |> 0, (acc, failed) => if failed then acc + 1 else acc
     let assertions = test_file.test_cases | tc => tc.assertions_count |> 0, (acc, count) => acc + count
     let suite_name = junit_escape_xml_attribute(test_file.file_name)
@@ -540,7 +542,7 @@ private fun junit_run_test(test_file: TestFile): TestOutput =
     + (test_file.test_cases | tc => junit_run_test_case(test_file.file_name, tc) |> '', (acc, tc) => acc + tc)
     + '</testsuite>'
     TestOutput {
-        path: from_string(JUNIT_PREFIX + test_file.file_name[1, test_file.file_name.size].replace('/', '.') + '.xml'),
+        path: from_string(JUNIT_PREFIX + test_file.file_name[1, test_file.file_name.length()].replace('/', '.') + '.xml'),
         content: content,
         failed: failures > 0
     }

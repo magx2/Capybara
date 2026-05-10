@@ -117,17 +117,17 @@ fun serialize(obj: JsonObject): String = stringify(obj)
 fun deserialize(json: String): Result[JsonObject] =
     _deserialize_json_object(json)
     | parse =>
-        if parse.parsing_string.size == 0
+        if parse.parsing_string.length() == 0
         then Success { value: parse.value }
         else Error { "Expected string to end, but still got `{parse.parsing_string}`" }
 
 data _Parse[T] { value: T, parsing_string: String }
-fun _Parse[T].pop(): Tuple[Option[String], _Parse[T]] = (this.parsing_string[0], _Parse { this.value, this.parsing_string[1, this.parsing_string.size] })
+fun _Parse[T].pop(): Tuple[Option[String], _Parse[T]] = (this.parsing_string[0], _Parse { this.value, this.parsing_string[1, this.parsing_string.length()] })
 
 fun rec _deserialize_json(json: String): Result[_Parse[Json]] =
     match json[0] with
     case None -> Error { "Expected JSON, but got end of string" }
-    case Some { first_char } when _is_white_space(first_char) -> _deserialize_json(_drop_white_space(json[1, json.size]))
+    case Some { first_char } when _is_white_space(first_char) -> _deserialize_json(_drop_white_space(json[1, json.length()]))
     case Some { first_char } ->
         match first_char with
         case '{' -> _deserialize_json_object(json)
@@ -144,7 +144,7 @@ fun _deserialize_json_array(json: String): Result[_Parse[JsonArray]] =
         case None -> Error { "Expected `,` or `]`, but got end of string!" }
         case Some { ']' } -> Success { parse.pop()[1] }
         case Some { ',' } -> {
-            let parse_json <- _deserialize_json(parse.parsing_string[1, parse.parsing_string.size])
+            let parse_json <- _deserialize_json(parse.parsing_string[1, parse.parsing_string.length()])
             __deserialize_json_array(_Parse {
                 value: parse.value + parse_json.value,
                 parsing_string: parse_json.parsing_string
@@ -153,9 +153,9 @@ fun _deserialize_json_array(json: String): Result[_Parse[JsonArray]] =
         case Some { v } ->  Error { "Expected `,` or `]`, but got `" + v + "`!" }
     ---
     if json.starts_with('[]')
-    then Success { _Parse { JsonArray { [] }, json[2, json.size] } }
+    then Success { _Parse { JsonArray { [] }, json[2, json.length()] } }
     else
-        _deserialize_json(json[1, json.size])
+        _deserialize_json(json[1, json.length()])
             | parse => __deserialize_json_array(_Parse {
                 value: JsonArray {[parse.value]},
                 parsing_string: parse.parsing_string
@@ -163,16 +163,16 @@ fun _deserialize_json_array(json: String): Result[_Parse[JsonArray]] =
 
 fun _deserialize_json_null(json: String): Result[_Parse[JsonNull]] =
     if json.starts_with('null')
-    then Success { _Parse { JsonNull {}, json[4, json.size] } }
+    then Success { _Parse { JsonNull {}, json[4, json.length()] } }
     else {
         let actual =
-            if json.size > 4
+            if json.length() > 4
             then json[0, 4]
-            else if json.size > 3
+            else if json.length() > 3
             then json[0, 3]
-            else if json.size > 2
+            else if json.length() > 2
             then json[0, 2]
-            else if json.size > 1
+            else if json.length() > 1
             then json[0, 1]
             else '<empty>'
         Error { "Expected `null`, but got `" + actual + "`!" }
@@ -180,20 +180,20 @@ fun _deserialize_json_null(json: String): Result[_Parse[JsonNull]] =
 
 fun _deserialize_json_bool(json: String): Result[_Parse[JsonBool]] =
     if json.starts_with('true')
-    then Success { _Parse { JsonBool {true}, json[4, json.size] } }
+    then Success { _Parse { JsonBool {true}, json[4, json.length()] } }
     else if json.starts_with('false')
-    then Success { _Parse { JsonBool {false}, json[5, json.size] } }
+    then Success { _Parse { JsonBool {false}, json[5, json.length()] } }
     else {
         let actual =
-            if json.size > 5
+            if json.length() > 5
             then json[0, 5]
-            else if json.size > 4
+            else if json.length() > 4
             then json[0, 4]
-            else if json.size > 3
+            else if json.length() > 3
             then json[0, 3]
-            else if json.size > 2
+            else if json.length() > 2
             then json[0, 2]
-            else if json.size > 1
+            else if json.length() > 1
             then json[0, 1]
             else '<empty>'
         Error { "Expected `true` or `false`, but got `" + actual + "`!" }
@@ -206,10 +206,10 @@ fun _deserialize_json_number(json: String): Result[_Parse[JsonNumber]] =
         case Some { first_char } ->
             match first_char with
             case '-' ->
-                if parse.value.is_empty | parse.value ? 'E' | parse.value ? 'e'
-                then __parse_number(_Parse { parse.value + first_char, parse.parsing_string[1, parse.parsing_string.size] })
+                if parse.value.is_empty() | parse.value ? 'E' | parse.value ? 'e'
+                then __parse_number(_Parse { parse.value + first_char, parse.parsing_string[1, parse.parsing_string.length()] })
                 else Error { 'Expected `[0-9]`, but got `-`' }
-            case '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '.', 'E', 'e', '+' -> __parse_number(_Parse { parse.value + first_char, parse.parsing_string[1, parse.parsing_string.size] })
+            case '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '.', 'E', 'e', '+' -> __parse_number(_Parse { parse.value + first_char, parse.parsing_string[1, parse.parsing_string.length()] })
             case '}', ']', ',' -> Success { parse }
             case _ v -> {
                 let no_white_space = _drop_white_space(parse.parsing_string)
@@ -244,7 +244,7 @@ fun _deserialize_json_object(json: String): Result[_Parse[JsonObject]] =
     match json[0] with
     case None -> Error { "message": "Expected JSON object, but got empty string!" }
     case Some { "{" } -> {
-        _deserialize_key_values(_drop_white_space(json[1, json.size]))
+        _deserialize_key_values(_drop_white_space(json[1, json.length()]))
         | parse  =>
             Success { _Parse {
                 value: JsonObject { parse.value },
@@ -257,7 +257,7 @@ fun _deserialize_key_values(json: String): Result[_Parse[Dict[Json]]] =
     fun rec __deserialize_key_values(json: String, acc: Dict[Json]): Result[_Parse[Dict[Json]]] =
         match json[0] with
         case None -> Error { "Expected `,` or `}`, but got empty string!" }
-        case Some { "}" } -> Success { _Parse { acc, json[1, json.size] } }
+        case Some { "}" } -> Success { _Parse { acc, json[1, json.length()] } }
         case Some { _ } ->
             match _deserialize_key_value(_drop_white_space(json)) with
             case Error e -> e
@@ -265,11 +265,11 @@ fun _deserialize_key_values(json: String): Result[_Parse[Dict[Json]]] =
                 let next = acc + { parse_key_value.value.key : parse_key_value.value.value }
                 match parse_key_value.parsing_string[0] with
                 case None -> Error { "Expected `,` or `}`, but got empty string!" }
-                case Some { "," } -> __deserialize_key_values(_drop_white_space(parse_key_value.parsing_string[1, parse_key_value.parsing_string.size]), next)
+                case Some { "," } -> __deserialize_key_values(_drop_white_space(parse_key_value.parsing_string[1, parse_key_value.parsing_string.length()]), next)
                 case Some { "}" } -> Success {
                     _Parse {
                         next,
-                        _drop_white_space(parse_key_value.parsing_string[1, parse_key_value.parsing_string.size])
+                        _drop_white_space(parse_key_value.parsing_string[1, parse_key_value.parsing_string.length()])
                     }
                 }
                 case Some { v } -> Error { "Expected `,` or `}`, but got `" + v + "`!" }
@@ -286,7 +286,7 @@ fun _deserialize_key_value(json: String): Result[_Parse[_KeyValue]] =
         match parse.parsing_string[0] with
         case None -> Error { "Expected `:`, but got end of string!" }
         case Some { ":" } -> {
-            _deserialize_json(_drop_white_space(parse.parsing_string[1, parse.parsing_string.size]))
+            _deserialize_json(_drop_white_space(parse.parsing_string[1, parse.parsing_string.length()]))
             | parse_json => Success {
                 _Parse {
                     _KeyValue { parse.value, parse_json.value },
@@ -320,28 +320,28 @@ fun _parse_string(json: String): Result[_Parse[String]] =
                     if v == 'u'
                     // support \uXXXX
                     // todo check if next chars are [0-9A-F]
-                    then __parse_string_until_quotation( _Parse { parse.value[0] + 'u' + parse.parsing_string[1, 5], parse.parsing_string[5, parse.parsing_string.size] }, false)
-                    else __parse_string_until_quotation( _Parse { parse.value[0] + v, parse.parsing_string[1, parse.parsing_string.size] }, false)
+                    then __parse_string_until_quotation( _Parse { parse.value[0] + 'u' + parse.parsing_string[1, 5], parse.parsing_string[5, parse.parsing_string.length()] }, false)
+                    else __parse_string_until_quotation( _Parse { parse.value[0] + v, parse.parsing_string[1, parse.parsing_string.length()] }, false)
                 else Error { message: "Expected one of " + (__escape_chars |> "", (a,b) => a + ", " + b) + " but got `" + v + "`" }
         else
             // no escape
             match parse.parsing_string[0] with
             case Some { v } -> {
                 match v with
-                case '\\' -> __parse_string_until_quotation(_Parse { parse.value + v, parse.parsing_string[1, parse.parsing_string.size] } , true)
-                case '"'  -> Success { _Parse { parse.value, _drop_white_space(parse.parsing_string[1, parse.parsing_string.size]) }} // quotation mark found, ending
-                case _    -> __parse_string_until_quotation(_Parse { parse.value + v, parse.parsing_string[1, parse.parsing_string.size] }, false) // quotation mark not found, parsing...
+                case '\\' -> __parse_string_until_quotation(_Parse { parse.value + v, parse.parsing_string[1, parse.parsing_string.length()] } , true)
+                case '"'  -> Success { _Parse { parse.value, _drop_white_space(parse.parsing_string[1, parse.parsing_string.length()]) }} // quotation mark found, ending
+                case _    -> __parse_string_until_quotation(_Parse { parse.value + v, parse.parsing_string[1, parse.parsing_string.length()] }, false) // quotation mark not found, parsing...
                 }
             case None -> Error { message: '"parse_string: Expected `"`, but got end of string."' }
     ---
     match json[0] with
-    case Some { '"' } -> __parse_string_until_quotation(_Parse { "", json[1, json.size] },  false)
+    case Some { '"' } -> __parse_string_until_quotation(_Parse { "", json[1, json.length()] },  false)
     case Some { v } -> Error { message: "parse_string: Expected `\"`, but got `" + v + "`." }
     case None -> Error { message: "parse_string: Expected JSON string, got end of string." }
 
 fun rec _drop_white_space(s: String): String =
     match s[0] with
-    case Some { c } when _is_white_space(c) -> _drop_white_space(s[1, s.size])
+    case Some { c } when _is_white_space(c) -> _drop_white_space(s[1, s.length()])
     case _ -> s
 
 fun _is_white_space(s: String): bool =
@@ -351,7 +351,7 @@ fun _is_white_space(s: String): bool =
         case None -> true
         case Some { c } ->
             if white_spaces ? c
-            then __is_white_space(s[1, s.size], white_spaces)
+            then __is_white_space(s[1, s.length()], white_spaces)
             else false
     ---
     __is_white_space(s, __white_spaces)

@@ -1,4 +1,5 @@
 from /capy/lang/Result import { * }
+from /capy/lang/String import { * }
 
 data ParseState { value: String, parsing_string: String }
 
@@ -10,7 +11,7 @@ fun parse_state(input: String): Result[ParseState] =
     Success { value: ParseState { value: input, parsing_string: "xyz" } }
 
 fun parse_and_add_rest_size(input: String): Result[long] =
-    parse_state(input) | parse => (parse.value.to_long() | number => Success { value: number + parse.parsing_string.size })
+    parse_state(input) | parse => (parse.value.to_long() | number => Success { value: number + parse.parsing_string.length() })
 
 fun map_untyped_result(): Result[String] =
     let result: Result = Success { "success_value" }

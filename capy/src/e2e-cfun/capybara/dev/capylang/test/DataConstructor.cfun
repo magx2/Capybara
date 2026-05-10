@@ -1,4 +1,5 @@
 from /capy/lang/Result import { * }
+from /capy/lang/String import { * }
 
 data OddInt { number: int } with constructor {
     if number % 2 == 1 then
@@ -26,14 +27,14 @@ fun validated_user_age_or_default(age: int): int =
     (User { age: age }).or_else(User! { age: 1 }).age
 
 type ValidatedName { name: String } with constructor {
-   if name.size == 0 then
+   if name.length() == 0 then
        Error { "Name was empty" }
    else
        Success { * { name: name } }
 } = NamedUser | NamedGuest
 
 data NamedUser { name: String, role: String } with constructor {
-    if role.size == 0 then
+    if role.length() == 0 then
         Error { "Role was empty" }
     else
         Success { * { name: name, role: role } }
@@ -42,14 +43,14 @@ data NamedUser { name: String, role: String } with constructor {
 data NamedGuest { name: String, badge: String }
 
 type ValidatedProfileName { name: String } with constructor {
-   if name.size == 0 then
+   if name.length() == 0 then
        Error { "Profile name was empty" }
    else
        Success { * { name: name } }
 } = Profile
 
 type ValidatedProfileRole { role: String } with constructor {
-   if role.size == 0 then
+   if role.length() == 0 then
        Error { "Profile role was empty" }
    else
        Success { * { role: role } }

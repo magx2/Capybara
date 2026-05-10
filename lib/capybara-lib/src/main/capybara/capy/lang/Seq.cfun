@@ -1,3 +1,5 @@
+from /capy/lang/Collections import { * }
+
 type Seq[T] = Cons[T] | End
 data Cons[T] { value: T, rest: () => Seq[T] }
 single End
@@ -82,7 +84,7 @@ fun to_seq(list: Dict[T]): Seq[Tuple[String, T]] =
 ///
 /// Important: calling this on an infinite sequence does not terminate.
 fun Seq[T].take_last(n: int): List[T] =
-    fun __add_to_list(max: int, list: List[T], value: T) = (if list.size >= max then list[1:] else list) + value
+    fun __add_to_list(max: int, list: List[T], value: T) = (if list.size() >= max then list[1:] else list) + value
     fun __take_last(seq: Seq[T], max: int, n: int, list: List[T]) =
         if n <= 0
         then list

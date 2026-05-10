@@ -3,10 +3,11 @@ from /capy/test/CapyTest import { * }
 from /capy/lang/Effect import { * }
 from /capy/lang/Option import { * }
 from /capy/lang/Result import { * }
+from /capy/lang/Collections import { * }
 
 fun reverse_ints(values: List[int]): List[int] =
     fun rev(left: List[int], acc: List[int]): List[int] =
-        if left.size == 0
+        if left.size() == 0
         then acc
         else
             match left[0] with
@@ -17,7 +18,7 @@ fun reverse_ints(values: List[int]): List[int] =
 
 fun duplicate_strings(values: List[String]): List[String] =
     fun dup(left: List[String], acc: List[String]): List[String] =
-        if left.size == 0
+        if left.size() == 0
         then acc
         else
             match left[0] with
@@ -36,24 +37,24 @@ data Box[T] { value: T }
 
 fun typed_empty_dict_then_append_json_box(name: String): int =
     let values: Dict[JsonBox] = {:}
-    (values + (name, JsonBox { value: "box:" + name })).size
+    (values + (name, JsonBox { value: "box:" + name })).size()
 
 fun reduce_dict_to_named_values_size(values: Dict[int]): int =
     let named_values = values |> [], (acc, name, value) => acc + NamedValue { name, value }
-    named_values.size
+    named_values.size()
 
 fun reduce_dict_to_parse_cases_size(values: Dict[int]): int =
     let parse_test_cases = values |> [], (acc, source, expected) => acc + ParseCase { source, expected }
-    parse_test_cases.size
+    parse_test_cases.size()
 
 fun reduce_dict_to_format_cases_size(values: Dict[int]): int =
     let format_test_cases = values |> [], (acc, expected, value) => acc + NamedValue { name: expected, value }
-    format_test_cases.size
+    format_test_cases.size()
 
 fun reduce_dict_to_two_lists_and_concat_sizes(values: Dict[int]): int =
     let parse_test_cases = values |> [], (acc, source, expected) => acc + NamedValue { name: "parse:" + source, value: expected }
     let format_test_cases = values |> [], (acc, expected, value) => acc + NamedValue { name: "format:" + expected, value }
-    (parse_test_cases + format_test_cases).size
+    (parse_test_cases + format_test_cases).size()
 
 fun reduce_list_to_success_values(values: List[int]): Result[List[int]] =
     values |> Success { [] }, (acc_result, item) => {
@@ -112,4 +113,4 @@ fun build_test_file_from_three_inferred_test_case_lists(): int =
     let parse_test_cases = ["1.2.3"] |> [], (acc, value) => acc + test("parse {value}", () => assert_that(value).is_equal_to(value))
     let to_string_test_cases = ["1.2.3"] |> [], (acc, value) => acc + test("stringify {value}", () => assert_that(value).is_equal_to(value))
     let failed_test_cases = ["1"] |> [], (acc, value) => acc + test("fail {value}", () => assert_that(value).is_equal_to(value))
-    test_file("/dev/capylang/test/EmptyLiteralInference.cfun", parse_test_cases + to_string_test_cases + failed_test_cases).unsafe_run().test_cases.size
+    test_file("/dev/capylang/test/EmptyLiteralInference.cfun", parse_test_cases + to_string_test_cases + failed_test_cases).unsafe_run().test_cases.size()

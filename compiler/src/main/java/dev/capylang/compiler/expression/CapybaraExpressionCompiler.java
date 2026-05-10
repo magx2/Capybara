@@ -484,25 +484,9 @@ public class CapybaraExpressionCompiler {
                             }
                         }
                     }
-                    if (source.type() instanceof CompiledList
-                        || source.type() instanceof CompiledSet
-                        || source.type() instanceof CompiledDict
-                        || source.type() == STRING) {
-                        if ("size".equals(fieldAccess.field())) {
-                            var javaField = source.type() == STRING ? "length" : "size";
-                            return Result.success(new CompiledFieldAccess(source, javaField, PrimitiveLinkedType.INT));
-                        }
-                        if ("is_empty".equals(fieldAccess.field())) {
-                            return Result.success(new CompiledFieldAccess(source, "isEmpty", PrimitiveLinkedType.BOOL));
-                        }
-                        return withPosition(
-                                Result.error("Field `" + fieldAccess.field() + "` not found in type `" + source.type() + "`"),
-                                fieldAccess.position()
-                        );
-                    }
                     if (!(source.type() instanceof GenericDataType dataType)) {
                         return withPosition(
-                                Result.error("Field access requires data type, was `" + source.type() + "`"),
+                                Result.error("Field access requires data type, was `" + displayType(source.type()) + "`"),
                                 fieldAccess.position()
                         );
                     }
@@ -520,6 +504,40 @@ public class CapybaraExpressionCompiler {
                                     fieldAccess.position()
                             ));
                 });
+    }
+
+    private static String displayType(CompiledType type) {
+        if (type instanceof CompiledList list) {
+            return "List[" + displayType(list.elementType()) + "]";
+        }
+        if (type instanceof CompiledSet set) {
+            return "Set[" + displayType(set.elementType()) + "]";
+        }
+        if (type instanceof CompiledDict dict) {
+            return "Dict[" + displayType(dict.valueType()) + "]";
+        }
+        if (type == STRING) {
+            return "String";
+        }
+        if (type == BOOL) {
+            return "bool";
+        }
+        if (type == INT) {
+            return "int";
+        }
+        if (type == LONG) {
+            return "long";
+        }
+        if (type == FLOAT) {
+            return "float";
+        }
+        if (type == DOUBLE) {
+            return "double";
+        }
+        if (type == BYTE) {
+            return "byte";
+        }
+        return type.name();
     }
 
     private CompiledType resolveFieldType(GenericDataType dataType, CompiledDataType.CompiledField field) {

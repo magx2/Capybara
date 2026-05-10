@@ -1,5 +1,6 @@
 from /capy/lang/Option import {*}
 from /capy/lang/String import { * }
+from /capy/lang/Collections import { * }
 
 enum PathRoot { RELATIVE, ABSOLUTE, HOME }
 
@@ -20,19 +21,19 @@ fun from_string(path_string: String): Path =
             if c == '/'
             then
                 if current == ""
-                then __segments(value[1, value.size], "", acc)
-                else __segments(value[1, value.size], "", acc + current)
+                then __segments(value[1, value.length()], "", acc)
+                else __segments(value[1, value.length()], "", acc + current)
             else
-                __segments(value[1, value.size], current + c, acc)
+                __segments(value[1, value.length()], current + c, acc)
     ---
     let value =
         if path_string.starts_with('/')
-        then path_string[1, path_string.size]
+        then path_string[1, path_string.length()]
         else if path_string.starts_with('~')
         then
             match path_string[1] with
-            case Some { '/' } -> path_string[2, path_string.size]
-            case _ -> path_string[1, path_string.size]
+            case Some { '/' } -> path_string[2, path_string.length()]
+            case _ -> path_string[1, path_string.length()]
         else path_string
     Path {
         root:
@@ -69,7 +70,7 @@ fun Path.name(): String =
         case HOME -> '~'
 
 fun Path.parent(): Option[Path] =
-    if this.segments.is_empty then None {}
+    if this.segments.is_empty() then None {}
     else Some {
         Path {
             root: this.root,
@@ -83,7 +84,7 @@ fun Path.is_absolute(): bool =
     case RELATIVE -> false
     case _ -> true
 
-fun Path.is_root(): bool = this.segments.size == 0
+fun Path.is_root(): bool = this.segments.size() == 0
 
 fun Path.normalize(): Path =
     fun rec __normalize_path(root: PathRoot, segments: List[String], acc: List[String]): List[String] =
@@ -95,7 +96,7 @@ fun Path.normalize(): Path =
             then __normalize_path(root, rest, acc)
             else if seg == ".."
             then
-                if acc.size > 0
+                if acc.size() > 0
                 then __normalize_path(root, rest, acc[:-1])
                 else
                     match root with

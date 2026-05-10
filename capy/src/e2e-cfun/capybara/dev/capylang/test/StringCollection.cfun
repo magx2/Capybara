@@ -13,17 +13,17 @@ fun trim_method(s: String): String = s.trim()
 
 fun replace_method(s: String, old: String, new: String): String = s.replace(old, new)
 
-fun is_empty_method(s: String): bool = s.is_empty
+fun is_empty_method(s: String): bool = s.is_empty()
 
 data BufferHolder { buffer: String }
 
-fun not_is_empty_method(s: String): bool = !s.is_empty
+fun not_is_empty_method(s: String): bool = !s.is_empty()
 
-fun not_nested_is_empty(holder: BufferHolder): bool = !holder.buffer.is_empty
+fun not_nested_is_empty(holder: BufferHolder): bool = !holder.buffer.is_empty()
 
-fun not_trimmed_is_empty(s: String): bool = !s.trim().is_empty
+fun not_trimmed_is_empty(s: String): bool = !s.trim().is_empty()
 
-fun size(s: String): int = s.size
+fun length(s: String): int = s.length()
 
 fun to_int_method(s: String): Result[int] = s.to_int()
 

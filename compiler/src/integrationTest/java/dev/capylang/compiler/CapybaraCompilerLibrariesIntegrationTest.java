@@ -68,6 +68,7 @@ class CapybaraCompilerLibrariesIntegrationTest {
 
         var consumerSource = """
                 from /capy/lang/Regex import { * }
+                from /capy/lang/Collections import { * }
                 fun matches_named(input: String): bool = regex/\\\\d+/.matches(input)
                 fun matches_alias(input: String): bool = regex/\\\\d+/ ? input
                 fun find_like(input: String): String = (regex/\\\\d+/ ~ input).group_value
@@ -82,7 +83,7 @@ class CapybaraCompilerLibrariesIntegrationTest {
                     match regex/\\\\d+/.find(input).group(0) with
                     case Some { group } -> group
                     case None -> ""
-                fun groups_count(input: String): int = regex/\\\\d+/.find(input).groups().size
+                fun groups_count(input: String): int = regex/\\\\d+/.find(input).groups().size()
                 """;
         var generated = new JavaGenerator().generate(compileProgram(List.of(new RawModule("RegexConsumer", "/foo/app", consumerSource)), libraries));
 
