@@ -252,13 +252,19 @@ def e2eCooTests = registerE2eTestTask(
 def jsTests = tasks.register('jsTests', NodeTask) {
     description = 'Runs JavaScript tests.'
     group = 'verification'
+    dependsOn ':capy:classes'
+    dependsOn ':compiler:classes'
     script.set(jsTestRunner)
     workingDir.set(layout.projectDirectory)
     args.set([jsTestSourcePath])
+    environment.put('CAPY_CLI_CLASSPATH', capyRuntimeClasspath.asPath)
     inputs.files(fileTree(jsTestSourcePath) {
         include '**/*.js'
     })
             .withPropertyName('jsTestSources')
+            .withPathSensitivity(PathSensitivity.RELATIVE)
+    inputs.files(capyRuntimeClasspath)
+            .withPropertyName('capyRuntimeClasspath')
             .withPathSensitivity(PathSensitivity.RELATIVE)
     shouldRunAfter test
 }
