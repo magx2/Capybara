@@ -613,7 +613,7 @@ public final class JavaScriptGenerator implements Generator {
             if (("_contains_native".equals(methodName) || "contains_native".equals(methodName))
                 && receiverType instanceof CollectionLinkedType.CompiledSet
                 && args.size() == 2) {
-                return Optional.of("(" + receiver + ").has(" + args.get(1) + ")");
+                return Optional.of("capy.contains(" + receiver + ", " + args.get(1) + ")");
             }
             return Optional.empty();
         }
@@ -920,7 +920,7 @@ public final class JavaScriptGenerator implements Generator {
                 return "(" + left + ").has(" + right + ")";
             }
             if (leftType instanceof CollectionLinkedType.CompiledSet) {
-                return "(" + left + ").has(" + right + ")";
+                return "capy.contains(" + left + ", " + right + ")";
             }
             if (leftType == PrimitiveLinkedType.STRING) {
                 return "String(" + left + ").includes(" + right + ")";

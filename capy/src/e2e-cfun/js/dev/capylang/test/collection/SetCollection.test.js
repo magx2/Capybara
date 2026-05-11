@@ -12,6 +12,9 @@ test('SetCollection', () => {
     assertCapyEqual(set.removeSet(new Set([1, 2, 3, 4]), new Set([2, 4])), new Set([1, 3]));
     assert.equal(set.contains(new Set([1, 2, 3]), 2), true);
     assert.equal(set.containsMethod(new Set([1, 2, 3]), 9), false);
+    assert.equal(set.containsStructuralDataOperator(new Set([new set.User({ name: 'Ada' })])), true);
+    assert.equal(set.containsStructuralDataMethod(new Set([new set.User({ name: 'Ada' })])), true);
+    assert.equal(set.containsStructuralTuple(new Set([[1, 'one']])), true);
     assert.equal(set.subsetNamed(new Set([1, 2]), new Set([1, 2, 3])), true);
     assert.equal(set.properSubsetSymbol(new Set([1, 2]), new Set([1, 2])), false);
     assert.equal(set.supersetNamed(new Set([1, 2, 3]), new Set([1, 2])), true);
