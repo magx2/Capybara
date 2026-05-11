@@ -39,6 +39,7 @@ public final class JavaScriptGenerator implements Generator {
     private static final String METHOD_DECL_PREFIX = "__method__";
     private static final Path RUNTIME_PATH = Path.of("dev", "capylang", "capybara.js");
     private static final java.util.regex.Pattern CONST_NAME_PATTERN = java.util.regex.Pattern.compile("^_?[A-Z_][A-Z0-9_]*$");
+    private static final java.util.regex.Pattern MODULE_VAR_PATTERN = java.util.regex.Pattern.compile("\\b__module_[A-Za-z0-9_]+\\b");
     private static final Set<String> JS_KEYWORDS = Set.of(
             "await", "break", "case", "catch", "class", "const", "continue", "debugger", "default",
             "delete", "do", "else", "enum", "export", "extends", "false", "finally", "for",
@@ -95,21 +96,6 @@ public final class JavaScriptGenerator implements Generator {
 
         private String render() {
             var body = new StringBuilder();
-            body.append("'use strict';\n\n");
-            body.append("const capy = require(")
-                    .append(jsString(relativeRequire(moduleInfo.relativePath(), RUNTIME_PATH)))
-                    .append(");\n");
-            for (var entry : requiredModules.entrySet()) {
-                body.append("const ")
-                        .append(moduleVar(entry.getKey()))
-                        .append(" = require(")
-                        .append(jsString(relativeRequire(moduleInfo.relativePath(), entry.getValue())))
-                        .append(");\n");
-            }
-            if (!requiredModules.isEmpty()) {
-                body.append('\n');
-            }
-
             for (var record : javaClass.records()) {
                 body.append(renderRecord(record)).append('\n');
             }
@@ -124,17 +110,44 @@ public final class JavaScriptGenerator implements Generator {
             }
             body.append(renderExports());
             body.append(renderProgramMain());
-            return body.toString();
+            requireReferencedModules(body.toString());
+
+            var output = new StringBuilder();
+            output.append("'use strict';\n\n");
+            output.append("const capy = require(")
+                    .append(jsString(relativeRequire(moduleInfo.relativePath(), RUNTIME_PATH)))
+                    .append(");\n");
+            for (var entry : requiredModules.entrySet()) {
+                output.append("const ")
+                        .append(moduleVar(entry.getKey()))
+                        .append(" = require(")
+                        .append(jsString(relativeRequire(moduleInfo.relativePath(), entry.getValue())))
+                        .append(");\n");
+            }
+            if (!requiredModules.isEmpty()) {
+                output.append('\n');
+            }
+            output.append(body);
+            return output.toString();
+        }
+
+        private void requireReferencedModules(String body) {
+            var matcher = MODULE_VAR_PATTERN.matcher(body);
+            while (matcher.find()) {
+                programContext.classNameForModuleVariable(matcher.group())
+                        .ifPresent(this::requireClassName);
+            }
         }
 
         private void requireClassName(String className) {
-            programContext.pathForClassName(className)
-                    .ifPresent(path -> requiredModules.putIfAbsent(className, path));
+            var resolvedClassName = programContext.resolveClassName(className).orElse(className);
+            programContext.pathForClassName(resolvedClassName)
+                    .ifPresent(path -> requiredModules.putIfAbsent(resolvedClassName, path));
         }
 
         private String renderRecord(JavaRecord record) {
             var code = new StringBuilder();
-            var name = record.name().toString();
+            var name = simpleTypeName(record.name().toString());
             code.append("class ").append(name).append(" {\n");
             code.append("    constructor(fields = {}) {\n");
             code.append("        this.__capybaraType = ").append(jsString(name)).append(";\n");
@@ -155,6 +168,17 @@ public final class JavaScriptGenerator implements Generator {
             }
             code.append("        });\n");
             code.append("    }\n");
+            code.append("    with_(...values) {\n");
+            code.append("        if (values.length === 1 && values[0] && typeof values[0] === 'object' && !Array.isArray(values[0])) {\n");
+            code.append("            return this.with(values[0]);\n");
+            code.append("        }\n");
+            code.append("        return new ").append(name).append("({\n");
+            for (int i = 0; i < record.fields().size(); i++) {
+                var field = record.fields().get(i);
+                code.append("            ").append(field.name()).append(": values[").append(i).append("],\n");
+            }
+            code.append("        });\n");
+            code.append("    }\n");
             code.append("    toString() {\n");
             code.append("        return capy.dataToString(this);\n");
             code.append("    }\n");
@@ -170,15 +194,42 @@ public final class JavaScriptGenerator implements Generator {
             for (var method : record.methods()) {
                 code.append(renderFunction(method, false));
             }
+            var recordMethodNames = record.methods().stream()
+                    .map(JavaMethod::name)
+                    .collect(java.util.stream.Collectors.toSet());
+            if (!recordMethodNames.contains("pipe")) {
+                code.append("    pipe(mapper) {\n");
+                code.append("        return capy.resultLikePipe(this, mapper);\n");
+                code.append("    }\n");
+            }
+            if (!recordMethodNames.contains("pipe_star")) {
+                code.append("    pipe_star(mapper) {\n");
+                code.append("        return capy.resultLikeFlatMap(this, mapper);\n");
+                code.append("    }\n");
+            }
             code.append("}\n");
+            for (var method : interfaceDefaultMethods(record)) {
+                if (!recordMethodNames.contains(method.name())) {
+                    code.insert(code.length() - 2, renderFunction(method, false));
+                }
+            }
             if (!record.isPrivate()) {
                 exportNames.add(name);
             }
             return code.toString();
         }
 
+        private List<JavaMethod> interfaceDefaultMethods(JavaRecord record) {
+            return record.implementInterfaces().stream()
+                    .map(javaType -> simpleTypeName(javaType.toString()))
+                    .flatMap(interfaceName -> javaClass.interfaces().stream()
+                            .filter(javaInterface -> simpleTypeName(javaInterface.name().toString()).equals(interfaceName))
+                            .flatMap(javaInterface -> javaInterface.defaultMethods().stream()))
+                    .toList();
+        }
+
         private String renderEnum(JavaEnum javaEnum) {
-            var enumName = javaEnum.name().toString();
+            var enumName = simpleTypeName(javaEnum.name().toString());
             var values = javaEnum.values().isEmpty() ? List.of("INSTANCE") : javaEnum.values();
             var code = new StringBuilder();
             if (values.size() == 1 && "INSTANCE".equals(values.getFirst())) {
@@ -186,23 +237,58 @@ public final class JavaScriptGenerator implements Generator {
                         .append(" = capy.enumValue(")
                         .append(jsString(enumName)).append(", ")
                         .append(jsString(enumName)).append(", ")
-                        .append(jsArray(programContext.parentTypes(enumName)))
+                        .append(jsArray(programContext.parentTypes(enumName))).append(", ")
+                        .append("0, [], ")
+                        .append(jsString(moduleInfo.packageName())).append(", ")
+                        .append(jsString(moduleInfo.packagePath()))
                         .append(");\n");
                 exportNames.add(enumName);
                 return code.toString();
             }
-            code.append("const ").append(enumName).append(" = Object.freeze({\n");
-            for (var value : values) {
-                code.append("    ").append(value).append(": capy.enumValue(")
+            code.append("const ").append(enumName).append(" = (() => {\n");
+            code.append("    const values = [\n");
+            for (var i = 0; i < values.size(); i++) {
+                var value = values.get(i);
+                var valueName = enumValueIdentifier(value);
+                var aliases = valueName.equals(value)
+                        ? List.<String>of()
+                        : List.of(valueName);
+                code.append("        capy.enumValue(")
                         .append(jsString(value)).append(", ")
                         .append(jsString(enumName)).append(", ")
-                        .append(jsArray(List.of(enumName))).append("),\n");
+                        .append(jsArray(programContext.parentTypes(valueName))).append(", ")
+                        .append(i).append(", ")
+                        .append(jsArray(aliases)).append(", ")
+                        .append(jsString(moduleInfo.packageName())).append(", ")
+                        .append(jsString(moduleInfo.packagePath())).append("),\n");
             }
-            code.append("});\n");
+            code.append("    ];\n");
+            code.append("    return Object.freeze({\n");
+            for (var i = 0; i < values.size(); i++) {
+                var value = values.get(i);
+                var valueName = enumValueIdentifier(value);
+                code.append("        ").append(valueName).append(": values[").append(i).append("],\n");
+            }
+            code.append("        values,\n");
+            code.append("        valuesSet: () => new Set(values),\n");
+            code.append("        parse: value => capy.parseEnum(value, values, ")
+                    .append(jsString(enumName))
+                    .append("),\n");
+            code.append("    });\n");
+            code.append("})();\n");
             exportNames.add(enumName);
             for (var value : values) {
-                code.append("const ").append(value).append(" = ").append(enumName).append(".").append(value).append(";\n");
-                exportNames.add(value);
+                var valueName = enumValueIdentifier(value);
+                code.append("const ").append(valueName).append(" = ").append(enumName).append(".").append(valueName).append(";\n");
+                var typeAlias = simpleTypeName(value);
+                if (!typeAlias.equals(valueName)) {
+                    code.append("const ").append(typeAlias).append(" = ").append(valueName).append(";\n");
+                }
+                var normalizedAlias = normalizeJsIdentifier(value);
+                if (!normalizedAlias.equals(valueName) && !normalizedAlias.equals(typeAlias)) {
+                    code.append("const ").append(normalizedAlias).append(" = ").append(valueName).append(";\n");
+                }
+                exportNames.add(valueName);
             }
             return code.toString();
         }
@@ -216,12 +302,17 @@ public final class JavaScriptGenerator implements Generator {
         }
 
         private String renderFunction(JavaMethod method, boolean topLevel) {
-            var name = method.name();
+            var name = topLevel
+                    ? programContext.emittedFunctionName(method.sourceName(), method.sourceParameterTypes())
+                    : method.name();
             var params = method.parameters().stream()
                     .map(JavaMethod.JavaFunctionParameter::generatedName)
                     .map(JavaScriptGenerator::normalizeJsIdentifier)
                     .toList();
             var scope = Scope.root();
+            if (!topLevel) {
+                scope = scope.bind("this", "this");
+            }
             for (var parameter : method.parameters()) {
                 scope = scope.bind(parameter.sourceName(), normalizeJsIdentifier(parameter.generatedName()));
             }
@@ -266,7 +357,7 @@ public final class JavaScriptGenerator implements Generator {
                    + "    const result = " + mainName + "(process.argv.slice(2));\n"
                    + "    const value = capy.isEffect(result) ? result.unsafe_run() : result;\n"
                    + "    if (value !== undefined && value !== null) {\n"
-                   + "        console.log(capy.toStringValue(value));\n"
+                   + "        capy.writeProgramResult(value);\n"
                    + "    }\n"
                    + "}\n";
         }
@@ -379,8 +470,26 @@ public final class JavaScriptGenerator implements Generator {
             if ("unsafe_run".equals(methodName)) {
                 return "(" + receiver + ").unsafe_run()";
             }
+            if (receiverType == PrimitiveLinkedType.ENUM && tailArgs.isEmpty()) {
+                if ("name".equals(methodName)) {
+                    return "(" + receiver + ").name";
+                }
+                if ("order".equals(methodName)) {
+                    return "(" + receiver + ").ordinal";
+                }
+            }
             if ("length".equals(methodName) && receiverType == PrimitiveLinkedType.STRING) {
                 return "(" + receiver + ").length";
+            }
+            if (("starts_with".equals(methodName) || "startsWith".equals(methodName))
+                && receiverType == PrimitiveLinkedType.STRING
+                && tailArgs.size() == 1) {
+                return "String(" + receiver + ").startsWith(" + tailArgs.getFirst() + ")";
+            }
+            if (("end_with".equals(methodName) || "endWith".equals(methodName))
+                && receiverType == PrimitiveLinkedType.STRING
+                && tailArgs.size() == 1) {
+                return "String(" + receiver + ").endsWith(" + tailArgs.getFirst() + ")";
             }
             if ("size".equals(methodName)) {
                 if (receiverType instanceof CollectionLinkedType.CompiledDict
@@ -402,10 +511,16 @@ public final class JavaScriptGenerator implements Generator {
                 && renderNativeCollectionMethod(functionCall, args, methodName).isPresent()) {
                 return renderNativeCollectionMethod(functionCall, args, methodName).orElseThrow();
             }
-            if (List.of("+", "plus").contains(methodName) && tailArgs.size() == 1) {
+            if (receiverType instanceof CollectionLinkedType.CompiledSet) {
+                var nativeSetMethod = renderNativeSetMethod(methodName, receiver, tailArgs);
+                if (nativeSetMethod.isPresent()) {
+                    return nativeSetMethod.orElseThrow();
+                }
+            }
+            if (List.of("+", "plus").contains(methodName) && tailArgs.size() == 1 && isNativePlusType(receiverType)) {
                 return renderCollectionPlus(receiverType, receiver, functionCall.arguments().get(1).type(), tailArgs.getFirst());
             }
-            if (List.of("-", "minus").contains(methodName) && tailArgs.size() == 1) {
+            if (List.of("-", "minus").contains(methodName) && tailArgs.size() == 1 && isNativeMinusType(receiverType)) {
                 return renderCollectionMinus(receiverType, receiver, functionCall.arguments().get(1).type(), tailArgs.getFirst());
             }
             if ("contains".equals(methodName) || "?".equals(methodName)) {
@@ -420,26 +535,58 @@ public final class JavaScriptGenerator implements Generator {
             if ("all".equals(methodName) && tailArgs.size() == 1) {
                 return "capy.all(" + receiver + ", " + tailArgs.getFirst() + ")";
             }
-            if ("map".equals(methodName) || "|".equals(methodName)) {
+            if (("map".equals(methodName) || "|".equals(methodName) || "pipe".equals(methodName)) && isCollectionType(receiverType)) {
                 return "capy.mapCollection(" + receiver + ", " + tailArgs.getFirst() + ")";
             }
-            if ("filter".equals(methodName) || "|-".equals(methodName)) {
+            if (("filter".equals(methodName) || "|-".equals(methodName) || "pipe_minus".equals(methodName)) && isCollectionType(receiverType)) {
                 return "capy.filterCollection(" + receiver + ", " + tailArgs.getFirst() + ")";
             }
-            if ("reject".equals(methodName)) {
+            if ("reject".equals(methodName) && isCollectionType(receiverType)) {
                 return "capy.rejectCollection(" + receiver + ", " + tailArgs.getFirst() + ")";
             }
-            if ("flat_map".equals(methodName) || "flatMap".equals(methodName) || "|*".equals(methodName)) {
+            if (("flat_map".equals(methodName) || "flatMap".equals(methodName) || "|*".equals(methodName) || "pipe_star".equals(methodName))
+                && isCollectionType(receiverType)) {
                 return "capy.flatMapCollection(" + receiver + ", " + tailArgs.getFirst() + ")";
             }
-            if ("reduce".equals(methodName) || "|>".equals(methodName)) {
+            if (("reduce".equals(methodName) || "|>".equals(methodName) || "pipe_greater".equals(methodName)) && tailArgs.size() >= 2 && isCollectionType(receiverType)) {
                 return "capy.reduceCollection(" + receiver + ", " + tailArgs.get(0) + ", " + tailArgs.get(1) + ")";
             }
-            if (methodName.startsWith("to_")) {
-                return renderConversion(methodName, receiver, functionCall.type());
+            if (isPrimitiveConversion(methodName)) {
+                return renderConversion(methodName, receiver, receiverType, functionCall.type());
             }
             var emittedName = emittedMethodName(functionCall);
             return "(" + receiver + ")." + emittedName + "(" + String.join(", ", tailArgs) + ")";
+        }
+
+        private Optional<String> renderNativeSetMethod(String methodName, String receiver, List<String> tailArgs) {
+            if (tailArgs.isEmpty() && List.of("power_set", "powerSet", "op2118", "℘").contains(methodName)) {
+                return Optional.of("capy.setPowerSet(" + receiver + ")");
+            }
+            if (tailArgs.size() != 1) {
+                return Optional.empty();
+            }
+            var other = tailArgs.getFirst();
+            return switch (methodName) {
+                case "is_subset_of", "isSubsetOf", "op2286", "⊆" ->
+                        Optional.of("capy.setIsSubsetOf(" + receiver + ", " + other + ")");
+                case "is_proper_subset_of", "isProperSubsetOf", "op2282", "⊂" ->
+                        Optional.of("capy.setIsProperSubsetOf(" + receiver + ", " + other + ")");
+                case "is_superset_of", "isSupersetOf", "op2287", "⊇" ->
+                        Optional.of("capy.setIsSupersetOf(" + receiver + ", " + other + ")");
+                case "is_proper_superset_of", "isProperSupersetOf", "op2283", "⊃" ->
+                        Optional.of("capy.setIsProperSupersetOf(" + receiver + ", " + other + ")");
+                case "union", "op222a", "∪" ->
+                        Optional.of("capy.setPlus(" + receiver + ", " + other + ")");
+                case "intersection", "op2229", "∩" ->
+                        Optional.of("capy.setIntersection(" + receiver + ", " + other + ")");
+                case "difference" ->
+                        Optional.of("capy.setMinus(" + receiver + ", " + other + ")");
+                case "symmetric_difference", "symmetricDifference", "op25b3", "△" ->
+                        Optional.of("capy.setSymmetricDifference(" + receiver + ", " + other + ")");
+                case "cartesian_product", "cartesianProduct", "opd7", "×" ->
+                        Optional.of("capy.setCartesianProduct(" + receiver + ", " + other + ")");
+                default -> Optional.empty();
+            };
         }
 
         private Optional<String> renderNativeCollectionMethod(CompiledFunctionCall functionCall, List<String> args, String methodName) {
@@ -450,10 +597,19 @@ public final class JavaScriptGenerator implements Generator {
                     if (receiverType instanceof CompiledTupleType) {
                         return Optional.of("capy.rawIndex(" + receiver + ", " + args.get(1) + ")");
                     }
-                    return Optional.of("capy.getIndex(" + receiver + ", " + args.get(1) + ")");
+                    if (receiverType instanceof CollectionLinkedType.CompiledList
+                        || receiverType instanceof CollectionLinkedType.CompiledDict
+                        || receiverType == PrimitiveLinkedType.STRING) {
+                        return Optional.of("capy.getIndex(" + receiver + ", " + args.get(1) + ")");
+                    }
+                    return Optional.empty();
                 }
                 if (args.size() == 3) {
-                    return Optional.of("capy.slice(" + receiver + ", " + args.get(1) + ", " + args.get(2) + ")");
+                    if (receiverType instanceof CollectionLinkedType.CompiledList
+                        || receiverType == PrimitiveLinkedType.STRING) {
+                        return Optional.of("capy.slice(" + receiver + ", " + args.get(1) + ", " + args.get(2) + ")");
+                    }
+                    return Optional.empty();
                 }
             }
             if (("_contains_native".equals(methodName) || "contains_native".equals(methodName))
@@ -488,8 +644,8 @@ public final class JavaScriptGenerator implements Generator {
                 case MOD -> "((" + left + ") % (" + right + "))";
                 case POWER -> "Math.pow(" + left + ", " + right + ")";
                 case GT, LT, LE, GE -> "((" + left + ") " + expression.operator().symbol() + " (" + right + "))";
-                case EQUAL -> "capy.equals(" + left + ", " + right + ")";
-                case NOTEQUAL -> "(!capy.equals(" + left + ", " + right + "))";
+                case EQUAL -> renderEquality(expression.left().type(), left, expression.right().type(), right, false);
+                case NOTEQUAL -> renderEquality(expression.left().type(), left, expression.right().type(), right, true);
                 case AND -> "((" + renderBoolean(expression.left(), scope) + ") && (" + renderBoolean(expression.right(), scope) + "))";
                 case PIPE -> "((" + renderBoolean(expression.left(), scope) + ") || (" + renderBoolean(expression.right(), scope) + "))";
                 case QUESTION -> renderContains(expression.left().type(), left, right);
@@ -500,6 +656,15 @@ public final class JavaScriptGenerator implements Generator {
                 case BITWISE_NOT -> "(~(" + left + "))";
                 default -> throw new UnsupportedOperationException("Unsupported JS infix operator: " + expression.operator());
             };
+        }
+
+        private String renderEquality(CompiledType leftType, String left, CompiledType rightType, String right, boolean negated) {
+            var equality = (leftType == PrimitiveLinkedType.BOOL && rightType != PrimitiveLinkedType.BOOL)
+                    ? "(" + left + " === capy.truthy(" + right + "))"
+                    : (rightType == PrimitiveLinkedType.BOOL && leftType != PrimitiveLinkedType.BOOL)
+                            ? "(capy.truthy(" + left + ") === " + right + ")"
+                            : "capy.equals(" + left + ", " + right + ")";
+            return negated ? "(!" + equality + ")" : equality;
         }
 
         private String renderLet(CompiledLetExpression letExpression, Scope scope) {
@@ -583,7 +748,7 @@ public final class JavaScriptGenerator implements Generator {
                 case CompiledMatchExpression.FloatPattern floatPattern ->
                         new RenderedPattern("capy.equals(" + value + ", " + stripNumericSuffix(floatPattern.value()) + ")", List.of(), scope);
                 case CompiledMatchExpression.StringPattern stringPattern ->
-                        new RenderedPattern("capy.equals(" + value + ", " + jsString(stringPattern.value()) + ")", List.of(), scope);
+                        new RenderedPattern("capy.equals(" + value + ", " + stringPattern.value() + ")", List.of(), scope);
                 case CompiledMatchExpression.BoolPattern boolPattern ->
                         new RenderedPattern("capy.equals(" + value + ", " + boolPattern.value() + ")", List.of(), scope);
                 case CompiledMatchExpression.WildcardPattern ignored ->
@@ -591,7 +756,7 @@ public final class JavaScriptGenerator implements Generator {
                 case CompiledMatchExpression.VariablePattern variablePattern -> {
                     if (isTypeLikeIdentifier(variablePattern.name())) {
                         yield new RenderedPattern(
-                                "capy.isType(" + value + ", " + jsString(simpleTypeName(variablePattern.name())) + ")",
+                                "capy.isType(" + value + ", " + jsString(typeNameReference(variablePattern.name())) + ")",
                                 List.of(),
                                 scope
                         );
@@ -602,7 +767,7 @@ public final class JavaScriptGenerator implements Generator {
                 case CompiledMatchExpression.TypedPattern typedPattern -> {
                     var bound = bindPatternValue(value, typedPattern.name(), scope);
                     yield new RenderedPattern(
-                            "capy.isType(" + value + ", " + jsString(simpleTypeName(typedPattern.type().name())) + ")",
+                            "capy.isType(" + value + ", " + jsString(typeNameReference(typedPattern.type().name())) + ")",
                             bound.bindings(),
                             bound.scope()
                     );
@@ -613,7 +778,7 @@ public final class JavaScriptGenerator implements Generator {
         }
 
         private RenderedPattern renderConstructorPattern(String value, CompiledMatchExpression.ConstructorPattern pattern, Scope scope) {
-            var constructorName = simpleTypeName(pattern.constructorName());
+            var constructorName = typeNameReference(pattern.constructorName());
             var fields = programContext.fieldsForType(constructorName);
             var condition = new StringBuilder("capy.isType(")
                     .append(value)
@@ -631,6 +796,10 @@ public final class JavaScriptGenerator implements Generator {
                 current = rendered.scope();
             }
             return new RenderedPattern(condition.toString(), bindings, current);
+        }
+
+        private String typeNameReference(String typeName) {
+            return programContext.emittedTypeName(moduleInfo.className(), typeName);
         }
 
         private RenderedPattern bindPatternValue(String value, String sourceName, Scope scope) {
@@ -720,6 +889,34 @@ public final class JavaScriptGenerator implements Generator {
             return "(" + receiver + ").length";
         }
 
+        private boolean isCollectionType(CompiledType type) {
+            return type instanceof CollectionLinkedType.CompiledList
+                   || type instanceof CollectionLinkedType.CompiledSet
+                   || type instanceof CollectionLinkedType.CompiledDict
+                   || type == PrimitiveLinkedType.STRING;
+        }
+
+        private boolean isNativePlusType(CompiledType type) {
+            return isCollectionType(type)
+                   || type == PrimitiveLinkedType.STRING
+                   || type == PrimitiveLinkedType.INT
+                   || type == PrimitiveLinkedType.LONG
+                   || type == PrimitiveLinkedType.FLOAT
+                   || type == PrimitiveLinkedType.DOUBLE;
+        }
+
+        private boolean isNativeMinusType(CompiledType type) {
+            return isCollectionType(type)
+                   || type == PrimitiveLinkedType.INT
+                   || type == PrimitiveLinkedType.LONG
+                   || type == PrimitiveLinkedType.FLOAT
+                   || type == PrimitiveLinkedType.DOUBLE;
+        }
+
+        private boolean isPrimitiveConversion(String methodName) {
+            return List.of("to_int", "to_long", "to_double", "to_float", "to_bool").contains(methodName);
+        }
+
         private String renderContains(CompiledType leftType, String left, String right) {
             if (leftType instanceof CollectionLinkedType.CompiledDict) {
                 return "(" + left + ").has(" + right + ")";
@@ -774,14 +971,16 @@ public final class JavaScriptGenerator implements Generator {
             return "((" + left + ") - (" + right + "))";
         }
 
-        private String renderConversion(String methodName, String receiver, CompiledType returnType) {
+        private String renderConversion(String methodName, String receiver, CompiledType receiverType, CompiledType returnType) {
             return switch (methodName) {
                 case "to_int" -> returnType instanceof GenericDataType
                         ? "capy.parseIntResult(" + receiver + ")"
-                        : "Math.trunc(" + receiver + ")";
+                        : receiverType == PrimitiveLinkedType.LONG
+                                ? "capy.longToInt(" + receiver + ")"
+                                : "capy.floatToInt(" + receiver + ")";
                 case "to_long" -> returnType instanceof GenericDataType
                         ? "capy.parseLongResult(" + receiver + ")"
-                        : "Math.trunc(" + receiver + ")";
+                        : "capy.floatToLong(" + receiver + ")";
                 case "to_double", "to_float" -> returnType instanceof GenericDataType
                         ? "capy.parseFloatResult(" + receiver + ")"
                         : "Number(" + receiver + ")";
@@ -800,6 +999,10 @@ public final class JavaScriptGenerator implements Generator {
                 if (isCurrentClassReference(className)) {
                     return emittedName;
                 }
+                var localTypeName = simpleTypeName(className);
+                if (programContext.localTypeNames(moduleInfo.className()).contains(localTypeName)) {
+                    return localTypeName + "." + emittedName;
+                }
                 var resolvedClassName = programContext.resolveClassName(className).orElse(className);
                 require(resolvedClassName);
                 return moduleVar(resolvedClassName) + "." + emittedName;
@@ -807,7 +1010,7 @@ public final class JavaScriptGenerator implements Generator {
             var owner = programContext.importedMemberOwner(moduleInfo.className(), emittedName)
                     .or(() -> programContext.importedMemberOwner(moduleInfo.className(), simpleMethodName(functionCall.name())));
             if (owner.isPresent()) {
-                var className = owner.orElseThrow();
+                var className = programContext.resolveClassName(owner.orElseThrow()).orElse(owner.orElseThrow());
                 require(className);
                 return moduleVar(className) + "." + emittedName;
             }
@@ -815,11 +1018,12 @@ public final class JavaScriptGenerator implements Generator {
         }
 
         private void require(String className) {
-            if (className.equals(moduleInfo.className())) {
+            var resolvedClassName = programContext.resolveClassName(className).orElse(className);
+            if (resolvedClassName.equals(moduleInfo.className())) {
                 return;
             }
-            programContext.pathForClassName(className)
-                    .ifPresent(path -> requiredModules.putIfAbsent(className, path));
+            programContext.pathForClassName(resolvedClassName)
+                    .ifPresent(path -> requiredModules.putIfAbsent(resolvedClassName, path));
         }
 
         private boolean isCurrentClassReference(String className) {
@@ -836,11 +1040,40 @@ public final class JavaScriptGenerator implements Generator {
             }
             var owner = programContext.importedMemberOwner(moduleInfo.className(), typeName);
             if (owner.isPresent()) {
-                var className = owner.orElseThrow();
+                var className = programContext.resolveClassName(owner.orElseThrow()).orElse(owner.orElseThrow());
+                require(className);
+                return moduleVar(className) + "." + typeName;
+            }
+            var nestedOwner = ownerClassNameForNestedType(dataType.name());
+            if (nestedOwner.isPresent()) {
+                var className = nestedOwner.orElseThrow();
+                require(className);
+                return moduleVar(className) + "." + typeName;
+            }
+            var exportedOwner = programContext.exportedMemberOwner(typeName);
+            if (exportedOwner.isPresent()) {
+                var className = exportedOwner.orElseThrow();
                 require(className);
                 return moduleVar(className) + "." + typeName;
             }
             return typeName;
+        }
+
+        private Optional<String> ownerClassNameForNestedType(String typeName) {
+            var stripped = typeName;
+            var generic = stripped.indexOf('[');
+            if (generic >= 0) {
+                stripped = stripped.substring(0, generic);
+            }
+            var normalized = stripped.replace('\\', '.').replace('/', '.');
+            while (normalized.startsWith(".")) {
+                normalized = normalized.substring(1);
+            }
+            var idx = normalized.lastIndexOf('.');
+            if (idx < 0) {
+                return Optional.empty();
+            }
+            return programContext.resolveClassName(normalized.substring(0, idx));
         }
 
         private String emittedMethodName(CompiledFunctionCall functionCall) {
@@ -930,28 +1163,32 @@ public final class JavaScriptGenerator implements Generator {
                 var moduleExports = new LinkedHashSet<String>();
                 var moduleTypes = new LinkedHashSet<String>();
                 for (var record : module.javaClass().records()) {
-                    var name = record.name().toString();
+                    var name = simpleTypeName(record.name().toString());
                     moduleTypes.add(name);
                     fields.put(name, record.fields().stream().map(JavaRecord.JavaRecordField::name).toList());
                     if (!record.isPrivate()) {
                         moduleExports.add(name);
                     }
                     for (var iface : record.implementInterfaces()) {
-                        parentTypes.computeIfAbsent(name, ignored -> new ArrayList<>()).add(iface.toString());
+                        parentTypes.computeIfAbsent(name, ignored -> new ArrayList<>()).add(simpleTypeName(iface.toString()));
                     }
                 }
                 for (var javaEnum : module.javaClass().enums()) {
-                    var name = javaEnum.name().toString();
+                    var name = simpleTypeName(javaEnum.name().toString());
                     moduleTypes.add(name);
                     moduleExports.add(name);
                     if (javaEnum.values().isEmpty()) {
                         fields.putIfAbsent(name, List.of());
                     }
+                    for (var iface : javaEnum.implementInterfaces()) {
+                        parentTypes.computeIfAbsent(name, ignored -> new ArrayList<>()).add(simpleTypeName(iface.toString()));
+                    }
                     for (var value : javaEnum.values()) {
-                        moduleTypes.add(value);
-                        moduleExports.add(value);
-                        fields.putIfAbsent(value, List.of());
-                        parentTypes.computeIfAbsent(value, ignored -> new ArrayList<>()).add(name);
+                        var valueName = enumValueIdentifier(value);
+                        moduleTypes.add(valueName);
+                        moduleExports.add(valueName);
+                        fields.putIfAbsent(valueName, List.of());
+                        parentTypes.computeIfAbsent(valueName, ignored -> new ArrayList<>()).add(name);
                     }
                 }
                 module.javaClass().staticConsts().stream()
@@ -975,12 +1212,16 @@ public final class JavaScriptGenerator implements Generator {
                         continue;
                     }
                     var className = staticImport.substring(0, idx);
+                    var resolvedClassName = classNameCandidates(className).stream()
+                            .filter(exports::containsKey)
+                            .findFirst()
+                            .orElse(className);
                     var memberName = staticImport.substring(idx + 1);
                     if ("*".equals(memberName)) {
-                        exports.getOrDefault(className, Set.of()).forEach(member -> imported.putIfAbsent(member, className));
+                        exports.getOrDefault(resolvedClassName, Set.of()).forEach(member -> imported.putIfAbsent(member, resolvedClassName));
                     } else {
-                        imported.putIfAbsent(memberName, className);
-                        imported.putIfAbsent(normalizeJsIdentifier(memberName), className);
+                        imported.putIfAbsent(memberName, resolvedClassName);
+                        imported.putIfAbsent(normalizeJsIdentifier(memberName), resolvedClassName);
                     }
                 }
                 importedOwners.put(module.className(), Map.copyOf(imported));
@@ -1011,16 +1252,60 @@ public final class JavaScriptGenerator implements Generator {
             return Optional.ofNullable(importedOwnersByClassName.getOrDefault(className, Map.of()).get(memberName));
         }
 
+        Optional<String> classNameForModuleVariable(String moduleVariable) {
+            return pathsByClassName.keySet().stream()
+                    .filter(className -> moduleVar(className).equals(moduleVariable))
+                    .findFirst();
+        }
+
+        Optional<String> exportedMemberOwner(String memberName) {
+            var normalized = normalizeJsIdentifier(memberName);
+            return exportsByClassName.entrySet().stream()
+                    .filter(entry -> entry.getValue().contains(memberName) || entry.getValue().contains(normalized))
+                    .map(Map.Entry::getKey)
+                    .findFirst();
+        }
+
         Set<String> localTypeNames(String className) {
             return localTypesByClassName.getOrDefault(className, Set.of());
         }
 
         List<String> fieldsForType(String typeName) {
+            var direct = fieldsByType.get(typeName);
+            if (direct != null) {
+                return direct;
+            }
             return fieldsByType.getOrDefault(simpleTypeName(typeName), List.of());
         }
 
         List<String> parentTypes(String typeName) {
+            var direct = parentTypesByType.get(typeName);
+            if (direct != null) {
+                return direct;
+            }
             return parentTypesByType.getOrDefault(simpleTypeName(typeName), List.of());
+        }
+
+        String emittedTypeName(String className, String typeName) {
+            var raw = rawSimpleTypeName(typeName);
+            var candidates = List.of(raw, enumValueIdentifier(raw), simpleTypeName(typeName));
+            var localTypes = localTypeNames(className);
+            for (var candidate : candidates) {
+                if (localTypes.contains(candidate)) {
+                    return candidate;
+                }
+            }
+            for (var candidate : candidates) {
+                if (importedMemberOwner(className, candidate).isPresent()) {
+                    return candidate;
+                }
+            }
+            for (var candidate : candidates) {
+                if (exportedMemberOwner(candidate).isPresent()) {
+                    return candidate;
+                }
+            }
+            return simpleTypeName(typeName);
         }
 
         String emittedFunctionName(String name, List<CompiledType> parameterTypes) {
@@ -1030,6 +1315,9 @@ public final class JavaScriptGenerator implements Generator {
             }
             var parameterSignature = parameterTypes.stream().map(String::valueOf).collect(joining(","));
             var simple = simpleMethodName(name);
+            if (simple.contains("__") && isValidJsIdentifier(simple)) {
+                return simple;
+            }
             var overrideBySimpleName = findOverrideBySimpleName(functionNameOverrides, name, parameterSignature);
             return overrideBySimpleName.orElseGet(() -> normalizeJsIdentifier(simple));
         }
@@ -1039,13 +1327,31 @@ public final class JavaScriptGenerator implements Generator {
             exports.put("capy.lang.Option", Set.of("Some", "None"));
             exports.put("capy.lang.Result", Set.of("Success", "Error"));
             exports.put("capy.lang.Effect", Set.of("pure", "delay"));
+            exports.put("capy.lang.Program", Set.of("Success", "Failed"));
             exports.put("capy.lang.Primitives", Set.of("to_int", "to_long", "to_double", "to_float", "to_bool"));
-            exports.put("capy.lang.String", Set.of("length", "get", "replace", "is_empty", "plus", "contains", "trim"));
+            exports.put("capy.lang.String", Set.of("length", "get", "replace", "is_empty", "plus", "contains", "starts_with", "end_with", "trim"));
+            exports.put("capy.lang.RegexModule", Set.of("fromLiteral"));
+            exports.put("capy.lang.Seq", Set.of("to_seq", "toSeq"));
+            exports.put("capy.lang.System", Set.of("current_millis", "currentMillis", "nano_time", "nanoTime"));
+            exports.put("capy.lang.Math", Set.of("digits", "floor_div", "floorDiv", "floor_mod", "floorMod", "min", "max"));
             exports.put("capy.collection.List", Set.of("size", "get", "is_empty", "plus", "minus", "contains", "any", "all", "map", "filter", "reject", "flat_map", "flatMap", "reduce"));
             exports.put("capy.collection.Set", Set.of("size", "to_list", "is_empty", "plus", "minus", "contains", "any", "all", "map", "filter", "reject", "flat_map", "flatMap", "reduce"));
             exports.put("capy.collection.Dict", Set.of("size", "entries", "get", "is_empty", "plus", "minus", "contains_key", "any", "all", "map", "filter", "reject", "reduce"));
             exports.put("capy.collection.Tuple", Set.of("get"));
-            exports.put("capy.io.Console", Set.of("print", "println", "print_error", "println_error", "read_line"));
+            exports.put("capy.io.Console", Set.of("print", "println", "print_error", "printError", "println_error", "printlnError", "read_line", "readLine"));
+            exports.put("capy.io.IO", Set.of("read_text", "readText", "read_lines", "readLines", "read_bytes", "readBytes",
+                    "write_text", "writeText", "write_lines", "writeLines", "write_bytes", "writeBytes",
+                    "append_text", "appendText", "append_lines", "appendLines", "append_bytes", "appendBytes",
+                    "exists", "is_file", "isFile", "is_directory", "isDirectory", "size", "create_file", "createFile",
+                    "create_directory", "createDirectory", "create_directories", "createDirectories", "list_entries",
+                    "listEntries", "delete", "delete_", "copy", "copy_replace", "copyReplace", "move", "move_replace", "moveReplace"));
+            exports.put("capy.date_time.DateModule", Set.of("Date", "uNIXDATE", "UNIX_DATE", "fromDaysSinceUnixEpoch", "from_days_since_unix_epoch"));
+            exports.put("capy.date_time.TimeModule", Set.of("Time", "mIDNIGHT", "MIDNIGHT"));
+            exports.put("capy.date_time.DurationModule", Set.of("DateDuration", "WeekDuration", "zERO", "ZERO"));
+            exports.put("capy.date_time.DateTimeModule", Set.of("DateTime", "uNIXEPOCH", "UNIX_EPOCH"));
+            exports.put("capy.date_time.Clock", Set.of("now"));
+            exports.put("capy.test.Assert", Set.of("assert_that", "assertThat"));
+            exports.put("capy.test.CapyTest", Set.of("test", "test_file", "testFile"));
             return exports;
         }
 
@@ -1069,13 +1375,26 @@ public final class JavaScriptGenerator implements Generator {
                     new GeneratedModule(Path.of("capy", "lang", "Option.js"), runtimeForwarder("../../dev/capylang/capybara.js", "Some", "None")),
                     new GeneratedModule(Path.of("capy", "lang", "Result.js"), runtimeForwarder("../../dev/capylang/capybara.js", "Success", "Error")),
                     new GeneratedModule(Path.of("capy", "lang", "Effect.js"), runtimeForwarder("../../dev/capylang/capybara.js", "pure", "delay")),
+                    new GeneratedModule(Path.of("capy", "lang", "Program.js"), programRuntime()),
                     new GeneratedModule(Path.of("capy", "lang", "Primitives.js"), primitivesRuntime()),
                     new GeneratedModule(Path.of("capy", "lang", "String.js"), stringRuntime()),
+                    new GeneratedModule(Path.of("capy", "lang", "RegexModule.js"), regexRuntime()),
+                    new GeneratedModule(Path.of("capy", "lang", "Seq.js"), seqRuntime()),
+                    new GeneratedModule(Path.of("capy", "lang", "System.js"), systemRuntime()),
+                    new GeneratedModule(Path.of("capy", "lang", "Math.js"), mathRuntime()),
                     new GeneratedModule(Path.of("capy", "collection", "List.js"), collectionRuntime()),
                     new GeneratedModule(Path.of("capy", "collection", "Set.js"), collectionRuntime()),
                     new GeneratedModule(Path.of("capy", "collection", "Dict.js"), collectionRuntime()),
                     new GeneratedModule(Path.of("capy", "collection", "Tuple.js"), collectionRuntime()),
-                    new GeneratedModule(Path.of("capy", "io", "Console.js"), consoleRuntime())
+                    new GeneratedModule(Path.of("capy", "io", "Console.js"), consoleRuntime()),
+                    new GeneratedModule(Path.of("capy", "io", "IO.js"), ioRuntime()),
+                    new GeneratedModule(Path.of("capy", "date_time", "DateModule.js"), dateRuntime()),
+                    new GeneratedModule(Path.of("capy", "date_time", "TimeModule.js"), timeRuntime()),
+                    new GeneratedModule(Path.of("capy", "date_time", "DurationModule.js"), durationRuntime()),
+                    new GeneratedModule(Path.of("capy", "date_time", "DateTimeModule.js"), dateTimeRuntime()),
+                    new GeneratedModule(Path.of("capy", "date_time", "Clock.js"), clockRuntime()),
+                    new GeneratedModule(Path.of("capy", "test", "Assert.js"), assertRuntime()),
+                    new GeneratedModule(Path.of("capy", "test", "CapyTest.js"), capyTestRuntime())
             );
         }
 
@@ -1084,13 +1403,26 @@ public final class JavaScriptGenerator implements Generator {
                     "capy.lang.Option",
                     "capy.lang.Result",
                     "capy.lang.Effect",
+                    "capy.lang.Program",
                     "capy.lang.Primitives",
                     "capy.lang.String",
+                    "capy.lang.RegexModule",
+                    "capy.lang.Seq",
+                    "capy.lang.System",
+                    "capy.lang.Math",
                     "capy.collection.List",
                     "capy.collection.Set",
                     "capy.collection.Dict",
                     "capy.collection.Tuple",
-                    "capy.io.Console"
+                    "capy.io.Console",
+                    "capy.io.IO",
+                    "capy.date_time.DateModule",
+                    "capy.date_time.TimeModule",
+                    "capy.date_time.DurationModule",
+                    "capy.date_time.DateTimeModule",
+                    "capy.date_time.Clock",
+                    "capy.test.Assert",
+                    "capy.test.CapyTest"
             );
         }
 
@@ -1107,11 +1439,46 @@ public final class JavaScriptGenerator implements Generator {
                    + "const capy = require('../../dev/capylang/capybara.js');\n"
                    + "module.exports = {\n"
                    + "    to_int: capy.parseIntResult,\n"
+                   + "    toInt: capy.parseIntResult,\n"
                    + "    to_long: capy.parseLongResult,\n"
+                   + "    toLong: capy.parseLongResult,\n"
                    + "    to_double: capy.parseFloatResult,\n"
+                   + "    toDouble: capy.parseFloatResult,\n"
                    + "    to_float: capy.parseFloatResult,\n"
+                   + "    toFloat: capy.parseFloatResult,\n"
                    + "    to_bool: capy.parseBoolResult,\n"
+                   + "    toBool: capy.parseBoolResult,\n"
                    + "};\n";
+        }
+
+        private static String programRuntime() {
+            return """
+                    'use strict';
+                    const capy = require('../../dev/capylang/capybara.js');
+
+                    class Success {
+                        constructor(fields = {}) {
+                            this.__capybaraType = 'Success';
+                            this.__capybaraTypes = ['Success', 'Program'];
+                            this.results = fields.results ?? [];
+                        }
+                        toString() { return capy.dataToString(this); }
+                        capybaraDataValueInfo() { return capy.dataValueInfo(this, 'Success', 'capy.lang', 'capy/lang/Program'); }
+                    }
+
+                    class Failed {
+                        constructor(fields = {}) {
+                            this.__capybaraType = 'Failed';
+                            this.__capybaraTypes = ['Failed', 'Program'];
+                            this.exitCode = fields.exitCode ?? 1;
+                            this.errors = fields.errors ?? [];
+                        }
+                        toString() { return capy.dataToString(this); }
+                        capybaraDataValueInfo() { return capy.dataValueInfo(this, 'Failed', 'capy.lang', 'capy/lang/Program'); }
+                    }
+
+                    module.exports = { Success, Failed };
+                    """;
         }
 
         private static String stringRuntime() {
@@ -1124,6 +1491,8 @@ public final class JavaScriptGenerator implements Generator {
                    + "    is_empty: value => String(value).length === 0,\n"
                    + "    plus: (left, right) => capy.toStringValue(left) + capy.toStringValue(right),\n"
                    + "    contains: (value, part) => String(value).includes(part),\n"
+                   + "    starts_with: (value, part) => String(value).startsWith(part),\n"
+                   + "    end_with: (value, part) => String(value).endsWith(part),\n"
                    + "    trim: value => String(value).trim(),\n"
                    + "};\n";
         }
@@ -1134,8 +1503,8 @@ public final class JavaScriptGenerator implements Generator {
                    + "module.exports = {\n"
                    + "    size: value => value instanceof Map || value instanceof Set ? value.size : value.length,\n"
                    + "    get: (value, start, end) => end === undefined ? capy.getIndex(value, start) : capy.slice(value, start, end),\n"
-                   + "    entries: value => Array.from(value.entries()),\n"
-                   + "    to_list: value => Array.from(value),\n"
+                   + "    entries: value => capy.list(value.entries()),\n"
+                   + "    to_list: value => capy.list(value),\n"
                    + "    is_empty: value => (value instanceof Map || value instanceof Set ? value.size : value.length) === 0,\n"
                    + "    plus: (left, right) => Array.isArray(left) ? (Array.isArray(right) ? capy.listPlus(left, right) : capy.listAppend(left, right)) : left instanceof Set ? (right instanceof Set ? capy.setPlus(left, right) : capy.setAppend(left, right)) : Array.isArray(right) ? capy.dictPut(left, right) : capy.dictPlus(left, right),\n"
                    + "    minus: (left, right) => Array.isArray(left) ? (Array.isArray(right) ? capy.listMinus(left, right) : capy.listRemove(left, right)) : left instanceof Set ? (right instanceof Set ? capy.setMinus(left, right) : capy.setRemove(left, right)) : right instanceof Map ? capy.dictMinus(left, right) : capy.dictRemove(left, right),\n"
@@ -1152,20 +1521,682 @@ public final class JavaScriptGenerator implements Generator {
                    + "};\n";
         }
 
+        private static String regexRuntime() {
+            return """
+                    'use strict';
+                    const capy = require('../../dev/capylang/capybara.js');
+
+                    class CapyRegex {
+                        constructor(pattern, flags = '') {
+                            this.pattern = pattern;
+                            this.flags = flags;
+                            this.__capybaraRegex = true;
+                        }
+                        compile(extraFlags = '') {
+                            const uniqueFlags = Array.from(new Set((this.flags + extraFlags).split(''))).join('');
+                            return new RegExp(this.pattern, uniqueFlags);
+                        }
+                        matches(input) {
+                            return this.compile().test(String(input));
+                        }
+                        find(input) {
+                            const match = this.compile().exec(String(input));
+                            return match ? new capy.Some({ value: match[0] }) : capy.None;
+                        }
+                        findAll(input) {
+                            return capy.seq(Array.from(String(input).matchAll(this.compile('g')), match => match[0]));
+                        }
+                        replace(replacement) {
+                            return input => String(input).replace(this.compile('g'), replacement);
+                        }
+                        split(input) {
+                            return capy.seq(String(input).split(this.compile()));
+                        }
+                        tilde(input) {
+                            return this.find(input);
+                        }
+                        tilde_tilde(input) {
+                            return this.findAll(input);
+                        }
+                        tilde_greater(replacement) {
+                            return this.replace(replacement);
+                        }
+                        slash_greater(input) {
+                            return this.split(input);
+                        }
+                    }
+
+                    function fromLiteral(pattern, flags = '') {
+                        return new CapyRegex(pattern, flags);
+                    }
+
+                    module.exports = { fromLiteral };
+                    """;
+        }
+
+        private static String seqRuntime() {
+            return """
+                    'use strict';
+                    const capy = require('../../dev/capylang/capybara.js');
+                    const toSeq = values => capy.seq(values);
+                    module.exports = {
+                        toSeq,
+                        to_seq: toSeq,
+                    };
+                    """;
+        }
+
+        private static String systemRuntime() {
+            return """
+                    'use strict';
+                    const capy = require('../../dev/capylang/capybara.js');
+                    const currentMillis = () => capy.delay(() => Date.now());
+                    const nanoTime = () => capy.delay(() => Number(process.hrtime.bigint()));
+                    module.exports = {
+                        currentMillis,
+                        current_millis: currentMillis,
+                        nanoTime,
+                        nano_time: nanoTime,
+                    };
+                    """;
+        }
+
+        private static String mathRuntime() {
+            return """
+                    'use strict';
+                    function floorDiv(left, right) {
+                        return Math.floor(left / right);
+                    }
+                    function floorMod(left, right) {
+                        return left - floorDiv(left, right) * right;
+                    }
+                    function digits(value) {
+                        return String(Math.trunc(Math.abs(value))).length;
+                    }
+                    module.exports = {
+                        digits,
+                        floorDiv,
+                        floor_div: floorDiv,
+                        floorMod,
+                        floor_mod: floorMod,
+                        min: Math.min,
+                        max: Math.max,
+                    };
+                    """;
+        }
+
         private static String consoleRuntime() {
             return "'use strict';\n"
+                   + "const fs = require('node:fs');\n"
                    + "const capy = require('../../dev/capylang/capybara.js');\n"
-                   + "const printValue = value => { process.stdout.write(capy.toStringValue(value)); return value; };\n"
-                   + "const printlnValue = value => { console.log(capy.toStringValue(value)); return value; };\n"
-                   + "const printError = value => { process.stderr.write(capy.toStringValue(value)); return value; };\n"
-                   + "const printlnError = value => { console.error(capy.toStringValue(value)); return value; };\n"
+                   + "let stdinLines;\n"
+                   + "let stdinOffset = 0;\n"
+                   + "const consoleString = value => Array.isArray(value) && value.every(item => Number.isInteger(item) && item >= 0 && item <= 255) ? String.fromCharCode(...value) : capy.toStringValue(value);\n"
+                   + "const printValue = value => { process.stdout.write(consoleString(value)); return value; };\n"
+                   + "const printlnValue = value => { console.log(consoleString(value)); return value; };\n"
+                   + "const printError = value => { process.stderr.write(consoleString(value)); return value; };\n"
+                   + "const printlnError = value => { console.error(consoleString(value)); return value; };\n"
+                   + "const readLineValue = () => {\n"
+                   + "    if (stdinLines === undefined) {\n"
+                   + "        const input = fs.readFileSync(0, 'utf8').replace(/\\r\\n/g, '\\n');\n"
+                   + "        stdinLines = input.length === 0 ? [] : input.replace(/\\n$/, '').split('\\n');\n"
+                   + "    }\n"
+                   + "    return stdinOffset < stdinLines.length ? new capy.Some({ value: stdinLines[stdinOffset++] }) : capy.None;\n"
+                   + "};\n"
                    + "module.exports = {\n"
                    + "    print: value => capy.delay(() => printValue(value)),\n"
                    + "    println: value => capy.delay(() => printlnValue(value)),\n"
                    + "    print_error: value => capy.delay(() => printError(value)),\n"
+                   + "    printError: value => capy.delay(() => printError(value)),\n"
                    + "    println_error: value => capy.delay(() => printlnError(value)),\n"
-                   + "    read_line: () => capy.delay(() => capy.None),\n"
+                   + "    printlnError: value => capy.delay(() => printlnError(value)),\n"
+                   + "    read_line: () => capy.delay(readLineValue),\n"
+                   + "    readLine: () => capy.delay(readLineValue),\n"
                    + "};\n";
+        }
+
+        private static String ioRuntime() {
+            return """
+                    'use strict';
+                    const fs = require('node:fs');
+                    const pathModule = require('node:path');
+                    const capy = require('../../dev/capylang/capybara.js');
+
+                    const pathText = path => String(path);
+                    const success = value => new capy.Success({ value });
+                    const failure = (operation, error) => new capy.Error({ message: `${operation} failed: ${error.message}` });
+                    const effectResult = (operation, thunk) => capy.delay(() => {
+                        try {
+                            return success(thunk());
+                        } catch (error) {
+                            return failure(operation, error);
+                        }
+                    });
+                    const writeParent = path => {
+                        const parent = pathModule.dirname(path);
+                        if (parent && parent !== '.') {
+                            fs.mkdirSync(parent, { recursive: true });
+                        }
+                    };
+                    const linesText = lines => lines.length === 0 ? '' : `${lines.join('\\n')}\\n`;
+                    const readLinesText = text => {
+                        if (text.length === 0) {
+                            return [];
+                        }
+                        const normalized = text.replace(/\\r\\n/g, '\\n');
+                        const lines = normalized.split('\\n');
+                        if (lines.at(-1) === '') {
+                            lines.pop();
+                        }
+                        return lines;
+                    };
+
+                    function readText(path) {
+                        return effectResult('read_text', () => fs.readFileSync(pathText(path), 'utf8'));
+                    }
+                    function readLines(path) {
+                        return effectResult('read_lines', () => readLinesText(fs.readFileSync(pathText(path), 'utf8')));
+                    }
+                    function readBytes(path) {
+                        return effectResult('read_bytes', () => Array.from(fs.readFileSync(pathText(path))));
+                    }
+                    function writeText(path, text) {
+                        return effectResult('write_text', () => {
+                            const target = pathText(path);
+                            writeParent(target);
+                            fs.writeFileSync(target, String(text), 'utf8');
+                            return text;
+                        });
+                    }
+                    function writeLines(path, lines) {
+                        return effectResult('write_lines', () => {
+                            const target = pathText(path);
+                            writeParent(target);
+                            fs.writeFileSync(target, linesText(lines), 'utf8');
+                            return lines;
+                        });
+                    }
+                    function writeBytes(path, bytes) {
+                        return effectResult('write_bytes', () => {
+                            const target = pathText(path);
+                            writeParent(target);
+                            fs.writeFileSync(target, Buffer.from(bytes.map(value => value & 0xff)));
+                            return bytes;
+                        });
+                    }
+                    function appendText(path, text) {
+                        return effectResult('append_text', () => {
+                            const target = pathText(path);
+                            writeParent(target);
+                            fs.appendFileSync(target, String(text), 'utf8');
+                            return text;
+                        });
+                    }
+                    function appendLines(path, lines) {
+                        return effectResult('append_lines', () => {
+                            const target = pathText(path);
+                            writeParent(target);
+                            fs.appendFileSync(target, linesText(lines), 'utf8');
+                            return lines;
+                        });
+                    }
+                    function appendBytes(path, bytes) {
+                        return effectResult('append_bytes', () => {
+                            const target = pathText(path);
+                            writeParent(target);
+                            fs.appendFileSync(target, Buffer.from(bytes.map(value => value & 0xff)));
+                            return bytes;
+                        });
+                    }
+                    const exists = path => capy.delay(() => fs.existsSync(pathText(path)));
+                    const isFile = path => capy.delay(() => fs.existsSync(pathText(path)) && fs.statSync(pathText(path)).isFile());
+                    const isDirectory = path => capy.delay(() => fs.existsSync(pathText(path)) && fs.statSync(pathText(path)).isDirectory());
+                    const size = path => effectResult('size', () => fs.statSync(pathText(path)).size);
+                    const createFile = path => effectResult('create_file', () => {
+                        const target = pathText(path);
+                        writeParent(target);
+                        fs.closeSync(fs.openSync(target, 'a'));
+                        return target;
+                    });
+                    const createDirectory = path => effectResult('create_directory', () => {
+                        const target = pathText(path);
+                        fs.mkdirSync(target);
+                        return target;
+                    });
+                    const createDirectories = path => effectResult('create_directories', () => {
+                        const target = pathText(path);
+                        fs.mkdirSync(target, { recursive: true });
+                        return target;
+                    });
+                    const listEntries = path => effectResult('list_entries', () => {
+                        const root = pathText(path);
+                        return fs.readdirSync(root).map(entry => pathModule.join(root, entry));
+                    });
+                    const delete_ = path => effectResult('delete', () => {
+                        fs.rmSync(pathText(path), { recursive: true });
+                        return true;
+                    });
+                    const copy = (source, target) => effectResult('copy', () => {
+                        const destination = pathText(target);
+                        writeParent(destination);
+                        fs.copyFileSync(pathText(source), destination, fs.constants.COPYFILE_EXCL);
+                        return destination;
+                    });
+                    const copyReplace = (source, target) => effectResult('copy_replace', () => {
+                        const destination = pathText(target);
+                        writeParent(destination);
+                        fs.copyFileSync(pathText(source), destination);
+                        return destination;
+                    });
+                    const move = (source, target) => effectResult('move', () => {
+                        const destination = pathText(target);
+                        if (fs.existsSync(destination)) {
+                            throw new Error(`Target already exists: ${destination}`);
+                        }
+                        writeParent(destination);
+                        fs.renameSync(pathText(source), destination);
+                        return destination;
+                    });
+                    const moveReplace = (source, target) => effectResult('move_replace', () => {
+                        const destination = pathText(target);
+                        writeParent(destination);
+                        fs.renameSync(pathText(source), destination);
+                        return destination;
+                    });
+
+                    module.exports = {
+                        readText,
+                        read_text: readText,
+                        readLines,
+                        read_lines: readLines,
+                        readBytes,
+                        read_bytes: readBytes,
+                        writeText,
+                        write_text: writeText,
+                        writeLines,
+                        write_lines: writeLines,
+                        writeBytes,
+                        write_bytes: writeBytes,
+                        appendText,
+                        append_text: appendText,
+                        appendLines,
+                        append_lines: appendLines,
+                        appendBytes,
+                        append_bytes: appendBytes,
+                        exists,
+                        isFile,
+                        is_file: isFile,
+                        isDirectory,
+                        is_directory: isDirectory,
+                        size,
+                        createFile,
+                        create_file: createFile,
+                        createDirectory,
+                        create_directory: createDirectory,
+                        createDirectories,
+                        create_directories: createDirectories,
+                        listEntries,
+                        list_entries: listEntries,
+                        delete_,
+                        delete: delete_,
+                        copy,
+                        copyReplace,
+                        copy_replace: copyReplace,
+                        move,
+                        moveReplace,
+                        move_replace: moveReplace,
+                    };
+                    """;
+        }
+
+        private static String dateRuntime() {
+            return """
+                    'use strict';
+                    const MILLIS_PER_DAY = 24 * 60 * 60 * 1000;
+
+                    class CapyDate {
+                        constructor(fields = {}) {
+                            this.__capybaraType = 'Date';
+                            this.__capybaraTypes = ['Date'];
+                            this.day = fields.day;
+                            this.month = fields.month;
+                            this.year = fields.year;
+                        }
+                        toDaysSinceUnixEpoch() {
+                            return Math.trunc(Date.UTC(this.year, this.month - 1, this.day) / MILLIS_PER_DAY);
+                        }
+                        to_days_since_unix_epoch() {
+                            return this.toDaysSinceUnixEpoch();
+                        }
+                        addDays(days) {
+                            return fromDaysSinceUnixEpoch(this.toDaysSinceUnixEpoch() + days);
+                        }
+                        add_days(days) {
+                            return this.addDays(days);
+                        }
+                        toIso8601() {
+                            const year = String(this.year).padStart(4, '0');
+                            return `${year}-${String(this.month).padStart(2, '0')}-${String(this.day).padStart(2, '0')}`;
+                        }
+                        to_iso_8601() {
+                            return this.toIso8601();
+                        }
+                    }
+
+                    function fromDaysSinceUnixEpoch(days) {
+                        const date = new globalThis.Date(days * MILLIS_PER_DAY);
+                        return new CapyDate({
+                            day: date.getUTCDate(),
+                            month: date.getUTCMonth() + 1,
+                            year: date.getUTCFullYear(),
+                        });
+                    }
+
+                    const uNIXDATE = new CapyDate({ day: 1, month: 1, year: 1970 });
+                    const UNIX_DATE = uNIXDATE;
+
+                    module.exports = {
+                        Date: CapyDate,
+                        uNIXDATE,
+                        UNIX_DATE,
+                        fromDaysSinceUnixEpoch,
+                        from_days_since_unix_epoch: fromDaysSinceUnixEpoch,
+                    };
+                    """;
+        }
+
+        private static String timeRuntime() {
+            return """
+                    'use strict';
+                    const SECONDS_IN_DAY = 24 * 60 * 60;
+
+                    class Time {
+                        constructor(fields = {}) {
+                            this.__capybaraType = 'Time';
+                            this.__capybaraTypes = ['Time'];
+                            this.hour = fields.hour;
+                            this.minute = fields.minute;
+                            this.second = fields.second;
+                            this.offset_minutes = fields.offset_minutes;
+                        }
+                        toSeconds() {
+                            return this.hour * 3600 + this.minute * 60 + this.second;
+                        }
+                        to_seconds() {
+                            return this.toSeconds();
+                        }
+                        addSeconds(seconds) {
+                            const total = ((this.toSeconds() + seconds) % SECONDS_IN_DAY + SECONDS_IN_DAY) % SECONDS_IN_DAY;
+                            return new Time({
+                                hour: Math.trunc(total / 3600),
+                                minute: Math.trunc((total % 3600) / 60),
+                                second: total % 60,
+                                offset_minutes: this.offset_minutes,
+                            });
+                        }
+                        add_seconds(seconds) {
+                            return this.addSeconds(seconds);
+                        }
+                        toIso8601() {
+                            const body = `${String(this.hour).padStart(2, '0')}:${String(this.minute).padStart(2, '0')}:${String(this.second).padStart(2, '0')}`;
+                            if (this.offset_minutes && this.offset_minutes.__capybaraType === 'Some') {
+                                const offset = this.offset_minutes.value;
+                                if (offset === 0) {
+                                    return `${body}Z`;
+                                }
+                                const sign = offset < 0 ? '-' : '+';
+                                const absolute = Math.abs(offset);
+                                return `${body}${sign}${String(Math.trunc(absolute / 60)).padStart(2, '0')}:${String(absolute % 60).padStart(2, '0')}`;
+                            }
+                            return body;
+                        }
+                        to_iso_8601() {
+                            return this.toIso8601();
+                        }
+                    }
+
+                    const mIDNIGHT = new Time({ hour: 0, minute: 0, second: 0 });
+                    const MIDNIGHT = mIDNIGHT;
+
+                    module.exports = {
+                        Time,
+                        mIDNIGHT,
+                        MIDNIGHT,
+                    };
+                    """;
+        }
+
+        private static String durationRuntime() {
+            return """
+                    'use strict';
+
+                    class DateDuration {
+                        constructor(fields = {}) {
+                            this.__capybaraType = 'DateDuration';
+                            this.__capybaraTypes = ['DateDuration', 'Duration'];
+                            this.years = fields.years ?? 0;
+                            this.months = fields.months ?? 0;
+                            this.days = fields.days ?? 0;
+                            this.hours = fields.hours ?? 0;
+                            this.minutes = fields.minutes ?? 0;
+                            this.seconds = fields.seconds ?? 0;
+                        }
+                        negate() {
+                            return new DateDuration({
+                                years: -this.years,
+                                months: -this.months,
+                                days: -this.days,
+                                hours: -this.hours,
+                                minutes: -this.minutes,
+                                seconds: -this.seconds,
+                            });
+                        }
+                        totalSeconds() {
+                            return this.days * 86400 + this.hours * 3600 + this.minutes * 60 + this.seconds;
+                        }
+                        toIso8601() {
+                            if (this.years === 0 && this.months === 0 && this.days === 0 && this.hours === 0 && this.minutes === 0 && this.seconds === 0) {
+                                return 'PT0S';
+                            }
+                            const datePart = `${this.years !== 0 ? `${this.years}Y` : ''}${this.months !== 0 ? `${this.months}M` : ''}${this.days !== 0 ? `${this.days}D` : ''}`;
+                            const timePart = `${this.hours !== 0 ? `${this.hours}H` : ''}${this.minutes !== 0 ? `${this.minutes}M` : ''}${this.seconds !== 0 ? `${this.seconds}S` : ''}`;
+                            return `P${datePart}${timePart ? `T${timePart}` : ''}`;
+                        }
+                        to_iso_8601() {
+                            return this.toIso8601();
+                        }
+                    }
+
+                    class WeekDuration {
+                        constructor(fields = {}) {
+                            this.__capybaraType = 'WeekDuration';
+                            this.__capybaraTypes = ['WeekDuration', 'Duration'];
+                            this.weeks = fields.weeks ?? 0;
+                        }
+                        negate() {
+                            return new WeekDuration({ weeks: -this.weeks });
+                        }
+                        totalSeconds() {
+                            return this.weeks * 7 * 86400;
+                        }
+                        toIso8601() {
+                            return `P${this.weeks}W`;
+                        }
+                        to_iso_8601() {
+                            return this.toIso8601();
+                        }
+                    }
+
+                    const zERO = new DateDuration({ years: 0, months: 0, days: 0, hours: 0, minutes: 0, seconds: 0 });
+                    const ZERO = zERO;
+
+                    module.exports = {
+                        DateDuration,
+                        WeekDuration,
+                        zERO,
+                        ZERO,
+                    };
+                    """;
+        }
+
+        private static String dateTimeRuntime() {
+            return """
+                    'use strict';
+                    const DateModule = require('./DateModule.js');
+                    const TimeModule = require('./TimeModule.js');
+                    const DurationModule = require('./DurationModule.js');
+
+                    class DateTime {
+                        constructor(fields = {}) {
+                            this.__capybaraType = 'DateTime';
+                            this.__capybaraTypes = ['DateTime'];
+                            this.date = fields.date;
+                            this.time = fields.time;
+                        }
+                        timestamp() {
+                            return this.date.toDaysSinceUnixEpoch() * 86400 + this.time.toSeconds();
+                        }
+                        plus(duration) {
+                            return DateTime.fromTimestamp(this.timestamp() + duration.totalSeconds());
+                        }
+                        minus(value) {
+                            if (value && value.__capybaraType === 'DateTime') {
+                                const delta = this.timestamp() - value.timestamp();
+                                const sign = delta < 0 ? -1 : 1;
+                                let remaining = Math.abs(delta);
+                                const days = Math.trunc(remaining / 86400);
+                                remaining %= 86400;
+                                const hours = Math.trunc(remaining / 3600);
+                                remaining %= 3600;
+                                const minutes = Math.trunc(remaining / 60);
+                                const seconds = remaining % 60;
+                                return new DurationModule.DateDuration({
+                                    years: 0,
+                                    months: 0,
+                                    days: sign * days,
+                                    hours: sign * hours,
+                                    minutes: sign * minutes,
+                                    seconds: sign * seconds,
+                                });
+                            }
+                            return this.plus(value.negate());
+                        }
+                        toIso8601() {
+                            return `${this.date.toIso8601()}T${this.time.toIso8601()}`;
+                        }
+                        to_iso_8601() {
+                            return this.toIso8601();
+                        }
+                        static fromTimestamp(timestamp) {
+                            const days = Math.floor(timestamp / 86400);
+                            const seconds = ((timestamp % 86400) + 86400) % 86400;
+                            return new DateTime({
+                                date: DateModule.fromDaysSinceUnixEpoch(days),
+                                time: TimeModule.mIDNIGHT.addSeconds(seconds),
+                            });
+                        }
+                    }
+
+                    const uNIXEPOCH = new DateTime({ date: DateModule.uNIXDATE, time: TimeModule.mIDNIGHT });
+                    const UNIX_EPOCH = uNIXEPOCH;
+
+                    module.exports = {
+                        DateTime,
+                        uNIXEPOCH,
+                        UNIX_EPOCH,
+                    };
+                    """;
+        }
+
+        private static String clockRuntime() {
+            return """
+                    'use strict';
+                    const capy = require('../../dev/capylang/capybara.js');
+                    const DateModule = require('./DateModule.js');
+                    const TimeModule = require('./TimeModule.js');
+                    const DateTimeModule = require('./DateTimeModule.js');
+
+                    function now() {
+                        return capy.delay(() => {
+                            const current = new Date();
+                            return new DateTimeModule.DateTime({
+                                date: new DateModule.Date({
+                                    day: current.getUTCDate(),
+                                    month: current.getUTCMonth() + 1,
+                                    year: current.getUTCFullYear(),
+                                }),
+                                time: new TimeModule.Time({
+                                    hour: current.getUTCHours(),
+                                    minute: current.getUTCMinutes(),
+                                    second: current.getUTCSeconds(),
+                                    offset_minutes: new capy.Some({ value: 0 }),
+                                }),
+                            });
+                        });
+                    }
+
+                    module.exports = { now };
+                    """;
+        }
+
+        private static String assertRuntime() {
+            return """
+                    'use strict';
+                    const capy = require('../../dev/capylang/capybara.js');
+
+                    class AssertionResult {
+                        constructor(value, message = '') {
+                            this.value = value;
+                            this.message = message;
+                        }
+                        succeeded() {
+                            return this.value;
+                        }
+                    }
+
+                    function assertThat(value) {
+                        return {
+                            isEqualTo(expected) {
+                                return new AssertionResult(capy.equals(value, expected), `Expected ${capy.toStringValue(value)} to equal ${capy.toStringValue(expected)}`);
+                            },
+                            succeeds() {
+                                return new AssertionResult(capy.isType(value, 'Success'), 'Expected Result.Success');
+                            },
+                            fails() {
+                                return new AssertionResult(capy.isType(value, 'Error'), 'Expected Result.Error');
+                            },
+                        };
+                    }
+
+                    module.exports = {
+                        assertThat,
+                        assert_that: assertThat,
+                    };
+                    """;
+        }
+
+        private static String capyTestRuntime() {
+            return """
+                    'use strict';
+                    const capy = require('../../dev/capylang/capybara.js');
+
+                    function test(name, body) {
+                        return { name, body };
+                    }
+
+                    function testFile(path, testCases) {
+                        return capy.delay(() => ({
+                            path,
+                            test_cases: testCases,
+                        }));
+                    }
+
+                    module.exports = {
+                        test,
+                        testFile,
+                        test_file: testFile,
+                    };
+                    """;
         }
 
         private static String runtime() {
@@ -1178,6 +2209,14 @@ public final class JavaScriptGenerator implements Generator {
                             this.__capybaraTypes = ['Some', 'Option'];
                             this.value = fields.value;
                         }
+                        map(mapper) { return optionMap(this, mapper); }
+                        pipe(mapper) { return optionMap(this, mapper); }
+                        flat_map(mapper) { return optionFlatMap(this, mapper); }
+                        flatMap(mapper) { return optionFlatMap(this, mapper); }
+                        pipe_star(mapper) { return optionFlatMap(this, mapper); }
+                        filter(predicate) { return predicate(this.value) ? None : this; }
+                        reduce(initial, reducer) { return invoke(reducer, initial, this.value); }
+                        reduceLeft(initial, reducer) { return this.reduce(initial, reducer); }
                         toString() { return dataToString(this); }
                         capybaraDataValueInfo() { return dataValueInfo(this, 'Some', 'capy.lang', 'capy/lang/Option'); }
                     }
@@ -1185,6 +2224,14 @@ public final class JavaScriptGenerator implements Generator {
                     const None = Object.freeze({
                         __capybaraType: 'None',
                         __capybaraTypes: ['None', 'Option'],
+                        map() { return this; },
+                        pipe() { return this; },
+                        flat_map() { return this; },
+                        flatMap() { return this; },
+                        pipe_star() { return this; },
+                        filter() { return this; },
+                        reduce(initial) { return initial; },
+                        reduceLeft(initial) { return initial; },
                         toString() { return 'None { }'; },
                         capybaraDataValueInfo() { return dataValueInfo(this, 'None', 'capy.lang', 'capy/lang/Option'); },
                     });
@@ -1195,6 +2242,17 @@ public final class JavaScriptGenerator implements Generator {
                             this.__capybaraTypes = ['Success', 'Result'];
                             this.value = fields.value;
                         }
+                        map(mapper) { return invoke(mapper, this.value); }
+                        pipe(mapper) { return invoke(mapper, this.value); }
+                        flat_map(mapper) { const mapped = invoke(mapper, this.value); return isSuccessLike(mapped) ? mapped.value : mapped; }
+                        flatMap(mapper) { return this.flat_map(mapper); }
+                        pipe_star(mapper) { return this.flat_map(mapper); }
+                        orElse() { return this.value; }
+                        or_else() { return this.value; }
+                        or() { return this; }
+                        reduce(successMapper) { return invoke(successMapper, this.value); }
+                        reduceLeft(successMapper) { return this.reduce(successMapper); }
+                        pipe_greater(args) { return this.reduce(args[0], args[1]); }
                         toString() { return dataToString(this); }
                         capybaraDataValueInfo() { return dataValueInfo(this, 'Success', 'capy.lang', 'capy/lang/Result'); }
                     }
@@ -1205,6 +2263,17 @@ public final class JavaScriptGenerator implements Generator {
                             this.__capybaraTypes = ['Error', 'Result'];
                             this.message = fields.message;
                         }
+                        map() { return this; }
+                        pipe() { return this; }
+                        flat_map() { return this; }
+                        flatMap() { return this; }
+                        pipe_star() { return this; }
+                        orElse(value) { return value; }
+                        or_else(value) { return value; }
+                        or(result) { return result; }
+                        reduce(successMapper, errorMapper) { return invoke(errorMapper, this.message); }
+                        reduceLeft(successMapper, errorMapper) { return this.reduce(successMapper, errorMapper); }
+                        pipe_greater(args) { return this.reduce(args[0], args[1]); }
                         toString() { return dataToString(this); }
                         capybaraDataValueInfo() { return dataValueInfo(this, 'Error', 'capy.lang', 'capy/lang/Result'); }
                     }
@@ -1235,21 +2304,145 @@ public final class JavaScriptGenerator implements Generator {
                     function invoke(fn, ...args) {
                         let result = fn;
                         for (const arg of args) {
+                            if (typeof result !== 'function') {
+                                return result;
+                            }
                             result = result(arg);
                         }
                         return result;
                     }
 
-                    function enumValue(name, owner, parents = []) {
+                    function isSuccessLike(value) {
+                        const type = String(value?.__capybaraType ?? '').toLowerCase();
+                        return Object.prototype.hasOwnProperty.call(value ?? {}, 'value')
+                            && (type.includes('success') || type.includes('ok'));
+                    }
+
+                    function isFailureLike(value) {
+                        const type = String(value?.__capybaraType ?? '').toLowerCase();
+                        return type.includes('error') || type.includes('fail');
+                    }
+
+                    function resultLikePipe(value, mapper) {
+                        if (isFailureLike(value)) {
+                            return value;
+                        }
+                        if (Object.prototype.hasOwnProperty.call(value ?? {}, 'value')) {
+                            return invoke(mapper, value.value);
+                        }
+                        return value;
+                    }
+
+                    function resultLikeFlatMap(value, mapper) {
+                        const mapped = resultLikePipe(value, mapper);
+                        return isSuccessLike(mapped) ? mapped.value : mapped;
+                    }
+
+                    const arrayMethods = {
+                        asList: { value() { return Array.from(this); } },
+                        first: { value() { return this.length === 0 ? None : new Some({ value: this[0] }); } },
+                        map: { value(mapper) { return list(Array.prototype.map.call(this, mapper)); } },
+                        flatMap: { value(mapper) { return flatMapCollection(this, mapper); } },
+                        flat_map: { value(mapper) { return flatMapCollection(this, mapper); } },
+                        filter: { value(predicate) { return list(Array.prototype.filter.call(this, predicate)); } },
+                        reject: { value(predicate) { return rejectCollection(this, predicate); } },
+                        pipe: { value(mapper) { return mapCollection(this, mapper); } },
+                        pipe_minus: { value(predicate) { return filterCollection(this, predicate); } },
+                        pipe_star: { value(mapper) { return flatMapCollection(this, mapper); } },
+                        reduce: { value(first, second) { return typeof first === 'function' ? Array.prototype.reduce.apply(this, arguments) : reduceCollection(this, first, second); } },
+                        reduceLeft: { value(initial, reducer) { return reduceCollection(this, initial, reducer); } },
+                        pipe_greater: { value(initial, reducer) { return reduceCollection(this, initial, reducer); } },
+                    };
+
+                    const setMethods = {
+                        asList: { value() { return Array.from(this); } },
+                        first: { value() { const values = Array.from(this); return values.length === 0 ? None : new Some({ value: values[0] }); } },
+                        pipe: { value(mapper) { return mapCollection(this, mapper); } },
+                        pipe_minus: { value(predicate) { return filterCollection(this, predicate); } },
+                        pipe_star: { value(mapper) { return flatMapCollection(this, mapper); } },
+                        reduceLeft: { value(initial, reducer) { return reduceCollection(this, initial, reducer); } },
+                        pipe_greater: { value(initial, reducer) { return reduceCollection(this, initial, reducer); } },
+                        isSubsetOf: { value(other) { return setIsSubsetOf(this, other); } },
+                        op2286: { value(other) { return setIsSubsetOf(this, other); } },
+                        isProperSubsetOf: { value(other) { return setIsProperSubsetOf(this, other); } },
+                        op2282: { value(other) { return setIsProperSubsetOf(this, other); } },
+                        isSupersetOf: { value(other) { return setIsSupersetOf(this, other); } },
+                        op2287: { value(other) { return setIsSupersetOf(this, other); } },
+                        isProperSupersetOf: { value(other) { return setIsProperSupersetOf(this, other); } },
+                        op2283: { value(other) { return setIsProperSupersetOf(this, other); } },
+                        union: { value(other) { return setPlus(this, other); } },
+                        op222a: { value(other) { return setPlus(this, other); } },
+                        intersection: { value(other) { return setIntersection(this, other); } },
+                        op2229: { value(other) { return setIntersection(this, other); } },
+                        difference: { value(other) { return setMinus(this, other); } },
+                        symmetricDifference: { value(other) { return setSymmetricDifference(this, other); } },
+                        op25b3: { value(other) { return setSymmetricDifference(this, other); } },
+                        cartesianProduct: { value(other) { return setCartesianProduct(this, other); } },
+                        opd7: { value(other) { return setCartesianProduct(this, other); } },
+                        powerSet: { value() { return setPowerSet(this); } },
+                        op2118: { value() { return setPowerSet(this); } },
+                    };
+
+                    function defineCapyMethods(target, methods) {
+                        for (const [name, descriptor] of Object.entries(methods)) {
+                            if (!Object.prototype.hasOwnProperty.call(target, name)) {
+                                Object.defineProperty(target, name, { ...descriptor, enumerable: false, configurable: true });
+                            }
+                        }
+                        return target;
+                    }
+
+                    function list(values = []) {
+                        return defineCapyMethods(Array.from(values), arrayMethods);
+                    }
+
+                    function set(values = []) {
+                        return defineCapyMethods(new Set(values), setMethods);
+                    }
+
+                    function seq(values, mapper) {
+                        return list(mapper === undefined ? values ?? [] : Array.from(values ?? [], mapper));
+                    }
+
+                    function enumValue(name, owner, parents = [], ordinal = 0, aliases = [], packageName = '', packagePath = owner) {
                         return Object.freeze({
                             __capybaraType: name,
-                            __capybaraTypes: [name, owner, ...parents],
+                            __capybaraTypes: [name, ...aliases, owner, ...parents],
+                            __capybaraEnum: true,
+                            name,
+                            ordinal,
+                            order: ordinal,
                             toString() { return name; },
-                            capybaraDataValueInfo() { return dataValueInfo(this, name, '', owner); },
+                            capybaraDataValueInfo() { return { name, packageName, packagePath, fields: [] }; },
                         });
                     }
 
                     function isType(value, typeName) {
+                        switch (typeName) {
+                            case 'BYTE':
+                            case 'INT':
+                            case 'LONG':
+                                return Number.isInteger(value);
+                            case 'FLOAT':
+                            case 'DOUBLE':
+                                return typeof value === 'number';
+                            case 'STRING':
+                                return typeof value === 'string';
+                            case 'BOOL':
+                                return typeof value === 'boolean';
+                            case 'List':
+                                return Array.isArray(value);
+                            case 'Set':
+                                return value instanceof Set;
+                            case 'Dict':
+                                return value instanceof Map;
+                            case 'DATA':
+                                return Boolean(value && Array.isArray(value.__capybaraTypes));
+                            case 'ENUM':
+                                return Boolean(value && value.__capybaraEnum);
+                            default:
+                                break;
+                        }
                         return Boolean(value && Array.isArray(value.__capybaraTypes) && value.__capybaraTypes.includes(typeName));
                     }
 
@@ -1280,7 +2473,8 @@ public final class JavaScriptGenerator implements Generator {
                         const size = value.length;
                         const from = start === undefined ? 0 : normalizeIndex(start, size);
                         const to = end === undefined ? size : normalizeIndex(end, size);
-                        return value.slice(from, to);
+                        const result = value.slice(from, to);
+                        return Array.isArray(result) ? list(result) : result;
                     }
 
                     function equals(left, right) {
@@ -1306,6 +2500,9 @@ public final class JavaScriptGenerator implements Generator {
                     }
 
                     function contains(collection, value) {
+                        if (collection && collection.__capybaraRegex && typeof collection.matches === 'function') {
+                            return collection.matches(value);
+                        }
                         if (collection instanceof Set) {
                             return Array.from(collection).some(item => equals(item, value));
                         }
@@ -1334,36 +2531,72 @@ public final class JavaScriptGenerator implements Generator {
                         return true;
                     }
 
-                    function listAppend(list, value) {
-                        return [...list, value];
+                    function listAppend(valueList, value) {
+                        return list([...valueList, value]);
                     }
 
                     function listPlus(left, right) {
-                        return [...left, ...right];
+                        return list([...left, ...right]);
                     }
 
-                    function listRemove(list, value) {
-                        return list.filter(item => !equals(item, value));
+                    function listRemove(valueList, value) {
+                        return list(valueList.filter(item => !equals(item, value)));
                     }
 
                     function listMinus(left, right) {
-                        return left.filter(item => !contains(right, item));
+                        return list(left.filter(item => !contains(right, item)));
                     }
 
-                    function setAppend(set, value) {
-                        return new Set([...set, value]);
+                    function setAppend(valueSet, value) {
+                        return set([...valueSet, value]);
                     }
 
                     function setPlus(left, right) {
-                        return new Set([...left, ...right]);
+                        return set([...left, ...right]);
                     }
 
-                    function setRemove(set, value) {
-                        return new Set(Array.from(set).filter(item => !equals(item, value)));
+                    function setRemove(valueSet, value) {
+                        return set(Array.from(valueSet).filter(item => !equals(item, value)));
                     }
 
                     function setMinus(left, right) {
-                        return new Set(Array.from(left).filter(item => !contains(right, item)));
+                        return set(Array.from(left).filter(item => !contains(right, item)));
+                    }
+
+                    function setIsSubsetOf(left, right) {
+                        return Array.from(left).every(item => contains(right, item));
+                    }
+
+                    function setIsProperSubsetOf(left, right) {
+                        return setIsSubsetOf(left, right) && left.size < right.size;
+                    }
+
+                    function setIsSupersetOf(left, right) {
+                        return setIsSubsetOf(right, left);
+                    }
+
+                    function setIsProperSupersetOf(left, right) {
+                        return setIsSubsetOf(right, left) && left.size > right.size;
+                    }
+
+                    function setIntersection(left, right) {
+                        return set(Array.from(left).filter(item => contains(right, item)));
+                    }
+
+                    function setSymmetricDifference(left, right) {
+                        return setPlus(setMinus(left, right), setMinus(right, left));
+                    }
+
+                    function setCartesianProduct(left, right) {
+                        return set(Array.from(left).flatMap(l => Array.from(right).map(r => [l, r])));
+                    }
+
+                    function setPowerSet(valueSet) {
+                        const values = Array.from(valueSet);
+                        return set(values.reduce(
+                            (subsets, item) => subsets.concat(subsets.map(subset => set([...subset, item]))),
+                            [set()]
+                        ));
                     }
 
                     function dictPut(dict, tuple) {
@@ -1391,6 +2624,15 @@ public final class JavaScriptGenerator implements Generator {
                     }
 
                     function entries(value) {
+                        if (isType(value, 'Some')) {
+                            return [value.value];
+                        }
+                        if (isType(value, 'None') || isType(value, 'Error')) {
+                            return [];
+                        }
+                        if (isType(value, 'Success')) {
+                            return [value.value];
+                        }
                         if (value instanceof Map) {
                             return Array.from(value.entries());
                         }
@@ -1404,55 +2646,109 @@ public final class JavaScriptGenerator implements Generator {
                     }
 
                     function mapCollection(value, mapper) {
+                        if (isType(value, 'Some')) {
+                            return optionMap(value, mapper);
+                        }
+                        if (isType(value, 'None')) {
+                            return value;
+                        }
+                        if (isType(value, 'Success')) {
+                            return invoke(mapper, value.value);
+                        }
+                        if (isType(value, 'Error')) {
+                            return value;
+                        }
                         if (value instanceof Map) {
                             return new Map(Array.from(value.entries()).map(([key, item]) => [key, invoke(mapper, key, item)]));
                         }
                         if (value instanceof Set) {
-                            return new Set(Array.from(value).map(item => invoke(mapper, item)));
+                            return set(Array.from(value).map((item, index) => invoke(mapper, item, index)));
                         }
                         if (typeof value === 'string') {
-                            return Array.from(value).map(item => invoke(mapper, item));
+                            return list(Array.from(value).map((item, index) => invoke(mapper, item, index)));
                         }
-                        return value.map(item => invoke(mapper, item));
+                        return list(value.map((item, index) => invoke(mapper, item, index)));
                     }
 
                     function filterCollection(value, predicate) {
+                        if (isType(value, 'Some')) {
+                            return optionFilterOut(value, predicate);
+                        }
+                        if (isType(value, 'None') || isType(value, 'Error')) {
+                            return value;
+                        }
+                        if (isType(value, 'Success')) {
+                            return invoke(predicate, value.value) ? value : new ErrorValue({ message: 'Filtered out' });
+                        }
                         if (value instanceof Map) {
                             return new Map(Array.from(value.entries()).filter(([key, item]) => invoke(predicate, key, item)));
                         }
                         if (value instanceof Set) {
-                            return new Set(Array.from(value).filter(item => invoke(predicate, item)));
+                            return set(Array.from(value).filter((item, index) => invoke(predicate, item, index)));
                         }
-                        return value.filter(item => invoke(predicate, item));
+                        if (typeof value === 'string') {
+                            return list(Array.from(value).filter((item, index) => invoke(predicate, item, index)));
+                        }
+                        return list(value.filter((item, index) => invoke(predicate, item, index)));
                     }
 
                     function rejectCollection(value, predicate) {
+                        if (isType(value, 'Some')) {
+                            return optionFilterOut(value, predicate);
+                        }
+                        if (isType(value, 'None') || isType(value, 'Error')) {
+                            return value;
+                        }
+                        if (isType(value, 'Success')) {
+                            return invoke(predicate, value.value) ? new ErrorValue({ message: 'Rejected' }) : value;
+                        }
                         if (value instanceof Map) {
                             return new Map(Array.from(value.entries()).filter(([key, item]) => !invoke(predicate, key, item)));
                         }
                         if (value instanceof Set) {
-                            return new Set(Array.from(value).filter(item => !invoke(predicate, item)));
+                            return set(Array.from(value).filter((item, index) => !invoke(predicate, item, index)));
                         }
-                        return value.filter(item => !invoke(predicate, item));
+                        if (typeof value === 'string') {
+                            return list(Array.from(value).filter((item, index) => !invoke(predicate, item, index)));
+                        }
+                        return list(value.filter((item, index) => !invoke(predicate, item, index)));
                     }
 
                     function flatMapCollection(value, mapper) {
-                        const mapped = entries(value).flatMap(item => invoke(mapper, item));
-                        return mapped;
+                        if (isType(value, 'Some')) {
+                            return optionFlatMap(value, mapper);
+                        }
+                        if (isType(value, 'None') || isType(value, 'Error')) {
+                            return value;
+                        }
+                        if (isType(value, 'Success')) {
+                            return invoke(mapper, value.value);
+                        }
+                        const mapped = entries(value).flatMap((item, index) => {
+                            const result = invoke(mapper, item, index);
+                            if (Array.isArray(result)) {
+                                return result;
+                            }
+                            if (result instanceof Set) {
+                                return Array.from(result);
+                            }
+                            return [result];
+                        });
+                        return list(mapped);
                     }
 
                     function any(value, predicate) {
                         if (value instanceof Map) {
                             return Array.from(value.entries()).some(([key, item]) => invoke(predicate, key, item));
                         }
-                        return entries(value).some(item => invoke(predicate, item));
+                        return entries(value).some((item, index) => invoke(predicate, item, index));
                     }
 
                     function all(value, predicate) {
                         if (value instanceof Map) {
                             return Array.from(value.entries()).every(([key, item]) => invoke(predicate, key, item));
                         }
-                        return entries(value).every(item => invoke(predicate, item));
+                        return entries(value).every((item, index) => invoke(predicate, item, index));
                     }
 
                     function reduceCollection(value, initial, reducer) {
@@ -1463,8 +2759,8 @@ public final class JavaScriptGenerator implements Generator {
                             }
                             return acc;
                         }
-                        for (const item of entries(value)) {
-                            acc = invoke(reducer, acc, item);
+                        for (const [index, item] of entries(value).entries()) {
+                            acc = invoke(reducer, acc, item, index);
                         }
                         return acc;
                     }
@@ -1481,38 +2777,80 @@ public final class JavaScriptGenerator implements Generator {
                         return isType(option, 'Some') && predicate(option.value) ? None : option;
                     }
 
-                    function parseResult(value, parser) {
+                    function floatToInt(value) {
+                        const number = Number(value);
+                        if (Number.isNaN(number)) {
+                            return 0;
+                        }
+                        if (number >= 2147483647) {
+                            return 2147483647;
+                        }
+                        if (number <= -2147483648) {
+                            return -2147483648;
+                        }
+                        return Math.trunc(number);
+                    }
+
+                    function longToInt(value) {
+                        return Number(BigInt.asIntN(32, BigInt(Math.trunc(Number(value)))));
+                    }
+
+                    function floatToLong(value) {
+                        const number = Number(value);
+                        if (Number.isNaN(number)) {
+                            return 0;
+                        }
+                        if (number >= 9223372036854775807) {
+                            return 9223372036854775807;
+                        }
+                        if (number <= -9223372036854775808) {
+                            return -9223372036854775808;
+                        }
+                        return Math.trunc(number);
+                    }
+
+                    function parseResult(value, typeName, parser) {
                         try {
-                            const parsed = parser(value);
+                            const text = String(value);
+                            const parsed = parser(text);
                             if (Number.isNaN(parsed)) {
-                                return new ErrorValue({ message: `Unable to parse ${value}` });
+                                return new ErrorValue({ message: `Cannot parse string to ${typeName}: ${value}` });
                             }
                             return new Success({ value: parsed });
                         } catch (error) {
-                            return new ErrorValue({ message: error.message });
+                            return new ErrorValue({ message: `Cannot parse string to ${typeName}: ${value}` });
                         }
                     }
 
                     function parseIntResult(value) {
-                        return parseResult(value, text => Number.parseInt(text, 10));
+                        return parseResult(value, 'int', text => /^[-+]?\\d+$/.test(text) ? Number.parseInt(text, 10) : Number.NaN);
                     }
 
                     function parseLongResult(value) {
-                        return parseIntResult(value);
+                        return parseResult(value, 'long', text => /^[-+]?\\d+$/.test(text) ? Number.parseInt(text, 10) : Number.NaN);
                     }
 
                     function parseFloatResult(value) {
-                        return parseResult(value, text => Number.parseFloat(text));
+                        return parseResult(value, 'float', text => /^[-+]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:[eE][-+]?\\d+)?$/.test(text) ? Number.parseFloat(text) : Number.NaN);
                     }
 
                     function parseBoolResult(value) {
-                        if (value === 'true') {
+                        const text = String(value);
+                        if (text === 'true') {
                             return new Success({ value: true });
                         }
-                        if (value === 'false') {
+                        if (text === 'false') {
                             return new Success({ value: false });
                         }
-                        return new ErrorValue({ message: `Unable to parse ${value}` });
+                        return new ErrorValue({ message: `Cannot parse string to bool: ${value}` });
+                    }
+
+                    function parseEnum(value, values, enumName) {
+                        const parsed = values.find(item => item.name === value || item.ordinal === value || item.order === value);
+                        if (parsed) {
+                            return new Success({ value: parsed });
+                        }
+                        return new ErrorValue({ message: `Unable to parse ${enumName} from ${value}` });
                     }
 
                     function toStringValue(value) {
@@ -1542,7 +2880,11 @@ public final class JavaScriptGenerator implements Generator {
                         if (keys.length === 0) {
                             return `${value.__capybaraType} { }`;
                         }
-                        return `${value.__capybaraType} { ` + keys.map(key => `"${key}": ${toStringValue(value[key])}`).join(', ') + ' }';
+                        return `${value.__capybaraType} { ` + keys.map(key => `"${key}": ${dataFieldToString(value[key])}`).join(', ') + ' }';
+                    }
+
+                    function dataFieldToString(value) {
+                        return typeof value === 'string' ? `"${value}"` : toStringValue(value);
                     }
 
                     function dataValueInfo(value, name, packageName, packagePath) {
@@ -1553,6 +2895,14 @@ public final class JavaScriptGenerator implements Generator {
                     }
 
                     function reflection(target, name, packageName, packagePath, fieldNames) {
+                        if (name) {
+                            return {
+                                name,
+                                packageName,
+                                packagePath,
+                                fields: fieldNames.map(field => ({ name: field, value: target[field] })),
+                            };
+                        }
                         if (target && typeof target.capybaraDataValueInfo === 'function') {
                             return target.capybaraDataValueInfo();
                         }
@@ -1562,6 +2912,23 @@ public final class JavaScriptGenerator implements Generator {
                             packagePath,
                             fields: fieldNames.map(field => ({ name: field, value: target[field] })),
                         };
+                    }
+
+                    function writeProgramResult(value) {
+                        if (isType(value, 'Program') && isType(value, 'Success') && Array.isArray(value.results)) {
+                            for (const result of value.results) {
+                                console.log(toStringValue(result));
+                            }
+                            return;
+                        }
+                        if (isType(value, 'Program') && isType(value, 'Failed')) {
+                            for (const error of value.errors ?? []) {
+                                console.error(toStringValue(error));
+                            }
+                            process.exitCode = value.exitCode ?? 1;
+                            return;
+                        }
+                        console.log(toStringValue(value));
                     }
 
                     function unsupported(message) {
@@ -1578,6 +2945,11 @@ public final class JavaScriptGenerator implements Generator {
                         delay,
                         isEffect,
                         invoke,
+                        resultLikePipe,
+                        resultLikeFlatMap,
+                        list,
+                        set,
+                        seq,
                         enumValue,
                         isType,
                         rawIndex,
@@ -1594,10 +2966,21 @@ public final class JavaScriptGenerator implements Generator {
                         setPlus,
                         setRemove,
                         setMinus,
+                        setIsSubsetOf,
+                        setIsProperSubsetOf,
+                        setIsSupersetOf,
+                        setIsProperSupersetOf,
+                        setIntersection,
+                        setSymmetricDifference,
+                        setCartesianProduct,
+                        setPowerSet,
                         dictPut,
                         dictPlus,
                         dictRemove,
                         dictMinus,
+                        floatToInt,
+                        longToInt,
+                        floatToLong,
                         mapCollection,
                         filterCollection,
                         rejectCollection,
@@ -1612,10 +2995,12 @@ public final class JavaScriptGenerator implements Generator {
                         parseLongResult,
                         parseFloatResult,
                         parseBoolResult,
+                        parseEnum,
                         toStringValue,
                         dataToString,
                         dataValueInfo,
                         reflection,
+                        writeProgramResult,
                         unsupported,
                     };
                     """;
@@ -1633,10 +3018,7 @@ public final class JavaScriptGenerator implements Generator {
                         ? function.name().substring(0, Math.max(function.name().lastIndexOf("__"), METHOD_DECL_PREFIX.length()))
                         : module.name();
                 var normalizedBaseName = normalizeJsIdentifier(baseMethodName(function.name()));
-                var erasedSignature = function.parameters().stream()
-                        .map(parameter -> String.valueOf(parameter.type()))
-                        .collect(joining(","));
-                collisions.computeIfAbsent(ownerKey + "|" + normalizedBaseName + "|" + erasedSignature, ignored -> new ArrayList<>()).add(function);
+                collisions.computeIfAbsent(ownerKey + "|" + normalizedBaseName, ignored -> new ArrayList<>()).add(function);
             }
         }
         for (var functions : collisions.values()) {
@@ -1647,6 +3029,8 @@ public final class JavaScriptGenerator implements Generator {
                     .filter(function -> isNamedIdentifier(baseMethodName(function.name())))
                     .findFirst();
             var mixedRawNames = functions.stream().map(function -> baseMethodName(function.name())).distinct().count() > 1;
+            var overloadedRawNames = functions.stream()
+                    .collect(java.util.stream.Collectors.groupingBy(function -> baseMethodName(function.name()), LinkedHashMap::new, java.util.stream.Collectors.counting()));
             for (var function : functions) {
                 var rawBaseName = baseMethodName(function.name());
                 var normalizedBaseName = normalizeJsIdentifier(rawBaseName);
@@ -1654,16 +3038,16 @@ public final class JavaScriptGenerator implements Generator {
                 var legacyEmittedName = normalizedBaseName + overloadSuffix;
                 var namedCanonical = canonicalNamedFunction.filter(named -> named == function).isPresent();
                 var emittedName = mixedRawNames
-                        ? (namedCanonical
+                        ? (namedCanonical && overloadedRawNames.getOrDefault(rawBaseName, 0L) == 1L
                                 ? normalizedBaseName
                                 : normalizedBaseName + "__" + methodVariantSuffix(rawBaseName) + overloadSuffix)
-                        : legacyEmittedName;
+                        : normalizedBaseName + overloadSuffix;
                 var parameterTypes = function.parameters().stream().map(CompiledFunction.CompiledFunctionParameter::type).toList();
                 overrides.put(signatureKey(function.name(), parameterTypes), emittedName);
                 if (!function.name().startsWith(METHOD_DECL_PREFIX)) {
                     overrides.put(signatureKey(ownerModuleNames.get(function) + "." + function.name(), parameterTypes), emittedName);
                 }
-                if (mixedRawNames || !function.name().startsWith(METHOD_DECL_PREFIX)) {
+                if (!function.name().startsWith(METHOD_DECL_PREFIX)) {
                     overrides.put(signatureKey(baseMethodName(function.name()), parameterTypes), emittedName);
                 }
                 if (!emittedName.equals(legacyEmittedName)) {
@@ -1793,8 +3177,16 @@ public final class JavaScriptGenerator implements Generator {
     }
 
     private static String simpleTypeName(String typeName) {
+        return normalizeJsTypeIdentifier(rawSimpleTypeName(typeName));
+    }
+
+    private static String rawSimpleTypeName(String typeName) {
         var stripped = typeName;
-        var generic = stripped.indexOf('[');
+        var squareGeneric = stripped.indexOf('[');
+        var javaGeneric = stripped.indexOf('<');
+        var generic = squareGeneric >= 0 && javaGeneric >= 0
+                ? Math.min(squareGeneric, javaGeneric)
+                : Math.max(squareGeneric, javaGeneric);
         if (generic >= 0) {
             stripped = stripped.substring(0, generic);
         }
@@ -1806,7 +3198,7 @@ public final class JavaScriptGenerator implements Generator {
         if (dot >= 0) {
             stripped = stripped.substring(dot + 1);
         }
-        return normalizeJsTypeIdentifier(stripped);
+        return stripped;
     }
 
     private static boolean isTypeLikeIdentifier(String value) {
@@ -1821,6 +3213,7 @@ public final class JavaScriptGenerator implements Generator {
     }
 
     private static String normalizeJsTypeIdentifier(String rawName) {
+        var preservePrivatePrefix = rawName.startsWith("_") && !rawName.startsWith("__");
         var parts = Stream.of(rawName.split("[^A-Za-z0-9]+"))
                 .filter(part -> !part.isEmpty())
                 .toList();
@@ -1836,6 +3229,9 @@ public final class JavaScriptGenerator implements Generator {
             }
         }
         var identifier = base.toString();
+        if (preservePrivatePrefix && !identifier.startsWith("_")) {
+            identifier = "_" + identifier;
+        }
         if (!Character.isLetter(identifier.charAt(0)) && identifier.charAt(0) != '_' && identifier.charAt(0) != '$') {
             identifier = "T" + identifier;
         }
@@ -1843,6 +3239,30 @@ public final class JavaScriptGenerator implements Generator {
             return identifier + "_";
         }
         return identifier;
+    }
+
+    private static String enumValueIdentifier(String rawName) {
+        if (isValidJsIdentifier(rawName) && !JS_KEYWORDS.contains(rawName)) {
+            return rawName;
+        }
+        return normalizeJsIdentifier(rawName);
+    }
+
+    private static boolean isValidJsIdentifier(String value) {
+        if (value == null || value.isBlank()) {
+            return false;
+        }
+        var first = value.charAt(0);
+        if (!Character.isLetter(first) && first != '_' && first != '$') {
+            return false;
+        }
+        for (var i = 1; i < value.length(); i++) {
+            var ch = value.charAt(i);
+            if (!Character.isLetterOrDigit(ch) && ch != '_' && ch != '$') {
+                return false;
+            }
+        }
+        return true;
     }
 
     private static String normalizeJsIdentifier(String rawName) {
@@ -1936,10 +3356,39 @@ public final class JavaScriptGenerator implements Generator {
             normalized = normalized.substring(1);
         }
         candidates.add(normalized);
+        var normalizedPackageSegments = normalizePackageSegments(normalized);
+        candidates.add(normalizedPackageSegments);
+        moduleClassNameCandidate(normalized).ifPresent(candidates::add);
+        moduleClassNameCandidate(normalizedPackageSegments).ifPresent(candidates::add);
         if (normalized.startsWith("_") && normalized.length() > 1 && Character.isLowerCase(normalized.charAt(1))) {
             candidates.add(normalized.substring(1));
         }
         return List.copyOf(candidates);
+    }
+
+    private static Optional<String> moduleClassNameCandidate(String className) {
+        var lastDot = className.lastIndexOf('.');
+        if (lastDot < 0 || className.endsWith("Module")) {
+            return Optional.empty();
+        }
+        var simpleName = className.substring(lastDot + 1);
+        if (simpleName.isBlank() || !Character.isUpperCase(simpleName.charAt(0))) {
+            return Optional.empty();
+        }
+        return Optional.of(className + "Module");
+    }
+
+    private static String normalizePackageSegments(String className) {
+        var segments = className.split("\\.");
+        if (segments.length < 2) {
+            return className;
+        }
+        var normalized = new ArrayList<String>();
+        for (var i = 0; i < segments.length - 1; i++) {
+            normalized.add(normalizeJsIdentifier(segments[i]));
+        }
+        normalized.add(segments[segments.length - 1]);
+        return String.join(".", normalized);
     }
 
     private static String relativeRequire(Path fromModule, Path targetModule) {
