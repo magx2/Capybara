@@ -37,7 +37,7 @@ import static java.util.stream.Collectors.joining;
 
 public final class JavaScriptGenerator implements Generator {
     private static final String METHOD_DECL_PREFIX = "__method__";
-    private static final Path RUNTIME_PATH = Path.of("dev", "capylang", "capybara.js");
+    static final Path RUNTIME_PATH = Path.of("dev", "capylang", "capybara.js");
     private static final java.util.regex.Pattern CONST_NAME_PATTERN = java.util.regex.Pattern.compile("^_?[A-Z_][A-Z0-9_]*$");
     private static final java.util.regex.Pattern MODULE_VAR_PATTERN = java.util.regex.Pattern.compile("\\b__module_[A-Za-z0-9_]+\\b");
     private static final Set<String> JS_KEYWORDS = Set.of(
@@ -51,10 +51,7 @@ public final class JavaScriptGenerator implements Generator {
 
     @Override
     public GeneratedProgram generate(CompiledProgram program) {
-        if (!program.objectOrientedModules().isEmpty()) {
-            throw new IllegalStateException("Object-oriented `.coo` generation is only supported for JAVA");
-        }
-        if (program.modules().isEmpty()) {
+        if (program.modules().isEmpty() && program.objectOrientedModules().isEmpty()) {
             return new GeneratedProgram(List.of());
         }
 
@@ -64,11 +61,12 @@ public final class JavaScriptGenerator implements Generator {
         var moduleInfos = program.modules().stream()
                 .map(module -> ModuleInfo.from(module, astBuilder.build(module)))
                 .toList();
-        var context = ProgramContext.build(moduleInfos, functionNameOverrides);
+        var context = ProgramContext.build(moduleInfos, program.objectOrientedModules(), functionNameOverrides);
 
         for (var moduleInfo : moduleInfos) {
             modules.add(new GeneratedModule(moduleInfo.relativePath(), new ModuleRenderer(context, moduleInfo).render()));
         }
+        modules.addAll(new ObjectOrientedJavaScriptGenerator(context).generate(program.objectOrientedModules()));
         modules.addAll(RuntimeModules.modules());
         return new GeneratedProgram(List.copyOf(modules));
     }
@@ -1122,7 +1120,7 @@ public final class JavaScriptGenerator implements Generator {
         }
     }
 
-    private record ModuleInfo(CompiledModule module, JavaClass javaClass, String className, Path relativePath, String packageName, String packagePath) {
+    record ModuleInfo(CompiledModule module, JavaClass javaClass, String className, Path relativePath, String packageName, String packagePath) {
         static ModuleInfo from(CompiledModule module, JavaClass javaClass) {
             var packageName = javaClass.javaPackage().toString();
             var className = packageName.isBlank() ? javaClass.name().toString() : packageName + "." + javaClass.name();
@@ -1139,7 +1137,7 @@ public final class JavaScriptGenerator implements Generator {
         }
     }
 
-    private record ProgramContext(
+    record ProgramContext(
             Map<String, Path> pathsByClassName,
             Map<String, Set<String>> exportsByClassName,
             Map<String, Set<String>> localTypesByClassName,
@@ -1149,6 +1147,14 @@ public final class JavaScriptGenerator implements Generator {
             Map<String, String> functionNameOverrides
     ) {
         static ProgramContext build(List<ModuleInfo> modules, Map<String, String> functionNameOverrides) {
+            return build(modules, List.of(), functionNameOverrides);
+        }
+
+        static ProgramContext build(
+                List<ModuleInfo> modules,
+                List<dev.capylang.compiler.parser.ObjectOrientedModule> objectOrientedModules,
+                Map<String, String> functionNameOverrides
+        ) {
             var paths = new LinkedHashMap<String, Path>();
             var exports = runtimeExports();
             var localTypes = new LinkedHashMap<String, Set<String>>();
@@ -1201,6 +1207,29 @@ public final class JavaScriptGenerator implements Generator {
                         .forEach(moduleExports::add);
                 exports.put(module.className(), Set.copyOf(moduleExports));
                 localTypes.put(module.className(), Set.copyOf(moduleTypes));
+            }
+            for (var module : objectOrientedModules) {
+                var packageName = ObjectOrientedJavaScriptGenerator.packageName(module.path());
+                var moduleTypes = module.objectOriented().definitions().stream()
+                        .map(dev.capylang.compiler.parser.ObjectOriented.TypeDeclaration::name)
+                        .map(JavaScriptGenerator::simpleTypeName)
+                        .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+                for (var definition : module.objectOriented().definitions()) {
+                    var typeName = simpleTypeName(definition.name());
+                    var className = packageName.isBlank() ? typeName : packageName + "." + typeName;
+                    paths.put(className, ObjectOrientedJavaScriptGenerator.relativePath(module, typeName));
+                    exports.put(className, Set.of(typeName));
+                    localTypes.put(className, Set.copyOf(moduleTypes));
+                    fields.put(typeName, definition.members().stream()
+                            .filter(dev.capylang.compiler.parser.ObjectOriented.FieldDeclaration.class::isInstance)
+                            .map(dev.capylang.compiler.parser.ObjectOriented.FieldDeclaration.class::cast)
+                            .map(dev.capylang.compiler.parser.ObjectOriented.FieldDeclaration::name)
+                            .toList());
+                    parentTypes.put(typeName, definition.parents().stream()
+                            .map(dev.capylang.compiler.parser.ObjectOriented.TypeReference::name)
+                            .map(JavaScriptGenerator::simpleTypeName)
+                            .toList());
+                }
             }
 
             var importedOwners = new LinkedHashMap<String, Map<String, String>>();
@@ -1339,6 +1368,7 @@ public final class JavaScriptGenerator implements Generator {
             exports.put("capy.collection.Dict", Set.of("size", "entries", "get", "is_empty", "plus", "minus", "contains_key", "any", "all", "map", "filter", "reject", "reduce"));
             exports.put("capy.collection.Tuple", Set.of("get"));
             exports.put("capy.io.Console", Set.of("print", "println", "print_error", "printError", "println_error", "printlnError", "read_line", "readLine"));
+            exports.put("capy.io.Stdout", Set.of("print", "println"));
             exports.put("capy.io.IO", Set.of("read_text", "readText", "read_lines", "readLines", "read_bytes", "readBytes",
                     "write_text", "writeText", "write_lines", "writeLines", "write_bytes", "writeBytes",
                     "append_text", "appendText", "append_lines", "appendLines", "append_bytes", "appendBytes",
@@ -1387,6 +1417,7 @@ public final class JavaScriptGenerator implements Generator {
                     new GeneratedModule(Path.of("capy", "collection", "Dict.js"), collectionRuntime()),
                     new GeneratedModule(Path.of("capy", "collection", "Tuple.js"), collectionRuntime()),
                     new GeneratedModule(Path.of("capy", "io", "Console.js"), consoleRuntime()),
+                    new GeneratedModule(Path.of("capy", "io", "Stdout.js"), stdoutRuntime()),
                     new GeneratedModule(Path.of("capy", "io", "IO.js"), ioRuntime()),
                     new GeneratedModule(Path.of("capy", "date_time", "DateModule.js"), dateRuntime()),
                     new GeneratedModule(Path.of("capy", "date_time", "TimeModule.js"), timeRuntime()),
@@ -1415,6 +1446,7 @@ public final class JavaScriptGenerator implements Generator {
                     "capy.collection.Dict",
                     "capy.collection.Tuple",
                     "capy.io.Console",
+                    "capy.io.Stdout",
                     "capy.io.IO",
                     "capy.date_time.DateModule",
                     "capy.date_time.TimeModule",
@@ -1652,6 +1684,16 @@ public final class JavaScriptGenerator implements Generator {
                    + "    printlnError: value => capy.delay(() => printlnError(value)),\n"
                    + "    read_line: () => capy.delay(readLineValue),\n"
                    + "    readLine: () => capy.delay(readLineValue),\n"
+                   + "};\n";
+        }
+
+        private static String stdoutRuntime() {
+            return "'use strict';\n"
+                   + "const capy = require('../../dev/capylang/capybara.js');\n"
+                   + "const consoleString = value => Array.isArray(value) && value.every(item => Number.isInteger(item) && item >= 0 && item <= 255) ? String.fromCharCode(...value) : capy.toStringValue(value);\n"
+                   + "module.exports = {\n"
+                   + "    print(value) { process.stdout.write(consoleString(value)); },\n"
+                   + "    println(value) { console.log(consoleString(value)); },\n"
                    + "};\n";
         }
 
@@ -2392,6 +2434,68 @@ public final class JavaScriptGenerator implements Generator {
                         return target;
                     }
 
+                    function size(value) {
+                        if (value instanceof Map || value instanceof Set) {
+                            return value.size;
+                        }
+                        return value == null ? 0 : value.length;
+                    }
+
+                    function newArray(length, defaultValue = undefined) {
+                        return Array.from({ length }, () => defaultValue);
+                    }
+
+                    function exceptionClass(name) {
+                        return { getSimpleName: () => name };
+                    }
+
+                    function decorateException(error, className = error && error.name ? error.name : 'Error') {
+                        if (!error || typeof error !== 'object') {
+                            return decorateException(new Error(String(error)), 'RuntimeException');
+                        }
+                        if (typeof error.getMessage !== 'function') {
+                            Object.defineProperty(error, 'getMessage', {
+                                value() { return this.message ?? String(this); },
+                                configurable: true,
+                            });
+                        }
+                        if (typeof error.getClass !== 'function') {
+                            Object.defineProperty(error, 'getClass', {
+                                value() { return exceptionClass(className); },
+                                configurable: true,
+                            });
+                        }
+                        return error;
+                    }
+
+                    function toException(value) {
+                        if (value instanceof Error) {
+                            return decorateException(value);
+                        }
+                        return decorateException(new Error(String(value)), 'RuntimeException');
+                    }
+
+                    function arrayIndexError(index) {
+                        return decorateException(new Error(String(index)), 'ArrayIndexOutOfBoundsException');
+                    }
+
+                    function arrayGet(value, index) {
+                        const normalized = index < 0 && value != null ? value.length + index : index;
+                        if (value == null || normalized < 0 || normalized >= value.length) {
+                            throw arrayIndexError(index);
+                        }
+                        return value[normalized];
+                    }
+
+                    function applyTrait(targetClass, traitClass) {
+                        for (const name of Object.getOwnPropertyNames(traitClass.prototype)) {
+                            if (name === 'constructor' || Object.prototype.hasOwnProperty.call(targetClass.prototype, name)) {
+                                continue;
+                            }
+                            Object.defineProperty(targetClass.prototype, name, Object.getOwnPropertyDescriptor(traitClass.prototype, name));
+                        }
+                    }
+
                     function list(values = []) {
                         return defineCapyMethods(Array.from(values), arrayMethods);
                     }
@@ -2950,6 +3054,12 @@ public final class JavaScriptGenerator implements Generator {
                         list,
                         set,
                         seq,
+                        size,
+                        newArray,
+                        toException,
+                        decorateException,
+                        arrayGet,
+                        applyTrait,
                         enumValue,
                         isType,
                         rawIndex,
@@ -2978,6 +3088,7 @@ public final class JavaScriptGenerator implements Generator {
                         dictPlus,
                         dictRemove,
                         dictMinus,
+                        entries,
                         floatToInt,
                         longToInt,
                         floatToLong,
@@ -3007,7 +3118,7 @@ public final class JavaScriptGenerator implements Generator {
         }
     }
 
-    private static Map<String, String> buildFunctionNameOverrides(CompiledProgram program) {
+    static Map<String, String> buildFunctionNameOverrides(CompiledProgram program) {
         var overrides = new LinkedHashMap<String, String>();
         var collisions = new LinkedHashMap<String, List<CompiledFunction>>();
         var ownerModuleNames = new java.util.IdentityHashMap<CompiledFunction, String>();
@@ -3107,7 +3218,7 @@ public final class JavaScriptGenerator implements Generator {
         return idx >= 0 ? name.substring(idx + 2) : name;
     }
 
-    private static String simpleMethodName(String target) {
+    static String simpleMethodName(String target) {
         var lastDot = target.lastIndexOf('.');
         var methodName = lastDot >= 0 ? target.substring(lastDot + 1) : target;
         return baseMethodName(methodName);
@@ -3176,11 +3287,11 @@ public final class JavaScriptGenerator implements Generator {
                || name.endsWith("/Option.Option");
     }
 
-    private static String simpleTypeName(String typeName) {
+    static String simpleTypeName(String typeName) {
         return normalizeJsTypeIdentifier(rawSimpleTypeName(typeName));
     }
 
-    private static String rawSimpleTypeName(String typeName) {
+    static String rawSimpleTypeName(String typeName) {
         var stripped = typeName;
         var squareGeneric = stripped.indexOf('[');
         var javaGeneric = stripped.indexOf('<');
@@ -3201,7 +3312,7 @@ public final class JavaScriptGenerator implements Generator {
         return stripped;
     }
 
-    private static boolean isTypeLikeIdentifier(String value) {
+    static boolean isTypeLikeIdentifier(String value) {
         if (value == null || value.isBlank()) {
             return false;
         }
@@ -3212,7 +3323,7 @@ public final class JavaScriptGenerator implements Generator {
         return idx < value.length() && Character.isUpperCase(value.charAt(idx));
     }
 
-    private static String normalizeJsTypeIdentifier(String rawName) {
+    static String normalizeJsTypeIdentifier(String rawName) {
         var preservePrivatePrefix = rawName.startsWith("_") && !rawName.startsWith("__");
         var parts = Stream.of(rawName.split("[^A-Za-z0-9]+"))
                 .filter(part -> !part.isEmpty())
@@ -3241,14 +3352,14 @@ public final class JavaScriptGenerator implements Generator {
         return identifier;
     }
 
-    private static String enumValueIdentifier(String rawName) {
+    static String enumValueIdentifier(String rawName) {
         if (isValidJsIdentifier(rawName) && !JS_KEYWORDS.contains(rawName)) {
             return rawName;
         }
         return normalizeJsIdentifier(rawName);
     }
 
-    private static boolean isValidJsIdentifier(String value) {
+    static boolean isValidJsIdentifier(String value) {
         if (value == null || value.isBlank()) {
             return false;
         }
@@ -3265,7 +3376,7 @@ public final class JavaScriptGenerator implements Generator {
         return true;
     }
 
-    private static String normalizeJsIdentifier(String rawName) {
+    static String normalizeJsIdentifier(String rawName) {
         if ("_".equals(rawName)) {
             return "__unused";
         }
@@ -3340,15 +3451,15 @@ public final class JavaScriptGenerator implements Generator {
         };
     }
 
-    private static String moduleVar(String className) {
+    static String moduleVar(String className) {
         return "__module_" + className.replaceAll("[^A-Za-z0-9]+", "_");
     }
 
-    private static Path classNamePath(String className) {
+    static Path classNamePath(String className) {
         return Path.of(className.replace('.', '/') + ".js");
     }
 
-    private static List<String> classNameCandidates(String rawClassName) {
+    static List<String> classNameCandidates(String rawClassName) {
         var candidates = new LinkedHashSet<String>();
         candidates.add(rawClassName);
         var normalized = rawClassName.replace('\\', '.').replace('/', '.');
@@ -3391,7 +3502,7 @@ public final class JavaScriptGenerator implements Generator {
         return String.join(".", normalized);
     }
 
-    private static String relativeRequire(Path fromModule, Path targetModule) {
+    static String relativeRequire(Path fromModule, Path targetModule) {
         var fromDir = Optional.ofNullable(fromModule.getParent()).orElse(Path.of(""));
         var relative = fromDir.relativize(targetModule).toString().replace('\\', '/');
         if (!relative.startsWith(".")) {
@@ -3400,18 +3511,18 @@ public final class JavaScriptGenerator implements Generator {
         return relative;
     }
 
-    private static String stripNumericSuffix(String value) {
+    static String stripNumericSuffix(String value) {
         if (value.endsWith("L") || value.endsWith("l") || value.endsWith("f") || value.endsWith("F") || value.endsWith("d") || value.endsWith("D")) {
             return value.substring(0, value.length() - 1);
         }
         return value;
     }
 
-    private static String jsArray(Collection<String> values) {
+    static String jsArray(Collection<String> values) {
         return values.stream().map(JavaScriptGenerator::jsString).collect(joining(", ", "[", "]"));
     }
 
-    private static String jsString(String value) {
+    static String jsString(String value) {
         var escaped = value
                 .replace("\\", "\\\\")
                 .replace("'", "\\'")

@@ -107,7 +107,7 @@ test('generate JS from linked input', async () => {
     assert.equal(node.stdout.trim(), '7');
 });
 
-test('compile-generate JS rejects object-oriented modules', async () => {
+test('compile-generate JS accepts object-oriented modules', async () => {
     const root = await tempProject();
     const sourceDir = join(root, 'src');
     const generatedDir = join(root, 'generated');
@@ -120,8 +120,12 @@ class Main {
 
     const result = runCapy(['compile-generate', 'JS', '-i', sourceDir, '-o', generatedDir]);
 
-    assert.notEqual(result.status, 0);
-    assert.equal(result.stderr.includes('Object-oriented `.coo` generation is only supported for JAVA'), true);
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(await exists(join(generatedDir, 'foo', 'Main.js')), true);
+
+    const node = runNode([join(generatedDir, 'foo', 'Main.js'), 'one', 'two']);
+    assert.equal(node.status, 0, node.stderr);
+    assert.equal(node.stdout.trim(), '2');
 });
 
 test('generated JS output is pruned by manifest on reuse', async () => {
