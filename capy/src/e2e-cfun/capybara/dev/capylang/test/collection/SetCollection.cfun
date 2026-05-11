@@ -22,6 +22,14 @@ fun contains(s: Set[int], value: int): bool = s ? value
 
 fun contains_method(s: Set[int], value: int): bool = s.contains(value)
 
+data User { name: String }
+
+fun contains_structural_data_operator(s: Set[User]): bool = s ? User! { name: "Ada" }
+
+fun contains_structural_data_method(s: Set[User]): bool = s.contains(User! { name: "Ada" })
+
+fun contains_structural_tuple(s: Set[Tuple[int, String]]): bool = s ? (1, "one")
+
 fun subset_named(left: Set[int], right: Set[int]): bool = left.is_subset_of(right)
 
 fun subset_symbol(left: Set[int], right: Set[int]): bool = left ⊆ right
