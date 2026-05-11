@@ -1,3 +1,4 @@
+import com.github.gradle.node.task.NodeTask
 import org.gradle.api.DefaultTask
 import org.gradle.api.GradleException
 import org.gradle.api.artifacts.component.ProjectComponentIdentifier
@@ -23,6 +24,7 @@ import java.util.TreeSet
 
 plugins {
     id 'buildlogic.java-application-conventions'
+    id "com.github.node-gradle.node" version "7.1.0"
 }
 
 abstract class InProcessCapybaraCompileTask extends DefaultTask {
@@ -137,6 +139,8 @@ def e2eCfunLinkedOutputDir = layout.buildDirectory.dir('generated/sources/capyba
 def e2eCooCapybaraSourceDir = layout.projectDirectory.dir('src/e2e-coo/capybara')
 def e2eCooGeneratedJavaDir = layout.buildDirectory.dir('generated/sources/capybara/java/e2e-coo')
 def e2eCooLinkedOutputDir = layout.buildDirectory.dir('generated/sources/capybara/linked/e2e-coo')
+def jsTestSourcePath = 'src/test/js'
+def jsTestRunner = layout.projectDirectory.file("${jsTestSourcePath}/run-tests.js")
 def capyRuntimeDependencies = configurations.runtimeClasspath.incoming.artifactView {
     componentFilter { componentIdentifier -> !(componentIdentifier instanceof ProjectComponentIdentifier) }
 }.files
@@ -245,12 +249,26 @@ def e2eCooTests = registerE2eTestTask(
         e2eCooRuntimeDependencies,
         'compileE2eCooJava'
 )
+def jsTests = tasks.register('jsTests', NodeTask) {
+    description = 'Runs JavaScript tests.'
+    group = 'verification'
+    script.set(jsTestRunner)
+    workingDir.set(layout.projectDirectory)
+    args.set([jsTestSourcePath])
+    inputs.files(fileTree(jsTestSourcePath) {
+        include '**/*.js'
+    })
+            .withPropertyName('jsTestSources')
+            .withPathSensitivity(PathSensitivity.RELATIVE)
+    shouldRunAfter test
+}
 
 tasks.register('e2eTests') {
     description = 'Runs all e2e tests.'
     group = 'verification'
     dependsOn e2eCfunTests
     dependsOn e2eCooTests
+    dependsOn jsTests
 }
 
 check {
