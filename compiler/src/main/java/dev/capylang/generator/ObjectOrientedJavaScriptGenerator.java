@@ -1,0 +1,1755 @@
+package dev.capylang.generator;
+
+import dev.capylang.compiler.parser.ObjectOriented;
+import dev.capylang.compiler.parser.ObjectOrientedModule;
+
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.stream.Stream;
+
+import static java.util.stream.Collectors.joining;
+
+final class ObjectOrientedJavaScriptGenerator {
+    private static final Pattern SIMPLE_RECEIVER_METHOD = Pattern.compile("(?<![A-Za-z0-9_$])((?:this|super|[A-Za-z_$][A-Za-z0-9_$]*)(?:\\.[A-Za-z_$][A-Za-z0-9_$]*)*)\\.(size|is_empty)\\s*\\(\\s*\\)");
+    private static final Pattern SIMPLE_INDEX = Pattern.compile("(?<![A-Za-z0-9_$])((?:this|super|[A-Za-z_$][A-Za-z0-9_$]*)(?:\\.[A-Za-z_$][A-Za-z0-9_$]*)*)\\s*\\[\\s*(-?\\d+)\\s*]");
+    private static final Set<String> JS_RESERVED_VALUES = Set.of(
+            "true", "false", "null", "undefined", "this", "super", "new", "capy",
+            "const", "let", "var", "return", "throw", "if", "else", "while", "do", "for",
+            "try", "catch", "class", "extends", "static", "function", "of", "in"
+    );
+
+    private final JavaScriptGenerator.ProgramContext programContext;
+    private int syntheticCounter = 0;
+
+    ObjectOrientedJavaScriptGenerator(JavaScriptGenerator.ProgramContext programContext) {
+        this.programContext = programContext;
+    }
+
+    List<GeneratedModule> generate(List<ObjectOrientedModule> modules) {
+        return modules.stream()
+                .flatMap(module -> generateModule(module).stream())
+                .toList();
+    }
+
+    private List<GeneratedModule> generateModule(ObjectOrientedModule module) {
+        var definitionsByName = module.objectOriented().definitions().stream()
+                .collect(java.util.stream.Collectors.toMap(
+                        definition -> JavaScriptGenerator.simpleTypeName(definition.name()),
+                        definition -> definition,
+                        (left, right) -> left,
+                        LinkedHashMap::new
+                ));
+        return module.objectOriented().definitions().stream()
+                .map(definition -> {
+                    var typeName = JavaScriptGenerator.simpleTypeName(definition.name());
+                    return new GeneratedModule(
+                            relativePath(module, typeName),
+                            renderType(new RenderContext(module, definition, definitionsByName))
+                    );
+                })
+                .toList();
+    }
+
+    static Path relativePath(ObjectOrientedModule module, String typeName) {
+        var normalizedPath = packageName(module.path()).replace('.', '/');
+        return normalizedPath.isBlank()
+                ? Path.of(typeName + ".js")
+                : Path.of(normalizedPath, typeName + ".js");
+    }
+
+    static String packageName(String path) {
+        var normalized = path.replace('\\', '/');
+        return Stream.of(normalized.split("/"))
+                .filter(part -> !part.isBlank())
+                .map(JavaScriptGenerator::normalizeJsIdentifier)
+                .collect(joining("."));
+    }
+
+    private String renderType(RenderContext context) {
+        var body = new StringBuilder();
+        body.append(switch (context.declaration()) {
+            case ObjectOriented.ClassDeclaration classDeclaration -> renderClass(context, classDeclaration);
+            case ObjectOriented.InterfaceDeclaration interfaceDeclaration -> renderInterface(context, interfaceDeclaration);
+            case ObjectOriented.TraitDeclaration traitDeclaration -> renderTrait(context, traitDeclaration);
+        });
+        body.append(renderExports(context.typeName()));
+
+        var output = new StringBuilder();
+        output.append("'use strict';\n\n");
+        output.append("const capy = require(")
+                .append(JavaScriptGenerator.jsString(JavaScriptGenerator.relativeRequire(context.relativePath(), JavaScriptGenerator.RUNTIME_PATH)))
+                .append(");\n");
+        for (var entry : context.requiredModules().entrySet()) {
+            output.append("const ")
+                    .append(JavaScriptGenerator.moduleVar(entry.getKey()))
+                    .append(" = require(")
+                    .append(JavaScriptGenerator.jsString(JavaScriptGenerator.relativeRequire(context.relativePath(), entry.getValue())))
+                    .append(");\n");
+        }
+        if (!context.requiredModules().isEmpty()) {
+            output.append('\n');
+        }
+        output.append(body);
+        return output.toString();
+    }
+
+    private String renderClass(RenderContext context, ObjectOriented.ClassDeclaration declaration) {
+        var code = new StringBuilder();
+        appendDocComments(code, declaration.comments(), 0);
+        var parents = classifyParents(declaration.parents(), context.definitionsByName());
+        code.append("class ").append(context.typeName());
+        parents.classParent().ifPresent(parent -> code.append(" extends ").append(typeReference(context, parent)));
+        code.append(" {\n");
+        code.append(renderConstructor(context, declaration, parents.classParent().isPresent()));
+        code.append(renderStaticTypeMethod(context));
+
+        var parentNames = Stream.concat(parents.classParent().stream(), parents.interfaceParents().stream())
+                .map(JavaScriptGenerator::simpleTypeName)
+                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+        var methods = declaration.members().stream()
+                .filter(ObjectOriented.MethodDeclaration.class::isInstance)
+                .map(ObjectOriented.MethodDeclaration.class::cast)
+                .toList();
+        for (var method : methods) {
+            code.append(renderClassMethod(context, method, parentNames));
+        }
+        code.append("}\n");
+
+        for (var parent : parents.interfaceParents()) {
+            var declarationParent = context.definitionsByName().get(JavaScriptGenerator.simpleTypeName(parent));
+            if (declarationParent instanceof ObjectOriented.TraitDeclaration || declarationParent == null) {
+                code.append("capy.applyTrait(")
+                        .append(context.typeName())
+                        .append(", ")
+                        .append(typeReference(context, parent))
+                        .append(");\n");
+            }
+        }
+        code.append(renderProgramMain(context, methods));
+        return code.toString();
+    }
+
+    private String renderConstructor(RenderContext context, ObjectOriented.ClassDeclaration declaration, boolean hasClassParent) {
+        var fields = declaration.members().stream()
+                .filter(ObjectOriented.FieldDeclaration.class::isInstance)
+                .map(ObjectOriented.FieldDeclaration.class::cast)
+                .toList();
+        var initBlocks = declaration.members().stream()
+                .filter(ObjectOriented.InitBlock.class::isInstance)
+                .map(ObjectOriented.InitBlock.class::cast)
+                .toList();
+        var constructorParameters = declaration.constructorParameters().stream()
+                .map(ObjectOriented.Parameter::name)
+                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+        var parameterList = declaration.constructorParameters().stream()
+                .map(parameter -> jsIdentifier(parameter.name()))
+                .collect(joining(", "));
+        var scope = ExpressionScope.root(context)
+                .withParameters(declaration.constructorParameters().stream().map(ObjectOriented.Parameter::name).toList());
+
+        var code = new StringBuilder();
+        code.append("    constructor(").append(parameterList).append(") {\n");
+        if (hasClassParent) {
+            code.append("        super();\n");
+        }
+        code.append("        this.__capybaraType = ").append(JavaScriptGenerator.jsString(context.typeName())).append(";\n");
+        code.append("        this.__capybaraTypes = ").append(JavaScriptGenerator.jsArray(capybaraTypeNames(context, declaration))).append(";\n");
+        for (var field : fields) {
+            var fieldName = jsIdentifier(field.name());
+            if (field.initializer().isPresent()) {
+                code.append("        this.")
+                        .append(fieldName)
+                        .append(" = ")
+                        .append(renderExpression(context, field.initializer().orElseThrow(), scope, Set.of()))
+                        .append(";\n");
+            } else if (constructorParameters.contains(field.name())) {
+                code.append("        this.")
+                        .append(fieldName)
+                        .append(" = ")
+                        .append(jsIdentifier(field.name()))
+                        .append(";\n");
+            } else {
+                code.append("        this.").append(fieldName).append(" = undefined;\n");
+            }
+        }
+        for (var initBlock : initBlocks) {
+            appendStatementBlockContents(code, context, initBlock.body(), 2, scope, Set.of());
+        }
+        code.append("    }\n");
+        return code.toString();
+    }
+
+    private List<String> capybaraTypeNames(RenderContext context, ObjectOriented.ClassDeclaration declaration) {
+        var names = new LinkedHashSet<String>();
+        names.add(context.typeName());
+        collectParentTypeNames(context, declaration, names);
+        return List.copyOf(names);
+    }
+
+    private void collectParentTypeNames(RenderContext context, ObjectOriented.TypeDeclaration declaration, LinkedHashSet<String> names) {
+        for (var parent : declaration.parents()) {
+            var parentName = JavaScriptGenerator.simpleTypeName(parent.name());
+            if (!names.add(parentName)) {
+                continue;
+            }
+            var local = context.definitionsByName().get(parentName);
+            if (local != null) {
+                collectParentTypeNames(context, local, names);
+            }
+        }
+    }
+
+    private String renderClassMethod(RenderContext context, ObjectOriented.MethodDeclaration method, Set<String> parentNames) {
+        var javaScriptEntrypoint = isJavaScriptEntrypoint(method);
+        if (javaScriptEntrypoint) {
+            ensureEntrypointCompatible(context, method, parentNames);
+        }
+        if (method.body().isEmpty()) {
+            return "    " + jsIdentifier(method.name()) + "() { throw capy.unsupported('Abstract method `" + method.name() + "` was called'); }\n";
+        }
+        var code = new StringBuilder();
+        appendDocComments(code, method.comments(), 1);
+        code.append("    ");
+        if (javaScriptEntrypoint) {
+            code.append("static ");
+        }
+        code.append(jsIdentifier(method.name()))
+                .append("(")
+                .append(method.parameters().stream().map(parameter -> jsIdentifier(parameter.name())).collect(joining(", ")))
+                .append(") {\n");
+        appendMethodBody(code, context, method, 2, parentNames, javaScriptEntrypoint);
+        code.append("    }\n");
+        return code.toString();
+    }
+
+    private String renderInterface(RenderContext context, ObjectOriented.InterfaceDeclaration declaration) {
+        var code = new StringBuilder();
+        appendDocComments(code, declaration.comments(), 0);
+        code.append("class ").append(context.typeName()).append(" {\n");
+        code.append(renderHasInstanceMethod(context.typeName()));
+        code.append(renderStaticTypeMethod(context));
+        code.append("}\n");
+        return code.toString();
+    }
+
+    private String renderTrait(RenderContext context, ObjectOriented.TraitDeclaration declaration) {
+        var code = new StringBuilder();
+        appendDocComments(code, declaration.comments(), 0);
+        code.append("class ").append(context.typeName()).append(" {\n");
+        code.append(renderHasInstanceMethod(context.typeName()));
+        code.append(renderStaticTypeMethod(context));
+        var parentNames = declaration.parents().stream()
+                .map(ObjectOriented.TypeReference::name)
+                .map(JavaScriptGenerator::simpleTypeName)
+                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+        for (var member : declaration.members()) {
+            if (member instanceof ObjectOriented.MethodDeclaration method) {
+                code.append(renderTraitMethod(context, method, parentNames));
+            } else if (member instanceof ObjectOriented.FieldDeclaration) {
+                throw unsupported(context.module(), "Trait fields are not supported by the JavaScript backend in v1");
+            } else {
+                throw unsupported(context.module(), "Trait init blocks are not supported by the JavaScript backend in v1");
+            }
+        }
+        code.append("}\n");
+        return code.toString();
+    }
+
+    private String renderTraitMethod(RenderContext context, ObjectOriented.MethodDeclaration method, Set<String> parentNames) {
+        if (method.body().isEmpty()) {
+            return "    " + jsIdentifier(method.name()) + "() { throw capy.unsupported('Abstract trait method `" + method.name() + "` was called'); }\n";
+        }
+        var code = new StringBuilder();
+        appendDocComments(code, method.comments(), 1);
+        code.append("    ")
+                .append(jsIdentifier(method.name()))
+                .append("(")
+                .append(method.parameters().stream().map(parameter -> jsIdentifier(parameter.name())).collect(joining(", ")))
+                .append(") {\n");
+        appendMethodBody(code, context, method, 2, parentNames, false);
+        code.append("    }\n");
+        return code.toString();
+    }
+
+    private String renderHasInstanceMethod(String typeName) {
+        return "    static [Symbol.hasInstance](value) {\n"
+               + "        return capy.isType(value, " + JavaScriptGenerator.jsString(typeName) + ");\n"
+               + "    }\n";
+    }
+
+    private String renderStaticTypeMethod(RenderContext context) {
+        return "    static type() {\n"
+               + "        return " + renderObjectOrientedInfo(context, context.declaration(), true) + ";\n"
+               + "    }\n";
+    }
+
+    private void appendMethodBody(
+            StringBuilder code,
+            RenderContext context,
+            ObjectOriented.MethodDeclaration method,
+            int indentLevel,
+            Set<String> parentNames,
+            boolean staticMethod
+    ) {
+        var scope = ExpressionScope.root(context).withParameters(method.parameters().stream().map(ObjectOriented.Parameter::name).toList());
+        if (!staticMethod) {
+            scope = scope.withThis();
+        }
+        var body = method.body().orElseThrow();
+        if (body instanceof ObjectOriented.ExpressionBody expressionBody) {
+            var renderedExpression = renderExpression(context, expressionBody.expression(), scope, parentNames);
+            code.append(indent(indentLevel));
+            if ("void".equals(method.returnType())) {
+                code.append(renderedExpression).append(";\n");
+            } else {
+                code.append("return ").append(renderedExpression).append(";\n");
+            }
+            return;
+        }
+        appendStatementBlockContents(code, context, (ObjectOriented.StatementBlock) body, indentLevel, scope, parentNames);
+    }
+
+    private void appendStatementBlockContents(
+            StringBuilder code,
+            RenderContext context,
+            ObjectOriented.StatementBlock block,
+            int indentLevel,
+            ExpressionScope parentScope,
+            Set<String> parentNames
+    ) {
+        var scope = parentScope.child();
+        for (int index = 0; index < block.statements().size(); index++) {
+            var statement = block.statements().get(index);
+            if (statement instanceof ObjectOriented.LocalMethodStatement) {
+                var groupedLocalMethods = new ArrayList<ObjectOriented.LocalMethodStatement>();
+                while (index < block.statements().size() && block.statements().get(index) instanceof ObjectOriented.LocalMethodStatement localMethod) {
+                    groupedLocalMethods.add(localMethod);
+                    index++;
+                }
+                index--;
+                scope = appendLocalMethodGroup(code, context, groupedLocalMethods, indentLevel, scope, parentNames);
+                continue;
+            }
+            scope = appendStatement(code, context, statement, indentLevel, scope, parentNames);
+        }
+    }
+
+    private ExpressionScope appendLocalMethodGroup(
+            StringBuilder code,
+            RenderContext context,
+            List<ObjectOriented.LocalMethodStatement> localMethods,
+            int indentLevel,
+            ExpressionScope scope,
+            Set<String> parentNames
+    ) {
+        var groupScope = scope.withLocals(localMethods.stream().map(ObjectOriented.LocalMethodStatement::name).toList());
+        for (var localMethod : localMethods) {
+            appendDocComments(code, localMethod.comments(), indentLevel);
+            code.append(indent(indentLevel))
+                    .append("function ")
+                    .append(jsIdentifier(localMethod.name()))
+                    .append("(")
+                    .append(localMethod.parameters().stream().map(parameter -> jsIdentifier(parameter.name())).collect(joining(", ")))
+                    .append(") {\n");
+            var methodScope = groupScope.child().withParameters(localMethod.parameters().stream().map(ObjectOriented.Parameter::name).toList());
+            if (localMethod.body() instanceof ObjectOriented.ExpressionBody expressionBody) {
+                code.append(indent(indentLevel + 1));
+                if ("void".equals(localMethod.returnType())) {
+                    code.append(renderExpression(context, expressionBody.expression(), methodScope, parentNames)).append(";\n");
+                } else {
+                    code.append("return ")
+                            .append(renderExpression(context, expressionBody.expression(), methodScope, parentNames))
+                            .append(";\n");
+                }
+            } else {
+                appendStatementBlockContents(code, context, (ObjectOriented.StatementBlock) localMethod.body(), indentLevel + 1, methodScope, parentNames);
+            }
+            code.append(indent(indentLevel)).append("}\n");
+        }
+        return groupScope;
+    }
+
+    private ExpressionScope appendStatement(
+            StringBuilder code,
+            RenderContext context,
+            ObjectOriented.Statement statement,
+            int indentLevel,
+            ExpressionScope scope,
+            Set<String> parentNames
+    ) {
+        switch (statement) {
+            case ObjectOriented.LetStatement letStatement -> {
+                code.append(indent(indentLevel))
+                        .append("const ")
+                        .append(jsIdentifier(letStatement.name()))
+                        .append(" = ")
+                        .append(renderExpression(context, letStatement.expression(), scope, parentNames))
+                        .append(";\n");
+                return scope.withLocal(letStatement.name());
+            }
+            case ObjectOriented.LocalMethodStatement ignored -> {
+                return scope;
+            }
+            case ObjectOriented.MutableVariableStatement mutableVariableStatement -> {
+                code.append(indent(indentLevel))
+                        .append("let ")
+                        .append(jsIdentifier(mutableVariableStatement.name()))
+                        .append(" = ")
+                        .append(renderExpression(context, mutableVariableStatement.expression(), scope, parentNames))
+                        .append(";\n");
+                return scope.withLocal(mutableVariableStatement.name());
+            }
+            case ObjectOriented.AssignmentStatement assignmentStatement -> {
+                code.append(indent(indentLevel))
+                        .append(scope.resolve(assignmentStatement.name()))
+                        .append(" = ")
+                        .append(renderExpression(context, assignmentStatement.expression(), scope, parentNames))
+                        .append(";\n");
+                return scope;
+            }
+            case ObjectOriented.ExpressionStatement expressionStatement -> {
+                code.append(indent(indentLevel))
+                        .append(renderExpression(context, expressionStatement.expression(), scope, parentNames))
+                        .append(";\n");
+                return scope;
+            }
+            case ObjectOriented.ThrowStatement throwStatement -> {
+                code.append(indent(indentLevel))
+                        .append("throw capy.toException(")
+                        .append(renderExpression(context, throwStatement.expression(), scope, parentNames))
+                        .append(");\n");
+                return scope;
+            }
+            case ObjectOriented.ReturnStatement returnStatement -> {
+                code.append(indent(indentLevel))
+                        .append("return ")
+                        .append(renderExpression(context, returnStatement.expression(), scope, parentNames))
+                        .append(";\n");
+                return scope;
+            }
+            case ObjectOriented.IfStatement ifStatement -> {
+                code.append(indent(indentLevel))
+                        .append("if (")
+                        .append(renderExpression(context, ifStatement.condition(), scope, parentNames))
+                        .append(") {\n");
+                appendStatementBlockContents(code, context, ifStatement.thenBranch(), indentLevel + 1, scope, parentNames);
+                code.append(indent(indentLevel)).append("}");
+                ifStatement.elseBranch().ifPresent(elseBranch -> {
+                    if (elseBranch instanceof ObjectOriented.IfStatement nestedIf) {
+                        code.append(" else ");
+                        appendInlineIf(code, context, nestedIf, indentLevel, scope, parentNames);
+                    } else {
+                        code.append(" else {\n");
+                        appendStatementBlockContents(code, context, (ObjectOriented.StatementBlock) elseBranch, indentLevel + 1, scope, parentNames);
+                        code.append(indent(indentLevel)).append("}");
+                    }
+                });
+                code.append("\n");
+                return scope;
+            }
+            case ObjectOriented.TryCatchStatement tryCatchStatement -> {
+                code.append(indent(indentLevel)).append("try {\n");
+                appendStatementBlockContents(code, context, tryCatchStatement.tryBlock(), indentLevel + 1, scope, parentNames);
+                code.append(indent(indentLevel)).append("}");
+                var catchClause = tryCatchStatement.catches().isEmpty()
+                        ? new ObjectOriented.CatchClause("__error", new ObjectOriented.StatementBlock(List.of()))
+                        : tryCatchStatement.catches().getFirst();
+                code.append(" catch (").append(jsIdentifier(catchClause.name())).append(") {\n");
+                code.append(indent(indentLevel + 1))
+                        .append(jsIdentifier(catchClause.name()))
+                        .append(" = capy.decorateException(")
+                        .append(jsIdentifier(catchClause.name()))
+                        .append(");\n");
+                appendStatementBlockContents(code, context, catchClause.body(), indentLevel + 1, scope.withLocal(catchClause.name()), parentNames);
+                code.append(indent(indentLevel)).append("}\n");
+                return scope;
+            }
+            case ObjectOriented.WhileStatement whileStatement -> {
+                code.append(indent(indentLevel))
+                        .append("while (")
+                        .append(renderExpression(context, whileStatement.condition(), scope, parentNames))
+                        .append(") {\n");
+                appendStatementBlockContents(code, context, whileStatement.body(), indentLevel + 1, scope, parentNames);
+                code.append(indent(indentLevel)).append("}\n");
+                return scope;
+            }
+            case ObjectOriented.DoWhileStatement doWhileStatement -> {
+                code.append(indent(indentLevel)).append("do {\n");
+                appendStatementBlockContents(code, context, doWhileStatement.body(), indentLevel + 1, scope, parentNames);
+                code.append(indent(indentLevel))
+                        .append("} while (")
+                        .append(renderExpression(context, doWhileStatement.condition(), scope, parentNames))
+                        .append(");\n");
+                return scope;
+            }
+            case ObjectOriented.ForEachStatement forEachStatement -> {
+                code.append(indent(indentLevel))
+                        .append("for (const ")
+                        .append(jsIdentifier(forEachStatement.name()))
+                        .append(" of capy.entries(")
+                        .append(renderExpression(context, forEachStatement.iterable(), scope, parentNames))
+                        .append(")) {\n");
+                appendStatementBlockContents(code, context, forEachStatement.body(), indentLevel + 1, scope.withLocal(forEachStatement.name()), parentNames);
+                code.append(indent(indentLevel)).append("}\n");
+                return scope;
+            }
+            case ObjectOriented.StatementBlock nestedBlock -> {
+                code.append(indent(indentLevel)).append("{\n");
+                appendStatementBlockContents(code, context, nestedBlock, indentLevel + 1, scope, parentNames);
+                code.append(indent(indentLevel)).append("}\n");
+                return scope;
+            }
+        }
+    }
+
+    private void appendInlineIf(
+            StringBuilder code,
+            RenderContext context,
+            ObjectOriented.IfStatement statement,
+            int indentLevel,
+            ExpressionScope scope,
+            Set<String> parentNames
+    ) {
+        code.append("if (")
+                .append(renderExpression(context, statement.condition(), scope, parentNames))
+                .append(") {\n");
+        appendStatementBlockContents(code, context, statement.thenBranch(), indentLevel + 1, scope, parentNames);
+        code.append(indent(indentLevel)).append("}");
+        statement.elseBranch().ifPresent(elseBranch -> {
+            if (elseBranch instanceof ObjectOriented.IfStatement nestedIf) {
+                code.append(" else ");
+                appendInlineIf(code, context, nestedIf, indentLevel, scope, parentNames);
+            } else {
+                code.append(" else {\n");
+                appendStatementBlockContents(code, context, (ObjectOriented.StatementBlock) elseBranch, indentLevel + 1, scope, parentNames);
+                code.append(indent(indentLevel)).append("}");
+            }
+        });
+    }
+
+    private String renderExpression(RenderContext context, String expression, ExpressionScope scope, Set<String> parentNames) {
+        var trimmed = expression.trim();
+        if (trimmed.isBlank()) {
+            return "undefined";
+        }
+        if (trimmed.startsWith("match")) {
+            return renderMatchExpression(context, trimmed, scope, parentNames);
+        }
+        if (trimmed.startsWith("if ")) {
+            return renderIfExpression(context, trimmed, scope, parentNames);
+        }
+        var arrayWithValues = renderArrayWithValues(context, trimmed, scope, parentNames);
+        if (arrayWithValues.isPresent()) {
+            return arrayWithValues.orElseThrow();
+        }
+        var sizedArray = renderSizedArray(context, trimmed, scope, parentNames);
+        if (sizedArray.isPresent()) {
+            return sizedArray.orElseThrow();
+        }
+        var dataCreation = renderDataCreation(context, trimmed, scope, parentNames);
+        if (dataCreation.isPresent()) {
+            return dataCreation.orElseThrow();
+        }
+        var collectionLiteral = renderCollectionLiteral(context, trimmed, scope, parentNames);
+        if (collectionLiteral.isPresent()) {
+            return collectionLiteral.orElseThrow();
+        }
+        if ("???".equals(trimmed)) {
+            return "undefined";
+        }
+        if (isNumericLiteral(trimmed)) {
+            return JavaScriptGenerator.stripNumericSuffix(trimmed);
+        }
+        trimmed = rewriteParentQualifiedCalls(trimmed, parentNames);
+        trimmed = rewriteModuleQualifiedReferences(context, trimmed);
+        trimmed = rewriteImportedFunctionCalls(context, trimmed);
+        trimmed = rewriteKnownCollectionMethods(trimmed);
+        trimmed = rewriteArrayIndexing(trimmed);
+        trimmed = rewriteBareFieldsAndLocals(trimmed, scope);
+        return trimmed;
+    }
+
+    private Optional<String> renderArrayWithValues(RenderContext context, String expression, ExpressionScope scope, Set<String> parentNames) {
+        if (!expression.endsWith("}")) {
+            return Optional.empty();
+        }
+        var braceIndex = findTopLevelChar(expression, '{');
+        if (braceIndex < 0) {
+            return Optional.empty();
+        }
+        var type = expression.substring(0, braceIndex).trim();
+        if (!type.endsWith("[]")) {
+            return Optional.empty();
+        }
+        var valuesSource = expression.substring(braceIndex + 1, expression.length() - 1).trim();
+        var values = splitTopLevel(valuesSource).stream()
+                .map(value -> renderExpression(context, value, scope, parentNames))
+                .collect(joining(", "));
+        return Optional.of("[" + values + "]");
+    }
+
+    private Optional<String> renderSizedArray(RenderContext context, String expression, ExpressionScope scope, Set<String> parentNames) {
+        if (!expression.endsWith("]")) {
+            return Optional.empty();
+        }
+        var sizeBracketIndex = findTopLevelChar(expression, '[');
+        if (sizeBracketIndex < 0) {
+            return Optional.empty();
+        }
+        var type = expression.substring(0, sizeBracketIndex).trim();
+        if (type.isBlank() || type.endsWith("[]") || !isTypeLikePrefix(type)) {
+            return Optional.empty();
+        }
+        var sizeExpression = expression.substring(sizeBracketIndex + 1, expression.length() - 1).trim();
+        if (sizeExpression.isBlank()) {
+            return Optional.empty();
+        }
+        return Optional.of("capy.newArray("
+                           + renderExpression(context, sizeExpression, scope, parentNames)
+                           + ", "
+                           + defaultValue(type)
+                           + ")");
+    }
+
+    private Optional<String> renderDataCreation(RenderContext context, String expression, ExpressionScope scope, Set<String> parentNames) {
+        if (!expression.endsWith("}")) {
+            return Optional.empty();
+        }
+        var braceIndex = findTopLevelChar(expression, '{');
+        if (braceIndex < 0) {
+            return Optional.empty();
+        }
+        var type = expression.substring(0, braceIndex).trim();
+        if (type.isBlank() || type.endsWith("[]") || !isTypeLikePrefix(type)) {
+            return Optional.empty();
+        }
+        var body = expression.substring(braceIndex + 1, expression.length() - 1).trim();
+        var typeName = JavaScriptGenerator.simpleTypeName(type);
+        var constructor = typeReference(context, typeName);
+        if ("None".equals(typeName) && body.isBlank()) {
+            return Optional.of(constructor);
+        }
+        var fields = programContext.fieldsForType(typeName);
+        var assignments = new ArrayList<String>();
+        var position = 0;
+        for (var item : splitTopLevel(body)) {
+            if (item.isBlank()) {
+                continue;
+            }
+            var colonIndex = findTopLevelChar(item, ':');
+            if (colonIndex >= 0) {
+                var name = item.substring(0, colonIndex).trim();
+                name = stripQuotes(name);
+                assignments.add(jsIdentifier(name) + ": " + renderExpression(context, item.substring(colonIndex + 1).trim(), scope, parentNames));
+            } else {
+                var name = position < fields.size() ? fields.get(position) : "value" + position;
+                assignments.add(jsIdentifier(name) + ": " + renderExpression(context, item, scope, parentNames));
+            }
+            position++;
+        }
+        return Optional.of("new " + constructor + "({ " + String.join(", ", assignments) + " })");
+    }
+
+    private Optional<String> renderCollectionLiteral(RenderContext context, String expression, ExpressionScope scope, Set<String> parentNames) {
+        if (expression.startsWith("[") && expression.endsWith("]")) {
+            var inner = expression.substring(1, expression.length() - 1).trim();
+            return Optional.of(splitTopLevel(inner).stream()
+                    .map(value -> renderExpression(context, value, scope, parentNames))
+                    .collect(joining(", ", "[", "]")));
+        }
+        if (!expression.startsWith("{") || !expression.endsWith("}")) {
+            return Optional.empty();
+        }
+        var inner = expression.substring(1, expression.length() - 1).trim();
+        if (inner.equals(":")) {
+            return Optional.of("new Map()");
+        }
+        var items = splitTopLevel(inner);
+        if (items.stream().anyMatch(item -> findTopLevelChar(item, ':') >= 0)) {
+            return Optional.of(items.stream()
+                    .map(item -> {
+                        var colon = findTopLevelChar(item, ':');
+                        if (colon < 0) {
+                            throw unsupported(context.module(), "Mixed set/dict literal `" + preview(expression) + "` is not supported");
+                        }
+                        return "[" + renderExpression(context, item.substring(0, colon).trim(), scope, parentNames)
+                               + ", "
+                               + renderExpression(context, item.substring(colon + 1).trim(), scope, parentNames)
+                               + "]";
+                    })
+                    .collect(joining(", ", "new Map([", "])")));
+        }
+        return Optional.of(items.stream()
+                .map(item -> renderExpression(context, item, scope, parentNames))
+                .collect(joining(", ", "new Set([", "])")));
+    }
+
+    private String renderIfExpression(RenderContext context, String expression, ExpressionScope scope, Set<String> parentNames) {
+        var thenIndex = findTopLevelKeyword(expression, " then ");
+        var elseIndex = findTopLevelKeyword(expression, " else ");
+        if (thenIndex < 0 || elseIndex < 0 || elseIndex <= thenIndex) {
+            throw unsupported(context.module(), "Unable to lower `if` expression `" + preview(expression) + "`");
+        }
+        var condition = expression.substring("if ".length(), thenIndex).trim();
+        var thenBranch = expression.substring(thenIndex + " then ".length(), elseIndex).trim();
+        var elseBranch = expression.substring(elseIndex + " else ".length()).trim();
+        return "((" + renderExpression(context, condition, scope, parentNames) + ") ? ("
+               + renderExpression(context, thenBranch, scope, parentNames) + ") : ("
+               + renderExpression(context, elseBranch, scope, parentNames) + "))";
+    }
+
+    private String renderMatchExpression(RenderContext context, String expression, ExpressionScope scope, Set<String> parentNames) {
+        var withIndex = findTopLevelToken(expression, "with", "match".length());
+        if (withIndex < 0) {
+            throw unsupported(context.module(), "Unable to lower `match` expression `" + preview(expression) + "`");
+        }
+        var matchedExpression = expression.substring("match".length(), withIndex).trim();
+        var casesSource = expression.substring(withIndex + "with".length()).trim();
+        var matchCases = splitMatchCases(casesSource);
+        var matchVar = "__capybaraMatch" + syntheticCounter++;
+        var code = new StringBuilder("(() => { const ")
+                .append(matchVar)
+                .append(" = ")
+                .append(renderExpression(context, matchedExpression, scope, parentNames))
+                .append("; ");
+        for (var matchCase : matchCases) {
+            code.append(renderMatchCase(context, matchCase, matchVar, scope, parentNames));
+        }
+        code.append("throw new Error('Non-exhaustive match'); })()");
+        return code.toString();
+    }
+
+    private String renderMatchCase(RenderContext context, String matchCase, String matchVar, ExpressionScope scope, Set<String> parentNames) {
+        if (!matchCase.startsWith("case")) {
+            throw unsupported(context.module(), "Unsupported match branch `" + preview(matchCase) + "`");
+        }
+        var arrowIndex = findTopLevelToken(matchCase, "->", "case".length());
+        if (arrowIndex < 0) {
+            throw unsupported(context.module(), "Unsupported match branch `" + preview(matchCase) + "`");
+        }
+        var pattern = matchCase.substring("case".length(), arrowIndex).trim();
+        var body = matchCase.substring(arrowIndex + "->".length()).trim();
+        var braceIndex = findTopLevelChar(pattern, '{');
+        if ("_".equals(pattern) || pattern.startsWith("_ ")) {
+            return "if (true) { return " + renderExpression(context, body, scope, parentNames) + "; } ";
+        }
+        if (braceIndex < 0) {
+            var typeName = JavaScriptGenerator.simpleTypeName(pattern);
+            return "if (capy.isType(" + matchVar + ", " + JavaScriptGenerator.jsString(typeName) + ")) { return "
+                   + renderExpression(context, body, scope, parentNames)
+                   + "; } ";
+        }
+
+        var typeName = JavaScriptGenerator.simpleTypeName(pattern.substring(0, braceIndex).trim());
+        var bindingsSource = pattern.substring(braceIndex + 1, pattern.length() - 1).trim();
+        var branchScope = scope.child();
+        var code = new StringBuilder();
+        code.append("if (capy.isType(")
+                .append(matchVar)
+                .append(", ")
+                .append(JavaScriptGenerator.jsString(typeName))
+                .append(")) { ");
+        for (var binding : splitTopLevel(bindingsSource)) {
+            var bindingName = binding.trim();
+            if (bindingName.isBlank() || "_".equals(bindingName)) {
+                continue;
+            }
+            branchScope = branchScope.withLocal(bindingName);
+            code.append("const ")
+                    .append(jsIdentifier(bindingName))
+                    .append(" = ")
+                    .append(matchVar)
+                    .append(".")
+                    .append(jsIdentifier(bindingName))
+                    .append("; ");
+        }
+        code.append("return ")
+                .append(renderExpression(context, body, branchScope, parentNames))
+                .append("; } ");
+        return code.toString();
+    }
+
+    private List<String> splitMatchCases(String casesSource) {
+        var normalized = casesSource.replace("\r", "");
+        var indexes = new ArrayList<Integer>();
+        for (int i = 0; i < normalized.length(); i++) {
+            if (startsWithTopLevelToken(normalized, i, "case")) {
+                indexes.add(i);
+            }
+        }
+        if (indexes.isEmpty()) {
+            return List.of();
+        }
+        var cases = new ArrayList<String>();
+        for (int i = 0; i < indexes.size(); i++) {
+            var start = indexes.get(i);
+            var end = i + 1 < indexes.size() ? indexes.get(i + 1) : normalized.length();
+            cases.add(normalized.substring(start, end).trim());
+        }
+        return List.copyOf(cases);
+    }
+
+    private String rewriteParentQualifiedCalls(String expression, Set<String> parentNames) {
+        var rewritten = expression;
+        for (var parentName : parentNames) {
+            rewritten = rewritten.replaceAll(
+                    "(^|[^A-Za-z0-9_$.])" + Pattern.quote(parentName) + "\\s*\\.",
+                    "$1super."
+            );
+        }
+        return rewritten;
+    }
+
+    private String rewriteModuleQualifiedReferences(RenderContext context, String expression) {
+        var rewritten = expression;
+        var classNames = programContext.pathsByClassName().keySet().stream()
+                .sorted((left, right) -> Integer.compare(right.length(), left.length()))
+                .toList();
+        for (var className : classNames) {
+            if (className.equals(context.className())) {
+                continue;
+            }
+            var simple = JavaScriptGenerator.simpleTypeName(className);
+            var pattern = Pattern.compile("(^|[^A-Za-z0-9_$.])" + Pattern.quote(simple) + "\\s*\\.");
+            var matcher = pattern.matcher(rewritten);
+            if (!matcher.find()) {
+                continue;
+            }
+            context.requireClassName(className);
+            rewritten = matcher.replaceAll("$1" + Matcher.quoteReplacement(JavaScriptGenerator.moduleVar(className) + "."));
+        }
+        return rewritten;
+    }
+
+    private String rewriteImportedFunctionCalls(RenderContext context, String expression) {
+        var rewritten = expression;
+        for (var entry : context.importedFunctionOwners().entrySet().stream()
+                .sorted((left, right) -> Integer.compare(right.getKey().length(), left.getKey().length()))
+                .toList()) {
+            var owner = entry.getValue();
+            context.requireClassName(owner);
+            rewritten = rewritten.replaceAll(
+                    "(^|[^A-Za-z0-9_$.])" + Pattern.quote(entry.getKey()) + "\\s*\\(",
+                    "$1" + Matcher.quoteReplacement(JavaScriptGenerator.moduleVar(owner) + "." + jsIdentifier(entry.getKey()) + "(")
+            );
+        }
+        return rewritten;
+    }
+
+    private String rewriteKnownCollectionMethods(String expression) {
+        var matcher = SIMPLE_RECEIVER_METHOD.matcher(expression);
+        var rewritten = new StringBuilder();
+        while (matcher.find()) {
+            var receiver = matcher.group(1);
+            var replacement = "size".equals(matcher.group(2))
+                    ? "capy.size(" + receiver + ")"
+                    : "(capy.size(" + receiver + ") === 0)";
+            matcher.appendReplacement(rewritten, Matcher.quoteReplacement(replacement));
+        }
+        matcher.appendTail(rewritten);
+        return rewritten.toString();
+    }
+
+    private String rewriteArrayIndexing(String expression) {
+        var matcher = SIMPLE_INDEX.matcher(expression);
+        var rewritten = new StringBuilder();
+        while (matcher.find()) {
+            matcher.appendReplacement(
+                    rewritten,
+                    Matcher.quoteReplacement("capy.arrayGet(" + matcher.group(1) + ", " + matcher.group(2) + ")")
+            );
+        }
+        matcher.appendTail(rewritten);
+        return rewritten.toString();
+    }
+
+    private String rewriteBareFieldsAndLocals(String expression, ExpressionScope scope) {
+        var code = new StringBuilder();
+        char stringDelimiter = 0;
+        for (int index = 0; index < expression.length(); index++) {
+            var current = expression.charAt(index);
+            if (stringDelimiter != 0) {
+                code.append(current);
+                if (current == '\\' && index + 1 < expression.length()) {
+                    code.append(expression.charAt(++index));
+                    continue;
+                }
+                if (current == stringDelimiter) {
+                    stringDelimiter = 0;
+                }
+                continue;
+            }
+            if (current == '"' || current == '\'') {
+                stringDelimiter = current;
+                code.append(current);
+                continue;
+            }
+            if (!isIdentifierStart(current)) {
+                code.append(current);
+                continue;
+            }
+            var start = index;
+            index++;
+            while (index < expression.length() && isIdentifierPart(expression.charAt(index))) {
+                index++;
+            }
+            var token = expression.substring(start, index);
+            index--;
+            var previous = previousNonWhitespace(expression, start);
+            var next = nextNonWhitespace(expression, index + 1);
+            if (scope.hasBinding(token)) {
+                code.append(scope.resolve(token));
+            } else if (scope.fieldNames().contains(token)
+                       && previous != '.'
+                       && next != '('
+                       && !JS_RESERVED_VALUES.contains(token)) {
+                code.append("this.").append(jsIdentifier(token));
+            } else {
+                code.append(token);
+            }
+        }
+        return code.toString();
+    }
+
+    private String typeReference(RenderContext context, String rawName) {
+        var typeName = JavaScriptGenerator.simpleTypeName(rawName);
+        if (typeName.equals(context.typeName())) {
+            return typeName;
+        }
+        var owner = context.importedTypeOwners().get(typeName);
+        if (owner == null) {
+            owner = currentPackageClassName(context.module(), typeName)
+                    .flatMap(programContext::resolveClassName)
+                    .orElse(null);
+        }
+        if (owner == null) {
+            owner = programContext.exportedMemberOwner(typeName).orElse(null);
+        }
+        if (owner == null && rawName.startsWith("/")) {
+            owner = JavaScriptGenerator.classNameCandidates(rawName).stream()
+                    .filter(programContext.pathsByClassName()::containsKey)
+                    .findFirst()
+                    .orElse(null);
+        }
+        if (owner == null || owner.equals(context.className())) {
+            return typeName;
+        }
+        context.requireClassName(owner);
+        return JavaScriptGenerator.moduleVar(owner) + "." + typeName;
+    }
+
+    private Optional<String> currentPackageClassName(ObjectOrientedModule module, String typeName) {
+        var pkg = packageName(module.path());
+        return Optional.of(pkg.isBlank() ? typeName : pkg + "." + typeName);
+    }
+
+    private ParentKinds classifyParents(
+            List<ObjectOriented.TypeReference> parents,
+            Map<String, ObjectOriented.TypeDeclaration> definitionsByName
+    ) {
+        Optional<String> classParent = Optional.empty();
+        var interfaceParents = new ArrayList<String>();
+        for (int index = 0; index < parents.size(); index++) {
+            var parentName = parents.get(index).name();
+            var localDeclaration = definitionsByName.get(JavaScriptGenerator.simpleTypeName(parentName));
+            if (classParent.isEmpty() && (localDeclaration instanceof ObjectOriented.ClassDeclaration || localDeclaration == null && index == 0)) {
+                classParent = Optional.of(parentName);
+            } else {
+                interfaceParents.add(parentName);
+            }
+        }
+        return new ParentKinds(classParent, List.copyOf(interfaceParents));
+    }
+
+    private boolean isJavaScriptEntrypoint(ObjectOriented.MethodDeclaration method) {
+        return method.name().equals("main")
+               && method.returnType().equals("int")
+               && method.parameters().size() == 1
+               && method.parameters().getFirst().type().equals("List[String]")
+               && method.body().isPresent()
+               && !method.modifiers().contains("abstract");
+    }
+
+    private void ensureEntrypointCompatible(RenderContext context, ObjectOriented.MethodDeclaration method, Set<String> parentNames) {
+        if (referencesThis(method) || referencesParents(method, parentNames)) {
+            throw unsupported(context.module(), "Entrypoint method `" + context.typeName() + ".main` cannot use instance state or parent-qualified calls");
+        }
+    }
+
+    private boolean referencesThis(ObjectOriented.MethodDeclaration method) {
+        return methodExpressions(method).stream().anyMatch(expression -> expression.contains("this"));
+    }
+
+    private boolean referencesParents(ObjectOriented.MethodDeclaration method, Set<String> parentNames) {
+        return methodExpressions(method).stream()
+                .anyMatch(expression -> parentNames.stream().anyMatch(parent -> expression.contains(parent + ".")));
+    }
+
+    private List<String> methodExpressions(ObjectOriented.MethodDeclaration method) {
+        return method.body().stream()
+                .flatMap(body -> switch (body) {
+                    case ObjectOriented.ExpressionBody expressionBody -> Stream.of(expressionBody.expression());
+                    case ObjectOriented.StatementBlock statementBlock -> collectExpressions(statementBlock).stream();
+                })
+                .toList();
+    }
+
+    private List<String> collectExpressions(ObjectOriented.StatementBlock block) {
+        var expressions = new ArrayList<String>();
+        collectExpressions(block, expressions);
+        return List.copyOf(expressions);
+    }
+
+    private void collectExpressions(ObjectOriented.StatementBlock block, List<String> expressions) {
+        for (var statement : block.statements()) {
+            switch (statement) {
+                case ObjectOriented.LetStatement letStatement -> expressions.add(letStatement.expression());
+                case ObjectOriented.LocalMethodStatement localMethodStatement -> {
+                    switch (localMethodStatement.body()) {
+                        case ObjectOriented.ExpressionBody expressionBody -> expressions.add(expressionBody.expression());
+                        case ObjectOriented.StatementBlock statementBlock -> collectExpressions(statementBlock, expressions);
+                    }
+                }
+                case ObjectOriented.MutableVariableStatement mutableVariableStatement -> expressions.add(mutableVariableStatement.expression());
+                case ObjectOriented.AssignmentStatement assignmentStatement -> expressions.add(assignmentStatement.expression());
+                case ObjectOriented.ExpressionStatement expressionStatement -> expressions.add(expressionStatement.expression());
+                case ObjectOriented.ThrowStatement throwStatement -> expressions.add(throwStatement.expression());
+                case ObjectOriented.ReturnStatement returnStatement -> expressions.add(returnStatement.expression());
+                case ObjectOriented.IfStatement ifStatement -> {
+                    expressions.add(ifStatement.condition());
+                    collectExpressions(ifStatement.thenBranch(), expressions);
+                    ifStatement.elseBranch().ifPresent(elseBranch -> collectExpressions(elseBranch, expressions));
+                }
+                case ObjectOriented.TryCatchStatement tryCatchStatement -> {
+                    collectExpressions(tryCatchStatement.tryBlock(), expressions);
+                    tryCatchStatement.catches().forEach(catchClause -> collectExpressions(catchClause.body(), expressions));
+                }
+                case ObjectOriented.WhileStatement whileStatement -> {
+                    expressions.add(whileStatement.condition());
+                    collectExpressions(whileStatement.body(), expressions);
+                }
+                case ObjectOriented.DoWhileStatement doWhileStatement -> {
+                    collectExpressions(doWhileStatement.body(), expressions);
+                    expressions.add(doWhileStatement.condition());
+                }
+                case ObjectOriented.ForEachStatement forEachStatement -> {
+                    expressions.add(forEachStatement.iterable());
+                    collectExpressions(forEachStatement.body(), expressions);
+                }
+                case ObjectOriented.StatementBlock nestedBlock -> collectExpressions(nestedBlock, expressions);
+            }
+        }
+    }
+
+    private void collectExpressions(ObjectOriented.Statement statement, List<String> expressions) {
+        switch (statement) {
+            case ObjectOriented.StatementBlock block -> collectExpressions(block, expressions);
+            case ObjectOriented.IfStatement ifStatement -> {
+                expressions.add(ifStatement.condition());
+                collectExpressions(ifStatement.thenBranch(), expressions);
+                ifStatement.elseBranch().ifPresent(elseBranch -> collectExpressions(elseBranch, expressions));
+            }
+            case ObjectOriented.WhileStatement whileStatement -> {
+                expressions.add(whileStatement.condition());
+                collectExpressions(whileStatement.body(), expressions);
+            }
+            case ObjectOriented.DoWhileStatement doWhileStatement -> {
+                collectExpressions(doWhileStatement.body(), expressions);
+                expressions.add(doWhileStatement.condition());
+            }
+            case ObjectOriented.ForEachStatement forEachStatement -> {
+                expressions.add(forEachStatement.iterable());
+                collectExpressions(forEachStatement.body(), expressions);
+            }
+            case ObjectOriented.TryCatchStatement tryCatchStatement -> {
+                collectExpressions(tryCatchStatement.tryBlock(), expressions);
+                tryCatchStatement.catches().forEach(catchClause -> collectExpressions(catchClause.body(), expressions));
+            }
+            case ObjectOriented.LetStatement letStatement -> expressions.add(letStatement.expression());
+            case ObjectOriented.LocalMethodStatement localMethodStatement -> {
+                switch (localMethodStatement.body()) {
+                    case ObjectOriented.ExpressionBody expressionBody -> expressions.add(expressionBody.expression());
+                    case ObjectOriented.StatementBlock statementBlock -> collectExpressions(statementBlock, expressions);
+                }
+            }
+            case ObjectOriented.MutableVariableStatement mutableVariableStatement -> expressions.add(mutableVariableStatement.expression());
+            case ObjectOriented.AssignmentStatement assignmentStatement -> expressions.add(assignmentStatement.expression());
+            case ObjectOriented.ExpressionStatement expressionStatement -> expressions.add(expressionStatement.expression());
+            case ObjectOriented.ThrowStatement throwStatement -> expressions.add(throwStatement.expression());
+            case ObjectOriented.ReturnStatement returnStatement -> expressions.add(returnStatement.expression());
+        }
+    }
+
+    private String renderProgramMain(RenderContext context, List<ObjectOriented.MethodDeclaration> methods) {
+        var main = methods.stream().filter(this::isJavaScriptEntrypoint).findFirst();
+        if (main.isEmpty()) {
+            return "";
+        }
+        return "\nif (require.main === module) {\n"
+               + "    const result = " + context.typeName() + ".main(process.argv.slice(2));\n"
+               + "    const value = capy.isEffect(result) ? result.unsafe_run() : result;\n"
+               + "    if (value !== undefined && value !== null) {\n"
+               + "        capy.writeProgramResult(value);\n"
+               + "    }\n"
+               + "}\n";
+    }
+
+    private String renderExports(String typeName) {
+        return "module.exports = {\n"
+               + "    " + typeName + ",\n"
+               + "};\n";
+    }
+
+    private String renderObjectOrientedInfo(RenderContext context, ObjectOriented.TypeDeclaration declaration, boolean full) {
+        if (declaration instanceof ObjectOriented.InterfaceDeclaration) {
+            return "{ kind: 'interface', name: "
+                   + JavaScriptGenerator.jsString(JavaScriptGenerator.simpleTypeName(declaration.name()))
+                   + ", pkg: "
+                   + renderReflectionPackage(context.module())
+                   + ", methods: "
+                   + renderReflectionMethods(context, declaration.members(), full)
+                   + ", parents: "
+                   + renderReflectionParents(context, declaration.parents(), full)
+                   + " }";
+        }
+        if (declaration instanceof ObjectOriented.TraitDeclaration) {
+            return "{ kind: 'trait', name: "
+                   + JavaScriptGenerator.jsString(JavaScriptGenerator.simpleTypeName(declaration.name()))
+                   + ", pkg: "
+                   + renderReflectionPackage(context.module())
+                   + ", methods: "
+                   + renderReflectionMethods(context, declaration.members(), full)
+                   + ", parents: "
+                   + renderReflectionParents(context, declaration.parents(), full)
+                   + " }";
+        }
+        var classDeclaration = (ObjectOriented.ClassDeclaration) declaration;
+        var fields = declaration.members().stream()
+                .filter(ObjectOriented.FieldDeclaration.class::isInstance)
+                .map(ObjectOriented.FieldDeclaration.class::cast)
+                .toList();
+        return "{ kind: 'object', name: "
+               + JavaScriptGenerator.jsString(JavaScriptGenerator.simpleTypeName(declaration.name()))
+               + ", pkg: "
+               + renderReflectionPackage(context.module())
+               + ", open: "
+               + classDeclaration.modifiers().contains("open")
+               + ", fields: "
+               + renderReflectionFields(context, fields, full)
+               + ", methods: "
+               + renderReflectionMethods(context, declaration.members(), full)
+               + ", parents: "
+               + renderReflectionParents(context, declaration.parents(), full)
+               + " }";
+    }
+
+    private String renderReflectionParents(RenderContext context, List<ObjectOriented.TypeReference> parents, boolean full) {
+        if (!full || parents.isEmpty()) {
+            return "[]";
+        }
+        return parents.stream()
+                .map(parent -> {
+                    var declaration = context.definitionsByName().get(JavaScriptGenerator.simpleTypeName(parent.name()));
+                    if (declaration == null) {
+                        return renderExternalObjectInfo(context, JavaScriptGenerator.simpleTypeName(parent.name()));
+                    }
+                    return renderObjectOrientedInfo(context, declaration, false);
+                })
+                .collect(joining(", ", "[", "]"));
+    }
+
+    private String renderReflectionFields(RenderContext context, List<ObjectOriented.FieldDeclaration> fields, boolean full) {
+        if (!full || fields.isEmpty()) {
+            return "[]";
+        }
+        return fields.stream()
+                .map(field -> "{ name: "
+                              + JavaScriptGenerator.jsString(field.name())
+                              + ", type: "
+                              + renderReflectionTypeInfo(context, field.type())
+                              + " }")
+                .collect(joining(", ", "[", "]"));
+    }
+
+    private String renderReflectionMethods(RenderContext context, List<ObjectOriented.MemberDeclaration> members, boolean full) {
+        if (!full) {
+            return "[]";
+        }
+        var methods = members.stream()
+                .filter(ObjectOriented.MethodDeclaration.class::isInstance)
+                .map(ObjectOriented.MethodDeclaration.class::cast)
+                .toList();
+        if (methods.isEmpty()) {
+            return "[]";
+        }
+        return methods.stream()
+                .map(method -> "{ name: "
+                               + JavaScriptGenerator.jsString(method.name())
+                               + ", pkg: "
+                               + renderReflectionPackage(context.module())
+                               + ", params: "
+                               + renderReflectionParams(context, method.parameters())
+                               + ", return_type: "
+                               + renderReflectionTypeInfo(context, method.returnType())
+                               + " }")
+                .collect(joining(", ", "[", "]"));
+    }
+
+    private String renderReflectionParams(RenderContext context, List<ObjectOriented.Parameter> parameters) {
+        if (parameters.isEmpty()) {
+            return "[]";
+        }
+        return parameters.stream()
+                .map(parameter -> "{ name: "
+                                  + JavaScriptGenerator.jsString(parameter.name())
+                                  + ", type: "
+                                  + renderReflectionTypeInfo(context, parameter.type())
+                                  + " }")
+                .collect(joining(", ", "[", "]"));
+    }
+
+    private String renderReflectionTypeInfo(RenderContext context, String rawType) {
+        var trimmed = rawType.trim();
+        if (trimmed.endsWith("[]")) {
+            return "{ kind: 'list', name: 'array', pkg: " + renderEmptyReflectionPackage()
+                   + ", element_type: " + renderReflectionTypeInfo(context, trimmed.substring(0, trimmed.length() - 2)) + " }";
+        }
+        if (trimmed.startsWith("List[") && trimmed.endsWith("]")) {
+            return "{ kind: 'list', name: 'List', pkg: " + renderEmptyReflectionPackage()
+                   + ", element_type: " + renderReflectionTypeInfo(context, trimmed.substring(5, trimmed.length() - 1)) + " }";
+        }
+        if (trimmed.startsWith("Set[") && trimmed.endsWith("]")) {
+            return "{ kind: 'set', name: 'Set', pkg: " + renderEmptyReflectionPackage()
+                   + ", element_type: " + renderReflectionTypeInfo(context, trimmed.substring(4, trimmed.length() - 1)) + " }";
+        }
+        if (trimmed.startsWith("Dict[") && trimmed.endsWith("]")) {
+            return "{ kind: 'dict', name: 'Dict', pkg: " + renderEmptyReflectionPackage()
+                   + ", value_type: " + renderReflectionTypeInfo(context, trimmed.substring(5, trimmed.length() - 1)) + " }";
+        }
+        if (trimmed.startsWith("Tuple[") && trimmed.endsWith("]")) {
+            var inner = trimmed.substring(6, trimmed.length() - 1);
+            var elements = splitTopLevel(inner).stream()
+                    .map(type -> renderReflectionTypeInfo(context, type))
+                    .collect(joining(", ", "[", "]"));
+            return "{ kind: 'tuple', name: 'Tuple', pkg: " + renderEmptyReflectionPackage() + ", elements: " + elements + " }";
+        }
+        return "{ kind: 'data', name: "
+               + JavaScriptGenerator.jsString(JavaScriptGenerator.simpleTypeName(trimmed))
+               + ", pkg: "
+               + renderReflectionPackageForType(context.module(), trimmed)
+               + " }";
+    }
+
+    private String renderExternalObjectInfo(RenderContext context, String name) {
+        return "{ kind: 'object', name: "
+               + JavaScriptGenerator.jsString(name)
+               + ", pkg: "
+               + renderReflectionPackageForType(context.module(), name)
+               + ", open: false, fields: [], methods: [], parents: [] }";
+    }
+
+    private String renderReflectionPackage(ObjectOrientedModule module) {
+        var path = module.path().replaceFirst("^/", "");
+        var name = path.isBlank() ? "" : JavaScriptGenerator.simpleTypeName(path);
+        return "{ name: " + JavaScriptGenerator.jsString(name) + ", path: " + JavaScriptGenerator.jsString(path) + " }";
+    }
+
+    private String renderReflectionPackageForType(ObjectOrientedModule module, String rawType) {
+        var normalized = rawType.replace('\\', '/');
+        if (normalized.startsWith("/")) {
+            var slash = normalized.lastIndexOf('/');
+            var path = slash > 0 ? normalized.substring(1, slash) : "";
+            var name = path.isBlank() ? "" : JavaScriptGenerator.simpleTypeName(path);
+            return "{ name: " + JavaScriptGenerator.jsString(name) + ", path: " + JavaScriptGenerator.jsString(path) + " }";
+        }
+        return renderReflectionPackage(module);
+    }
+
+    private String renderEmptyReflectionPackage() {
+        return "{ name: '', path: '' }";
+    }
+
+    private boolean isNumericLiteral(String value) {
+        return value.matches("[0-9]+[lLfFdD]?")
+               || value.matches("[0-9]+\\.[0-9]*(?:[eE][+-]?[0-9]+)?[fFdD]?")
+               || value.matches("[0-9]+(?:[eE][+-]?[0-9]+)[fFdD]?");
+    }
+
+    private boolean isTypeLikePrefix(String value) {
+        return switch (value) {
+            case "byte", "int", "long", "double", "float", "bool", "String", "any", "data", "void" -> true;
+            default -> value.startsWith("/") || Character.isUpperCase(value.charAt(0)) || value.startsWith("_");
+        };
+    }
+
+    private String defaultValue(String type) {
+        return switch (type.trim()) {
+            case "byte", "int", "long", "double", "float" -> "0";
+            case "bool" -> "false";
+            default -> "undefined";
+        };
+    }
+
+    private String ownerClassName(ObjectOrientedModule module, String moduleName) {
+        if (moduleName.startsWith("/")) {
+            var normalized = moduleName.substring(1).replace('/', '.');
+            return JavaScriptGenerator.classNameCandidates(normalized).stream()
+                    .filter(programContext.pathsByClassName()::containsKey)
+                    .findFirst()
+                    .orElse(normalized);
+        }
+        var pkg = packageName(module.path());
+        var candidate = pkg.isBlank() ? moduleName : pkg + "." + moduleName;
+        return programContext.resolveClassName(candidate).orElse(candidate);
+    }
+
+    private String stripQuotes(String value) {
+        if (value.length() >= 2
+            && ((value.startsWith("\"") && value.endsWith("\"")) || (value.startsWith("'") && value.endsWith("'")))) {
+            return value.substring(1, value.length() - 1);
+        }
+        return value;
+    }
+
+    private int findTopLevelToken(String value, String token, int startAt) {
+        var parens = 0;
+        var brackets = 0;
+        var braces = 0;
+        char stringDelimiter = 0;
+        for (int i = startAt; i <= value.length() - token.length(); i++) {
+            var current = value.charAt(i);
+            if (stringDelimiter != 0) {
+                if (current == '\\') {
+                    i++;
+                    continue;
+                }
+                if (current == stringDelimiter) {
+                    stringDelimiter = 0;
+                }
+                continue;
+            }
+            if (current == '"' || current == '\'') {
+                stringDelimiter = current;
+                continue;
+            }
+            switch (current) {
+                case '(' -> parens++;
+                case ')' -> parens--;
+                case '[' -> brackets++;
+                case ']' -> brackets--;
+                case '{' -> braces++;
+                case '}' -> braces--;
+                default -> {
+                }
+            }
+            if (parens == 0 && brackets == 0 && braces == 0 && value.startsWith(token, i)) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    private boolean startsWithTopLevelToken(String value, int index, String token) {
+        if (!value.startsWith(token, index)) {
+            return false;
+        }
+        var parens = 0;
+        var brackets = 0;
+        var braces = 0;
+        char stringDelimiter = 0;
+        for (int i = 0; i < index; i++) {
+            var current = value.charAt(i);
+            if (stringDelimiter != 0) {
+                if (current == '\\') {
+                    i++;
+                    continue;
+                }
+                if (current == stringDelimiter) {
+                    stringDelimiter = 0;
+                }
+                continue;
+            }
+            if (current == '"' || current == '\'') {
+                stringDelimiter = current;
+                continue;
+            }
+            switch (current) {
+                case '(' -> parens++;
+                case ')' -> parens--;
+                case '[' -> brackets++;
+                case ']' -> brackets--;
+                case '{' -> braces++;
+                case '}' -> braces--;
+                default -> {
+                }
+            }
+        }
+        return parens == 0 && brackets == 0 && braces == 0;
+    }
+
+    private int findTopLevelKeyword(String value, String keyword) {
+        var parens = 0;
+        var brackets = 0;
+        var braces = 0;
+        char stringDelimiter = 0;
+        for (int i = 0; i <= value.length() - keyword.length(); i++) {
+            var current = value.charAt(i);
+            if (stringDelimiter != 0) {
+                if (current == '\\') {
+                    i++;
+                    continue;
+                }
+                if (current == stringDelimiter) {
+                    stringDelimiter = 0;
+                }
+                continue;
+            }
+            if (current == '"' || current == '\'') {
+                stringDelimiter = current;
+                continue;
+            }
+            switch (current) {
+                case '(' -> parens++;
+                case ')' -> parens--;
+                case '[' -> brackets++;
+                case ']' -> brackets--;
+                case '{' -> braces++;
+                case '}' -> braces--;
+                default -> {
+                }
+            }
+            if (parens == 0 && brackets == 0 && braces == 0 && value.startsWith(keyword, i)) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    private int findTopLevelChar(String value, char target) {
+        var parens = 0;
+        var brackets = 0;
+        var braces = 0;
+        char stringDelimiter = 0;
+        for (int i = 0; i < value.length(); i++) {
+            var current = value.charAt(i);
+            if (stringDelimiter != 0) {
+                if (current == '\\') {
+                    i++;
+                    continue;
+                }
+                if (current == stringDelimiter) {
+                    stringDelimiter = 0;
+                }
+                continue;
+            }
+            if (current == '"' || current == '\'') {
+                stringDelimiter = current;
+                continue;
+            }
+            if (parens == 0 && brackets == 0 && braces == 0 && current == target) {
+                return i;
+            }
+            switch (current) {
+                case '(' -> parens++;
+                case ')' -> parens--;
+                case '[' -> brackets++;
+                case ']' -> brackets--;
+                case '{' -> braces++;
+                case '}' -> braces--;
+                default -> {
+                }
+            }
+        }
+        return -1;
+    }
+
+    private List<String> splitTopLevel(String value) {
+        if (value.isBlank()) {
+            return List.of();
+        }
+        var result = new ArrayList<String>();
+        var current = new StringBuilder();
+        var parens = 0;
+        var brackets = 0;
+        var braces = 0;
+        char stringDelimiter = 0;
+        for (int i = 0; i < value.length(); i++) {
+            var ch = value.charAt(i);
+            if (stringDelimiter != 0) {
+                current.append(ch);
+                if (ch == '\\' && i + 1 < value.length()) {
+                    current.append(value.charAt(++i));
+                    continue;
+                }
+                if (ch == stringDelimiter) {
+                    stringDelimiter = 0;
+                }
+                continue;
+            }
+            if (ch == '"' || ch == '\'') {
+                stringDelimiter = ch;
+                current.append(ch);
+                continue;
+            }
+            switch (ch) {
+                case '(' -> parens++;
+                case ')' -> parens--;
+                case '[' -> brackets++;
+                case ']' -> brackets--;
+                case '{' -> braces++;
+                case '}' -> braces--;
+                case ',' -> {
+                    if (parens == 0 && brackets == 0 && braces == 0) {
+                        result.add(current.toString().trim());
+                        current.setLength(0);
+                        continue;
+                    }
+                }
+                default -> {
+                }
+            }
+            current.append(ch);
+        }
+        if (!current.isEmpty()) {
+            result.add(current.toString().trim());
+        }
+        return result;
+    }
+
+    private char previousNonWhitespace(String value, int beforeIndex) {
+        for (int i = beforeIndex - 1; i >= 0; i--) {
+            if (!Character.isWhitespace(value.charAt(i))) {
+                return value.charAt(i);
+            }
+        }
+        return '\0';
+    }
+
+    private char nextNonWhitespace(String value, int afterIndex) {
+        for (int i = afterIndex; i < value.length(); i++) {
+            if (!Character.isWhitespace(value.charAt(i))) {
+                return value.charAt(i);
+            }
+        }
+        return '\0';
+    }
+
+    private boolean isIdentifierStart(char value) {
+        return Character.isLetter(value) || value == '_' || value == '$';
+    }
+
+    private boolean isIdentifierPart(char value) {
+        return Character.isLetterOrDigit(value) || value == '_' || value == '$';
+    }
+
+    private String jsIdentifier(String value) {
+        if (JavaScriptGenerator.isValidJsIdentifier(value) && !JS_RESERVED_VALUES.contains(value)) {
+            return value;
+        }
+        return JavaScriptGenerator.normalizeJsIdentifier(value);
+    }
+
+    private String indent(int level) {
+        return "    ".repeat(level);
+    }
+
+    private void appendDocComments(StringBuilder code, List<String> comments, int indentLevel) {
+        if (comments.isEmpty()) {
+            return;
+        }
+        var indent = indent(indentLevel);
+        comments.forEach(line -> code.append(indent).append("//").append(line.isEmpty() ? "" : " " + line).append("\n"));
+    }
+
+    private IllegalArgumentException unsupported(ObjectOrientedModule module, String message) {
+        return new IllegalArgumentException(module.moduleFile() + ": " + message);
+    }
+
+    private String preview(String expression) {
+        return expression.replaceAll("\\s+", " ").trim();
+    }
+
+    private final class RenderContext {
+        private final ObjectOrientedModule module;
+        private final ObjectOriented.TypeDeclaration declaration;
+        private final Map<String, ObjectOriented.TypeDeclaration> definitionsByName;
+        private final String packageName;
+        private final String typeName;
+        private final String className;
+        private final Path relativePath;
+        private final LinkedHashMap<String, Path> requiredModules = new LinkedHashMap<>();
+        private final Map<String, String> importedTypeOwners;
+        private final Map<String, String> importedFunctionOwners;
+        private final Set<String> fieldNames;
+
+        private RenderContext(
+                ObjectOrientedModule module,
+                ObjectOriented.TypeDeclaration declaration,
+                Map<String, ObjectOriented.TypeDeclaration> definitionsByName
+        ) {
+            this.module = module;
+            this.declaration = declaration;
+            this.definitionsByName = definitionsByName;
+            this.packageName = packageName(module.path());
+            this.typeName = JavaScriptGenerator.simpleTypeName(declaration.name());
+            this.className = packageName.isBlank() ? typeName : packageName + "." + typeName;
+            this.relativePath = ObjectOrientedJavaScriptGenerator.relativePath(module, typeName);
+            this.importedTypeOwners = importedTypeOwners(module);
+            this.importedFunctionOwners = importedFunctionOwners(module);
+            this.fieldNames = declaration.members().stream()
+                    .filter(ObjectOriented.FieldDeclaration.class::isInstance)
+                    .map(ObjectOriented.FieldDeclaration.class::cast)
+                    .map(ObjectOriented.FieldDeclaration::name)
+                    .collect(java.util.stream.Collectors.toUnmodifiableSet());
+        }
+
+        private void requireClassName(String className) {
+            var resolvedClassName = programContext.resolveClassName(className).orElse(className);
+            if (resolvedClassName.equals(this.className)) {
+                return;
+            }
+            programContext.pathForClassName(resolvedClassName)
+                    .ifPresent(path -> requiredModules.putIfAbsent(resolvedClassName, path));
+        }
+
+        private Map<String, String> importedTypeOwners(ObjectOrientedModule module) {
+            var owners = new LinkedHashMap<String, String>();
+            for (var importDeclaration : module.imports()) {
+                var owner = ownerClassName(module, importDeclaration.moduleName());
+                if (importDeclaration.isStarImport()) {
+                    programContext.exportsByClassName().getOrDefault(owner, Set.of()).stream()
+                            .filter(symbol -> !symbol.isBlank() && Character.isUpperCase(symbol.charAt(0)))
+                            .forEach(symbol -> owners.putIfAbsent(symbol, owner));
+                }
+                for (var symbol : importDeclaration.symbols()) {
+                    if ("*".equals(symbol) || symbol.isBlank() || !Character.isUpperCase(symbol.charAt(0))) {
+                        continue;
+                    }
+                    if (!importDeclaration.excludedSymbols().contains(symbol)) {
+                        owners.putIfAbsent(symbol, owner);
+                    }
+                }
+            }
+            return Map.copyOf(owners);
+        }
+
+        private Map<String, String> importedFunctionOwners(ObjectOrientedModule module) {
+            var owners = new LinkedHashMap<String, String>();
+            for (var importDeclaration : module.imports()) {
+                var owner = ownerClassName(module, importDeclaration.moduleName());
+                if (importDeclaration.isStarImport() && "/capy/io/Stdout".equals(importDeclaration.moduleName())) {
+                    owners.put("print", owner);
+                    owners.put("println", owner);
+                }
+                for (var symbol : importDeclaration.symbols()) {
+                    if ("*".equals(symbol) || symbol.isBlank() || Character.isUpperCase(symbol.charAt(0))) {
+                        continue;
+                    }
+                    if (!importDeclaration.excludedSymbols().contains(symbol)) {
+                        owners.put(symbol, owner);
+                    }
+                }
+            }
+            return Map.copyOf(owners);
+        }
+
+        private ObjectOrientedModule module() {
+            return module;
+        }
+
+        private ObjectOriented.TypeDeclaration declaration() {
+            return declaration;
+        }
+
+        private Map<String, ObjectOriented.TypeDeclaration> definitionsByName() {
+            return definitionsByName;
+        }
+
+        private String typeName() {
+            return typeName;
+        }
+
+        private String className() {
+            return className;
+        }
+
+        private Path relativePath() {
+            return relativePath;
+        }
+
+        private LinkedHashMap<String, Path> requiredModules() {
+            return requiredModules;
+        }
+
+        private Map<String, String> importedTypeOwners() {
+            return importedTypeOwners;
+        }
+
+        private Map<String, String> importedFunctionOwners() {
+            return importedFunctionOwners;
+        }
+
+        private Set<String> fieldNames() {
+            return fieldNames;
+        }
+    }
+
+    private record ExpressionScope(RenderContext context, Map<String, String> bindings, Set<String> fieldNames) {
+        static ExpressionScope root(RenderContext context) {
+            return new ExpressionScope(context, Map.of(), context.fieldNames());
+        }
+
+        ExpressionScope child() {
+            return new ExpressionScope(context, bindings, fieldNames);
+        }
+
+        ExpressionScope withThis() {
+            return this;
+        }
+
+        ExpressionScope withParameters(List<String> names) {
+            return withLocals(names);
+        }
+
+        ExpressionScope withLocal(String name) {
+            var updated = new HashMap<>(bindings);
+            updated.put(name, jsIdentifierStatic(name));
+            return new ExpressionScope(context, Map.copyOf(updated), fieldNames);
+        }
+
+        ExpressionScope withLocals(List<String> names) {
+            var current = this;
+            for (var name : names) {
+                current = current.withLocal(name);
+            }
+            return current;
+        }
+
+        boolean hasBinding(String name) {
+            return bindings.containsKey(name);
+        }
+
+        String resolve(String name) {
+            return bindings.getOrDefault(name, jsIdentifierStatic(name));
+        }
+
+        private static String jsIdentifierStatic(String value) {
+            if (JavaScriptGenerator.isValidJsIdentifier(value) && !JS_RESERVED_VALUES.contains(value)) {
+                return value;
+            }
+            return JavaScriptGenerator.normalizeJsIdentifier(value);
+        }
+    }
+
+    private record ParentKinds(Optional<String> classParent, List<String> interfaceParents) {
+    }
+}

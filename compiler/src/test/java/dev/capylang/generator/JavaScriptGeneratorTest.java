@@ -3,8 +3,6 @@ package dev.capylang.generator;
 import dev.capylang.compiler.CapybaraCompiler;
 import dev.capylang.compiler.CompiledProgram;
 import dev.capylang.compiler.Result;
-import dev.capylang.compiler.parser.ObjectOriented;
-import dev.capylang.compiler.parser.ObjectOrientedModule;
 import dev.capylang.compiler.parser.RawModule;
 import dev.capylang.compiler.parser.SourceKind;
 import org.junit.jupiter.api.Test;
@@ -18,7 +16,6 @@ import java.util.TreeSet;
 
 import static java.util.stream.Collectors.joining;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class JavaScriptGeneratorTest {
     @TempDir
@@ -67,30 +64,204 @@ class JavaScriptGeneratorTest {
     }
 
     @Test
-    void shouldRejectObjectOrientedModules() {
-        var objectOrientedModule = new ObjectOrientedModule(
+    void shouldGenerateAndRunObjectOrientedModules() throws Exception {
+        var program = compileProgram(List.of(new RawModule(
                 "User",
                 "/foo",
-                new ObjectOriented(List.of(new ObjectOriented.ClassDeclaration(
-                        "User",
-                        List.of(),
-                        List.of(),
-                        List.of(),
-                        List.of(),
-                        List.of()
-                ))),
-                List.of(),
-                SourceKind.OBJECT_ORIENTED
-        );
+                """
+                        open class Base {
+                            field prefix: String = "hello"
 
-        assertThatThrownBy(() -> new JavaScriptGenerator().generate(new CompiledProgram(List.of(), List.of(objectOrientedModule))))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("Object-oriented `.coo` generation is only supported for JAVA");
+                            open def describe(name: String): String = prefix + " " + name
+                        }
+
+                        trait Bracket {
+                            def bracket(name: String): String = "[" + name + "]"
+                        }
+
+                        class User(name: String): Base, Bracket {
+                            field name: String = name
+
+                            def greet(): String = this.describe(this.name)
+
+                            def print(): String {
+                                let label: String = Base.describe(this.name)
+                                return label + "!"
+                            }
+
+                            def local_increment(x: int): int {
+                                let step: int = 1
+                                def inc(y: int): int = y + step
+                                return inc(x)
+                            }
+
+                            def parity(x: int): bool {
+                                def is_even(n: int): bool {
+                                    if n == 0 {
+                                        return true
+                                    } else {
+                                        return is_odd(n - 1)
+                                    }
+                                }
+                                def is_odd(n: int): bool {
+                                    if n == 0 {
+                                        return false
+                                    } else {
+                                        return is_even(n - 1)
+                                    }
+                                }
+                                return is_even(x)
+                            }
+
+                            def second(values: String[]): String = values[1]
+
+                            def names(): String[] = String[]{"zero", "one"}
+
+                            def slots(size: int): int[] = int[size]
+
+                            def recover(flag: bool): String {
+                                try {
+                                    if flag {
+                                        throw "boom"
+                                    }
+                                    return "ok"
+                                } catch error {
+                                    return error.getMessage()
+                                }
+                            }
+
+                            def catch_index(values: String[]): String {
+                                try {
+                                    return values[3]
+                                } catch error {
+                                    return error.getClass().getSimpleName()
+                                }
+                            }
+                        }
+                        """,
+                SourceKind.OBJECT_ORIENTED
+        )));
+
+        var generated = new JavaScriptGenerator().generate(program);
+        writeGenerated(generated);
+
+        assertThat(generated.modules())
+                .extracting(GeneratedModule::relativePath)
+                .contains(
+                        Path.of("foo", "Base.js"),
+                        Path.of("foo", "Bracket.js"),
+                        Path.of("foo", "User.js")
+                );
+
+        var output = runNode("""
+                const { User } = require('./foo/User.js');
+                const user = new User('Ada');
+                console.log([
+                    user.greet(),
+                    user.bracket(user.name),
+                    user.print(),
+                    user.local_increment(7),
+                    user.parity(12),
+                    user.parity(15),
+                    user.second(['zero', 'one']),
+                    user.names().join(','),
+                    user.slots(4).length,
+                    user.recover(true),
+                    user.catch_index(['zero'])
+                ].join('|'));
+                """);
+
+        assertThat(output).isEqualTo("hello Ada|[Ada]|hello Ada!|8|true|false|one|zero,one|4|boom|ArrayIndexOutOfBoundsException");
+    }
+
+    @Test
+    void shouldGenerateAndRunObjectOrientedFunctionalInteropAndReflection() throws Exception {
+        var program = compileProgram(List.of(
+                new RawModule(
+                        "ObjectOrientedFpInterop",
+                        "/foo",
+                        """
+                                type InteropPet = InteropDog | InteropCat
+                                data InteropDog { name: String }
+                                data InteropCat { age: int }
+
+                                fun make_dog(name: String): InteropDog = InteropDog { name: name }
+
+                                fun pet_text(pet: InteropPet): String =
+                                    match pet with
+                                    case InteropDog { name } -> "dog:" + name
+                                    case InteropCat { age } -> "cat:" + age
+                                """,
+                        SourceKind.FUNCTIONAL
+                ),
+                new RawModule(
+                        "PetInteractor",
+                        "/foo",
+                        """
+                                from ObjectOrientedFpInterop import { InteropPet, InteropDog, InteropCat }
+
+                                interface Printable {
+                                    def print(): String
+                                }
+
+                                trait Label {
+                                    def label(name: String): String = "[" + name + "]"
+                                }
+
+                                class PetInteractor: Printable, Label {
+                                    def invoke_fp_function(name: String): String =
+                                        ObjectOrientedFpInterop.petText(ObjectOrientedFpInterop.makeDog(name))
+
+                                    def create_fp_data(name: String): InteropPet =
+                                        InteropDog { name: name }
+
+                                    def match_fp_type(pet_name: String): String {
+                                        let pet: InteropPet = InteropDog { name: pet_name }
+                                        return match pet with
+                                        case InteropDog { name } -> ("dog:" + name)
+                                        case InteropCat { age } -> ("cat:" + age)
+                                    }
+
+                                    override def print(): String = this.label("pet")
+                                }
+                                """,
+                        SourceKind.OBJECT_ORIENTED
+                )
+        ));
+
+        var generated = new JavaScriptGenerator().generate(program);
+        writeGenerated(generated);
+
+        var output = runNode("""
+                const { PetInteractor } = require('./foo/PetInteractor.js');
+                const { InteropDog } = require('./foo/ObjectOrientedFpInterop.js');
+                const pet = new PetInteractor();
+                const dog = pet.create_fp_data('Bara');
+                const printable = require('./foo/Printable.js').Printable.type();
+                const label = require('./foo/Label.js').Label.type();
+                const interactor = PetInteractor.type();
+                console.log([
+                    pet.invoke_fp_function('Capy'),
+                    dog instanceof InteropDog,
+                    dog.name,
+                    pet.match_fp_type('Mochi'),
+                    pet.print(),
+                    printable.methods.map(method => method.name).join(','),
+                    label.methods.map(method => method.name).join(','),
+                    interactor.parents.map(parent => parent.name).sort().join(',')
+                ].join('|'));
+                """);
+
+        assertThat(output).isEqualTo("dog:Capy|true|Bara|dog:Mochi|[pet]|print|label|Label,Printable");
     }
 
     private static CompiledProgram compileProgram(String source) {
+        return compileProgram(List.of(new RawModule("Main", "/foo", source)));
+    }
+
+    private static CompiledProgram compileProgram(List<RawModule> modules) {
         var result = CapybaraCompiler.INSTANCE.compile(
-                List.of(new RawModule("Main", "/foo", source)),
+                modules,
                 new TreeSet<>()
         );
         if (result instanceof Result.Error<CompiledProgram> error) {

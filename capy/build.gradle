@@ -143,10 +143,13 @@ def e2eCfunLinkedOutputDir = layout.buildDirectory.dir('generated/sources/capyba
 def e2eCfunLinkedJsOutputDir = layout.buildDirectory.dir('generated/sources/capybara/linked-js/e2e-cfun')
 def e2eCooCapybaraSourceDir = layout.projectDirectory.dir('src/e2e-coo/capybara')
 def e2eCooGeneratedJavaDir = layout.buildDirectory.dir('generated/sources/capybara/java/e2e-coo')
+def e2eCooGeneratedJsDir = layout.buildDirectory.dir('generated/sources/capybara/js/e2e-coo')
 def e2eCooLinkedOutputDir = layout.buildDirectory.dir('generated/sources/capybara/linked/e2e-coo')
+def e2eCooLinkedJsOutputDir = layout.buildDirectory.dir('generated/sources/capybara/linked-js/e2e-coo')
 def jsTestSourcePath = 'src/test/js'
 def jsTestRunner = layout.projectDirectory.file("${jsTestSourcePath}/run-tests.js")
 def e2eCfunJsTestSourcePath = 'src/e2e-cfun/js'
+def e2eCooJsTestSourcePath = 'src/e2e-coo/js'
 def capyRuntimeDependencies = configurations.runtimeClasspath.incoming.artifactView {
     componentFilter { componentIdentifier -> !(componentIdentifier instanceof ProjectComponentIdentifier) }
 }.files
@@ -298,6 +301,29 @@ def e2eCfunJsTests = tasks.register('e2e-cfun-js', NodeTask) {
             .withPathSensitivity(PathSensitivity.RELATIVE)
     shouldRunAfter e2eCfunTests
 }
+def e2eCooJsTests = tasks.register('e2e-coo-js', NodeTask) {
+    description = 'Runs object-oriented JavaScript e2e tests.'
+    group = 'verification'
+    dependsOn ':capy:classes'
+    dependsOn ':compiler:classes'
+    script.set(jsTestRunner)
+    workingDir.set(layout.projectDirectory)
+    args.set([e2eCooJsTestSourcePath])
+    environment.put('CAPY_CLI_CLASSPATH', capyRuntimeClasspath.asPath)
+    environment.put('CAPY_E2E_COO_JS_GENERATED_DIR', e2eCooGeneratedJsDir.get().asFile.absolutePath)
+    inputs.files(fileTree(e2eCooJsTestSourcePath) {
+        include '**/*.js'
+    })
+            .withPropertyName('e2eCooJsTestSources')
+            .withPathSensitivity(PathSensitivity.RELATIVE)
+    inputs.dir(e2eCooGeneratedJsDir)
+            .withPropertyName('e2eCooGeneratedJsSources')
+            .withPathSensitivity(PathSensitivity.RELATIVE)
+    inputs.files(capyRuntimeClasspath)
+            .withPropertyName('capyRuntimeClasspath')
+            .withPathSensitivity(PathSensitivity.RELATIVE)
+    shouldRunAfter e2eCooTests
+}
 
 tasks.register('e2eTests') {
     description = 'Runs all e2e tests.'
@@ -305,6 +331,7 @@ tasks.register('e2eTests') {
     dependsOn e2eCfunTests
     dependsOn e2eCfunJsTests
     dependsOn e2eCooTests
+    dependsOn e2eCooJsTests
     dependsOn jsTests
 }
 
@@ -312,6 +339,7 @@ check {
     dependsOn e2eCfunTests
     dependsOn e2eCfunJsTests
     dependsOn e2eCooTests
+    dependsOn e2eCooJsTests
 }
 
 def registerCapybaraE2eLinkTask = { String taskName, String taskDescription, String outputTypeName, capybaraInputDir, capybaraLinkedOutputDir, capybaraGeneratedOutputDir ->
@@ -357,6 +385,14 @@ def linkCapybaraE2eCooSources = registerCapybaraE2eLinkTask(
         e2eCooLinkedOutputDir,
         e2eCooGeneratedJavaDir
 )
+def linkCapybaraE2eCooJsSources = registerCapybaraE2eLinkTask(
+        'linkCapybaraE2eCooJsSources',
+        'Compiles object-oriented e2e-test Capybara files and generates JavaScript in one pass without launching a separate JVM.',
+        'JAVASCRIPT',
+        e2eCooCapybaraSourceDir,
+        e2eCooLinkedJsOutputDir,
+        e2eCooGeneratedJsDir
+)
 
 tasks.named('compileE2eCfunJava') {
     dependsOn linkCapybaraE2eCfunSources
@@ -368,6 +404,10 @@ tasks.named('e2e-cfun-js') {
 
 tasks.named('compileE2eCooJava') {
     dependsOn linkCapybaraE2eCooSources
+}
+
+tasks.named('e2e-coo-js') {
+    dependsOn linkCapybaraE2eCooJsSources
 }
 
 jar {
