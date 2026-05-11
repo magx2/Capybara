@@ -1,0 +1,35 @@
+const test = require('node:test');
+const { assert, assertCapyEqual, generatedModule } = require('./_support');
+
+test('SimpleFunction', () => {
+    const simple = generatedModule('dev/capylang/test/SimpleFunction.js');
+    assert.equal(simple.alwaysTrue(), true);
+    assert.equal(simple.add(1, 2), 3);
+    assert.equal(simple.subtract(1, 2), -1);
+    assert.equal(simple.multiply(5, 3), 15);
+    assert.equal(simple.divide(10, 2), 5);
+    assert.equal(simple.divide(9, 2), 4);
+    assert.equal(simple.classify(1), 'positive');
+    assert.equal(simple.classify(0), 'non-positive');
+    assert.equal(simple.classify(-1), 'non-positive');
+    assert.equal(simple.isPositive(1), true);
+    assert.equal(simple.isPositive(0), false);
+    assert.equal(simple.greet('World'), 'Hello, World');
+    assert.equal(simple.doubleThenClassify(1), 'positive');
+    assert.equal(simple.orderOfExpression(3, 5), 77);
+    assert.equal(simple.power(2, 3), 8);
+    assert.equal(simple.power(-4, 3), -64);
+    assertCapyEqual(simple.staticList(), [1, 2, 3]);
+    assert.equal(simple.callPrivateAndPublic(3), 9);
+    assert.equal(simple.typedLetString(), 'd');
+    assert.equal(simple.typedLetTupleString(), 'd');
+    assert.equal(simple.typedLetTupleInt(), 1);
+    assert.equal(simple.typedLetBool(), true);
+    assert.equal(simple.typedLetInt(), 7);
+    assert.equal(simple.typedLetLong(), 7);
+    assert.equal(simple.typedLetFloat(), 1.5);
+    assert.equal(simple.typedLetDouble(), 1.5);
+    assertCapyEqual(simple.typedLetList(), [1, 2, 3]);
+    assertCapyEqual(simple.typedLetSet(), new Set([1, 2, 3]));
+    assert.equal(simple.typedLetDict().get('a'), 1);
+});
