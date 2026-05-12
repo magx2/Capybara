@@ -16,6 +16,6 @@ test('Data', () => {
     assert.equal(data.createPositionalData('abc', 10).text, 'abc');
     assert.equal(data.createPositionalDataExpr('abc', 10).text, 'abc!');
     assert.equal(data.readDataType(data.createDataWithType('record')), 'record');
-    assert.equal(data.genericFieldPipe(new data.Box({ value: '41' })).value, 43);
+    assert.equal(data.genericFieldPipe(new data.Box({ value: '41' })).value, 43n);
     assert.equal(data.genericFieldPipe(new data.Box({ value: 'x' })).__capybaraType, 'BoxError');
 });

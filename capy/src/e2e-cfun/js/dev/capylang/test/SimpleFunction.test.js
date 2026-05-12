@@ -26,7 +26,7 @@ test('SimpleFunction', () => {
     assert.equal(simple.typedLetTupleInt(), 1);
     assert.equal(simple.typedLetBool(), true);
     assert.equal(simple.typedLetInt(), 7);
-    assert.equal(simple.typedLetLong(), 7);
+    assert.equal(simple.typedLetLong(), 7n);
     assert.equal(simple.typedLetFloat(), 1.5);
     assert.equal(simple.typedLetDouble(), 1.5);
     assertCapyEqual(simple.typedLetList(), [1, 2, 3]);

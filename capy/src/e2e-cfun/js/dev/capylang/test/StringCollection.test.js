@@ -17,7 +17,9 @@ test('StringCollection', () => {
     assert.equal(strings.notTrimmedIsEmpty('   '), false);
     assert.equal(assertSuccess(strings.toIntMethod('123')), 123);
     assert.match(assertError(strings.toIntMethod('abc')), /Cannot parse string to int: abc/);
-    assert.equal(assertSuccess(strings.toLongMethod('12345678901')), 12345678901);
+    assert.equal(assertSuccess(strings.toLongMethod('12345678901')), 12345678901n);
+    assert.equal(assertSuccess(strings.toLongMethod('9223372036854775807')), 9223372036854775807n);
+    assert.match(assertError(strings.toLongMethod('9223372036854775808')), /Cannot parse string to long/);
     assert.equal(assertSuccess(strings.toDoubleMethod('12.5')), 12.5);
     assert.equal(assertSuccess(strings.toFloatMethod('1.25')), 1.25);
     assert.equal(assertSuccess(strings.toBoolMethod('false')), false);

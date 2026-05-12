@@ -27,7 +27,7 @@ test('FileIo', () => {
     assertCapyEqual(assertSuccess(unsafe(fileIo.writeBytesFile(bytesFile, [65, 66]))), [65, 66]);
     assertCapyEqual(assertSuccess(unsafe(fileIo.appendBytesFile(bytesFile, [67]))), [67]);
     assertCapyEqual(assertSuccess(unsafe(fileIo.readBytesFile(bytesFile))), [65, 66, 67]);
-    assert.equal(assertSuccess(unsafe(fileIo.fileSize(bytesFile))), 3);
+    assert.equal(assertSuccess(unsafe(fileIo.fileSize(bytesFile))), 3n);
     assert.equal(unsafe(fileIo.existsPath(bytesFile)), true);
     assert.match(assertError(unsafe(fileIo.readTextFile(path.join(tempDir, 'missing.txt')))), /read_text failed/);
 

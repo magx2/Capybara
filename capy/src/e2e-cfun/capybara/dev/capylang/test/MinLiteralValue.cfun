@@ -5,3 +5,11 @@ fun min_int(): int = -2147483648
 fun min_int_digits(): int = digits(-2147483648)
 
 fun min_long(): long = -9223372036854775808L
+
+fun max_long(): long = 9223372036854775807L
+
+fun max_safe_integer_long(): long = 9007199254740991L
+
+fun long_addition(): long = 9223372036854775800L + 7L
+
+fun long_overflow(): long = 9223372036854775807L + 1L
