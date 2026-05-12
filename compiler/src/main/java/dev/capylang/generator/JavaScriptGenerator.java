@@ -37,6 +37,8 @@ import static java.util.stream.Collectors.joining;
 
 public final class JavaScriptGenerator implements Generator {
     private static final String METHOD_DECL_PREFIX = "__method__";
+    private static final String DICT_PIPE_ARGS_SEPARATOR = "::";
+    private static final String TUPLE_PIPE_ARGS_SEPARATOR = ";;";
     static final Path RUNTIME_PATH = Path.of("dev", "capylang", "capybara.js");
     private static final java.util.regex.Pattern CONST_NAME_PATTERN = java.util.regex.Pattern.compile("^_?[A-Z_][A-Z0-9_]*$");
     private static final java.util.regex.Pattern MODULE_VAR_PATTERN = java.util.regex.Pattern.compile("\\b__module_[A-Za-z0-9_]+\\b");
@@ -59,6 +61,7 @@ public final class JavaScriptGenerator implements Generator {
         var astBuilder = new JavaAstBuilder(functionNameOverrides);
         var modules = new ArrayList<GeneratedModule>();
         var moduleInfos = program.modules().stream()
+                .filter(module -> !isRuntimeProvidedModule(module))
                 .map(module -> ModuleInfo.from(module, astBuilder.build(module)))
                 .toList();
         var context = ProgramContext.build(moduleInfos, program.objectOrientedModules(), functionNameOverrides);
@@ -69,6 +72,24 @@ public final class JavaScriptGenerator implements Generator {
         modules.addAll(new ObjectOrientedJavaScriptGenerator(context).generate(program.objectOrientedModules()));
         modules.addAll(RuntimeModules.modules());
         return new GeneratedProgram(List.copyOf(modules));
+    }
+
+    private static boolean isRuntimeProvidedModule(CompiledModule module) {
+        var path = module.path().replace('\\', '/');
+            return switch (path + "/" + module.name()) {
+                case "capy/lang/Effect",
+                     "capy/lang/Option",
+                     "capy/lang/Result",
+                     "capy/test/Assert",
+                     "capy/test/CapyTest",
+                 "capy/date_time/Clock",
+                 "capy/date_time/Date",
+                 "capy/date_time/DateTime",
+                 "capy/date_time/Duration",
+                 "capy/date_time/Interval",
+                 "capy/date_time/Time" -> true;
+            default -> false;
+        };
     }
 
     private static final class ModuleRenderer {
@@ -156,6 +177,7 @@ public final class JavaScriptGenerator implements Generator {
             for (var field : record.fields()) {
                 code.append("        this.").append(field.name()).append(" = fields.").append(field.name()).append(";\n");
             }
+            code.append("        return capy.methodAliasProxy(this);\n");
             code.append("    }\n");
             code.append("    with(fields = {}) {\n");
             code.append("        return new ").append(name).append("({\n");
@@ -187,6 +209,8 @@ public final class JavaScriptGenerator implements Generator {
                     .append(jsString(moduleInfo.packageName()))
                     .append(", ")
                     .append(jsString(moduleInfo.packagePath()))
+                    .append(", ")
+                    .append(jsArray(record.fields().stream().map(JavaRecord.JavaRecordField::name).toList()))
                     .append(");\n");
             code.append("    }\n");
             for (var method : record.methods()) {
@@ -336,8 +360,38 @@ public final class JavaScriptGenerator implements Generator {
             if (exportNames.isEmpty()) {
                 return "module.exports = {};\n";
             }
-            return "module.exports = {\n"
-                   + exportNames.stream()
+            var exportAliases = new LinkedHashMap<String, List<String>>();
+            for (var exportName : exportNames) {
+                var overloadSeparator = exportName.indexOf("__");
+                if (overloadSeparator > 0) {
+                    exportAliases.computeIfAbsent(exportName.substring(0, overloadSeparator), ignored -> new ArrayList<>())
+                            .add(exportName);
+                }
+            }
+            var aliasDeclarations = new StringBuilder();
+            var allExportNames = new ArrayList<>(exportNames);
+            for (var entry : exportAliases.entrySet()) {
+                if (exportNames.contains(entry.getKey())) {
+                    continue;
+                }
+                aliasDeclarations.append("function ")
+                        .append(entry.getKey())
+                        .append("(...args) {\n")
+                        .append("    return capy.dispatchOverload([\n");
+                for (var overload : entry.getValue()) {
+                    aliasDeclarations.append("        [")
+                            .append(jsString(overload))
+                            .append(", ")
+                            .append(overload)
+                            .append("],\n");
+                }
+                aliasDeclarations.append("    ], args);\n")
+                        .append("}\n\n");
+                allExportNames.add(entry.getKey());
+            }
+            return aliasDeclarations
+                   + "module.exports = {\n"
+                   + allExportNames.stream()
                            .map(name -> "    " + name + ",")
                            .collect(joining("\n"))
                    + "\n};\n";
@@ -461,11 +515,48 @@ public final class JavaScriptGenerator implements Generator {
             if ("sqrt".equals(functionCall.name()) && args.size() == 1) {
                 return "Math.sqrt(" + args.getFirst() + ")";
             }
+            var nativeCall = renderRuntimeBackedFunctionCall(functionCall, args);
+            if (nativeCall.isPresent()) {
+                return nativeCall.orElseThrow();
+            }
             var target = resolveFunctionTarget(functionCall);
             if (isConstCall(functionCall)) {
                 return target;
             }
             return target + "(" + String.join(", ", args) + ")";
+        }
+
+        private Optional<String> renderRuntimeBackedFunctionCall(CompiledFunctionCall functionCall, List<String> args) {
+            var owner = functionOwner(functionCall);
+            var methodName = simpleMethodName(functionCall.name());
+            if (owner.filter("capy.lang.Primitives"::equals).isPresent() && args.size() == 1) {
+                return switch (methodName) {
+                    case "to_int", "toInt" -> Optional.of("capy.parseIntResult(" + args.getFirst() + ")");
+                    case "to_long", "toLong" -> Optional.of("capy.parseLongResult(" + args.getFirst() + ")");
+                        case "to_double", "toDouble" ->
+                                Optional.of("capy.parseFloatResult(" + args.getFirst() + ", 'double')");
+                        case "to_float", "toFloat" ->
+                                Optional.of("capy.parseFloatResult(" + args.getFirst() + ", 'float')");
+                    case "to_bool", "toBool" -> Optional.of("capy.parseBoolResult(" + args.getFirst() + ")");
+                    default -> Optional.empty();
+                };
+            }
+            if (owner.filter("capy.lang.Random"::equals).isPresent() && "seed".equals(methodName) && args.isEmpty()) {
+                require("capy.lang.Random");
+                return Optional.of("new " + moduleVar("capy.lang.Random") + ".Seed({ value: BigInt(Date.now()) })");
+            }
+            return Optional.empty();
+        }
+
+        private Optional<String> functionOwner(CompiledFunctionCall functionCall) {
+            var lastDot = functionCall.name().lastIndexOf('.');
+            if (lastDot >= 0) {
+                return programContext.resolveClassName(functionCall.name().substring(0, lastDot));
+            }
+            var emittedName = emittedMethodName(functionCall);
+            return programContext.importedMemberOwner(moduleInfo.className(), emittedName)
+                    .or(() -> programContext.importedMemberOwner(moduleInfo.className(), simpleMethodName(functionCall.name())))
+                    .flatMap(programContext::resolveClassName);
         }
 
         private String renderMethodCall(CompiledFunctionCall functionCall, List<String> args, Scope scope) {
@@ -501,7 +592,7 @@ public final class JavaScriptGenerator implements Generator {
                 && tailArgs.size() == 1) {
                 return "String(" + receiver + ").endsWith(" + tailArgs.getFirst() + ")";
             }
-            if ("size".equals(methodName)) {
+            if ("size".equals(methodName) && isCollectionType(receiverType)) {
                 if (receiverType instanceof CollectionLinkedType.CompiledDict
                     || receiverType instanceof CollectionLinkedType.CompiledSet) {
                     return "(" + receiver + ").size";
@@ -533,10 +624,10 @@ public final class JavaScriptGenerator implements Generator {
             if (List.of("-", "minus").contains(methodName) && tailArgs.size() == 1 && isNativeMinusType(receiverType)) {
                 return renderCollectionMinus(receiverType, receiver, functionCall.arguments().get(1).type(), tailArgs.getFirst());
             }
-            if ("contains".equals(methodName) || "?".equals(methodName)) {
+            if (("contains".equals(methodName) || "?".equals(methodName)) && isCollectionType(receiverType)) {
                 return renderContains(receiverType, receiver, tailArgs.getFirst());
             }
-            if ("is_empty".equals(methodName)) {
+            if ("is_empty".equals(methodName) && isCollectionType(receiverType)) {
                 return renderSize(receiverType, receiver) + " === 0";
             }
             if ("any".equals(methodName) && tailArgs.size() == 1) {
@@ -695,6 +786,18 @@ public final class JavaScriptGenerator implements Generator {
         private String renderLambda(CompiledLambdaExpression lambdaExpression, Scope scope) {
             if (lambdaExpression.functionType().argumentType() == PrimitiveLinkedType.NOTHING) {
                 return "(() => (" + render(lambdaExpression.expression(), scope) + "))";
+            }
+            var tupleArgs = parseTuplePipeArguments(lambdaExpression.argumentName());
+            if (tupleArgs.length > 0 && lambdaExpression.functionType().argumentType() instanceof CompiledTupleType tupleType) {
+                var jsName = scope.reserve("__tupleItem");
+                var child = scope.bind(lambdaExpression.argumentName(), jsName);
+                var size = Math.min(tupleType.elementTypes().size(), tupleArgs.length);
+                for (var i = 0; i < size; i++) {
+                    if (!"_".equals(tupleArgs[i]) && !tupleArgs[i].isBlank()) {
+                        child = child.bindExpression(tupleArgs[i], "capy.rawIndex(" + jsName + ", " + i + ")");
+                    }
+                }
+                return "((" + jsName + ") => (" + render(lambdaExpression.expression(), child) + "))";
             }
             var jsName = scope.reserve(lambdaExpression.argumentName());
             var child = scope.bind(lambdaExpression.argumentName(), jsName);
@@ -864,7 +967,18 @@ public final class JavaScriptGenerator implements Generator {
         }
 
         private String lambdaForPipe(String argumentName, CompiledExpression body, Scope scope) {
-            var args = argumentName.split("::|;;");
+            var tupleArgs = parseTuplePipeArguments(argumentName);
+            if (tupleArgs.length > 0) {
+                var jsName = scope.reserve("__tupleItem");
+                var child = scope.bind(argumentName, jsName);
+                for (var i = 0; i < tupleArgs.length; i++) {
+                    if (!"_".equals(tupleArgs[i]) && !tupleArgs[i].isBlank()) {
+                        child = child.bindExpression(tupleArgs[i], "capy.rawIndex(" + jsName + ", " + i + ")");
+                    }
+                }
+                return "((" + jsName + ") => (" + render(body, child) + "))";
+            }
+            var args = parseDictPipeArguments(argumentName);
             if (args.length == 2) {
                 var first = normalizeJsIdentifier(args[0]);
                 var second = normalizeJsIdentifier(args[1]);
@@ -874,6 +988,24 @@ public final class JavaScriptGenerator implements Generator {
             var jsName = normalizeJsIdentifier(argumentName);
             var child = scope.bind(argumentName, jsName);
             return "((" + jsName + ") => (" + render(body, child) + "))";
+        }
+
+        private static String[] parseDictPipeArguments(String argumentName) {
+            if (!argumentName.contains(DICT_PIPE_ARGS_SEPARATOR)) {
+                return new String[0];
+            }
+            var parts = argumentName.split(java.util.regex.Pattern.quote(DICT_PIPE_ARGS_SEPARATOR), -1);
+            if (parts.length != 2 || parts[0].isBlank() || parts[1].isBlank()) {
+                return new String[0];
+            }
+            return parts;
+        }
+
+        private static String[] parseTuplePipeArguments(String argumentName) {
+            if (!argumentName.contains(TUPLE_PIPE_ARGS_SEPARATOR)) {
+                return new String[0];
+            }
+            return argumentName.split(java.util.regex.Pattern.quote(TUPLE_PIPE_ARGS_SEPARATOR), -1);
         }
 
         private String renderEffectBind(CompiledEffectBindExpression bind, Scope scope) {
@@ -1024,9 +1156,12 @@ public final class JavaScriptGenerator implements Generator {
                 case "to_long" -> returnType instanceof GenericDataType
                         ? "capy.parseLongResult(" + receiver + ")"
                         : "capy.floatToLong(" + receiver + ")";
-                case "to_double", "to_float" -> returnType instanceof GenericDataType
-                        ? "capy.parseFloatResult(" + receiver + ")"
-                        : "Number(" + receiver + ")";
+                    case "to_double" -> returnType instanceof GenericDataType
+                            ? "capy.parseFloatResult(" + receiver + ", 'double')"
+                            : "Number(" + receiver + ")";
+                    case "to_float" -> returnType instanceof GenericDataType
+                            ? "capy.parseFloatResult(" + receiver + ", 'float')"
+                            : "Number(" + receiver + ")";
                 case "to_bool" -> returnType instanceof GenericDataType
                         ? "capy.parseBoolResult(" + receiver + ")"
                         : "capy.truthy(" + receiver + ")";
@@ -1152,6 +1287,12 @@ public final class JavaScriptGenerator implements Generator {
             return new Scope(Map.copyOf(updatedBindings), Set.copyOf(updatedUsedNames));
         }
 
+        Scope bindExpression(String sourceName, String jsExpression) {
+            var updatedBindings = new HashMap<>(bindings);
+            updatedBindings.put(sourceName, jsExpression);
+            return new Scope(Map.copyOf(updatedBindings), usedNames);
+        }
+
         String reserve(String sourceName) {
             var base = normalizeJsIdentifier(sourceName);
             if (!usedNames.contains(base)) {
@@ -1252,6 +1393,10 @@ public final class JavaScriptGenerator implements Generator {
                         .forEach(moduleExports::add);
                 exports.put(module.className(), Set.copyOf(moduleExports));
                 localTypes.put(module.className(), Set.copyOf(moduleTypes));
+                var companionClassName = module.className() + "Module";
+                paths.putIfAbsent(companionClassName, module.relativePath());
+                exports.putIfAbsent(companionClassName, Set.copyOf(moduleExports));
+                localTypes.putIfAbsent(companionClassName, Set.copyOf(moduleTypes));
             }
             for (var module : objectOrientedModules) {
                 var packageName = ObjectOrientedJavaScriptGenerator.packageName(module.path());
@@ -1389,6 +1534,9 @@ public final class JavaScriptGenerator implements Generator {
             }
             var parameterSignature = parameterTypes.stream().map(String::valueOf).collect(joining(","));
             var simple = simpleMethodName(name);
+            if (simple.contains("__local_const_")) {
+                return normalizeJsIdentifier(simple);
+            }
             if (simple.contains("__") && isValidJsIdentifier(simple)) {
                 return simple;
             }
@@ -1420,12 +1568,27 @@ public final class JavaScriptGenerator implements Generator {
                     "exists", "is_file", "isFile", "is_directory", "isDirectory", "size", "create_file", "createFile",
                     "create_directory", "createDirectory", "create_directories", "createDirectories", "list_entries",
                     "listEntries", "delete", "delete_", "copy", "copy_replace", "copyReplace", "move", "move_replace", "moveReplace"));
-            exports.put("capy.date_time.DateModule", Set.of("Date", "uNIXDATE", "UNIX_DATE", "fromDaysSinceUnixEpoch", "from_days_since_unix_epoch"));
-            exports.put("capy.date_time.TimeModule", Set.of("Time", "mIDNIGHT", "MIDNIGHT"));
-            exports.put("capy.date_time.DurationModule", Set.of("DateDuration", "WeekDuration", "zERO", "ZERO"));
-            exports.put("capy.date_time.DateTimeModule", Set.of("DateTime", "uNIXEPOCH", "UNIX_EPOCH"));
+            exports.put("capy.date_time.DateModule", Set.of(
+                    "Date", "__constructor__data__Date", "uNIXDATE", "UNIX_DATE", "fromIso8601", "from_iso_8601",
+                    "fromDaysSinceUnixEpoch", "from_days_since_unix_epoch",
+                    "jANUARY", "JANUARY", "fEBRUARY", "FEBRUARY", "mARCH", "MARCH", "aPRIL", "APRIL",
+                    "mAY", "MAY", "jUNE", "JUNE", "jULY", "JULY", "aUGUST", "AUGUST",
+                    "sEPTEMBER", "SEPTEMBER", "oCTOBER", "OCTOBER", "nOVEMBER", "NOVEMBER",
+                    "dECEMBER", "DECEMBER"));
+            exports.put("capy.date_time.TimeModule", Set.of(
+                    "Time", "__constructor__data__Time", "fromIso8601", "from_iso_8601",
+                    "hOURSINDAY", "HOURS_IN_DAY", "mINUTESINHOUR", "MINUTES_IN_HOUR",
+                    "sECONDSINMINUTE", "SECONDS_IN_MINUTE", "sECONDSINHOUR", "SECONDS_IN_HOUR",
+                    "mINUTESINDAY", "MINUTES_IN_DAY", "sECONDSINDAY", "SECONDS_IN_DAY",
+                    "mAXOFFSETMINUTES", "MAX_OFFSET_MINUTES", "mIDNIGHT", "MIDNIGHT", "nOON", "NOON"));
+            exports.put("capy.date_time.DurationModule", Set.of(
+                    "DateDuration", "WeekDuration", "zERO", "ZERO", "fromIso8601", "from_iso_8601"));
+            exports.put("capy.date_time.DateTimeModule", Set.of(
+                    "DateTime", "uNIXEPOCH", "UNIX_EPOCH", "fromIso8601", "from_iso_8601"));
+            exports.put("capy.date_time.Interval", Set.of(
+                    "DateTimeDurationEnd", "DateTimeStartDuration", "DateTimeStartEnd", "fromIso8601", "from_iso_8601"));
             exports.put("capy.date_time.Clock", Set.of("now"));
-            exports.put("capy.test.Assert", Set.of("assert_that", "assertThat"));
+            exports.put("capy.test.Assert", Set.of("assert_all", "assertAll", "assert_that", "assertThat"));
             exports.put("capy.test.CapyTest", Set.of("test", "test_file", "testFile"));
             return exports;
         }
@@ -1468,6 +1631,7 @@ public final class JavaScriptGenerator implements Generator {
                     new GeneratedModule(Path.of("capy", "date_time", "TimeModule.js"), timeRuntime()),
                     new GeneratedModule(Path.of("capy", "date_time", "DurationModule.js"), durationRuntime()),
                     new GeneratedModule(Path.of("capy", "date_time", "DateTimeModule.js"), dateTimeRuntime()),
+                    new GeneratedModule(Path.of("capy", "date_time", "Interval.js"), intervalRuntime()),
                     new GeneratedModule(Path.of("capy", "date_time", "Clock.js"), clockRuntime()),
                     new GeneratedModule(Path.of("capy", "test", "Assert.js"), assertRuntime()),
                     new GeneratedModule(Path.of("capy", "test", "CapyTest.js"), capyTestRuntime())
@@ -1497,6 +1661,7 @@ public final class JavaScriptGenerator implements Generator {
                     "capy.date_time.TimeModule",
                     "capy.date_time.DurationModule",
                     "capy.date_time.DateTimeModule",
+                    "capy.date_time.Interval",
                     "capy.date_time.Clock",
                     "capy.test.Assert",
                     "capy.test.CapyTest"
@@ -1519,10 +1684,10 @@ public final class JavaScriptGenerator implements Generator {
                    + "    toInt: capy.parseIntResult,\n"
                    + "    to_long: capy.parseLongResult,\n"
                    + "    toLong: capy.parseLongResult,\n"
-                   + "    to_double: capy.parseFloatResult,\n"
-                   + "    toDouble: capy.parseFloatResult,\n"
-                   + "    to_float: capy.parseFloatResult,\n"
-                   + "    toFloat: capy.parseFloatResult,\n"
+                       + "    to_double: value => capy.parseFloatResult(value, 'double'),\n"
+                       + "    toDouble: value => capy.parseFloatResult(value, 'double'),\n"
+                       + "    to_float: value => capy.parseFloatResult(value, 'float'),\n"
+                       + "    toFloat: value => capy.parseFloatResult(value, 'float'),\n"
                    + "    to_bool: capy.parseBoolResult,\n"
                    + "    toBool: capy.parseBoolResult,\n"
                    + "};\n";
@@ -1957,21 +2122,109 @@ public final class JavaScriptGenerator implements Generator {
         private static String dateRuntime() {
             return """
                     'use strict';
-                    const MILLIS_PER_DAY = 24 * 60 * 60 * 1000;
+                    const capy = require('../../dev/capylang/capybara.js');
 
-                    class CapyDate {
+                    const jANUARY = 1;
+                    const fEBRUARY = 2;
+                    const mARCH = 3;
+                    const aPRIL = 4;
+                    const mAY = 5;
+                    const jUNE = 6;
+                    const jULY = 7;
+                    const aUGUST = 8;
+                    const sEPTEMBER = 9;
+                    const oCTOBER = 10;
+                    const nOVEMBER = 11;
+                    const dECEMBER = 12;
+                    const __DAYS_PER_400_YEARS = 146097;
+                    const __DAYS_PER_YEAR = 365;
+                    const __UNIX_EPOCH_CIVIL_OFFSET_DAYS = 719468;
+                    const __DAYS_PER_4_YEARS_MINUS_1 = 1460;
+                    const __DAYS_PER_100_YEARS_MINUS_1 = 36524;
+                    const __DAYS_PER_400_YEARS_MINUS_1 = 146096;
+                    const __MONTH_TO_DAY_NUMERATOR = 153;
+                    const __MONTH_TO_DAY_BIAS = 2;
+
+                    const success = value => new capy.Success({ value });
+                    const failure = message => new capy.Error({ message });
+                    const floorDiv = (left, right) => Math.floor(left / right);
+
+                    function _leapYear(year) {
+                        return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+                    }
+
+                    function _days31Month(month) {
+                        return month === jANUARY || month === mARCH || month === mAY || month === jULY
+                            || month === aUGUST || month === oCTOBER || month === dECEMBER;
+                    }
+
+                    function _days30Month(month) {
+                        return month === aPRIL || month === jUNE || month === sEPTEMBER || month === nOVEMBER;
+                    }
+
+                    function daysInMonth(year, month) {
+                        if (month === fEBRUARY) {
+                            return _leapYear(year) ? 29 : 28;
+                        }
+                        return _days31Month(month) ? 31 : 30;
+                    }
+
+                    class DateValue {
                         constructor(fields = {}) {
                             this.__capybaraType = 'Date';
-                            this.__capybaraTypes = ['Date'];
+                            this.__capybaraTypes = ['Date', 'CapybaraDataValue'];
                             this.day = fields.day;
                             this.month = fields.month;
                             this.year = fields.year;
+                            return capy.methodAliasProxy(this);
+                        }
+                        with(fields = {}) {
+                            return new DateValue({
+                                day: Object.prototype.hasOwnProperty.call(fields, 'day') ? fields.day : this.day,
+                                month: Object.prototype.hasOwnProperty.call(fields, 'month') ? fields.month : this.month,
+                                year: Object.prototype.hasOwnProperty.call(fields, 'year') ? fields.year : this.year,
+                            });
+                        }
+                        with_(day, month, year) {
+                            return arguments.length === 1 && day && typeof day === 'object'
+                                ? this.with(day)
+                                : new DateValue({ day, month, year });
+                        }
+                        toString() {
+                            return capy.dataToString(this);
+                        }
+                        capybaraDataValueInfo() {
+                            return capy.dataValueInfo(this, 'Date', 'capy.dateTime', 'capy/date_time/Date');
                         }
                         toDaysSinceUnixEpoch() {
-                            return Math.trunc(Date.UTC(this.year, this.month - 1, this.day) / MILLIS_PER_DAY);
+                            const y = this.month <= 2 ? this.year - 1 : this.year;
+                            const era = floorDiv(y, 400);
+                            const yoe = y - era * 400;
+                            const mp = this.month > fEBRUARY ? this.month - 3 : this.month + 9;
+                            const doy = floorDiv(__MONTH_TO_DAY_NUMERATOR * mp + __MONTH_TO_DAY_BIAS, 5) + this.day - 1;
+                            const doe = yoe * __DAYS_PER_YEAR + floorDiv(yoe, 4) - floorDiv(yoe, 100) + doy;
+                            return era * __DAYS_PER_400_YEARS + doe - __UNIX_EPOCH_CIVIL_OFFSET_DAYS;
                         }
                         to_days_since_unix_epoch() {
                             return this.toDaysSinceUnixEpoch();
+                        }
+                        leapYear() {
+                            return _leapYear(this.year);
+                        }
+                        leap_year() {
+                            return this.leapYear();
+                        }
+                        firstDayOfMonth() {
+                            return new DateValue({ day: 1, month: this.month, year: this.year });
+                        }
+                        first_day_of_month() {
+                            return this.firstDayOfMonth();
+                        }
+                        lastDayOfMonth() {
+                            return new DateValue({ day: daysInMonth(this.year, this.month), month: this.month, year: this.year });
+                        }
+                        last_day_of_month() {
+                            return this.lastDayOfMonth();
                         }
                         addDays(days) {
                             return fromDaysSinceUnixEpoch(this.toDaysSinceUnixEpoch() + days);
@@ -1979,8 +2232,25 @@ public final class JavaScriptGenerator implements Generator {
                         add_days(days) {
                             return this.addDays(days);
                         }
+                        addYearsMonths(years, months) {
+                            const totalMonths = (this.year + years) * 12 + (this.month + months - 1);
+                            const normalizedYear = floorDiv(totalMonths, 12);
+                            const normalizedMonth = totalMonths - normalizedYear * 12 + 1;
+                            return new DateValue({
+                                day: Math.min(this.day, daysInMonth(normalizedYear, normalizedMonth)),
+                                month: normalizedMonth,
+                                year: normalizedYear,
+                            });
+                        }
+                        add_years_months(years, months) {
+                            return this.addYearsMonths(years, months);
+                        }
                         toIso8601() {
-                            const year = String(this.year).padStart(4, '0');
+                            const year = this.year < 0
+                                ? `-${String(-this.year).padStart(4, '0')}`
+                                : this.year > 9999
+                                    ? `+${this.year}`
+                                    : String(this.year).padStart(4, '0');
                             return `${year}-${String(this.month).padStart(2, '0')}-${String(this.day).padStart(2, '0')}`;
                         }
                         to_iso_8601() {
@@ -1989,23 +2259,127 @@ public final class JavaScriptGenerator implements Generator {
                     }
 
                     function fromDaysSinceUnixEpoch(days) {
-                        const date = new globalThis.Date(days * MILLIS_PER_DAY);
-                        return new CapyDate({
-                            day: date.getUTCDate(),
-                            month: date.getUTCMonth() + 1,
-                            year: date.getUTCFullYear(),
-                        });
+                        const z = days + __UNIX_EPOCH_CIVIL_OFFSET_DAYS;
+                        const era = floorDiv(z, __DAYS_PER_400_YEARS);
+                        const doe = z - era * __DAYS_PER_400_YEARS;
+                        const yoe = floorDiv(doe - floorDiv(doe, __DAYS_PER_4_YEARS_MINUS_1) + floorDiv(doe, __DAYS_PER_100_YEARS_MINUS_1) - floorDiv(doe, __DAYS_PER_400_YEARS_MINUS_1), __DAYS_PER_YEAR);
+                        const y = yoe + era * 400;
+                        const doy = doe - (__DAYS_PER_YEAR * yoe + floorDiv(yoe, 4) - floorDiv(yoe, 100));
+                        const mp = floorDiv(5 * doy + __MONTH_TO_DAY_BIAS, __MONTH_TO_DAY_NUMERATOR);
+                        const day = doy - floorDiv(__MONTH_TO_DAY_NUMERATOR * mp + __MONTH_TO_DAY_BIAS, 5) + 1;
+                        const month = mp < 10 ? mp + 3 : mp - 9;
+                        const year = month <= fEBRUARY ? y + 1 : y;
+                        return new DateValue({ day, month, year });
                     }
 
-                    const uNIXDATE = new CapyDate({ day: 1, month: 1, year: 1970 });
+                    function __constructor__data__Date(day, month, year) {
+                        if (month < jANUARY || month > dECEMBER || day < 1 || day > daysInMonth(year, month)) {
+                            return failure(`Invalid date \\`${day}/${month}/${year}\\`!`);
+                        }
+                        return success(new DateValue({ day, month, year }));
+                    }
+
+                    function parseInteger(text, label) {
+                        if (!/^[0-9]+$/.test(text)) {
+                            return failure(`Invalid ISO 8601 date format: expected digits for ${label}, got \\`${text}\\``);
+                        }
+                        return success(Number.parseInt(text, 10));
+                    }
+
+                    function parseYear(text) {
+                        if (text.length === 0) {
+                            return failure('Invalid ISO 8601 date format: expected year');
+                        }
+                        if (text.startsWith('+') || text.startsWith('-')) {
+                            if (text.length < 5) {
+                                return failure(`Invalid ISO 8601 date format: expected expanded year, got \\`${text}\\``);
+                            }
+                            const parsed = parseInteger(text.slice(1), 'year');
+                            return capy.isType(parsed, 'Success')
+                                ? success(text.startsWith('-') ? -parsed.value : parsed.value)
+                                : parsed;
+                        }
+                        if (text.length < 4) {
+                            return failure(`Invalid ISO 8601 date format: expected four-digit year, got \\`${text}\\``);
+                        }
+                        return parseInteger(text, 'year');
+                    }
+
+                    function parseDate(yearPart, monthPart, dayPart) {
+                        const year = parseYear(yearPart);
+                        if (!capy.isType(year, 'Success')) return year;
+                        const month = parseInteger(monthPart, 'month');
+                        if (!capy.isType(month, 'Success')) return month;
+                        const day = parseInteger(dayPart, 'day');
+                        if (!capy.isType(day, 'Success')) return day;
+                        const constructed = __constructor__data__Date(day.value, month.value, year.value);
+                        return capy.isType(constructed, 'Success')
+                            ? constructed
+                            : failure(`Invalid ISO 8601 date format: ${constructed.message}`);
+                    }
+
+                    function fromIso8601(iso) {
+                        const value = String(iso);
+                        const extendedYearEnd = value.length - 6;
+                        const isExtended = value.length >= 10
+                            && value.slice(extendedYearEnd, extendedYearEnd + 1) === '-'
+                            && value.slice(value.length - 3, value.length - 2) === '-';
+                        if (isExtended) {
+                            return parseDate(value.slice(0, extendedYearEnd), value.slice(value.length - 5, value.length - 3), value.slice(value.length - 2));
+                        }
+                        if (value.length >= 8) {
+                            return parseDate(value.slice(0, value.length - 4), value.slice(value.length - 4, value.length - 2), value.slice(value.length - 2));
+                        }
+                        return failure(`Invalid ISO 8601 date format: expected date in \\`YYYY-MM-DD\\` or \\`YYYYMMDD\\` format, got \\`${value}\\``);
+                    }
+
+                    const uNIXDATE = new DateValue({ day: 1, month: 1, year: 1970 });
                     const UNIX_DATE = uNIXDATE;
 
                     module.exports = {
-                        Date: CapyDate,
+                        Date: DateValue,
+                        __constructor__data__Date,
+                        _days30Month,
+                        _days31Month,
+                        _leapYear,
+                        jANUARY,
+                        JANUARY: jANUARY,
+                        fEBRUARY,
+                        FEBRUARY: fEBRUARY,
+                        mARCH,
+                        MARCH: mARCH,
+                        aPRIL,
+                        APRIL: aPRIL,
+                        mAY,
+                        MAY: mAY,
+                        jUNE,
+                        JUNE: jUNE,
+                        jULY,
+                        JULY: jULY,
+                        aUGUST,
+                        AUGUST: aUGUST,
+                        sEPTEMBER,
+                        SEPTEMBER: sEPTEMBER,
+                        oCTOBER,
+                        OCTOBER: oCTOBER,
+                        nOVEMBER,
+                        NOVEMBER: nOVEMBER,
+                        dECEMBER,
+                        DECEMBER: dECEMBER,
+                        __DAYS_PER_400_YEARS,
+                        __DAYS_PER_YEAR,
+                        __UNIX_EPOCH_CIVIL_OFFSET_DAYS,
+                        __DAYS_PER_4_YEARS_MINUS_1,
+                        __DAYS_PER_100_YEARS_MINUS_1,
+                        __DAYS_PER_400_YEARS_MINUS_1,
+                        __MONTH_TO_DAY_NUMERATOR,
+                        __MONTH_TO_DAY_BIAS,
                         uNIXDATE,
                         UNIX_DATE,
                         fromDaysSinceUnixEpoch,
                         from_days_since_unix_epoch: fromDaysSinceUnixEpoch,
+                        fromIso8601,
+                        from_iso_8601: fromIso8601,
                     };
                     """;
         }
@@ -2013,34 +2387,101 @@ public final class JavaScriptGenerator implements Generator {
         private static String timeRuntime() {
             return """
                     'use strict';
-                    const SECONDS_IN_DAY = 24 * 60 * 60;
+                    const capy = require('../../dev/capylang/capybara.js');
+
+                    const hOURSINDAY = 24;
+                    const mINUTESINHOUR = 60;
+                    const sECONDSINMINUTE = 60;
+                    const sECONDSINHOUR = mINUTESINHOUR * sECONDSINMINUTE;
+                    const mINUTESINDAY = hOURSINDAY * mINUTESINHOUR;
+                    const sECONDSINDAY = hOURSINDAY * sECONDSINHOUR;
+                    const mAXOFFSETMINUTES = 23 * mINUTESINHOUR + 59;
+                    const success = value => new capy.Success({ value });
+                    const failure = message => new capy.Error({ message });
+                    const floorMod = (left, right) => left - Math.floor(left / right) * right;
 
                     class Time {
                         constructor(fields = {}) {
                             this.__capybaraType = 'Time';
-                            this.__capybaraTypes = ['Time'];
+                            this.__capybaraTypes = ['Time', 'CapybaraDataValue'];
                             this.hour = fields.hour;
                             this.minute = fields.minute;
                             this.second = fields.second;
-                            this.offset_minutes = fields.offset_minutes;
+                            this.offset_minutes = fields.offset_minutes ?? capy.None;
+                            return capy.methodAliasProxy(this);
+                        }
+                        with(fields = {}) {
+                            return new Time({
+                                hour: Object.prototype.hasOwnProperty.call(fields, 'hour') ? fields.hour : this.hour,
+                                minute: Object.prototype.hasOwnProperty.call(fields, 'minute') ? fields.minute : this.minute,
+                                second: Object.prototype.hasOwnProperty.call(fields, 'second') ? fields.second : this.second,
+                                offset_minutes: Object.prototype.hasOwnProperty.call(fields, 'offset_minutes') ? fields.offset_minutes : this.offset_minutes,
+                            });
+                        }
+                        with_(hour, minute, second, offset_minutes) {
+                            return arguments.length === 1 && hour && typeof hour === 'object'
+                                ? this.with(hour)
+                                : new Time({ hour, minute, second, offset_minutes });
+                        }
+                        toString() {
+                            return capy.dataToString(this);
+                        }
+                        capybaraDataValueInfo() {
+                            return capy.dataValueInfo(this, 'Time', 'capy.dateTime', 'capy/date_time/Time');
                         }
                         toSeconds() {
-                            return this.hour * 3600 + this.minute * 60 + this.second;
+                            return this.hour * sECONDSINHOUR + this.minute * sECONDSINMINUTE + this.second;
                         }
                         to_seconds() {
                             return this.toSeconds();
                         }
+                        toMinutes() {
+                            return this.hour * mINUTESINHOUR + this.minute;
+                        }
+                        to_minutes() {
+                            return this.toMinutes();
+                        }
+                        toHours() {
+                            return this.hour;
+                        }
+                        to_hours() {
+                            return this.toHours();
+                        }
+                        roundToMinutes() {
+                            return new Time({ hour: this.hour, minute: this.minute, second: 0, offset_minutes: this.offset_minutes });
+                        }
+                        round_to_minutes() {
+                            return this.roundToMinutes();
+                        }
+                        roundToHours() {
+                            return new Time({ hour: this.hour, minute: 0, second: 0, offset_minutes: this.offset_minutes });
+                        }
+                        round_to_hours() {
+                            return this.roundToHours();
+                        }
                         addSeconds(seconds) {
-                            const total = ((this.toSeconds() + seconds) % SECONDS_IN_DAY + SECONDS_IN_DAY) % SECONDS_IN_DAY;
+                            const total = floorMod(this.toSeconds() + seconds, sECONDSINDAY);
                             return new Time({
-                                hour: Math.trunc(total / 3600),
-                                minute: Math.trunc((total % 3600) / 60),
-                                second: total % 60,
+                                hour: Math.trunc(total / sECONDSINHOUR),
+                                minute: Math.trunc((total % sECONDSINHOUR) / sECONDSINMINUTE),
+                                second: total % sECONDSINMINUTE,
                                 offset_minutes: this.offset_minutes,
                             });
                         }
                         add_seconds(seconds) {
                             return this.addSeconds(seconds);
+                        }
+                        addMinutes(minutes) {
+                            return this.addSeconds(minutes * sECONDSINMINUTE);
+                        }
+                        add_minutes(minutes) {
+                            return this.addMinutes(minutes);
+                        }
+                        addHours(hours) {
+                            return this.addSeconds(hours * sECONDSINHOUR);
+                        }
+                        add_hours(hours) {
+                            return this.addHours(hours);
                         }
                         toIso8601() {
                             const body = `${String(this.hour).padStart(2, '0')}:${String(this.minute).padStart(2, '0')}:${String(this.second).padStart(2, '0')}`;
@@ -2060,13 +2501,130 @@ public final class JavaScriptGenerator implements Generator {
                         }
                     }
 
-                    const mIDNIGHT = new Time({ hour: 0, minute: 0, second: 0 });
+                    function __constructor__data__Time(hour, minute, second, offset_minutes) {
+                        if (hour < 0 || hour > hOURSINDAY - 1 || minute < 0 || minute > mINUTESINHOUR - 1 || second < 0 || second > sECONDSINMINUTE - 1) {
+                            return failure(`Invalid time \\`${hour}:${minute}:${second}\\`!`);
+                        }
+                        if (offset_minutes && offset_minutes.__capybaraType === 'Some') {
+                            const value = offset_minutes.value;
+                            if (value < -mAXOFFSETMINUTES || value > mAXOFFSETMINUTES) {
+                                return failure(`Invalid UTC offset \\`${value}\\` minutes!`);
+                            }
+                        }
+                        return success(new Time({ hour, minute, second, offset_minutes }));
+                    }
+
+                    function parseInteger(text, label) {
+                        if (!/^[0-9]+$/.test(text)) {
+                            return failure(`Invalid ISO 8601 time format: expected digits for ${label}, got \\`${text}\\``);
+                        }
+                        return success(Number.parseInt(text, 10));
+                    }
+
+                    function parseOffset(sign, hourPart, minutePart) {
+                        const hours = parseInteger(hourPart, 'offset hour');
+                        if (!capy.isType(hours, 'Success')) return hours;
+                        const minutes = parseInteger(minutePart, 'offset minute');
+                        if (!capy.isType(minutes, 'Success')) return minutes;
+                        if (hours.value > 23) {
+                            return failure('Invalid ISO 8601 time format: offset hour must be between 00 and 23');
+                        }
+                        if (minutes.value > 59) {
+                            return failure('Invalid ISO 8601 time format: offset minute must be between 00 and 59');
+                        }
+                        if (sign === '-' && hours.value === 0 && minutes.value === 0) {
+                            return failure('Invalid ISO 8601 time format: negative zero offset is not allowed');
+                        }
+                        const direction = sign === '-' ? -1 : 1;
+                        return success(direction * (hours.value * mINUTESINHOUR + minutes.value));
+                    }
+
+                    function parseZone(value) {
+                        if (value.length === 0) {
+                            return failure('Invalid ISO 8601 time format: time must not be empty');
+                        }
+                        if (value.endsWith('Z')) {
+                            return success({ buffer: value.slice(0, -1), offset_minutes: new capy.Some({ value: 0 }) });
+                        }
+                        const extended = value.match(/([+-])(\\d{2}):(\\d{2})$/);
+                        if (extended) {
+                            const offset = parseOffset(extended[1], extended[2], extended[3]);
+                            return capy.isType(offset, 'Success')
+                                ? success({ buffer: value.slice(0, -6), offset_minutes: new capy.Some({ value: offset.value }) })
+                                : offset;
+                        }
+                        const basic = value.match(/([+-])(\\d{2})(\\d{2})$/);
+                        if (basic) {
+                            const offset = parseOffset(basic[1], basic[2], basic[3]);
+                            return capy.isType(offset, 'Success')
+                                ? success({ buffer: value.slice(0, -5), offset_minutes: new capy.Some({ value: offset.value }) })
+                                : offset;
+                        }
+                        const hourOnly = value.match(/([+-])(\\d{2})$/);
+                        if (hourOnly) {
+                            const offset = parseOffset(hourOnly[1], hourOnly[2], '00');
+                            return capy.isType(offset, 'Success')
+                                ? success({ buffer: value.slice(0, -3), offset_minutes: new capy.Some({ value: offset.value }) })
+                                : offset;
+                        }
+                        return success({ buffer: value, offset_minutes: capy.None });
+                    }
+
+                    function parseParts(hourPart, minutePart, secondPart, offset_minutes) {
+                        const hour = parseInteger(hourPart, 'hour');
+                        if (!capy.isType(hour, 'Success')) return hour;
+                        const minute = parseInteger(minutePart, 'minute');
+                        if (!capy.isType(minute, 'Success')) return minute;
+                        const second = parseInteger(secondPart, 'second');
+                        if (!capy.isType(second, 'Success')) return second;
+                        const constructed = __constructor__data__Time(hour.value, minute.value, second.value, offset_minutes);
+                        return capy.isType(constructed, 'Success')
+                            ? constructed
+                            : failure(`Invalid ISO 8601 time format: ${constructed.message}`);
+                    }
+
+                    function fromIso8601(iso) {
+                        const value = String(iso).startsWith('T') ? String(iso).slice(1) : String(iso);
+                        const zone = parseZone(value);
+                        if (!capy.isType(zone, 'Success')) return zone;
+                        const buffer = zone.value.buffer;
+                        if (buffer.length === 8 && buffer[2] === ':' && buffer[5] === ':') {
+                            return parseParts(buffer.slice(0, 2), buffer.slice(3, 5), buffer.slice(6, 8), zone.value.offset_minutes);
+                        }
+                        if (buffer.length === 6) {
+                            return parseParts(buffer.slice(0, 2), buffer.slice(2, 4), buffer.slice(4, 6), zone.value.offset_minutes);
+                        }
+                        return failure(`Invalid ISO 8601 time format: expected time in \\`HH:MM:SS\\`, \\`HHMMSS\\`, \\`THH:MM:SS\\`, or \\`THHMMSS\\` format, got \\`${iso}\\``);
+                    }
+
+                    const mIDNIGHT = new Time({ hour: 0, minute: 0, second: 0, offset_minutes: capy.None });
                     const MIDNIGHT = mIDNIGHT;
+                    const nOON = new Time({ hour: 12, minute: 0, second: 0, offset_minutes: capy.None });
+                    const NOON = nOON;
 
                     module.exports = {
                         Time,
+                        __constructor__data__Time,
+                        hOURSINDAY,
+                        HOURS_IN_DAY: hOURSINDAY,
+                        mINUTESINHOUR,
+                        MINUTES_IN_HOUR: mINUTESINHOUR,
+                        sECONDSINMINUTE,
+                        SECONDS_IN_MINUTE: sECONDSINMINUTE,
+                        sECONDSINHOUR,
+                        SECONDS_IN_HOUR: sECONDSINHOUR,
+                        mINUTESINDAY,
+                        MINUTES_IN_DAY: mINUTESINDAY,
+                        sECONDSINDAY,
+                        SECONDS_IN_DAY: sECONDSINDAY,
+                        mAXOFFSETMINUTES,
+                        MAX_OFFSET_MINUTES: mAXOFFSETMINUTES,
                         mIDNIGHT,
                         MIDNIGHT,
+                        nOON,
+                        NOON,
+                        fromIso8601,
+                        from_iso_8601: fromIso8601,
                     };
                     """;
         }
@@ -2074,37 +2632,81 @@ public final class JavaScriptGenerator implements Generator {
         private static String durationRuntime() {
             return """
                     'use strict';
+                    const capy = require('../../dev/capylang/capybara.js');
+
+                    const success = value => new capy.Success({ value });
+                    const failure = message => new capy.Error({ message });
 
                     class DateDuration {
                         constructor(fields = {}) {
                             this.__capybaraType = 'DateDuration';
-                            this.__capybaraTypes = ['DateDuration', 'Duration'];
-                            this.years = fields.years ?? 0;
-                            this.months = fields.months ?? 0;
-                            this.days = fields.days ?? 0;
-                            this.hours = fields.hours ?? 0;
-                            this.minutes = fields.minutes ?? 0;
-                            this.seconds = fields.seconds ?? 0;
+                            this.__capybaraTypes = ['DateDuration', 'Duration', 'CapybaraDataValue'];
+                            this._years = fields.years ?? fields._years ?? 0;
+                            this._months = fields.months ?? fields._months ?? 0;
+                            this._days = fields.days ?? fields._days ?? 0;
+                            this._hours = fields.hours ?? fields._hours ?? 0;
+                            this._minutes = fields.minutes ?? fields._minutes ?? 0;
+                            this._seconds = fields.seconds ?? fields._seconds ?? 0;
+                            return capy.methodAliasProxy(this);
+                        }
+                        with(fields = {}) {
+                            return new DateDuration({
+                                years: Object.prototype.hasOwnProperty.call(fields, 'years') ? fields.years : this._years,
+                                months: Object.prototype.hasOwnProperty.call(fields, 'months') ? fields.months : this._months,
+                                days: Object.prototype.hasOwnProperty.call(fields, 'days') ? fields.days : this._days,
+                                hours: Object.prototype.hasOwnProperty.call(fields, 'hours') ? fields.hours : this._hours,
+                                minutes: Object.prototype.hasOwnProperty.call(fields, 'minutes') ? fields.minutes : this._minutes,
+                                seconds: Object.prototype.hasOwnProperty.call(fields, 'seconds') ? fields.seconds : this._seconds,
+                            });
+                        }
+                        with_(years, months, days, hours, minutes, seconds) {
+                            return arguments.length === 1 && years && typeof years === 'object'
+                                ? this.with(years)
+                                : new DateDuration({ years, months, days, hours, minutes, seconds });
+                        }
+                        toString() {
+                            return capy.dataToString(this);
+                        }
+                        capybaraDataValueInfo() {
+                            return {
+                                name: 'DateDuration',
+                                packageName: 'capy.dateTime',
+                                packagePath: 'capy/date_time/Duration',
+                                fields: [
+                                    { name: 'years', value: this._years },
+                                    { name: 'months', value: this._months },
+                                    { name: 'days', value: this._days },
+                                    { name: 'hours', value: this._hours },
+                                    { name: 'minutes', value: this._minutes },
+                                    { name: 'seconds', value: this._seconds },
+                                ],
+                            };
                         }
                         negate() {
                             return new DateDuration({
-                                years: -this.years,
-                                months: -this.months,
-                                days: -this.days,
-                                hours: -this.hours,
-                                minutes: -this.minutes,
-                                seconds: -this.seconds,
+                                years: -this._years,
+                                months: -this._months,
+                                days: -this._days,
+                                hours: -this._hours,
+                                minutes: -this._minutes,
+                                seconds: -this._seconds,
                             });
                         }
+                        years() { return this._years; }
+                        months() { return this._months; }
+                        days() { return this._days; }
+                        hours() { return this._hours; }
+                        minutes() { return this._minutes; }
+                        seconds() { return this._seconds; }
                         totalSeconds() {
-                            return this.days * 86400 + this.hours * 3600 + this.minutes * 60 + this.seconds;
+                            return this._days * 86400 + this._hours * 3600 + this._minutes * 60 + this._seconds;
                         }
                         toIso8601() {
-                            if (this.years === 0 && this.months === 0 && this.days === 0 && this.hours === 0 && this.minutes === 0 && this.seconds === 0) {
+                            if (this._years === 0 && this._months === 0 && this._days === 0 && this._hours === 0 && this._minutes === 0 && this._seconds === 0) {
                                 return 'PT0S';
                             }
-                            const datePart = `${this.years !== 0 ? `${this.years}Y` : ''}${this.months !== 0 ? `${this.months}M` : ''}${this.days !== 0 ? `${this.days}D` : ''}`;
-                            const timePart = `${this.hours !== 0 ? `${this.hours}H` : ''}${this.minutes !== 0 ? `${this.minutes}M` : ''}${this.seconds !== 0 ? `${this.seconds}S` : ''}`;
+                            const datePart = `${this._years !== 0 ? `${this._years}Y` : ''}${this._months !== 0 ? `${this._months}M` : ''}${this._days !== 0 ? `${this._days}D` : ''}`;
+                            const timePart = `${this._hours !== 0 ? `${this._hours}H` : ''}${this._minutes !== 0 ? `${this._minutes}M` : ''}${this._seconds !== 0 ? `${this._seconds}S` : ''}`;
                             return `P${datePart}${timePart ? `T${timePart}` : ''}`;
                         }
                         to_iso_8601() {
@@ -2115,17 +2717,46 @@ public final class JavaScriptGenerator implements Generator {
                     class WeekDuration {
                         constructor(fields = {}) {
                             this.__capybaraType = 'WeekDuration';
-                            this.__capybaraTypes = ['WeekDuration', 'Duration'];
-                            this.weeks = fields.weeks ?? 0;
+                            this.__capybaraTypes = ['WeekDuration', 'Duration', 'CapybaraDataValue'];
+                            this._weeks = fields.weeks ?? fields._weeks ?? 0;
+                            return capy.methodAliasProxy(this);
+                        }
+                        with(fields = {}) {
+                            return new WeekDuration({
+                                weeks: Object.prototype.hasOwnProperty.call(fields, 'weeks') ? fields.weeks : this._weeks,
+                            });
+                        }
+                        with_(weeks) {
+                            return arguments.length === 1 && weeks && typeof weeks === 'object'
+                                ? this.with(weeks)
+                                : new WeekDuration({ weeks });
+                        }
+                        toString() {
+                            return capy.dataToString(this);
+                        }
+                        capybaraDataValueInfo() {
+                            return {
+                                name: 'WeekDuration',
+                                packageName: 'capy.dateTime',
+                                packagePath: 'capy/date_time/Duration',
+                                fields: [{ name: 'weeks', value: this._weeks }],
+                            };
                         }
                         negate() {
-                            return new WeekDuration({ weeks: -this.weeks });
+                            return new WeekDuration({ weeks: -this._weeks });
                         }
+                        years() { return 0; }
+                        months() { return 0; }
+                        days() { return this._weeks * 7; }
+                        hours() { return 0; }
+                        minutes() { return 0; }
+                        seconds() { return 0; }
+                        weeks() { return this._weeks; }
                         totalSeconds() {
-                            return this.weeks * 7 * 86400;
+                            return this._weeks * 7 * 86400;
                         }
                         toIso8601() {
-                            return `P${this.weeks}W`;
+                            return `P${this._weeks}W`;
                         }
                         to_iso_8601() {
                             return this.toIso8601();
@@ -2135,11 +2766,125 @@ public final class JavaScriptGenerator implements Generator {
                     const zERO = new DateDuration({ years: 0, months: 0, days: 0, hours: 0, minutes: 0, seconds: 0 });
                     const ZERO = zERO;
 
+                    function toDuration(parts) {
+                        return parts.weeks !== 0
+                            ? new WeekDuration({ weeks: parts.weeks })
+                            : new DateDuration(parts);
+                    }
+
+                    function validateCombined(parts) {
+                        if (parts.months < 0 || parts.months > 12) return failure('Invalid ISO 8601 duration format: combined duration month component must be between 0 and 12');
+                        if (parts.days < 0 || parts.days > 31) return failure('Invalid ISO 8601 duration format: combined duration day component must be between 0 and 31');
+                        if (parts.hours < 0 || parts.hours > 23) return failure('Invalid ISO 8601 duration format: combined duration hour component must be between 0 and 23');
+                        if (parts.minutes < 0 || parts.minutes > 59) return failure('Invalid ISO 8601 duration format: combined duration minute component must be between 0 and 59');
+                        if (parts.seconds < 0 || parts.seconds > 59) return failure('Invalid ISO 8601 duration format: combined duration second component must be between 0 and 59');
+                        return success(toDuration(parts));
+                    }
+
+                    function parseCombinedBasic(value) {
+                        return validateCombined({
+                            years: Number.parseInt(value.slice(0, 4), 10),
+                            months: Number.parseInt(value.slice(4, 6), 10),
+                            weeks: 0,
+                            days: Number.parseInt(value.slice(6, 8), 10),
+                            hours: Number.parseInt(value.slice(9, 11), 10),
+                            minutes: Number.parseInt(value.slice(11, 13), 10),
+                            seconds: Number.parseInt(value.slice(13, 15), 10),
+                        });
+                    }
+
+                    function parseCombinedExtended(value) {
+                        return validateCombined({
+                            years: Number.parseInt(value.slice(0, 4), 10),
+                            months: Number.parseInt(value.slice(5, 7), 10),
+                            weeks: 0,
+                            days: Number.parseInt(value.slice(8, 10), 10),
+                            hours: Number.parseInt(value.slice(11, 13), 10),
+                            minutes: Number.parseInt(value.slice(14, 16), 10),
+                            seconds: Number.parseInt(value.slice(17, 19), 10),
+                        });
+                    }
+
+                    function componentOrder(inTime, designator) {
+                        if (inTime) {
+                            if (designator === 'H') return 5;
+                            if (designator === 'M') return 6;
+                            if (designator === 'S') return 7;
+                            return null;
+                        }
+                        if (designator === 'Y') return 1;
+                        if (designator === 'M') return 2;
+                        if (designator === 'W') return 3;
+                        if (designator === 'D') return 4;
+                        return null;
+                    }
+
+                    function parseDesignatorDuration(value) {
+                        let index = 0;
+                        let inTime = false;
+                        let previousOrder = 0;
+                        let hasComponent = false;
+                        let hasTimeComponent = false;
+                        const parts = { years: 0, months: 0, weeks: 0, days: 0, hours: 0, minutes: 0, seconds: 0 };
+                        while (index < value.length) {
+                            if (value[index] === 'T') {
+                                if (inTime) return failure('Invalid ISO 8601 duration format: duplicate `T` separator');
+                                if (parts.weeks !== 0) return failure('Invalid ISO 8601 duration format: week durations cannot be combined with time components');
+                                inTime = true;
+                                previousOrder = 4;
+                                index++;
+                                continue;
+                            }
+                            const match = /^\\d+/.exec(value.slice(index));
+                            if (!match) return failure(`Invalid ISO 8601 duration format: expected digit or \\`T\\`, got \\`${value[index]}\\``);
+                            const amount = Number.parseInt(match[0], 10);
+                            index += match[0].length;
+                            if (index >= value.length) return failure(`Invalid ISO 8601 duration format: missing designator after \\`${amount}\\``);
+                            const designator = value[index++];
+                            const order = componentOrder(inTime, designator);
+                            if (order == null) {
+                                return failure(`Invalid ISO 8601 duration format: unexpected ${inTime ? 'time' : 'date'} designator \\`${designator}\\``);
+                            }
+                            if (order <= previousOrder) return failure('Invalid ISO 8601 duration format: components must appear in ISO 8601 order and may not repeat');
+                            if (designator === 'W' && (inTime || parts.years || parts.months || parts.days || parts.hours || parts.minutes || parts.seconds)) {
+                                return failure('Invalid ISO 8601 duration format: week durations cannot be combined with other components');
+                            }
+                            if (designator !== 'W' && parts.weeks !== 0) {
+                                return failure('Invalid ISO 8601 duration format: week durations cannot be combined with other components');
+                            }
+                            if (designator === 'Y') parts.years = amount;
+                            else if (designator === 'M' && inTime) parts.minutes = amount;
+                            else if (designator === 'M') parts.months = amount;
+                            else if (designator === 'W') parts.weeks = amount;
+                            else if (designator === 'D') parts.days = amount;
+                            else if (designator === 'H') parts.hours = amount;
+                            else if (designator === 'S') parts.seconds = amount;
+                            previousOrder = order;
+                            hasComponent = true;
+                            hasTimeComponent = hasTimeComponent || inTime;
+                        }
+                        if (!hasComponent) return failure('Invalid ISO 8601 duration format: missing components');
+                        if (inTime && !hasTimeComponent) return failure('Invalid ISO 8601 duration format: missing time components after `T`');
+                        return success(toDuration(parts));
+                    }
+
+                    function fromIso8601(iso) {
+                        const value = String(iso);
+                        if (!value.startsWith('P')) return failure('Invalid ISO 8601 duration format: must start with `P`');
+                        const duration = value.slice(1);
+                        if (duration.length === 0) return failure('Invalid ISO 8601 duration format: missing components');
+                        if (/^\\d{8}T\\d{6}$/.test(duration)) return parseCombinedBasic(duration);
+                        if (/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}$/.test(duration)) return parseCombinedExtended(duration);
+                        return parseDesignatorDuration(duration);
+                    }
+
                     module.exports = {
                         DateDuration,
                         WeekDuration,
                         zERO,
                         ZERO,
+                        fromIso8601,
+                        from_iso_8601: fromIso8601,
                     };
                     """;
         }
@@ -2147,34 +2892,72 @@ public final class JavaScriptGenerator implements Generator {
         private static String dateTimeRuntime() {
             return """
                     'use strict';
+                    const capy = require('../../dev/capylang/capybara.js');
                     const DateModule = require('./DateModule.js');
                     const TimeModule = require('./TimeModule.js');
                     const DurationModule = require('./DurationModule.js');
+                    const success = value => new capy.Success({ value });
+                    const failure = message => new capy.Error({ message });
+                    const floorDiv = (left, right) => Math.floor(left / right);
+                    const floorMod = (left, right) => left - floorDiv(left, right) * right;
 
                     class DateTime {
                         constructor(fields = {}) {
                             this.__capybaraType = 'DateTime';
-                            this.__capybaraTypes = ['DateTime'];
+                            this.__capybaraTypes = ['DateTime', 'CapybaraDataValue'];
                             this.date = fields.date;
                             this.time = fields.time;
+                            return capy.methodAliasProxy(this);
+                        }
+                        with(fields = {}) {
+                            return new DateTime({
+                                date: Object.prototype.hasOwnProperty.call(fields, 'date') ? fields.date : this.date,
+                                time: Object.prototype.hasOwnProperty.call(fields, 'time') ? fields.time : this.time,
+                            });
+                        }
+                        with_(date, time) {
+                            return arguments.length === 1 && date && typeof date === 'object'
+                                ? this.with(date)
+                                : new DateTime({ date, time });
+                        }
+                        toString() {
+                            return capy.dataToString(this);
+                        }
+                        capybaraDataValueInfo() {
+                            return capy.dataValueInfo(this, 'DateTime', 'capy.dateTime', 'capy/date_time/DateTime');
                         }
                         timestamp() {
-                            return BigInt(this.date.toDaysSinceUnixEpoch() * 86400 + this.time.toSeconds());
+                            return this.date.toDaysSinceUnixEpoch() * TimeModule.sECONDSINDAY + this.time.toSeconds();
                         }
                         plus(duration) {
-                            return DateTime.fromTimestamp(Number(this.timestamp()) + duration.totalSeconds());
+                            const dateWithMonths = this.date.addYearsMonths(duration.years(), duration.months());
+                            const daysFromHours = floorDiv(duration.hours(), TimeModule.hOURSINDAY);
+                            const daysFromMinutes = floorDiv(duration.minutes(), TimeModule.mINUTESINDAY);
+                            const daysFromSeconds = floorDiv(duration.seconds(), TimeModule.sECONDSINDAY);
+                            const remainderHours = floorMod(duration.hours(), TimeModule.hOURSINDAY);
+                            const remainderMinutes = floorMod(duration.minutes(), TimeModule.mINUTESINDAY);
+                            const remainderSeconds = floorMod(duration.seconds(), TimeModule.sECONDSINDAY);
+                            const intraDaySeconds = remainderHours * TimeModule.sECONDSINHOUR
+                                + remainderMinutes * TimeModule.sECONDSINMINUTE
+                                + remainderSeconds;
+                            const shiftedSeconds = this.time.toSeconds() + intraDaySeconds;
+                            const extraDays = floorDiv(shiftedSeconds, TimeModule.sECONDSINDAY);
+                            return new DateTime({
+                                date: dateWithMonths.addDays(duration.days() + daysFromHours + daysFromMinutes + daysFromSeconds + extraDays),
+                                time: this.time.addSeconds(intraDaySeconds),
+                            });
                         }
                         minus(value) {
                             if (value && value.__capybaraType === 'DateTime') {
-                                const delta = Number(this.timestamp() - value.timestamp());
+                                const delta = this.timestamp() - value.timestamp();
                                 const sign = delta < 0 ? -1 : 1;
                                 let remaining = Math.abs(delta);
-                                const days = Math.trunc(remaining / 86400);
-                                remaining %= 86400;
-                                const hours = Math.trunc(remaining / 3600);
-                                remaining %= 3600;
-                                const minutes = Math.trunc(remaining / 60);
-                                const seconds = remaining % 60;
+                                const days = Math.trunc(remaining / TimeModule.sECONDSINDAY);
+                                remaining %= TimeModule.sECONDSINDAY;
+                                const hours = Math.trunc(remaining / TimeModule.sECONDSINHOUR);
+                                remaining %= TimeModule.sECONDSINHOUR;
+                                const minutes = Math.trunc(remaining / TimeModule.sECONDSINMINUTE);
+                                const seconds = remaining % TimeModule.sECONDSINMINUTE;
                                 return new DurationModule.DateDuration({
                                     years: 0,
                                     months: 0,
@@ -2186,8 +2969,54 @@ public final class JavaScriptGenerator implements Generator {
                             }
                             return this.plus(value.negate());
                         }
+                        lessThan(other) {
+                            return this.date.toDaysSinceUnixEpoch() < other.date.toDaysSinceUnixEpoch()
+                                || (this.date.toDaysSinceUnixEpoch() === other.date.toDaysSinceUnixEpoch()
+                                    && this.time.toSeconds() < other.time.toSeconds());
+                        }
+                        less_than(other) {
+                            return this.lessThan(other);
+                        }
+                        less(other) {
+                            return this.lessThan(other);
+                        }
+                        greaterThan(other) {
+                            return this.date.toDaysSinceUnixEpoch() > other.date.toDaysSinceUnixEpoch()
+                                || (this.date.toDaysSinceUnixEpoch() === other.date.toDaysSinceUnixEpoch()
+                                    && this.time.toSeconds() > other.time.toSeconds());
+                        }
+                        greater_than(other) {
+                            return this.greaterThan(other);
+                        }
+                        greater(other) {
+                            return this.greaterThan(other);
+                        }
                         toIso8601() {
-                            return `${this.date.toIso8601()}T${this.time.toIso8601()}`;
+                            const normalized = this.time.offset_minutes && this.time.offset_minutes.__capybaraType === 'Some'
+                                ? new DateTime({
+                                    date: this.date,
+                                    time: new TimeModule.Time({
+                                        hour: this.time.hour,
+                                        minute: this.time.minute,
+                                        second: this.time.second,
+                                        offset_minutes: capy.None,
+                                    }),
+                                }).plus(new DurationModule.DateDuration({
+                                    years: 0,
+                                    months: 0,
+                                    days: 0,
+                                    hours: 0,
+                                    minutes: -this.time.offset_minutes.value,
+                                    seconds: 0,
+                                }))
+                                : this;
+                            const utcTime = new TimeModule.Time({
+                                hour: normalized.time.hour,
+                                minute: normalized.time.minute,
+                                second: normalized.time.second,
+                                offset_minutes: new capy.Some({ value: 0 }),
+                            });
+                            return `${normalized.date.toIso8601()}T${utcTime.toIso8601()}`;
                         }
                         to_iso_8601() {
                             return this.toIso8601();
@@ -2202,6 +3031,50 @@ public final class JavaScriptGenerator implements Generator {
                         }
                     }
 
+                    function scanSplit(value) {
+                        const index = String(value).indexOf('T');
+                        if (index < 0) return failure('Invalid ISO 8601 date-time format: expected `T` separator between date and time');
+                        if (String(value).indexOf('T', index + 1) >= 0) return failure('Invalid ISO 8601 date-time format: expected exactly one `T` separator');
+                        const left = String(value).slice(0, index);
+                        const right = String(value).slice(index + 1);
+                        if (left.length === 0 || right.length === 0) return failure('Invalid ISO 8601 date-time format: date-time parts must not be empty');
+                        return success({ left, right });
+                    }
+
+                    function fromIso8601(iso) {
+                        const split = scanSplit(iso);
+                        if (!capy.isType(split, 'Success')) return split;
+                        const left = split.value.left;
+                        const right = split.value.right;
+                        const dateIsExtended = left.length === 10 && left[4] === '-' && left[7] === '-';
+                        const timeIsExtended = right.length >= 8 && right[2] === ':' && right[5] === ':';
+                        if (dateIsExtended !== timeIsExtended) {
+                            return failure('Invalid ISO 8601 date-time format: date and time must use the same basic or extended format');
+                        }
+                        const date = DateModule.fromIso8601(left);
+                        if (!capy.isType(date, 'Success')) return date;
+                        const timeWithOffset = TimeModule.fromIso8601(right);
+                        if (!capy.isType(timeWithOffset, 'Success')) return timeWithOffset;
+                        if (!timeWithOffset.value.offset_minutes || timeWithOffset.value.offset_minutes.__capybaraType !== 'Some') {
+                            return failure('Invalid ISO 8601 date-time format: expected UTC designator `Z` or numeric offset');
+                        }
+                        const utcTime = TimeModule.__constructor__data__Time(
+                            timeWithOffset.value.hour,
+                            timeWithOffset.value.minute,
+                            timeWithOffset.value.second,
+                            capy.None
+                        );
+                        if (!capy.isType(utcTime, 'Success')) return utcTime;
+                        return success(new DateTime({ date: date.value, time: utcTime.value }).plus(new DurationModule.DateDuration({
+                            years: 0,
+                            months: 0,
+                            days: 0,
+                            hours: 0,
+                            minutes: -timeWithOffset.value.offset_minutes.value,
+                            seconds: 0,
+                        })));
+                    }
+
                     const uNIXEPOCH = new DateTime({ date: DateModule.uNIXDATE, time: TimeModule.mIDNIGHT });
                     const UNIX_EPOCH = uNIXEPOCH;
 
@@ -2209,6 +3082,154 @@ public final class JavaScriptGenerator implements Generator {
                         DateTime,
                         uNIXEPOCH,
                         UNIX_EPOCH,
+                        fromIso8601,
+                        from_iso_8601: fromIso8601,
+                    };
+                    """;
+        }
+
+        private static String intervalRuntime() {
+            return """
+                    'use strict';
+                    const capy = require('../../dev/capylang/capybara.js');
+                    const DateTimeModule = require('./DateTimeModule.js');
+                    const DurationModule = require('./DurationModule.js');
+                    const success = value => new capy.Success({ value });
+                    const failure = message => new capy.Error({ message });
+                    const invalid = message => failure(`Invalid ISO 8601 interval format: ${message}`);
+
+                    class DateTimeStartEnd {
+                        constructor(fields = {}) {
+                            this.__capybaraType = 'DateTimeStartEnd';
+                            this.__capybaraTypes = ['DateTimeStartEnd', 'Interval', 'CapybaraDataValue'];
+                            this._start = fields.start ?? fields._start;
+                            this._end = fields.end ?? fields._end;
+                            return capy.methodAliasProxy(this);
+                        }
+                        start() { return this._start; }
+                        end() { return this._end; }
+                        duration() { return this._end.minus(this._start); }
+                        toIso8601() { return `${this._start.toIso8601()}/${this._end.toIso8601()}`; }
+                        to_iso_8601() { return this.toIso8601(); }
+                        toString() { return capy.dataToString(this); }
+                        capybaraDataValueInfo() {
+                            return {
+                                name: 'DateTimeStartEnd',
+                                packageName: 'capy.dateTime',
+                                packagePath: 'capy/date_time/Interval',
+                                fields: [{ name: 'start', value: this._start }, { name: 'end', value: this._end }],
+                            };
+                        }
+                    }
+
+                    class DateTimeStartDuration {
+                        constructor(fields = {}) {
+                            this.__capybaraType = 'DateTimeStartDuration';
+                            this.__capybaraTypes = ['DateTimeStartDuration', 'Interval', 'CapybaraDataValue'];
+                            this._start = fields.start ?? fields._start;
+                            this._duration = fields.duration ?? fields._duration;
+                            return capy.methodAliasProxy(this);
+                        }
+                        start() { return this._start; }
+                        end() { return this._start.plus(this._duration); }
+                        duration() { return this._duration; }
+                        toIso8601() { return `${this._start.toIso8601()}/${this._duration.toIso8601()}`; }
+                        to_iso_8601() { return this.toIso8601(); }
+                        toString() { return capy.dataToString(this); }
+                        capybaraDataValueInfo() {
+                            return {
+                                name: 'DateTimeStartDuration',
+                                packageName: 'capy.dateTime',
+                                packagePath: 'capy/date_time/Interval',
+                                fields: [{ name: 'start', value: this._start }, { name: 'duration', value: this._duration }],
+                            };
+                        }
+                    }
+
+                    class DateTimeDurationEnd {
+                        constructor(fields = {}) {
+                            this.__capybaraType = 'DateTimeDurationEnd';
+                            this.__capybaraTypes = ['DateTimeDurationEnd', 'Interval', 'CapybaraDataValue'];
+                            this._duration = fields.duration ?? fields._duration;
+                            this._end = fields.end ?? fields._end;
+                            return capy.methodAliasProxy(this);
+                        }
+                        start() { return this._end.minus(this._duration); }
+                        end() { return this._end; }
+                        duration() { return this._duration; }
+                        toIso8601() { return `${this._duration.toIso8601()}/${this._end.toIso8601()}`; }
+                        to_iso_8601() { return this.toIso8601(); }
+                        toString() { return capy.dataToString(this); }
+                        capybaraDataValueInfo() {
+                            return {
+                                name: 'DateTimeDurationEnd',
+                                packageName: 'capy.dateTime',
+                                packagePath: 'capy/date_time/Interval',
+                                fields: [{ name: 'duration', value: this._duration }, { name: 'end', value: this._end }],
+                            };
+                        }
+                    }
+
+                    function splitInterval(value) {
+                        const hasSlash = value.includes('/');
+                        const hasDash = value.includes('--');
+                        if (hasSlash && hasDash) return invalid('expected exactly one interval separator');
+                        const separator = hasSlash ? '/' : hasDash ? '--' : null;
+                        if (!separator) return invalid('expected `/` or `--` separator');
+                        const first = value.indexOf(separator);
+                        if (first < 0 || value.indexOf(separator, first + separator.length) >= 0) {
+                            return invalid('expected exactly one interval separator');
+                        }
+                        const left = value.slice(0, first);
+                        const right = value.slice(first + separator.length);
+                        if (left.length === 0 || right.length === 0) return invalid('interval parts must not be empty');
+                        return success({ left, right });
+                    }
+
+                    function parseDateTime(value) {
+                        const parsed = DateTimeModule.fromIso8601(value);
+                        return capy.isType(parsed, 'Success') ? parsed : invalid('interval endpoints must be UTC date-times');
+                    }
+
+                    function fromIso8601(iso) {
+                        const split = splitInterval(String(iso));
+                        if (!capy.isType(split, 'Success')) return split;
+                        const left = split.value.left;
+                        const right = split.value.right;
+                        if (left.startsWith('P') && right.startsWith('P')) {
+                            return invalid('interval cannot contain a duration on both sides');
+                        }
+                        if (left.startsWith('P')) {
+                            const duration = DurationModule.fromIso8601(left);
+                            if (!capy.isType(duration, 'Success')) return duration;
+                            const end = parseDateTime(right);
+                            return capy.isType(end, 'Success')
+                                ? success(new DateTimeDurationEnd({ duration: duration.value, end: end.value }))
+                                : end;
+                        }
+                        if (right.startsWith('P')) {
+                            const duration = DurationModule.fromIso8601(right);
+                            if (!capy.isType(duration, 'Success')) return duration;
+                            const start = parseDateTime(left);
+                            return capy.isType(start, 'Success')
+                                ? success(new DateTimeStartDuration({ start: start.value, duration: duration.value }))
+                                : start;
+                        }
+                        const start = parseDateTime(left);
+                        if (!capy.isType(start, 'Success')) return start;
+                        const end = parseDateTime(right);
+                        if (!capy.isType(end, 'Success')) return end;
+                        return start.value.greaterThan(end.value)
+                            ? invalid('interval start must not be after interval end')
+                            : success(new DateTimeStartEnd({ start: start.value, end: end.value }));
+                    }
+
+                    module.exports = {
+                        DateTimeDurationEnd,
+                        DateTimeStartDuration,
+                        DateTimeStartEnd,
+                        fromIso8601,
+                        from_iso_8601: fromIso8601,
                     };
                     """;
         }
@@ -2250,33 +3271,325 @@ public final class JavaScriptGenerator implements Generator {
                     const capy = require('../../dev/capylang/capybara.js');
 
                     class AssertionResult {
-                        constructor(value, message = '') {
-                            this.value = value;
+                        constructor(result, message = '', type = 'Assertion') {
+                            this.result = result;
                             this.message = message;
+                            this.type = type;
                         }
                         succeeded() {
-                            return this.value;
+                            return this.result;
+                        }
+                    }
+
+                    function assertion(result, message, type) {
+                        return () => new AssertionResult(Boolean(result), message, type);
+                    }
+
+                        function assertionsOf(value) {
+                            if (value == null) {
+                                return [];
+                            }
+                            if (Array.isArray(value)) {
+                                return flattenAssertions(value);
+                            }
+                        if (Array.isArray(value.assertions)) {
+                            return value.assertions;
+                        }
+                        if (typeof value.succeeded === 'function') {
+                            return [() => value];
+                        }
+                        if (Object.prototype.hasOwnProperty.call(value, 'result')) {
+                            return [() => value];
+                        }
+                            return [assertion(false, `Unsupported assertion result: ${String(value)}`, 'AssertRuntime')];
+                        }
+
+                        function flattenAssertions(values) {
+                            const flattened = [];
+                            for (const value of values) {
+                                flattened.push(...assertionsOf(value));
+                            }
+                            return flattened;
+                        }
+
+                    function display(value) {
+                        return value && typeof value.toIso8601 === 'function' ? value.toIso8601() : capy.toStringValue(value);
+                    }
+
+                    function valueAt(value, name) {
+                        if (value == null) return undefined;
+                        const member = value[name];
+                        return typeof member === 'function' ? member.call(value) : member;
+                    }
+
+                    function sequenceAsList(value) {
+                        if (value && typeof value.asList === 'function') {
+                            return value.asList();
+                        }
+                        return undefined;
+                    }
+
+                    function collectionSize(value) {
+                        if (value instanceof Map || value instanceof Set) return value.size;
+                        const sequence = sequenceAsList(value);
+                        if (sequence !== undefined) return sequence.length;
+                        return value?.length ?? 0;
+                    }
+
+                    function containsValue(container, expected) {
+                        if (container && container.__capybaraType === 'Some') return capy.equals(container.value, expected);
+                        if (container && container.__capybaraType === 'Success') return capy.equals(container.value, expected);
+                        if (typeof container === 'string') return container.includes(String(expected));
+                        if (container instanceof Map) return Array.from(container.values()).some(value => capy.equals(value, expected));
+                        const sequence = sequenceAsList(container);
+                        if (sequence !== undefined) return capy.contains(sequence, expected);
+                        return capy.contains(container, expected);
+                    }
+
+                    function isSuccess(value) {
+                        return capy.isType(value, 'Success');
+                    }
+
+                        function isError(value) {
+                            return capy.isType(value, 'Error');
+                        }
+
+                        function withMethodAliases(target) {
+                            return new Proxy(target, {
+                                get(target, property, receiver) {
+                                    if (property in target) return Reflect.get(target, property, receiver);
+                                    if (typeof property === 'string') {
+                                        const overloadSeparator = property.indexOf('__');
+                                        if (overloadSeparator > 0) {
+                                            const base = property.slice(0, overloadSeparator);
+                                            if (typeof target[base] === 'function') {
+                                                return target[base].bind(target);
+                                            }
+                                        }
+                                    }
+                                    return undefined;
+                                },
+                            });
+                        }
+
+                        class GenericAssert {
+                            constructor(value, assertions = []) {
+                                this.__capybaraType = 'Assert';
+                                this.__capybaraTypes = ['Assert'];
+                                this.value = value;
+                                this.assertions = assertions;
+                                return withMethodAliases(this);
+                            }
+                        append(result, message, type) {
+                            return new GenericAssert(this.value, this.assertions.concat(assertion(result, message, type)));
+                        }
+                        failed() {
+                            return this.assertions.some(supplier => !supplier().result);
+                        }
+                        succeeded() {
+                            return !this.failed();
+                        }
+                        contains(expected) {
+                            return this.append(
+                                containsValue(this.value, expected),
+                                `Expected ${display(this.value)} to contain ${display(expected)}`,
+                                'contains'
+                            );
+                        }
+                        doesNotContain(expected) {
+                            return this.append(
+                                !containsValue(this.value, expected),
+                                `Expected ${display(this.value)} not to contain ${display(expected)}`,
+                                'does_not_contain'
+                            );
+                        }
+                        containsKey(expected) {
+                            return this.append(
+                                this.value instanceof Map && this.value.has(expected),
+                                `Expected ${display(this.value)} to contain key ${display(expected)}`,
+                                'contains_key'
+                            );
+                        }
+                        containsValue(expected) {
+                            return this.append(
+                                this.value instanceof Map && Array.from(this.value.values()).some(value => capy.equals(value, expected)),
+                                `Expected ${display(this.value)} to contain value ${display(expected)}`,
+                                'contains_value'
+                            );
+                        }
+                        doesNotContainKey(expected) {
+                            return this.append(
+                                !(this.value instanceof Map && this.value.has(expected)),
+                                `Expected ${display(this.value)} not to contain key ${display(expected)}`,
+                                'does_not_contain_key'
+                            );
+                        }
+                        hasSize(expected) {
+                            return this.append(
+                                capy.equals(collectionSize(this.value), expected),
+                                `Expected size ${collectionSize(this.value)} to equal ${expected}`,
+                                'has_size'
+                            );
+                        }
+                        isEmpty() {
+                            return this.hasSize(0);
+                        }
+                        isEqualTo(expected, epsilon) {
+                            const result = epsilon === undefined
+                                ? capy.equals(this.value, expected)
+                                : Math.abs(this.value - expected) <= epsilon;
+                            return this.append(
+                                result,
+                                `Expected ${display(this.value)} to equal ${display(expected)}`,
+                                'is_equal_to'
+                            );
+                        }
+                        isGreaterThan(expected) {
+                            return this.append(this.value > expected, `Expected ${display(this.value)} to be greater than ${display(expected)}`, 'is_greater_than');
+                        }
+                        isGreaterOrEqualsThan(expected) {
+                            return this.append(this.value >= expected, `Expected ${display(this.value)} to be greater than or equal to ${display(expected)}`, 'is_greater_or_equals_than');
+                        }
+                        isLessThan(expected) {
+                            return this.append(this.value < expected, `Expected ${display(this.value)} to be less than ${display(expected)}`, 'is_less_than');
+                        }
+                        isLessOrEqualsThan(expected) {
+                            return this.append(this.value <= expected, `Expected ${display(this.value)} to be less than or equal to ${display(expected)}`, 'is_less_or_equals_than');
+                        }
+                        isBetween(start, end) {
+                            return this.isGreaterOrEqualsThan(start).isLessOrEqualsThan(end);
+                        }
+                        isZero() {
+                            return this.isEqualTo(0);
+                        }
+                        isOne() {
+                            return this.isEqualTo(1);
+                        }
+                        isTrue() {
+                            return this.isEqualTo(true);
+                        }
+                        isFalse() {
+                            return this.isEqualTo(false);
+                        }
+                        startsWith(expected) {
+                            return this.append(String(this.value).startsWith(expected), `Expected ${display(this.value)} to start with ${display(expected)}`, 'starts_with');
+                        }
+                        doesNotStartWith(expected) {
+                            return this.append(!String(this.value).startsWith(expected), `Expected ${display(this.value)} not to start with ${display(expected)}`, 'does_not_start_with');
+                        }
+                        succeeds(expectedOrAssert) {
+                            const ok = isSuccess(this.value);
+                            const base = this.append(ok, `Expected Result.Success, got ${display(this.value)}`, 'succeeds');
+                            if (!ok) return base;
+                            if (arguments.length === 0) return base;
+                            if (typeof expectedOrAssert === 'function') {
+                                return new GenericAssert(this.value, base.assertions.concat(assertionsOf(expectedOrAssert(this.value.value))));
+                            }
+                            return base.append(
+                                capy.equals(this.value.value, expectedOrAssert),
+                                `Expected success value ${display(this.value.value)} to equal ${display(expectedOrAssert)}`,
+                                'succeeds'
+                            );
+                        }
+                        fails(expectedMessage) {
+                            const ok = isError(this.value);
+                            const messageMatches = expectedMessage === undefined || (ok && capy.equals(this.value.message, expectedMessage));
+                            return this.append(
+                                ok && messageMatches,
+                                expectedMessage === undefined
+                                    ? `Expected Result.Error, got ${display(this.value)}`
+                                    : `Expected error message ${display(expectedMessage)}, got ${display(this.value?.message)}`,
+                                'fails'
+                            );
+                        }
+                        hasDay(expected) {
+                            return this.append(capy.equals(valueAt(this.value, 'day') ?? valueAt(valueAt(this.value, 'date'), 'day'), expected), `Expected day to equal ${expected}`, 'has_day');
+                        }
+                        hasMonth(expected) {
+                            return this.append(capy.equals(valueAt(this.value, 'month') ?? valueAt(valueAt(this.value, 'date'), 'month'), expected), `Expected month to equal ${expected}`, 'has_month');
+                        }
+                        hasYear(expected) {
+                            return this.append(capy.equals(valueAt(this.value, 'year') ?? valueAt(valueAt(this.value, 'date'), 'year'), expected), `Expected year to equal ${expected}`, 'has_year');
+                        }
+                        hasHour(expected) {
+                            return this.append(capy.equals(valueAt(this.value, 'hour') ?? valueAt(valueAt(this.value, 'time'), 'hour'), expected), `Expected hour to equal ${expected}`, 'has_hour');
+                        }
+                        hasMinute(expected) {
+                            return this.append(capy.equals(valueAt(this.value, 'minute') ?? valueAt(valueAt(this.value, 'time'), 'minute'), expected), `Expected minute to equal ${expected}`, 'has_minute');
+                        }
+                        hasSecond(expected) {
+                            return this.append(capy.equals(valueAt(this.value, 'second') ?? valueAt(valueAt(this.value, 'time'), 'second'), expected), `Expected second to equal ${expected}`, 'has_second');
+                        }
+                        hasOffsetMinutes(expected) {
+                            const actual = valueAt(this.value, 'offset_minutes') ?? valueAt(valueAt(this.value, 'time'), 'offset_minutes');
+                            const normalized = typeof expected === 'number' ? new capy.Some({ value: expected }) : expected;
+                            return this.append(capy.equals(actual, normalized), `Expected offset to equal ${display(normalized)}`, 'has_offset_minutes');
+                        }
+                        hasDate(expected) {
+                            return this.append(capy.equals(valueAt(this.value, 'date'), expected), `Expected date to equal ${display(expected)}`, 'has_date');
+                        }
+                        hasTime(expected) {
+                            return this.append(capy.equals(valueAt(this.value, 'time'), expected), `Expected time to equal ${display(expected)}`, 'has_time');
+                        }
+                        hasYears(expected) {
+                            return this.append(capy.equals(valueAt(this.value, 'years'), expected), `Expected years to equal ${expected}`, 'has_years');
+                        }
+                        hasMonths(expected) {
+                            return this.append(capy.equals(valueAt(this.value, 'months'), expected), `Expected months to equal ${expected}`, 'has_months');
+                        }
+                        hasDays(expected) {
+                            return this.append(capy.equals(valueAt(this.value, 'days'), expected), `Expected days to equal ${expected}`, 'has_days');
+                        }
+                        hasHours(expected) {
+                            return this.append(capy.equals(valueAt(this.value, 'hours'), expected), `Expected hours to equal ${expected}`, 'has_hours');
+                        }
+                        hasMinutes(expected) {
+                            return this.append(capy.equals(valueAt(this.value, 'minutes'), expected), `Expected minutes to equal ${expected}`, 'has_minutes');
+                        }
+                        hasSeconds(expected) {
+                            return this.append(capy.equals(valueAt(this.value, 'seconds'), expected), `Expected seconds to equal ${expected}`, 'has_seconds');
+                        }
+                        hasWeeks(expected) {
+                            return this.append(capy.equals(valueAt(this.value, 'weeks'), expected), `Expected weeks to equal ${expected}`, 'has_weeks');
+                        }
+                        hasStart(expected) {
+                            return this.append(capy.equals(valueAt(this.value, 'start'), expected), `Expected start to equal ${display(expected)}`, 'has_start');
+                        }
+                        hasEnd(expected) {
+                            return this.append(capy.equals(valueAt(this.value, 'end'), expected), `Expected end to equal ${display(expected)}`, 'has_end');
+                        }
+                        hasDuration(expected) {
+                            return this.append(capy.equals(valueAt(this.value, 'duration'), expected), `Expected duration to equal ${display(expected)}`, 'has_duration');
                         }
                     }
 
                     function assertThat(value) {
-                        return {
-                            isEqualTo(expected) {
-                                return new AssertionResult(capy.equals(value, expected), `Expected ${capy.toStringValue(value)} to equal ${capy.toStringValue(expected)}`);
-                            },
-                            succeeds() {
-                                return new AssertionResult(capy.isType(value, 'Success'), 'Expected Result.Success');
-                            },
-                            fails() {
-                                return new AssertionResult(capy.isType(value, 'Error'), 'Expected Result.Error');
-                            },
-                        };
+                        return new GenericAssert(value);
                     }
 
-                    module.exports = {
+                        function assertAll(asserts) {
+                            return new GenericAssert(null, flattenAssertions(asserts));
+                        }
+
+                    const exportsObject = {
+                        assertAll,
+                        assert_all: assertAll,
                         assertThat,
                         assert_that: assertThat,
                     };
+
+                    module.exports = new Proxy(exportsObject, {
+                        get(target, property) {
+                            if (property in target) return target[property];
+                            if (typeof property === 'string' && (property.startsWith('assertThat') || property.startsWith('assert_that'))) {
+                                return assertThat;
+                            }
+                            if (typeof property === 'string' && (property.startsWith('assertAll') || property.startsWith('assert_all'))) {
+                                return assertAll;
+                            }
+                            return undefined;
+                        },
+                    });
                     """;
         }
 
@@ -2319,6 +3632,7 @@ public final class JavaScriptGenerator implements Generator {
                         flat_map(mapper) { return optionFlatMap(this, mapper); }
                         flatMap(mapper) { return optionFlatMap(this, mapper); }
                         pipe_star(mapper) { return optionFlatMap(this, mapper); }
+                        pipeStar(mapper) { return optionFlatMap(this, mapper); }
                         filter(predicate) { return predicate(this.value) ? None : this; }
                         reduce(initial, reducer) { return invoke(reducer, initial, this.value); }
                         reduceLeft(initial, reducer) { return this.reduce(initial, reducer); }
@@ -2334,6 +3648,7 @@ public final class JavaScriptGenerator implements Generator {
                         flat_map() { return this; },
                         flatMap() { return this; },
                         pipe_star() { return this; },
+                        pipeStar() { return this; },
                         filter() { return this; },
                         reduce(initial) { return initial; },
                         reduceLeft(initial) { return initial; },
@@ -2345,7 +3660,13 @@ public final class JavaScriptGenerator implements Generator {
                         constructor(fields = {}) {
                             this.__capybaraType = 'Success';
                             this.__capybaraTypes = ['Success', 'Result'];
-                            this.value = fields.value;
+                            this.value = fields.value ?? fields.results;
+                            Object.defineProperty(this, 'results', {
+                                value: fields.results ?? fields.value,
+                                enumerable: false,
+                                configurable: true,
+                            });
+                            return methodAliasProxy(this);
                         }
                         map(mapper) { return invoke(mapper, this.value); }
                         pipe(mapper) { return invoke(mapper, this.value); }
@@ -2366,7 +3687,9 @@ public final class JavaScriptGenerator implements Generator {
                         constructor(fields = {}) {
                             this.__capybaraType = 'Error';
                             this.__capybaraTypes = ['Error', 'Result'];
-                            this.message = fields.message;
+                            this.message = fields.message ?? fields.ex;
+                            this.ex = this.message;
+                            return methodAliasProxy(this);
                         }
                         map() { return this; }
                         pipe() { return this; }
@@ -2388,10 +3711,16 @@ public final class JavaScriptGenerator implements Generator {
                             this.thunk = thunk;
                             this.__capybaraType = '_UnsafeEffect';
                             this.__capybaraTypes = ['_UnsafeEffect', 'Effect'];
+                            return methodAliasProxy(this);
                         }
                         unsafe_run() { return this.thunk(); }
+                        unsafeRun() { return this.unsafe_run(); }
                         map(mapper) { return delay(() => mapper(this.unsafe_run())); }
+                        pipe(mapper) { return this.map(mapper); }
                         flat_map(mapper) { return delay(() => mapper(this.unsafe_run()).unsafe_run()); }
+                        flatMap(mapper) { return this.flat_map(mapper); }
+                        pipe_star(mapper) { return this.flat_map(mapper); }
+                        pipeStar(mapper) { return this.flat_map(mapper); }
                     }
 
                     function delay(thunk) {
@@ -2438,28 +3767,33 @@ public final class JavaScriptGenerator implements Generator {
                         return value;
                     }
 
-                    function resultLikeFlatMap(value, mapper) {
-                        const mapped = resultLikePipe(value, mapper);
-                        return isSuccessLike(mapped) ? mapped.value : mapped;
-                    }
+                        function resultLikeFlatMap(value, mapper) {
+                            const mapped = resultLikePipe(value, mapper);
+                            return isSuccessLike(mapped) ? mapped.value : mapped;
+                        }
 
-                    const arrayMethods = {
-                        asList: { value() { return Array.from(this); } },
-                        first: { value() { return this.length === 0 ? None : new Some({ value: this[0] }); } },
-                        map: { value(mapper) { return list(Array.prototype.map.call(this, mapper)); } },
-                        flatMap: { value(mapper) { return flatMapCollection(this, mapper); } },
-                        flat_map: { value(mapper) { return flatMapCollection(this, mapper); } },
-                        filter: { value(predicate) { return list(Array.prototype.filter.call(this, predicate)); } },
-                        reject: { value(predicate) { return rejectCollection(this, predicate); } },
-                        pipe: { value(mapper) { return mapCollection(this, mapper); } },
-                        pipe_minus: { value(predicate) { return filterCollection(this, predicate); } },
-                        pipe_star: { value(mapper) { return flatMapCollection(this, mapper); } },
-                        reduce: { value(first, second) { return typeof first === 'function' ? Array.prototype.reduce.apply(this, arguments) : reduceCollection(this, first, second); } },
+                        const nativeArrayMap = Array.prototype.map;
+                        const nativeArrayFlatMap = Array.prototype.flatMap;
+                        const nativeArrayFilter = Array.prototype.filter;
+                        const nativeArrayReduce = Array.prototype.reduce;
+
+                        const arrayMethods = {
+                            asList: { value() { return Array.from(this); } },
+                            first: { value() { return this.length === 0 ? None : new Some({ value: this[0] }); } },
+                            map: { value(mapper) { return list(nativeArrayMap.call(this, mapper)); } },
+                            flatMap: { value(mapper) { return flatMapCollection(this, mapper); } },
+                            flat_map: { value(mapper) { return flatMapCollection(this, mapper); } },
+                            filter: { value(predicate) { return list(nativeArrayFilter.call(this, predicate)); } },
+                            reject: { value(predicate) { return rejectCollection(this, predicate); } },
+                            pipe: { value(mapper) { return mapCollection(this, mapper); } },
+                            pipe_minus: { value(predicate) { return filterCollection(this, predicate); } },
+                            pipe_star: { value(mapper) { return flatMapCollection(this, mapper); } },
+                            reduce: { value(first, second) { return typeof first === 'function' ? nativeArrayReduce.apply(this, arguments) : reduceCollection(this, first, second); } },
                         reduceLeft: { value(initial, reducer) { return reduceCollection(this, initial, reducer); } },
                         pipe_greater: { value(initial, reducer) { return reduceCollection(this, initial, reducer); } },
                     };
 
-                    const setMethods = {
+                        const setMethods = {
                         asList: { value() { return Array.from(this); } },
                         first: { value() { const values = Array.from(this); return values.length === 0 ? None : new Some({ value: values[0] }); } },
                         pipe: { value(mapper) { return mapCollection(this, mapper); } },
@@ -2485,17 +3819,28 @@ public final class JavaScriptGenerator implements Generator {
                         cartesianProduct: { value(other) { return setCartesianProduct(this, other); } },
                         opd7: { value(other) { return setCartesianProduct(this, other); } },
                         powerSet: { value() { return setPowerSet(this); } },
-                        op2118: { value() { return setPowerSet(this); } },
-                    };
+                            op2118: { value() { return setPowerSet(this); } },
+                        };
 
-                    function defineCapyMethods(target, methods) {
+                        const mapMethods = {
+                            containsKey: { value(key) { return this.has(key); } },
+                            contains_key: { value(key) { return this.has(key); } },
+                            containsValue: { value(expected) { return Array.from(this.values()).some(value => equals(value, expected)); } },
+                            contains_value: { value(expected) { return Array.from(this.values()).some(value => equals(value, expected)); } },
+                            isEmpty: { value() { return this.size === 0; } },
+                            is_empty: { value() { return this.size === 0; } },
+                        };
+
+                        function defineCapyMethods(target, methods) {
                         for (const [name, descriptor] of Object.entries(methods)) {
                             if (!Object.prototype.hasOwnProperty.call(target, name)) {
                                 Object.defineProperty(target, name, { ...descriptor, enumerable: false, configurable: true });
                             }
                         }
-                        return target;
-                    }
+                            return target;
+                        }
+
+                        defineCapyMethods(Map.prototype, mapMethods);
 
                     function size(value) {
                         if (value instanceof Set) {
@@ -2586,7 +3931,7 @@ public final class JavaScriptGenerator implements Generator {
                     }
 
                     function enumValue(name, owner, parents = [], ordinal = 0, aliases = [], packageName = '', packagePath = owner) {
-                        return Object.freeze({
+                        const value = {
                             __capybaraType: name,
                             __capybaraTypes: [name, ...aliases, owner, ...parents],
                             __capybaraEnum: true,
@@ -2595,7 +3940,92 @@ public final class JavaScriptGenerator implements Generator {
                             order: ordinal,
                             toString() { return name; },
                             capybaraDataValueInfo() { return { name, packageName, packagePath, fields: [] }; },
+                        };
+                        if (parents.includes('Seq') && name === 'End') {
+                            Object.assign(value, {
+                                any() { return false; },
+                                asList() { return []; },
+                                drop() { return this; },
+                                dropUntil() { return this; },
+                                filter() { return this; },
+                                first() { return None; },
+                                firstMatch() { return None; },
+                                flatMap() { return this; },
+                                map() { return this; },
+                                pipe() { return this; },
+                                pipeStar() { return this; },
+                                pipe_star() { return this; },
+                                plus(other) { return other; },
+                                reduce(initial) { return initial; },
+                                reduceLeft(initial) { return initial; },
+                                reject() { return this; },
+                                take() { return []; },
+                                takeLast() { return []; },
+                                until() { return this; },
+                                zip() { return this; },
+                            });
+                        }
+                        return methodAliasProxy(Object.freeze(value));
+                    }
+
+                    function methodAliasProxy(target) {
+                        return new Proxy(target, {
+                            get(target, property, receiver) {
+                                if (property in target) return Reflect.get(target, property, receiver);
+                                if (typeof property !== 'string') return undefined;
+                                const directCamel = property.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
+                                if (directCamel !== property && typeof target[directCamel] === 'function') {
+                                    return target[directCamel].bind(target);
+                                }
+                                const overloadSeparator = property.indexOf('__');
+                                if (overloadSeparator <= 0) return undefined;
+                                const base = property.slice(0, overloadSeparator);
+                                const camelBase = base.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
+                                const candidates = [
+                                    base,
+                                    camelBase,
+                                    base === 'greater' ? 'greaterThan' : undefined,
+                                    base === 'less' ? 'lessThan' : undefined,
+                                ];
+                                for (const candidate of candidates) {
+                                    if (candidate && typeof target[candidate] === 'function') {
+                                        return target[candidate].bind(target);
+                                    }
+                                }
+                                return undefined;
+                            },
                         });
+                    }
+
+                    function overloadScore(name, args) {
+                        if (args.length === 0) return 1;
+                        const first = args[0];
+                        const lowered = name.toLowerCase();
+                        if (lowered.includes('compileddict')) return first instanceof Map ? 100 : -1;
+                        if (lowered.includes('compiledset')) return first instanceof Set ? 100 : -1;
+                        if (lowered.includes('compiledlist')) return Array.isArray(first) ? 100 : -1;
+                        if (lowered.includes('string')) return typeof first === 'string' ? 80 : -1;
+                        if (lowered.includes('long')) return typeof first === 'bigint' ? 80 : -1;
+                        if (lowered.includes('int') || lowered.includes('float') || lowered.includes('double')) {
+                            return typeof first === 'number' ? 70 : -1;
+                        }
+                        if (first && first.__capybaraType && lowered.includes(first.__capybaraType.toLowerCase())) {
+                            return 90;
+                        }
+                        return 1;
+                    }
+
+                    function dispatchOverload(overloads, args) {
+                        let selected = overloads[0];
+                        let selectedScore = -1;
+                        for (const overload of overloads) {
+                            const score = overloadScore(overload[0], args);
+                            if (score > selectedScore) {
+                                selected = overload;
+                                selectedScore = score;
+                            }
+                        }
+                        return selected[1](...args);
                     }
 
                     function isType(value, typeName) {
@@ -2681,11 +4111,11 @@ public final class JavaScriptGenerator implements Generator {
                             return left.size === right.size
                                 && Array.from(left.entries()).every(([key, value]) => right.has(key) && equals(value, right.get(key)));
                         }
-                        if (left && right && left.__capybaraType && right.__capybaraType && left.__capybaraType === right.__capybaraType) {
-                            const keys = Object.keys(left).filter(key => !key.startsWith('__') && typeof left[key] !== 'function');
-                            return keys.length === Object.keys(right).filter(key => !key.startsWith('__') && typeof right[key] !== 'function').length
-                                && keys.every(key => equals(left[key], right[key]));
-                        }
+                            if (left && right && left.__capybaraType && right.__capybaraType && left.__capybaraType === right.__capybaraType) {
+                                const keys = nativeArrayFilter.call(Object.keys(left), key => !key.startsWith('__') && typeof left[key] !== 'function');
+                                return keys.length === nativeArrayFilter.call(Object.keys(right), key => !key.startsWith('__') && typeof right[key] !== 'function').length
+                                    && keys.every(key => equals(left[key], right[key]));
+                            }
                         return false;
                     }
 
@@ -2732,13 +4162,13 @@ public final class JavaScriptGenerator implements Generator {
                         return list([...left, ...right]);
                     }
 
-                    function listRemove(valueList, value) {
-                        return list(valueList.filter(item => !equals(item, value)));
-                    }
+                        function listRemove(valueList, value) {
+                            return list(nativeArrayFilter.call(valueList, item => !equals(item, value)));
+                        }
 
-                    function listMinus(left, right) {
-                        return list(left.filter(item => !contains(right, item)));
-                    }
+                        function listMinus(left, right) {
+                            return list(nativeArrayFilter.call(left, item => !contains(right, item)));
+                        }
 
                     function setAppend(valueSet, value) {
                         const result = set(valueSet);
@@ -2753,12 +4183,12 @@ public final class JavaScriptGenerator implements Generator {
                         return result;
                     }
 
-                    function setRemove(valueSet, value) {
-                        return set(Array.from(valueSet).filter(item => !equals(item, value)));
-                    }
+                        function setRemove(valueSet, value) {
+                            return set(nativeArrayFilter.call(Array.from(valueSet), item => !equals(item, value)));
+                        }
 
-                    function setMinus(left, right) {
-                        return set(Array.from(left).filter(item => !contains(right, item)));
+                        function setMinus(left, right) {
+                            return set(nativeArrayFilter.call(Array.from(left), item => !contains(right, item)));
                     }
 
                     function setIsSubsetOf(left, right) {
@@ -2779,27 +4209,27 @@ public final class JavaScriptGenerator implements Generator {
                         return setIsSubsetOf(right, left) && set(left).size > set(right).size;
                     }
 
-                    function setIntersection(left, right) {
-                        return set(Array.from(left).filter(item => contains(right, item)));
+                        function setIntersection(left, right) {
+                            return set(nativeArrayFilter.call(Array.from(left), item => contains(right, item)));
                     }
 
                     function setSymmetricDifference(left, right) {
                         return setPlus(setMinus(left, right), setMinus(right, left));
                     }
 
-                    function setCartesianProduct(left, right) {
-                        const normalizedLeft = set(left);
-                        const normalizedRight = set(right);
-                        return set(Array.from(normalizedLeft).flatMap(l => Array.from(normalizedRight).map(r => [l, r])));
-                    }
+                        function setCartesianProduct(left, right) {
+                            const normalizedLeft = set(left);
+                            const normalizedRight = set(right);
+                            return set(nativeArrayFlatMap.call(Array.from(normalizedLeft), l => nativeArrayMap.call(Array.from(normalizedRight), r => [l, r])));
+                        }
 
-                    function setPowerSet(valueSet) {
-                        const values = Array.from(set(valueSet));
-                        return set(values.reduce(
-                            (subsets, item) => subsets.concat(subsets.map(subset => set([...subset, item]))),
-                            [set()]
-                        ));
-                    }
+                        function setPowerSet(valueSet) {
+                            const values = Array.from(set(valueSet));
+                            return set(nativeArrayReduce.call(values,
+                                (subsets, item) => subsets.concat(nativeArrayMap.call(subsets, subset => set([...subset, item]))),
+                                [set()]
+                            ));
+                        }
 
                     function dictPut(dict, tuple) {
                         const result = new Map(dict);
@@ -2844,6 +4274,9 @@ public final class JavaScriptGenerator implements Generator {
                         if (typeof value === 'string') {
                             return Array.from(value);
                         }
+                        if (value && typeof value.asList === 'function') {
+                            return value.asList();
+                        }
                         return value;
                     }
 
@@ -2857,19 +4290,19 @@ public final class JavaScriptGenerator implements Generator {
                         if (isType(value, 'Success')) {
                             return invoke(mapper, value.value);
                         }
-                        if (isType(value, 'Error')) {
-                            return value;
+                            if (isType(value, 'Error')) {
+                                return value;
+                            }
+                            if (value instanceof Map) {
+                                return new Map(nativeArrayMap.call(Array.from(value.entries()), ([key, item]) => [key, invoke(mapper, key, item)]));
+                            }
+                            if (value instanceof Set) {
+                                return set(nativeArrayMap.call(Array.from(value), (item, index) => invoke(mapper, item, index)));
                         }
-                        if (value instanceof Map) {
-                            return new Map(Array.from(value.entries()).map(([key, item]) => [key, invoke(mapper, key, item)]));
-                        }
-                        if (value instanceof Set) {
-                            return set(Array.from(value).map((item, index) => invoke(mapper, item, index)));
-                        }
-                        if (typeof value === 'string') {
-                            return list(Array.from(value).map((item, index) => invoke(mapper, item, index)));
-                        }
-                        return list(value.map((item, index) => invoke(mapper, item, index)));
+                            if (typeof value === 'string') {
+                                return list(nativeArrayMap.call(Array.from(value), (item, index) => invoke(mapper, item, index)));
+                            }
+                            return list(nativeArrayMap.call(value, (item, index) => invoke(mapper, item, index)));
                     }
 
                     function filterCollection(value, predicate) {
@@ -2879,19 +4312,19 @@ public final class JavaScriptGenerator implements Generator {
                         if (isType(value, 'None') || isType(value, 'Error')) {
                             return value;
                         }
-                        if (isType(value, 'Success')) {
-                            return invoke(predicate, value.value) ? value : new ErrorValue({ message: 'Filtered out' });
+                            if (isType(value, 'Success')) {
+                                return invoke(predicate, value.value) ? value : new ErrorValue({ message: 'Filtered out' });
+                            }
+                            if (value instanceof Map) {
+                                return new Map(nativeArrayFilter.call(Array.from(value.entries()), ([key, item]) => invoke(predicate, key, item)));
+                            }
+                            if (value instanceof Set) {
+                                return set(nativeArrayFilter.call(Array.from(value), (item, index) => invoke(predicate, item, index)));
                         }
-                        if (value instanceof Map) {
-                            return new Map(Array.from(value.entries()).filter(([key, item]) => invoke(predicate, key, item)));
-                        }
-                        if (value instanceof Set) {
-                            return set(Array.from(value).filter((item, index) => invoke(predicate, item, index)));
-                        }
-                        if (typeof value === 'string') {
-                            return list(Array.from(value).filter((item, index) => invoke(predicate, item, index)));
-                        }
-                        return list(value.filter((item, index) => invoke(predicate, item, index)));
+                            if (typeof value === 'string') {
+                                return list(nativeArrayFilter.call(Array.from(value), (item, index) => invoke(predicate, item, index)));
+                            }
+                            return list(nativeArrayFilter.call(value, (item, index) => invoke(predicate, item, index)));
                     }
 
                     function rejectCollection(value, predicate) {
@@ -2901,19 +4334,19 @@ public final class JavaScriptGenerator implements Generator {
                         if (isType(value, 'None') || isType(value, 'Error')) {
                             return value;
                         }
-                        if (isType(value, 'Success')) {
-                            return invoke(predicate, value.value) ? new ErrorValue({ message: 'Rejected' }) : value;
+                            if (isType(value, 'Success')) {
+                                return invoke(predicate, value.value) ? new ErrorValue({ message: 'Rejected' }) : value;
+                            }
+                            if (value instanceof Map) {
+                                return new Map(nativeArrayFilter.call(Array.from(value.entries()), ([key, item]) => !invoke(predicate, key, item)));
+                            }
+                            if (value instanceof Set) {
+                                return set(nativeArrayFilter.call(Array.from(value), (item, index) => !invoke(predicate, item, index)));
                         }
-                        if (value instanceof Map) {
-                            return new Map(Array.from(value.entries()).filter(([key, item]) => !invoke(predicate, key, item)));
-                        }
-                        if (value instanceof Set) {
-                            return set(Array.from(value).filter((item, index) => !invoke(predicate, item, index)));
-                        }
-                        if (typeof value === 'string') {
-                            return list(Array.from(value).filter((item, index) => !invoke(predicate, item, index)));
-                        }
-                        return list(value.filter((item, index) => !invoke(predicate, item, index)));
+                            if (typeof value === 'string') {
+                                return list(nativeArrayFilter.call(Array.from(value), (item, index) => !invoke(predicate, item, index)));
+                            }
+                            return list(nativeArrayFilter.call(value, (item, index) => !invoke(predicate, item, index)));
                     }
 
                     function flatMapCollection(value, mapper) {
@@ -2926,7 +4359,7 @@ public final class JavaScriptGenerator implements Generator {
                         if (isType(value, 'Success')) {
                             return invoke(mapper, value.value);
                         }
-                        const mapped = entries(value).flatMap((item, index) => {
+                            const mapped = nativeArrayFlatMap.call(entries(value), (item, index) => {
                             const result = invoke(mapper, item, index);
                             if (Array.isArray(result)) {
                                 return result;
@@ -2942,6 +4375,9 @@ public final class JavaScriptGenerator implements Generator {
                     function any(value, predicate) {
                         if (value instanceof Map) {
                             return Array.from(value.entries()).some(([key, item]) => invoke(predicate, key, item));
+                        }
+                        if (value && typeof value.any === 'function' && !Array.isArray(value)) {
+                            return value.any(predicate);
                         }
                         return entries(value).some((item, index) => invoke(predicate, item, index));
                     }
@@ -3069,9 +4505,9 @@ public final class JavaScriptGenerator implements Generator {
                         });
                     }
 
-                    function parseFloatResult(value) {
-                        return parseResult(value, 'float', text => /^[-+]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:[eE][-+]?\\d+)?$/.test(text) ? Number.parseFloat(text) : Number.NaN);
-                    }
+                        function parseFloatResult(value, typeName = 'float') {
+                            return parseResult(value, typeName, text => /^[-+]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:[eE][-+]?\\d+)?$/.test(text) ? Number.parseFloat(text) : Number.NaN);
+                        }
 
                     function parseBoolResult(value) {
                         const text = String(value);
@@ -3096,40 +4532,41 @@ public final class JavaScriptGenerator implements Generator {
                         if (value === null || value === undefined) {
                             return '';
                         }
-                        if (typeof value === 'string') {
-                            return value;
-                        }
-                        if (Array.isArray(value)) {
-                            return '[' + value.map(toStringValue).join(', ') + ']';
-                        }
-                        if (value instanceof Set) {
-                            return '{' + Array.from(value).map(toStringValue).join(', ') + '}';
-                        }
-                        if (value instanceof Map) {
-                            return '{' + Array.from(value.entries()).map(([key, item]) => `${key}: ${toStringValue(item)}`).join(', ') + '}';
+                            if (typeof value === 'string') {
+                                return value;
+                            }
+                            if (Array.isArray(value)) {
+                                return '[' + nativeArrayMap.call(value, toStringValue).join(', ') + ']';
+                            }
+                            if (value instanceof Set) {
+                                return '{' + nativeArrayMap.call(Array.from(value), toStringValue).join(', ') + '}';
+                            }
+                            if (value instanceof Map) {
+                                return '{' + nativeArrayMap.call(Array.from(value.entries()), ([key, item]) => `${key}: ${toStringValue(item)}`).join(', ') + '}';
                         }
                         if (typeof value.toString === 'function' && value.toString !== Object.prototype.toString) {
                             return value.toString();
                         }
                         return String(value);
-                    }
-
-                    function dataToString(value) {
-                        const keys = Object.keys(value).filter(key => !key.startsWith('__') && typeof value[key] !== 'function');
-                        if (keys.length === 0) {
-                            return `${value.__capybaraType} { }`;
                         }
-                        return `${value.__capybaraType} { ` + keys.map(key => `"${key}": ${dataFieldToString(value[key])}`).join(', ') + ' }';
+
+                        function dataToString(value) {
+                            const keys = nativeArrayFilter.call(Object.keys(value), key => !key.startsWith('__') && typeof value[key] !== 'function');
+                            if (keys.length === 0) {
+                                return `${value.__capybaraType} { }`;
+                            }
+                            return `${value.__capybaraType} { ` + nativeArrayMap.call(keys, key => `"${key}": ${dataFieldToString(value[key])}`).join(', ') + ' }';
                     }
 
                     function dataFieldToString(value) {
                         return typeof value === 'string' ? `"${value}"` : toStringValue(value);
                     }
 
-                    function dataValueInfo(value, name, packageName, packagePath) {
-                        const fields = Object.keys(value)
-                            .filter(key => !key.startsWith('__') && typeof value[key] !== 'function')
-                            .map(key => ({ name: key, value: value[key] }));
+                        function dataValueInfo(value, name, packageName, packagePath, fieldNames) {
+                            const keys = Array.isArray(fieldNames) && fieldNames.length > 0
+                                ? fieldNames
+                                : nativeArrayFilter.call(Object.keys(value), key => !key.startsWith('__') && typeof value[key] !== 'function');
+                            const fields = nativeArrayMap.call(keys, key => ({ name: key, value: value[key] }));
                         return { name, packageName, packagePath, fields };
                     }
 
@@ -3139,7 +4576,7 @@ public final class JavaScriptGenerator implements Generator {
                                 name,
                                 packageName,
                                 packagePath,
-                                fields: fieldNames.map(field => ({ name: field, value: target[field] })),
+                                    fields: nativeArrayMap.call(fieldNames, field => ({ name: field, value: target[field] })),
                             };
                         }
                         if (target && typeof target.capybaraDataValueInfo === 'function') {
@@ -3149,7 +4586,7 @@ public final class JavaScriptGenerator implements Generator {
                             name,
                             packageName,
                             packagePath,
-                            fields: fieldNames.map(field => ({ name: field, value: target[field] })),
+                                fields: nativeArrayMap.call(fieldNames, field => ({ name: field, value: target[field] })),
                         };
                     }
 
@@ -3190,12 +4627,14 @@ public final class JavaScriptGenerator implements Generator {
                         set,
                         seq,
                         size,
+                        dispatchOverload,
                         newArray,
                         toException,
                         decorateException,
                         arrayGet,
                         applyTrait,
                         enumValue,
+                        methodAliasProxy,
                         isType,
                         rawIndex,
                         getIndex,
@@ -3311,13 +4750,13 @@ public final class JavaScriptGenerator implements Generator {
         return Map.copyOf(overrides);
     }
 
-    private static Optional<String> findOverrideBySimpleName(Map<String, String> functionNameOverrides, String targetName, String parameterSignature) {
-        var simpleMethodName = simpleMethodName(targetName);
-        var qualifier = qualifierName(targetName);
-        var candidates = functionNameOverrides.entrySet().stream()
-                .filter(entry -> simpleMethodName(keyName(entry.getKey())).equals(simpleMethodName))
-                .filter(entry -> keyParameterSignature(entry.getKey()).equals(parameterSignature))
-                .toList();
+        private static Optional<String> findOverrideBySimpleName(Map<String, String> functionNameOverrides, String targetName, String parameterSignature) {
+            var simpleMethodName = normalizeJsIdentifier(simpleMethodName(targetName));
+            var qualifier = qualifierName(targetName);
+            var candidates = functionNameOverrides.entrySet().stream()
+                    .filter(entry -> normalizeJsIdentifier(simpleMethodName(keyName(entry.getKey()))).equals(simpleMethodName))
+                    .filter(entry -> keyParameterSignature(entry.getKey()).equals(parameterSignature))
+                    .toList();
         if (qualifier != null) {
             var qualified = candidates.stream()
                     .filter(entry -> Objects.equals(qualifierName(keyName(entry.getKey())), qualifier))

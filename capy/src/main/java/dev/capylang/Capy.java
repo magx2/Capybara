@@ -49,6 +49,7 @@ import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.time.Duration;
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Comparator;
@@ -593,11 +594,13 @@ public class Capy {
                 return EXIT_COMPILATION_ERROR;
             }
             validateOutputDirectory(testGeneratedOutputDir, "Generated test output path");
-            var testGenerationInput = selectGenerationInput(
-                    testCompilation.program(),
-                    testCompilation.sourceModules(),
-                    includeJavaLibResources
-            );
+            var testGenerationInput = outputType == OutputType.JAVASCRIPT
+                    ? new GenerationInput(mergePrograms(compilation.program(), testCompilation.program()), includeJavaLibResources)
+                    : selectGenerationInput(
+                            testCompilation.program(),
+                            testCompilation.sourceModules(),
+                            includeJavaLibResources
+                    );
             if (generatedOutputDir.equals(testGeneratedOutputDir)) {
                 generatePrograms(outputType, generatedOutputDir, List.of(mainGenerationInput, testGenerationInput));
             } else {
@@ -614,6 +617,15 @@ public class Capy {
         var mergedLibraries = new TreeSet<>(libraries);
         mergedLibraries.addAll(compilation.program().modules());
         return mergedLibraries;
+    }
+
+    private static CompiledProgram mergePrograms(CompiledProgram first, CompiledProgram second) {
+        var modules = new TreeSet<CompiledModule>();
+        modules.addAll(first.modules());
+        modules.addAll(second.modules());
+        var objectOrientedModules = new ArrayList<>(first.objectOrientedModules());
+        objectOrientedModules.addAll(second.objectOrientedModules());
+        return new CompiledProgram(modules, objectOrientedModules);
     }
 
     static CompilationArtifacts compileSources(Path input, TreeSet<CompiledModule> libraries, boolean compileTests, PrintStream err) throws IOException {
@@ -751,13 +763,13 @@ public class Capy {
         return copiedFiles;
     }
 
-    private static Set<Path> writeGeneratedProgram(Path outputDir, GeneratedProgram program) {
-        var writtenFiles = new HashSet<Path>();
+    private static void writeGeneratedProgram(Path outputDir, GeneratedProgram program, Set<Path> writtenFiles) {
         program.modules().forEach(module -> {
-            writeCompiledModule(outputDir, module.relativePath(), module.code());
-            writtenFiles.add(module.relativePath().normalize());
+            var relativePath = module.relativePath().normalize();
+            if (writtenFiles.add(relativePath)) {
+                writeCompiledModule(outputDir, relativePath, module.code());
+            }
         });
-        return writtenFiles;
     }
 
     private static void generateProgram(OutputType outputType, Path generatedOutputDir, GenerationInput generationInput) {
@@ -776,7 +788,7 @@ public class Capy {
         var writeStartedAt = System.nanoTime();
         var writtenFiles = new HashSet<Path>();
         for (var generatedProgram : generatedPrograms) {
-            writtenFiles.addAll(writeGeneratedProgram(generatedOutputDir, generatedProgram));
+            writeGeneratedProgram(generatedOutputDir, generatedProgram, writtenFiles);
         }
         log.info("Wrote generated " + outputType + " sources to: " + generatedOutputDir + " in " + Duration.ofNanos(System.nanoTime() - writeStartedAt));
         if (outputType == OutputType.JAVA && generationInputs.stream().anyMatch(GenerationInput::includeJavaLibResources)) {
@@ -1852,9 +1864,6 @@ public class Capy {
     record CompilationArtifacts(CompiledProgram program, List<ModuleRef> sourceModules) {
     }
 }
-
-
-
 
 
 
