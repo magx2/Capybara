@@ -40,7 +40,30 @@ public final class JavaScriptGenerator implements Generator {
     private static final String DICT_PIPE_ARGS_SEPARATOR = "::";
     private static final String TUPLE_PIPE_ARGS_SEPARATOR = ";;";
     static final Path RUNTIME_PATH = Path.of("dev", "capylang", "capybara.js");
-    private static final Set<String> RUNTIME_PROVIDED_MODULE_NAMES = runtimeProvidedModuleNames();
+    private static final Set<String> RUNTIME_PROVIDED_MODULE_NAMES = Set.of(
+            "capy/collection/Dict",
+            "capy/collection/List",
+            "capy/collection/Set",
+            "capy/collection/Tuple",
+            "capy/date_time/Clock",
+            "capy/date_time/Date",
+            "capy/date_time/DateTime",
+            "capy/date_time/Duration",
+            "capy/date_time/Interval",
+            "capy/date_time/Time",
+            "capy/io/Console",
+            "capy/io/IO",
+            "capy/io/Stdout",
+            "capy/lang/Effect",
+            "capy/lang/Option",
+            "capy/lang/Primitives",
+            "capy/lang/Regex",
+            "capy/lang/Result",
+            "capy/lang/String",
+            "capy/lang/System",
+            "capy/test/Assert",
+            "capy/test/CapyTest"
+    );
     private static final java.util.regex.Pattern CONST_NAME_PATTERN = java.util.regex.Pattern.compile("^_?[A-Z_][A-Z0-9_]*$");
     private static final java.util.regex.Pattern MODULE_VAR_PATTERN = java.util.regex.Pattern.compile("\\b__module_[A-Za-z0-9_]+\\b");
     private static final Set<String> JS_KEYWORDS = Set.of(
@@ -79,18 +102,6 @@ public final class JavaScriptGenerator implements Generator {
         var path = module.path().replace('\\', '/').replaceFirst("^/+", "");
         var moduleName = path.isBlank() ? module.name() : path + "/" + module.name();
         return RUNTIME_PROVIDED_MODULE_NAMES.contains(moduleName);
-    }
-
-    private static Set<String> runtimeProvidedModuleNames() {
-        var moduleNames = new LinkedHashSet<String>();
-        for (var className : RuntimeModules.classNames()) {
-            var moduleName = className.replace('.', '/');
-            moduleNames.add(moduleName);
-            if (moduleName.endsWith("Module")) {
-                moduleNames.add(moduleName.substring(0, moduleName.length() - "Module".length()));
-            }
-        }
-        return Set.copyOf(moduleNames);
     }
 
     private static final class ModuleRenderer {
@@ -1561,7 +1572,14 @@ public final class JavaScriptGenerator implements Generator {
             exports.put("capy.lang.Result", Set.of("Success", "Error"));
             exports.put("capy.lang.Effect", Set.of("pure", "delay"));
             exports.put("capy.lang.Program", Set.of("Success", "Failed"));
-            exports.put("capy.lang.Primitives", Set.of("to_int", "to_long", "to_double", "to_float", "to_bool"));
+            exports.put("capy.lang.Primitives", Set.of(
+                    "to_int", "toInt", "to_long", "toLong", "to_double", "toDouble", "to_float", "toFloat", "to_bool", "toBool",
+                    "mAXINTVALUE", "MAX_INT_VALUE", "mININTVALUE", "MIN_INT_VALUE",
+                    "mAXLONGVALUE", "MAX_LONG_VALUE", "mINLONGVALUE", "MIN_LONG_VALUE",
+                    "fLOATBOUND", "FLOAT_BOUND", "dOUBLEBOUND", "DOUBLE_BOUND",
+                    "fLOATBOUNDASFLOAT", "FLOAT_BOUND_AS_FLOAT", "dOUBLEBOUNDASDOUBLE", "DOUBLE_BOUND_AS_DOUBLE",
+                    "clamp_long_to_int", "clampLongToInt", "safe_long_to_int", "safeLongToInt"
+            ));
             exports.put("capy.lang.String", Set.of("length", "get", "replace", "is_empty", "plus", "contains", "starts_with", "end_with", "trim"));
             exports.put("capy.lang.RegexModule", Set.of("fromLiteral"));
             exports.put("capy.lang.Seq", Set.of("to_seq", "toSeq"));
@@ -1690,17 +1708,63 @@ public final class JavaScriptGenerator implements Generator {
         private static String primitivesRuntime() {
             return "'use strict';\n"
                    + "const capy = require('../../dev/capylang/capybara.js');\n"
+                   + "const mAXINTVALUE = 2147483647;\n"
+                   + "const mININTVALUE = -2147483648;\n"
+                   + "const mAXLONGVALUE = 9223372036854775807n;\n"
+                   + "const mINLONGVALUE = -9223372036854775808n;\n"
+                   + "const fLOATBOUND = 16777216n;\n"
+                   + "const dOUBLEBOUND = 9007199254740992n;\n"
+                   + "const fLOATBOUNDASFLOAT = 16777216.0;\n"
+                   + "const dOUBLEBOUNDASDOUBLE = 9007199254740992.0;\n"
+                   + "function clampLongToInt(value) {\n"
+                   + "    if (value > BigInt(mAXINTVALUE)) {\n"
+                   + "        return mAXINTVALUE;\n"
+                   + "    }\n"
+                   + "    if (value < BigInt(mININTVALUE)) {\n"
+                   + "        return mININTVALUE;\n"
+                   + "    }\n"
+                   + "    return capy.longToInt(value);\n"
+                   + "}\n"
+                   + "function safeLongToInt(value) {\n"
+                   + "    if (value > BigInt(mAXINTVALUE)) {\n"
+                   + "        return new capy.Error({ message: `long value \\`${value}\\` is greater than max int value` });\n"
+                   + "    }\n"
+                   + "    if (value < BigInt(mININTVALUE)) {\n"
+                   + "        return new capy.Error({ message: `long value \\`${value}\\` is smaller than min int value` });\n"
+                   + "    }\n"
+                   + "    return new capy.Success({ value: capy.longToInt(value) });\n"
+                   + "}\n"
                    + "module.exports = {\n"
+                   + "    mAXINTVALUE,\n"
+                   + "    MAX_INT_VALUE: mAXINTVALUE,\n"
+                   + "    mININTVALUE,\n"
+                   + "    MIN_INT_VALUE: mININTVALUE,\n"
+                   + "    mAXLONGVALUE,\n"
+                   + "    MAX_LONG_VALUE: mAXLONGVALUE,\n"
+                   + "    mINLONGVALUE,\n"
+                   + "    MIN_LONG_VALUE: mINLONGVALUE,\n"
+                   + "    fLOATBOUND,\n"
+                   + "    FLOAT_BOUND: fLOATBOUND,\n"
+                   + "    dOUBLEBOUND,\n"
+                   + "    DOUBLE_BOUND: dOUBLEBOUND,\n"
+                   + "    fLOATBOUNDASFLOAT,\n"
+                   + "    FLOAT_BOUND_AS_FLOAT: fLOATBOUNDASFLOAT,\n"
+                   + "    dOUBLEBOUNDASDOUBLE,\n"
+                   + "    DOUBLE_BOUND_AS_DOUBLE: dOUBLEBOUNDASDOUBLE,\n"
                    + "    to_int: capy.parseIntResult,\n"
                    + "    toInt: capy.parseIntResult,\n"
                    + "    to_long: capy.parseLongResult,\n"
                    + "    toLong: capy.parseLongResult,\n"
                        + "    to_double: value => capy.parseFloatResult(value, 'double'),\n"
                        + "    toDouble: value => capy.parseFloatResult(value, 'double'),\n"
-                       + "    to_float: value => capy.parseFloatResult(value, 'float'),\n"
-                       + "    toFloat: value => capy.parseFloatResult(value, 'float'),\n"
+                   + "    to_float: value => capy.parseFloatResult(value, 'float'),\n"
+                   + "    toFloat: value => capy.parseFloatResult(value, 'float'),\n"
                    + "    to_bool: capy.parseBoolResult,\n"
                    + "    toBool: capy.parseBoolResult,\n"
+                   + "    clamp_long_to_int: clampLongToInt,\n"
+                   + "    clampLongToInt,\n"
+                   + "    safe_long_to_int: safeLongToInt,\n"
+                   + "    safeLongToInt,\n"
                    + "};\n";
         }
 
