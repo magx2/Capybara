@@ -1,3 +1,4 @@
+import com.github.gradle.node.task.NodeTask
 import org.gradle.api.DefaultTask
 import org.gradle.api.GradleException
 import org.gradle.api.Task
@@ -36,6 +37,12 @@ import java.util.logging.Logger
 
 plugins {
     id 'buildlogic.java-library-conventions'
+    id 'com.github.node-gradle.node' version '7.1.0'
+}
+
+node {
+    version = '22.11.0'
+    download = true
 }
 
 dependencies {
@@ -47,9 +54,9 @@ class CapyRuntimeBridge implements Closeable {
     private final def readLinkedProgramMethod
     private final def compileMethod
     private final def compileGenerateMethod
+    private final Class outputTypeClass
     private def parseArgumentsMethod
     private def runTestsMethod
-    private final Object javaOutputType
 
     CapyRuntimeBridge(Set<File> runtimeClasspathFiles) {
         def runtimeUrls = runtimeClasspathFiles.collect { it.toURI().toURL() } as URL[]
@@ -68,8 +75,7 @@ class CapyRuntimeBridge implements Closeable {
                 String
         )
 
-        def outputTypeClass = Class.forName('dev.capylang.compiler.OutputType', true, classLoader)
-        javaOutputType = outputTypeClass.enumConstants.find { it.name() == 'JAVA' }
+        outputTypeClass = Class.forName('dev.capylang.compiler.OutputType', true, classLoader)
         compileGenerateMethod = capyClass.getMethod(
                 'compileGenerate',
                 outputTypeClass,
@@ -108,6 +114,7 @@ class CapyRuntimeBridge implements Closeable {
             TreeSet libraries,
             boolean compileTests,
             boolean includeJavaLibResources,
+            String outputTypeName,
             String compilerVersion,
             PrintStream errors
     ) {
@@ -122,9 +129,13 @@ class CapyRuntimeBridge implements Closeable {
                     compilerVersion
             ) as Integer
         }
+        def outputType = outputTypeClass.enumConstants.find { it.name() == outputTypeName }
+        if (outputType == null) {
+            throw new GradleException("Unknown Capybara output type: ${outputTypeName}")
+        }
         return compileGenerateMethod.invoke(
                 null,
-                javaOutputType,
+                outputType,
                 inputPath,
                 generatedOutputPath,
                 linkedOutputPath,
@@ -234,6 +245,9 @@ abstract class InProcessCapybaraCompileTask extends DefaultTask {
     abstract Property<Boolean> getIncludeJavaLibResources()
 
     @Input
+    abstract Property<String> getOutputTypeName()
+
+    @Input
     abstract Property<String> getCompilerVersion()
 
     @Input
@@ -259,6 +273,7 @@ abstract class InProcessCapybaraCompileTask extends DefaultTask {
                     libraries,
                     compileTests.getOrElse(false),
                     includeJavaLibResources.getOrElse(true),
+                    outputTypeName.getOrElse('JAVA'),
                     compilerVersion.get(),
                     new PrintStream(errors)
             )
@@ -346,6 +361,7 @@ def capybaraCompileLogLevel = switch (gradle.startParameter.logLevel) {
 tasks.withType(InProcessCapybaraCompileTask).configureEach {
     runtimeService.set(capyRuntimeService)
     logLevel.set(capybaraCompileLogLevel)
+    outputTypeName.set('JAVA')
 }
 
 tasks.withType(InProcessCapybaraTestTask).configureEach {
@@ -370,9 +386,12 @@ def capybaraMainSourceDir = layout.projectDirectory.dir('src/main/capybara')
 def capybaraTestSourceDir = layout.projectDirectory.dir('src/test/capybara')
 def capybaraGeneratedMainDir = layout.buildDirectory.dir('generated/sources/capybara/java/main')
 def capybaraGeneratedTestDir = layout.buildDirectory.dir('generated/sources/capybara/java/test')
+def capybaraGeneratedTestJsDir = layout.buildDirectory.dir('generated/sources/capybara/js/test')
 def capybaraGeneratedCheckDir = layout.buildDirectory.dir('generated/sources/capybara/java/check')
 def capybaraLinkedMainDir = layout.buildDirectory.dir('generated/sources/capybara/linked/main')
 def capybaraTestResultsDir = layout.buildDirectory.dir('test-results/capybara')
+def capybaraJsTestResultsDir = layout.buildDirectory.dir('test-results/capybara-js')
+def capybaraJsTestRunner = layout.projectDirectory.file('src/test/js/run-capybara-tests.js')
 def capybaraTestRuntimeClasspath = files(capyRuntimeClasspath, sourceSets.main.runtimeClasspath, sourceSets.test.output.classesDirs)
 def directoryContainsFile = { directory, matcher = { true } ->
     Path root = directory.asFile.toPath()
@@ -559,6 +578,30 @@ tasks.register('compileTestCapybara') {
     dependsOn tasks.named('compileTestCapybaraDirect')
 }
 
+tasks.register('compileTestCapybaraJavaScriptDirect', InProcessCapybaraCompileTask) {
+    group = 'verification'
+    description = 'Compiles main and test Capybara files and generates JavaScript for test execution.'
+
+    runtimeClasspath.from(capyRuntimeClasspath)
+    inputDir.set(capybaraMainSourceDir)
+    generatedOutputDir.set(capybaraGeneratedTestJsDir)
+    if (hasCapybaraTestSources) {
+        testInputDir.set(capybaraTestSourceDir)
+        testGeneratedOutputDir.set(capybaraGeneratedTestJsDir)
+    }
+    compileTests.set(false)
+    includeJavaLibResources.set(false)
+    outputTypeName.set('JAVASCRIPT')
+    compilerVersion.set(project.version.toString())
+    onlyIf { hasCapybaraTestSources && !singleJavaVerificationBuild }
+}
+
+tasks.register('compileTestCapybaraJavaScript') {
+    group = 'verification'
+    description = 'Compiles main and test Capybara files and generates JavaScript for test execution.'
+    dependsOn tasks.named('compileTestCapybaraJavaScriptDirect')
+}
+
 tasks.register('testCapybara', InProcessCapybaraTestTask) {
     group = 'verification'
     description = 'Runs Capybara tests from compiled test classes without launching a separate JVM.'
@@ -571,6 +614,29 @@ tasks.register('testCapybara', InProcessCapybaraTestTask) {
     )
     outputDir.set(capybaraTestResultsDir)
     reportType.set('JUNIT')
+}
+
+def testCapybaraJavaScript = tasks.register('testCapybaraJavaScript', NodeTask) {
+    group = 'verification'
+    description = 'Runs Capybara tests from generated JavaScript with Node.js.'
+    dependsOn tasks.named('compileTestCapybaraJavaScriptDirect')
+    shouldRunAfter tasks.named('testCapybara')
+
+    script.set(capybaraJsTestRunner)
+    workingDir.set(layout.projectDirectory)
+    args.set([
+            '--generated-dir', capybaraGeneratedTestJsDir.get().asFile.absolutePath,
+            '--output-dir', capybaraJsTestResultsDir.get().asFile.absolutePath,
+            '--report-type', 'JUNIT',
+            '--log', 'TC'
+    ])
+    inputs.file(capybaraJsTestRunner)
+            .withPropertyName('capybaraJsTestRunner')
+            .withPathSensitivity(PathSensitivity.RELATIVE)
+    inputs.dir(capybaraGeneratedTestJsDir)
+            .withPropertyName('capybaraGeneratedTestJsSources')
+            .withPathSensitivity(PathSensitivity.RELATIVE)
+    outputs.dir(capybaraJsTestResultsDir)
 }
 
 sourceSets {
@@ -689,6 +755,15 @@ tasks.matching { it.name == 'check' }.configureEach {
 }
 
 tasks.named('testCapybara') {
+    enabled = hasCapybaraTestSources
+    if (!hasCapybaraTestSources) {
+        setDependsOn([])
+    } else {
+        finalizedBy testCapybaraJavaScript
+    }
+}
+
+tasks.named('testCapybaraJavaScript') {
     enabled = hasCapybaraTestSources
     if (!hasCapybaraTestSources) {
         setDependsOn([])
