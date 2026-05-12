@@ -1781,6 +1781,9 @@ public final class JavaScriptGenerator implements Generator {
                         matches(input) {
                             return this.compile().test(String(input));
                         }
+                        question(input) {
+                            return this.matches(input);
+                        }
                         find(input) {
                             const match = this.compile().exec(String(input));
                             return match ? new capy.Some({ value: match[0] }) : capy.None;
