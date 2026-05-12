@@ -567,7 +567,7 @@ final class ObjectOrientedJavaScriptGenerator {
             return "undefined";
         }
         if (isNumericLiteral(trimmed)) {
-            return JavaScriptGenerator.stripNumericSuffix(trimmed);
+            return JavaScriptGenerator.renderNumericLiteral(trimmed);
         }
         trimmed = rewriteParentQualifiedCalls(trimmed, parentNames);
         trimmed = rewriteModuleQualifiedReferences(context, trimmed);
@@ -690,7 +690,7 @@ final class ObjectOrientedJavaScriptGenerator {
         }
         return Optional.of(items.stream()
                 .map(item -> renderExpression(context, item, scope, parentNames))
-                .collect(joining(", ", "new Set([", "])")));
+                .collect(joining(", ", "capy.set([", "])")));
     }
 
     private String renderIfExpression(RenderContext context, String expression, ExpressionScope scope, Set<String> parentNames) {
@@ -1279,9 +1279,9 @@ final class ObjectOrientedJavaScriptGenerator {
     }
 
     private boolean isNumericLiteral(String value) {
-        return value.matches("[0-9]+[lLfFdD]?")
-               || value.matches("[0-9]+\\.[0-9]*(?:[eE][+-]?[0-9]+)?[fFdD]?")
-               || value.matches("[0-9]+(?:[eE][+-]?[0-9]+)[fFdD]?");
+        return value.matches("[+-]?[0-9]+[lLfFdD]?")
+               || value.matches("[+-]?[0-9]+\\.[0-9]*(?:[eE][+-]?[0-9]+)?[fFdD]?")
+               || value.matches("[+-]?[0-9]+(?:[eE][+-]?[0-9]+)[fFdD]?");
     }
 
     private boolean isTypeLikePrefix(String value) {
@@ -1293,7 +1293,8 @@ final class ObjectOrientedJavaScriptGenerator {
 
     private String defaultValue(String type) {
         return switch (type.trim()) {
-            case "byte", "int", "long", "double", "float" -> "0";
+            case "long" -> "0n";
+            case "byte", "int", "double", "float" -> "0";
             case "bool" -> "false";
             default -> "undefined";
         };

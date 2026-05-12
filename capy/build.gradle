@@ -27,6 +27,11 @@ plugins {
     id "com.github.node-gradle.node" version "7.1.0"
 }
 
+node {
+    version = '22.11.0'
+    download = true
+}
+
 abstract class InProcessCapybaraCompileTask extends DefaultTask {
     @Classpath
     abstract ConfigurableFileCollection getRuntimeClasspath()
@@ -340,6 +345,7 @@ check {
     dependsOn e2eCfunJsTests
     dependsOn e2eCooTests
     dependsOn e2eCooJsTests
+    dependsOn jsTests
 }
 
 def registerCapybaraE2eLinkTask = { String taskName, String taskDescription, String outputTypeName, capybaraInputDir, capybaraLinkedOutputDir, capybaraGeneratedOutputDir ->

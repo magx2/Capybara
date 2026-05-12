@@ -30,6 +30,18 @@ fun contains_structural_data_method(s: Set[User]): bool = s.contains(User! { nam
 
 fun contains_structural_tuple(s: Set[Tuple[int, String]]): bool = s ? (1, "one")
 
+fun structural_literal_size(): int = {User! { name: "Ada" }, User! { name: "Ada" }}.size()
+
+fun structural_append_size(s: Set[User]): int = (s + User! { name: "Ada" }).size()
+
+fun structural_union_size(left: Set[User], right: Set[User]): int = (left + right).size()
+
+fun structural_mapped_values() = {1, 2}.map(value => User! { name: "Ada" })
+
+fun structural_proper_subset_after_union(left: Set[User], right: Set[User]): bool = left ⊂ (left + right)
+
+fun structural_power_set_size(s: Set[User]): int = s.power_set().size()
+
 fun subset_named(left: Set[int], right: Set[int]): bool = left.is_subset_of(right)
 
 fun subset_symbol(left: Set[int], right: Set[int]): bool = left ⊆ right

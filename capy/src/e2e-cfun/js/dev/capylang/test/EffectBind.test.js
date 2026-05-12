@@ -7,6 +7,6 @@ test('EffectBind', () => {
     assert.equal(unsafe(effects.nestedEffect(7)), 'v=7');
     assert.equal(effects.constructDelayedDivideByZero(), true);
     assert.match(unsafe(effects.clockNowIso()), /T/);
-    assert.equal(typeof unsafe(effects.currentMillisValue()), 'number');
-    assert.equal(typeof unsafe(effects.nanoTimeValue()), 'number');
+    assert.equal(typeof unsafe(effects.currentMillisValue()), 'bigint');
+    assert.equal(typeof unsafe(effects.nanoTimeValue()), 'bigint');
 });

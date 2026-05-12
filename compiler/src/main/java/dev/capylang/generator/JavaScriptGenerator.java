@@ -268,7 +268,7 @@ public final class JavaScriptGenerator implements Generator {
                 code.append("        ").append(valueName).append(": values[").append(i).append("],\n");
             }
             code.append("        values,\n");
-            code.append("        valuesSet: () => new Set(values),\n");
+            code.append("        valuesSet: () => capy.set(values),\n");
             code.append("        parse: value => capy.parseEnum(value, values, ")
                     .append(jsString(enumName))
                     .append("),\n");
@@ -385,10 +385,10 @@ public final class JavaScriptGenerator implements Generator {
                 case CompiledDoubleValue doubleValue -> stripNumericSuffix(doubleValue.doubleValue());
                 case CompiledFloatValue floatValue -> stripNumericSuffix(floatValue.floatValue());
                 case CompiledIntValue intValue -> stripNumericSuffix(intValue.intValue());
-                case CompiledLongValue longValue -> stripNumericSuffix(longValue.longValue());
+                case CompiledLongValue longValue -> renderLongLiteral(longValue.longValue());
                 case CompiledStringValue stringValue -> stringValue.toString();
                 case CompiledVariable variable -> scope.resolve(variable.name());
-                case CompiledNumericWidening numericWidening -> render(numericWidening.expression(), scope);
+                case CompiledNumericWidening numericWidening -> renderNumericWidening(numericWidening, scope);
                 case CompiledNewList newList -> renderNewList(newList, scope);
                 case CompiledNewSet newSet -> renderNewSet(newSet, scope);
                 case CompiledNewDict newDict -> renderNewDict(newDict, scope);
@@ -426,7 +426,19 @@ public final class JavaScriptGenerator implements Generator {
         private String renderNewSet(CompiledNewSet newSet, Scope scope) {
             return newSet.values().stream()
                     .map(value -> render(value, scope))
-                    .collect(joining(", ", "new Set([", "])"));
+                    .collect(joining(", ", "capy.set([", "])"));
+        }
+
+        private String renderNumericWidening(CompiledNumericWidening numericWidening, Scope scope) {
+            var expression = render(numericWidening.expression(), scope);
+            if (numericWidening.type() == PrimitiveLinkedType.LONG && numericWidening.expression().type() != PrimitiveLinkedType.LONG) {
+                return "capy.toLong(" + expression + ")";
+            }
+            if ((numericWidening.type() == PrimitiveLinkedType.FLOAT || numericWidening.type() == PrimitiveLinkedType.DOUBLE)
+                && numericWidening.expression().type() == PrimitiveLinkedType.LONG) {
+                return "Number(" + expression + ")";
+            }
+            return expression;
         }
 
         private String renderNewDict(CompiledNewDict newDict, Scope scope) {
@@ -633,14 +645,22 @@ public final class JavaScriptGenerator implements Generator {
             var left = render(expression.left(), scope);
             var right = render(expression.right(), scope);
             return switch (expression.operator()) {
-                case PLUS -> "(" + renderCollectionPlus(expression.left().type(), left, expression.right().type(), right) + ")";
-                case MINUS -> "(" + renderCollectionMinus(expression.left().type(), left, expression.right().type(), right) + ")";
-                case MUL -> "((" + left + ") * (" + right + "))";
+                case PLUS -> "(" + renderCollectionPlus(expression, left, right) + ")";
+                case MINUS -> "(" + renderCollectionMinus(expression, left, right) + ")";
+                case MUL -> expression.type() == PrimitiveLinkedType.LONG
+                        ? "capy.longMul(" + left + ", " + right + ")"
+                        : "((" + left + ") * (" + right + "))";
                 case DIV -> expression.type() == PrimitiveLinkedType.INT
                         ? "Math.trunc((" + left + ") / (" + right + "))"
+                        : expression.type() == PrimitiveLinkedType.LONG
+                                ? "capy.longDiv(" + left + ", " + right + ")"
                         : "((" + left + ") / (" + right + "))";
-                case MOD -> "((" + left + ") % (" + right + "))";
-                case POWER -> "Math.pow(" + left + ", " + right + ")";
+                case MOD -> expression.type() == PrimitiveLinkedType.LONG
+                        ? "capy.longMod(" + left + ", " + right + ")"
+                        : "((" + left + ") % (" + right + "))";
+                case POWER -> expression.type() == PrimitiveLinkedType.LONG
+                        ? "capy.longPow(" + left + ", " + right + ")"
+                        : "Math.pow(" + left + ", " + right + ")";
                 case GT, LT, LE, GE -> "((" + left + ") " + expression.operator().symbol() + " (" + right + "))";
                 case EQUAL -> renderEquality(expression.left().type(), left, expression.right().type(), right, false);
                 case NOTEQUAL -> renderEquality(expression.left().type(), left, expression.right().type(), right, true);
@@ -742,7 +762,7 @@ public final class JavaScriptGenerator implements Generator {
                 case CompiledMatchExpression.IntPattern intPattern ->
                         new RenderedPattern("capy.equals(" + value + ", " + stripNumericSuffix(intPattern.value()) + ")", List.of(), scope);
                 case CompiledMatchExpression.LongPattern longPattern ->
-                        new RenderedPattern("capy.equals(" + value + ", " + stripNumericSuffix(longPattern.value()) + ")", List.of(), scope);
+                        new RenderedPattern("capy.equals(" + value + ", " + renderLongLiteral(longPattern.value()) + ")", List.of(), scope);
                 case CompiledMatchExpression.FloatPattern floatPattern ->
                         new RenderedPattern("capy.equals(" + value + ", " + stripNumericSuffix(floatPattern.value()) + ")", List.of(), scope);
                 case CompiledMatchExpression.StringPattern stringPattern ->
@@ -881,7 +901,10 @@ public final class JavaScriptGenerator implements Generator {
         }
 
         private String renderSize(CompiledType type, String receiver) {
-            if (type instanceof CollectionLinkedType.CompiledDict || type instanceof CollectionLinkedType.CompiledSet) {
+            if (type instanceof CollectionLinkedType.CompiledSet) {
+                return "capy.size(" + receiver + ")";
+            }
+            if (type instanceof CollectionLinkedType.CompiledDict) {
                 return "(" + receiver + ").size";
             }
             return "(" + receiver + ").length";
@@ -928,7 +951,15 @@ public final class JavaScriptGenerator implements Generator {
             return "capy.contains(" + left + ", " + right + ")";
         }
 
+        private String renderCollectionPlus(CompiledInfixExpression expression, String left, String right) {
+            return renderCollectionPlus(expression.left().type(), left, expression.right().type(), right, expression.type());
+        }
+
         private String renderCollectionPlus(CompiledType leftType, String left, CompiledType rightType, String right) {
+            return renderCollectionPlus(leftType, left, rightType, right, null);
+        }
+
+        private String renderCollectionPlus(CompiledType leftType, String left, CompiledType rightType, String right, CompiledType resultType) {
             if (leftType instanceof CollectionLinkedType.CompiledList) {
                 return rightType instanceof CollectionLinkedType.CompiledList
                         ? "capy.listPlus(" + left + ", " + right + ")"
@@ -947,10 +978,21 @@ public final class JavaScriptGenerator implements Generator {
             if (leftType == PrimitiveLinkedType.STRING || rightType == PrimitiveLinkedType.STRING) {
                 return "capy.toStringValue(" + left + ") + capy.toStringValue(" + right + ")";
             }
+            if (resultType == PrimitiveLinkedType.LONG) {
+                return "capy.longAdd(" + left + ", " + right + ")";
+            }
             return "((" + left + ") + (" + right + "))";
         }
 
+        private String renderCollectionMinus(CompiledInfixExpression expression, String left, String right) {
+            return renderCollectionMinus(expression.left().type(), left, expression.right().type(), right, expression.type());
+        }
+
         private String renderCollectionMinus(CompiledType leftType, String left, CompiledType rightType, String right) {
+            return renderCollectionMinus(leftType, left, rightType, right, null);
+        }
+
+        private String renderCollectionMinus(CompiledType leftType, String left, CompiledType rightType, String right, CompiledType resultType) {
             if (leftType instanceof CollectionLinkedType.CompiledList) {
                 return rightType instanceof CollectionLinkedType.CompiledList
                         ? "capy.listMinus(" + left + ", " + right + ")"
@@ -965,6 +1007,9 @@ public final class JavaScriptGenerator implements Generator {
                 return rightType instanceof CollectionLinkedType.CompiledDict
                         ? "capy.dictMinus(" + left + ", " + right + ")"
                         : "capy.dictRemove(" + left + ", " + right + ")";
+            }
+            if (resultType == PrimitiveLinkedType.LONG) {
+                return "capy.longSub(" + left + ", " + right + ")";
             }
             return "((" + left + ") - (" + right + "))";
         }
@@ -1622,8 +1667,8 @@ public final class JavaScriptGenerator implements Generator {
             return """
                     'use strict';
                     const capy = require('../../dev/capylang/capybara.js');
-                    const currentMillis = () => capy.delay(() => Date.now());
-                    const nanoTime = () => capy.delay(() => Number(process.hrtime.bigint()));
+                    const currentMillis = () => capy.delay(() => capy.toLong(Date.now()));
+                    const nanoTime = () => capy.delay(() => capy.toLong(process.hrtime.bigint()));
                     module.exports = {
                         currentMillis,
                         current_millis: currentMillis,
@@ -1636,23 +1681,41 @@ public final class JavaScriptGenerator implements Generator {
         private static String mathRuntime() {
             return """
                     'use strict';
+                    const capy = require('../../dev/capylang/capybara.js');
                     function floorDiv(left, right) {
+                        if (typeof left === 'bigint' || typeof right === 'bigint') {
+                            const dividend = capy.toLong(left);
+                            const divisor = capy.toLong(right);
+                            const quotient = dividend / divisor;
+                            const remainder = dividend % divisor;
+                            return remainder !== 0n && ((dividend < 0n) !== (divisor < 0n)) ? quotient - 1n : quotient;
+                        }
                         return Math.floor(left / right);
                     }
                     function floorMod(left, right) {
+                        if (typeof left === 'bigint' || typeof right === 'bigint') {
+                            const dividend = capy.toLong(left);
+                            const divisor = capy.toLong(right);
+                            return dividend - floorDiv(dividend, divisor) * divisor;
+                        }
                         return left - floorDiv(left, right) * right;
                     }
                     function digits(value) {
+                        if (typeof value === 'bigint') {
+                            return String(value < 0n ? -value : value).length;
+                        }
                         return String(Math.trunc(Math.abs(value))).length;
                     }
+                    const min = (left, right) => left < right ? left : right;
+                    const max = (left, right) => left > right ? left : right;
                     module.exports = {
                         digits,
                         floorDiv,
                         floor_div: floorDiv,
                         floorMod,
                         floor_mod: floorMod,
-                        min: Math.min,
-                        max: Math.max,
+                        min,
+                        max,
                     };
                     """;
         }
@@ -1793,7 +1856,7 @@ public final class JavaScriptGenerator implements Generator {
                     const exists = path => capy.delay(() => fs.existsSync(pathText(path)));
                     const isFile = path => capy.delay(() => fs.existsSync(pathText(path)) && fs.statSync(pathText(path)).isFile());
                     const isDirectory = path => capy.delay(() => fs.existsSync(pathText(path)) && fs.statSync(pathText(path)).isDirectory());
-                    const size = path => effectResult('size', () => fs.statSync(pathText(path)).size);
+                    const size = path => effectResult('size', () => capy.toLong(fs.statSync(pathText(path)).size));
                     const createFile = path => effectResult('create_file', () => {
                         const target = pathText(path);
                         writeParent(target);
@@ -2096,14 +2159,14 @@ public final class JavaScriptGenerator implements Generator {
                             this.time = fields.time;
                         }
                         timestamp() {
-                            return this.date.toDaysSinceUnixEpoch() * 86400 + this.time.toSeconds();
+                            return BigInt(this.date.toDaysSinceUnixEpoch() * 86400 + this.time.toSeconds());
                         }
                         plus(duration) {
-                            return DateTime.fromTimestamp(this.timestamp() + duration.totalSeconds());
+                            return DateTime.fromTimestamp(Number(this.timestamp()) + duration.totalSeconds());
                         }
                         minus(value) {
                             if (value && value.__capybaraType === 'DateTime') {
-                                const delta = this.timestamp() - value.timestamp();
+                                const delta = Number(this.timestamp() - value.timestamp());
                                 const sign = delta < 0 ? -1 : 1;
                                 let remaining = Math.abs(delta);
                                 const days = Math.trunc(remaining / 86400);
@@ -2435,7 +2498,10 @@ public final class JavaScriptGenerator implements Generator {
                     }
 
                     function size(value) {
-                        if (value instanceof Map || value instanceof Set) {
+                        if (value instanceof Set) {
+                            return set(value).size;
+                        }
+                        if (value instanceof Map) {
                             return value.size;
                         }
                         return value == null ? 0 : value.length;
@@ -2500,8 +2566,19 @@ public final class JavaScriptGenerator implements Generator {
                         return defineCapyMethods(Array.from(values), arrayMethods);
                     }
 
+                    function setAdd(valueSet, value) {
+                        if (!contains(valueSet, value)) {
+                            valueSet.add(value);
+                        }
+                        return valueSet;
+                    }
+
                     function set(values = []) {
-                        return defineCapyMethods(new Set(values), setMethods);
+                        const result = defineCapyMethods(new Set(), setMethods);
+                        for (const value of values ?? []) {
+                            setAdd(result, value);
+                        }
+                        return result;
                     }
 
                     function seq(values, mapper) {
@@ -2525,8 +2602,9 @@ public final class JavaScriptGenerator implements Generator {
                         switch (typeName) {
                             case 'BYTE':
                             case 'INT':
-                            case 'LONG':
                                 return Number.isInteger(value);
+                            case 'LONG':
+                                return typeof value === 'bigint';
                             case 'FLOAT':
                             case 'DOUBLE':
                                 return typeof value === 'number';
@@ -2585,11 +2663,19 @@ public final class JavaScriptGenerator implements Generator {
                         if (Object.is(left, right)) {
                             return true;
                         }
+                        if (typeof left === 'bigint' && typeof right === 'number') {
+                            return Number.isInteger(right) && left === BigInt(right);
+                        }
+                        if (typeof left === 'number' && typeof right === 'bigint') {
+                            return Number.isInteger(left) && BigInt(left) === right;
+                        }
                         if (Array.isArray(left) && Array.isArray(right)) {
                             return left.length === right.length && left.every((value, index) => equals(value, right[index]));
                         }
                         if (left instanceof Set && right instanceof Set) {
-                            return left.size === right.size && Array.from(left).every(value => contains(right, value));
+                            const normalizedLeft = set(left);
+                            const normalizedRight = set(right);
+                            return normalizedLeft.size === normalizedRight.size && Array.from(normalizedLeft).every(value => contains(normalizedRight, value));
                         }
                         if (left instanceof Map && right instanceof Map) {
                             return left.size === right.size
@@ -2626,6 +2712,9 @@ public final class JavaScriptGenerator implements Generator {
                         if (typeof value === 'number') {
                             return value !== 0;
                         }
+                        if (typeof value === 'bigint') {
+                            return value !== 0n;
+                        }
                         if (typeof value === 'string' || Array.isArray(value)) {
                             return value.length > 0;
                         }
@@ -2652,11 +2741,16 @@ public final class JavaScriptGenerator implements Generator {
                     }
 
                     function setAppend(valueSet, value) {
-                        return set([...valueSet, value]);
+                        const result = set(valueSet);
+                        return setAdd(result, value);
                     }
 
                     function setPlus(left, right) {
-                        return set([...left, ...right]);
+                        const result = set(left);
+                        for (const value of right) {
+                            setAdd(result, value);
+                        }
+                        return result;
                     }
 
                     function setRemove(valueSet, value) {
@@ -2668,11 +2762,13 @@ public final class JavaScriptGenerator implements Generator {
                     }
 
                     function setIsSubsetOf(left, right) {
-                        return Array.from(left).every(item => contains(right, item));
+                        const normalizedLeft = set(left);
+                        const normalizedRight = set(right);
+                        return Array.from(normalizedLeft).every(item => contains(normalizedRight, item));
                     }
 
                     function setIsProperSubsetOf(left, right) {
-                        return setIsSubsetOf(left, right) && left.size < right.size;
+                        return setIsSubsetOf(left, right) && set(left).size < set(right).size;
                     }
 
                     function setIsSupersetOf(left, right) {
@@ -2680,7 +2776,7 @@ public final class JavaScriptGenerator implements Generator {
                     }
 
                     function setIsProperSupersetOf(left, right) {
-                        return setIsSubsetOf(right, left) && left.size > right.size;
+                        return setIsSubsetOf(right, left) && set(left).size > set(right).size;
                     }
 
                     function setIntersection(left, right) {
@@ -2692,11 +2788,13 @@ public final class JavaScriptGenerator implements Generator {
                     }
 
                     function setCartesianProduct(left, right) {
-                        return set(Array.from(left).flatMap(l => Array.from(right).map(r => [l, r])));
+                        const normalizedLeft = set(left);
+                        const normalizedRight = set(right);
+                        return set(Array.from(normalizedLeft).flatMap(l => Array.from(normalizedRight).map(r => [l, r])));
                     }
 
                     function setPowerSet(valueSet) {
-                        const values = Array.from(valueSet);
+                        const values = Array.from(set(valueSet));
                         return set(values.reduce(
                             (subsets, item) => subsets.concat(subsets.map(subset => set([...subset, item]))),
                             [set()]
@@ -2881,6 +2979,37 @@ public final class JavaScriptGenerator implements Generator {
                         return isType(option, 'Some') && predicate(option.value) ? None : option;
                     }
 
+                    const LONG_MIN = -9223372036854775808n;
+                    const LONG_MAX = 9223372036854775807n;
+
+                    function toLong(value) {
+                        return BigInt.asIntN(64, BigInt(value));
+                    }
+
+                    function longAdd(left, right) {
+                        return toLong(BigInt(left) + BigInt(right));
+                    }
+
+                    function longSub(left, right) {
+                        return toLong(BigInt(left) - BigInt(right));
+                    }
+
+                    function longMul(left, right) {
+                        return toLong(BigInt(left) * BigInt(right));
+                    }
+
+                    function longDiv(left, right) {
+                        return toLong(BigInt(left) / BigInt(right));
+                    }
+
+                    function longMod(left, right) {
+                        return toLong(BigInt(left) % BigInt(right));
+                    }
+
+                    function longPow(left, right) {
+                        return floatToLong(Math.pow(Number(left), Number(right)));
+                    }
+
                     function floatToInt(value) {
                         const number = Number(value);
                         if (Number.isNaN(number)) {
@@ -2896,21 +3025,21 @@ public final class JavaScriptGenerator implements Generator {
                     }
 
                     function longToInt(value) {
-                        return Number(BigInt.asIntN(32, BigInt(Math.trunc(Number(value)))));
+                        return Number(BigInt.asIntN(32, BigInt(value)));
                     }
 
                     function floatToLong(value) {
                         const number = Number(value);
                         if (Number.isNaN(number)) {
-                            return 0;
+                            return 0n;
                         }
                         if (number >= 9223372036854775807) {
-                            return 9223372036854775807;
+                            return LONG_MAX;
                         }
                         if (number <= -9223372036854775808) {
-                            return -9223372036854775808;
+                            return LONG_MIN;
                         }
-                        return Math.trunc(number);
+                        return BigInt(Math.trunc(number));
                     }
 
                     function parseResult(value, typeName, parser) {
@@ -2931,7 +3060,13 @@ public final class JavaScriptGenerator implements Generator {
                     }
 
                     function parseLongResult(value) {
-                        return parseResult(value, 'long', text => /^[-+]?\\d+$/.test(text) ? Number.parseInt(text, 10) : Number.NaN);
+                        return parseResult(value, 'long', text => {
+                            if (!/^[-+]?\\d+$/.test(text)) {
+                                return Number.NaN;
+                            }
+                            const parsed = BigInt(text);
+                            return parsed < LONG_MIN || parsed > LONG_MAX ? Number.NaN : parsed;
+                        });
                     }
 
                     function parseFloatResult(value) {
@@ -3092,6 +3227,13 @@ public final class JavaScriptGenerator implements Generator {
                         floatToInt,
                         longToInt,
                         floatToLong,
+                        toLong,
+                        longAdd,
+                        longSub,
+                        longMul,
+                        longDiv,
+                        longMod,
+                        longPow,
                         mapCollection,
                         filterCollection,
                         rejectCollection,
@@ -3516,6 +3658,23 @@ public final class JavaScriptGenerator implements Generator {
             return value.substring(0, value.length() - 1);
         }
         return value;
+    }
+
+    static String renderNumericLiteral(String value) {
+        if (value.endsWith("L") || value.endsWith("l")) {
+            return renderLongLiteral(value);
+        }
+        return stripNumericSuffix(value);
+    }
+
+    static String renderLongLiteral(String value) {
+        var literal = value.endsWith("L") || value.endsWith("l")
+                ? value.substring(0, value.length() - 1)
+                : value;
+        if (literal.startsWith("+")) {
+            literal = literal.substring(1);
+        }
+        return literal.replace("_", "") + "n";
     }
 
     static String jsArray(Collection<String> values) {

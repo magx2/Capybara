@@ -15,6 +15,27 @@ test('SetCollection', () => {
     assert.equal(set.containsStructuralDataOperator(new Set([new set.User({ name: 'Ada' })])), true);
     assert.equal(set.containsStructuralDataMethod(new Set([new set.User({ name: 'Ada' })])), true);
     assert.equal(set.containsStructuralTuple(new Set([[1, 'one']])), true);
+    assert.equal(set.structuralLiteralSize(), 1);
+    assert.equal(set.structuralAppendSize(new Set([new set.User({ name: 'Ada' })])), 1);
+    assert.equal(
+        set.structuralUnionSize(
+            new Set([new set.User({ name: 'Ada' })]),
+            new Set([new set.User({ name: 'Ada' })]),
+        ),
+        1,
+    );
+    assert.equal(set.structuralMappedValues().size, 1);
+    assert.equal(
+        set.structuralProperSubsetAfterUnion(
+            new Set([new set.User({ name: 'Ada' })]),
+            new Set([new set.User({ name: 'Ada' })]),
+        ),
+        false,
+    );
+    assert.equal(
+        set.structuralPowerSetSize(new Set([new set.User({ name: 'Ada' }), new set.User({ name: 'Ada' })])),
+        2,
+    );
     assert.equal(set.subsetNamed(new Set([1, 2]), new Set([1, 2, 3])), true);
     assert.equal(set.properSubsetSymbol(new Set([1, 2]), new Set([1, 2])), false);
     assert.equal(set.supersetNamed(new Set([1, 2, 3]), new Set([1, 2])), true);
