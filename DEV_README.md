@@ -36,7 +36,13 @@ Use the multi-agent workflow for this Capybara repository:
         - OOP for `.coo` (encapsulation, clear responsibilities, domain modeling)
     - Keep code consistent with existing conventions
 
-5. Language Designer
+5. Senior JavaScript Developer
+    - Implement JavaScript backend, runtime, CLI, and Node test tasks according to the plan
+    - Keep generated output CommonJS-compatible and consistent with existing JavaScript generator conventions
+    - Use Capybara runtime helpers where JavaScript native behavior does not match language semantics
+    - Add or update focused JS coverage under `capy/src/test/js`, `capy/src/e2e-cfun/js`, and `capy/src/e2e-coo/js`
+
+6. Language Designer
     - Review `Functional.g4` and `.cfun` syntax changes
     - Review `ObjectOriented.g4` and `.coo` syntax changes
     - Ensure consistency, minimalism, and expressiveness of the language
@@ -44,21 +50,21 @@ Use the multi-agent workflow for this Capybara repository:
     - Detect constructs that encourage imperative or OOP thinking
     - Suggest improvements for long-term language ergonomics and coherence
 
-6. Compiler Engineer
+7. Compiler Engineer
     - Review grammar, parsing, AST shape, compile-time validation, and code generation impact
     - Check whether `Functional.g4` and `ObjectOriented.g4` changes are safe for the compiler pipeline
     - Identify ambiguity, precedence issues, parser conflicts, and poor error-reporting risks
     - Verify that syntax changes map cleanly to Java, JavaScript, and Python backends
     - Protect compile-error tests and developer-facing diagnostics
 
-7. Reviewer (FP-focused)
+8. Reviewer (FP-focused)
     - Verify correctness and behavior
     - Check for regressions
     - Validate integration tests and compile-error tests
     - Review `.cfun` code for FP idioms (no hidden mutation, no imperative patterns)
     - Ensure changes align with FP principles and language design decisions
 
-8. Reviewer (OO-focused)
+9. Reviewer (OO-focused)
     - Verify correctness and behavior of `.coo` code
     - Check for regressions
     - Validate integration tests and compile-error tests

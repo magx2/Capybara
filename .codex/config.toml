@@ -17,6 +17,10 @@ config_file = "agents/principal-developer.toml"
 description = "Implements scoped Capybara tasks in code and tests, keeping changes minimal and aligned with repository conventions."
 config_file = "agents/senior-developer.toml"
 
+[agents.senior_javascript_developer]
+description = "Implements scoped Capybara JavaScript backend, runtime, CLI, and Node test tasks while keeping changes minimal and idiomatic."
+config_file = "agents/senior-javascript-developer.toml"
+
 [agents.reviewer]
 description = "Reviews Capybara code changes for correctness, regressions, missing tests, and adherence to repository guidelines."
 config_file = "agents/reviewer.toml"
