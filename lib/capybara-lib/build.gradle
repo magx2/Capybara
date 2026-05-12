@@ -480,7 +480,8 @@ def capybaraTestLifecycleTasks = [
         'test',
         'testClasses',
         'compileTestJava',
-        'testCapybara'
+        'testCapybara',
+        'testCapybaraJava'
 ] as Set
 def singleJavaVerificationLifecycleTasks = [
         'build',
@@ -490,7 +491,8 @@ def singleJavaVerificationLifecycleTasks = [
         'test',
         'testClasses',
         'compileTestJava',
-        'testCapybara'
+        'testCapybara',
+        'testCapybaraJava'
 ] as Set
 def capybaraTestBuildRequested = requestedTaskBasenames.any { capybaraTestLifecycleTasks.contains(it) }
 def singleJavaVerificationBuild = !hasJvmMainSources &&
@@ -602,9 +604,9 @@ tasks.register('compileTestCapybaraJavaScript') {
     dependsOn tasks.named('compileTestCapybaraJavaScriptDirect')
 }
 
-tasks.register('testCapybara', InProcessCapybaraTestTask) {
+def testCapybaraJava = tasks.register('testCapybaraJava', InProcessCapybaraTestTask) {
     group = 'verification'
-    description = 'Runs Capybara tests from compiled test classes without launching a separate JVM.'
+    description = 'Runs Capybara tests from compiled Java test classes without launching a separate JVM.'
     dependsOn tasks.named('compileTestJava')
 
     runtimeClasspath.from(
@@ -620,7 +622,7 @@ def testCapybaraJavaScript = tasks.register('testCapybaraJavaScript', NodeTask) 
     group = 'verification'
     description = 'Runs Capybara tests from generated JavaScript with Node.js.'
     dependsOn tasks.named('compileTestCapybaraJavaScriptDirect')
-    shouldRunAfter tasks.named('testCapybara')
+    shouldRunAfter testCapybaraJava
 
     script.set(capybaraJsTestRunner)
     workingDir.set(layout.projectDirectory)
@@ -637,6 +639,13 @@ def testCapybaraJavaScript = tasks.register('testCapybaraJavaScript', NodeTask) 
             .withPropertyName('capybaraGeneratedTestJsSources')
             .withPathSensitivity(PathSensitivity.RELATIVE)
     outputs.dir(capybaraJsTestResultsDir)
+}
+
+tasks.register('testCapybara') {
+    group = 'verification'
+    description = 'Runs Capybara tests for Java and JavaScript.'
+    dependsOn testCapybaraJava
+    dependsOn testCapybaraJavaScript
 }
 
 sourceSets {
@@ -720,21 +729,21 @@ tasks.named('testClasses') {
 }
 
 tasks.matching { it.name == 'test' }.configureEach {
-    if (hasCapybaraTestSources) {
-        dependsOn tasks.named('testCapybara')
-    }
     scanForTestClasses = false
     include '**/*Test.class', '**/*Tests.class', '**/*IT.class', '**/*IntegrationTest.class'
     exclude 'capy/**'
     reports.html.required = false
     reports.junitXml.required = true
-    enabled = hasJvmTestSources
+    enabled = hasJvmTestSources || hasCapybaraTestSources
     systemProperty 'junit.jupiter.execution.parallel.enabled', 'true'
     systemProperty 'junit.jupiter.execution.parallel.mode.default', 'concurrent'
     systemProperty 'junit.jupiter.execution.parallel.mode.classes.default', 'concurrent'
     systemProperty 'junit.jupiter.execution.parallel.config.strategy', 'dynamic'
     if (!hasJvmTestSources) {
         setDependsOn([])
+    }
+    if (hasCapybaraTestSources) {
+        dependsOn tasks.named('testCapybara')
     }
     if (it.hasProperty('failOnNoDiscoveredTests')) {
         failOnNoDiscoveredTests = false
@@ -758,8 +767,13 @@ tasks.named('testCapybara') {
     enabled = hasCapybaraTestSources
     if (!hasCapybaraTestSources) {
         setDependsOn([])
-    } else {
-        finalizedBy testCapybaraJavaScript
+    }
+}
+
+tasks.named('testCapybaraJava') {
+    enabled = hasCapybaraTestSources
+    if (!hasCapybaraTestSources) {
+        setDependsOn([])
     }
 }
 
