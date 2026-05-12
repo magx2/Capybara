@@ -257,6 +257,36 @@ class JavaScriptGeneratorTest {
     }
 
     @Test
+    void shouldWrapIntArithmeticLikeJava() throws Exception {
+        var program = compileProgram("""
+                const MAX_INT: int = 2147483647
+                const MIN_INT: int = -2147483648
+
+                fun add_overflow(): int = MAX_INT + 1
+                fun subtract_overflow(): int = MIN_INT - 1
+                fun multiply_overflow(): int = 65536 * 65536
+                fun divide_overflow(): int = MIN_INT / -1
+                fun remainder_overflow(): int = MIN_INT % -1
+                """);
+
+        var generated = new JavaScriptGenerator().generate(program);
+        writeGenerated(generated);
+
+        var output = runNode("""
+                const m = require('./foo/Main.js');
+                console.log([
+                    m.addOverflow(),
+                    m.subtractOverflow(),
+                    m.multiplyOverflow(),
+                    m.divideOverflow(),
+                    m.remainderOverflow()
+                ].join('|'));
+                """);
+
+        assertThat(output).isEqualTo("-2147483648|2147483647|0|-2147483648|0");
+    }
+
+    @Test
     void shouldSkipRuntimeProvidedStdlibSources() {
         var generated = new JavaScriptGenerator().generate(new CompiledProgram(List.of(
                 runtimeModule("List", "/capy/collection"),

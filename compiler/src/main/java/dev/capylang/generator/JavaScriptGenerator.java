@@ -620,10 +620,10 @@ public final class JavaScriptGenerator implements Generator {
                 }
             }
             if (List.of("+", "plus").contains(methodName) && tailArgs.size() == 1 && isNativePlusType(receiverType)) {
-                return renderCollectionPlus(receiverType, receiver, functionCall.arguments().get(1).type(), tailArgs.getFirst());
+                return renderCollectionPlus(receiverType, receiver, functionCall.arguments().get(1).type(), tailArgs.getFirst(), functionCall.type());
             }
             if (List.of("-", "minus").contains(methodName) && tailArgs.size() == 1 && isNativeMinusType(receiverType)) {
-                return renderCollectionMinus(receiverType, receiver, functionCall.arguments().get(1).type(), tailArgs.getFirst());
+                return renderCollectionMinus(receiverType, receiver, functionCall.arguments().get(1).type(), tailArgs.getFirst(), functionCall.type());
             }
             if (("contains".equals(methodName) || "?".equals(methodName)) && isCollectionType(receiverType)) {
                 return renderContains(receiverType, receiver, tailArgs.getFirst());
@@ -741,14 +741,18 @@ public final class JavaScriptGenerator implements Generator {
                 case MINUS -> "(" + renderCollectionMinus(expression, left, right) + ")";
                 case MUL -> expression.type() == PrimitiveLinkedType.LONG
                         ? "capy.longMul(" + left + ", " + right + ")"
+                        : expression.type() == PrimitiveLinkedType.INT
+                                ? "capy.intMul(" + left + ", " + right + ")"
                         : "((" + left + ") * (" + right + "))";
                 case DIV -> expression.type() == PrimitiveLinkedType.INT
-                        ? "Math.trunc((" + left + ") / (" + right + "))"
+                        ? "capy.intDiv(" + left + ", " + right + ")"
                         : expression.type() == PrimitiveLinkedType.LONG
                                 ? "capy.longDiv(" + left + ", " + right + ")"
                         : "((" + left + ") / (" + right + "))";
                 case MOD -> expression.type() == PrimitiveLinkedType.LONG
                         ? "capy.longMod(" + left + ", " + right + ")"
+                        : expression.type() == PrimitiveLinkedType.INT
+                                ? "capy.intMod(" + left + ", " + right + ")"
                         : "((" + left + ") % (" + right + "))";
                 case POWER -> expression.type() == PrimitiveLinkedType.LONG
                         ? "capy.longPow(" + left + ", " + right + ")"
@@ -1114,6 +1118,9 @@ public final class JavaScriptGenerator implements Generator {
             if (resultType == PrimitiveLinkedType.LONG) {
                 return "capy.longAdd(" + left + ", " + right + ")";
             }
+            if (resultType == PrimitiveLinkedType.INT) {
+                return "capy.intAdd(" + left + ", " + right + ")";
+            }
             return "((" + left + ") + (" + right + "))";
         }
 
@@ -1143,6 +1150,9 @@ public final class JavaScriptGenerator implements Generator {
             }
             if (resultType == PrimitiveLinkedType.LONG) {
                 return "capy.longSub(" + left + ", " + right + ")";
+            }
+            if (resultType == PrimitiveLinkedType.INT) {
+                return "capy.intSub(" + left + ", " + right + ")";
             }
             return "((" + left + ") - (" + right + "))";
         }
@@ -4426,6 +4436,36 @@ public final class JavaScriptGenerator implements Generator {
                         return BigInt.asIntN(64, BigInt(value));
                     }
 
+                    function toInt(value) {
+                        return value | 0;
+                    }
+
+                    function intAdd(left, right) {
+                        return toInt(Number(left) + Number(right));
+                    }
+
+                    function intSub(left, right) {
+                        return toInt(Number(left) - Number(right));
+                    }
+
+                    function intMul(left, right) {
+                        return Math.imul(left, right);
+                    }
+
+                    function intDiv(left, right) {
+                        if (right === 0) {
+                            throw new RangeError('/ by zero');
+                        }
+                        return toInt(Math.trunc(left / right));
+                    }
+
+                    function intMod(left, right) {
+                        if (right === 0) {
+                            throw new RangeError('/ by zero');
+                        }
+                        return toInt(left % right);
+                    }
+
                     function longAdd(left, right) {
                         return toLong(BigInt(left) + BigInt(right));
                     }
@@ -4670,7 +4710,13 @@ public final class JavaScriptGenerator implements Generator {
                         floatToInt,
                         longToInt,
                         floatToLong,
+                        toInt,
                         toLong,
+                        intAdd,
+                        intSub,
+                        intMul,
+                        intDiv,
+                        intMod,
                         longAdd,
                         longSub,
                         longMul,
