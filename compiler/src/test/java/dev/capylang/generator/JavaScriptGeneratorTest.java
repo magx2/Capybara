@@ -291,6 +291,7 @@ class JavaScriptGeneratorTest {
         var generated = new JavaScriptGenerator().generate(new CompiledProgram(List.of(
                 runtimeModule("List", "/capy/collection"),
                 runtimeModule("String", "/capy/lang"),
+                runtimeModule("Primitives", "/capy/lang"),
                 runtimeModule("IO", "/capy/io"),
                 runtimeModule("Date", "/capy/date_time"),
                 runtimeModule("Regex", "/capy/lang")
@@ -304,6 +305,7 @@ class JavaScriptGeneratorTest {
                 .contains(
                         Path.of("capy", "collection", "List.js"),
                         Path.of("capy", "lang", "String.js"),
+                        Path.of("capy", "lang", "Primitives.js"),
                         Path.of("capy", "io", "IO.js"),
                         Path.of("capy", "date_time", "DateModule.js"),
                         Path.of("capy", "lang", "RegexModule.js")
@@ -313,6 +315,21 @@ class JavaScriptGeneratorTest {
                         Path.of("capy", "lang", "Regex.js")
                 )
                 .doesNotHaveDuplicates();
+    }
+
+    @Test
+    void shouldKeepSourceBackedStdlibModulesWhenRuntimeIsOnlyAHelper() {
+        var generated = new JavaScriptGenerator().generate(new CompiledProgram(List.of(
+                runtimeModule("Math", "/capy/lang"),
+                runtimeModule("Seq", "/capy/lang")
+        )));
+
+        var paths = generated.modules().stream()
+                .map(GeneratedModule::relativePath)
+                .toList();
+
+        assertThat(paths).filteredOn(Path.of("capy", "lang", "Math.js")::equals).hasSize(2);
+        assertThat(paths).filteredOn(Path.of("capy", "lang", "Seq.js")::equals).hasSize(2);
     }
 
     private static CompiledProgram compileProgram(String source) {
