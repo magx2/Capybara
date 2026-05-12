@@ -14,7 +14,7 @@ from /capy/date_time/Clock import { now }
 from /capy/date_time/DateTime import { * }
 from /capy/lang/System import { nano_time }
 
-data TestFile { file_name: String, test_cases: List[TestCase], timestamp: String }
+data TestFile { file_name: String, test_cases: List[TestCase], timestamp: String, timestamp_millis: long }
 data TestCase { name: String, result: TestResult, assertions_count: int, execution_time: double }
 type TestResult = Passed | Failed
 single Passed
@@ -43,7 +43,8 @@ fun test_file(file_name: String, test_cases: List[Effect[TestCase]]): Effect[Tes
     TestFile {
         file_name: file_name,
         test_cases: executed_test_cases,
-        timestamp: current.to_iso_8601()
+        timestamp: current.to_iso_8601(),
+        timestamp_millis: current.timestamp() * 1000L
     }
 
 fun test(name: String, assert_supplier: () => Assert): Effect[TestCase] =
@@ -111,8 +112,8 @@ fun TestCase.failed(): bool =
     case Passed -> false
     case Failed -> true
 
-enum ReportType { JUNIT }
-type Report = JUnitReport
+enum ReportType { JUNIT, CTRF, JUNIT_CTRF }
+type Report = JUnitReport | CtrfReport
 
 /// See: [Complete JUnit XML example](https://github.com/testmoapp/junitxml/blob/main/examples/junit-complete.xml)
 data JUnitReport { suites: List[JUnitTestSuite] }
@@ -150,12 +151,16 @@ fun JUnitFailure.`+`(other_message: String): JUnitFailure =
         call_stack: this.call_stack
     }
 
+data CtrfReport { report: String }
+
 data TestOutput { path: Path, content: String, failed: bool }
 data TestRun { outputs: List[TestOutput], written_files: List[Path], failure_summary: String, failed: bool }
 
 fun run_tests(rtype: ReportType, test_files: List[TestFile]): List[TestOutput] =
     match rtype with
     case JUNIT -> junit_run_tests(test_files)
+    case CTRF -> ctrf_run_tests(test_files)
+    case JUNIT_CTRF -> junit_run_tests(test_files) + ctrf_run_tests(test_files)
 
 fun run_tests(rtype: ReportType, output_dir: Path, test_files: List[TestFile]): Effect[Result[TestRun]] =
     let outputs = run_tests(rtype, test_files)
@@ -535,6 +540,8 @@ private fun path_segments_to_string(segments: List[String]): String =
 private fun has_failures(test_outputs: List[TestOutput]): bool = test_outputs.any(output => output.failed)
 
 const JUNIT_PREFIX = 'TEST-'
+const CTRF_REPORT_FILE = 'ctrf-report.json'
+const CTRF_SPEC_VERSION = '0.0.0'
 
 private fun junit_run_tests(test_files: List[TestFile]): List[TestOutput] = (test_files | :junit_run_test).as_list()
 
@@ -578,3 +585,108 @@ private fun junit_escape_xml_attribute(value: String): String =
         .replace('>', '&gt;')
         .replace('"', '&quot;')
         .replace("'", '&apos;')
+
+private fun ctrf_run_tests(test_files: List[TestFile]): List[TestOutput] = [
+    TestOutput {
+        path: from_string(CTRF_REPORT_FILE),
+        content: ctrf_report(test_files),
+        failed: ctrf_failed_count(test_files) > 0
+    }
+]
+
+fun ctrf_report(test_files: List[TestFile]): String =
+    let start = ctrf_start_millis(test_files)
+    let duration = ctrf_total_duration_millis(test_files)
+    "{"
+    + '"reportFormat":"CTRF",'
+    + '"specVersion":' + ctrf_json_string(CTRF_SPEC_VERSION) + ','
+    + '"timestamp":' + ctrf_json_string(ctrf_timestamp(test_files)) + ','
+    + '"generatedBy":"Capybara",'
+    + '"results":{'
+    + '"tool":{"name":"Capybara"},'
+    + '"summary":{'
+    + '"tests":' + ctrf_tests_count(test_files) + ','
+    + '"passed":' + ctrf_passed_count(test_files) + ','
+    + '"failed":' + ctrf_failed_count(test_files) + ','
+    + '"skipped":0,'
+    + '"pending":0,'
+    + '"other":0,'
+    + '"suites":' + test_files.size() + ','
+    + '"start":' + start + ','
+    + '"stop":' + (start + duration) + ','
+    + '"duration":' + duration
+    + '},'
+    + '"tests":[' + ctrf_test_cases(test_files) + ']'
+    + '}'
+    + '}'
+
+private fun ctrf_test_cases(test_files: List[TestFile]): String =
+    test_files |> '', (acc, test_file) =>
+        let cases = ctrf_test_cases_for_file(test_file)
+        if cases.is_empty()
+        then acc
+        else acc + ctrf_comma(acc) + cases
+
+private fun ctrf_test_cases_for_file(test_file: TestFile): String =
+    test_file.test_cases |> '', (acc, test_case) =>
+        acc + ctrf_comma(acc) + ctrf_test_case(test_file, test_case)
+
+private fun ctrf_test_case(test_file: TestFile, test_case: TestCase): String =
+    let duration = ctrf_duration_millis(test_case)
+    "{"
+    + '"name":' + ctrf_json_string(test_case.name) + ','
+    + '"status":' + ctrf_json_string(ctrf_status(test_case)) + ','
+    + '"duration":' + duration + ','
+    + '"suite":[' + ctrf_json_string(test_file.file_name) + '],'
+    + '"filePath":' + ctrf_json_string(test_file.file_name)
+    + ctrf_failure_fields(test_case)
+    + '}'
+
+private fun ctrf_failure_fields(test_case: TestCase): String =
+    match test_case.result with
+    case Passed -> ''
+    case Failed { message, type } ->
+        let normalized_message = normalize_failure_message(message)
+        ',"message":' + ctrf_json_string(normalized_message)
+        + ',"trace":' + ctrf_json_string(normalized_message)
+        + ',"extra":{"failureType":' + ctrf_json_string(type) + '}'
+
+private fun ctrf_status(test_case: TestCase): String =
+    if test_case.failed()
+    then 'failed'
+    else 'passed'
+
+private fun ctrf_timestamp(test_files: List[TestFile]): String =
+    match test_files[0] with
+    case None -> '1970-01-01T00:00:00Z'
+    case Some { test_file } -> test_file.timestamp
+
+private fun ctrf_start_millis(test_files: List[TestFile]): long =
+    match test_files[0] with
+    case None -> 0L
+    case Some { test_file } -> test_file.timestamp_millis
+
+private fun ctrf_total_duration_millis(test_files: List[TestFile]): long =
+    test_files |> 0L, (acc, test_file) =>
+        acc + (test_file.test_cases |> 0L, (test_acc, test_case) => test_acc + ctrf_duration_millis(test_case))
+
+private fun ctrf_duration_millis(test_case: TestCase): long =
+    (test_case.execution_time * 1000.0).to_long()
+
+private fun ctrf_tests_count(test_files: List[TestFile]): int =
+    test_files |> 0, (acc, test_file) => acc + test_file.test_cases.size()
+
+private fun ctrf_passed_count(test_files: List[TestFile]): int =
+    test_files |> 0, (acc, test_file) =>
+        acc + (test_file.test_cases |> 0, (test_acc, test_case) => if test_case.succeeded() then test_acc + 1 else test_acc)
+
+private fun ctrf_failed_count(test_files: List[TestFile]): int =
+    test_files |> 0, (acc, test_file) =>
+        acc + (test_file.test_cases |> 0, (test_acc, test_case) => if test_case.failed() then test_acc + 1 else test_acc)
+
+private fun ctrf_comma(value: String): String = if value.is_empty() then '' else ','
+
+private fun ctrf_json_string(value: String): String =
+    '"' + ctrf_json_escape(value) + '"'
+
+private fun ctrf_json_escape(value: String): String = <native>

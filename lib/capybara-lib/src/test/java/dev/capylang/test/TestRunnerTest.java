@@ -277,6 +277,21 @@ class TestRunnerTest {
     }
 
     @Test
+    void shouldParseCtrfReportOutputTypes() {
+        var ctrfArguments = TestRunner.parseArguments(new String[]{
+                "-o", tempDir.toString(),
+                "-rt", "CTRF"
+        });
+        var junitCtrfArguments = TestRunner.parseArguments(new String[]{
+                "-o", tempDir.toString(),
+                "-rt", "JUNIT_CTRF"
+        });
+
+        assertEquals(TestRunner.ReportType.CTRF, ctrfArguments.reportType());
+        assertEquals(TestRunner.ReportType.JUNIT_CTRF, junitCtrfArguments.reportType());
+    }
+
+    @Test
     void shouldParseRepeatedTestSelectors() {
         var arguments = TestRunner.parseArguments(new String[]{
                 "-o", tempDir.toString(),
@@ -509,6 +524,55 @@ class TestRunnerTest {
     }
 
     @Test
+    void shouldRenderCtrfReportForTestRun() {
+        var report = CapyTest.ctrfReport(List.of(testFile(
+                "/capy/lang/StringTest.cfun",
+                passed("starts_with should pass"),
+                failed("starts_with should fail", "Expected string:\ncapybara\nto start with:\nbara", "assertion failed")
+        )));
+
+        assertTrue(report.contains("\"reportFormat\":\"CTRF\""));
+        assertTrue(report.contains("\"specVersion\":\"0.0.0\""));
+        assertTrue(report.contains("\"tool\":{\"name\":\"Capybara\"}"));
+        assertTrue(report.contains("\"summary\":{\"tests\":2,\"passed\":1,\"failed\":1,\"skipped\":0,\"pending\":0,\"other\":0,\"suites\":1,\"start\":0,\"stop\":0,\"duration\":0}"));
+        assertTrue(report.contains("\"name\":\"starts_with should pass\",\"status\":\"passed\",\"duration\":0,\"suite\":[\"/capy/lang/StringTest.cfun\"],\"filePath\":\"/capy/lang/StringTest.cfun\""));
+        assertTrue(report.contains("\"name\":\"starts_with should fail\",\"status\":\"failed\",\"duration\":0,\"suite\":[\"/capy/lang/StringTest.cfun\"],\"filePath\":\"/capy/lang/StringTest.cfun\",\"message\":\"Expected string:\\ncapybara\\nto start with:\\nbara\",\"trace\":\"Expected string:\\ncapybara\\nto start with:\\nbara\",\"extra\":{\"failureType\":\"assertion failed\"}"));
+    }
+
+    @Test
+    void shouldEscapeJsonControlCharactersInCtrfReport() {
+        var controlCharacters = controlCharacters();
+        var escapedControlCharacters = escapedControlCharacters();
+        var message = "line" + (char) 0 + "\b\fbreak";
+        var report = CapyTest.ctrfReport(List.of(testFile(
+                "/capy/lang/StringTest.cfun",
+                failed("control" + controlCharacters + "name", message, "assertion failed")
+        )));
+
+        assertFalse(report.chars().anyMatch(character -> character < 0x20));
+        assertTrue(report.contains("\"name\":\"control" + escapedControlCharacters + "name\""));
+        assertTrue(report.contains("\"message\":\"line\\u0000\\b\\fbreak\""));
+        assertTrue(report.contains("\"trace\":\"line\\u0000\\b\\fbreak\""));
+    }
+
+    @Test
+    void shouldWriteJUnitAndCtrfReportsTogether() throws Exception {
+        var run = successValue(CapyTest.runTests(
+                CapyTest.ReportType.JUNIT_CTRF,
+                PathUtil.fromJavaPath(tempDir),
+                List.of(testFile("/capy/lang/MathTest", passed("should_pass")))
+        ).unsafeRun());
+
+        assertEquals(
+                List.of(relativePath("TEST-capy.lang.MathTest.xml"), relativePath("ctrf-report.json")),
+                run.written_files()
+        );
+        assertTrue(Files.exists(tempDir.resolve("TEST-capy.lang.MathTest.xml")));
+        assertTrue(Files.readString(tempDir.resolve("ctrf-report.json")).contains("\"reportFormat\":\"CTRF\""));
+        assertEquals("TEST-capy.lang.MathTest.xml\nctrf-report.json\n", Files.readString(tempDir.resolve(OUTPUT_MANIFEST_FILE)));
+    }
+
+    @Test
     void shouldPrintTeamCityMessagesWhileExecutingTestFile() {
         var originalOut = System.out;
         var previousLogType = TestLog.currentLogType();
@@ -554,7 +618,7 @@ class TestRunnerTest {
     }
 
     private static TestFile testFile(String fileName, TestCase... testCases) {
-        return new TestFile(fileName, List.of(testCases), "1970-01-01T00:00:00Z");
+        return new TestFile(fileName, List.of(testCases), "1970-01-01T00:00:00Z", 0L);
     }
 
     private static TestCase passed(String name) {
@@ -567,6 +631,21 @@ class TestRunnerTest {
 
     private static TestCase failed(String name, String message, String type) {
         return new TestCase(name, new CapyTest.Failed(message, type), 1, 0.0);
+    }
+
+    private static String controlCharacters() {
+        var controlCharacters = new StringBuilder();
+        for (var character = 0; character < 0x20; character++) {
+            controlCharacters.append((char) character);
+        }
+        return controlCharacters.toString();
+    }
+
+    private static String escapedControlCharacters() {
+        return "\\u0000\\u0001\\u0002\\u0003\\u0004\\u0005\\u0006\\u0007"
+               + "\\b\\t\\n\\u000b\\f\\r\\u000e\\u000f"
+               + "\\u0010\\u0011\\u0012\\u0013\\u0014\\u0015\\u0016\\u0017"
+               + "\\u0018\\u0019\\u001a\\u001b\\u001c\\u001d\\u001e\\u001f";
     }
 
     private static Path relativePath(String... segments) {
