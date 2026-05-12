@@ -963,6 +963,9 @@ public final class JavaGenerator implements Generator {
         if (isCapyTestCurrentLogTypeMethod(ownerPackage, ownerName, method)) {
             return mapCapyTestCurrentLogTypeMethod(method, visibility, methodTypeParameters);
         }
+        if (isCapyTestCtrfJsonEscapeMethod(ownerPackage, ownerName, method)) {
+            return mapCapyTestCtrfJsonEscapeMethod(method, visibility, methodTypeParameters);
+        }
         if (isCapyTestSelectionMethod(ownerPackage, ownerName, method)) {
             return mapCapyTestSelectionMethod(method, visibility, methodTypeParameters);
         }
@@ -1084,6 +1087,24 @@ public final class JavaGenerator implements Generator {
         return mapJavaDoc(method.comments())
                + visibility + "static " + methodTypeParameters + method.returnType() + " " + mapMethodName(method.name()) + "() {\n"
                + "return capy.lang.Effect.delay(dev.capylang.test.TestLog::currentLogType);\n"
+               + "}\n";
+    }
+
+    private boolean isCapyTestCtrfJsonEscapeMethod(String ownerPackage, String ownerName, JavaMethod method) {
+        return "capy.test".equals(ownerPackage)
+               && "CapyTest".equals(ownerName)
+               && "ctrf_json_escape".equals(method.sourceName())
+               && method.parameters().size() == 1
+               && method.sourceParameterTypes().size() == 1
+               && method.sourceParameterTypes().getFirst() == PrimitiveLinkedType.STRING
+               && method.sourceReturnType() == PrimitiveLinkedType.STRING
+               && isNativeExpression(method);
+    }
+
+    private String mapCapyTestCtrfJsonEscapeMethod(JavaMethod method, String visibility, String methodTypeParameters) {
+        return mapJavaDoc(method.comments())
+               + visibility + "static " + methodTypeParameters + method.returnType() + " " + mapMethodName(method.name()) + "(" + mapFunctionParameters(method.parameters()) + ") {\n"
+               + "return dev.capylang.test.CtrfJson.escape(" + method.parameters().getFirst().generatedName() + ");\n"
                + "}\n";
     }
 

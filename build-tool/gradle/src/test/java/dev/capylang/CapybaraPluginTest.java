@@ -618,6 +618,14 @@ class CapybaraPluginTest {
     }
 
     @Test
+    void shouldDefaultCapybaraTestReportTypeToJUnitAndCtrf() {
+        var project = newProject(List.of("check"));
+        var testCapybara = project.getTasks().named("testCapybara", CapybaraTestTask.class).get();
+
+        assertEquals("JUNIT_CTRF", testCapybara.getReportType().get());
+    }
+
+    @Test
     void shouldDefaultCapybaraTestSelectionOptions() {
         var project = newProject(List.of("check"));
         var testCapybara = project.getTasks().named("testCapybara", CapybaraTestTask.class).get();

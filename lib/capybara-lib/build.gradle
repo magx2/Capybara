@@ -615,7 +615,7 @@ def testCapybaraJava = tasks.register('testCapybaraJava', InProcessCapybaraTestT
                     : capybaraTestRuntimeClasspath
     )
     outputDir.set(capybaraTestResultsDir)
-    reportType.set('JUNIT')
+    reportType.set('JUNIT_CTRF')
 }
 
 def testCapybaraJavaScript = tasks.register('testCapybaraJavaScript', NodeTask) {
@@ -629,7 +629,7 @@ def testCapybaraJavaScript = tasks.register('testCapybaraJavaScript', NodeTask) 
     args.set([
             '--generated-dir', capybaraGeneratedTestJsDir.get().asFile.absolutePath,
             '--output-dir', capybaraJsTestResultsDir.get().asFile.absolutePath,
-            '--report-type', 'JUNIT',
+            '--report-type', 'JUNIT_CTRF',
             '--log', 'TC'
     ])
     inputs.file(capybaraJsTestRunner)
