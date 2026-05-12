@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+hook_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${hook_dir}/lib/capybara-git-policy.sh"
+
+failed=0
+
+while IFS=' ' read -r local_ref local_oid remote_ref remote_oid; do
+    if [[ -z "${local_ref:-}" ]]; then
+        continue
+    fi
+
+    if capybara_is_zero_oid "${local_oid}"; then
+        continue
+    fi
+
+    if [[ "${remote_ref}" == refs/heads/* ]]; then
+        branch_name="${remote_ref#refs/heads/}"
+
+        if ! capybara_validate_branch_name "${branch_name}"; then
+            failed=1
+        fi
+
+        if ! capybara_validate_pushed_commits "${local_oid}" "${remote_oid}"; then
+            failed=1
+        fi
+    fi
+done
+
+exit "${failed}"

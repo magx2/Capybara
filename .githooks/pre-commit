@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+hook_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${hook_dir}/lib/capybara-git-policy.sh"
+
+branch_name="$(git symbolic-ref --quiet --short HEAD || true)"
+
+if [[ -z "${branch_name}" ]]; then
+    echo "Skipping branch name validation for detached HEAD." >&2
+    exit 0
+fi
+
+capybara_validate_branch_name "${branch_name}"

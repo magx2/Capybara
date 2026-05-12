@@ -1,5 +1,15 @@
 # Capybara
 
+## Development
+
+Enable the repository Git hooks after cloning:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+The hooks validate branch names and commit subjects before commits and pushes. Branch names must be the repository default branch, `{feature|bug|chore}/#{issue-number}{description}`, or `release/{major}.{minor}.x`. Commit subjects must start with a conventional type, optionally followed by an issue number, for example `feat: add parser support` or `feat(#111): add parser support`.
+
 ## Language
 
 ### Functional part

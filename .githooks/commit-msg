@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+hook_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${hook_dir}/lib/capybara-git-policy.sh"
+
+capybara_validate_commit_message_file "$1"
