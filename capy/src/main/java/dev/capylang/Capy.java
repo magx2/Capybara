@@ -496,9 +496,9 @@ public class Capy {
     private static OutputType parseOutputType(String value) {
         return switch (value.toUpperCase(Locale.ROOT)) {
             case "JAVA" -> OutputType.JAVA;
-            case "PYTHON" -> OutputType.PYTHON;
+            case "PYTHON", "PY" -> OutputType.PYTHON;
             case "JAVASCRIPT", "JS" -> OutputType.JAVASCRIPT;
-            default -> throw new CliException("Unknown output type `" + value + "`. Use java, python, javascript, or js.");
+            default -> throw new CliException("Unknown output type `" + value + "`. Use java, python, py, javascript, or js.");
         };
     }
 
@@ -594,7 +594,7 @@ public class Capy {
                 return EXIT_COMPILATION_ERROR;
             }
             validateOutputDirectory(testGeneratedOutputDir, "Generated test output path");
-            var testGenerationInput = outputType == OutputType.JAVASCRIPT
+            var testGenerationInput = outputType == OutputType.JAVASCRIPT || outputType == OutputType.PYTHON
                     ? new GenerationInput(mergePrograms(compilation.program(), testCompilation.program()), includeJavaLibResources)
                     : selectGenerationInput(
                             testCompilation.program(),
@@ -1864,7 +1864,6 @@ public class Capy {
     record CompilationArtifacts(CompiledProgram program, List<ModuleRef> sourceModules) {
     }
 }
-
 
 
 

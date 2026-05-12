@@ -1,4 +1,5 @@
 import com.github.gradle.node.task.NodeTask
+import com.pswidersk.gradle.python.VenvTask
 import org.gradle.api.DefaultTask
 import org.gradle.api.GradleException
 import org.gradle.api.Task
@@ -38,11 +39,33 @@ import java.util.logging.Logger
 plugins {
     id 'buildlogic.java-library-conventions'
     id 'com.github.node-gradle.node' version '7.1.0'
+    id 'com.pswidersk.python-plugin' version '3.2.9'
 }
 
 node {
     version = '22.11.0'
     download = true
+}
+
+pythonPlugin {
+    pythonVersion = '3.12.8'
+}
+
+// The Python plugin installs Miniforge and environments under the root .gradle/python
+// directory by default. Keep the shared install/cache, but avoid concurrent first-time
+// setup from multiple modules.
+def capyPythonSetupTasks = [':capy:condaSetup', ':capy:envSetup']
+
+tasks.named('condaDownload') {
+    mustRunAfter(capyPythonSetupTasks)
+}
+
+tasks.named('condaSetup') {
+    mustRunAfter(capyPythonSetupTasks)
+}
+
+tasks.named('envSetup') {
+    mustRunAfter(capyPythonSetupTasks)
 }
 
 dependencies {
@@ -387,11 +410,14 @@ def capybaraTestSourceDir = layout.projectDirectory.dir('src/test/capybara')
 def capybaraGeneratedMainDir = layout.buildDirectory.dir('generated/sources/capybara/java/main')
 def capybaraGeneratedTestDir = layout.buildDirectory.dir('generated/sources/capybara/java/test')
 def capybaraGeneratedTestJsDir = layout.buildDirectory.dir('generated/sources/capybara/js/test')
+def capybaraGeneratedTestPyDir = layout.buildDirectory.dir('generated/sources/capybara/python/test')
 def capybaraGeneratedCheckDir = layout.buildDirectory.dir('generated/sources/capybara/java/check')
 def capybaraLinkedMainDir = layout.buildDirectory.dir('generated/sources/capybara/linked/main')
 def capybaraTestResultsDir = layout.buildDirectory.dir('test-results/capybara')
 def capybaraJsTestResultsDir = layout.buildDirectory.dir('test-results/capybara-js')
+def capybaraPyTestResultsDir = layout.buildDirectory.dir('test-results/capybara-python')
 def capybaraJsTestRunner = layout.projectDirectory.file('src/test/js/run-capybara-tests.js')
+def capybaraPyTestRunner = layout.projectDirectory.file('src/test/py/run-capybara-tests.py')
 def capybaraTestRuntimeClasspath = files(capyRuntimeClasspath, sourceSets.main.runtimeClasspath, sourceSets.test.output.classesDirs)
 def directoryContainsFile = { directory, matcher = { true } ->
     Path root = directory.asFile.toPath()
@@ -604,6 +630,30 @@ tasks.register('compileTestCapybaraJavaScript') {
     dependsOn tasks.named('compileTestCapybaraJavaScriptDirect')
 }
 
+tasks.register('compileTestCapybaraPythonDirect', InProcessCapybaraCompileTask) {
+    group = 'verification'
+    description = 'Compiles main and test Capybara files and generates Python for test execution.'
+
+    runtimeClasspath.from(capyRuntimeClasspath)
+    inputDir.set(capybaraMainSourceDir)
+    generatedOutputDir.set(capybaraGeneratedTestPyDir)
+    if (hasCapybaraTestSources) {
+        testInputDir.set(capybaraTestSourceDir)
+        testGeneratedOutputDir.set(capybaraGeneratedTestPyDir)
+    }
+    compileTests.set(false)
+    includeJavaLibResources.set(false)
+    outputTypeName.set('PYTHON')
+    compilerVersion.set(project.version.toString())
+    onlyIf { hasCapybaraTestSources && !singleJavaVerificationBuild }
+}
+
+tasks.register('compileTestCapybaraPython') {
+    group = 'verification'
+    description = 'Compiles main and test Capybara files and generates Python for test execution.'
+    dependsOn tasks.named('compileTestCapybaraPythonDirect')
+}
+
 def testCapybaraJava = tasks.register('testCapybaraJava', InProcessCapybaraTestTask) {
     group = 'verification'
     description = 'Runs Capybara tests from compiled Java test classes without launching a separate JVM.'
@@ -641,11 +691,35 @@ def testCapybaraJavaScript = tasks.register('testCapybaraJavaScript', NodeTask) 
     outputs.dir(capybaraJsTestResultsDir)
 }
 
+def testCapybaraPython = tasks.register('testCapybaraPython', VenvTask) {
+    group = 'verification'
+    description = 'Runs Capybara tests from generated Python.'
+    dependsOn tasks.named('compileTestCapybaraPythonDirect')
+    shouldRunAfter testCapybaraJavaScript
+
+    workingDir.set(layout.projectDirectory)
+    args = [
+            capybaraPyTestRunner.asFile.absolutePath,
+            '--generated-dir', capybaraGeneratedTestPyDir.get().asFile.absolutePath,
+            '--output-dir', capybaraPyTestResultsDir.get().asFile.absolutePath,
+            '--report-type', 'JUNIT_CTRF_JEST',
+            '--log', 'TC'
+    ]
+    inputs.file(capybaraPyTestRunner)
+            .withPropertyName('capybaraPyTestRunner')
+            .withPathSensitivity(PathSensitivity.RELATIVE)
+    inputs.dir(capybaraGeneratedTestPyDir)
+            .withPropertyName('capybaraGeneratedTestPySources')
+            .withPathSensitivity(PathSensitivity.RELATIVE)
+    outputs.dir(capybaraPyTestResultsDir)
+}
+
 tasks.register('testCapybara') {
     group = 'verification'
-    description = 'Runs Capybara tests for Java and JavaScript.'
+    description = 'Runs Capybara tests for Java, JavaScript, and Python.'
     dependsOn testCapybaraJava
     dependsOn testCapybaraJavaScript
+    dependsOn testCapybaraPython
 }
 
 sourceSets {
@@ -778,6 +852,13 @@ tasks.named('testCapybaraJava') {
 }
 
 tasks.named('testCapybaraJavaScript') {
+    enabled = hasCapybaraTestSources
+    if (!hasCapybaraTestSources) {
+        setDependsOn([])
+    }
+}
+
+tasks.named('testCapybaraPython') {
     enabled = hasCapybaraTestSources
     if (!hasCapybaraTestSources) {
         setDependsOn([])
