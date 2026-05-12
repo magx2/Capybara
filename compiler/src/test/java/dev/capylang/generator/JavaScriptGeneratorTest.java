@@ -12,6 +12,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 import java.util.TreeSet;
 
 import static java.util.stream.Collectors.joining;
@@ -255,8 +256,41 @@ class JavaScriptGeneratorTest {
         assertThat(output).isEqualTo("dog:Capy|true|Bara|dog:Mochi|[pet]|print|label|Label,Printable");
     }
 
+    @Test
+    void shouldSkipRuntimeProvidedStdlibSources() {
+        var generated = new JavaScriptGenerator().generate(new CompiledProgram(List.of(
+                runtimeModule("List", "/capy/collection"),
+                runtimeModule("String", "/capy/lang"),
+                runtimeModule("IO", "/capy/io"),
+                runtimeModule("Date", "/capy/date_time"),
+                runtimeModule("Regex", "/capy/lang")
+        )));
+
+        var paths = generated.modules().stream()
+                .map(GeneratedModule::relativePath)
+                .toList();
+
+        assertThat(paths)
+                .contains(
+                        Path.of("capy", "collection", "List.js"),
+                        Path.of("capy", "lang", "String.js"),
+                        Path.of("capy", "io", "IO.js"),
+                        Path.of("capy", "date_time", "DateModule.js"),
+                        Path.of("capy", "lang", "RegexModule.js")
+                )
+                .doesNotContain(
+                        Path.of("capy", "date_time", "Date.js"),
+                        Path.of("capy", "lang", "Regex.js")
+                )
+                .doesNotHaveDuplicates();
+    }
+
     private static CompiledProgram compileProgram(String source) {
         return compileProgram(List.of(new RawModule("Main", "/foo", source)));
+    }
+
+    private static dev.capylang.compiler.CompiledModule runtimeModule(String name, String path) {
+        return new dev.capylang.compiler.CompiledModule(name, path, Map.of(), List.of(), List.of());
     }
 
     private static CompiledProgram compileProgram(List<RawModule> modules) {

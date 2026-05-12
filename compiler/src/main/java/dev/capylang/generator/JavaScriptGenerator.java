@@ -40,6 +40,7 @@ public final class JavaScriptGenerator implements Generator {
     private static final String DICT_PIPE_ARGS_SEPARATOR = "::";
     private static final String TUPLE_PIPE_ARGS_SEPARATOR = ";;";
     static final Path RUNTIME_PATH = Path.of("dev", "capylang", "capybara.js");
+    private static final Set<String> RUNTIME_PROVIDED_MODULE_NAMES = runtimeProvidedModuleNames();
     private static final java.util.regex.Pattern CONST_NAME_PATTERN = java.util.regex.Pattern.compile("^_?[A-Z_][A-Z0-9_]*$");
     private static final java.util.regex.Pattern MODULE_VAR_PATTERN = java.util.regex.Pattern.compile("\\b__module_[A-Za-z0-9_]+\\b");
     private static final Set<String> JS_KEYWORDS = Set.of(
@@ -75,21 +76,21 @@ public final class JavaScriptGenerator implements Generator {
     }
 
     private static boolean isRuntimeProvidedModule(CompiledModule module) {
-        var path = module.path().replace('\\', '/');
-            return switch (path + "/" + module.name()) {
-                case "capy/lang/Effect",
-                     "capy/lang/Option",
-                     "capy/lang/Result",
-                     "capy/test/Assert",
-                     "capy/test/CapyTest",
-                 "capy/date_time/Clock",
-                 "capy/date_time/Date",
-                 "capy/date_time/DateTime",
-                 "capy/date_time/Duration",
-                 "capy/date_time/Interval",
-                 "capy/date_time/Time" -> true;
-            default -> false;
-        };
+        var path = module.path().replace('\\', '/').replaceFirst("^/+", "");
+        var moduleName = path.isBlank() ? module.name() : path + "/" + module.name();
+        return RUNTIME_PROVIDED_MODULE_NAMES.contains(moduleName);
+    }
+
+    private static Set<String> runtimeProvidedModuleNames() {
+        var moduleNames = new LinkedHashSet<String>();
+        for (var className : RuntimeModules.classNames()) {
+            var moduleName = className.replace('.', '/');
+            moduleNames.add(moduleName);
+            if (moduleName.endsWith("Module")) {
+                moduleNames.add(moduleName.substring(0, moduleName.length() - "Module".length()));
+            }
+        }
+        return Set.copyOf(moduleNames);
     }
 
     private static final class ModuleRenderer {
