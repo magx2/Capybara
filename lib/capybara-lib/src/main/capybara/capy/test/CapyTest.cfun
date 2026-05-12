@@ -112,8 +112,8 @@ fun TestCase.failed(): bool =
     case Passed -> false
     case Failed -> true
 
-enum ReportType { JUNIT, CTRF, JUNIT_CTRF }
-type Report = JUnitReport | CtrfReport
+enum ReportType { JUNIT, CTRF, JEST, JUNIT_CTRF, JUNIT_JEST, CTRF_JEST, JUNIT_CTRF_JEST }
+type Report = JUnitReport | CtrfReport | JestReport
 
 /// See: [Complete JUnit XML example](https://github.com/testmoapp/junitxml/blob/main/examples/junit-complete.xml)
 data JUnitReport { suites: List[JUnitTestSuite] }
@@ -152,6 +152,7 @@ fun JUnitFailure.`+`(other_message: String): JUnitFailure =
     }
 
 data CtrfReport { report: String }
+data JestReport { report: String }
 
 data TestOutput { path: Path, content: String, failed: bool }
 data TestRun { outputs: List[TestOutput], written_files: List[Path], failure_summary: String, failed: bool }
@@ -160,7 +161,11 @@ fun run_tests(rtype: ReportType, test_files: List[TestFile]): List[TestOutput] =
     match rtype with
     case JUNIT -> junit_run_tests(test_files)
     case CTRF -> ctrf_run_tests(test_files)
+    case JEST -> jest_run_tests(test_files)
     case JUNIT_CTRF -> junit_run_tests(test_files) + ctrf_run_tests(test_files)
+    case JUNIT_JEST -> junit_run_tests(test_files) + jest_run_tests(test_files)
+    case CTRF_JEST -> ctrf_run_tests(test_files) + jest_run_tests(test_files)
+    case JUNIT_CTRF_JEST -> junit_run_tests(test_files) + ctrf_run_tests(test_files) + jest_run_tests(test_files)
 
 fun run_tests(rtype: ReportType, output_dir: Path, test_files: List[TestFile]): Effect[Result[TestRun]] =
     let outputs = run_tests(rtype, test_files)
@@ -541,6 +546,7 @@ private fun has_failures(test_outputs: List[TestOutput]): bool = test_outputs.an
 
 const JUNIT_PREFIX = 'TEST-'
 const CTRF_REPORT_FILE = 'ctrf-report.json'
+const JEST_REPORT_FILE = 'jest-report.json'
 const CTRF_SPEC_VERSION = '0.0.0'
 
 private fun junit_run_tests(test_files: List[TestFile]): List[TestOutput] = (test_files | :junit_run_test).as_list()
@@ -690,3 +696,83 @@ private fun ctrf_json_string(value: String): String =
     '"' + ctrf_json_escape(value) + '"'
 
 private fun ctrf_json_escape(value: String): String = <native>
+
+private fun jest_run_tests(test_files: List[TestFile]): List[TestOutput] = [
+    TestOutput {
+        path: from_string(JEST_REPORT_FILE),
+        content: jest_report(test_files),
+        failed: ctrf_failed_count(test_files) > 0
+    }
+]
+
+fun jest_report(test_files: List[TestFile]): String =
+    let failed_count = ctrf_failed_count(test_files)
+    "{"
+    + '"success":' + jest_json_bool(failed_count == 0) + ','
+    + '"numTotalTestSuites":' + test_files.size() + ','
+    + '"numPassedTestSuites":' + jest_passed_suite_count(test_files) + ','
+    + '"numFailedTestSuites":' + jest_failed_suite_count(test_files) + ','
+    + '"numPendingTestSuites":0,'
+    + '"numTotalTests":' + ctrf_tests_count(test_files) + ','
+    + '"numPassedTests":' + ctrf_passed_count(test_files) + ','
+    + '"numFailedTests":' + failed_count + ','
+    + '"numPendingTests":0,'
+    + '"numTodoTests":0,'
+    + '"startTime":' + ctrf_start_millis(test_files) + ','
+    + '"testResults":[' + jest_test_results(test_files) + ']'
+    + '}'
+
+private fun jest_test_results(test_files: List[TestFile]): String =
+    test_files |> '', (acc, test_file) =>
+        acc + ctrf_comma(acc) + jest_test_result(test_file)
+
+private fun jest_test_result(test_file: TestFile): String =
+    let failed_count = jest_failed_count(test_file)
+    let start = test_file.timestamp_millis
+    let duration = jest_duration_millis(test_file)
+    "{"
+    + '"name":' + ctrf_json_string(test_file.file_name) + ','
+    + '"status":' + ctrf_json_string(jest_status(failed_count > 0)) + ','
+    + '"startTime":' + start + ','
+    + '"endTime":' + (start + duration) + ','
+    + '"assertionResults":[' + jest_assertion_results(test_file) + ']'
+    + '}'
+
+private fun jest_assertion_results(test_file: TestFile): String =
+    test_file.test_cases |> '', (acc, test_case) =>
+        acc + ctrf_comma(acc) + jest_assertion_result(test_file, test_case)
+
+private fun jest_assertion_result(test_file: TestFile, test_case: TestCase): String =
+    "{"
+    + '"ancestorTitles":[' + ctrf_json_string(test_file.file_name) + '],'
+    + '"title":' + ctrf_json_string(test_case.name) + ','
+    + '"status":' + ctrf_json_string(jest_status(test_case.failed())) + ','
+    + '"duration":' + ctrf_duration_millis(test_case) + ','
+    + '"failureMessages":' + jest_failure_messages(test_case) + ','
+    + '"location":null'
+    + '}'
+
+private fun jest_failure_messages(test_case: TestCase): String =
+    match test_case.result with
+    case Passed -> '[]'
+    case Failed { message, type } -> '[' + ctrf_json_string(normalize_failure_message(message)) + ']'
+
+private fun jest_status(failed: bool): String =
+    if failed then 'failed' else 'passed'
+
+private fun jest_json_bool(value: bool): String =
+    if value then 'true' else 'false'
+
+private fun jest_passed_suite_count(test_files: List[TestFile]): int =
+    test_files |> 0, (acc, test_file) =>
+        if jest_failed_count(test_file) > 0 then acc else acc + 1
+
+private fun jest_failed_suite_count(test_files: List[TestFile]): int =
+    test_files |> 0, (acc, test_file) =>
+        if jest_failed_count(test_file) > 0 then acc + 1 else acc
+
+private fun jest_failed_count(test_file: TestFile): int =
+    test_file.test_cases |> 0, (acc, test_case) => if test_case.failed() then acc + 1 else acc
+
+private fun jest_duration_millis(test_file: TestFile): long =
+    test_file.test_cases |> 0L, (acc, test_case) => acc + ctrf_duration_millis(test_case)
