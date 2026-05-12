@@ -10,3 +10,7 @@ build
 tmp-*
 
 .ai/*
+
+# Python test cache
+__pycache__/
+*.py[cod]
