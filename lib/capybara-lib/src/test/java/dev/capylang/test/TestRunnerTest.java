@@ -286,9 +286,19 @@ class TestRunnerTest {
                 "-o", tempDir.toString(),
                 "-rt", "JUNIT_CTRF"
         });
+        var jestArguments = TestRunner.parseArguments(new String[]{
+                "-o", tempDir.toString(),
+                "-rt", "JEST"
+        });
+        var junitCtrfJestArguments = TestRunner.parseArguments(new String[]{
+                "-o", tempDir.toString(),
+                "-rt", "JUNIT_CTRF_JEST"
+        });
 
         assertEquals(TestRunner.ReportType.CTRF, ctrfArguments.reportType());
         assertEquals(TestRunner.ReportType.JUNIT_CTRF, junitCtrfArguments.reportType());
+        assertEquals(TestRunner.ReportType.JEST, jestArguments.reportType());
+        assertEquals(TestRunner.ReportType.JUNIT_CTRF_JEST, junitCtrfJestArguments.reportType());
     }
 
     @Test
@@ -556,20 +566,61 @@ class TestRunnerTest {
     }
 
     @Test
-    void shouldWriteJUnitAndCtrfReportsTogether() throws Exception {
+    void shouldRenderJestReportForTestRun() {
+        var report = CapyTest.jestReport(List.of(testFile(
+                "/capy/lang/StringTest.cfun",
+                passed("starts_with should pass"),
+                failed("starts_with should fail", "Expected string:\ncapybara\nto start with:\nbara", "assertion failed")
+        )));
+
+        assertTrue(report.contains("\"success\":false"));
+        assertTrue(report.contains("\"numTotalTestSuites\":1"));
+        assertTrue(report.contains("\"numPassedTestSuites\":0"));
+        assertTrue(report.contains("\"numFailedTestSuites\":1"));
+        assertTrue(report.contains("\"numTotalTests\":2"));
+        assertTrue(report.contains("\"numPassedTests\":1"));
+        assertTrue(report.contains("\"numFailedTests\":1"));
+        assertTrue(report.contains("\"startTime\":0"));
+        assertTrue(report.contains("\"name\":\"/capy/lang/StringTest.cfun\",\"status\":\"failed\",\"startTime\":0,\"endTime\":0,\"assertionResults\""));
+        assertTrue(report.contains("\"ancestorTitles\":[\"/capy/lang/StringTest.cfun\"],\"title\":\"starts_with should pass\",\"status\":\"passed\",\"duration\":0,\"failureMessages\":[],\"location\":null"));
+        assertTrue(report.contains("\"title\":\"starts_with should fail\",\"status\":\"failed\",\"duration\":0,\"failureMessages\":[\"Expected string:\\ncapybara\\nto start with:\\nbara\"],\"location\":null"));
+    }
+
+    @Test
+    void shouldEscapeJsonControlCharactersInJestReport() {
+        var controlCharacters = controlCharacters();
+        var escapedControlCharacters = escapedControlCharacters();
+        var message = "line" + (char) 0 + "\b\fbreak";
+        var report = CapyTest.jestReport(List.of(testFile(
+                "/capy/lang/StringTest.cfun",
+                failed("control" + controlCharacters + "name", message, "assertion failed")
+        )));
+
+        assertFalse(report.chars().anyMatch(character -> character < 0x20));
+        assertTrue(report.contains("\"title\":\"control" + escapedControlCharacters + "name\""));
+        assertTrue(report.contains("\"failureMessages\":[\"line\\u0000\\b\\fbreak\"]"));
+    }
+
+    @Test
+    void shouldWriteJUnitCtrfAndJestReportsTogether() throws Exception {
         var run = successValue(CapyTest.runTests(
-                CapyTest.ReportType.JUNIT_CTRF,
+                CapyTest.ReportType.JUNIT_CTRF_JEST,
                 PathUtil.fromJavaPath(tempDir),
                 List.of(testFile("/capy/lang/MathTest", passed("should_pass")))
         ).unsafeRun());
 
         assertEquals(
-                List.of(relativePath("TEST-capy.lang.MathTest.xml"), relativePath("ctrf-report.json")),
+                List.of(
+                        relativePath("TEST-capy.lang.MathTest.xml"),
+                        relativePath("ctrf-report.json"),
+                        relativePath("jest-report.json")
+                ),
                 run.written_files()
         );
         assertTrue(Files.exists(tempDir.resolve("TEST-capy.lang.MathTest.xml")));
         assertTrue(Files.readString(tempDir.resolve("ctrf-report.json")).contains("\"reportFormat\":\"CTRF\""));
-        assertEquals("TEST-capy.lang.MathTest.xml\nctrf-report.json\n", Files.readString(tempDir.resolve(OUTPUT_MANIFEST_FILE)));
+        assertTrue(Files.readString(tempDir.resolve("jest-report.json")).contains("\"success\":true"));
+        assertEquals("TEST-capy.lang.MathTest.xml\nctrf-report.json\njest-report.json\n", Files.readString(tempDir.resolve(OUTPUT_MANIFEST_FILE)));
     }
 
     @Test

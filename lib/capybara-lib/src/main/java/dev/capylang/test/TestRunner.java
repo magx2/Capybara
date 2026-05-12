@@ -143,7 +143,11 @@ public class TestRunner {
     public enum ReportType {
         JUNIT,
         CTRF,
-        JUNIT_CTRF
+        JEST,
+        JUNIT_CTRF,
+        JUNIT_JEST,
+        CTRF_JEST,
+        JUNIT_CTRF_JEST
     }
 
     private static void printHelp() {
@@ -151,7 +155,7 @@ public class TestRunner {
                 Usage: java -jar test-runner.jar [options]
                 Options:
                   -o, --output-dir <dir>    Output directory for test reports (required)
-                  -rt, --report-type <type> Report type (required, JUNIT, CTRF, JUNIT_CTRF)
+                  -rt, --report-type <type> Report type (required, JUNIT, CTRF, JEST, JUNIT_CTRF, JUNIT_JEST, CTRF_JEST, JUNIT_CTRF_JEST)
                   -l, --log <type>          Log output type (optional, LOG, TC, TEAM_CITY)
                   --tests <selector>        Run only tests matching selector; can be repeated
                   --available-tests         Print available test selectors and exit
