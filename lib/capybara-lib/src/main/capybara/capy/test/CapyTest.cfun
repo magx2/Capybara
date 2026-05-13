@@ -24,31 +24,25 @@ single Passed
 data Failed { message: String, type: String }
 enum LogType { NONE, LOG, TEAM_CITY }
 
-fun test_file(file_name: String, test_cases: List[Effect[TestCase]]): Effect[TestFile] =
+fun test_file(file_name: String, test_cases: List[TestCase]): Effect[TestFile] =
     let current <- now()
-    let collected_test_cases <- collect_test_cases(test_cases)
+    test_file_at(file_name, current.timestamp() * 1000L, test_cases)
+
+fun test_file_at(file_name: String, timestamp_millis: long, test_cases: List[TestCase]): TestFile =
     TestFile {
         file_name: file_name,
-        test_cases: collected_test_cases,
-        timestamp_millis: current.timestamp() * 1000L
+        test_cases: test_cases,
+        timestamp_millis: timestamp_millis
     }
 
-fun test(name: String, assert_supplier: () => Assert): Effect[TestCase] =
-    pure(TestCase {
+fun test(name: String, assert_supplier: () => Assert): TestCase =
+    TestCase {
         name: name,
         result: Passed {},
         assertions_count: 0,
         execution_time: 0.0,
         assert_supplier: assert_supplier
-    })
-
-private fun collect_test_cases(test_cases: List[Effect[TestCase]]): Effect[List[TestCase]] =
-    match test_cases[0] with
-    case None -> pure([])
-    case Some { test_case } ->
-        let collected_test_case <- test_case
-        let collected_test_cases <- collect_test_cases(test_cases[1:])
-        [collected_test_case] + collected_test_cases
+    }
 
 private fun execute_test_files(log_type: LogType, test_files: List[TestFile]): Effect[List[TestFile]] =
     match test_files[0] with

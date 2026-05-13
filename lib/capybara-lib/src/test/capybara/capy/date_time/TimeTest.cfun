@@ -45,7 +45,7 @@ fun _local_time(hour: int, minute: int, second: int): Result[Time] =
 fun _offset_time(hour: int, minute: int, second: int, offset_minutes: int): Result[Time] =
     Time { hour, minute, second, offset_minutes: Some { offset_minutes } }
 
-fun _test_time(hour: int, minute: int, second: int, is_valid: bool): Effect[TestCase] =
+fun _test_time(hour: int, minute: int, second: int, is_valid: bool): TestCase =
     let assert: Assert =
         if is_valid
         then assert_that(_local_time(hour, minute, second))
@@ -58,7 +58,7 @@ fun _test_time(hour: int, minute: int, second: int, is_valid: bool): Effect[Test
         else assert_that(_local_time(hour, minute, second)).fails()
     test("Time \{ hour: {hour}, minute: {minute}, second: {second} } should " + (if is_valid then "succeed" else "fail"), () => assert)
 
-fun _test_to_seconds(): List[Effect[TestCase]] =
+fun _test_to_seconds(): List[TestCase] =
     ([
         (4, 23, 59, 15839),
         (2, 30, 0, 9000),
@@ -67,7 +67,7 @@ fun _test_to_seconds(): List[Effect[TestCase]] =
         "Time \{ hour: {hour}, minute: {minute}, second: {second} }.to_seconds() should return the {expected} seconds",
         () => assert_that(_local_time(hour, minute, second) | t => Success { t.to_seconds() }).succeeds(expected))).as_list()
 
-fun _test_to_minutes(): List[Effect[TestCase]] =
+fun _test_to_minutes(): List[TestCase] =
     ([
         (4, 23, 59, 263),
         (2, 30, 0, 150),
@@ -76,7 +76,7 @@ fun _test_to_minutes(): List[Effect[TestCase]] =
         "Time \{ hour: {hour}, minute: {minute}, second: {second} }.to_minutes() should return the {expected} minutes",
         () => assert_that(_local_time(hour, minute, second) | t => Success { t.to_minutes() }).succeeds(expected))).as_list()
 
-fun _test_to_hours(): List[Effect[TestCase]] =
+fun _test_to_hours(): List[TestCase] =
     ([
         (4, 23, 59, 4),
         (2, 30, 0, 2),
@@ -85,7 +85,7 @@ fun _test_to_hours(): List[Effect[TestCase]] =
         "Time \{ hour: {hour}, minute: {minute}, second: {second} }.to_hours() should return the {expected} hours",
         () => assert_that(_local_time(hour, minute, second) | t => Success { t.to_hours() }).succeeds(expected))).as_list()
 
-fun _test_round_to_minutes(): Effect[TestCase] =
+fun _test_round_to_minutes(): TestCase =
     test(
         "Time \{hour: 23, minute: 59, seconds: 59}.round_to_minutes() should preserve offset and zero seconds",
         () => assert_that(_offset_time(23, 59, 59, 90))
@@ -96,7 +96,7 @@ fun _test_round_to_minutes(): Effect[TestCase] =
                     .has_second(0)
                     .has_offset_minutes(Some { 90 })))
 
-fun _test_round_to_hours(): Effect[TestCase] =
+fun _test_round_to_hours(): TestCase =
     test(
         "Time \{hour: 23, minute: 59, seconds: 59}.round_to_hours() should preserve offset and zero minutes",
         () => assert_that(_offset_time(23, 59, 59, -300))
@@ -107,7 +107,7 @@ fun _test_round_to_hours(): Effect[TestCase] =
                     .has_second(0)
                     .has_offset_minutes(Some { -300 })))
 
-fun _test_add_seconds(): List[Effect[TestCase]] =
+fun _test_add_seconds(): List[TestCase] =
     ([
         (23, 59, 59, 1, 0, 0, 0),
         (23, 59, 59, 60, 0, 0, 59),
@@ -125,7 +125,7 @@ fun _test_add_seconds(): List[Effect[TestCase]] =
                 assert_that(time.add_seconds(seconds_to_add))
                     .is_equal_to(_time_test_value(expected_hour, expected_minute, expected_second, Some { 330 }))))).as_list()
 
-fun _test_add_minutes(): List[Effect[TestCase]] =
+fun _test_add_minutes(): List[TestCase] =
     ([
         (23, 59, 59, 1, 0, 0, 59),
         (23, 59, 59, 60, 0, 59, 59),
@@ -141,7 +141,7 @@ fun _test_add_minutes(): List[Effect[TestCase]] =
                 assert_that(time.add_minutes(minutes_to_add))
                     .is_equal_to(_time_test_value(expected_hour, expected_minute, expected_second, Some { -300 }))))).as_list()
 
-fun _test_add_hours(): List[Effect[TestCase]] =
+fun _test_add_hours(): List[TestCase] =
     ([
         (23, 59, 59, 1, 0, 59, 59),
         (23, 59, 59, -1, 22, 59, 59),
@@ -153,7 +153,7 @@ fun _test_add_hours(): List[Effect[TestCase]] =
                 assert_that(time.add_hours(hours_to_add))
                     .is_equal_to(_time_test_value(expected_hour, expected_minute, expected_second, Some { 0 }))))).as_list()
 
-fun _time_test_to_iso_8601(): List[Effect[TestCase]] =
+fun _time_test_to_iso_8601(): List[TestCase] =
     ([
         (_time_test_value(13, 47, 30, None {}), "13:47:30"),
         (_time_test_value(13, 47, 30, Some { 0 }), "13:47:30Z"),
@@ -163,7 +163,7 @@ fun _time_test_to_iso_8601(): List[Effect[TestCase]] =
         "Time.to_iso_8601() should format {expected}",
         () => assert_that(time.to_iso_8601()).is_equal_to(expected))).as_list()
 
-fun _time_test_from_iso_8601_success(): List[Effect[TestCase]] =
+fun _time_test_from_iso_8601_success(): List[TestCase] =
     ([
         ("13:47:30", _time_test_value(13, 47, 30, None {})),
         ("134730", _time_test_value(13, 47, 30, None {})),
@@ -184,7 +184,7 @@ fun _time_test_from_iso_8601_success(): List[Effect[TestCase]] =
         "Time.from_iso_8601 should parse {iso}",
         () => assert_that(/capy/date_time/Time.from_iso_8601(iso)).succeeds(expected))).as_list()
 
-fun _time_test_from_iso_8601_failure(): List[Effect[TestCase]] =
+fun _time_test_from_iso_8601_failure(): List[TestCase] =
     ([
         "24:00:00",
         "13:47",

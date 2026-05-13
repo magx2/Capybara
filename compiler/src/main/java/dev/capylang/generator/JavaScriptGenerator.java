@@ -1646,7 +1646,7 @@ public final class JavaScriptGenerator implements Generator {
                     "DateTimeDurationEnd", "DateTimeStartDuration", "DateTimeStartEnd", "fromIso8601", "from_iso_8601"));
             exports.put("capy.date_time.Clock", Set.of("now"));
             exports.put("capy.test.Assert", Set.of("assert_all", "assertAll", "assert_that", "assertThat"));
-            exports.put("capy.test.CapyTest", Set.of("test", "test_file", "testFile"));
+            exports.put("capy.test.CapyTest", Set.of("test", "test_file", "testFile", "test_file_at", "testFileAt"));
             return exports;
         }
 
@@ -3782,15 +3782,23 @@ public final class JavaScriptGenerator implements Generator {
                         return { name, body };
                     }
 
-                    function testFile(path, testCases) {
-                        return capy.delay(() => ({
+                    function testFileAt(path, timestampMillis, testCases) {
+                        return {
                             path,
+                            file_name: path,
                             test_cases: testCases,
-                        }));
+                            timestamp_millis: timestampMillis,
+                        };
+                    }
+
+                    function testFile(path, testCases) {
+                        return capy.delay(() => testFileAt(path, Date.now(), testCases));
                     }
 
                     module.exports = {
                         test,
+                        testFileAt,
+                        test_file_at: testFileAt,
                         testFile,
                         test_file: testFile,
                     };

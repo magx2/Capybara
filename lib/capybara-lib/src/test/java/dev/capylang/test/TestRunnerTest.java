@@ -430,8 +430,9 @@ class TestRunnerTest {
     @Test
     void shouldNotExecuteUnselectedTestBodies() {
         var executed = new AtomicInteger();
-        var testFile = CapyTest.testFile(
+        var testFile = CapyTest.testFileAt(
                 "/capy/lang/SelectionTest.cfun",
+                0L,
                 List.of(
                         CapyTest.test("selected", () -> {
                             executed.incrementAndGet();
@@ -442,7 +443,7 @@ class TestRunnerTest {
                             return capy.test.Assert.assertThat("capybara").startsWith("capy");
                         })
                 )
-        ).unsafeRun();
+        );
         var filtered = TestRunner.filterTestFiles(
                 List.of(testFile),
                 List.of("/capy/lang/SelectionTest.\"selected\"")
@@ -464,8 +465,9 @@ class TestRunnerTest {
 
     @Test
     void shouldListAvailableTestsWithoutExecutingBodies() {
-        var testFile = CapyTest.testFile(
+        var testFile = CapyTest.testFileAt(
                 "/capy/lang/SelectionTest.cfun",
+                0L,
                 List.of(
                         CapyTest.test("first", () -> {
                             throw new AssertionError("available tests should not execute bodies");
@@ -474,7 +476,7 @@ class TestRunnerTest {
                             throw new AssertionError("available tests should not execute bodies");
                         })
                 )
-        ).unsafeRun();
+        );
 
         assertEquals(
                 List.of(
@@ -624,13 +626,14 @@ class TestRunnerTest {
         var stdout = new ByteArrayOutputStream();
         try {
             System.setOut(new PrintStream(stdout));
-            var testFile = CapyTest.testFile(
+            var testFile = CapyTest.testFileAt(
                     "/capy/lang/StringTest.cfun",
+                    0L,
                     List.of(CapyTest.test("starts_with should fail", () -> {
                         System.out.println("ASSERTION_BODY");
                         return capy.test.Assert.assertThat("capybara").startsWith("bara");
                     }))
-            ).unsafeRun();
+            );
             successValue(CapyTest.runTests(
                     CapyTest.ReportType.JUNIT,
                     PathUtil.fromJavaPath(tempDir),
