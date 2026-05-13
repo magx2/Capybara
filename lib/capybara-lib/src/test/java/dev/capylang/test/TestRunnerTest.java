@@ -282,23 +282,24 @@ class TestRunnerTest {
                 "-o", tempDir.toString(),
                 "-rt", "CTRF"
         });
-        var junitCtrfArguments = TestRunner.parseArguments(new String[]{
-                "-o", tempDir.toString(),
-                "-rt", "JUNIT_CTRF"
-        });
         var jestArguments = TestRunner.parseArguments(new String[]{
                 "-o", tempDir.toString(),
                 "-rt", "JEST"
         });
-        var junitCtrfJestArguments = TestRunner.parseArguments(new String[]{
-                "-o", tempDir.toString(),
-                "-rt", "JUNIT_CTRF_JEST"
-        });
 
         assertEquals(TestRunner.ReportType.CTRF, ctrfArguments.reportType());
-        assertEquals(TestRunner.ReportType.JUNIT_CTRF, junitCtrfArguments.reportType());
         assertEquals(TestRunner.ReportType.JEST, jestArguments.reportType());
-        assertEquals(TestRunner.ReportType.JUNIT_CTRF_JEST, junitCtrfJestArguments.reportType());
+    }
+
+    @Test
+    void shouldRejectCombinedReportOutputTypes() {
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> TestRunner.parseArguments(new String[]{
+                        "-o", tempDir.toString(),
+                        "-rt", "JUNIT" + "_CTRF"
+                })
+        );
     }
 
     @Test
@@ -602,25 +603,21 @@ class TestRunnerTest {
     }
 
     @Test
-    void shouldWriteJUnitCtrfAndJestReportsTogether() throws Exception {
+    void shouldWriteJestReport() throws Exception {
         var run = successValue(CapyTest.runTests(
-                CapyTest.ReportType.JUNIT_CTRF_JEST,
+                CapyTest.ReportType.JEST,
                 PathUtil.fromJavaPath(tempDir),
                 List.of(testFile("/capy/lang/MathTest", passed("should_pass")))
         ).unsafeRun());
 
         assertEquals(
                 List.of(
-                        relativePath("TEST-capy.lang.MathTest.xml"),
-                        relativePath("ctrf-report.json"),
                         relativePath("jest-report.json")
                 ),
                 run.written_files()
         );
-        assertTrue(Files.exists(tempDir.resolve("TEST-capy.lang.MathTest.xml")));
-        assertTrue(Files.readString(tempDir.resolve("ctrf-report.json")).contains("\"reportFormat\":\"CTRF\""));
         assertTrue(Files.readString(tempDir.resolve("jest-report.json")).contains("\"success\":true"));
-        assertEquals("TEST-capy.lang.MathTest.xml\nctrf-report.json\njest-report.json\n", Files.readString(tempDir.resolve(OUTPUT_MANIFEST_FILE)));
+        assertEquals("jest-report.json\n", Files.readString(tempDir.resolve(OUTPUT_MANIFEST_FILE)));
     }
 
     @Test

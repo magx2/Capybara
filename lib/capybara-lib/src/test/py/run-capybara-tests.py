@@ -8,17 +8,18 @@ import sys
 import time
 import traceback
 
+SUPPORTED_REPORT_TYPES = ("JUNIT", "CTRF", "JEST")
+
 
 def parse_args(argv):
     parser = argparse.ArgumentParser()
     parser.add_argument("--generated-dir", required=True)
     parser.add_argument("--output-dir")
-    parser.add_argument("--report-type", default="JUNIT_CTRF_JEST")
+    parser.add_argument("--report-type", default="JUNIT", type=str.upper, choices=SUPPORTED_REPORT_TYPES)
     parser.add_argument("--log", default="NONE")
     parser.add_argument("--tests", action="append", default=[])
     parser.add_argument("--available-tests", action="store_true")
     args = parser.parse_args(argv)
-    args.report_type = args.report_type.upper()
     args.log = args.log.upper()
     if not args.available_tests and not args.output_dir:
         parser.error("--output-dir is required unless --available-tests is set")
@@ -276,11 +277,10 @@ def suite_report(file_name, results):
 def write_reports(output_dir, report_type, suites, start_ms, stop_ms):
     output_dir = pathlib.Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    parts = set(report_type.split("_"))
-    if "JUNIT" in parts:
+    if report_type == "JUNIT":
         for suite in suites:
             report_path(output_dir, suite["fileName"]).write_text(suite_report(suite["fileName"], suite["results"]))
-    if "CTRF" in parts:
+    if report_type == "CTRF":
         tests = []
         for suite in suites:
             for result in suite["results"]:
@@ -314,7 +314,7 @@ def write_reports(output_dir, report_type, suites, start_ms, stop_ms):
                 "tests": tests,
             },
         }, indent=2) + "\n")
-    if "JEST" in parts:
+    if report_type == "JEST":
         results = [result for suite in suites for result in suite["results"]]
         failed = sum(1 for result in results if result["failed"])
         failed_suites = sum(1 for suite in suites if any(result["failed"] for result in suite["results"]))
