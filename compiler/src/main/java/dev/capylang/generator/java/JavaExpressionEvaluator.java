@@ -3288,9 +3288,10 @@ public class JavaExpressionEvaluator {
         return qualifiedEnumValueName(dataType.name())
                 .map(name -> normalizeJavaTypeReference(name.ownerName()) + "." + enumValuePatternName(name.valueName()))
                 .orElseGet(() -> {
-                    var ownerName = enumValueOwnerOverrides().get(dataType.name());
-                    if (ownerName != null) {
-                        return normalizeJavaTypeReference(ownerName) + "." + enumValuePatternName(dataType.name());
+                    var override = enumValueOverride(dataType.name());
+                    if (override.isPresent()) {
+                        var enumValue = override.orElseThrow();
+                        return normalizeJavaTypeReference(enumValue.ownerName()) + "." + enumValuePatternName(enumValue.valueName());
                     }
                     return normalizeJavaTypeReference(dataType.name());
                 });
@@ -3300,12 +3301,25 @@ public class JavaExpressionEvaluator {
         return qualifiedEnumValueName(dataType.name())
                 .filter(name -> isUppercaseName(name.valueName()))
                 .map(name -> normalizeJavaTypeReference(name.ownerName()))
-                .or(() -> Optional.ofNullable(enumValueOwnerOverrides().get(dataType.name()))
+                .or(() -> enumValueOverride(dataType.name())
                         .filter(ignored -> isUppercaseName(dataType.name()))
-                        .map(JavaExpressionEvaluator::normalizeJavaTypeReference));
+                        .map(enumValue -> normalizeJavaTypeReference(enumValue.ownerName())));
     }
 
     private record QualifiedEnumValueName(String ownerName, String valueName) {
+    }
+
+    private static Optional<QualifiedEnumValueName> enumValueOverride(String valueName) {
+        return Optional.ofNullable(enumValueOwnerOverrides().get(valueName))
+                .map(rawOverride -> parseEnumValueOverride(rawOverride, valueName));
+    }
+
+    private static QualifiedEnumValueName parseEnumValueOverride(String rawOverride, String fallbackValueName) {
+        var separator = rawOverride.lastIndexOf('#');
+        if (separator < 0) {
+            return new QualifiedEnumValueName(rawOverride, fallbackValueName);
+        }
+        return new QualifiedEnumValueName(rawOverride.substring(0, separator), rawOverride.substring(separator + 1));
     }
 
     private static Optional<QualifiedEnumValueName> qualifiedEnumValueName(String typeName) {

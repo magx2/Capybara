@@ -15,13 +15,19 @@ import static dev.capylang.generator.java.JavaAnnotation.generatedAnnotation;
 
 public class JavaAstBuilder {
     private final Map<String, String> functionNameOverrides;
+    private final Map<String, String> enumValueOwnerOverrides;
 
     public JavaAstBuilder() {
-        this(Map.of());
+        this(Map.of(), Map.of());
     }
 
     public JavaAstBuilder(Map<String, String> functionNameOverrides) {
+        this(functionNameOverrides, Map.of());
+    }
+
+    public JavaAstBuilder(Map<String, String> functionNameOverrides, Map<String, String> enumValueOwnerOverrides) {
         this.functionNameOverrides = Map.copyOf(functionNameOverrides);
+        this.enumValueOwnerOverrides = Map.copyOf(enumValueOwnerOverrides);
     }
     private static final java.util.regex.Pattern CONST_NAME_PATTERN = java.util.regex.Pattern.compile("^_?[A-Z_][A-Z0-9_]*$");
     private final Map<String, String> normalizedJavaClassReferenceCache = new HashMap<>();
@@ -82,7 +88,7 @@ public class JavaAstBuilder {
                 javaClassName,
                 new JavaPackage(javaPackageName),
                 module.staticImports().stream()
-                        .map(staticImport -> normalizeJavaClassReference(staticImport.className()) + "." + buildJavaStaticImportMember(staticImport.memberName()))
+                        .map(this::buildJavaStaticImport)
                         .collect(toCollection(TreeSet::new)),
                 buildStaticConsts(module.functions()),
                 buildStaticMethods(module.functions(), staticMethodsSelfCallClassNames, nativeTypeNames),
@@ -162,10 +168,19 @@ public class JavaAstBuilder {
         var overrides = new LinkedHashMap<String, String>();
         ownersByValue.forEach((valueName, ownerNames) -> {
             if (ownerNames.size() == 1) {
-                overrides.put(valueName, ownerNames.iterator().next());
+                var ownerName = ownerNames.iterator().next();
+                overrides.put(valueName, enumValueOverride(ownerName, valueName));
+                var alias = valueName.replace("_", "");
+                if (!alias.equals(valueName)) {
+                    overrides.put(alias, enumValueOverride(ownerName, valueName));
+                }
             }
         });
         return Map.copyOf(overrides);
+    }
+
+    private String enumValueOverride(String ownerName, String valueName) {
+        return ownerName + "#" + valueName;
     }
 
     private SortedMap<String, List<CompiledFunction>> indexFunctionsByOwnerPrefix(Set<CompiledFunction> functions) {
@@ -393,6 +408,41 @@ public class JavaAstBuilder {
             return buildClassName(memberName).toString();
         }
         return buildMethodName(memberName);
+    }
+
+    private String buildJavaStaticImport(CompiledModule.StaticImport staticImport) {
+        if (staticImport.enumValue()) {
+            if ("*".equals(staticImport.memberName())) {
+                return normalizeRawTypeReference(staticImport.className()) + ".*";
+            }
+            return normalizeRawTypeReference(staticImport.className()) + "." + enumValuePatternName(staticImport.memberName());
+        }
+        if ("*".equals(staticImport.memberName())) {
+            return normalizeJavaClassReference(staticImport.className()) + ".*";
+        }
+        var enumValueOwner = enumValueOwnerOverrides.get(staticImport.memberName());
+        if (enumValueOwner != null) {
+            var override = parseEnumValueOverride(enumValueOwner, staticImport.memberName());
+            return normalizeRawTypeReference(override.ownerName()) + "." + enumValuePatternName(override.valueName());
+        }
+        return normalizeJavaClassReference(staticImport.className()) + "." + buildJavaStaticImportMember(staticImport.memberName());
+    }
+
+    private EnumValueOverride parseEnumValueOverride(String rawOverride, String fallbackValueName) {
+        var separator = rawOverride.lastIndexOf('#');
+        if (separator < 0) {
+            return new EnumValueOverride(rawOverride, fallbackValueName);
+        }
+        return new EnumValueOverride(rawOverride.substring(0, separator), rawOverride.substring(separator + 1));
+    }
+
+    private record EnumValueOverride(String ownerName, String valueName) {
+    }
+
+    private String enumValuePatternName(String constructorName) {
+        var normalized = constructorName.replace('\\', '/');
+        var separator = Math.max(normalized.lastIndexOf('/'), normalized.lastIndexOf('.'));
+        return separator >= 0 ? normalized.substring(separator + 1) : normalized;
     }
 
     private boolean isUpperSnakeConstName(String name) {

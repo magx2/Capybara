@@ -1254,6 +1254,7 @@ public class CapybaraCompiler {
             );
             if (importDeclaration.isStarImport() && importDeclaration.excludedSymbols().isEmpty()) {
                 imports.add(new CompiledModule.StaticImport(className, "*"));
+                imports.addAll(enumValueStaticImports(importedModule, importedTypes));
                 continue;
             }
             var availableFunctionMembers = importedSignaturesByName.keySet();
@@ -1262,7 +1263,8 @@ public class CapybaraCompiler {
             availableMembers.addAll(availableTypeMembers);
             for (var symbol : importDeclaration.selectedSymbols(availableMembers)) {
                 if (availableMembers.contains(symbol)) {
-                    imports.add(new CompiledModule.StaticImport(className, symbol));
+                    imports.add(enumValueStaticImport(importedModule, importedTypes, symbol)
+                            .orElseGet(() -> new CompiledModule.StaticImport(className, symbol)));
                 }
             }
         }
@@ -1272,6 +1274,74 @@ public class CapybaraCompiler {
         cachedByModule.put(cacheKey, result);
         return result;
     }
+
+    private List<CompiledModule.StaticImport> enumValueStaticImports(
+            ModuleRef importedModule,
+            SortedMap<String, GenericDataType> importedTypes
+    ) {
+        return importedTypes.values().stream()
+                .filter(CompiledDataParentType.class::isInstance)
+                .map(CompiledDataParentType.class::cast)
+                .filter(CompiledDataParentType::enumType)
+                .flatMap(enumType -> enumType.subTypes().stream()
+                        .map(enumValue -> new CompiledModule.StaticImport(
+                                rawEnumOwnerTypeName(importedModule, enumType.name(), importedTypes),
+                                enumValue.name(),
+                                true)))
+                .toList();
+    }
+
+    private Optional<CompiledModule.StaticImport> enumValueStaticImport(
+            ModuleRef importedModule,
+            SortedMap<String, GenericDataType> importedTypes,
+            String symbol
+    ) {
+        if (!(importedTypes.get(symbol) instanceof CompiledDataType dataType) || !dataType.enumValue()) {
+            return Optional.empty();
+        }
+        return importedTypes.values().stream()
+                .filter(CompiledDataParentType.class::isInstance)
+                .map(CompiledDataParentType.class::cast)
+                .filter(CompiledDataParentType::enumType)
+                .filter(enumType -> enumType.subTypes().stream().anyMatch(subType -> subType.name().equals(dataType.name())))
+                .findFirst()
+                .map(enumType -> new CompiledModule.StaticImport(
+                        rawEnumOwnerTypeName(importedModule, enumType.name(), importedTypes),
+                        dataType.name(),
+                        true));
+    }
+
+    private String rawEnumOwnerTypeName(
+            ModuleRef module,
+            String enumTypeName,
+            SortedMap<String, GenericDataType> linkedTypes
+    ) {
+        var ownerName = typesAreNestedInModuleOwner(module, linkedTypes)
+                ? module.name() + "." + enumTypeName
+                : enumTypeName;
+        var modulePath = module.path().replace('\\', '/').replaceFirst("^/+", "").replaceFirst("/+$", "");
+        return modulePath.isBlank() ? ownerName : "/" + modulePath + "/" + ownerName;
+    }
+
+    private boolean typesAreNestedInModuleOwner(ModuleRef module, SortedMap<String, GenericDataType> linkedTypes) {
+        var hasNameConflict = false;
+        var hasOwnerInterface = false;
+        for (var type : linkedTypes.values()) {
+            if (type instanceof CompiledDataParentType parentType && parentType.name().equals(module.name())) {
+                hasNameConflict = true;
+                if (!parentType.enumType()) {
+                    hasOwnerInterface = true;
+                }
+            } else if (type instanceof CompiledDataType dataType
+                       && !dataType.singleton()
+                       && !dataType.nativeType()
+                       && dataType.name().equals(module.name())) {
+                hasNameConflict = true;
+            }
+        }
+        return !hasNameConflict || hasOwnerInterface;
+    }
+
     private SortedSet<CompiledFunction> deduplicateFunctions(List<CompiledFunction> linkedFunctions) {
         var byKey = new LinkedHashMap<String, CompiledFunction>();
         for (var function : linkedFunctions) {

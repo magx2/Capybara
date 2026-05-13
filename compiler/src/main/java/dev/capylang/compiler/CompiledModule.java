@@ -56,11 +56,16 @@ public record CompiledModule(
         staticImports = new TreeSet<>(staticImports);
     }
 
-    public record StaticImport(String className, String memberName) implements Comparable<StaticImport> {
+    public record StaticImport(String className, String memberName, boolean enumValue) implements Comparable<StaticImport> {
+        public StaticImport(String className, String memberName) {
+            this(className, memberName, false);
+        }
+
         @Override
         public int compareTo(StaticImport o) {
             return comparing(StaticImport::className)
                     .thenComparing(StaticImport::memberName)
+                    .thenComparing(StaticImport::enumValue)
                     .compare(this, o);
         }
     }

@@ -32,12 +32,13 @@ public final class JavaGenerator implements Generator {
         var timings = new GenerationTimings();
         var functionNameOverrides = buildFunctionNameOverrides(program);
         var staticExtensionMethodOwners = buildStaticExtensionMethodOwners(program);
-        var astBuilder = new JavaAstBuilder(functionNameOverrides);
+        var enumValueOwnerOverrides = buildEnumValueOwnerOverrides(program);
+        var astBuilder = new JavaAstBuilder(functionNameOverrides, enumValueOwnerOverrides);
         JavaExpressionEvaluator.setFunctionNameOverrides(functionNameOverrides);
         JavaExpressionEvaluator.setStaticExtensionMethodOwners(staticExtensionMethodOwners);
         var modules = new ArrayList<GeneratedModule>();
         for (var module : program.modules()) {
-            modules.addAll(modules(module, timings, astBuilder));
+            modules.addAll(modules(module, timings, astBuilder, enumValueOwnerOverrides));
         }
         modules.addAll(time(timings::addSourceRenderNanos, () -> objectOrientedJavaGenerator.generate(program.objectOrientedModules())));
         log.info(() -> "Java generation timings: AST build="
@@ -47,9 +48,17 @@ public final class JavaGenerator implements Generator {
         return new GeneratedProgram(modules);
     }
 
-    private List<GeneratedModule> modules(CompiledModule module, GenerationTimings timings, JavaAstBuilder astBuilder) {
+    private List<GeneratedModule> modules(
+            CompiledModule module,
+            GenerationTimings timings,
+            JavaAstBuilder astBuilder,
+            java.util.Map<String, String> globalEnumValueOwnerOverrides
+    ) {
         var javaClass = time(timings::addAstBuildNanos, () -> astBuilder.build(module));
-        JavaExpressionEvaluator.setEnumValueOwnerOverrides(javaClass.enumValueOwnerOverrides());
+        var enumValueOwnerOverrides = new java.util.LinkedHashMap<>(globalEnumValueOwnerOverrides);
+        enumValueOwnerOverrides.putAll(importedEnumValueOwnerOverrides(module));
+        enumValueOwnerOverrides.putAll(javaClass.enumValueOwnerOverrides());
+        JavaExpressionEvaluator.setEnumValueOwnerOverrides(enumValueOwnerOverrides);
         try {
             if (!hasTypeOrDataNameConflictWithFile(javaClass)) {
                 return List.of(new GeneratedModule(
@@ -102,6 +111,21 @@ public final class JavaGenerator implements Generator {
         }
     }
 
+    private java.util.Map<String, String> importedEnumValueOwnerOverrides(CompiledModule module) {
+        var overrides = new java.util.LinkedHashMap<String, String>();
+        for (var staticImport : module.staticImports()) {
+            if (!staticImport.enumValue() || "*".equals(staticImport.memberName())) {
+                continue;
+            }
+            overrides.put(staticImport.memberName(), enumValueOverride(staticImport.className(), staticImport.memberName()));
+            var alias = staticImport.memberName().replace("_", "");
+            if (!alias.equals(staticImport.memberName())) {
+                overrides.put(alias, enumValueOverride(staticImport.className(), staticImport.memberName()));
+            }
+        }
+        return java.util.Map.copyOf(overrides);
+    }
+
 
     private java.util.Map<String, String> buildStaticExtensionMethodOwners(CompiledProgram program) {
         var nativeTypeNames = program.modules().stream()
@@ -122,6 +146,53 @@ public final class JavaGenerator implements Generator {
             }
         }
         return java.util.Map.copyOf(owners);
+    }
+
+    private java.util.Map<String, String> buildEnumValueOwnerOverrides(CompiledProgram program) {
+        var ownersByValue = new java.util.LinkedHashMap<String, java.util.LinkedHashSet<String>>();
+        for (var module : program.modules()) {
+            for (var type : module.types().values()) {
+                if (!(type instanceof dev.capylang.compiler.CompiledDataParentType parentType) || !parentType.enumType()) {
+                    continue;
+                }
+                var ownerClassName = enumOwnerClassName(module, parentType.name());
+                for (var subType : parentType.subTypes()) {
+                    ownersByValue
+                            .computeIfAbsent(subType.name(), ignored -> new java.util.LinkedHashSet<>())
+                            .add(ownerClassName);
+                }
+            }
+        }
+
+        var overrides = new java.util.LinkedHashMap<String, String>();
+        ownersByValue.forEach((valueName, ownerNames) -> {
+            if (ownerNames.size() == 1) {
+                var ownerName = ownerNames.iterator().next();
+                overrides.put(valueName, enumValueOverride(ownerName, valueName));
+                var alias = valueName.replace("_", "");
+                if (!alias.equals(valueName)) {
+                    overrides.put(alias, enumValueOverride(ownerName, valueName));
+                }
+            }
+        });
+        return java.util.Map.copyOf(overrides);
+    }
+
+    private String enumValueOverride(String ownerName, String valueName) {
+        return ownerName + "#" + valueName;
+    }
+
+    private String enumOwnerClassName(CompiledModule module, String enumTypeName) {
+        var modulePath = module.path().replace('\\', '/');
+        var normalizedPath = modulePath.startsWith("/") ? modulePath : "/" + modulePath;
+        var pathPrefix = normalizedPath.equals("/") ? "" : normalizedPath;
+        return staticMethodsAreNestedInOwner(module)
+                ? qualifiedTypeName(pathPrefix, module.name() + "." + enumTypeName)
+                : qualifiedTypeName(pathPrefix, enumTypeName);
+    }
+
+    private String qualifiedTypeName(String pathPrefix, String typeName) {
+        return pathPrefix.isBlank() ? typeName : pathPrefix + "/" + typeName;
     }
 
     private String staticMethodOwnerClassName(CompiledModule module) {
@@ -687,7 +758,7 @@ public final class JavaGenerator implements Generator {
             return false;
         }
         var member = staticImport.substring(lastDot + 1);
-        return Character.isUpperCase(member.charAt(0));
+        return Character.isUpperCase(member.charAt(0)) && !member.equals(member.toUpperCase(java.util.Locale.ROOT));
     }
 
     private String extractCompanionOwnerImport(String classImport) {

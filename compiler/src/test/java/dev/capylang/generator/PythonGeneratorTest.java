@@ -214,6 +214,40 @@ class PythonGeneratorTest {
         assertThat(output).isEqualTo("-2147483648|2147483647|0|-2147483648|0");
     }
 
+    @Test
+    void shouldResolveImportedEnumQualifierStaticCall() throws Exception {
+        var program = compileProgram(List.of(
+                new RawModule("Modes", "/foo/lib", """
+                        enum RoundMode { FLOOR, HALF_EVEN }
+                        """),
+                new RawModule("Consumer", "/foo/app", """
+                        from /foo/lib/Modes import { RoundMode }
+                        from /capy/lang/Result import { * }
+
+                        fun parsed_name(): String =
+                            match RoundMode.parse('HALF_EVEN') with
+                            case Success _ -> 'parsed'
+                            case Error _ -> 'error'
+                        """)
+        ));
+
+        var generated = new PythonGenerator().generate(program);
+        writeGenerated(generated);
+
+        var consumer = generated.modules().stream()
+                .filter(module -> module.relativePath().equals(Path.of("foo", "app", "Consumer.py")))
+                .findFirst()
+                .orElseThrow();
+        assertThat(consumer.code()).contains("capy_module_foo_lib_Modes.RoundMode.parse(\"HALF_EVEN\")");
+
+        var output = runPython("""
+                import foo.app.Consumer as m
+                print(m.parsedName())
+                """);
+
+        assertThat(output).isEqualTo("parsed");
+    }
+
     private static CompiledProgram compileProgram(String source) {
         return compileProgram(List.of(new RawModule("Main", "/foo", source)));
     }

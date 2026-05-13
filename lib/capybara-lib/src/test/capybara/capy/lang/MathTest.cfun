@@ -1,6 +1,6 @@
 from /capy/test/Assert import { * }
 from /capy/lang/Effect import { * }
-from /capy/lang/Math import { * }
+from /capy/lang/Math import { CEILING, FLOOR, HALF_DOWN, HALF_EVEN, HALF_UP, RoundMode, digits, floor_div, floor_mod, max, min, round }
 from /capy/collection/List import { * }
 from /capy/collection/Set import { * }
 from /capy/collection/Dict import { * }
@@ -106,6 +106,14 @@ fun tests(): Effect[TestFile] =
         test("max([]: List[long]) should return None", () => _test_empty_max_long()),
     ]
 
+    let round_cases = [
+        test("round FLOOR should round toward negative infinity", () => _test_round_floor()),
+        test("round CEILING should round toward positive infinity", () => _test_round_ceiling()),
+        test("round HALF_UP should round ties away from zero", () => _test_round_half_up()),
+        test("round HALF_DOWN should round ties toward zero", () => _test_round_half_down()),
+        test("round HALF_EVEN should round ties to even neighbor", () => _test_round_half_even()),
+    ]
+
     let all_cases = digits_test_cases
         + floor_div_cases
         + floor_mod_cases
@@ -115,6 +123,7 @@ fun tests(): Effect[TestFile] =
         + max_long_cases
         + list_int_cases
         + list_long_cases
+        + round_cases
 
     test_file("/capy/lang/Math.cfun", all_cases)
 
@@ -176,6 +185,49 @@ fun _test_min_negative_values_long(expected: long): Assert =
 
 fun _test_max_negative_values_long(expected: long): Assert =
     assert_that(_max_negative_longs()).contains(expected)
+
+fun _test_round_floor(): Assert =
+    assert_all([
+        _assert_round(1.9, FLOOR, 1L),
+        _assert_round(2.0, FLOOR, 2L),
+        _assert_round(-1.1, FLOOR, -2L),
+    ])
+
+fun _test_round_ceiling(): Assert =
+    assert_all([
+        _assert_round(1.1, CEILING, 2L),
+        _assert_round(-1.9, CEILING, -1L),
+        _assert_round(-2.0, CEILING, -2L),
+    ])
+
+fun _test_round_half_up(): Assert =
+    assert_all([
+        _assert_round(1.4, HALF_UP, 1L),
+        _assert_round(1.5, HALF_UP, 2L),
+        _assert_round(-1.4, HALF_UP, -1L),
+        _assert_round(-1.5, HALF_UP, -2L),
+    ])
+
+fun _test_round_half_down(): Assert =
+    assert_all([
+        _assert_round(1.5, HALF_DOWN, 1L),
+        _assert_round(1.6, HALF_DOWN, 2L),
+        _assert_round(-1.5, HALF_DOWN, -1L),
+        _assert_round(-1.6, HALF_DOWN, -2L),
+    ])
+
+fun _test_round_half_even(): Assert =
+    assert_all([
+        _assert_round(1.5, HALF_EVEN, 2L),
+        _assert_round(2.5, HALF_EVEN, 2L),
+        _assert_round(-1.5, HALF_EVEN, -2L),
+        _assert_round(-2.5, HALF_EVEN, -2L),
+        _assert_round(1.4, HALF_EVEN, 1L),
+        _assert_round(1.6, HALF_EVEN, 2L),
+    ])
+
+private fun _assert_round(value: double, mode: RoundMode, expected: long): Assert =
+    assert_that(round(value, mode)).is_equal_to(expected)
 
 
 fun _min_ints(): Option[int] = min(_ints())
