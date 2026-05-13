@@ -32,25 +32,14 @@ public class TestRunner {
     public static int runTests(Arguments arguments) {
         var capyTestRuntimeClass = loadCapyTestRuntime();
         var gatherTestsMethod = loadGatherTestsMethod(capyTestRuntimeClass);
-        var previousLogType = TestLog.currentLogType();
-        var previousSelection = TestSelection.setSelection(TestSelection.Selection.from(
-                arguments.testSelectors(),
-                arguments.availableTests()
-        ));
-        TestLog.setLogType(arguments.availableTests() ? CapyTest.LogType.NONE : arguments.logType());
-        try {
-            var testFiles = invokeGatherTests(gatherTestsMethod);
-            if (arguments.availableTests()) {
-                availableTests(testFiles).forEach(System.out::println);
-                return 0;
-            }
-            testFiles = filterTestFiles(testFiles, arguments.testSelectors());
-            var testRun = invokeRunTests(arguments.reportType(), arguments.outputDir(), testFiles);
-            return testRun.failed() ? 1 : 0;
-        } finally {
-            TestSelection.restoreSelection(previousSelection);
-            TestLog.setLogType(previousLogType);
+        var testFiles = invokeGatherTests(gatherTestsMethod);
+        if (arguments.availableTests()) {
+            availableTests(testFiles).forEach(System.out::println);
+            return 0;
         }
+        testFiles = filterTestFiles(testFiles, arguments.testSelectors());
+        var testRun = invokeRunTests(arguments.reportType(), arguments.outputDir(), arguments.logType(), testFiles);
+        return testRun.failed() ? 1 : 0;
     }
 
     public static Arguments parseArguments(String[] args) {
@@ -265,11 +254,13 @@ public class TestRunner {
     private static TestRun invokeRunTests(
             ReportType reportType,
             Path outputDir,
+            CapyTest.LogType logType,
             List<CapyTest.TestFile> testFiles
     ) {
         var result = (Result<TestRun>) CapyTest.runTestsAndPrintSummary(
                 capy.test.CapyTest.ReportType.valueOf(reportType.name()),
                 PathUtil.fromJavaPath(outputDir),
+                logType,
                 (List) testFiles
         ).unsafeRun();
         return unwrapResult(result, "Cannot run Capybara tests");

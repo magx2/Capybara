@@ -1031,12 +1031,6 @@ public final class JavaGenerator implements Generator {
         if (isCapyLangPrimitivesStringParseMethod(ownerPackage, ownerName, method)) {
             return mapCapyLangPrimitivesStringParseMethod(method, visibility, methodTypeParameters);
         }
-        if (isCapyTestCurrentLogTypeMethod(ownerPackage, ownerName, method)) {
-            return mapCapyTestCurrentLogTypeMethod(method, visibility, methodTypeParameters);
-        }
-        if (isCapyTestSelectionMethod(ownerPackage, ownerName, method)) {
-            return mapCapyTestSelectionMethod(method, visibility, methodTypeParameters);
-        }
         if (isCapyIoConsoleMethod(ownerPackage, ownerName, method)) {
             return mapCapyIoConsoleMethod(method, visibility, methodTypeParameters);
         }
@@ -1141,48 +1135,6 @@ public final class JavaGenerator implements Generator {
         return method.expression() instanceof dev.capylang.compiler.expression.CompiledNothingValue nothingValue
                && (nothingValue.message().contains("`<native>`")
                    || nothingValue.message().contains("native expression in function"));
-    }
-
-    private boolean isCapyTestCurrentLogTypeMethod(String ownerPackage, String ownerName, JavaMethod method) {
-        return "capy.test".equals(ownerPackage)
-               && "CapyTest".equals(ownerName)
-               && "currentLogType".equals(mapMethodName(method.name()))
-               && method.parameters().isEmpty()
-               && isEffectTypeReference(method.returnType().toString());
-    }
-
-    private String mapCapyTestCurrentLogTypeMethod(JavaMethod method, String visibility, String methodTypeParameters) {
-        return mapJavaDoc(method.comments())
-               + visibility + "static " + methodTypeParameters + method.returnType() + " " + mapMethodName(method.name()) + "() {\n"
-               + "return capy.lang.Effect.delay(dev.capylang.test.TestLog::currentLogType);\n"
-               + "}\n";
-    }
-
-    private boolean isCapyTestSelectionMethod(String ownerPackage, String ownerName, JavaMethod method) {
-        if (!"capy.test".equals(ownerPackage) || !"CapyTest".equals(ownerName) || !isEffectTypeReference(method.returnType().toString())) {
-            return false;
-        }
-        var methodName = mapMethodName(method.name());
-        return switch (methodName) {
-            case "pushTestFile", "shouldIncludeTestFile", "shouldExecuteTest", "shouldIncludeTest" ->
-                    method.parameters().size() == 1 && isNativeExpression(method);
-            case "popTestFile" -> method.parameters().isEmpty() && isNativeExpression(method);
-            default -> false;
-        };
-    }
-
-    private String mapCapyTestSelectionMethod(JavaMethod method, String visibility, String methodTypeParameters) {
-        var methodName = mapMethodName(method.name());
-        var runtimeCall = switch (methodName) {
-            case "pushTestFile", "shouldIncludeTestFile", "shouldExecuteTest", "shouldIncludeTest" ->
-                    "dev.capylang.test.TestSelection." + methodName + "(" + method.parameters().getFirst().generatedName() + ")";
-            case "popTestFile" -> "dev.capylang.test.TestSelection.popTestFile()";
-            default -> throw new IllegalStateException("Unsupported CapyTest selection method: " + methodName);
-        };
-        return mapJavaDoc(method.comments())
-               + visibility + "static " + methodTypeParameters + method.returnType() + " " + methodName + "(" + mapFunctionParameters(method.parameters()) + ") {\n"
-               + "return capy.lang.Effect.delay(() -> " + runtimeCall + ");\n"
-               + "}\n";
     }
 
     private boolean isCapyIoConsoleMethod(String ownerPackage, String ownerName, JavaMethod method) {

@@ -2,62 +2,11 @@ package dev.capylang.test;
 
 import capy.test.CapyTest;
 
-import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.List;
 
 public final class TestSelection {
-    private static final ThreadLocal<Selection> CURRENT_SELECTION = new ThreadLocal<>();
-    private static final ThreadLocal<ArrayDeque<String>> CURRENT_TEST_FILES = ThreadLocal.withInitial(ArrayDeque::new);
-
     private TestSelection() {
-    }
-
-    static Selection currentSelection() {
-        var selection = CURRENT_SELECTION.get();
-        return selection == null ? Selection.all() : selection;
-    }
-
-    static Selection setSelection(Selection selection) {
-        var previousSelection = CURRENT_SELECTION.get();
-        if (selection == null || selection.isDefault()) {
-            CURRENT_SELECTION.remove();
-        } else {
-            CURRENT_SELECTION.set(selection);
-        }
-        CURRENT_TEST_FILES.remove();
-        return previousSelection;
-    }
-
-    static void restoreSelection(Selection selection) {
-        if (selection == null || selection.isDefault()) {
-            CURRENT_SELECTION.remove();
-        } else {
-            CURRENT_SELECTION.set(selection);
-        }
-        CURRENT_TEST_FILES.remove();
-    }
-
-    public static String pushTestFile(String fileName) {
-        CURRENT_TEST_FILES.get().push(normalizedTestFileName(fileName));
-        return fileName;
-    }
-
-    public static String popTestFile() {
-        var testFiles = CURRENT_TEST_FILES.get();
-        return testFiles.isEmpty() ? "" : testFiles.pop();
-    }
-
-    public static boolean shouldIncludeTestFile(String fileName) {
-        return currentSelection().shouldIncludeTestFile(fileName);
-    }
-
-    public static boolean shouldExecuteTest(String testName) {
-        return currentSelection().shouldExecuteTest(currentTestFile(), testName);
-    }
-
-    public static boolean shouldIncludeTest(String testName) {
-        return currentSelection().shouldIncludeTest(currentTestFile(), testName);
     }
 
     static List<String> availableTests(List<CapyTest.TestFile> testFiles) {
@@ -131,11 +80,6 @@ public final class TestSelection {
         return filteredFiles;
     }
 
-    private static String currentTestFile() {
-        var testFiles = CURRENT_TEST_FILES.get();
-        return testFiles.isEmpty() ? "" : testFiles.peek();
-    }
-
     private static String testId(CapyTest.TestFile testFile, CapyTest.TestCase testCase) {
         return normalizedTestFileName(testFile.file_name()) + ".\"" + escapeTestName(testCase.name()) + "\"";
     }
@@ -171,42 +115,6 @@ public final class TestSelection {
             result.append('\\');
         }
         return result.toString();
-    }
-
-    record Selection(List<Selector> selectors, boolean availableTests) {
-        static Selection all() {
-            return new Selection(List.of(), false);
-        }
-
-        static Selection from(List<String> testSelectors, boolean availableTests) {
-            var selectors = testSelectors == null
-                    ? List.<Selector>of()
-                    : testSelectors.stream().map(Selector::parse).toList();
-            return new Selection(selectors, availableTests);
-        }
-
-        boolean isDefault() {
-            return selectors.isEmpty() && !availableTests;
-        }
-
-        boolean shouldIncludeTestFile(String fileName) {
-            if (availableTests || selectors.isEmpty()) {
-                return true;
-            }
-            var normalizedFileName = normalizedTestFileName(fileName);
-            return selectors.stream().anyMatch(selector -> selector.fileName().equals(normalizedFileName));
-        }
-
-        boolean shouldExecuteTest(String fileName, String testName) {
-            return !availableTests && shouldIncludeTest(fileName, testName);
-        }
-
-        boolean shouldIncludeTest(String fileName, String testName) {
-            if (availableTests || selectors.isEmpty()) {
-                return true;
-            }
-            return selectors.stream().anyMatch(selector -> selector.matches(fileName, testName));
-        }
     }
 
     record Selector(String raw, String fileName, String testName) {
