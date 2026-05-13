@@ -665,7 +665,7 @@ def testCapybaraJava = tasks.register('testCapybaraJava', InProcessCapybaraTestT
                     : capybaraTestRuntimeClasspath
     )
     outputDir.set(capybaraTestResultsDir)
-    reportType.set('JUNIT_CTRF_JEST')
+    reportType.set('JUNIT')
 }
 
 def testCapybaraJavaScript = tasks.register('testCapybaraJavaScript', NodeTask) {
@@ -679,7 +679,7 @@ def testCapybaraJavaScript = tasks.register('testCapybaraJavaScript', NodeTask) 
     args.set([
             '--generated-dir', capybaraGeneratedTestJsDir.get().asFile.absolutePath,
             '--output-dir', capybaraJsTestResultsDir.get().asFile.absolutePath,
-            '--report-type', 'JUNIT_CTRF_JEST',
+            '--report-type', 'JUNIT',
             '--log', 'TC'
     ])
     inputs.file(capybaraJsTestRunner)
@@ -702,7 +702,7 @@ def testCapybaraPython = tasks.register('testCapybaraPython', VenvTask) {
             capybaraPyTestRunner.asFile.absolutePath,
             '--generated-dir', capybaraGeneratedTestPyDir.get().asFile.absolutePath,
             '--output-dir', capybaraPyTestResultsDir.get().asFile.absolutePath,
-            '--report-type', 'JUNIT_CTRF_JEST',
+            '--report-type', 'JUNIT',
             '--log', 'TC'
     ]
     inputs.file(capybaraPyTestRunner)

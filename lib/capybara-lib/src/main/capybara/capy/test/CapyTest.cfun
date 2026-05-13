@@ -114,7 +114,7 @@ fun TestCase.failed(): bool =
     case Passed -> false
     case Failed -> true
 
-enum ReportType { JUNIT, CTRF, JEST, JUNIT_CTRF, JUNIT_JEST, CTRF_JEST, JUNIT_CTRF_JEST }
+enum ReportType { JUNIT, CTRF, JEST }
 type Report = JUnitReport | CtrfReport | JestReport
 
 /// See: [Complete JUnit XML example](https://github.com/testmoapp/junitxml/blob/main/examples/junit-complete.xml)
@@ -164,10 +164,6 @@ fun run_tests(rtype: ReportType, test_files: List[TestFile]): List[TestOutput] =
     case JUNIT -> junit_run_tests(test_files)
     case CTRF -> ctrf_run_tests(test_files)
     case JEST -> jest_run_tests(test_files)
-    case JUNIT_CTRF -> junit_run_tests(test_files) + ctrf_run_tests(test_files)
-    case JUNIT_JEST -> junit_run_tests(test_files) + jest_run_tests(test_files)
-    case CTRF_JEST -> ctrf_run_tests(test_files) + jest_run_tests(test_files)
-    case JUNIT_CTRF_JEST -> junit_run_tests(test_files) + ctrf_run_tests(test_files) + jest_run_tests(test_files)
 
 fun run_tests(rtype: ReportType, output_dir: Path, test_files: List[TestFile]): Effect[Result[TestRun]] =
     let outputs = run_tests(rtype, test_files)
