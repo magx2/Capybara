@@ -430,61 +430,59 @@ class TestRunnerTest {
     @Test
     void shouldNotExecuteUnselectedTestBodies() {
         var executed = new AtomicInteger();
-        var previousSelection = TestSelection.setSelection(TestSelection.Selection.from(
-                List.of("/capy/lang/SelectionTest.\"selected\""),
-                false
-        ));
-        try {
-            var testFile = CapyTest.testFile(
-                    "/capy/lang/SelectionTest.cfun",
-                    List.of(
-                            CapyTest.test("selected", () -> {
-                                executed.incrementAndGet();
-                                return capy.test.Assert.assertThat("capybara").startsWith("capy");
-                            }),
-                            CapyTest.test("skipped", () -> {
-                                executed.addAndGet(100);
-                                return capy.test.Assert.assertThat("capybara").startsWith("capy");
-                            })
-                    )
-            ).unsafeRun();
+        var testFile = CapyTest.testFile(
+                "/capy/lang/SelectionTest.cfun",
+                List.of(
+                        CapyTest.test("selected", () -> {
+                            executed.incrementAndGet();
+                            return capy.test.Assert.assertThat("capybara").startsWith("capy");
+                        }),
+                        CapyTest.test("skipped", () -> {
+                            executed.addAndGet(100);
+                            return capy.test.Assert.assertThat("capybara").startsWith("capy");
+                        })
+                )
+        ).unsafeRun();
+        var filtered = TestRunner.filterTestFiles(
+                List.of(testFile),
+                List.of("/capy/lang/SelectionTest.\"selected\"")
+        );
 
-            assertEquals(1, executed.get());
-            assertEquals(
-                    List.of("selected"),
-                    testFile.test_cases().stream().map(TestCase::name).toList()
-            );
-        } finally {
-            TestSelection.restoreSelection(previousSelection);
-        }
+        successValue(CapyTest.runTests(
+                CapyTest.ReportType.JUNIT,
+                PathUtil.fromJavaPath(tempDir),
+                CapyTest.LogType.NONE,
+                filtered
+        ).unsafeRun());
+
+        assertEquals(1, executed.get());
+        assertEquals(
+                List.of("selected"),
+                filtered.getFirst().test_cases().stream().map(TestCase::name).toList()
+        );
     }
 
     @Test
     void shouldListAvailableTestsWithoutExecutingBodies() {
-        var previousSelection = TestSelection.setSelection(TestSelection.Selection.from(List.of(), true));
-        try {
-            var testFile = CapyTest.testFile(
-                    "/capy/lang/SelectionTest.cfun",
-                    List.of(
-                            CapyTest.test("first", () -> {
-                                throw new AssertionError("available tests should not execute bodies");
-                            }),
-                            CapyTest.test("second", () -> {
-                                throw new AssertionError("available tests should not execute bodies");
-                            })
-                    )
-            ).unsafeRun();
+        var testFile = CapyTest.testFile(
+                "/capy/lang/SelectionTest.cfun",
+                List.of(
+                        CapyTest.test("first", () -> {
+                            throw new AssertionError("available tests should not execute bodies");
+                        }),
+                        CapyTest.test("second", () -> {
+                            throw new AssertionError("available tests should not execute bodies");
+                        })
+                )
+        ).unsafeRun();
 
-            assertEquals(
-                    List.of(
-                            "/capy/lang/SelectionTest.\"first\"",
-                            "/capy/lang/SelectionTest.\"second\""
-                    ),
-                    TestRunner.availableTests(List.of(testFile))
-            );
-        } finally {
-            TestSelection.restoreSelection(previousSelection);
-        }
+        assertEquals(
+                List.of(
+                        "/capy/lang/SelectionTest.\"first\"",
+                        "/capy/lang/SelectionTest.\"second\""
+                ),
+                TestRunner.availableTests(List.of(testFile))
+        );
     }
 
     @Test
@@ -623,21 +621,23 @@ class TestRunnerTest {
     @Test
     void shouldPrintTeamCityMessagesWhileExecutingTestFile() {
         var originalOut = System.out;
-        var previousLogType = TestLog.currentLogType();
         var stdout = new ByteArrayOutputStream();
         try {
             System.setOut(new PrintStream(stdout));
-            TestLog.setLogType(CapyTest.LogType.TEAM_CITY);
-
-            CapyTest.testFile(
+            var testFile = CapyTest.testFile(
                     "/capy/lang/StringTest.cfun",
                     List.of(CapyTest.test("starts_with should fail", () -> {
                         System.out.println("ASSERTION_BODY");
                         return capy.test.Assert.assertThat("capybara").startsWith("bara");
                     }))
             ).unsafeRun();
+            successValue(CapyTest.runTests(
+                    CapyTest.ReportType.JUNIT,
+                    PathUtil.fromJavaPath(tempDir),
+                    CapyTest.LogType.TEAM_CITY,
+                    List.of(testFile)
+            ).unsafeRun());
         } finally {
-            TestLog.setLogType(previousLogType);
             System.setOut(originalOut);
         }
 
@@ -670,7 +670,13 @@ class TestRunnerTest {
     }
 
     private static TestCase passed(String name) {
-        return new TestCase(name, CapyTest.Passed.INSTANCE, 1, 0.0);
+        return new TestCase(
+                name,
+                CapyTest.Passed.INSTANCE,
+                1,
+                0.0,
+                () -> capy.test.Assert.assertThat("capybara").startsWith("capy")
+        );
     }
 
     private static TestCase failed(String name, String message) {
@@ -678,7 +684,13 @@ class TestRunnerTest {
     }
 
     private static TestCase failed(String name, String message, String type) {
-        return new TestCase(name, new CapyTest.Failed(message, type), 1, 0.0);
+        return new TestCase(
+                name,
+                new CapyTest.Failed(message, type),
+                1,
+                0.0,
+                () -> capy.test.Assert.assertThat("capybara").startsWith("capy")
+        );
     }
 
     private static String controlCharacters() {
