@@ -106,7 +106,6 @@ public final class TestSelection {
                 filteredFiles.add(new CapyTest.TestFile(
                         testFile.file_name(),
                         filteredCases,
-                        testFile.timestamp(),
                         testFile.timestamp_millis()
                 ));
             }

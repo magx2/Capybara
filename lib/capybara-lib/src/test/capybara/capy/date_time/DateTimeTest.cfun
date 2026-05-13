@@ -25,6 +25,7 @@ fun tests(): Effect[TestFile] =
         [_test_unix_epoch()]
         + _datetime_test_to_iso_8601()
         + _test_timestamp()
+        + _test_from_timestamp()
         + _test_plus()
         + _test_minus_duration()
         + _test_minus_datetime()
@@ -67,6 +68,18 @@ fun _test_timestamp(): List[Effect[TestCase]] =
     ] | (datetime, expected) => test(
         "{datetime}.timestamp() should return the correct Unix timestamp",
         () => assert_that(datetime.timestamp()).is_equal_to(expected))).as_list()
+
+fun _test_from_timestamp(): List[Effect[TestCase]] =
+    ([
+        (0L, _at(0, 0)),
+        (86400L, _at(1, 0)),
+        (3600L, _at(0, 3600)),
+        (1L, _at(0, 1)),
+        (-1L, _at(-1, 86399)),
+        (90000L, _at(1, 3600)),
+    ] | (timestamp, expected) => test(
+        "DateTime.from_timestamp should convert {timestamp} to DateTime",
+        () => assert_that(/capy/date_time/DateTime.from_timestamp(timestamp)).is_equal_to(expected))).as_list()
 
 fun _test_plus(): List[Effect[TestCase]] =
     let epoch_date = UNIX_DATE

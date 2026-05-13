@@ -12,9 +12,10 @@ from /capy/collection/Dict import { * }
 from /capy/lang/Effect import { * }
 from /capy/date_time/Clock import { now }
 from /capy/date_time/DateTime import { * }
+from /capy/lang/Math import { floor_div }
 from /capy/lang/System import { nano_time }
 
-data TestFile { file_name: String, test_cases: List[TestCase], timestamp: String, timestamp_millis: long }
+data TestFile { file_name: String, test_cases: List[TestCase], timestamp_millis: long }
 data TestCase { name: String, result: TestResult, assertions_count: int, execution_time: double }
 type TestResult = Passed | Failed
 single Passed
@@ -43,7 +44,6 @@ fun test_file(file_name: String, test_cases: List[Effect[TestCase]]): Effect[Tes
     TestFile {
         file_name: file_name,
         test_cases: executed_test_cases,
-        timestamp: current.to_iso_8601(),
         timestamp_millis: current.timestamp() * 1000L
     }
 
@@ -557,7 +557,8 @@ private fun junit_run_test(test_file: TestFile): TestOutput =
     let assertions = test_file.test_cases |> 0, (acc, tc) => acc + tc.assertions_count
     let suite_name = junit_escape_xml_attribute(test_file.file_name)
     let time = test_file.test_cases |> 0.0, (acc, tc) => acc + tc.execution_time
-    let content = "<testsuite name=\"{suite_name}\" tests=\"{tests}\" failures=\"{failures}\" errors=\"0\" skipped=\"0\" assertions=\"{assertions}\" time=\"{time}\" timestamp=\"{test_file.timestamp}\">"
+    let timestamp = test_file_timestamp(test_file)
+    let content = "<testsuite name=\"{suite_name}\" tests=\"{tests}\" failures=\"{failures}\" errors=\"0\" skipped=\"0\" assertions=\"{assertions}\" time=\"{time}\" timestamp=\"{timestamp}\">"
     + (test_file.test_cases |> '', (acc, tc) => acc + junit_run_test_case(test_file.file_name, tc))
     + '</testsuite>'
     TestOutput {
@@ -665,7 +666,10 @@ private fun ctrf_status(test_case: TestCase): String =
 private fun ctrf_timestamp(test_files: List[TestFile]): String =
     match test_files[0] with
     case None -> '1970-01-01T00:00:00Z'
-    case Some { test_file } -> test_file.timestamp
+    case Some { test_file } -> test_file_timestamp(test_file)
+
+private fun test_file_timestamp(test_file: TestFile): String =
+    from_timestamp(floor_div(test_file.timestamp_millis, 1000L)).to_iso_8601()
 
 private fun ctrf_start_millis(test_files: List[TestFile]): long =
     match test_files[0] with

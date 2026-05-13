@@ -16,6 +16,17 @@ const UNIX_EPOCH: DateTime = DateTime { date: UNIX_DATE, time: MIDNIGHT }
 /// Returns Unix timestamp (seconds since `1970-01-01T00:00:00Z`).
 fun DateTime.timestamp(): long = 1L * this.date.to_days_since_unix_epoch() * SECONDS_IN_DAY + this.time.to_seconds()
 
+/// Converts a Unix timestamp (seconds since `1970-01-01T00:00:00Z`) to a `DateTime`.
+fun from_timestamp(timestamp: long): DateTime =
+    let seconds_in_day = 1L * SECONDS_IN_DAY
+    let days = floor_div(timestamp, seconds_in_day)
+    let seconds = floor_mod(timestamp, seconds_in_day)
+    let midnight = MIDNIGHT
+    DateTime {
+        date: from_days_since_unix_epoch(clamp_long_to_int(days)),
+        time: midnight.add_seconds(clamp_long_to_int(seconds))
+    }
+
 /// Adds a `Duration` to this `DateTime`.
 fun DateTime.plus(duration: Duration): DateTime =
     let date_with_months = this.date.add_years_months(duration.years(), duration.months())
