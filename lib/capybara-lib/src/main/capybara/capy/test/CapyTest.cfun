@@ -666,8 +666,12 @@ private fun ctrf_status(test_case: TestCase): String =
 
 private fun ctrf_timestamp(test_files: List[TestFile]): String =
     match test_files[0] with
-    case None -> '1970-01-01T00:00:00Z'
+    case None -> unix_epoch_timestamp()
     case Some { test_file } -> test_file_timestamp(test_file)
+
+private fun unix_epoch_timestamp(): String =
+    let epoch = UNIX_EPOCH
+    epoch.to_iso_8601()
 
 private fun test_file_timestamp(test_file: TestFile): String =
     from_timestamp(floor_div(test_file.timestamp_millis, 1000L)).to_iso_8601()
