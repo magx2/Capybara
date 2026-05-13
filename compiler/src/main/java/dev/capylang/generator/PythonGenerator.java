@@ -1560,7 +1560,7 @@ public final class PythonGenerator implements Generator {
             exports.put("capy.date_time.DateModule", Set.of("Date", "__constructor__data__Date", "capy__constructorDataDate", "UNIX_DATE", "fromIso8601", "from_iso_8601"));
             exports.put("capy.date_time.TimeModule", Set.of("Time", "__constructor__data__Time", "capy__constructorDataTime", "fromIso8601", "from_iso_8601"));
             exports.put("capy.date_time.DurationModule", Set.of("DateDuration", "WeekDuration", "ZERO", "fromIso8601", "from_iso_8601"));
-            exports.put("capy.date_time.DateTimeModule", Set.of("DateTime", "UNIX_EPOCH", "fromIso8601", "from_iso_8601"));
+            exports.put("capy.date_time.DateTimeModule", Set.of("DateTime", "UNIX_EPOCH", "fromTimestamp", "from_timestamp", "fromIso8601", "from_iso_8601"));
             exports.put("capy.date_time.Interval", Set.of("DateTimeDurationEnd", "DateTimeStartDuration", "DateTimeStartEnd", "fromIso8601", "from_iso_8601"));
             exports.put("capy.date_time.Clock", Set.of("now"));
             exports.put("capy.test.Assert", Set.of("assert_all", "assertAll", "assert_that", "assertThat"));
@@ -1932,6 +1932,8 @@ public final class PythonGenerator implements Generator {
                     import dev.capylang.capybara as capy
                     DateTime = capy.DateTime
                     UNIX_EPOCH = uNIXEPOCH = DateTime({'date': capy.Date({'day': 1, 'month': 1, 'year': 1970}), 'time': capy.Time({'hour': 0, 'minute': 0, 'second': 0, 'offset_minutes': capy.None_})})
+                    fromTimestamp = capy.date_time_from_timestamp
+                    from_timestamp = fromTimestamp
                     fromIso8601 = capy.date_time_from_iso
                     from_iso_8601 = fromIso8601
                     """;
@@ -3171,6 +3173,10 @@ public final class PythonGenerator implements Generator {
                         def __str__(self): return self.toIso8601()
                         def toString(self): return str(self)
                         def capybaraDataValueInfo(self): return data_value_info(self, 'DateTime', 'capy.date_time', 'capy/date_time/DateTimeModule', ['date', 'time'])
+
+                    def date_time_from_timestamp(timestamp):
+                        days, seconds = divmod(int(timestamp), 86400)
+                        return DateTime({'date': _date_from_days(days), 'time': Time({'hour': seconds // 3600, 'minute': (seconds % 3600) // 60, 'second': seconds % 60, 'offset_minutes': None_})})
 
                     def _split_time_offset(value):
                         if value.endswith('Z'):

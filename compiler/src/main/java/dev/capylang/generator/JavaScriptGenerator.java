@@ -1613,7 +1613,8 @@ public final class JavaScriptGenerator implements Generator {
             exports.put("capy.date_time.DurationModule", Set.of(
                     "DateDuration", "WeekDuration", "zERO", "ZERO", "fromIso8601", "from_iso_8601"));
             exports.put("capy.date_time.DateTimeModule", Set.of(
-                    "DateTime", "uNIXEPOCH", "UNIX_EPOCH", "fromIso8601", "from_iso_8601"));
+                    "DateTime", "uNIXEPOCH", "UNIX_EPOCH", "fromTimestamp", "from_timestamp",
+                    "fromIso8601", "from_iso_8601"));
             exports.put("capy.date_time.Interval", Set.of(
                     "DateTimeDurationEnd", "DateTimeStartDuration", "DateTimeStartEnd", "fromIso8601", "from_iso_8601"));
             exports.put("capy.date_time.Clock", Set.of("now"));
@@ -3100,13 +3101,18 @@ public final class JavaScriptGenerator implements Generator {
                             return this.toIso8601();
                         }
                         static fromTimestamp(timestamp) {
-                            const days = Math.floor(timestamp / 86400);
-                            const seconds = ((timestamp % 86400) + 86400) % 86400;
+                            const normalizedTimestamp = Number(timestamp);
+                            const days = Math.floor(normalizedTimestamp / TimeModule.sECONDSINDAY);
+                            const seconds = ((normalizedTimestamp % TimeModule.sECONDSINDAY) + TimeModule.sECONDSINDAY) % TimeModule.sECONDSINDAY;
                             return new DateTime({
                                 date: DateModule.fromDaysSinceUnixEpoch(days),
                                 time: TimeModule.mIDNIGHT.addSeconds(seconds),
                             });
                         }
+                    }
+
+                    function fromTimestamp(timestamp) {
+                        return DateTime.fromTimestamp(timestamp);
                     }
 
                     function scanSplit(value) {
@@ -3160,6 +3166,8 @@ public final class JavaScriptGenerator implements Generator {
                         DateTime,
                         uNIXEPOCH,
                         UNIX_EPOCH,
+                        fromTimestamp,
+                        from_timestamp: fromTimestamp,
                         fromIso8601,
                         from_iso_8601: fromIso8601,
                     };

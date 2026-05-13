@@ -669,7 +669,7 @@ class TestRunnerTest {
     }
 
     private static TestFile testFile(String fileName, TestCase... testCases) {
-        return new TestFile(fileName, List.of(testCases), "1970-01-01T00:00:00Z", 0L);
+        return new TestFile(fileName, List.of(testCases), 0L);
     }
 
     private static TestCase passed(String name) {
