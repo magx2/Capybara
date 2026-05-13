@@ -287,6 +287,40 @@ class JavaScriptGeneratorTest {
     }
 
     @Test
+    void shouldResolveImportedEnumQualifierStaticCall() throws Exception {
+        var program = compileProgram(List.of(
+                new RawModule("Modes", "/foo/lib", """
+                        enum RoundMode { FLOOR, HALF_EVEN }
+                        """),
+                new RawModule("Consumer", "/foo/app", """
+                        from /foo/lib/Modes import { RoundMode }
+                        from /capy/lang/Result import { * }
+
+                        fun parsed_name(): String =
+                            match RoundMode.parse('HALF_EVEN') with
+                            case Success _ -> 'parsed'
+                            case Error _ -> 'error'
+                        """)
+        ));
+
+        var generated = new JavaScriptGenerator().generate(program);
+        writeGenerated(generated);
+
+        var consumer = generated.modules().stream()
+                .filter(module -> module.relativePath().equals(Path.of("foo", "app", "Consumer.js")))
+                .findFirst()
+                .orElseThrow();
+        assertThat(consumer.code()).contains("__module_foo_lib_Modes.RoundMode.parse(\"HALF_EVEN\")");
+
+        var output = runNode("""
+                const m = require('./foo/app/Consumer.js');
+                console.log(m.parsedName());
+                """);
+
+        assertThat(output).isEqualTo("parsed");
+    }
+
+    @Test
     void shouldSkipRuntimeProvidedStdlibSources() {
         var generated = new JavaScriptGenerator().generate(new CompiledProgram(List.of(
                 runtimeModule("List", "/capy/collection"),

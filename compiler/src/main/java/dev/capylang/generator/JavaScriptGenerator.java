@@ -1203,6 +1203,13 @@ public final class JavaScriptGenerator implements Generator {
                 if (programContext.localTypeNames(moduleInfo.className()).contains(localTypeName)) {
                     return localTypeName + "." + emittedName;
                 }
+                var importedOwner = programContext.importedMemberOwner(moduleInfo.className(), localTypeName)
+                        .or(() -> programContext.importedMemberOwner(moduleInfo.className(), normalizeJsIdentifier(localTypeName)));
+                if (importedOwner.isPresent()) {
+                    var ownerClassName = programContext.resolveClassName(importedOwner.orElseThrow()).orElse(importedOwner.orElseThrow());
+                    require(ownerClassName);
+                    return moduleVar(ownerClassName) + "." + localTypeName + "." + emittedName;
+                }
                 var resolvedClassName = programContext.resolveClassName(className).orElse(className);
                 require(resolvedClassName);
                 return moduleVar(resolvedClassName) + "." + emittedName;
@@ -1234,7 +1241,7 @@ public final class JavaScriptGenerator implements Generator {
         }
 
         private String dataConstructorReference(CompiledDataType dataType) {
-            var typeName = simpleTypeName(dataType.name());
+            var typeName = programContext.emittedTypeName(moduleInfo.className(), dataType.name());
             if (programContext.localTypeNames(moduleInfo.className()).contains(typeName)) {
                 return typeName;
             }
@@ -1453,15 +1460,13 @@ public final class JavaScriptGenerator implements Generator {
                         continue;
                     }
                     var className = staticImport.substring(0, idx);
-                    var resolvedClassName = classNameCandidates(className).stream()
-                            .filter(exports::containsKey)
-                            .findFirst()
-                            .orElse(className);
+                    var resolvedClassName = resolveStaticImportOwner(className, exports);
                     var memberName = staticImport.substring(idx + 1);
                     if ("*".equals(memberName)) {
                         exports.getOrDefault(resolvedClassName, Set.of()).forEach(member -> imported.putIfAbsent(member, resolvedClassName));
                     } else {
                         imported.putIfAbsent(memberName, resolvedClassName);
+                        imported.putIfAbsent(simpleTypeName(memberName), resolvedClassName);
                         imported.putIfAbsent(normalizeJsIdentifier(memberName), resolvedClassName);
                     }
                 }
@@ -1484,9 +1489,7 @@ public final class JavaScriptGenerator implements Generator {
         }
 
         Optional<String> resolveClassName(String className) {
-            return classNameCandidates(className).stream()
-                    .filter(pathsByClassName::containsKey)
-                    .findFirst();
+            return resolveClassName(className, pathsByClassName.keySet());
         }
 
         Optional<String> importedMemberOwner(String className, String memberName) {
@@ -1497,6 +1500,27 @@ public final class JavaScriptGenerator implements Generator {
             return pathsByClassName.keySet().stream()
                     .filter(className -> moduleVar(className).equals(moduleVariable))
                     .findFirst();
+        }
+
+        private static String resolveStaticImportOwner(String className, Map<String, Set<String>> exports) {
+            return resolveClassName(className, exports.keySet()).orElse(className);
+        }
+
+        private static Optional<String> resolveClassName(String className, Set<String> knownClassNames) {
+            var current = className;
+            while (true) {
+                var resolved = classNameCandidates(current).stream()
+                        .filter(knownClassNames::contains)
+                        .findFirst();
+                if (resolved.isPresent()) {
+                    return resolved;
+                }
+                var idx = current.lastIndexOf('.');
+                if (idx < 0) {
+                    return Optional.empty();
+                }
+                current = current.substring(0, idx);
+            }
         }
 
         Optional<String> exportedMemberOwner(String memberName) {
@@ -1584,7 +1608,10 @@ public final class JavaScriptGenerator implements Generator {
             exports.put("capy.lang.RegexModule", Set.of("fromLiteral"));
             exports.put("capy.lang.Seq", Set.of("to_seq", "toSeq"));
             exports.put("capy.lang.System", Set.of("current_millis", "currentMillis", "nano_time", "nanoTime"));
-            exports.put("capy.lang.Math", Set.of("digits", "floor_div", "floorDiv", "floor_mod", "floorMod", "min", "max"));
+            exports.put("capy.lang.Math", Set.of(
+                    "digits", "floor_div", "floorDiv", "floor_mod", "floorMod", "min", "max",
+                    "RoundMode", "FLOOR", "CEILING", "HALF_UP", "HALF_DOWN", "HALF_EVEN", "round"
+            ));
             exports.put("capy.collection.List", Set.of("size", "get", "is_empty", "plus", "minus", "contains", "any", "all", "map", "filter", "reject", "flat_map", "flatMap", "reduce"));
             exports.put("capy.collection.Set", Set.of("size", "to_list", "is_empty", "plus", "minus", "contains", "any", "all", "map", "filter", "reject", "flat_map", "flatMap", "reduce"));
             exports.put("capy.collection.Dict", Set.of("size", "entries", "get", "is_empty", "plus", "minus", "contains_key", "any", "all", "map", "filter", "reject", "reduce"));
@@ -1926,6 +1953,30 @@ public final class JavaScriptGenerator implements Generator {
             return """
                     'use strict';
                     const capy = require('../../dev/capylang/capybara.js');
+                    const RoundMode = (() => {
+                        const values = [
+                            capy.enumValue('FLOOR', 'RoundMode', ['RoundMode'], 0, [], 'capy.lang', 'capy/lang/Math'),
+                            capy.enumValue('CEILING', 'RoundMode', ['RoundMode'], 1, [], 'capy.lang', 'capy/lang/Math'),
+                            capy.enumValue('HALF_UP', 'RoundMode', ['RoundMode'], 2, [], 'capy.lang', 'capy/lang/Math'),
+                            capy.enumValue('HALF_DOWN', 'RoundMode', ['RoundMode'], 3, [], 'capy.lang', 'capy/lang/Math'),
+                            capy.enumValue('HALF_EVEN', 'RoundMode', ['RoundMode'], 4, [], 'capy.lang', 'capy/lang/Math'),
+                        ];
+                        return Object.freeze({
+                            FLOOR: values[0],
+                            CEILING: values[1],
+                            HALF_UP: values[2],
+                            HALF_DOWN: values[3],
+                            HALF_EVEN: values[4],
+                            values,
+                            valuesSet: () => capy.set(values),
+                            parse: value => capy.parseEnum(value, values, 'RoundMode'),
+                        });
+                    })();
+                    const FLOOR = RoundMode.FLOOR;
+                    const CEILING = RoundMode.CEILING;
+                    const HALF_UP = RoundMode.HALF_UP;
+                    const HALF_DOWN = RoundMode.HALF_DOWN;
+                    const HALF_EVEN = RoundMode.HALF_EVEN;
                     function floorDiv(left, right) {
                         if (typeof left === 'bigint' || typeof right === 'bigint') {
                             const dividend = capy.toLong(left);
@@ -1952,7 +2003,49 @@ public final class JavaScriptGenerator implements Generator {
                     }
                     const min = (left, right) => left < right ? left : right;
                     const max = (left, right) => left > right ? left : right;
+                    const roundFloor = value => capy.floatToLong(Math.floor(Number(value)));
+                    const roundCeiling = value => capy.floatToLong(Math.ceil(Number(value)));
+                    function roundNearest(value, tieBreaker) {
+                        const lower = roundFloor(value);
+                        const upper = roundCeiling(value);
+                        const lowerDiff = Number(value) - Number(lower);
+                        const upperDiff = Number(upper) - Number(value);
+                        if (lowerDiff < upperDiff) {
+                            return lower;
+                        }
+                        if (lowerDiff > upperDiff) {
+                            return upper;
+                        }
+                        return tieBreaker(lower, upper);
+                    }
+                    const halfUp = value => roundNearest(value, (lower, upper) => Number(value) < 0.0 ? lower : upper);
+                    const halfDown = value => roundNearest(value, (lower, upper) => Number(value) < 0.0 ? upper : lower);
+                    const halfEven = value => roundNearest(value, (lower, upper) => lower % 2n === 0n ? lower : upper);
+                    function round(value, mode) {
+                        if (capy.isType(mode, 'FLOOR')) {
+                            return roundFloor(value);
+                        }
+                        if (capy.isType(mode, 'CEILING')) {
+                            return roundCeiling(value);
+                        }
+                        if (capy.isType(mode, 'HALF_UP')) {
+                            return halfUp(value);
+                        }
+                        if (capy.isType(mode, 'HALF_DOWN')) {
+                            return halfDown(value);
+                        }
+                        if (capy.isType(mode, 'HALF_EVEN')) {
+                            return halfEven(value);
+                        }
+                        throw new Error('Unexpected RoundMode: ' + capy.toStringValue(mode));
+                    }
                     module.exports = {
+                        RoundMode,
+                        FLOOR,
+                        CEILING,
+                        HALF_UP,
+                        HALF_DOWN,
+                        HALF_EVEN,
                         digits,
                         floorDiv,
                         floor_div: floorDiv,
@@ -1960,6 +2053,7 @@ public final class JavaScriptGenerator implements Generator {
                         floor_mod: floorMod,
                         min,
                         max,
+                        round,
                     };
                     """;
         }

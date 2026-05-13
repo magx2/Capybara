@@ -38,6 +38,7 @@ import static dev.capylang.compiler.PrimitiveLinkedType.ANY;
 
 class JavaExpressionEvaluatorTest {
     private static final Object STANDARD_LIBRARY_LOCK = new Object();
+    private static final Object GENERATED_JAVA_COMPILER_LOCK = new Object();
     private static Path standardLibraryClassesDir;
 
     @TempDir
@@ -428,6 +429,28 @@ class JavaExpressionEvaluatorTest {
         assertThat(generated)
                 .contains("return PathRoot.ABSOLUTE;")
                 .contains("return PathRoot.RELATIVE;");
+        assertGeneratedJavaCompiles(generatedProgram);
+    }
+
+    @Test
+    void shouldQualifyImportedEnumValuesInGeneratedJava() {
+        var generatedProgram = new JavaGenerator().generate(compileProgram(List.of(
+                new RawModule("Modes", "/foo/lib", """
+                        enum RoundMode { FLOOR, HALF_EVEN }
+                        """),
+                new RawModule("Consumer", "/foo/app", """
+                        from /foo/lib/Modes import { HALF_EVEN, RoundMode }
+
+                        fun selected(): RoundMode = HALF_EVEN
+                        """)
+        )));
+        var generated = generatedProgram.modules().stream()
+                .filter(module -> module.relativePath().equals(Path.of("foo", "app", "Consumer.java")))
+                .map(dev.capylang.generator.GeneratedModule::code)
+                .findFirst()
+                .orElseThrow();
+
+        assertThat(generated).contains("return foo.lib.Modes.RoundMode.HALF_EVEN;");
         assertGeneratedJavaCompiles(generatedProgram);
     }
 
@@ -1397,29 +1420,36 @@ class JavaExpressionEvaluatorTest {
                             .toList());
                 }
             }
-            var diagnostics = new DiagnosticCollector<JavaFileObject>();
-            var output = new StringWriter();
-            try (var fileManager = compiler.getStandardFileManager(diagnostics, Locale.ROOT, StandardCharsets.UTF_8)) {
-                var compilationUnits = fileManager.getJavaFileObjectsFromFiles(javaFiles.stream().map(Path::toFile).toList());
-                var classpathEntries = Stream.concat(
-                                Stream.of(System.getProperty("java.class.path")),
-                                Stream.of(
-                                                resolveRepositoryPath("lib/capybara-lib/build/classes/java/main"),
-                                                ensureStandardLibraryClasses()
-                                        )
-                                        .filter(Objects::nonNull)
-                                        .filter(Files::exists)
-                                        .map(Path::toString))
-                        .collect(joining(System.getProperty("path.separator")));
-                var options = List.of(
-                        "--release", "21",
-                        "-classpath", classpathEntries,
-                        "-d", classesDir.toString()
-                );
-                var success = compiler.getTask(new PrintWriter(output), fileManager, diagnostics, options, null, compilationUnits).call();
-                assertThat(success)
-                        .as(diagnostics.getDiagnostics().stream().map(Objects::toString).collect(joining(System.lineSeparator())))
-                        .isTrue();
+            synchronized (GENERATED_JAVA_COMPILER_LOCK) {
+                var diagnostics = new DiagnosticCollector<JavaFileObject>();
+                var output = new StringWriter();
+                try (var fileManager = compiler.getStandardFileManager(diagnostics, Locale.ROOT, StandardCharsets.UTF_8)) {
+                    var compilationUnits = fileManager.getJavaFileObjectsFromFiles(javaFiles.stream().map(Path::toFile).toList());
+                    var classpathEntries = Stream.concat(
+                                    Stream.of(System.getProperty("java.class.path")),
+                                    Stream.of(
+                                                    resolveRepositoryPath("lib/capybara-lib/build/classes/java/main"),
+                                                    ensureStandardLibraryClasses()
+                                            )
+                                            .filter(Objects::nonNull)
+                                            .filter(Files::exists)
+                                            .map(Path::toString))
+                            .collect(joining(System.getProperty("path.separator")));
+                    var options = List.of(
+                            "--release", "21",
+                            "-classpath", classpathEntries,
+                            "-d", classesDir.toString()
+                    );
+                    var success = compiler.getTask(new PrintWriter(output), fileManager, diagnostics, options, null, compilationUnits).call();
+                    var compilerMessages = Stream.of(
+                                    diagnostics.getDiagnostics().stream().map(Objects::toString).collect(joining(System.lineSeparator())),
+                                    output.toString())
+                            .filter(message -> !message.isBlank())
+                            .collect(joining(System.lineSeparator()));
+                    assertThat(success)
+                            .as(compilerMessages)
+                            .isTrue();
+                }
             }
         } catch (Exception e) {
             throw new AssertionError("Unable to compile generated Java", e);

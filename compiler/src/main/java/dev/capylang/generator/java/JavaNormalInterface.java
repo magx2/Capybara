@@ -2,7 +2,7 @@ package dev.capylang.generator.java;
 
 import java.util.List;
 
-public record JavaNormalInterface(JavaType name, List<String> comments, List<JavaInterfaceMethod> methods, List<JavaMethod> defaultMethods) implements JavaInterface, Comparable<JavaNormalInterface> {
+public record JavaNormalInterface(JavaType name, List<String> comments, List<JavaInterfaceMethod> methods, List<JavaMethod> defaultMethods) implements JavaInterface {
     @Override
     public final boolean equals(Object o) {
         if (!(o instanceof JavaNormalInterface that)) return false;
@@ -15,8 +15,4 @@ public record JavaNormalInterface(JavaType name, List<String> comments, List<Jav
         return name.hashCode();
     }
 
-    @Override
-    public int compareTo(JavaNormalInterface o) {
-        return name.compareTo(o.name);
-    }
 }

@@ -116,3 +116,108 @@ fun max(values: List[long]): Option[long] =
     match values[0] with
     case None -> None {}
     case Some { v } -> Some { __max(v, values[1:]) }
+
+enum RoundMode { FLOOR, CEILING, HALF_UP, HALF_DOWN, HALF_EVEN }
+
+/// Rounds `value` to a `long` using the selected `RoundMode`.
+///
+/// Use `FLOOR` and `CEILING` when the direction matters more than nearest
+/// integer distance. Use the `HALF_*` modes when values should normally round
+/// to the nearest whole number and only need a specific policy for `.5` ties.
+///
+/// The modes are:
+///
+/// - `FLOOR`: always round toward negative infinity.
+/// - `CEILING`: always round toward positive infinity.
+/// - `HALF_UP`: round to the nearest value and move ties away from zero.
+/// - `HALF_DOWN`: round to the nearest value and move ties toward zero.
+/// - `HALF_EVEN`: round to the nearest value and move ties to the even neighbor.
+///
+/// Example:
+/// ```cfun
+/// from /capy/lang/Math import { HALF_EVEN, round }
+///
+/// fun cents_from_dollars(amount: double): long =
+///     round(amount * 100.0, HALF_EVEN)
+/// ```
+///
+/// The `HALF_*` modes all agree when there is a clear nearest whole number.
+/// They only differ for exact ties, which are values exactly halfway between
+/// two whole numbers:
+///
+/// ```cfun
+/// from /capy/lang/Math import { HALF_DOWN, HALF_EVEN, HALF_UP, round }
+///
+/// let half_up = round(2.5, HALF_UP)          // 3L
+/// let half_down = round(2.5, HALF_DOWN)      // 2L
+/// let half_even_low = round(2.5, HALF_EVEN)  // 2L
+/// let half_even_high = round(3.5, HALF_EVEN) // 4L
+/// ```
+///
+/// Negative ties keep the same mode-specific meaning. `HALF_UP` moves away
+/// from zero, while `HALF_DOWN` moves toward zero:
+///
+/// ```cfun
+/// from /capy/lang/Math import { HALF_DOWN, HALF_UP, round }
+///
+/// let away_from_zero = round(-1.5, HALF_UP) // -2L
+/// let toward_zero = round(-1.5, HALF_DOWN)  // -1L
+/// ```
+fun round(value: double, mode: RoundMode): long =
+    match mode with
+    case FLOOR -> floor(value)
+    case CEILING -> ceiling(value)
+    case HALF_UP -> half_up(value)
+    case HALF_DOWN -> half_down(value)
+    case HALF_EVEN -> half_even(value)
+
+private fun floor(value: double): long =
+    let truncated = value.to_long()
+    if value < truncated
+    then truncated - 1L
+    else truncated
+
+private fun ceiling(value: double): long =
+    let truncated = value.to_long()
+    if value > truncated
+    then truncated + 1L
+    else truncated
+
+private fun half_up(value: double): long =
+    let lower = floor(value)
+    let upper = ceiling(value)
+    let lower_diff = value - lower
+    let upper_diff = upper - value
+    if lower_diff < upper_diff
+    then lower
+    else if lower_diff > upper_diff
+        then upper
+        else if value < 0.0
+            then lower
+            else upper
+
+private fun half_down(value: double): long =
+    let lower = floor(value)
+    let upper = ceiling(value)
+    let lower_diff = value - lower
+    let upper_diff = upper - value
+    if lower_diff < upper_diff
+    then lower
+    else if lower_diff > upper_diff
+        then upper
+        else if value < 0.0
+            then upper
+            else lower
+
+private fun half_even(value: double): long =
+    let lower = floor(value)
+    let upper = ceiling(value)
+    let lower_diff = value - lower
+    let upper_diff = upper - value
+    if lower_diff < upper_diff
+    then lower
+    else if lower_diff > upper_diff
+        then upper
+        else if floor_mod(lower, 2L) == 0L
+            then lower
+            else upper

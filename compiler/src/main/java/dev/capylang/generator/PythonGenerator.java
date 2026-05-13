@@ -1159,6 +1159,13 @@ public final class PythonGenerator implements Generator {
                 if (programContext.localTypeNames(moduleInfo.className()).contains(localTypeName)) {
                     return localTypeName + "." + emittedName;
                 }
+                var importedOwner = programContext.importedMemberOwner(moduleInfo.className(), localTypeName)
+                        .or(() -> programContext.importedMemberOwner(moduleInfo.className(), pyIdentifier(localTypeName)));
+                if (importedOwner.isPresent()) {
+                    var ownerClassName = programContext.resolveClassName(importedOwner.orElseThrow()).orElse(importedOwner.orElseThrow());
+                    require(ownerClassName);
+                    return moduleVar(ownerClassName) + "." + localTypeName + "." + emittedName;
+                }
                 var resolvedClassName = programContext.resolveClassName(className).orElse(className);
                 require(resolvedClassName);
                 return moduleVar(resolvedClassName) + "." + emittedName;
@@ -1190,7 +1197,7 @@ public final class PythonGenerator implements Generator {
         }
 
         private String dataConstructorReference(CompiledDataType dataType) {
-            var typeName = simpleTypeName(dataType.name());
+            var typeName = programContext.emittedTypeName(moduleInfo.className(), dataType.name());
             if (programContext.localTypeNames(moduleInfo.className()).contains(typeName)) {
                 return typeName;
             }
@@ -1413,15 +1420,13 @@ public final class PythonGenerator implements Generator {
                         continue;
                     }
                     var className = staticImport.substring(0, idx);
-                    var resolvedClassName = classNameCandidates(className).stream()
-                            .filter(exports::containsKey)
-                            .findFirst()
-                            .orElse(className);
+                    var resolvedClassName = resolveStaticImportOwner(className, exports);
                     var memberName = staticImport.substring(idx + 1);
                     if ("*".equals(memberName)) {
                         exports.getOrDefault(resolvedClassName, Set.of()).forEach(member -> imported.putIfAbsent(member, resolvedClassName));
                     } else {
                         imported.putIfAbsent(memberName, resolvedClassName);
+                        imported.putIfAbsent(simpleTypeName(memberName), resolvedClassName);
                         imported.putIfAbsent(pyIdentifier(memberName), resolvedClassName);
                     }
                 }
@@ -1444,9 +1449,7 @@ public final class PythonGenerator implements Generator {
         }
 
         Optional<String> resolveClassName(String className) {
-            return classNameCandidates(className).stream()
-                    .filter(pathsByClassName::containsKey)
-                    .findFirst();
+            return resolveClassName(className, pathsByClassName.keySet());
         }
 
         Optional<String> importedMemberOwner(String className, String memberName) {
@@ -1457,6 +1460,27 @@ public final class PythonGenerator implements Generator {
             return pathsByClassName.keySet().stream()
                     .filter(className -> moduleVar(className).equals(moduleVariable))
                     .findFirst();
+        }
+
+        private static String resolveStaticImportOwner(String className, Map<String, Set<String>> exports) {
+            return resolveClassName(className, exports.keySet()).orElse(className);
+        }
+
+        private static Optional<String> resolveClassName(String className, Set<String> knownClassNames) {
+            var current = className;
+            while (true) {
+                var resolved = classNameCandidates(current).stream()
+                        .filter(knownClassNames::contains)
+                        .findFirst();
+                if (resolved.isPresent()) {
+                    return resolved;
+                }
+                var idx = current.lastIndexOf('.');
+                if (idx < 0) {
+                    return Optional.empty();
+                }
+                current = current.substring(0, idx);
+            }
         }
 
         Optional<String> exportedMemberOwner(String memberName) {
@@ -1544,7 +1568,10 @@ public final class PythonGenerator implements Generator {
             exports.put("capy.lang.RegexModule", Set.of("fromLiteral"));
             exports.put("capy.lang.Seq", Set.of("to_seq", "toSeq"));
             exports.put("capy.lang.System", Set.of("current_millis", "currentMillis", "nano_time", "nanoTime"));
-            exports.put("capy.lang.Math", Set.of("digits", "floor_div", "floorDiv", "floor_mod", "floorMod", "min", "max"));
+            exports.put("capy.lang.Math", Set.of(
+                    "digits", "floor_div", "floorDiv", "floor_mod", "floorMod", "min", "max",
+                    "RoundMode", "FLOOR", "CEILING", "HALF_UP", "HALF_DOWN", "HALF_EVEN", "round"
+            ));
             exports.put("capy.collection.List", Set.of("size", "get", "is_empty", "plus", "minus", "contains", "any", "all", "map", "filter", "reject", "flat_map", "flatMap", "reduce"));
             exports.put("capy.collection.Set", Set.of("size", "to_list", "is_empty", "plus", "minus", "contains", "any", "all", "map", "filter", "reject", "flat_map", "flatMap", "reduce"));
             exports.put("capy.collection.Dict", Set.of("size", "entries", "get", "is_empty", "plus", "minus", "contains_key", "any", "all", "map", "filter", "reject", "reduce"));
@@ -1791,6 +1818,32 @@ public final class PythonGenerator implements Generator {
             return """
                     # Generated by Capybara. Do not edit.
                     import math as __math
+                    import dev.capylang.capybara as capy
+                    _RoundMode_values = [
+                        capy.enum_value('FLOOR', 'RoundMode', ['RoundMode'], 0, [], 'capy.lang', 'capy/lang/Math'),
+                        capy.enum_value('CEILING', 'RoundMode', ['RoundMode'], 1, [], 'capy.lang', 'capy/lang/Math'),
+                        capy.enum_value('HALF_UP', 'RoundMode', ['RoundMode'], 2, [], 'capy.lang', 'capy/lang/Math'),
+                        capy.enum_value('HALF_DOWN', 'RoundMode', ['RoundMode'], 3, [], 'capy.lang', 'capy/lang/Math'),
+                        capy.enum_value('HALF_EVEN', 'RoundMode', ['RoundMode'], 4, [], 'capy.lang', 'capy/lang/Math'),
+                    ]
+                    class RoundMode:
+                        values = _RoundMode_values
+                        FLOOR = values[0]
+                        CEILING = values[1]
+                        HALF_UP = values[2]
+                        HALF_DOWN = values[3]
+                        HALF_EVEN = values[4]
+                        @staticmethod
+                        def valuesSet():
+                            return capy.set_(RoundMode.values)
+                        @staticmethod
+                        def parse(value):
+                            return capy.parse_enum(value, RoundMode.values, 'RoundMode')
+                    FLOOR = RoundMode.FLOOR
+                    CEILING = RoundMode.CEILING
+                    HALF_UP = RoundMode.HALF_UP
+                    HALF_DOWN = RoundMode.HALF_DOWN
+                    HALF_EVEN = RoundMode.HALF_EVEN
                     digits = lambda value: [int(ch) for ch in str(abs(value))]
                     floor_div = lambda left, right: left // right
                     floorDiv = floor_div
@@ -1798,6 +1851,38 @@ public final class PythonGenerator implements Generator {
                     floorMod = floor_mod
                     min = lambda left, right: left if left < right else right
                     max = lambda left, right: left if left > right else right
+                    def _round_floor(value):
+                        return capy.float_to_long(__math.floor(float(value)))
+                    def _round_ceiling(value):
+                        return capy.float_to_long(__math.ceil(float(value)))
+                    def _round_nearest(value, tie_breaker):
+                        lower = _round_floor(value)
+                        upper = _round_ceiling(value)
+                        lower_diff = float(value) - float(lower)
+                        upper_diff = float(upper) - float(value)
+                        if lower_diff < upper_diff:
+                            return lower
+                        if lower_diff > upper_diff:
+                            return upper
+                        return tie_breaker(lower, upper)
+                    def _half_up(value):
+                        return _round_nearest(value, lambda lower, upper: lower if float(value) < 0.0 else upper)
+                    def _half_down(value):
+                        return _round_nearest(value, lambda lower, upper: upper if float(value) < 0.0 else lower)
+                    def _half_even(value):
+                        return _round_nearest(value, lambda lower, upper: lower if lower % 2 == 0 else upper)
+                    def round(value, mode):
+                        if capy.is_type(mode, 'FLOOR'):
+                            return _round_floor(value)
+                        if capy.is_type(mode, 'CEILING'):
+                            return _round_ceiling(value)
+                        if capy.is_type(mode, 'HALF_UP'):
+                            return _half_up(value)
+                        if capy.is_type(mode, 'HALF_DOWN'):
+                            return _half_down(value)
+                        if capy.is_type(mode, 'HALF_EVEN'):
+                            return _half_even(value)
+                        raise ValueError('Unexpected RoundMode: ' + capy.to_string_value(mode))
                     """;
         }
 
