@@ -66,7 +66,7 @@ fun tests(): Effect[TestFile] =
         + _date_test_from_iso_8601_success()
         + _date_test_from_iso_8601_failure())
 
-fun _test_date(day: int, month: int, year: int, is_valid: bool): Effect[TestCase] =
+fun _test_date(day: int, month: int, year: int, is_valid: bool): TestCase =
     let assert: Assert =
         if is_valid
         then assert_that(Date { day, month, year })
@@ -80,14 +80,14 @@ fun _test_date(day: int, month: int, year: int, is_valid: bool): Effect[TestCase
         "Date \{ day: {day}, month: {month}, year: {year} } should be " + (if is_valid then 'valid' else 'invalid'),
         () => assert)
 
-fun _test_leap_year(): List[Effect[TestCase]] =
+fun _test_leap_year(): List[TestCase] =
     let leap_year = Date { day: 1, month: JANUARY, year: 2020 } | d => Success { d.leap_year() }
     let not_leap_year = Date { day: 1, month: JANUARY, year: 2019 } | d => Success { d.leap_year() }
     [
         test('1/1/2020 should be a leap year', () => assert_that(leap_year).succeeds(true)),
         test('1/1/2019 should not be a leap year', () => assert_that(not_leap_year).succeeds(false)) ]
 
-fun _date_test_to_iso_8601(): List[Effect[TestCase]] =
+fun _date_test_to_iso_8601(): List[TestCase] =
     ([
         (7, JANUARY, 2000, "2000-01-07"),
         (7, JANUARY, -1, "-0001-01-07"),
@@ -96,7 +96,7 @@ fun _date_test_to_iso_8601(): List[Effect[TestCase]] =
         "Date.to_iso_8601() should format {day}/{month}/{year}",
         () => assert_that(Date { day, month, year } | d => Success { d.to_iso_8601() }).succeeds(expected))).as_list()
 
-fun _date_test_from_iso_8601_success(): List[Effect[TestCase]] =
+fun _date_test_from_iso_8601_success(): List[TestCase] =
     ([
         ("2000-01-07", 7, JANUARY, 2000),
         ("20000107", 7, JANUARY, 2000),
@@ -110,7 +110,7 @@ fun _date_test_from_iso_8601_success(): List[Effect[TestCase]] =
                 .has_month(month)
                 .has_year(year)))).as_list()
 
-fun _date_test_from_iso_8601_failure(): List[Effect[TestCase]] =
+fun _date_test_from_iso_8601_failure(): List[TestCase] =
     ([
         "2000-02-30",
         "2000-01",
