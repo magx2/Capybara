@@ -12,8 +12,9 @@ from /capy/collection/Dict import { * }
 from /capy/lang/Effect import { * }
 from /capy/date_time/Clock import { now }
 from /capy/date_time/DateTime import { * }
-from /capy/lang/Math import { floor_div }
+from /capy/lang/Math import { floor_div, HALF_EVEN, round }
 from /capy/lang/System import { nano_time }
+from /capy/lang/TimeUnit import { * }
 from /capy/serialization/Json import { JsonString, stringify }
 
 data TestFile { file_name: String, test_cases: List[TestCase], timestamp_millis: long }
@@ -686,7 +687,7 @@ private fun ctrf_total_duration_millis(test_files: List[TestFile]): long =
         acc + (test_file.test_cases |> 0L, (test_acc, test_case) => test_acc + ctrf_duration_millis(test_case))
 
 private fun ctrf_duration_millis(test_case: TestCase): long =
-    (test_case.execution_time * 1000.0).to_long()
+    Second { value: round(test_case.execution_time, HALF_EVEN) }.to_milli_seconds().value
 
 private fun ctrf_tests_count(test_files: List[TestFile]): int =
     test_files |> 0, (acc, test_file) => acc + test_file.test_cases.size()
