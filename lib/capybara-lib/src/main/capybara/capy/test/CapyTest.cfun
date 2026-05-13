@@ -14,6 +14,7 @@ from /capy/date_time/Clock import { now }
 from /capy/date_time/DateTime import { * }
 from /capy/lang/Math import { floor_div }
 from /capy/lang/System import { nano_time }
+from /capy/serialization/Json import { JsonString, stringify }
 
 data TestFile { file_name: String, test_cases: List[TestCase], timestamp_millis: long }
 data TestCase { name: String, result: TestResult, assertions_count: int, execution_time: double }
@@ -697,9 +698,7 @@ private fun ctrf_failed_count(test_files: List[TestFile]): int =
 private fun ctrf_comma(value: String): String = if value.is_empty() then '' else ','
 
 private fun ctrf_json_string(value: String): String =
-    '"' + ctrf_json_escape(value) + '"'
-
-private fun ctrf_json_escape(value: String): String = <native>
+    stringify(JsonString { value })
 
 private fun jest_run_tests(test_files: List[TestFile]): List[TestOutput] = [
     TestOutput {

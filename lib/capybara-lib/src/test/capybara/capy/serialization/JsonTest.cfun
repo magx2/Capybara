@@ -55,6 +55,7 @@ fun tests(): Effect[TestFile] =
         test("should serialize object with primitive types", () => test_serialize_object_with_primitive_types()),
         test("should serialize object with list", () => test_serialize_object_with_list()),
         test("should stringify top-level json values", () => should_stringify_top_level_json_values()),
+        test("should escape JSON strings", () => should_escape_json_strings()),
         test("should deserialize simple object", () => should_deserialize_simple_object()),
         test("should deserialize object with number as long types", () => should_deserialize_object_with_number_as_long_types()),
         test("should deserialize object with number as double types", () => should_deserialize_object_with_number_as_double_types()),
@@ -328,6 +329,19 @@ fun should_stringify_top_level_json_values(): Assert =
         assert_that(stringify(JsonNumberDouble { value: 1.5 })).is_equal_to("1.5"),
         assert_that(stringify(JsonBool { value: true })).is_equal_to("true"),
         assert_that(stringify(JsonNull {})).is_equal_to("null"),
+    ])
+
+fun should_escape_json_strings(): Assert =
+    let quote = '"'
+    let slash = '\\'
+    let escaped_quote = quote + slash + quote + quote
+    let escaped_backslash = quote + slash + slash + quote
+    assert_all([
+        assert_that(stringify(JsonString { value: quote })).is_equal_to(escaped_quote),
+        assert_that(stringify(JsonString { value: slash })).is_equal_to(escaped_backslash),
+        assert_that(stringify(JsonString { value: '\n' })).is_equal_to(quote + slash + 'n' + quote),
+        assert_that(stringify(JsonString { value: '\u0000' })).is_equal_to(quote + slash + 'u0000' + quote),
+        assert_that(stringify(JsonObject { value: { quote: JsonString { value: slash } } })).is_equal_to('{' + escaped_quote + ':' + escaped_backslash + '}'),
     ])
 
 fun should_deserialize_simple_object(): Assert =
