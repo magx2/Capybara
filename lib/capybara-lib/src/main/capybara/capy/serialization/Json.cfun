@@ -126,7 +126,7 @@ fun stringify(json: Json): String =
 
 fun serialize(obj: JsonObject): String = stringify(obj)
 
-fun escape_string(value: String): String =
+private fun escape_string(value: String): String =
     fun __unicode_control(hex: String): String = '\\' + 'u00' + hex
     fun __escape_char(char: String): String =
         match char with
