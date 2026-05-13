@@ -107,8 +107,8 @@ fun stringify(json: Json): String =
         "{"
         + (v |> "", (acc, k, item) =>
             if acc == ""
-            then "\"" + k + "\":" + stringify(item)
-            else acc + "," + "\"" + k + "\":" + stringify(item))
+            then stringify(JsonString { k }) + ":" + stringify(item)
+            else acc + "," + stringify(JsonString { k }) + ":" + stringify(item))
         + "}"
     case JsonArray { value } ->  "["
         + (value | :stringify |> "", (acc, item) =>
@@ -116,7 +116,7 @@ fun stringify(json: Json): String =
             then item
             else acc + "," + item)
         + "]"
-    case JsonString { value } -> "\"" + value + "\""
+    case JsonString { value } -> "\"" + escape_string(value) + "\""
     case JsonNumberDouble { value } -> value + ""
     case JsonNumberLong { value } -> value + ""
     case JsonValueObject { value } -> stringify(value)
@@ -125,6 +125,48 @@ fun stringify(json: Json): String =
     case JsonNull -> "null"
 
 fun serialize(obj: JsonObject): String = stringify(obj)
+
+fun escape_string(value: String): String =
+    fun __unicode_control(hex: String): String = '\\' + 'u00' + hex
+    fun __escape_char(char: String): String =
+        match char with
+        case '"' -> '\\' + '"'
+        case '\\' -> '\\' + '\\'
+        case '\b' -> '\\' + 'b'
+        case '\f' -> '\\' + 'f'
+        case '\n' -> '\\' + 'n'
+        case '\r' -> '\\' + 'r'
+        case '\t' -> '\\' + 't'
+        case '\u0000' -> __unicode_control('00')
+        case '\u0001' -> __unicode_control('01')
+        case '\u0002' -> __unicode_control('02')
+        case '\u0003' -> __unicode_control('03')
+        case '\u0004' -> __unicode_control('04')
+        case '\u0005' -> __unicode_control('05')
+        case '\u0006' -> __unicode_control('06')
+        case '\u0007' -> __unicode_control('07')
+        case '\u000b' -> __unicode_control('0b')
+        case '\u000e' -> __unicode_control('0e')
+        case '\u000f' -> __unicode_control('0f')
+        case '\u0010' -> __unicode_control('10')
+        case '\u0011' -> __unicode_control('11')
+        case '\u0012' -> __unicode_control('12')
+        case '\u0013' -> __unicode_control('13')
+        case '\u0014' -> __unicode_control('14')
+        case '\u0015' -> __unicode_control('15')
+        case '\u0016' -> __unicode_control('16')
+        case '\u0017' -> __unicode_control('17')
+        case '\u0018' -> __unicode_control('18')
+        case '\u0019' -> __unicode_control('19')
+        case '\u001a' -> __unicode_control('1a')
+        case '\u001b' -> __unicode_control('1b')
+        case '\u001c' -> __unicode_control('1c')
+        case '\u001d' -> __unicode_control('1d')
+        case '\u001e' -> __unicode_control('1e')
+        case '\u001f' -> __unicode_control('1f')
+        case _ -> char
+    ---
+    value |> '', (acc, char) => acc + __escape_char(char)
 
 fun deserialize(json: String): Result[JsonObject] =
     _deserialize_json_object(json)
