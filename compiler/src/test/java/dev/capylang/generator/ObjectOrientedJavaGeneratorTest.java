@@ -354,6 +354,60 @@ class ObjectOrientedJavaGeneratorTest {
     }
 
     @Test
+    void shouldResolvePrimitiveBackedObjectOrientedTypesFromTheImportedModule() throws Exception {
+        var program = compileProgram(List.of(
+                new RawModule(
+                        "ValidatedIds",
+                        "/foo/a",
+                        """
+                                type user_id -> int with constructor {
+                                    value
+                                }
+                                """,
+                        SourceKind.FUNCTIONAL
+                ),
+                new RawModule(
+                        "RawIds",
+                        "/foo/z",
+                        """
+                                type user_id -> long
+                                """,
+                        SourceKind.FUNCTIONAL
+                ),
+                new RawModule(
+                        "IdConsumer",
+                        "/foo/app",
+                        """
+                                from /foo/z/RawIds import { user_id }
+
+                                class IdConsumer {
+                                    def construct(value: long): user_id = user_id { value }
+                                }
+                                """,
+                        SourceKind.OBJECT_ORIENTED
+                )
+        ));
+
+        var generatedProgram = new JavaGenerator().generate(program);
+        var consumerModule = generatedProgram.modules().stream()
+                .filter(module -> module.relativePath().endsWith("IdConsumer.java"))
+                .findFirst()
+                .orElseThrow();
+
+        assertThat(consumerModule.code())
+                .contains("public @dev.capylang.PrimitiveType(cfunType = \"/foo/z/RawIds.user_id\") long construct(long value)")
+                .doesNotContain("cfunType = \"/foo/a/ValidatedIds.user_id\"");
+
+        var classesDir = compileGeneratedJava(generatedProgram);
+        try (var classLoader = new URLClassLoader(new URL[]{classesDir.toUri().toURL()})) {
+            var consumerType = classLoader.loadClass("foo.app.IdConsumer");
+            var consumer = consumerType.getConstructor().newInstance();
+
+            assertThat(consumerType.getMethod("construct", long.class).invoke(consumer, 11L)).isEqualTo(11L);
+        }
+    }
+
+    @Test
     void shouldRejectUnsafePrimitiveBackedConstructionFromObjectOrientedCode() {
         var customConstructorProgram = compileProgram(List.of(
                 new RawModule(
