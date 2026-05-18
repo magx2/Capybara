@@ -1840,7 +1840,7 @@ public final class ObjectOrientedJavaGenerator {
         }
         var primitiveBackedType = primitiveBackedType(trimmed);
         if (primitiveBackedType.isPresent()) {
-            return renderPrimitiveType(primitiveBackedType.orElseThrow().backingType(), boxed);
+            return renderPrimitiveBackedType(primitiveBackedType.orElseThrow(), boxed);
         }
         return switch (trimmed) {
             case "byte" -> renderPrimitiveType(PrimitiveLinkedType.BYTE, boxed);
@@ -1865,6 +1865,10 @@ public final class ObjectOrientedJavaGenerator {
             case FLOAT -> boxed ? "Float" : "float";
             default -> throw new IllegalArgumentException("Unsupported primitive-backed OO type `" + type + "`");
         };
+    }
+
+    private String renderPrimitiveBackedType(PrimitiveBackedTypeInfo type, boolean boxed) {
+        return "@dev.capylang.PrimitiveType(cfunType = " + javaString(type.cfunType()) + ") " + renderPrimitiveType(type.backingType(), boxed);
     }
 
     private Optional<PrimitiveBackedTypeInfo> primitiveBackedType(String rawType) {
@@ -1973,6 +1977,7 @@ public final class ObjectOrientedJavaGenerator {
 
     public record PrimitiveBackedTypeInfo(
             String name,
+            String cfunType,
             PrimitiveLinkedType backingType,
             boolean directConstructionAllowed
     ) {

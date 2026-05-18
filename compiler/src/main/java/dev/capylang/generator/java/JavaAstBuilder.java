@@ -35,7 +35,7 @@ public class JavaAstBuilder {
     private final Map<String, String> mappedTypeParameterDescriptorCache = new HashMap<>();
     private final Map<String, List<String>> topLevelDescriptorSplitCache = new HashMap<>();
     private Set<String> localTypeNames = Set.of();
-    private Map<String, PrimitiveLinkedType> primitiveBackedTypes = Map.of();
+    private Map<String, PrimitiveBackedTypeInfo> primitiveBackedTypes = Map.of();
 
     @SafeVarargs
     private static <T extends Comparable<? super T>> SortedSet<T> sortedSetOf(T... values) {
@@ -61,8 +61,10 @@ public class JavaAstBuilder {
         localTypeNames = module.types().keySet().stream()
                 .map(JavaAstBuilder::simpleTypeName)
                 .collect(toUnmodifiableSet());
-        primitiveBackedTypes = primitiveBackedTypes(module.types().values());
+        primitiveBackedTypes = primitiveBackedTypes(module);
         try {
+            normalizedRawTypeReferenceCache.clear();
+            mappedTypeParameterDescriptorCache.clear();
             return buildModule(module);
         } finally {
             localTypeNames = previousLocalTypeNames;
@@ -165,15 +167,31 @@ public class JavaAstBuilder {
         return new ModuleTypeIndex(dataParentTypes, dataTypes, primitiveBackedTypes, Set.copyOf(enumValueTypeNames));
     }
 
-    private Map<String, PrimitiveLinkedType> primitiveBackedTypes(Collection<GenericDataType> types) {
-        var result = new LinkedHashMap<String, PrimitiveLinkedType>();
-        for (var type : types) {
+    private Map<String, PrimitiveBackedTypeInfo> primitiveBackedTypes(CompiledModule module) {
+        var result = new LinkedHashMap<String, PrimitiveBackedTypeInfo>();
+        for (var type : module.types().values()) {
             if (type instanceof CompiledPrimitiveBackedType primitiveBackedType) {
-                result.put(primitiveBackedType.name(), primitiveBackedType.backingType());
-                result.put(simpleTypeName(primitiveBackedType.name()), primitiveBackedType.backingType());
+                var info = new PrimitiveBackedTypeInfo(
+                        fullyQualifiedCapybaraTypeName(module, primitiveBackedType.name()),
+                        primitiveBackedType.backingType()
+                );
+                result.put(primitiveBackedType.name(), info);
+                result.put(simpleTypeName(primitiveBackedType.name()), info);
             }
         }
         return Map.copyOf(result);
+    }
+
+    private String fullyQualifiedCapybaraTypeName(CompiledModule module, String typeName) {
+        var normalizedType = typeName.replace('\\', '/');
+        if (normalizedType.contains("/")) {
+            return normalizedType.startsWith("/") ? normalizedType : "/" + normalizedType;
+        }
+        var path = module.path().replace('\\', '/').replaceFirst("/+$", "");
+        if (path.isBlank() || ".".equals(path)) {
+            return "/" + module.name() + "." + normalizedType;
+        }
+        return (path.startsWith("/") ? path : "/" + path) + "/" + module.name() + "." + normalizedType;
     }
 
     private Map<String, String> enumValueOwnerOverrides(ModuleTypeIndex typeIndex) {
@@ -538,7 +556,7 @@ public class JavaAstBuilder {
 
     private JavaType buildJavaType(CompiledType type) {
         return switch (type) {
-            case CompiledPrimitiveBackedType primitiveBackedType -> buildPrimitiveLinkedType(primitiveBackedType.backingType());
+            case CompiledPrimitiveBackedType primitiveBackedType -> buildPrimitiveBackedType(primitiveBackedType, false);
             case GenericDataType genericDataType -> buildGenericDataType(genericDataType);
             case PrimitiveLinkedType primitiveLinkedType -> buildPrimitiveLinkedType(primitiveLinkedType);
             case CollectionLinkedType collectionLinkedType -> buildCollectionLinkedType(collectionLinkedType);
@@ -749,7 +767,7 @@ public class JavaAstBuilder {
         var normalized = descriptor.trim();
         var primitiveBackedType = primitiveBackedTypes.get(normalized);
         if (primitiveBackedType != null) {
-            return buildJavaBoxedType(primitiveBackedType);
+            return buildPrimitiveBackedType(primitiveBackedType.cfunType(), primitiveBackedType.backingType(), true).toString();
         }
         return switch (normalized) {
             case "byte" -> "java.lang.Byte";
@@ -829,7 +847,7 @@ public class JavaAstBuilder {
     private String computeNormalizedRawTypeReference(String rawTypeName) {
         var primitiveBackedType = primitiveBackedTypes.get(rawTypeName);
         if (primitiveBackedType != null) {
-            return buildJavaBoxedType(primitiveBackedType);
+            return buildPrimitiveBackedType(primitiveBackedType.cfunType(), primitiveBackedType.backingType(), true).toString();
         }
         if ("Option".equals(rawTypeName) || isOptionTypeName(rawTypeName) || isOptionSomeTypeName(rawTypeName)) {
             return "java.util.Optional";
@@ -895,6 +913,26 @@ public class JavaAstBuilder {
         };
     }
 
+    private JavaType buildPrimitiveBackedType(String cfunType, PrimitiveLinkedType backingType, boolean boxed) {
+        var erasedType = boxed ? buildJavaBoxedType(backingType) : buildPrimitiveLinkedType(backingType).toString();
+        var annotation = "@dev.capylang.PrimitiveType(cfunType = " + javaString(cfunType) + ")";
+        if (boxed) {
+            var dotIndex = erasedType.lastIndexOf('.');
+            if (dotIndex > 0 && dotIndex < erasedType.length() - 1) {
+                return new JavaType(erasedType.substring(0, dotIndex + 1) + annotation + " " + erasedType.substring(dotIndex + 1));
+            }
+        }
+        return new JavaType(annotation + " " + erasedType);
+    }
+
+    private JavaType buildPrimitiveBackedType(CompiledPrimitiveBackedType primitiveBackedType, boolean boxed) {
+        var info = primitiveBackedTypes.get(primitiveBackedType.name());
+        if (info == null) {
+            info = new PrimitiveBackedTypeInfo(primitiveBackedType.name(), primitiveBackedType.backingType());
+        }
+        return buildPrimitiveBackedType(info.cfunType(), info.backingType(), boxed);
+    }
+
     private JavaType buildCollectionLinkedType(CollectionLinkedType type) {
         return switch (type) {
             case CompiledList linkedList -> new JavaType("java.util.List<" + buildJavaBoxedType(linkedList.elementType()) + ">");
@@ -905,7 +943,7 @@ public class JavaAstBuilder {
 
     private String buildJavaBoxedType(CompiledType type) {
         return switch (type) {
-            case CompiledPrimitiveBackedType primitiveBackedType -> buildJavaBoxedType(primitiveBackedType.backingType());
+            case CompiledPrimitiveBackedType primitiveBackedType -> buildPrimitiveBackedType(primitiveBackedType, true).toString();
             case PrimitiveLinkedType primitiveLinkedType -> switch (primitiveLinkedType) {
                 case BYTE -> "java.lang.Byte";
                 case INT -> "java.lang.Integer";
@@ -1068,6 +1106,16 @@ public class JavaAstBuilder {
             return identifier + "_";
         }
         return identifier;
+    }
+
+    private static String javaString(String value) {
+        return "\"" + value
+                .replace("\\", "\\\\")
+                .replace("\"", "\\\"")
+                .replace("\n", "\\n")
+                .replace("\r", "\\r")
+                .replace("\t", "\\t")
+                + "\"";
     }
 
     private static String normalizeJavaIdentifier(String name, boolean upperCamel) {
@@ -1462,5 +1510,8 @@ public class JavaAstBuilder {
             SortedSet<CompiledPrimitiveBackedType> primitiveBackedTypes,
             Set<String> enumValueTypeNames
     ) {
+    }
+
+    private record PrimitiveBackedTypeInfo(String cfunType, PrimitiveLinkedType backingType) {
     }
 }

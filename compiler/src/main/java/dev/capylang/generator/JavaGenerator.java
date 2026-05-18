@@ -135,20 +135,32 @@ public final class JavaGenerator implements Generator {
                 .map(name -> name.substring(PRIMITIVE_BACKED_TYPE_CONSTRUCTOR_FUNCTION_PREFIX.length()))
                 .collect(java.util.stream.Collectors.toUnmodifiableSet());
         var result = new java.util.LinkedHashMap<String, ObjectOrientedJavaGenerator.PrimitiveBackedTypeInfo>();
-        program.modules().stream()
-                .flatMap(module -> module.types().values().stream())
+        program.modules().forEach(module -> module.types().values().stream()
                 .filter(dev.capylang.compiler.CompiledPrimitiveBackedType.class::isInstance)
                 .map(dev.capylang.compiler.CompiledPrimitiveBackedType.class::cast)
                 .forEach(type -> {
                     var info = new ObjectOrientedJavaGenerator.PrimitiveBackedTypeInfo(
                             type.name(),
+                            fullyQualifiedCapybaraTypeName(module, type.name()),
                             type.backingType(),
                             !constructorTypes.contains(type.name())
                     );
                     result.putIfAbsent(type.name(), info);
                     result.putIfAbsent(simpleTypeName(type.name()), info);
-                });
+                }));
         return java.util.Map.copyOf(result);
+    }
+
+    private static String fullyQualifiedCapybaraTypeName(CompiledModule module, String typeName) {
+        var normalizedType = typeName.replace('\\', '/');
+        if (normalizedType.contains("/")) {
+            return normalizedType.startsWith("/") ? normalizedType : "/" + normalizedType;
+        }
+        var path = module.path().replace('\\', '/').replaceFirst("/+$", "");
+        if (path.isBlank() || ".".equals(path)) {
+            return "/" + module.name() + "." + normalizedType;
+        }
+        return (path.startsWith("/") ? path : "/" + path) + "/" + module.name() + "." + normalizedType;
     }
 
     private static String simpleTypeName(String name) {

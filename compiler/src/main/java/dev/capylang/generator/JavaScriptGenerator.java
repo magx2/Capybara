@@ -141,6 +141,7 @@ public final class JavaScriptGenerator implements Generator {
             for (var method : javaClass.staticMethods()) {
                 body.append(renderFunction(method, true)).append('\n');
             }
+            body.append(renderPrimitiveTypeMetadata());
             body.append(renderExports());
             body.append(renderProgramMain());
             requireReferencedModules(body.toString());
@@ -369,6 +370,51 @@ public final class JavaScriptGenerator implements Generator {
                 exportNames.add(name);
             }
             return code.toString();
+        }
+
+        private String renderPrimitiveTypeMetadata() {
+            var primitiveBackedTypes = moduleInfo.module().types().values().stream()
+                    .filter(CompiledPrimitiveBackedType.class::isInstance)
+                    .map(CompiledPrimitiveBackedType.class::cast)
+                    .toList();
+            if (primitiveBackedTypes.isEmpty()) {
+                return "";
+            }
+            exportNames.add("__capybaraPrimitiveTypes");
+            var code = new StringBuilder();
+            code.append("const __capybaraPrimitiveTypes = Object.freeze({\n");
+            for (var type : primitiveBackedTypes) {
+                code.append("    ").append(type.name()).append(": Object.freeze({ cfunType: ")
+                        .append(jsString(fullyQualifiedCapybaraTypeName(type.name())))
+                        .append(", backingType: ")
+                        .append(jsString(primitiveTypeName(type.backingType())))
+                        .append(" }),\n");
+            }
+            code.append("});\n\n");
+            return code.toString();
+        }
+
+        private String primitiveTypeName(PrimitiveLinkedType type) {
+            return switch (type) {
+                case BYTE -> "byte";
+                case INT -> "int";
+                case LONG -> "long";
+                case FLOAT -> "float";
+                case DOUBLE -> "double";
+                default -> throw new IllegalArgumentException("Unsupported primitive-backed type `" + type + "`");
+            };
+        }
+
+        private String fullyQualifiedCapybaraTypeName(String typeName) {
+            var normalizedType = typeName.replace('\\', '/');
+            if (normalizedType.contains("/")) {
+                return normalizedType.startsWith("/") ? normalizedType : "/" + normalizedType;
+            }
+            var path = moduleInfo.module().path().replace('\\', '/').replaceFirst("/+$", "");
+            if (path.isBlank() || ".".equals(path)) {
+                return "/" + moduleInfo.module().name() + "." + normalizedType;
+            }
+            return (path.startsWith("/") ? path : "/" + path) + "/" + moduleInfo.module().name() + "." + normalizedType;
         }
 
         private String renderExports() {
