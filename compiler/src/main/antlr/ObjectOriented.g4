@@ -109,9 +109,11 @@ simpleType: 'byte'
     | 'any'
     | 'data'
     | 'void'
-    | qualifiedType ('[' type (',' type)* ']')?;
+    | qualifiedType ('[' type (',' type)* ']')?
+    | lowerQualifiedType;
 
 qualifiedType: TYPE (DOT TYPE)*;
+lowerQualifiedType: NAME (DOT NAME)*;
 TYPE: [_]* [A-Z][a-zA-Z0-9_]* | TYPE_FULL;
 TYPE_FULL: '/' [A-Za-z_][a-zA-Z0-9_]* ( '/' [A-Za-z_][a-zA-Z0-9_]* )+;
 INFIX_METHOD_LITERAL: '`' ('|l>' | [+\-*/\\^%$#@~!:<>|?=∈∉≠⊆⊂⊇⊃∪∩△×℘∅]+) '`';
@@ -199,7 +201,17 @@ sliceIndexNoPipeLiteral: MINUS? INT_LITERAL;
 tupleLiteral: LPAREN expression (COMMA expression)+ RPAREN;
 arrayCreationType: simpleType ('[' ']')+;
 arrayWithValues: arrayCreationType LBRACE (expression (COMMA expression)* COMMA?)? RBRACE;
-sizedArray: simpleType LBRACK expression RBRACK;
+sizedArray: sizedArrayType LBRACK expression RBRACK;
+sizedArrayType: 'byte'
+    | 'int'
+    | 'long'
+    | 'double'
+    | 'bool'
+    | 'float'
+    | 'any'
+    | 'data'
+    | 'void'
+    | qualifiedType ('[' type (',' type)* ']')?;
 
 ifExpression: 'if' expression 'then' expression 'else' expression;
 functionReference: COLON identifier;
@@ -271,6 +283,7 @@ patternType
     | 'data'
     | 'void'
     | qualifiedType ('[' type (',' type)* ']')?
+    | lowerQualifiedType
     ;
 
 constructorPattern: TYPE LBRACE fieldPatternList? RBRACE;
