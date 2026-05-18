@@ -555,6 +555,7 @@ public class CapybaraTypeCompiler {
             case CompiledPrimitiveBackedType primitiveBackedType -> new CompiledPrimitiveBackedType(
                     requestedName,
                     primitiveBackedType.backingType(),
+                    primitiveBackedType.cfunType(),
                     primitiveBackedType.comments(),
                     primitiveBackedType.visibility()
             );

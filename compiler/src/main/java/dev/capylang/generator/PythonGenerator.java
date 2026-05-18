@@ -11,6 +11,7 @@ import dev.capylang.compiler.CompiledType;
 import dev.capylang.compiler.GenericDataType;
 import dev.capylang.compiler.PrimitiveLinkedType;
 import dev.capylang.compiler.expression.*;
+import dev.capylang.compiler.parser.ObjectOrientedModule;
 import dev.capylang.generator.java.JavaAstBuilder;
 import dev.capylang.generator.java.JavaClass;
 import dev.capylang.generator.java.JavaConst;
@@ -401,7 +402,7 @@ public final class PythonGenerator implements Generator {
             code.append("__capybaraPrimitiveTypes = {\n");
             for (var type : primitiveBackedTypes) {
                 code.append("    ").append(pyString(type.name())).append(": {\"cfunType\": ")
-                        .append(pyString(fullyQualifiedCapybaraTypeName(type.name())))
+                        .append(pyString(type.cfunType()))
                         .append(", \"backingType\": ")
                         .append(pyString(primitiveTypeName(type.backingType())))
                         .append("},\n");
@@ -419,18 +420,6 @@ public final class PythonGenerator implements Generator {
                 case DOUBLE -> "double";
                 default -> throw new IllegalArgumentException("Unsupported primitive-backed type `" + type + "`");
             };
-        }
-
-        private String fullyQualifiedCapybaraTypeName(String typeName) {
-            var normalizedType = typeName.replace('\\', '/');
-            if (normalizedType.contains("/")) {
-                return normalizedType.startsWith("/") ? normalizedType : "/" + normalizedType;
-            }
-            var path = moduleInfo.module().path().replace('\\', '/').replaceFirst("/+$", "");
-            if (path.isBlank() || ".".equals(path)) {
-                return "/" + moduleInfo.module().name() + "." + normalizedType;
-            }
-            return (path.startsWith("/") ? path : "/" + path) + "/" + moduleInfo.module().name() + "." + normalizedType;
         }
 
         private String renderExportAliases() {
@@ -1507,27 +1496,61 @@ public final class PythonGenerator implements Generator {
         }
 
         private static Map<String, PrimitiveBackedTypeInfo> primitiveBackedTypes(List<ModuleInfo> modules) {
-            var constructorTypes = modules.stream()
-                    .flatMap(module -> module.module().functions().stream())
-                    .map(CompiledFunction::name)
-                    .filter(name -> name.startsWith(PRIMITIVE_BACKED_TYPE_CONSTRUCTOR_FUNCTION_PREFIX))
-                    .map(name -> name.substring(PRIMITIVE_BACKED_TYPE_CONSTRUCTOR_FUNCTION_PREFIX.length()))
-                    .collect(java.util.stream.Collectors.toUnmodifiableSet());
             var result = new LinkedHashMap<String, PrimitiveBackedTypeInfo>();
-            modules.stream()
-                    .flatMap(module -> module.module().types().values().stream())
+            modules.forEach(module -> module.module().types().values().stream()
                     .filter(CompiledPrimitiveBackedType.class::isInstance)
                     .map(CompiledPrimitiveBackedType.class::cast)
                     .forEach(type -> {
                         var info = new PrimitiveBackedTypeInfo(
                                 type.name(),
+                                type.cfunType(),
                                 primitiveTypeName(type.backingType()),
-                                !constructorTypes.contains(type.name())
+                                !constructorTypes(module).contains(type.name())
                         );
-                        result.putIfAbsent(type.name(), info);
-                        result.putIfAbsent(simpleTypeName(type.name()), info);
-                    });
+                        putPrimitiveBackedTypeAliases(result, info, module.module());
+                    }));
+            putUniqueSimplePrimitiveBackedTypeAliases(result);
             return result;
+        }
+
+        private static Set<String> constructorTypes(ModuleInfo module) {
+            return module.module().functions().stream()
+                    .map(CompiledFunction::name)
+                    .filter(name -> name.startsWith(PRIMITIVE_BACKED_TYPE_CONSTRUCTOR_FUNCTION_PREFIX))
+                    .map(name -> name.substring(PRIMITIVE_BACKED_TYPE_CONSTRUCTOR_FUNCTION_PREFIX.length()))
+                    .collect(java.util.stream.Collectors.toUnmodifiableSet());
+        }
+
+        private static void putPrimitiveBackedTypeAliases(
+                Map<String, PrimitiveBackedTypeInfo> result,
+                PrimitiveBackedTypeInfo info,
+                CompiledModule module
+        ) {
+            if (info.name().contains("/") || info.name().contains(".")) {
+                result.putIfAbsent(info.name(), info);
+            }
+            result.putIfAbsent(info.cfunType(), info);
+            result.putIfAbsent(withoutLeadingSlash(info.cfunType()), info);
+            result.putIfAbsent(module.name() + "." + info.name(), info);
+        }
+
+        private static void putUniqueSimplePrimitiveBackedTypeAliases(Map<String, PrimitiveBackedTypeInfo> result) {
+            var bySimpleName = result.values().stream()
+                    .distinct()
+                    .collect(java.util.stream.Collectors.groupingBy(
+                            info -> simpleTypeName(info.name()),
+                            LinkedHashMap::new,
+                            java.util.stream.Collectors.toList()
+                    ));
+            bySimpleName.forEach((simpleName, infos) -> {
+                if (infos.size() == 1) {
+                    result.putIfAbsent(simpleName, infos.getFirst());
+                }
+            });
+        }
+
+        private static String withoutLeadingSlash(String value) {
+            return value.startsWith("/") ? value.substring(1) : value;
         }
 
         private static String primitiveTypeName(PrimitiveLinkedType type) {
@@ -1542,6 +1565,10 @@ public final class PythonGenerator implements Generator {
         }
 
         Optional<PrimitiveBackedTypeInfo> primitiveBackedType(String rawType) {
+            return primitiveBackedType(null, rawType);
+        }
+
+        Optional<PrimitiveBackedTypeInfo> primitiveBackedType(ObjectOrientedModule module, String rawType) {
             var normalized = rawType.trim();
             if (normalized.endsWith("!")) {
                 normalized = normalized.substring(0, normalized.length() - 1).trim();
@@ -1550,10 +1577,60 @@ public final class PythonGenerator implements Generator {
             if (direct != null) {
                 return Optional.of(direct);
             }
+            if (module != null) {
+                var imported = importedPrimitiveBackedType(module, normalized);
+                if (imported.isPresent()) {
+                    return imported;
+                }
+            }
             return Optional.ofNullable(primitiveBackedTypesByName.get(simpleTypeName(normalized)));
         }
 
-        record PrimitiveBackedTypeInfo(String name, String backingType, boolean directConstructionAllowed) {
+        private Optional<PrimitiveBackedTypeInfo> importedPrimitiveBackedType(ObjectOrientedModule module, String typeName) {
+            var simpleName = simpleTypeName(typeName);
+            for (var importDeclaration : module.imports()) {
+                if (importDeclaration.excludedSymbols().contains(simpleName)) {
+                    continue;
+                }
+                if (!importDeclaration.isStarImport() && !importDeclaration.symbols().contains(simpleName)) {
+                    continue;
+                }
+                var qualifiedName = importedPrimitiveBackedTypeName(module, importDeclaration.moduleName(), simpleName);
+                var direct = primitiveBackedTypesByName.get(qualifiedName);
+                if (direct != null) {
+                    return Optional.of(direct);
+                }
+                if (importDeclaration.isStarImport()) {
+                    var modulePrefix = importedModuleName(module, importDeclaration.moduleName()) + ".";
+                    var imported = primitiveBackedTypesByName.values().stream()
+                            .distinct()
+                            .filter(type -> type.cfunType().startsWith(modulePrefix))
+                            .filter(type -> simpleTypeName(type.name()).equals(simpleName))
+                            .findFirst();
+                    if (imported.isPresent()) {
+                        return imported;
+                    }
+                }
+            }
+            return Optional.empty();
+        }
+
+        private String importedPrimitiveBackedTypeName(ObjectOrientedModule module, String moduleName, String typeName) {
+            return importedModuleName(module, moduleName) + "." + typeName;
+        }
+
+        private String importedModuleName(ObjectOrientedModule module, String moduleName) {
+            if (moduleName.startsWith("/")) {
+                return moduleName;
+            }
+            var path = module.path().replace('\\', '/').replaceFirst("/+$", "");
+            if (path.isBlank() || ".".equals(path)) {
+                return "/" + moduleName;
+            }
+            return (path.startsWith("/") ? path : "/" + path) + "/" + moduleName;
+        }
+
+        record PrimitiveBackedTypeInfo(String name, String cfunType, String backingType, boolean directConstructionAllowed) {
         }
 
         Optional<Path> pathForClassName(String className) {

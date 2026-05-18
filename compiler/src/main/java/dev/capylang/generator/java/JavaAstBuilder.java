@@ -172,7 +172,7 @@ public class JavaAstBuilder {
         for (var type : module.types().values()) {
             if (type instanceof CompiledPrimitiveBackedType primitiveBackedType) {
                 var info = new PrimitiveBackedTypeInfo(
-                        fullyQualifiedCapybaraTypeName(module, primitiveBackedType.name()),
+                        primitiveBackedType.cfunType(),
                         primitiveBackedType.backingType()
                 );
                 result.put(primitiveBackedType.name(), info);
@@ -180,18 +180,6 @@ public class JavaAstBuilder {
             }
         }
         return Map.copyOf(result);
-    }
-
-    private String fullyQualifiedCapybaraTypeName(CompiledModule module, String typeName) {
-        var normalizedType = typeName.replace('\\', '/');
-        if (normalizedType.contains("/")) {
-            return normalizedType.startsWith("/") ? normalizedType : "/" + normalizedType;
-        }
-        var path = module.path().replace('\\', '/').replaceFirst("/+$", "");
-        if (path.isBlank() || ".".equals(path)) {
-            return "/" + module.name() + "." + normalizedType;
-        }
-        return (path.startsWith("/") ? path : "/" + path) + "/" + module.name() + "." + normalizedType;
     }
 
     private Map<String, String> enumValueOwnerOverrides(ModuleTypeIndex typeIndex) {
@@ -928,7 +916,7 @@ public class JavaAstBuilder {
     private JavaType buildPrimitiveBackedType(CompiledPrimitiveBackedType primitiveBackedType, boolean boxed) {
         var info = primitiveBackedTypes.get(primitiveBackedType.name());
         if (info == null) {
-            info = new PrimitiveBackedTypeInfo(primitiveBackedType.name(), primitiveBackedType.backingType());
+            info = new PrimitiveBackedTypeInfo(primitiveBackedType.cfunType(), primitiveBackedType.backingType());
         }
         return buildPrimitiveBackedType(info.cfunType(), info.backingType(), boxed);
     }
