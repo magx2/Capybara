@@ -1,0 +1,25 @@
+from /capy/lang/Result import { * }
+
+type user_id -> int with constructor {
+    if value > 0
+    then Success { value }
+    else Error { message: "bad user id" }
+}
+
+type order_id -> int
+type score -> int
+
+const FIRST_USER_ID = user_id! { 1 }
+
+fun new_user_id(value: int): Result[user_id] = user_id { value }
+fun raw_user_id(value: int): user_id = user_id! { value }
+fun unwrap_user_id(id: user_id): int = @id
+fun unwrap_raw_user_id(value: int): int = unwrap_user_id(raw_user_id(value))
+fun score_of(value: int): score = score { value }
+fun unwrap_score(score: score): int = @score
+
+fun user_id.plus(other: user_id): user_id = user_id! { @this + @other }
+fun user_id.`+`(other: user_id): user_id = user_id! { @this + @other }
+
+fun plus_user_ids(left: user_id, right: user_id): user_id = left.plus(right)
+fun add_user_ids(left: user_id, right: user_id): user_id = left + right
