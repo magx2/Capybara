@@ -128,7 +128,7 @@ public final class ObjectOrientedJavaGenerator {
                 .collect(Collectors.toCollection(HashSet::new));
 
         for (var field : fields) {
-            code.append(renderFieldDeclaration(field, constructorParameterNames)).append("\n");
+            code.append(renderFieldDeclaration(module, field, constructorParameterNames)).append("\n");
         }
         if (!fields.isEmpty()) {
             code.append("\n");
@@ -341,7 +341,7 @@ public final class ObjectOrientedJavaGenerator {
         var code = new StringBuilder();
         code.append("    public ").append(declaration.name()).append("(");
         code.append(declaration.constructorParameters().stream()
-                .map(parameter -> renderType(parameter.type(), false) + " " + sanitizeIdentifier(parameter.name()))
+                .map(parameter -> renderType(module, parameter.type(), false) + " " + sanitizeIdentifier(parameter.name()))
                 .collect(Collectors.joining(", ")));
         code.append(") {\n");
         var constructorParameterNames = declaration.constructorParameters().stream()
@@ -373,16 +373,16 @@ public final class ObjectOrientedJavaGenerator {
         return code.toString();
     }
 
-    private String renderFieldDeclaration(ObjectOriented.FieldDeclaration field, Set<String> constructorParameterNames) {
+    private String renderFieldDeclaration(ObjectOrientedModule module, ObjectOriented.FieldDeclaration field, Set<String> constructorParameterNames) {
         var code = new StringBuilder();
         appendDocComments(code, field.comments(), 1);
         var visibility = renderClassVisibility(field.visibility());
         if (!visibility.isBlank()) {
             code.append(visibility).append(' ');
         }
-        code.append(renderType(field.type(), false)).append(' ').append(sanitizeIdentifier(field.name()));
+        code.append(renderType(module, field.type(), false)).append(' ').append(sanitizeIdentifier(field.name()));
         if (field.initializer().isPresent() && !referencesAny(field.initializer().orElseThrow(), constructorParameterNames)) {
-            code.append(" = ").append(renderExpression(null, field.initializer().orElseThrow(), Set.of(), LocalMethodBindings.empty()));
+            code.append(" = ").append(renderExpression(module, field.initializer().orElseThrow(), Set.of(), LocalMethodBindings.empty()));
         }
         code.append(";");
         return code.toString();
@@ -427,11 +427,11 @@ public final class ObjectOrientedJavaGenerator {
         if (javaEntrypoint) {
             code.append("static ");
         }
-        code.append(renderType(method.returnType(), false))
+        code.append(renderType(module, method.returnType(), false))
                 .append(' ')
                 .append(sanitizeIdentifier(method.name()))
                 .append('(')
-                .append(renderParameters(method.parameters()))
+                .append(renderParameters(module, method.parameters()))
                 .append(')');
         if (abstractMethod) {
             code.append(";\n");
@@ -700,7 +700,7 @@ public final class ObjectOrientedJavaGenerator {
                    + renderEmptyReflectionPackage()
                    + ")";
         }
-        var primitiveBackedType = primitiveBackedType(trimmed);
+        var primitiveBackedType = primitiveBackedType(module, trimmed);
         if (primitiveBackedType.isPresent()) {
             return renderReflectionTypeInfo(module, primitiveBackedType.orElseThrow().backingType().name().toLowerCase(Locale.ROOT), definitionsByName);
         }
@@ -763,11 +763,11 @@ public final class ObjectOrientedJavaGenerator {
         var code = new StringBuilder();
         appendDocComments(code, method.comments(), 1);
         code.append("    ")
-                .append(renderType(method.returnType(), false))
+                .append(renderType(module, method.returnType(), false))
                 .append(" ")
                 .append(sanitizeIdentifier(method.name()))
                 .append("(")
-                .append(renderParameters(method.parameters()))
+                .append(renderParameters(module, method.parameters()))
                 .append(");\n");
         return code.toString();
     }
@@ -794,11 +794,11 @@ public final class ObjectOrientedJavaGenerator {
         if (method.body().isPresent() && !"private".equals(method.visibility())) {
             code.append("default ");
         }
-        code.append(renderType(method.returnType(), false))
+        code.append(renderType(module, method.returnType(), false))
                 .append(' ')
                 .append(sanitizeIdentifier(method.name()))
                 .append('(')
-                .append(renderParameters(method.parameters()))
+                .append(renderParameters(module, method.parameters()))
                 .append(')');
         if (method.body().isEmpty()) {
             code.append(";\n");
@@ -819,7 +819,7 @@ public final class ObjectOrientedJavaGenerator {
     ) {
         method.body().ifPresent(body -> {
             if (body instanceof ObjectOriented.ExpressionBody expressionBody) {
-                if ("void".equals(renderType(method.returnType(), false))) {
+                if ("void".equals(renderType(module, method.returnType(), false))) {
                     code.append(indent(indentLevel))
                             .append(renderExpression(module, expressionBody.expression(), parentNames, LocalMethodBindings.empty()))
                             .append(";\n");
@@ -891,18 +891,18 @@ public final class ObjectOrientedJavaGenerator {
     ) {
         appendDocComments(code, method.comments(), indentLevel);
         code.append(indent(indentLevel))
-                .append(renderType(method.returnType(), false))
+                .append(renderType(module, method.returnType(), false))
                 .append(' ')
                 .append(sanitizeIdentifier(method.name()))
                 .append("(")
                 .append(method.parameters().stream()
-                        .map(parameter -> renderType(parameter.type(), false) + " " + sanitizeIdentifier(parameter.name()))
+                        .map(parameter -> renderType(module, parameter.type(), false) + " " + sanitizeIdentifier(parameter.name()))
                         .collect(Collectors.joining(", ")))
                 .append(")");
         if (method.body() instanceof ObjectOriented.ExpressionBody expressionBody) {
             code.append(" {\n")
                     .append(indent(indentLevel + 1));
-            if ("void".equals(renderType(method.returnType(), false))) {
+            if ("void".equals(renderType(module, method.returnType(), false))) {
                 code.append(renderExpression(module, expressionBody.expression(), parentNames, localMethodBindings)).append(";\n");
             } else {
                 code.append("return ")
@@ -928,7 +928,7 @@ public final class ObjectOrientedJavaGenerator {
         switch (statement) {
             case ObjectOriented.LetStatement letStatement -> code.append(indent(indentLevel))
                     .append("final ")
-                    .append(letStatement.type().map(type -> renderType(type, false)).orElse("var"))
+                    .append(letStatement.type().map(type -> renderType(module, type, false)).orElse("var"))
                     .append(' ')
                     .append(sanitizeIdentifier(letStatement.name()))
                     .append(" = ")
@@ -937,7 +937,7 @@ public final class ObjectOrientedJavaGenerator {
             case ObjectOriented.LocalMethodStatement ignored -> {
             }
             case ObjectOriented.MutableVariableStatement mutableVariableStatement -> code.append(indent(indentLevel))
-                    .append(mutableVariableStatement.type().map(type -> renderType(type, false)).orElse("var"))
+                    .append(mutableVariableStatement.type().map(type -> renderType(module, type, false)).orElse("var"))
                     .append(' ')
                     .append(sanitizeIdentifier(mutableVariableStatement.name()))
                     .append(" = ")
@@ -1010,7 +1010,7 @@ public final class ObjectOrientedJavaGenerator {
             case ObjectOriented.ForEachStatement forEachStatement -> {
                 code.append(indent(indentLevel))
                         .append("for (")
-                        .append(forEachStatement.type().map(type -> renderType(type, false)).orElse("var"))
+                        .append(forEachStatement.type().map(type -> renderType(module, type, false)).orElse("var"))
                         .append(' ')
                         .append(sanitizeIdentifier(forEachStatement.name()))
                         .append(" : ")
@@ -1285,9 +1285,9 @@ public final class ObjectOrientedJavaGenerator {
                + "    }\n";
     }
 
-    private String renderParameters(List<ObjectOriented.Parameter> parameters) {
+    private String renderParameters(ObjectOrientedModule module, List<ObjectOriented.Parameter> parameters) {
         return parameters.stream()
-                .map(parameter -> renderType(parameter.type(), false) + " " + sanitizeIdentifier(parameter.name()))
+                .map(parameter -> renderType(module, parameter.type(), false) + " " + sanitizeIdentifier(parameter.name()))
                 .collect(Collectors.joining(", "));
     }
 
@@ -1401,18 +1401,18 @@ public final class ObjectOrientedJavaGenerator {
             return Optional.empty();
         }
         var type = expression.substring(0, braceIndex).trim();
-        if (type.isBlank() || type.endsWith("[]") || !isTypeLikePrefix(type)) {
+        if (type.isBlank() || type.endsWith("[]") || !isTypeLikePrefix(module, type)) {
             return Optional.empty();
         }
         var body = expression.substring(braceIndex + 1, expression.length() - 1).trim();
-        var primitiveBackedType = primitiveBackedType(type);
+        var primitiveBackedType = primitiveBackedType(module, type);
         if (primitiveBackedType.isPresent()) {
             return renderPrimitiveBackedDataCreation(module, type, body, parentNames, localMethodBindings, primitiveBackedType.orElseThrow());
         }
         var arguments = splitTopLevel(body).stream()
                 .map(assignment -> renderDataCreationArgument(module, assignment, parentNames, localMethodBindings))
                 .collect(Collectors.joining(", "));
-        return Optional.of("new " + renderType(type, false) + "(" + arguments + ")");
+        return Optional.of("new " + renderType(module, type, false) + "(" + arguments + ")");
     }
 
     private Optional<String> renderPrimitiveBackedDataCreation(
@@ -1626,7 +1626,7 @@ public final class ObjectOrientedJavaGenerator {
         var values = splitTopLevel(valuesSource).stream()
                 .map(value -> renderExpression(module, value, parentNames, localMethodBindings))
                 .collect(Collectors.joining(", "));
-        return Optional.of("new " + renderType(type, false) + "{" + values + "}");
+        return Optional.of("new " + renderType(module, type, false) + "{" + values + "}");
     }
 
     private Optional<String> renderSizedArray(ObjectOrientedModule module, String expression, Set<String> parentNames, LocalMethodBindings localMethodBindings) {
@@ -1638,14 +1638,14 @@ public final class ObjectOrientedJavaGenerator {
             return Optional.empty();
         }
         var type = expression.substring(0, sizeBracketIndex).trim();
-        if (type.isBlank() || type.endsWith("[]") || !isTypeLikePrefix(type)) {
+        if (type.isBlank() || type.endsWith("[]") || !isTypeLikePrefix(module, type)) {
             return Optional.empty();
         }
         var sizeExpression = expression.substring(sizeBracketIndex + 1, expression.length() - 1).trim();
         if (sizeExpression.isBlank()) {
             return Optional.empty();
         }
-        return Optional.of("new " + renderType(type, false) + "[" + renderExpression(module, sizeExpression, parentNames, localMethodBindings) + "]");
+        return Optional.of("new " + renderType(module, type, false) + "[" + renderExpression(module, sizeExpression, parentNames, localMethodBindings) + "]");
     }
 
     private String renderIfExpression(ObjectOrientedModule module, String expression, Set<String> parentNames, LocalMethodBindings localMethodBindings) {
@@ -1814,8 +1814,8 @@ public final class ObjectOrientedJavaGenerator {
         return result;
     }
 
-    private boolean isTypeLikePrefix(String value) {
-        if (primitiveBackedType(value).isPresent()) {
+    private boolean isTypeLikePrefix(ObjectOrientedModule module, String value) {
+        if (primitiveBackedType(module, value).isPresent()) {
             return true;
         }
         return switch (value) {
@@ -1825,20 +1825,24 @@ public final class ObjectOrientedJavaGenerator {
     }
 
     private String renderType(String type, boolean boxed) {
+        return renderType(null, type, boxed);
+    }
+
+    private String renderType(ObjectOrientedModule module, String type, boolean boxed) {
         var trimmed = type.trim();
         if (trimmed.endsWith("[]")) {
-            return renderType(trimmed.substring(0, trimmed.length() - 2), false) + "[]";
+            return renderType(module, trimmed.substring(0, trimmed.length() - 2), false) + "[]";
         }
         if (trimmed.startsWith("List[") && trimmed.endsWith("]")) {
-            return "java.util.List<" + renderType(innerType(trimmed), true) + ">";
+            return "java.util.List<" + renderType(module, innerType(trimmed), true) + ">";
         }
         if (trimmed.startsWith("Set[") && trimmed.endsWith("]")) {
-            return "java.util.Set<" + renderType(innerType(trimmed), true) + ">";
+            return "java.util.Set<" + renderType(module, innerType(trimmed), true) + ">";
         }
         if (trimmed.startsWith("Dict[") && trimmed.endsWith("]")) {
-            return "java.util.Map<String, " + renderType(innerType(trimmed), true) + ">";
+            return "java.util.Map<String, " + renderType(module, innerType(trimmed), true) + ">";
         }
-        var primitiveBackedType = primitiveBackedType(trimmed);
+        var primitiveBackedType = primitiveBackedType(module, trimmed);
         if (primitiveBackedType.isPresent()) {
             return renderPrimitiveBackedType(primitiveBackedType.orElseThrow(), boxed);
         }
@@ -1872,6 +1876,10 @@ public final class ObjectOrientedJavaGenerator {
     }
 
     private Optional<PrimitiveBackedTypeInfo> primitiveBackedType(String rawType) {
+        return primitiveBackedType(null, rawType);
+    }
+
+    private Optional<PrimitiveBackedTypeInfo> primitiveBackedType(ObjectOrientedModule module, String rawType) {
         var normalized = rawType.trim();
         if (normalized.endsWith("!")) {
             normalized = normalized.substring(0, normalized.length() - 1).trim();
@@ -1880,7 +1888,57 @@ public final class ObjectOrientedJavaGenerator {
         if (direct != null) {
             return Optional.of(direct);
         }
+        if (module != null) {
+            var imported = importedPrimitiveBackedType(module, normalized);
+            if (imported.isPresent()) {
+                return imported;
+            }
+        }
         return Optional.ofNullable(primitiveBackedTypes.get(simpleTypeName(normalized)));
+    }
+
+    private Optional<PrimitiveBackedTypeInfo> importedPrimitiveBackedType(ObjectOrientedModule module, String typeName) {
+        var simpleName = simpleTypeName(typeName);
+        for (var importDeclaration : module.imports()) {
+            if (importDeclaration.excludedSymbols().contains(simpleName)) {
+                continue;
+            }
+            if (!importDeclaration.isStarImport() && !importDeclaration.symbols().contains(simpleName)) {
+                continue;
+            }
+            var qualifiedName = importedPrimitiveBackedTypeName(module, importDeclaration.moduleName(), simpleName);
+            var direct = primitiveBackedTypes.get(qualifiedName);
+            if (direct != null) {
+                return Optional.of(direct);
+            }
+            if (importDeclaration.isStarImport()) {
+                var modulePrefix = importedModuleName(module, importDeclaration.moduleName()) + ".";
+                var imported = primitiveBackedTypes.values().stream()
+                        .distinct()
+                        .filter(type -> type.cfunType().startsWith(modulePrefix))
+                        .filter(type -> simpleTypeName(type.name()).equals(simpleName))
+                        .findFirst();
+                if (imported.isPresent()) {
+                    return imported;
+                }
+            }
+        }
+        return Optional.empty();
+    }
+
+    private String importedPrimitiveBackedTypeName(ObjectOrientedModule module, String moduleName, String typeName) {
+        return importedModuleName(module, moduleName) + "." + typeName;
+    }
+
+    private String importedModuleName(ObjectOrientedModule module, String moduleName) {
+        if (moduleName.startsWith("/")) {
+            return moduleName;
+        }
+        var path = module.path().replace('\\', '/').replaceFirst("/+$", "");
+        if (path.isBlank() || ".".equals(path)) {
+            return "/" + moduleName;
+        }
+        return (path.startsWith("/") ? path : "/" + path) + "/" + moduleName;
     }
 
     private String innerType(String collectionType) {

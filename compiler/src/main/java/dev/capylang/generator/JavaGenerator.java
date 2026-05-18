@@ -128,12 +128,6 @@ public final class JavaGenerator implements Generator {
     }
 
     private java.util.Map<String, ObjectOrientedJavaGenerator.PrimitiveBackedTypeInfo> primitiveBackedTypeInfo(CompiledProgram program) {
-        var constructorTypes = program.modules().stream()
-                .flatMap(module -> module.functions().stream())
-                .map(dev.capylang.compiler.CompiledFunction::name)
-                .filter(name -> name.startsWith(PRIMITIVE_BACKED_TYPE_CONSTRUCTOR_FUNCTION_PREFIX))
-                .map(name -> name.substring(PRIMITIVE_BACKED_TYPE_CONSTRUCTOR_FUNCTION_PREFIX.length()))
-                .collect(java.util.stream.Collectors.toUnmodifiableSet());
         var result = new java.util.LinkedHashMap<String, ObjectOrientedJavaGenerator.PrimitiveBackedTypeInfo>();
         program.modules().forEach(module -> module.types().values().stream()
                 .filter(dev.capylang.compiler.CompiledPrimitiveBackedType.class::isInstance)
@@ -141,26 +135,56 @@ public final class JavaGenerator implements Generator {
                 .forEach(type -> {
                     var info = new ObjectOrientedJavaGenerator.PrimitiveBackedTypeInfo(
                             type.name(),
-                            fullyQualifiedCapybaraTypeName(module, type.name()),
+                            type.cfunType(),
                             type.backingType(),
-                            !constructorTypes.contains(type.name())
+                            !constructorTypes(module).contains(type.name())
                     );
-                    result.putIfAbsent(type.name(), info);
-                    result.putIfAbsent(simpleTypeName(type.name()), info);
+                    putPrimitiveBackedTypeAliases(result, info, module);
                 }));
+        putUniqueSimplePrimitiveBackedTypeAliases(result);
         return java.util.Map.copyOf(result);
     }
 
-    private static String fullyQualifiedCapybaraTypeName(CompiledModule module, String typeName) {
-        var normalizedType = typeName.replace('\\', '/');
-        if (normalizedType.contains("/")) {
-            return normalizedType.startsWith("/") ? normalizedType : "/" + normalizedType;
+    private static Set<String> constructorTypes(CompiledModule module) {
+        return module.functions().stream()
+                .map(dev.capylang.compiler.CompiledFunction::name)
+                .filter(name -> name.startsWith(PRIMITIVE_BACKED_TYPE_CONSTRUCTOR_FUNCTION_PREFIX))
+                .map(name -> name.substring(PRIMITIVE_BACKED_TYPE_CONSTRUCTOR_FUNCTION_PREFIX.length()))
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+    }
+
+    private static void putPrimitiveBackedTypeAliases(
+            java.util.Map<String, ObjectOrientedJavaGenerator.PrimitiveBackedTypeInfo> result,
+            ObjectOrientedJavaGenerator.PrimitiveBackedTypeInfo info,
+            CompiledModule module
+    ) {
+        if (info.name().contains("/") || info.name().contains(".")) {
+            result.putIfAbsent(info.name(), info);
         }
-        var path = module.path().replace('\\', '/').replaceFirst("/+$", "");
-        if (path.isBlank() || ".".equals(path)) {
-            return "/" + module.name() + "." + normalizedType;
-        }
-        return (path.startsWith("/") ? path : "/" + path) + "/" + module.name() + "." + normalizedType;
+        result.putIfAbsent(info.cfunType(), info);
+        result.putIfAbsent(withoutLeadingSlash(info.cfunType()), info);
+        result.putIfAbsent(module.name() + "." + info.name(), info);
+    }
+
+    private static void putUniqueSimplePrimitiveBackedTypeAliases(
+            java.util.Map<String, ObjectOrientedJavaGenerator.PrimitiveBackedTypeInfo> result
+    ) {
+        var bySimpleName = result.values().stream()
+                .distinct()
+                .collect(java.util.stream.Collectors.groupingBy(
+                        info -> simpleTypeName(info.name()),
+                        java.util.LinkedHashMap::new,
+                        java.util.stream.Collectors.toList()
+                ));
+        bySimpleName.forEach((simpleName, infos) -> {
+            if (infos.size() == 1) {
+                result.putIfAbsent(simpleName, infos.getFirst());
+            }
+        });
+    }
+
+    private static String withoutLeadingSlash(String value) {
+        return value.startsWith("/") ? value.substring(1) : value;
     }
 
     private static String simpleTypeName(String name) {

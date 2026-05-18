@@ -1218,6 +1218,7 @@ public class CapybaraCompiler {
             case CompiledPrimitiveBackedType primitiveBackedType -> new CompiledPrimitiveBackedType(
                     requestedName,
                     primitiveBackedType.backingType(),
+                    primitiveBackedType.cfunType(),
                     primitiveBackedType.comments(),
                     primitiveBackedType.visibility()
             );
@@ -6242,6 +6243,7 @@ public class CapybaraCompiler {
         return Result.success(new CompiledPrimitiveBackedType(
                 declaration.name(),
                 backingType,
+                qualifiedModuleNameFromSourceFile(normalizedFile) + "." + declaration.name(),
                 declaration.comments(),
                 declaration.visibility()
         ));

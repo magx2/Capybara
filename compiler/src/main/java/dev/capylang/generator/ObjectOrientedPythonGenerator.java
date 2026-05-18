@@ -602,7 +602,7 @@ final class ObjectOrientedPythonGenerator {
             return Optional.empty();
         }
         var type = expression.substring(0, sizeBracketIndex).trim();
-        if (type.isBlank() || type.endsWith("[]") || !isTypeLikePrefix(type)) {
+        if (type.isBlank() || type.endsWith("[]") || !isTypeLikePrefix(context, type)) {
             return Optional.empty();
         }
         var sizeExpression = expression.substring(sizeBracketIndex + 1, expression.length() - 1).trim();
@@ -625,11 +625,11 @@ final class ObjectOrientedPythonGenerator {
             return Optional.empty();
         }
         var type = expression.substring(0, braceIndex).trim();
-        if (type.isBlank() || type.endsWith("[]") || !isTypeLikePrefix(type)) {
+        if (type.isBlank() || type.endsWith("[]") || !isTypeLikePrefix(context, type)) {
             return Optional.empty();
         }
         var body = expression.substring(braceIndex + 1, expression.length() - 1).trim();
-        var primitiveBackedType = programContext.primitiveBackedType(type);
+        var primitiveBackedType = programContext.primitiveBackedType(context.module(), type);
         if (primitiveBackedType.isPresent()) {
             return renderPrimitiveBackedDataCreation(context, type, body, scope, parentNames, primitiveBackedType.orElseThrow());
         }
@@ -1337,8 +1337,8 @@ final class ObjectOrientedPythonGenerator {
                || value.matches("[+-]?[0-9]+(?:[eE][+-]?[0-9]+)[fFdD]?");
     }
 
-    private boolean isTypeLikePrefix(String value) {
-        if (programContext.primitiveBackedType(value).isPresent()) {
+    private boolean isTypeLikePrefix(RenderContext context, String value) {
+        if (programContext.primitiveBackedType(context.module(), value).isPresent()) {
             return true;
         }
         return switch (value) {
