@@ -57,6 +57,10 @@ public class ValueNameRewriter {
             case CompiledNewSet linkedNewSet -> rewriteValueInLinkedNewSet(name, uniqueName, linkedNewSet);
             case CompiledNewData linkedNewData -> rewriteValueInLinkedNewData(name, uniqueName, linkedNewData);
             case CompiledStringValue linkedStringValue -> linkedStringValue;
+            case CompiledUnwrapExpression linkedUnwrapExpression -> new CompiledUnwrapExpression(
+                    rewriteValueInExpression(name, uniqueName, linkedUnwrapExpression.expression()),
+                    linkedUnwrapExpression.type()
+            );
             case CompiledVariable linkedVariable -> rewriteValueInLinkedVariable(name, uniqueName, linkedVariable);
         };
     }

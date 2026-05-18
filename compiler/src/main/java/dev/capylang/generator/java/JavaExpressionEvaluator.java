@@ -395,6 +395,7 @@ public class JavaExpressionEvaluator {
             case CompiledNewSet newSet -> evaluateNewSet(newSet, scope);
             case CompiledNewData newData -> evaluateNewData(newData, scope);
             case CompiledStringValue stringValue -> evaluateStringValue(stringValue, scope);
+            case CompiledUnwrapExpression unwrapExpression -> evaluateExpression(unwrapExpression.expression(), scope);
             case CompiledVariable variable -> evaluateVariable(variable, scope);
         };
     }
@@ -3203,6 +3204,13 @@ public class JavaExpressionEvaluator {
     }
 
     private static Scope evaluateNewData(CompiledNewData newData, Scope scope) {
+        if (newData.type() instanceof dev.capylang.compiler.CompiledPrimitiveBackedType) {
+            var value = newData.assignments().stream()
+                    .filter(assignment -> "value".equals(assignment.name()))
+                    .findFirst()
+                    .orElseThrow(() -> new IllegalStateException("Primitive-backed type construction requires a `value` argument"));
+            return evaluateExpression(value.value(), scope);
+        }
         if (!(newData.type() instanceof dev.capylang.compiler.CompiledDataType dataType)) {
             throw new UnsupportedOperationException("Cannot instantiate non-data type: " + newData.type());
         }

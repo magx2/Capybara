@@ -48,6 +48,8 @@ public class CompiledExpressionPrinter {
             case CompiledNewSet linkedNewSet -> printLinkedNewSet(linkedNewSet, level);
             case CompiledNewData linkedNewData -> printLinkedNewData(linkedNewData, level);
             case CompiledStringValue linkedStringValue -> printLinkedStringValue(linkedStringValue, level);
+            case CompiledUnwrapExpression linkedUnwrapExpression ->
+                    "@" + printExpression(linkedUnwrapExpression.expression(), level);
             case CompiledVariable linkedVariable -> printLinkedVariable(linkedVariable, level);
         };
     }

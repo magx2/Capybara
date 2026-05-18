@@ -406,6 +406,11 @@ public class CapybaraParser {
             return List.of(deriverDeclaration(deriverDeclaration));
         }
 
+        var primitiveBackedTypeDeclaration = context.primitiveBackedTypeDeclaration();
+        if (primitiveBackedTypeDeclaration != null) {
+            return List.of(primitiveBackedTypeDeclaration(primitiveBackedTypeDeclaration));
+        }
+
         var enumDeclaration = context.enumDeclaration();
         if (enumDeclaration != null) {
             return List.of(enumDeclaration(enumDeclaration));
@@ -427,6 +432,20 @@ public class CapybaraParser {
         }
 
         throw new IllegalStateException("Unknown definition: " + context.getText());
+    }
+
+    private PrimitiveBackedTypeDeclaration primitiveBackedTypeDeclaration(FunctionalParser.PrimitiveBackedTypeDeclarationContext context) {
+        return new PrimitiveBackedTypeDeclaration(
+                context.primitiveBackedTypeName().getText(),
+                PrimitiveType.find(context.primitiveBackingType().getText())
+                        .orElseThrow(() -> new IllegalStateException("Unknown primitive backing type: " + context.primitiveBackingType().getText())),
+                constructorExpression(context.constructorClause()),
+                context.docComment().stream()
+                        .map(comment -> stripDocComment(comment.getText()))
+                        .toList(),
+                visibility(context.VISIBILITY()),
+                position(context)
+        );
     }
 
     private TypeDeclaration typeDeclaration(FunctionalParser.TypeDeclarationContext context) {
@@ -574,7 +593,7 @@ public class CapybaraParser {
     private List<Definition> functionDeclaration(dev.capylang.parser.antlr.FunctionalParser.FunctionDeclarationContext functionDeclarationContext) {
         var visibility = visibility(functionDeclarationContext.VISIBILITY());
         var functionNameDeclaration = functionDeclarationContext.functionNameDeclaration();
-        var methodOwner = functionNameDeclaration.genericTypeDeclaration();
+        var methodOwner = functionNameDeclaration.methodOwnerDeclaration();
         var methodName = functionName(functionNameDeclaration);
         var parameters = functionDeclarationContext.parameters() == null
                 ? List.<Parameter>of()
@@ -590,7 +609,7 @@ public class CapybaraParser {
             methodParameters.add(thisParameter);
             methodParameters.addAll(parameters);
             parameters = List.copyOf(methodParameters);
-            methodName = METHOD_DECL_PREFIX + genericTypeName(methodOwner) + "__" + methodName;
+            methodName = METHOD_DECL_PREFIX + methodOwnerName(methodOwner) + "__" + methodName;
         }
         var localDefinitions = functionDeclarationContext.functionBody().localDefinition();
         var localFunctionNameMap = new java.util.LinkedHashMap<String, String>();
@@ -1131,6 +1150,10 @@ public class CapybaraParser {
                             .toList(),
                     tupleExpression.position()
             );
+            case UnwrapExpression unwrapExpression -> new UnwrapExpression(
+                    rewriteLocalNames(unwrapExpression.expression(), localFunctionNameMap, localTypeNameMap, localConstNameMap),
+                    unwrapExpression.position()
+            );
             case PlaceholderExpression placeholderExpression -> placeholderExpression;
             default -> expression;
         };
@@ -1622,6 +1645,10 @@ public class CapybaraParser {
             );
         }
 
+        if (expression.AT() != null && expression.expressionNoLet().size() == 1) {
+            return new UnwrapExpression(expressionNoLet(expression.expressionNoLet(0)), position(expression));
+        }
+
         if (expression.BANG() != null && expression.infixOperator() == null && expression.expressionNoLet().size() == 1) {
             return negate(expressionNoLet(expression.expressionNoLet(0)), position(expression));
         }
@@ -1915,6 +1942,10 @@ public class CapybaraParser {
                     ),
                     position(expression)
             );
+        }
+
+        if (expression.AT() != null && expression.expressionNoLetNoPipe().size() == 1) {
+            return new UnwrapExpression(expressionNoLetNoPipe(expression.expressionNoLetNoPipe(0)), position(expression));
         }
 
         if (expression.BANG() != null && expression.infixOperatorNoPipe() == null && expression.expressionNoLetNoPipe().size() == 1) {
@@ -2966,6 +2997,10 @@ public class CapybaraParser {
                     value.values().stream().map(argument -> shiftInterpolationPositions(argument, stringPosition, interpolationOffset)).toList(),
                     shiftPosition(value.position(), stringPosition, interpolationOffset)
             );
+            case UnwrapExpression value -> new UnwrapExpression(
+                    shiftInterpolationPositions(value.expression(), stringPosition, interpolationOffset),
+                    shiftPosition(value.position(), stringPosition, interpolationOffset)
+            );
             case PlaceholderExpression value -> new PlaceholderExpression(shiftPosition(value.position(), stringPosition, interpolationOffset));
             case Value value -> new Value(value.name(), shiftPosition(value.position(), stringPosition, interpolationOffset));
         };
@@ -3084,6 +3119,13 @@ public class CapybaraParser {
 
     private static String genericTypeName(FunctionalParser.GenericTypeDeclarationContext context) {
         return context.TYPE(0).getText();
+    }
+
+    private static String methodOwnerName(FunctionalParser.MethodOwnerDeclarationContext context) {
+        if (context.genericTypeDeclaration() != null) {
+            return genericTypeName(context.genericTypeDeclaration());
+        }
+        return context.lowerQualifiedType().getText();
     }
 
     private static String identifier(FunctionalParser.IdentifierContext context) {
