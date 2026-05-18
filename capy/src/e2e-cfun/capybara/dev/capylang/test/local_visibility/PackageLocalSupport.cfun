@@ -1,6 +1,6 @@
 local const LOCAL_OFFSET: int = 5
 
-local type LocalValue = LocalNumber
+local union LocalValue = LocalNumber
 local data LocalNumber { value: int }
 
 local fun add_local_offset(x: int): int = x + LOCAL_OFFSET

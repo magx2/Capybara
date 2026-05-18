@@ -26,7 +26,7 @@ class LocalVisibilityCompilationErrorTest {
             """
                     local fun local_add(x: int): int = x + 1
                     local const LOCAL_OFFSET: int = 5
-                    local type LocalValue = LocalNumber
+                    local union LocalValue = LocalNumber
                     local data LocalNumber { value: int }
                     private fun private_add(x: int): int = x + 2
                     fun public_value(x: int): int = local_add(x) + LOCAL_OFFSET

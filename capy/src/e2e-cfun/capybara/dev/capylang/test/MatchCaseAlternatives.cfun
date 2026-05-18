@@ -18,7 +18,7 @@ fun long_bucket(value: long): String =
     case 100L | 200L | 300L -> 'hundreds'
     case _ -> 'other'
 
-type Sign = Plus | Minus | Zero
+union Sign = Plus | Minus | Zero
 data Plus { value: String }
 data Minus { value: String }
 data Zero { value: String }

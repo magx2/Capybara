@@ -13,7 +13,7 @@ class InfixOperatorCompilerTest {
     @Test
     void shouldFailPlusForDataParentAndSubtype() {
         var error = compileFailure("""
-                type Json = JsonArray | JsonNull
+                union Json = JsonArray | JsonNull
                 data JsonArray { value: List[Json] }
                 single JsonNull
 
@@ -31,7 +31,7 @@ class InfixOperatorCompilerTest {
                 from /capy/collection/Set import { * }
                 from /capy/collection/Dict import { * }
 
-                type Json = JsonArray | JsonNull
+                union Json = JsonArray | JsonNull
                 data JsonArray { value: List[Json] }
                 single JsonNull
 
@@ -55,7 +55,7 @@ class InfixOperatorCompilerTest {
                 from /capy/collection/Set import { * }
                 from /capy/collection/Dict import { * }
 
-                type Assert = ResultAssert | StringAssert
+                union Assert = ResultAssert | StringAssert
                 data ResultAssert { value: bool }
                 data StringAssert { value: String }
 
@@ -80,11 +80,11 @@ class InfixOperatorCompilerTest {
                 from /capy/collection/Set import { * }
                 from /capy/collection/Dict import { * }
 
-                type Result[T] = Success[T] | Error
+                union Result[T] = Success[T] | Error
                 data Success[T] { value: T }
                 data Error { message: String }
 
-                type Assert[T] = ResultAssert[T] | StringAssert
+                union Assert[T] = ResultAssert[T] | StringAssert
                 data ResultAssert[T] { value: Result[T] }
                 data StringAssert { value: String }
 
@@ -111,7 +111,7 @@ class InfixOperatorCompilerTest {
                 from /capy/collection/Dict import { * }
                 from /capy/lang/Seq import { * }
 
-                type Assert = ResultAssert | StringAssert
+                union Assert = ResultAssert | StringAssert
                 data ResultAssert { value: bool }
                 data StringAssert { value: String }
 
@@ -137,11 +137,11 @@ class InfixOperatorCompilerTest {
                 from /capy/collection/Dict import { * }
                 from /capy/lang/Seq import { * }
 
-                type Result[T] = Success[T] | Error
+                union Result[T] = Success[T] | Error
                 data Success[T] { value: T }
                 data Error { message: String }
 
-                type Assert[T] = ResultAssert[T] | StringAssert
+                union Assert[T] = ResultAssert[T] | StringAssert
                 data ResultAssert[T] { value: Result[T] }
                 data StringAssert { value: String }
 
@@ -163,10 +163,10 @@ class InfixOperatorCompilerTest {
     void shouldInferConcreteElementTypeForImportedGenericMethodCallAgainstCompiledLibraries() {
         var libraries = compileProgram(List.of(
                 new RawModule("Seq", "/capy/lang", """
-                        type Seq[T] = Cons[T] | End
+                        union Seq[T] = Cons[T] | End
                         data Cons[T] { value: T, rest: () => Seq[T] }
                         single End
-                        type Option[T] = Some[T] | None
+                        union Option[T] = Some[T] | None
                         data Some[T] { value: T }
                         single None
 
@@ -193,7 +193,7 @@ class InfixOperatorCompilerTest {
     void shouldInferConcreteReturnTypeForImportedGenericFunctionAgainstCompiledLibraries() {
         var libraries = compileProgram(List.of(
                 new RawModule("Seq", "/capy/lang", """
-                        type Seq[T] = Cons[T] | End
+                        union Seq[T] = Cons[T] | End
                         data Cons[T] { value: T, rest: () => Seq[T] }
                         single End
 

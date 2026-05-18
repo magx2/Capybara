@@ -61,7 +61,7 @@ class WithCompilationErrorTest {
                 Arguments.of(
                         "parent cannot update subtype field",
                         """
-                                type Letter { x: int } = A | B
+                                union Letter { x: int } = A | B
                                 data A { a: String }
                                 data B { b: int }
                                 fun foo(letter: Letter): Letter = letter.with(a: \"x\")

@@ -18,7 +18,7 @@ from /capy/lang/String import { * }
 /// `Duration` is a sum type:
 /// - `DateDuration` for year/month/day/time durations
 /// - `WeekDuration` for ISO week-only durations like `P2W`
-type Duration = DateDuration | WeekDuration
+union Duration = DateDuration | WeekDuration
 
 /// Duration expressed with calendar and clock components.
 ///

@@ -1,11 +1,11 @@
-type AnyInfo { name: String, pkg: PackageInfo } = CFunInfo | CooInfo
-type CFunInfo = DataInfo
+union AnyInfo { name: String, pkg: PackageInfo } = CFunInfo | CooInfo
+union CFunInfo = DataInfo
     | ListInfo
     | SetInfo
     | DictInfo
     | TupleInfo
     | FunctionTypeInfo
-type CooInfo =
+union CooInfo =
     InterfaceInfo
     | ObjectInfo
     | TraitInfo

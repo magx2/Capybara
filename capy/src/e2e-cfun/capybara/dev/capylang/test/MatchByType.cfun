@@ -23,7 +23,7 @@ fun match_int_ignore_binding(value: any): int =
     case _ -> 0
 
 data Person { name: String }
-type Entity = Person
+union Entity = Person
 enum MatchStatus { READY, DONE }
 
 fun is_data(value: any): bool =

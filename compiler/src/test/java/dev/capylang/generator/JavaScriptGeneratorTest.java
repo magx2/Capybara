@@ -182,7 +182,7 @@ class JavaScriptGeneratorTest {
                         "ObjectOrientedFpInterop",
                         "/foo",
                         """
-                                type InteropPet = InteropDog | InteropCat
+                                union InteropPet = InteropDog | InteropCat
                                 data InteropDog { name: String }
                                 data InteropCat { age: int }
 

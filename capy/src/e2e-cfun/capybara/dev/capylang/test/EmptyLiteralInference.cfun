@@ -91,11 +91,11 @@ fun reduce_list_to_box_values(values: List[int]): Box[List[int]] =
     let initial: Box[List[int]] = Box { [] }
     values |> initial, (acc_box, item) => Box { acc_box.value + item }
 
-type SeqEnd[T] = ConsEnd[T] | EndEnd
+union SeqEnd[T] = ConsEnd[T] | EndEnd
 data ConsEnd[T] { value: T, rest: () => SeqEnd[T] }
 single EndEnd
 
-type Outcome = ParseSucceeded | ParseFailed
+union Outcome = ParseSucceeded | ParseFailed
 data ParseSucceeded { source: String }
 data ParseFailed { source: String }
 data OutcomeBatch { outcomes: List[Outcome] }

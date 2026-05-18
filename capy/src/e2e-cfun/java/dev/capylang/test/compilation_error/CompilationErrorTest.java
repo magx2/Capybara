@@ -63,7 +63,7 @@ public class CompilationErrorTest {
     void shouldNormalizeLocalTypeNamesInMatchExhaustivenessErrors() {
         var errors = compileProgram("""
                         fun parse(value: int): int =
-                            type __Token = __Number | Stop
+                            union __Token = __Number | Stop
                             data __Number { value: int }
                             single Stop
                             ---
@@ -225,7 +225,7 @@ public class CompilationErrorTest {
                 var errors = compileProgram("""
                         from /capy/lang/Result import { * }
                         from /capy/lang/String import { * }
-                        type Parent { foo: String } with constructor {
+                        union Parent { foo: String } with constructor {
                            if foo.length() == 0 then
                                Error { message: "missing" }
                            else
@@ -604,7 +604,7 @@ public class CompilationErrorTest {
     void shouldRejectNestedResultPipeBeforeJavaGeneration() {
         var result = CapybaraCompiler.INSTANCE.compile(List.of(
                 new RawModule("Result", "/capy/lang", """
-                        type Result[T] = Success[T] | Error
+                        union Result[T] = Success[T] | Error
                         data Success[T] { value: T }
                         data Error { message: String }
 
@@ -746,7 +746,7 @@ public class CompilationErrorTest {
                 Arguments.of(
                         "match_not_exhaustive",
                         """
-                                type Letter = A | B | C | D
+                                union Letter = A | B | C | D
                                 data A { a: int }
                                 data B { b: int }
                                 data C { c: int }
@@ -804,7 +804,7 @@ public class CompilationErrorTest {
                 Arguments.of(
                         "match_guard_does_not_make_case_exhaustive",
                         """
-                                type Letter = A | B
+                                union Letter = A | B
                                 data A { a: int }
                                 data B { b: int }
                                 fun foo(letter: Letter): int =
@@ -957,7 +957,7 @@ public class CompilationErrorTest {
                 Arguments.of(
                         "infix_plus_data_parent_and_subtype",
                         """
-                                type Json = JsonArray | JsonNull
+                                union Json = JsonArray | JsonNull
                                 data JsonArray { value: List[Json] }
                                 single JsonNull
                                 fun foo(left: JsonArray, right: Json): Json =
@@ -1118,7 +1118,7 @@ public class CompilationErrorTest {
                 Arguments.of(
                         "parser_syntax_error_missing_brace_in_then_branch",
                         """
-                                type Seq[T] = Cons[T] | End
+                                union Seq[T] = Cons[T] | End
                                 data Cons[T] { value: T, rest: Seq[T] }
                                 single End
                                 fun to_seq(list: List[int]): Seq[int] =
@@ -1130,7 +1130,6 @@ public class CompilationErrorTest {
                         """
                                 error: mismatched types
                                  --> /foo/boo/parser_syntax_error_missing_brace_in_then_branch.cfun:%d:%d
-                                type Seq[T] = Cons[T] | End
                                 data Cons[T] { value: T, rest: Seq[T] }
                                 single End
                                 fun to_seq(list: List[int]): Seq[int] =
@@ -1173,7 +1172,7 @@ public class CompilationErrorTest {
                 Arguments.of(
                         "seq_match_case_wrong_arrow",
                         """
-                                type Seq[T] = Cons[T] | End
+                                union Seq[T] = Cons[T] | End
                                 data Cons[T] { value: T, rest: Seq[T] }
                                 single End
                                 fun Seq[T].take(n: int): List[T] =
@@ -1185,7 +1184,6 @@ public class CompilationErrorTest {
                         """
                                 error: mismatched types
                                  --> /foo/boo/seq_match_case_wrong_arrow.cfun:%d:%d
-                                type Seq[T] = Cons[T] | End
                                 data Cons[T] { value: T, rest: Seq[T] }
                                 single End
                                 fun Seq[T].take(n: int): List[T] =
@@ -1215,7 +1213,7 @@ public class CompilationErrorTest {
                 Arguments.of(
                         "data_type_not_found_sqe",
                         """
-                                type Seq[T] = Cons[T] | End
+                                union Seq[T] = Cons[T] | End
                                 data Cons[T] { value: T, rest: Sqe[T] }
                                 single End
                                 """,
@@ -1301,7 +1299,7 @@ public class CompilationErrorTest {
                 Arguments.of(
                         "function_json_null_wrong_generic_return_type",
                         """
-                                type Result[T] = Success[T] | Error
+                                union Result[T] = Success[T] | Error
                                 data Success[T] { value: T }
                                 data Error { message: String }
                                 data _Parse[T] { value: T, parsing_string: String }
@@ -1323,7 +1321,7 @@ public class CompilationErrorTest {
                 Arguments.of(
                         "empty_dict_result_not_compatible_with_list_result",
                         """
-                                type Result[T] = Success[T] | Error
+                                union Result[T] = Success[T] | Error
                                 data Success[T] { value: T }
                                 data Error { message: String }
                                 fun accepts_list(value: Result[List[int]]): int = 1
@@ -1342,7 +1340,7 @@ public class CompilationErrorTest {
                 Arguments.of(
                         "any_list_result_not_compatible_with_list_result",
                         """
-                                type Result[T] = Success[T] | Error
+                                union Result[T] = Success[T] | Error
                                 data Success[T] { value: T }
                                 data Error { message: String }
                                 fun accepts_list(value: Result[List[int]]): int = 1
@@ -1616,7 +1614,7 @@ public class CompilationErrorTest {
                         "function_private_type_escapes_signature",
                         """
                                 fun foo_me(name: String): __Name =
-                                    type __Name = __Foo | __Boo | __Unknown
+                                    union __Name = __Foo | __Boo | __Unknown
                                     data __Foo { foo: String }
                                     data __Boo { boo: String }
                                     data __Unknown { unkn: String }
@@ -1767,7 +1765,7 @@ public class CompilationErrorTest {
                     fun String.length(): int = <native>
                     """),
             new RawModule("Name", "/capy/compilation_test", """
-                    type Name[T] = Foo[T] | Boo
+                    union Name[T] = Foo[T] | Boo
                     data Foo[T] { value: T }
                     data Boo { message: String }
                     """)

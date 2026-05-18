@@ -1,4 +1,4 @@
-type Effect[T] = _UnsafeEffect[T]
+union Effect[T] = _UnsafeEffect[T]
 
 private data _UnsafeEffect[T] { unsafe_thunk: () => T }
 

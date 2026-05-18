@@ -42,8 +42,8 @@ localDefinition: localFunctionDeclaration
 localFunctionDeclaration: docComment* 'fun' recFunctionMarker localFunctionNameDeclaration '(' parameters? ')' functionType? '=' expression
                         | docComment* 'fun' localFunctionNameDeclaration '(' parameters? ')' functionType? '=' expression;
 localFunctionNameDeclaration: NAME | REC;
-localTypeDeclaration: 'type' genericTypeDeclaration constructorClause? '=' genericTypeDeclaration (PIPE genericTypeDeclaration)*
-                    | 'type' genericTypeDeclaration '{' fieldDeclarationList? '}' constructorClause? '=' genericTypeDeclaration (PIPE genericTypeDeclaration)*;
+localTypeDeclaration: 'union' genericTypeDeclaration constructorClause? '=' genericTypeDeclaration (PIPE genericTypeDeclaration)*
+                    | 'union' genericTypeDeclaration '{' fieldDeclarationList? '}' constructorClause? '=' genericTypeDeclaration (PIPE genericTypeDeclaration)*;
 localDataDeclaration: 'data' genericTypeDeclaration '{' dataBody? '}' constructorClause?
                     | 'data' genericTypeDeclaration '=' '{' dataBody? '}' constructorClause?;
 localSingleDeclaration: 'single' TYPE;
@@ -55,8 +55,8 @@ methodIdentifier: identifier | 'with' | infixMethodLiteral | infixOperator;
 infixMethodLiteral: BACKTICKED_INFIX_METHOD_LITERAL | INFIX_METHOD_LITERAL;
 docComment: DOC_COMMENT;
 
-typeDeclaration: docComment* VISIBILITY? 'type' genericTypeDeclaration constructorClause? '=' genericTypeDeclaration (PIPE genericTypeDeclaration)* deriveClause?
-               | docComment* VISIBILITY? 'type' genericTypeDeclaration '{' fieldDeclarationList? '}' constructorClause? '=' genericTypeDeclaration (PIPE genericTypeDeclaration)* deriveClause?;
+typeDeclaration: docComment* VISIBILITY? 'union' genericTypeDeclaration constructorClause? '=' genericTypeDeclaration (PIPE genericTypeDeclaration)* deriveClause?
+               | docComment* VISIBILITY? 'union' genericTypeDeclaration '{' fieldDeclarationList? '}' constructorClause? '=' genericTypeDeclaration (PIPE genericTypeDeclaration)* deriveClause?;
 enumDeclaration: 'enum' TYPE '{' TYPE (COMMA TYPE)* COMMA? '}';
 dataDeclaration: docComment* VISIBILITY? 'data' genericTypeDeclaration '{' dataBody? '}' constructorClause? deriveClause?
                | docComment* VISIBILITY? 'data' genericTypeDeclaration '=' '{' dataBody? '}' constructorClause? deriveClause?;
@@ -78,7 +78,7 @@ VISIBILITY: 'local' | 'private';
 BOOL_LITERAL: 'true' | 'false';
 REC: 'rec';
 NAME : [_]* [a-z] [a-zA-Z0-9_]*;
-identifier: NAME | REC | 'derive' | 'deriver' | 'fun' | 'type' | 'enum' | 'byte' | 'int' | 'long' | 'double' | 'bool' | 'float' | 'nothing' | 'any';
+identifier: NAME | REC | 'derive' | 'deriver' | 'fun' | 'type' | 'union' | 'enum' | 'byte' | 'int' | 'long' | 'double' | 'bool' | 'float' | 'nothing' | 'any';
 parameters: parameter (',' parameter)*;
 parameter: identifier ':' type;
 functionType: ':' type;
@@ -172,6 +172,7 @@ functionCall: NAME '(' argumentList? ')'
             | 'derive' '(' argumentList? ')'
             | 'deriver' '(' argumentList? ')'
             | 'fun' '(' argumentList? ')'
+            | 'union' '(' argumentList? ')'
             | 'byte' '(' argumentList? ')'
             | 'int' '(' argumentList? ')'
             | 'long' '(' argumentList? ')'

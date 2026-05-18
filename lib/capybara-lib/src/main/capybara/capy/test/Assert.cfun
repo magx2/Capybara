@@ -13,7 +13,7 @@ from /capy/date_time/Interval import { * }
 
 data Assertion { result: bool, message: String, type: String }
 
-type Assert { assertions: List[() => Assertion] } =
+union Assert { assertions: List[() => Assertion] } =
     _TechnicalAssert
     | StringAssert | IntAssert | LongAssert | DoubleAssert | FloatAssert | BoolAssert
     | DataAssert | OptionAssert | ResultAssert

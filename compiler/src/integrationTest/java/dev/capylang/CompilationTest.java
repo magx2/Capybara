@@ -47,7 +47,7 @@ class CompilationTest {
         return Stream.of(
                 Arguments.of("""
                                 // algebraic type
-                                type Shape = Circle | Rectangle
+                                union Shape = Circle | Rectangle
                                 data Circle { radius: double }
                                 data Rectangle { width: double, height: double }
                                 
@@ -62,7 +62,7 @@ class CompilationTest {
                                     case Rectangle { width, height } -> Circle { radius : (width + height) / 4 }
                                 
                                 // type with common value
-                                type Person { name: String, age: int } = Student | Teacher
+                                union Person { name: String, age: int } = Student | Teacher
                                 data Student { grade: int }
                                 data Teacher { subject: String }
                                 """,
@@ -73,7 +73,7 @@ class CompilationTest {
                                 fun always_true(): bool = true
                                 
                                 // algebraic type
-                                type Shape = Circle | Rectangle
+                                union Shape = Circle | Rectangle
                                 data Circle { radius: double }
                                 data Rectangle { width: double, height: double }
                                 
@@ -89,7 +89,7 @@ class CompilationTest {
                                 """,
                         """
                                 // algebraic type
-                                type Shape = Circle | Rectangle
+                                union Shape = Circle | Rectangle
                                 data Circle { radius: double }
                                 data Rectangle { width: double, height: double }
                                 
@@ -105,12 +105,12 @@ class CompilationTest {
                                 """,
                         """
                                 // type with common value
-                                type Person { name: String, age: int } = Student | Teacher
+                                union Person { name: String, age: int } = Student | Teacher
                                 data Student { grade: int }
                                 data Teacher { subject: String }
                                 """,
                         """
-                                type Option[T] = Some[T] | None
+                                union Option[T] = Some[T] | None
                                 data Some[T] { value: T }
                                 single None
 

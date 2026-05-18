@@ -5,7 +5,7 @@ from /capy/lang/Result import { * }
 from /capy/lang/String import { * }
 
 /// ISO 8601 interval represented using UTC date-time endpoints.
-type Interval =
+union Interval =
     DateTimeStartEnd
     | DateTimeStartDuration
     | DateTimeDurationEnd

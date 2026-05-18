@@ -1,4 +1,4 @@
-type Result[T] = Success[T] | Error
+union Result[T] = Success[T] | Error
 data Success[T] { value: T }
 data Error { message: String }
 

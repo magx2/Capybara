@@ -22,7 +22,7 @@ fun nested_guard(option: Option[int]): String =
 
 data Sign { value: String, weight: int, enabled: bool }
 
-type Letter = Vowel | Consonant
+union Letter = Vowel | Consonant
 single Vowel
 single Consonant
 

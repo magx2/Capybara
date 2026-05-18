@@ -1,7 +1,7 @@
 from /capy/lang/Result import { * }
 
 fun foo_me(name: String): String =
-    type __Name = __Foo | __Boo | __Unknown
+    union __Name = __Foo | __Boo | __Unknown
     data __Foo { foo: String }
     data __Boo { boo: String }
     data __Unknown { unkn: String }
@@ -43,7 +43,7 @@ fun local_generic_data_used_in_local_function_return_type(v: int): String =
     case Error { message } -> "error:" + message
 
 fun local_single_used_in_local_type_and_function(use_stop: bool): String =
-    type __Token = __Value | Stop
+    union __Token = __Value | Stop
     data __Value { value: int }
     single Stop
     fun describe(token: __Token): String =

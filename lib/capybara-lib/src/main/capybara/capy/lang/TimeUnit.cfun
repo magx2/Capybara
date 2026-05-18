@@ -1,4 +1,4 @@
-type TimeUnit = NanoSecond | MicroSecond | MilliSecond | Second | Minute | Hour | Day | Week
+union TimeUnit = NanoSecond | MicroSecond | MilliSecond | Second | Minute | Hour | Day | Week
 
 data NanoSecond { value: long } 
 data MicroSecond { value: long } 

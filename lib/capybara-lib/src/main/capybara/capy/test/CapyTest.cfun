@@ -19,7 +19,7 @@ from /capy/serialization/Json import { JsonString, stringify }
 
 data TestFile { file_name: String, test_cases: List[TestCase], timestamp_millis: long }
 data TestCase { name: String, result: TestResult, assertions_count: int, execution_time: double, assert_supplier: () => Assert }
-type TestResult = Passed | Failed
+union TestResult = Passed | Failed
 single Passed
 data Failed { message: String, type: String }
 enum LogType { NONE, LOG, TEAM_CITY }
@@ -109,7 +109,7 @@ fun TestCase.failed(): bool =
     case Failed -> true
 
 enum ReportType { JUNIT, CTRF, JEST }
-type Report = JUnitReport | CtrfReport | JestReport
+union Report = JUnitReport | CtrfReport | JestReport
 
 /// See: [Complete JUnit XML example](https://github.com/testmoapp/junitxml/blob/main/examples/junit-complete.xml)
 data JUnitReport { suites: List[JUnitTestSuite] }

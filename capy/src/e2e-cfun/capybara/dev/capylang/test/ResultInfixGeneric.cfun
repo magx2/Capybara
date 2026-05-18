@@ -1,4 +1,4 @@
-type MyResult[T] = Ok[T] | Fail
+union MyResult[T] = Ok[T] | Fail
 data Ok[T] { value: T }
 data Fail { message: String }
 
