@@ -4,6 +4,7 @@ import dev.capylang.compiler.CollectionLinkedType;
 import dev.capylang.compiler.CompiledDataType;
 import dev.capylang.compiler.CompiledFunction;
 import dev.capylang.compiler.CompiledModule;
+import dev.capylang.compiler.CompiledPrimitiveBackedType;
 import dev.capylang.compiler.CompiledProgram;
 import dev.capylang.compiler.CompiledTupleType;
 import dev.capylang.compiler.CompiledType;
@@ -476,6 +477,7 @@ public final class PythonGenerator implements Generator {
                 case CompiledIndexExpression indexExpression -> renderIndex(indexExpression, scope);
                 case CompiledSliceExpression sliceExpression -> renderSlice(sliceExpression, scope);
                 case CompiledNewData newData -> renderNewData(newData, scope);
+                case CompiledUnwrapExpression unwrapExpression -> render(unwrapExpression.expression(), scope);
                 case CompiledMatchExpression matchExpression -> renderMatch(matchExpression, scope);
                 case CompiledPipeExpression pipeExpression -> renderPipe(pipeExpression, scope);
                 case CompiledPipeFilterOutExpression pipeFilterOutExpression -> renderPipeFilterOut(pipeFilterOutExpression, scope);
@@ -666,6 +668,10 @@ public final class PythonGenerator implements Generator {
             if (isPrimitiveConversion(methodName)) {
                 return renderConversion(methodName, receiver, receiverType, functionCall.type());
             }
+            if (receiverType instanceof CompiledPrimitiveBackedType) {
+                var target = resolveFunctionTarget(functionCall);
+                return target + "(" + String.join(", ", args) + ")";
+            }
             var emittedName = pyIdentifier(emittedMethodName(functionCall));
             if ("with".equals(emittedName)) {
                 emittedName = "with_";
@@ -835,6 +841,13 @@ public final class PythonGenerator implements Generator {
         }
 
         private String renderNewData(CompiledNewData newData, Scope scope) {
+            if (newData.type() instanceof CompiledPrimitiveBackedType) {
+                return newData.assignments().stream()
+                        .filter(assignment -> "value".equals(assignment.name()))
+                        .findFirst()
+                        .map(assignment -> render(assignment.value(), scope))
+                        .orElseThrow(() -> new IllegalStateException("Primitive-backed type construction requires a `value` argument"));
+            }
             if (!(newData.type() instanceof CompiledDataType dataType)) {
                 throw new UnsupportedOperationException("Cannot instantiate non-data type: " + newData.type());
             }
@@ -3495,9 +3508,16 @@ public final class PythonGenerator implements Generator {
 
     private static String overloadSuffix(CompiledFunction function) {
         var suffix = function.parameters().stream()
-                .map(parameter -> sanitizeOverloadSuffix(String.valueOf(parameter.type())))
+                .map(parameter -> sanitizeOverloadSuffix(overloadTypeName(parameter.type())))
                 .collect(joining("__"));
         return suffix.isBlank() ? "" : "__" + suffix;
+    }
+
+    private static String overloadTypeName(CompiledType type) {
+        if (type instanceof CompiledPrimitiveBackedType primitiveBackedType) {
+            return primitiveBackedType.name();
+        }
+        return String.valueOf(type);
     }
 
     private static String methodVariantSuffix(String rawBaseName) {

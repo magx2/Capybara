@@ -130,10 +130,13 @@ public final class JavaGenerator implements Generator {
     private java.util.Map<String, String> buildStaticExtensionMethodOwners(CompiledProgram program) {
         var nativeTypeNames = program.modules().stream()
                 .flatMap(module -> module.types().values().stream())
-                .filter(dev.capylang.compiler.CompiledDataType.class::isInstance)
-                .map(dev.capylang.compiler.CompiledDataType.class::cast)
-                .filter(dev.capylang.compiler.CompiledDataType::nativeType)
-                .map(dev.capylang.compiler.CompiledDataType::name)
+                .flatMap(type -> switch (type) {
+                    case dev.capylang.compiler.CompiledDataType dataType when dataType.nativeType() ->
+                            java.util.stream.Stream.of(dataType.name());
+                    case dev.capylang.compiler.CompiledPrimitiveBackedType primitiveBackedType ->
+                            java.util.stream.Stream.of(primitiveBackedType.name());
+                    default -> java.util.stream.Stream.empty();
+                })
                 .collect(java.util.stream.Collectors.toSet());
         var owners = new java.util.LinkedHashMap<String, String>();
         for (var module : program.modules()) {
@@ -353,7 +356,7 @@ public final class JavaGenerator implements Generator {
 
     private static String overloadSuffix(dev.capylang.compiler.CompiledFunction function) {
         var suffix = function.parameters().stream()
-                .map(parameter -> sanitizeOverloadSuffix(String.valueOf(parameter.type())))
+                .map(parameter -> sanitizeOverloadSuffix(overloadTypeName(parameter.type())))
                 .collect(joining("__"));
         return suffix.isBlank() ? "" : "__" + suffix;
     }
@@ -512,12 +515,20 @@ public final class JavaGenerator implements Generator {
                     : "java.util.function.Function";
             case dev.capylang.compiler.PrimitiveLinkedType primitive -> primitive.name();
             case dev.capylang.compiler.CompiledGenericTypeParameter ignored -> "java.lang.Object";
+            case dev.capylang.compiler.CompiledPrimitiveBackedType primitiveBackedType -> primitiveBackedType.backingType().name();
             case dev.capylang.compiler.GenericDataType genericDataType -> {
                 var name = genericDataType.name();
                 var idx = name.indexOf('[');
                 yield idx > 0 ? name.substring(0, idx) : name;
             }
         };
+    }
+
+    private static String overloadTypeName(dev.capylang.compiler.CompiledType type) {
+        if (type instanceof dev.capylang.compiler.CompiledPrimitiveBackedType primitiveBackedType) {
+            return primitiveBackedType.name();
+        }
+        return String.valueOf(type);
     }
 
     private <T> T time(java.util.function.LongConsumer recorder, Supplier<T> action) {

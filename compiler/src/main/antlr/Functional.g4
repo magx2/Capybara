@@ -23,6 +23,7 @@ program : definition+ EOF;
 definition:
     functionDeclaration
     | deriverDeclaration
+    | primitiveBackedTypeDeclaration
     | typeDeclaration
     | enumDeclaration
     | dataDeclaration
@@ -49,12 +50,15 @@ localDataDeclaration: 'data' genericTypeDeclaration '{' dataBody? '}' constructo
 localSingleDeclaration: 'single' TYPE;
 localConstDeclaration: docComment* 'const' privateLocalConstName (':' type)? '=' expressionNoLet;
 privateLocalConstName: NAME | TYPE;
-functionNameDeclaration: identifier | genericTypeDeclaration DOT declarationMethodIdentifier;
+functionNameDeclaration: identifier | methodOwnerDeclaration DOT declarationMethodIdentifier;
 declarationMethodIdentifier: identifier | 'with' | BACKTICKED_INFIX_METHOD_LITERAL;
 methodIdentifier: identifier | 'with' | infixMethodLiteral | infixOperator;
 infixMethodLiteral: BACKTICKED_INFIX_METHOD_LITERAL | INFIX_METHOD_LITERAL;
 docComment: DOC_COMMENT;
 
+primitiveBackedTypeDeclaration: docComment* VISIBILITY? 'type' primitiveBackedTypeName MATCH_ARROW primitiveBackingType constructorClause?;
+primitiveBackedTypeName: NAME;
+primitiveBackingType: 'byte' | 'int' | 'long' | 'float' | 'double';
 typeDeclaration: docComment* VISIBILITY? 'union' genericTypeDeclaration constructorClause? '=' genericTypeDeclaration (PIPE genericTypeDeclaration)* deriveClause?
                | docComment* VISIBILITY? 'union' genericTypeDeclaration '{' fieldDeclarationList? '}' constructorClause? '=' genericTypeDeclaration (PIPE genericTypeDeclaration)* deriveClause?;
 enumDeclaration: docComment* 'enum' TYPE '{' TYPE (COMMA TYPE)* COMMA? '}';
@@ -71,6 +75,7 @@ fieldDeclaration: identifier ':' type
                 | STRING_LITERAL ':' type
                 | SPREAD TYPE;
 dataBody: NATIVE_LITERAL | fieldDeclarationList;
+methodOwnerDeclaration: genericTypeDeclaration | lowerQualifiedType;
 genericTypeDeclaration: TYPE (typeLbrack TYPE (',' TYPE)* RBRACK)?;
 typeLbrack: LBRACK | LINE_START_LBRACK;
 
@@ -95,8 +100,10 @@ type: LPAREN RPAREN FAT_ARROW type
     | 'data'
     | 'enum'
     | 'nothing'
-    | qualifiedType (typeLbrack type (',' type)* RBRACK)?;
+    | qualifiedType (typeLbrack type (',' type)* RBRACK)?
+    | lowerQualifiedType;
 qualifiedType: TYPE (DOT TYPE)*;
+lowerQualifiedType: NAME (DOT NAME)*;
 TYPE: [_]* [A-Z][a-zA-Z0-9_]*
       | TYPE_FULL ;
 TYPE_FULL: '/' [A-Za-z_][a-zA-Z0-9_]* ( '/' [A-Za-z_][a-zA-Z0-9_]* )+;
@@ -117,6 +124,7 @@ expressionNoLet: ifExpression
                | '(' expression ')'
                | '{' expression '}'
                | new_set
+               | AT expressionNoLet
                | BANG expressionNoLet
                | BITWISE_NOT expressionNoLet
                | MINUS expressionNoLet
@@ -147,6 +155,7 @@ expressionNoLetNoPipe: ifExpression
                      | '(' expression ')'
                      | '{' expression '}'
                      | new_set
+                     | AT expressionNoLetNoPipe
                      | BANG expressionNoLetNoPipe
                      | BITWISE_NOT expressionNoLetNoPipe
                      | MINUS expressionNoLetNoPipe
@@ -338,6 +347,7 @@ PIPE_FLATMAP : '|*';
 PIPE_REDUCE : '|>';
 PIPE : '|';
 COLON : ':';
+AT : '@';
 EQUAL : '==';
 LE : '<=';
 GE : '>=';

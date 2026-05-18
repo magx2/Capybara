@@ -35,6 +35,7 @@ public class JavaAstBuilder {
     private final Map<String, String> mappedTypeParameterDescriptorCache = new HashMap<>();
     private final Map<String, List<String>> topLevelDescriptorSplitCache = new HashMap<>();
     private Set<String> localTypeNames = Set.of();
+    private Map<String, PrimitiveLinkedType> primitiveBackedTypes = Map.of();
 
     @SafeVarargs
     private static <T extends Comparable<? super T>> SortedSet<T> sortedSetOf(T... values) {
@@ -56,13 +57,16 @@ public class JavaAstBuilder {
 
     public JavaClass build(CompiledModule module) {
         var previousLocalTypeNames = localTypeNames;
+        var previousPrimitiveBackedTypes = primitiveBackedTypes;
         localTypeNames = module.types().keySet().stream()
                 .map(JavaAstBuilder::simpleTypeName)
                 .collect(toUnmodifiableSet());
+        primitiveBackedTypes = primitiveBackedTypes(module.types().values());
         try {
             return buildModule(module);
         } finally {
             localTypeNames = previousLocalTypeNames;
+            primitiveBackedTypes = previousPrimitiveBackedTypes;
         }
     }
 
@@ -74,9 +78,12 @@ public class JavaAstBuilder {
         var reflectionFallbackPackagePath = reflectionFallbackPackagePath(module);
         var staticMethodsClassName = staticMethodsClassName(module, javaClassName.toString());
         var staticMethodsSelfCallClassNames = staticMethodsSelfCallClassNames(module, javaPackageName, staticMethodsClassName);
-        var nativeTypeNames = typeIndex.dataTypes().stream()
+        var nativeDataTypeNames = typeIndex.dataTypes().stream()
                 .filter(CompiledDataType::nativeType)
-                .map(CompiledDataType::name)
+                .map(CompiledDataType::name);
+        var primitiveBackedTypeNames = typeIndex.primitiveBackedTypes().stream()
+                .map(CompiledPrimitiveBackedType::name);
+        var nativeTypeNames = Stream.concat(nativeDataTypeNames, primitiveBackedTypeNames)
                 .collect(toSet());
         var interfaces = buildInterfaces(typeIndex.dataParentTypes().stream()
                 .filter(parentType -> !parentType.enumType())
@@ -139,6 +146,7 @@ public class JavaAstBuilder {
     private ModuleTypeIndex indexTypes(SortedMap<String, GenericDataType> types) {
         var dataParentTypes = new TreeSet<CompiledDataParentType>();
         var dataTypes = new TreeSet<CompiledDataType>();
+        var primitiveBackedTypes = new TreeSet<CompiledPrimitiveBackedType>();
         var enumValueTypeNames = new HashSet<String>();
         for (var type : types.values()) {
             if (type instanceof CompiledDataParentType parentType) {
@@ -150,9 +158,22 @@ public class JavaAstBuilder {
                 }
             } else if (type instanceof CompiledDataType dataType) {
                 dataTypes.add(dataType);
+            } else if (type instanceof CompiledPrimitiveBackedType primitiveBackedType) {
+                primitiveBackedTypes.add(primitiveBackedType);
             }
         }
-        return new ModuleTypeIndex(dataParentTypes, dataTypes, Set.copyOf(enumValueTypeNames));
+        return new ModuleTypeIndex(dataParentTypes, dataTypes, primitiveBackedTypes, Set.copyOf(enumValueTypeNames));
+    }
+
+    private Map<String, PrimitiveLinkedType> primitiveBackedTypes(Collection<GenericDataType> types) {
+        var result = new LinkedHashMap<String, PrimitiveLinkedType>();
+        for (var type : types) {
+            if (type instanceof CompiledPrimitiveBackedType primitiveBackedType) {
+                result.put(primitiveBackedType.name(), primitiveBackedType.backingType());
+                result.put(simpleTypeName(primitiveBackedType.name()), primitiveBackedType.backingType());
+            }
+        }
+        return Map.copyOf(result);
     }
 
     private Map<String, String> enumValueOwnerOverrides(ModuleTypeIndex typeIndex) {
@@ -517,6 +538,7 @@ public class JavaAstBuilder {
 
     private JavaType buildJavaType(CompiledType type) {
         return switch (type) {
+            case CompiledPrimitiveBackedType primitiveBackedType -> buildPrimitiveLinkedType(primitiveBackedType.backingType());
             case GenericDataType genericDataType -> buildGenericDataType(genericDataType);
             case PrimitiveLinkedType primitiveLinkedType -> buildPrimitiveLinkedType(primitiveLinkedType);
             case CollectionLinkedType collectionLinkedType -> buildCollectionLinkedType(collectionLinkedType);
@@ -552,6 +574,7 @@ public class JavaAstBuilder {
         var typeParameters = switch (type) {
             case CompiledDataType linkedDataType -> linkedDataType.typeParameters();
             case CompiledDataParentType linkedDataParentType -> linkedDataParentType.typeParameters();
+            case CompiledPrimitiveBackedType ignored -> List.<String>of();
         };
         return typeParameters.stream().findFirst();
     }
@@ -698,6 +721,7 @@ public class JavaAstBuilder {
         var typeParameters = switch (type) {
             case CompiledDataType linkedDataType -> linkedDataType.typeParameters();
             case CompiledDataParentType linkedDataParentType -> linkedDataParentType.typeParameters();
+            case CompiledPrimitiveBackedType ignored -> List.<String>of();
         };
         if (typeParameters.isEmpty()) {
             return new JavaType(rawJavaTypeName);
@@ -723,6 +747,10 @@ public class JavaAstBuilder {
 
     private String computeTypeParameterDescriptor(String descriptor) {
         var normalized = descriptor.trim();
+        var primitiveBackedType = primitiveBackedTypes.get(normalized);
+        if (primitiveBackedType != null) {
+            return buildJavaBoxedType(primitiveBackedType);
+        }
         return switch (normalized) {
             case "byte" -> "java.lang.Byte";
             case "int" -> "java.lang.Integer";
@@ -799,6 +827,10 @@ public class JavaAstBuilder {
     }
 
     private String computeNormalizedRawTypeReference(String rawTypeName) {
+        var primitiveBackedType = primitiveBackedTypes.get(rawTypeName);
+        if (primitiveBackedType != null) {
+            return buildJavaBoxedType(primitiveBackedType);
+        }
         if ("Option".equals(rawTypeName) || isOptionTypeName(rawTypeName) || isOptionSomeTypeName(rawTypeName)) {
             return "java.util.Optional";
         }
@@ -873,6 +905,7 @@ public class JavaAstBuilder {
 
     private String buildJavaBoxedType(CompiledType type) {
         return switch (type) {
+            case CompiledPrimitiveBackedType primitiveBackedType -> buildJavaBoxedType(primitiveBackedType.backingType());
             case PrimitiveLinkedType primitiveLinkedType -> switch (primitiveLinkedType) {
                 case BYTE -> "java.lang.Byte";
                 case INT -> "java.lang.Integer";
@@ -1426,6 +1459,7 @@ public class JavaAstBuilder {
     private record ModuleTypeIndex(
             SortedSet<CompiledDataParentType> dataParentTypes,
             SortedSet<CompiledDataType> dataTypes,
+            SortedSet<CompiledPrimitiveBackedType> primitiveBackedTypes,
             Set<String> enumValueTypeNames
     ) {
     }

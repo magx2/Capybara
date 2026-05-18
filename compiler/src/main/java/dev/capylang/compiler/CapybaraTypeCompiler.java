@@ -101,6 +101,9 @@ public class CapybaraTypeCompiler {
         if (typeArguments.isEmpty()) {
             return Result.success(linkedType);
         }
+        if (linkedType instanceof CompiledPrimitiveBackedType primitiveBackedType) {
+            return Result.error("Type `" + primitiveBackedType.name() + "` does not accept type arguments");
+        }
         return typeArguments.stream()
                 .map(typeArgument -> parseTypeArgument(typeArgument, linkCache))
                 .map(type -> linkType(type, dataTypes, linkCache))
@@ -298,6 +301,7 @@ public class CapybaraTypeCompiler {
             case CompiledDataParentType linkedDataParentType -> linkedDataParentType.typeParameters().isEmpty()
                     ? linkedDataParentType.name()
                     : linkedDataParentType.name() + "[" + String.join(", ", linkedDataParentType.typeParameters()) + "]";
+            case CompiledPrimitiveBackedType primitiveBackedType -> primitiveBackedType.name();
             case CompiledGenericTypeParameter linkedGenericTypeParameter -> linkedGenericTypeParameter.name();
         };
     }
@@ -548,6 +552,12 @@ public class CapybaraTypeCompiler {
                     linkedDataParentType.visibility(),
                     linkedDataParentType.enumType()
             );
+            case CompiledPrimitiveBackedType primitiveBackedType -> new CompiledPrimitiveBackedType(
+                    requestedName,
+                    primitiveBackedType.backingType(),
+                    primitiveBackedType.comments(),
+                    primitiveBackedType.visibility()
+            );
         };
     }
 
@@ -593,4 +603,3 @@ public class CapybaraTypeCompiler {
                 .map(CompiledTupleType::new);
     }
 }
-

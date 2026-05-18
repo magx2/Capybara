@@ -5,6 +5,7 @@ import dev.capylang.compiler.CompiledDataParentType;
 import dev.capylang.compiler.CompiledDataType;
 import dev.capylang.compiler.CompiledFunctionType;
 import dev.capylang.compiler.CompiledGenericTypeParameter;
+import dev.capylang.compiler.CompiledPrimitiveBackedType;
 import dev.capylang.compiler.CompiledTupleType;
 import dev.capylang.compiler.PrimitiveLinkedType;
 
@@ -99,6 +100,8 @@ public final class ReflectionValueInfoJava {
                     "new capy.metaProg.Reflection.DataInfo("
                     + javaString(genericTypeParameter.name()) + ", "
                     + reflectionEmptyPackageInfo() + ")";
+            case CompiledPrimitiveBackedType primitiveBackedType ->
+                    reflectionTypeInfo(primitiveBackedType.backingType(), fallbackPackagePath);
             case CompiledDataParentType parentType ->
                     "new capy.metaProg.Reflection.DataInfo("
                     + javaString(simpleReflectionTypeName(parentType.name())) + ", "

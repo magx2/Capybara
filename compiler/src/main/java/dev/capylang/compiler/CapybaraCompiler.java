@@ -29,8 +29,10 @@ public class CapybaraCompiler {
     private static final String METHOD_DECL_PREFIX = "__method__";
     private static final String DATA_CONSTRUCTOR_FUNCTION_PREFIX = "__constructor__data__";
     private static final String TYPE_CONSTRUCTOR_FUNCTION_PREFIX = "__constructor__type__";
+    private static final String PRIMITIVE_BACKED_TYPE_CONSTRUCTOR_FUNCTION_PREFIX = "__constructor__primitive__";
     private static final String CONSTRUCTOR_STATE_TYPE_PREFIX = "__constructor_state__";
     private static final java.util.regex.Pattern IDENTIFIER_PATTERN = java.util.regex.Pattern.compile("[A-Za-z_][A-Za-z0-9_]*");
+    private static final java.util.regex.Pattern PRIMITIVE_BACKED_TYPE_NAME_PATTERN = java.util.regex.Pattern.compile("[a-z][a-z0-9_]*");
     private static final ObjectMapper OBJECT_MAPPER = objectMapper();
     private static final Logger log = Logger.getLogger(CapybaraCompiler.class.getName());
     private static final Object BUNDLED_LIBRARIES_LOCK = new Object();
@@ -456,7 +458,8 @@ public class CapybaraCompiler {
 
     private enum ConstructorKind {
         DATA,
-        TYPE
+        TYPE,
+        PRIMITIVE_BACKED
     }
 
     private record ConstructorDescriptor(ConstructorKind kind, String targetTypeName) {
@@ -928,6 +931,7 @@ public class CapybaraCompiler {
                     linkedDataParentType.visibility(),
                     linkedDataParentType.enumType()
             );
+            case CompiledPrimitiveBackedType primitiveBackedType -> primitiveBackedType;
         };
     }
 
@@ -971,6 +975,7 @@ public class CapybaraCompiler {
                 }
                 yield resolveGenericDataType(linkedDataParentType, all, appendResolvingTypeName(resolvingTypeNames, linkedDataParentType.name()));
             }
+            case CompiledPrimitiveBackedType primitiveBackedType -> primitiveBackedType;
             case CollectionLinkedType.CompiledList linkedList ->
                     new CollectionLinkedType.CompiledList(resolveLinkedType(linkedList.elementType(), all, resolvingTypeNames));
             case CollectionLinkedType.CompiledSet linkedSet ->
@@ -1209,6 +1214,12 @@ public class CapybaraCompiler {
                     linkedDataParentType.comments(),
                     linkedDataParentType.visibility(),
                     linkedDataParentType.enumType()
+            );
+            case CompiledPrimitiveBackedType primitiveBackedType -> new CompiledPrimitiveBackedType(
+                    requestedName,
+                    primitiveBackedType.backingType(),
+                    primitiveBackedType.comments(),
+                    primitiveBackedType.visibility()
             );
         };
     }
@@ -2116,6 +2127,12 @@ public class CapybaraCompiler {
                 .map(dataDeclaration -> constructorFunction(dataDeclaration, linkedTypes))
                 .flatMap(Optional::stream)
                 .forEach(functions::add);
+        definitions.stream()
+                .filter(PrimitiveBackedTypeDeclaration.class::isInstance)
+                .map(PrimitiveBackedTypeDeclaration.class::cast)
+                .map(primitiveBackedTypeDeclaration -> constructorFunction(primitiveBackedTypeDeclaration, linkedTypes))
+                .flatMap(Optional::stream)
+                .forEach(functions::add);
         return List.copyOf(functions);
     }
 
@@ -2166,6 +2183,29 @@ public class CapybaraCompiler {
         ));
     }
 
+    private Optional<Function> constructorFunction(
+            PrimitiveBackedTypeDeclaration declaration,
+            SortedMap<String, GenericDataType> linkedTypes
+    ) {
+        var constructor = declaration.constructor();
+        if (constructor.isEmpty()) {
+            return Optional.empty();
+        }
+        var linkedType = linkedTypes.get(declaration.name());
+        if (!(linkedType instanceof CompiledPrimitiveBackedType primitiveBackedType)) {
+            return Optional.empty();
+        }
+        return Optional.of(new Function(
+                primitiveBackedTypeConstructorFunctionName(declaration.name()),
+                List.of(new Parameter(compiledTypeToParserType(primitiveBackedType.backingType()), "value", declaration.position())),
+                Optional.empty(),
+                constructor.orElseThrow(),
+                List.of(),
+                declaration.visibility(),
+                declaration.position()
+        ));
+    }
+
     private ConstructorCatalog constructorCatalog(
             List<Module> modules,
             SortedSet<CompiledModule> libraries
@@ -2192,14 +2232,16 @@ public class CapybaraCompiler {
             Module module,
             ModuleRef moduleRef
     ) {
-        return module.functional().definitions().stream()
+        var owners = new LinkedHashMap<String, String>();
+        module.functional().definitions().stream()
                 .filter(DataDeclaration.class::isInstance)
                 .map(DataDeclaration.class::cast)
-                .collect(java.util.stream.Collectors.toUnmodifiableMap(
-                        DataDeclaration::name,
-                        ignored -> qualifiedModuleName(moduleRef),
-                        (first, second) -> first
-                ));
+                .forEach(dataDeclaration -> owners.putIfAbsent(dataDeclaration.name(), qualifiedModuleName(moduleRef)));
+        module.functional().definitions().stream()
+                .filter(PrimitiveBackedTypeDeclaration.class::isInstance)
+                .map(PrimitiveBackedTypeDeclaration.class::cast)
+                .forEach(declaration -> owners.putIfAbsent(declaration.name(), qualifiedModuleName(moduleRef)));
+        return Map.copyOf(owners);
     }
 
     private Map<String, CapybaraExpressionCompiler.ProtectedConstructorRef> moduleConstructors(
@@ -2235,6 +2277,21 @@ public class CapybaraCompiler {
                                 qualifiedTypeName(moduleRef, constructorStateTypeName(typeDeclaration.name())),
                                 true,
                                 expressionMayProduceResult(typeDeclaration.constructor().orElseThrow())
+                        )
+                ));
+        module.functional().definitions().stream()
+                .filter(PrimitiveBackedTypeDeclaration.class::isInstance)
+                .map(PrimitiveBackedTypeDeclaration.class::cast)
+                .filter(declaration -> declaration.constructor().isPresent())
+                .forEach(declaration -> constructors.put(
+                        declaration.name(),
+                        new CapybaraExpressionCompiler.ProtectedConstructorRef(
+                                qualifiedModuleName(moduleRef),
+                                primitiveBackedTypeConstructorFunctionName(declaration.name()),
+                                declaration.name(),
+                                declaration.name(),
+                                false,
+                                expressionMayProduceResult(declaration.constructor().orElseThrow())
                         )
                 ));
         return Map.copyOf(constructors);
@@ -2294,13 +2351,15 @@ public class CapybaraCompiler {
                         descriptor.targetTypeName(),
                         new CapybaraExpressionCompiler.ProtectedConstructorRef(
                                 qualifiedModuleName(moduleRef),
-                                descriptor.kind() == ConstructorKind.DATA
-                                        ? dataConstructorFunctionName(descriptor.targetTypeName())
-                                        : typeConstructorFunctionName(descriptor.targetTypeName()),
+                                switch (descriptor.kind()) {
+                                    case DATA -> dataConstructorFunctionName(descriptor.targetTypeName());
+                                    case TYPE -> typeConstructorFunctionName(descriptor.targetTypeName());
+                                    case PRIMITIVE_BACKED -> primitiveBackedTypeConstructorFunctionName(descriptor.targetTypeName());
+                                },
                                 descriptor.targetTypeName(),
-                                descriptor.kind() == ConstructorKind.DATA
-                                        ? qualifiedTypeName(moduleRef, descriptor.targetTypeName())
-                                        : qualifiedTypeName(moduleRef, constructorStateTypeName(descriptor.targetTypeName())),
+                                descriptor.kind() == ConstructorKind.TYPE
+                                        ? qualifiedTypeName(moduleRef, constructorStateTypeName(descriptor.targetTypeName()))
+                                        : qualifiedTypeName(moduleRef, descriptor.targetTypeName()),
                                 descriptor.kind() == ConstructorKind.TYPE,
                                 isResultLikeType(function.returnType(), library.types())
                         )
@@ -2356,10 +2415,9 @@ public class CapybaraCompiler {
             ModuleRef moduleRef
     ) {
         return library.types().values().stream()
-                .filter(CompiledDataType.class::isInstance)
-                .map(CompiledDataType.class::cast)
+                .filter(type -> type instanceof CompiledDataType || type instanceof CompiledPrimitiveBackedType)
                 .collect(java.util.stream.Collectors.toUnmodifiableMap(
-                        CompiledDataType::name,
+                        GenericDataType::name,
                         ignored -> qualifiedModuleName(moduleRef),
                         (first, second) -> first
                 ));
@@ -2466,6 +2524,21 @@ public class CapybaraCompiler {
                                 expressionMayProduceResult(typeDeclaration.constructor().orElseThrow())
                         )
                 ));
+        module.functional().definitions().stream()
+                .filter(PrimitiveBackedTypeDeclaration.class::isInstance)
+                .map(PrimitiveBackedTypeDeclaration.class::cast)
+                .filter(declaration -> declaration.constructor().isPresent())
+                .forEach(declaration -> protectedConstructors.put(
+                        declaration.name(),
+                        new CapybaraExpressionCompiler.ProtectedConstructorRef(
+                                module.name(),
+                                primitiveBackedTypeConstructorFunctionName(declaration.name()),
+                                declaration.name(),
+                                declaration.name(),
+                                false,
+                                expressionMayProduceResult(declaration.constructor().orElseThrow())
+                        )
+                ));
         var referencedNestedTypes = typeDeclarations.stream()
                 .flatMap(typeDeclaration -> typeDeclaration.subTypes().stream())
                 .filter(typeDeclarationsByName::containsKey)
@@ -2508,6 +2581,20 @@ public class CapybaraCompiler {
             var target = constructorTarget.orElseThrow();
             var linkedType = linkedTypes.get(target.targetTypeName());
             if (target.kind() == ConstructorKind.DATA && linkedType instanceof CompiledDataType) {
+                protectedConstructors.put(
+                        target.targetTypeName(),
+                        new CapybaraExpressionCompiler.ProtectedConstructorRef(
+                                library.name(),
+                                function.name(),
+                                target.targetTypeName(),
+                                target.targetTypeName(),
+                                false,
+                                isResultLikeType(function.returnType(), linkedTypes)
+                        )
+                );
+                continue;
+            }
+            if (target.kind() == ConstructorKind.PRIMITIVE_BACKED && linkedType instanceof CompiledPrimitiveBackedType) {
                 protectedConstructors.put(
                         target.targetTypeName(),
                         new CapybaraExpressionCompiler.ProtectedConstructorRef(
@@ -2787,6 +2874,32 @@ public class CapybaraCompiler {
                 .anyMatch(candidate -> sameTypeName(candidate.name(), parentType.name()));
     }
 
+    private boolean isResultOf(CompiledType type, CompiledType payloadType, Map<String, GenericDataType> dataTypes) {
+        if (!(type instanceof CompiledDataParentType parentType) || !isResultLikeType(parentType, dataTypes)) {
+            return false;
+        }
+        return parentType.typeParameters().stream()
+                .findFirst()
+                .map(descriptor -> descriptor.equals(typeDescriptorForResult(payloadType))
+                                   || descriptor.equals(payloadType.name())
+                                   || descriptor.equals(payloadType.name().toLowerCase(Locale.ROOT)))
+                .orElse(false);
+    }
+
+    private String typeDescriptorForResult(CompiledType type) {
+        return switch (type) {
+            case PrimitiveLinkedType primitive -> primitiveDescriptorForMessage(primitive);
+            case CompiledPrimitiveBackedType primitiveBackedType -> primitiveBackedType.name();
+            case CompiledDataType dataType -> dataType.name();
+            case CompiledDataParentType parentType -> parentType.name();
+            default -> type.name();
+        };
+    }
+
+    private String primitiveDescriptorForMessage(PrimitiveLinkedType primitive) {
+        return primitive == PrimitiveLinkedType.STRING ? "String" : primitive.name().toLowerCase(Locale.ROOT);
+    }
+
     private boolean expressionMayProduceResult(Expression expression) {
         return switch (expression) {
             case NewData newData -> newData.type() instanceof DataType dataType
@@ -2822,6 +2935,7 @@ public class CapybaraCompiler {
             case NothingValue ignored -> false;
             case PlaceholderExpression ignored -> false;
             case StringValue ignored -> false;
+            case UnwrapExpression unwrapExpression -> expressionMayProduceResult(unwrapExpression.expression());
             case WithExpression withExpression -> expressionMayProduceResult(withExpression.source());
         };
     }
@@ -2832,6 +2946,10 @@ public class CapybaraCompiler {
 
     private static String typeConstructorFunctionName(String typeName) {
         return TYPE_CONSTRUCTOR_FUNCTION_PREFIX + typeName;
+    }
+
+    private static String primitiveBackedTypeConstructorFunctionName(String typeName) {
+        return PRIMITIVE_BACKED_TYPE_CONSTRUCTOR_FUNCTION_PREFIX + typeName;
     }
 
     private static String constructorStateTypeName(String typeName) {
@@ -2861,6 +2979,12 @@ public class CapybaraCompiler {
             return Optional.of(new ConstructorDescriptor(
                     ConstructorKind.TYPE,
                     functionName.substring(TYPE_CONSTRUCTOR_FUNCTION_PREFIX.length())
+            ));
+        }
+        if (functionName.startsWith(PRIMITIVE_BACKED_TYPE_CONSTRUCTOR_FUNCTION_PREFIX)) {
+            return Optional.of(new ConstructorDescriptor(
+                    ConstructorKind.PRIMITIVE_BACKED,
+                    functionName.substring(PRIMITIVE_BACKED_TYPE_CONSTRUCTOR_FUNCTION_PREFIX.length())
             ));
         }
         return Optional.empty();
@@ -3125,6 +3249,8 @@ public class CapybaraCompiler {
                     .toList());
             case CompiledTupleExpression tupleExpression ->
                     analyzeAll(selfCallNames, parameters, tupleExpression.values(), false);
+            case CompiledUnwrapExpression unwrapExpression ->
+                    analyzeTailRecursion(selfCallNames, parameters, unwrapExpression.expression(), false);
             case CompiledBooleanValue ignored -> TailRecursionAnalysis.empty();
             case CompiledByteValue ignored -> TailRecursionAnalysis.empty();
             case CompiledDoubleValue ignored -> TailRecursionAnalysis.empty();
@@ -3242,6 +3368,21 @@ public class CapybaraCompiler {
             return new Result.Error<>(error.errors());
         }
         var targetType = ((Result.Success<CompiledType>) linkedTarget).value();
+        if (targetType instanceof CompiledPrimitiveBackedType primitiveBackedType) {
+            if (expression.type().equals(primitiveBackedType.backingType())) {
+                return Result.success(expression);
+            }
+            if (isResultOf(expression.type(), primitiveBackedType.backingType(), dataTypes)) {
+                return Result.success(expression);
+            }
+            return withPosition(
+                    Result.error("Constructor for `" + target.targetTypeName() + "` must return `"
+                                 + primitiveDescriptorForMessage(primitiveBackedType.backingType()) + "` or `Result["
+                                 + primitiveDescriptorForMessage(primitiveBackedType.backingType()) + "]`, but got `" + expression.type() + "`"),
+                    returnExpressionPosition(function.expression()).or(() -> function.position()),
+                    ""
+            );
+        }
         if (!(targetType instanceof CompiledDataType dataType)) {
             return Result.success(expression);
         }
@@ -4049,6 +4190,7 @@ public class CapybaraCompiler {
                                                 + " " + formatExpressionPreview(letExpression.rest());
             case MatchExpression matchExpression ->
                     "match " + formatExpressionPreview(matchExpression.matchWith()) + " with ...";
+            case UnwrapExpression unwrapExpression -> "@" + formatExpressionPreview(unwrapExpression.expression());
             default -> expression.toString();
         };
     }
@@ -4242,6 +4384,7 @@ public class CapybaraCompiler {
                     : restorePrivateTypeNameForDisplay(linkedDataParentType.name()) + "[" + linkedDataParentType.typeParameters().stream()
                     .map(this::restorePrivateTypeNameForDisplay)
                     .collect(java.util.stream.Collectors.joining(", ")) + "]";
+            case CompiledPrimitiveBackedType primitiveBackedType -> restorePrivateTypeNameForDisplay(primitiveBackedType.name());
             case CompiledGenericTypeParameter linkedGenericTypeParameter -> restorePrivateTypeNameForDisplay(linkedGenericTypeParameter.name());
         };
     }
@@ -4611,6 +4754,7 @@ public class CapybaraCompiler {
         return switch (genericDataType) {
             case CompiledDataType dataType -> dataType.typeParameters();
             case CompiledDataParentType parentType -> parentType.typeParameters();
+            case CompiledPrimitiveBackedType ignored -> List.of();
         };
     }
 
@@ -4821,6 +4965,11 @@ public class CapybaraCompiler {
             case dev.capylang.compiler.expression.CompiledTupleExpression value ->
                     new dev.capylang.compiler.expression.CompiledTupleExpression(
                             value.values().stream().map(v -> enrichNothing(v, functionName, moduleSourceFile)).toList(),
+                            value.type()
+                    );
+            case dev.capylang.compiler.expression.CompiledUnwrapExpression value ->
+                    new dev.capylang.compiler.expression.CompiledUnwrapExpression(
+                            enrichNothing(value.expression(), functionName, moduleSourceFile),
                             value.type()
                     );
             case dev.capylang.compiler.expression.CompiledStringValue value -> value;
@@ -5451,6 +5600,7 @@ public class CapybaraCompiler {
                     compiledTypeToParserType(functionType.returnType())
             );
             case CompiledGenericTypeParameter genericTypeParameter -> new DataType(genericTypeParameter.name());
+            case CompiledPrimitiveBackedType primitiveBackedType -> new DataType(primitiveBackedType.name());
             case CompiledDataType compiledDataType -> compiledDataType.typeParameters().isEmpty()
                     ? new DataType(compiledDataType.name())
                     : new DataType(compiledDataType.name() + "["
@@ -5537,6 +5687,9 @@ public class CapybaraCompiler {
         var baseType = ((Result.Success<CompiledType>) linkedBase).value();
         if (parsed.typeArguments().isEmpty()) {
             return Result.success(baseType);
+        }
+        if (baseType instanceof CompiledPrimitiveBackedType primitiveBackedType) {
+            return Result.error("Type `" + primitiveBackedType.name() + "` does not accept type arguments");
         }
 
         return parsed.typeArguments().stream()
@@ -5664,6 +5817,7 @@ public class CapybaraCompiler {
             case CompiledDataParentType linkedDataParentType -> linkedDataParentType.typeParameters().isEmpty()
                     ? linkedDataParentType.name()
                     : linkedDataParentType.name() + "[" + String.join(", ", linkedDataParentType.typeParameters()) + "]";
+            case CompiledPrimitiveBackedType primitiveBackedType -> primitiveBackedType.name();
             case CompiledGenericTypeParameter linkedGenericTypeParameter -> linkedGenericTypeParameter.name();
         };
     }
@@ -5955,6 +6109,16 @@ public class CapybaraCompiler {
 
     private Result<SortedMap<String, GenericDataType>> types(Module module) {
         var normalizedFile = normalizeFile(moduleSourceFile(module));
+        var primitiveBackedTypesOrError = linkPrimitiveBackedTypeDeclarations(
+                castList(module, PrimitiveBackedTypeDeclaration.class),
+                normalizedFile
+        );
+        if (primitiveBackedTypesOrError instanceof Result.Error<List<CompiledPrimitiveBackedType>> error) {
+            return new Result.Error<>(error.errors());
+        }
+        var primitiveBackedTypes = ((Result.Success<List<CompiledPrimitiveBackedType>>) primitiveBackedTypesOrError).value();
+        var primitiveBackedTypesByName = primitiveBackedTypes.stream()
+                .collect(toMap(CompiledPrimitiveBackedType::name, identity(), (first, second) -> first));
         var rawTypeDeclarations = castList(module, TypeDeclaration.class);
         var rawEnumDeclarations = castList(module, EnumDeclaration.class);
         var enumDeclarations = rawEnumDeclarations.stream()
@@ -5967,7 +6131,10 @@ public class CapybaraCompiler {
         var dataDeclarationsOrError = linkDataDeclarations(
                 castList(module, DataDeclaration.class),
                 rawTypeDeclarationsByName,
-                enumDeclarationsByName,
+                Stream.concat(
+                        enumDeclarationsByName.entrySet().stream(),
+                        primitiveBackedTypesByName.entrySet().stream()
+                ).collect(toMap(Map.Entry::getKey, Map.Entry::getValue, (first, second) -> first)),
                 module.imports(),
                 normalizedFile
         );
@@ -5988,6 +6155,7 @@ public class CapybaraCompiler {
         dataDeclarations.forEach(dataType -> knownDataTypes.put(dataType.name(), dataType));
         singleDeclarations.forEach(dataType -> knownDataTypes.put(dataType.name(), dataType));
         enumDeclarations.forEach(enumType -> knownDataTypes.put(enumType.name(), enumType));
+        primitiveBackedTypes.forEach(type -> knownDataTypes.put(type.name(), type));
 
         var typeDeclarationsOrError = rawTypeDeclarations
                 .stream()
@@ -6012,6 +6180,7 @@ public class CapybaraCompiler {
         set.addAll(singleDeclarations);
         set.addAll(enumDeclarations);
         set.addAll(typeDeclarations);
+        set.addAll(primitiveBackedTypes);
         var map = new TreeMap<>(set.stream().collect(toMap(GenericDataType::name, identity())));
         typeDeclarations.forEach(parentType -> parentType.subTypes().forEach(subType -> map.put(subType.name(), subType)));
         enumDeclarations.forEach(enumType -> enumType.subTypes().forEach(subType -> map.put(subType.name(), subType)));
@@ -6033,6 +6202,49 @@ public class CapybaraCompiler {
 
     private Result<List<CompiledDataType>> linkDataDeclarations(List<DataDeclaration> dataDeclarations) {
         return linkDataDeclarations(dataDeclarations, Map.of(), Map.of(), List.of(), "");
+    }
+
+    private Result<List<CompiledPrimitiveBackedType>> linkPrimitiveBackedTypeDeclarations(
+            List<PrimitiveBackedTypeDeclaration> declarations,
+            String normalizedFile
+    ) {
+        return declarations.stream()
+                .map(declaration -> linkPrimitiveBackedTypeDeclaration(declaration, normalizedFile))
+                .collect(new ResultCollectionCollector<>());
+    }
+
+    private Result<CompiledPrimitiveBackedType> linkPrimitiveBackedTypeDeclaration(
+            PrimitiveBackedTypeDeclaration declaration,
+            String normalizedFile
+    ) {
+        if (!PRIMITIVE_BACKED_TYPE_NAME_PATTERN.matcher(declaration.name()).matches()) {
+            return withPosition(
+                    Result.error("Primitive-backed type name `" + declaration.name() + "` must be lower snake_case"),
+                    declaration.position(),
+                    normalizedFile
+            );
+        }
+        var backingType = switch (declaration.backingType()) {
+            case BYTE -> PrimitiveLinkedType.BYTE;
+            case INT -> PrimitiveLinkedType.INT;
+            case LONG -> PrimitiveLinkedType.LONG;
+            case FLOAT -> PrimitiveLinkedType.FLOAT;
+            case DOUBLE -> PrimitiveLinkedType.DOUBLE;
+            default -> null;
+        };
+        if (backingType == null) {
+            return withPosition(
+                    Result.error("Primitive-backed type `" + declaration.name() + "` must be backed by byte, int, long, float, or double"),
+                    declaration.position(),
+                    normalizedFile
+            );
+        }
+        return Result.success(new CompiledPrimitiveBackedType(
+                declaration.name(),
+                backingType,
+                declaration.comments(),
+                declaration.visibility()
+        ));
     }
 
     private Result<List<CompiledDataType>> linkDataDeclarations(
