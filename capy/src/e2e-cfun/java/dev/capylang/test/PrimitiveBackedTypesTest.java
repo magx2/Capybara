@@ -1,6 +1,7 @@
 package dev.capylang.test;
 
 import capy.lang.Result;
+import dev.capylang.PrimitiveType;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -14,6 +15,21 @@ class PrimitiveBackedTypesTest {
         assertThat(PrimitiveBackedTypes.plusUserIds(2, 3)).isEqualTo(5);
         assertThat(PrimitiveBackedTypes.addUserIds(4, 5)).isEqualTo(9);
         assertThat(PrimitiveBackedTypes.unwrapScore(PrimitiveBackedTypes.scoreOf(11))).isEqualTo(11);
+    }
+
+    @Test
+    void primitiveBackedTypesPreserveSourceTypeMetadataOnErasedJavaSignatures() throws Exception {
+        var rawUserId = PrimitiveBackedTypes.class.getMethod("rawUserId", int.class);
+        assertThat(rawUserId.getAnnotatedReturnType().getAnnotation(PrimitiveType.class).cfunType())
+                .isEqualTo("/dev/capylang/test/PrimitiveBackedTypes.user_id");
+
+        var unwrapUserId = PrimitiveBackedTypes.class.getMethod("unwrapUserId", int.class);
+        assertThat(unwrapUserId.getAnnotatedParameterTypes()[0].getAnnotation(PrimitiveType.class).cfunType())
+                .isEqualTo("/dev/capylang/test/PrimitiveBackedTypes.user_id");
+
+        var scoreOf = PrimitiveBackedTypes.class.getMethod("scoreOf", int.class);
+        assertThat(scoreOf.getAnnotatedReturnType().getAnnotation(PrimitiveType.class).cfunType())
+                .isEqualTo("/dev/capylang/test/PrimitiveBackedTypes.score");
     }
 
     @Test

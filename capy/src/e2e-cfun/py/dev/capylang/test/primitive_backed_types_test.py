@@ -18,3 +18,12 @@ class PrimitiveBackedTypesPythonE2ETest(unittest.TestCase):
         self.assertEqual(primitive_backed_types.plusUserIds(2, 3), 5)
         self.assertEqual(primitive_backed_types.addUserIds(4, 5), 9)
         self.assertEqual(primitive_backed_types.unwrapScore(primitive_backed_types.scoreOf(11)), 11)
+        primitive_types = getattr(primitive_backed_types, "__capybaraPrimitiveTypes")
+        self.assertEqual(
+            primitive_types["user_id"],
+            {"cfunType": "/dev/capylang/test/PrimitiveBackedTypes.user_id", "backingType": "int"},
+        )
+        self.assertEqual(
+            primitive_types["score"],
+            {"cfunType": "/dev/capylang/test/PrimitiveBackedTypes.score", "backingType": "int"},
+        )
