@@ -66,7 +66,7 @@ class CapybaraCompilerLibrariesTest {
     void shouldCompileStringParseFunctionsInPrimitivesModule() {
         var compiled = compileProgram(List.of(
                 new RawModule("Result", "/capy/lang", """
-                        type Result[T] = Success[T] | Error
+                        union Result[T] = Success[T] | Error
                         data Success[T] { value: T }
                         data Error { message: String }
                         """),
@@ -171,7 +171,7 @@ class CapybaraCompilerLibrariesTest {
                 }
 
                 data User { name: String, age: int } derive Show, AgeComparable
-                type Named { id: String } = Person derive Show
+                union Named { id: String } = Person derive Show
                 data Person { id: String, name: String }
 
                 fun render(): String = User { name: "Ada", age: 42 }.show()
@@ -567,7 +567,7 @@ class CapybaraCompilerLibrariesTest {
                 from /capy/lang/Result import { * }
                 from /capy/lang/String import { * }
 
-                type ValidatedName { name: String } with constructor {
+                union ValidatedName { name: String } with constructor {
                    if name.length() == 0 then
                        Error { message: "Name was empty" }
                    else
@@ -596,14 +596,14 @@ class CapybaraCompilerLibrariesTest {
                 from /capy/lang/Result import { * }
                 from /capy/lang/String import { * }
 
-                type ValidatedName { name: String } with constructor {
+                union ValidatedName { name: String } with constructor {
                    if name.length() == 0 then
                        Error { message: "Name was empty" }
                    else
                        Success { value: * { name: name } }
                 } = NamedEntity
 
-                type NamedEntity { name: String } = NamedUser
+                union NamedEntity { name: String } = NamedUser
 
                 data NamedUser { name: String, role: String }
                 """;
@@ -653,7 +653,7 @@ class CapybaraCompilerLibrariesTest {
                 collectionsModule(),
                 new RawModule("Assert", "/capy/test", """
                         data Assertion { result: bool, message: String }
-                        type Assert { assertions: List[Assertion] } = StringAssert
+                        union Assert { assertions: List[Assertion] } = StringAssert
                         data StringAssert { value: String }
                         """),
                 new RawModule("CapyTest", "/capy/test", """
@@ -735,7 +735,7 @@ class CapybaraCompilerLibrariesTest {
     void shouldCompileParentWithExpression() {
         var compiled = compileProgram(List.of(
                 new RawModule("WithParent", "/foo/with", """
-                        type Letter { x: int } = A | B
+                        union Letter { x: int } = A | B
                         data A { a: String }
                         data B { b: int }
                         fun update(letter: Letter): Letter = letter.with(x: letter.x + 1)
@@ -802,7 +802,7 @@ class CapybaraCompilerLibrariesTest {
     void shouldPreferResultOverDataOverloadForConstructorExpressionsInMethodChains() {
         var compiled = compileProgram(List.of(
                 new RawModule("Result", "/capy/lang", """
-                        type Result[T] = Success[T] | Error
+                        union Result[T] = Success[T] | Error
                         data Success[T] { value: T }
                         data Error { message: String }
                         """),
@@ -841,7 +841,7 @@ class CapybaraCompilerLibrariesTest {
     void shouldPreferResultOverDataOverloadForConstructorExpressionsAgainstLinkedLibraries() {
         var libraries = compileProgram(List.of(
                 new RawModule("Result", "/capy/lang", """
-                        type Result[T] = Success[T] | Error
+                        union Result[T] = Success[T] | Error
                         data Success[T] { value: T }
                         data Error { message: String }
                         """),
@@ -882,7 +882,7 @@ class CapybaraCompilerLibrariesTest {
     void shouldPreferDirectOverloadsOverWrappingPlainValuesIntoResult() {
         var compiled = compileProgram(List.of(
                 new RawModule("Result", "/capy/lang", """
-                        type Result[T] = Success[T] | Error
+                        union Result[T] = Success[T] | Error
                         data Success[T] { value: T }
                         data Error { message: String }
                         """),
@@ -933,7 +933,7 @@ class CapybaraCompilerLibrariesTest {
     void shouldResolveAbsoluteImportsAgainstRelativeModulePaths() {
         var compiled = compileProgram(List.of(
                 new RawModule("Result", "capy/lang", """
-                        type Result[T] = Success[T] | Error
+                        union Result[T] = Success[T] | Error
                         data Success[T] { value: T }
                         data Error { message: String }
                         """),
@@ -956,7 +956,7 @@ class CapybaraCompilerLibrariesTest {
     void shouldRejectNestedResultWhenResultAssertExpectsSingleResult() {
         var error = compileFailure(List.of(
                 new RawModule("Result", "/capy/lang", """
-                        type Result[T] = Success[T] | Error
+                        union Result[T] = Success[T] | Error
                         data Success[T] { value: T }
                         data Error { message: String }
                         """),
@@ -996,7 +996,7 @@ class CapybaraCompilerLibrariesTest {
     void shouldPreferLocalConstructorOverUnimportedLinkedLibraryConstructorWithSameName() {
         var libraries = compileProgram(List.of(
                 new RawModule("Result", "/capy/lang", """
-                        type Result[T] = Success[T] | Error
+                        union Result[T] = Success[T] | Error
                         data Success[T] { value: T }
                         data Error { message: String }
                         """),
@@ -1051,14 +1051,14 @@ class CapybaraCompilerLibrariesTest {
     void shouldCompileTypedAssertLetsForResultAssertLambdaChains() {
         var compiled = compileProgram(List.of(
                 new RawModule("Result", "/capy/lang", """
-                        type Result[T] = Success[T] | Error
+                        union Result[T] = Success[T] | Error
                         data Success[T] { value: T }
                         data Error { message: String }
                         """),
                 new RawModule("Assert", "/capy/test", """
                         from /capy/lang/Result import { * }
 
-                        type Assert = TechnicalAssert | DataAssert | IntAssert | ResultAssert
+                        union Assert = TechnicalAssert | DataAssert | IntAssert | ResultAssert
                         data TechnicalAssert { assertions: List[bool] }
                         data DataAssert { value: data }
                         data IntAssert { value: int }
@@ -1110,14 +1110,14 @@ class CapybaraCompilerLibrariesTest {
     void shouldWrapParentSubtypesIntoExpectedResultWithoutRecursiveCoercion() {
         var compiled = compileProgram(List.of(
                 new RawModule("Result", "/capy/lang", """
-                        type Result[T] = Success[T] | Error
+                        union Result[T] = Success[T] | Error
                         data Success[T] { value: T }
                         data Error { message: String }
                         """),
                 new RawModule("Json", "/capy/serialization", """
                         from /capy/lang/Result import { * }
 
-                        type Json = JsonObject | JsonBool
+                        union Json = JsonObject | JsonBool
                         data JsonObject { value: Dict[Json] }
                         data JsonBool { value: bool }
 
@@ -1202,7 +1202,7 @@ class CapybaraCompilerLibrariesTest {
     void shouldRejectSubtypeFieldTypeThatDoesNotMatchParentMemberType() {
         var error = compileFailure(List.of(
                 new RawModule("Consumer", "/foo/app", """
-                        type Duration { seconds: long } = DateDuration
+                        union Duration { seconds: long } = DateDuration
                         data DateDuration { seconds: int }
                         """)
         ));
@@ -1218,7 +1218,7 @@ class CapybaraCompilerLibrariesTest {
     void shouldRejectTypeMethodThatConflictsWithSubtypeFieldGetterType() {
         var error = compileFailure(List.of(
                 new RawModule("Consumer", "/foo/app", """
-                        type Duration = DateDuration | WeekDuration
+                        union Duration = DateDuration | WeekDuration
                         data DateDuration { seconds: int }
                         data WeekDuration { weeks: int }
 
@@ -1272,7 +1272,7 @@ class CapybaraCompilerLibrariesTest {
 
     private static RawModule reflectionMetadataModule() {
         return new RawModule("Reflection", "/capy/meta_prog", """
-                type AnyInfo { name: String, pkg: PackageInfo } =
+                union AnyInfo { name: String, pkg: PackageInfo } =
                     DataInfo
                     | InterfaceInfo
                     | ObjectInfo

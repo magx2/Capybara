@@ -7,7 +7,7 @@ from /capy/lang/Seq import { * }
 from /capy/lang/String import { * }
 from /capy/meta_prog/Reflection import { DataValueInfo, reflection }
 
-type Json = JsonObject | JsonArray | JsonValue
+union Json = JsonObject | JsonArray | JsonValue
 data JsonObject { value: Dict[Json] }
 fun JsonObject.`+`(other: JsonObject): JsonObject = JsonObject { value: this.value + other.value }
 fun JsonObject.`+`(other: Tuple[String, Json]): JsonObject = JsonObject { value: this.value + other }
@@ -21,9 +21,9 @@ fun JsonArray.`+`(other: JsonArray): JsonArray = JsonArray { value: this.value +
 fun JsonArray.`+`(other: Json): JsonArray = JsonArray { value: this.value + other }
 fun JsonArray.get(index: int): Option[Json] = this.value[index]
 
-type JsonValue = JsonString | JsonValueObject | JsonNumber | JsonValueArray | JsonBool | JsonNull
+union JsonValue = JsonString | JsonValueObject | JsonNumber | JsonValueArray | JsonBool | JsonNull
 data JsonString { value: String }
-type JsonNumber = JsonNumberDouble | JsonNumberLong
+union JsonNumber = JsonNumberDouble | JsonNumberLong
 data JsonNumberDouble { value: double }
 data JsonNumberLong { value: long }
 data JsonValueObject { value: JsonObject }

@@ -261,7 +261,7 @@ class JavaExpressionEvaluatorTest {
                 data JUnitReport { suites: List[JUnitTestSuite] }
 
                 /// Node type
-                type JUnitNode = JUnitReport
+                union JUnitNode = JUnitReport
                 """);
 
         var generated = new JavaGenerator().generate(program).modules().stream()
@@ -309,9 +309,9 @@ class JavaExpressionEvaluatorTest {
 
                 data Assertion { result: bool, message: String, type: String }
                 data StringAssert { value: String, assertions: List[Assertion] }
-                type Assert { assertions: List[Assertion] } = StringAssert
+                union Assert { assertions: List[Assertion] } = StringAssert
                 single Passed
-                type TestResult = Passed
+                union TestResult = Passed
                 data TestCase { name: String, result: TestResult, assertions_count: int, execution_time: long }
 
                 private fun execute(assertions: List[Assertion]): TestResult = Passed {}
@@ -342,9 +342,9 @@ class JavaExpressionEvaluatorTest {
 
                 data Assertion { result: bool, message: String, type: String }
                 data StringAssert { value: String, assertions: List[Assertion] }
-                type Assert { assertions: List[Assertion] } = StringAssert
+                union Assert { assertions: List[Assertion] } = StringAssert
                 single Passed
-                type TestResult = Passed
+                union TestResult = Passed
                 data TestCase { name: String, result: TestResult, assertions_count: int, execution_time: long }
 
                 private fun execute(assertions: List[Assertion]): TestResult = Passed {}
@@ -837,7 +837,7 @@ class JavaExpressionEvaluatorTest {
                 from /capy/collection/Dict import { * }
                 from /capy/lang/Seq import { * }
 
-                type Outcome = ParseSucceeded | ParseFailed
+                union Outcome = ParseSucceeded | ParseFailed
                 data ParseSucceeded { source: String }
                 data ParseFailed { source: String }
 
@@ -863,7 +863,7 @@ class JavaExpressionEvaluatorTest {
                 from /capy/collection/Set import { * }
                 from /capy/collection/Dict import { * }
 
-                type Outcome = ParseSucceeded | ParseFailed
+                union Outcome = ParseSucceeded | ParseFailed
                 data ParseSucceeded { source: String }
                 data ParseFailed { source: String }
                 data OutcomeBatch { outcomes: List[Outcome] }
@@ -952,7 +952,7 @@ class JavaExpressionEvaluatorTest {
         var generated = new JavaGenerator().generate(compileProgram("GenericResultBinding", "/foo/bar", """
                 from /capy/lang/Result import { * }
 
-                type Assert { assertions: List[() => String] } = StringAssert
+                union Assert { assertions: List[() => String] } = StringAssert
                 data StringAssert { assertions: List[() => String] }
                 data ResultAssert[T] { value: Result[T] }
 
@@ -1039,7 +1039,7 @@ class JavaExpressionEvaluatorTest {
                 from /capy/collection/Set import { * }
                 from /capy/collection/Dict import { * }
 
-                type Item = Text | Count
+                union Item = Text | Count
                 data Text { value: String }
                 data Count { value: int }
 
@@ -1103,7 +1103,7 @@ class JavaExpressionEvaluatorTest {
         var generatedProgram = new JavaGenerator().generate(compileProgram("TextFlatMapExpectedType", "/foo/bar", """
                 from /capy/collection/List import { * }
 
-                type TestSeq[T] = TestSeqEnd
+                union TestSeq[T] = TestSeqEnd
                 single TestSeqEnd
 
                 data Text { chars: List[String] }
@@ -1270,7 +1270,7 @@ class JavaExpressionEvaluatorTest {
                 Arguments.of(
                         "summon_tom",
                         """
-                                type Knight = EnglishKnight | Tom
+                                union Knight = EnglishKnight | Tom
                                 data EnglishKnight { power: float }
                                 single Tom
                                 fun summon_tom(): Knight = Tom {}
@@ -1347,7 +1347,7 @@ class JavaExpressionEvaluatorTest {
 
     private static RawModule reflectionMetadataModule() {
         return new RawModule("Reflection", "/capy/meta_prog", """
-                type AnyInfo { name: String, pkg: PackageInfo } =
+                union AnyInfo { name: String, pkg: PackageInfo } =
                     DataInfo
                     | InterfaceInfo
                     | ObjectInfo

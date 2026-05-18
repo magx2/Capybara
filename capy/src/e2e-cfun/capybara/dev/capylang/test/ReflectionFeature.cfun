@@ -3,7 +3,7 @@ from /capy/collection/List import { * }
 from /capy/collection/Set import { * }
 from /capy/collection/Dict import { * }
 
-type Letter { name: String } = A | B
+union Letter { name: String } = A | B
 data A { a: int }
 data B { b: List[String] }
 single ReflectedEmpty
@@ -13,7 +13,7 @@ single ReflectedSingleton
 enum ReflectedStatus { REFLECTED_READY, REFLECTED_DONE }
 data ReflectedEnvelope { label: String, payload: A }
 
-type ReflectedJson = ReflectedJsonObject | ReflectedJsonString | ReflectedJsonNumber | ReflectedJsonBool | ReflectedJsonNull
+union ReflectedJson = ReflectedJsonObject | ReflectedJsonString | ReflectedJsonNumber | ReflectedJsonBool | ReflectedJsonNull
 data ReflectedJsonObject { value: Dict[ReflectedJson] }
 data ReflectedJsonString { value: String }
 data ReflectedJsonNumber { value: int }

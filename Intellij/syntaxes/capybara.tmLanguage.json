@@ -130,7 +130,7 @@
       "patterns": [
         {
           "name": "keyword.control.capybara",
-          "match": "\\b(fun|rec|def|type|enum|data|single|const|derive|deriver|local|match|with|constructor|case|when|if|then|else|let|return|throw|try|catch|this|receiver|from|import|except|class|trait|interface|field|open|abstract|override|final|private|public|init|super|while|do|for|foreach|in)\\b"
+          "match": "\\b(fun|rec|def|union|enum|data|single|const|derive|deriver|local|match|with|constructor|case|when|if|then|else|let|return|throw|try|catch|this|receiver|from|import|except|class|trait|interface|field|open|abstract|override|final|private|public|init|super|while|do|for|foreach|in)\\b"
         },
         {
           "name": "keyword.operator.constructor.capybara",
@@ -196,7 +196,7 @@
         },
         {
           "name": "meta.type.constructor.capybara",
-          "match": "\\b(type)\\s+(_*[A-Z][A-Za-z0-9_]*(?:\\[[^\\]]+\\])?)(?:\\s*\\{[^{}\\n]*\\})?\\s+(with)\\s+(constructor)\\s*\\{"
+          "match": "\\b(union)\\s+(_*[A-Z][A-Za-z0-9_]*(?:\\[[^\\]]+\\])?)(?:\\s*\\{[^{}\\n]*\\})?\\s+(with)\\s+(constructor)\\s*\\{"
         },
         {
           "name": "meta.data.constructor-bypass.capybara",
@@ -216,7 +216,7 @@
         },
         {
           "name": "entity.name.type.private.capybara",
-          "match": "\\b(type|enum|data|single|deriver|class|trait|interface)\\s+(__[A-Za-z0-9_]*)"
+          "match": "\\b(union|enum|data|single|deriver|class|trait|interface)\\s+(__[A-Za-z0-9_]*)"
         },
         {
           "name": "entity.name.type.capybara",

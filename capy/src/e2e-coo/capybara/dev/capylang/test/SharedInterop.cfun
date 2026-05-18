@@ -1,4 +1,4 @@
-type SharedPet = SharedDog | SharedCat
+union SharedPet = SharedDog | SharedCat
 data SharedDog { name: String }
 data SharedCat { age: int }
 

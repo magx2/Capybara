@@ -109,7 +109,7 @@ fun data_pipe(a: int, b: int, c: int): /capy/lang/Option[Value] =
     then None {}
     else Some { add(add(value, b), c) }
 
-type Boxed = IntBox | LongBox
+union Boxed = IntBox | LongBox
 data IntBox { value: int }
 data LongBox { value: long }
 

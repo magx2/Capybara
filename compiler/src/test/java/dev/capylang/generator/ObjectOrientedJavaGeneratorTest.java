@@ -349,7 +349,7 @@ class ObjectOrientedJavaGeneratorTest {
                         "ObjectOrientedFpInterop",
                         "/foo/boo",
                         """
-                                type InteropPet = InteropDog | InteropCat
+                                union InteropPet = InteropDog | InteropCat
                                 data InteropDog { name: String }
                                 data InteropCat { age: int }
 
@@ -422,7 +422,7 @@ class ObjectOrientedJavaGeneratorTest {
                         "SharedInterop",
                         "/foo/boo",
                         """
-                                type SharedPet = SharedDog | SharedCat
+                                union SharedPet = SharedDog | SharedCat
                                 data SharedDog { name: String }
                                 data SharedCat { age: int }
 
@@ -494,7 +494,7 @@ class ObjectOrientedJavaGeneratorTest {
                         "SharedInterop",
                         "",
                         """
-                                type SharedPet = SharedDog | SharedCat
+                                union SharedPet = SharedDog | SharedCat
                                 data SharedDog { name: String }
                                 data SharedCat { age: int }
 

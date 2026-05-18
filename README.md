@@ -37,7 +37,7 @@ fun rectangle_area(width: float, height: float): float =
     let area = width * height
     yield area
  
-type ProgramResult = Success { result: Option[String] } | Failure { errorCode: int }
+union ProgramResult = Success { result: Option[String] } | Failure { errorCode: int }
  
 fun test_if(x: int): String =
     if x > 0 then "positive"
@@ -97,7 +97,7 @@ fun test_new_static_dictonary(): Dict[int] =
     }
 
 // algebraic type
-type Shape = Circle | Rectangle
+union Shape = Circle | Rectangle
 data Circle { radius: float }
 data Rectangle { width: float, height: float }
 
@@ -109,7 +109,7 @@ fun area(shape: Shape): float =
 fun circle(radius: float): Circle = Circle { "radius": radius }
 fun rectangle(width: float, height: float): Rectangle = Rectangle { "width": width, "height": height }
 
-type Option[T] = Some(T) | None
+union Option[T] = Some(T) | None
 data Some[T] { value: T }
 single None
 
@@ -118,7 +118,7 @@ fun positive_or_none(x: int): Option[int] =
     else None
 
 // type with common value
-type Person { name: String, age: int } = Student | Teacher
+union Person { name: String, age: int } = Student | Teacher
 data Student { grade: int }
 data Teacher { subject: String }
 fun ppl_in_school(persons: Person): List[String] = persons | p => p.name + " is age of " + p.age
@@ -139,11 +139,11 @@ fun apply_twice(f: (int) => int, x: int): int = x | f | f
 
 fun compose(f: (int) => int, g: (int) => int): (int) => int = x => x | f | g
 
-type BuildIn = Primitive | Collection | Tuple
-type Primitive = Number | String | bool
-type Number = int | long | float | double
-type Collection[T] = List[T] | Set[T] | Dict[T]
-type List[T] = Cons[T] | None
+union BuildIn = Primitive | Collection | Tuple
+union Primitive = Number | String | bool
+union Number = int | long | float | double
+union Collection[T] = List[T] | Set[T] | Dict[T]
+union List[T] = Cons[T] | None
 data Cons[T] { head: T, tail: List[T] }
 
 // method on types

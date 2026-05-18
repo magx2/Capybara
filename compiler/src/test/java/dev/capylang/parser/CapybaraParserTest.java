@@ -127,7 +127,7 @@ class CapybaraParserTest {
                 Arguments.of(
                         "seq_first_wildcard",
                         """
-                                type Seq[T] = Cons[T] | End
+                                union Seq[T] = Cons[T] | End
                                 data Cons[T] { value: T, rest: Seq[T] }
                                 single End
 
@@ -140,7 +140,7 @@ class CapybaraParserTest {
                 Arguments.of(
                         "seq_first_wildcard_fq_singleton",
                         """
-                                type Seq[T] = Cons[T] | End
+                                union Seq[T] = Cons[T] | End
                                 data Cons[T] { value: T, rest: Seq[T] }
                                 single End
 
@@ -182,6 +182,21 @@ class CapybaraParserTest {
         assertThat(call.arguments().get(0)).isInstanceOf(PlaceholderExpression.class);
         assertThat(call.arguments().get(2)).isInstanceOf(PlaceholderExpression.class);
         assertThat(call.arguments().get(3)).isInstanceOf(PlaceholderExpression.class);
+    }
+
+    @Test
+    @DisplayName("should parse union keyword function calls as function calls")
+    void parseUnionKeywordFunctionCallsAsFunctionCalls() {
+        var module = parseSuccess(new RawModule("Test", "/parser", """
+                fun union(): int = 1
+                fun call_union(): int = union()
+                """));
+
+        var function = findFunction("call_union", module.functional());
+        assertThat(function.expression()).isInstanceOf(FunctionCall.class);
+        var call = (FunctionCall) function.expression();
+        assertThat(call.name()).isEqualTo("union");
+        assertThat(call.arguments()).isEmpty();
     }
 
     @Test
@@ -239,7 +254,7 @@ class CapybaraParserTest {
                 }
 
                 data User { name: String, age: int } derive Show
-                type Named { id: String } = Person derive Show
+                union Named { id: String } = Person derive Show
                 data Person { id: String, name: String }
                 """));
 
@@ -285,7 +300,7 @@ class CapybaraParserTest {
     @DisplayName("should parse type constructor and constructor-local star data")
     void parseTypeConstructor() {
         var module = parseSuccess(new RawModule("Test", "/parser", """
-                type User { age: int } with constructor {
+                union User { age: int } with constructor {
                    if age > 0 then Success { * { age: age } } else Error { "age" }
                 } = Adult | Child
                 """));
@@ -295,6 +310,18 @@ class CapybaraParserTest {
         assertThat(type.constructor().orElseThrow()).isInstanceOf(IfExpression.class);
         var constructor = (IfExpression) type.constructor().orElseThrow();
         assertThat(constructor.thenBranch()).isInstanceOf(NewData.class);
+    }
+
+    @Test
+    @DisplayName("should reject old type keyword for union declarations")
+    void rejectTypeKeywordForUnionDeclarations() {
+        var result = new CapybaraParser().parseModule(new RawModule("Test", "/parser", """
+                type Result = Success | Error
+                data Success {}
+                data Error {}
+                """));
+
+        assertThat(result).isInstanceOf(Result.Error.class);
     }
 
     @Test
@@ -595,7 +622,7 @@ class CapybaraParserTest {
                 data JUnitReport { suites: List[JUnitTestSuite] }
 
                 /// Represents a single suite
-                type JUnitNode = JUnitTestSuite
+                union JUnitNode = JUnitTestSuite
                 """));
 
         var data = findDefinition(DataDeclaration.class, "JUnitReport", module.functional());
@@ -609,7 +636,7 @@ class CapybaraParserTest {
     @DisplayName("should parse trailing comma in data and type field declarations")
     void parseTrailingCommaInDataAndTypeFieldDeclarations() {
         var module = parseSuccess(new RawModule("Test", "/parser", """
-                type T1 { a: int, b: String, c: int, } = D1 | D2
+                union T1 { a: int, b: String, c: int, } = D1 | D2
                 data D1 { d: int, e: int, }
                 data D2 { f: int, g: int, }
                 """));

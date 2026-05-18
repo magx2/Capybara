@@ -16,7 +16,7 @@ const LIST_V: List[int] = [1, 2, 3]
 const SET_V: Set[String] = {"a", "b"}
 const DICT_V: Dict[int] = {"one": 1, "two": 2}
 
-type Animal = Dog | Cat
+union Animal = Dog | Cat
 data Dog { name: String }
 data Cat { age: int }
 

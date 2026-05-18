@@ -26,7 +26,7 @@ fun validated_user_age(age: int): String =
 fun validated_user_age_or_default(age: int): int =
     (User { age: age }).or_else(User! { age: 1 }).age
 
-type ValidatedName { name: String } with constructor {
+union ValidatedName { name: String } with constructor {
    if name.length() == 0 then
        Error { "Name was empty" }
    else
@@ -42,14 +42,14 @@ data NamedUser { name: String, role: String } with constructor {
 
 data NamedGuest { name: String, badge: String }
 
-type ValidatedProfileName { name: String } with constructor {
+union ValidatedProfileName { name: String } with constructor {
    if name.length() == 0 then
        Error { "Profile name was empty" }
    else
        Success { * { name: name } }
 } = Profile
 
-type ValidatedProfileRole { role: String } with constructor {
+union ValidatedProfileRole { role: String } with constructor {
    if role.length() == 0 then
        Error { "Profile role was empty" }
    else
