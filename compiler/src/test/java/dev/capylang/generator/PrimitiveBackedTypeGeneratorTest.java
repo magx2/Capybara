@@ -19,8 +19,9 @@ class PrimitiveBackedTypeGeneratorTest {
         var code = generatedCode(new JavaGenerator(), Path.of("foo", "Ids.java"));
 
         assertThat(code)
-                .contains("public static int make(int value)")
-                .contains("public static int unwrap(int value)")
+                .contains("public static @dev.capylang.PrimitiveType(cfunType = \"/foo/Ids.user_id\") int make(int value)")
+                .contains("public static int unwrap(@dev.capylang.PrimitiveType(cfunType = \"/foo/Ids.user_id\") int value)")
+                .contains("public static @dev.capylang.PrimitiveType(cfunType = \"/foo/Ids.user_id\") int plus(@dev.capylang.PrimitiveType(cfunType = \"/foo/Ids.user_id\") int left, @dev.capylang.PrimitiveType(cfunType = \"/foo/Ids.user_id\") int right)")
                 .contains("return value;");
         assertThat(code)
                 .doesNotContain("record UserId")
@@ -36,7 +37,9 @@ class PrimitiveBackedTypeGeneratorTest {
 
         assertThat(code)
                 .contains("function make(value)")
-                .contains("function unwrap(value)");
+                .contains("function unwrap(value)")
+                .contains("const __capybaraPrimitiveTypes = Object.freeze({")
+                .contains("user_id: Object.freeze({ cfunType: '/foo/Ids.user_id', backingType: 'int' })");
         assertThat(code)
                 .doesNotContain("class UserId")
                 .doesNotContain("class user_id")
@@ -51,7 +54,9 @@ class PrimitiveBackedTypeGeneratorTest {
 
         assertThat(code)
                 .contains("def make(value):")
-                .contains("def unwrap(value):");
+                .contains("def unwrap(value):")
+                .contains("__capybaraPrimitiveTypes = {")
+                .contains("'user_id': {\"cfunType\": '/foo/Ids.user_id', \"backingType\": 'int'}");
         assertThat(code)
                 .doesNotContain("class UserId")
                 .doesNotContain("class user_id")

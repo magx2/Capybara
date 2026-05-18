@@ -11,6 +11,14 @@ test('PrimitiveBackedTypes', () => {
     assert.equal(primitiveBackedTypes.unwrapScore(primitiveBackedTypes.scoreOf(11)), 11);
     assert.equal(assertSuccess(primitiveBackedTypes.newUserId(7)), 7);
     assert.equal(assertError(primitiveBackedTypes.newUserId(0)), 'bad user id');
+    assert.deepEqual(primitiveBackedTypes.__capybaraPrimitiveTypes.user_id, {
+        cfunType: '/dev/capylang/test/PrimitiveBackedTypes.user_id',
+        backingType: 'int',
+    });
+    assert.deepEqual(primitiveBackedTypes.__capybaraPrimitiveTypes.score, {
+        cfunType: '/dev/capylang/test/PrimitiveBackedTypes.score',
+        backingType: 'int',
+    });
 
     const generated = fs.readFileSync(modulePath('dev/capylang/test/PrimitiveBackedTypes.js'), 'utf8');
     assert.match(generated, /function addUserIds\(left, right\) \{\s+return plus__op_plus__user_id__user_id\(left, right\);/);

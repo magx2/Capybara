@@ -333,12 +333,11 @@ class ObjectOrientedJavaGeneratorTest {
                 .orElseThrow();
 
         assertThat(consumerModule.code())
-                .contains("private int seed;")
-                .contains("public IdConsumer(int seed)")
-                .contains("public int echo(int id)")
-                .contains("public int construct(int value)")
-                .contains("final int id = value;")
-                .doesNotContain("user_id")
+                .contains("private @dev.capylang.PrimitiveType(cfunType = \"/foo/boo/Ids.user_id\") int seed;")
+                .contains("public IdConsumer(@dev.capylang.PrimitiveType(cfunType = \"/foo/boo/Ids.user_id\") int seed)")
+                .contains("public @dev.capylang.PrimitiveType(cfunType = \"/foo/boo/Ids.user_id\") int echo(@dev.capylang.PrimitiveType(cfunType = \"/foo/boo/Ids.user_id\") int id)")
+                .contains("public @dev.capylang.PrimitiveType(cfunType = \"/foo/boo/Ids.user_id\") int construct(int value)")
+                .contains("final @dev.capylang.PrimitiveType(cfunType = \"/foo/boo/Ids.user_id\") int id = value;")
                 .doesNotContain("new UserId")
                 .doesNotContain("class UserId");
 
