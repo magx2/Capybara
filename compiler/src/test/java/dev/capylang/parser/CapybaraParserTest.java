@@ -44,6 +44,8 @@ class CapybaraParserTest {
                     case DataDeclaration dataDeclaration -> dataDeclaration.name().equals(name);
                     case TypeDeclaration typeDeclaration -> typeDeclaration.name().equals(name);
                     case EnumDeclaration enumDeclaration -> enumDeclaration.name().equals(name);
+                    case PrimitiveBackedTypeDeclaration primitiveBackedTypeDeclaration ->
+                            primitiveBackedTypeDeclaration.name().equals(name);
                     default -> false;
                 })
                 .findAny()
@@ -240,6 +242,64 @@ class CapybaraParserTest {
         var constructor = (IfExpression) data.constructor().orElseThrow();
         assertThat(constructor.thenBranch()).isInstanceOf(ConstructorData.class);
         assertThat(constructor.elseBranch()).isInstanceOf(ConstructorData.class);
+    }
+
+    @Test
+    @DisplayName("should parse primitive-backed type declarations")
+    void parsePrimitiveBackedTypeDeclaration() {
+        var module = parseSuccess(new RawModule("Test", "/parser", """
+                type foo_bar -> int
+                fun identity(value: foo_bar): foo_bar = value
+                """));
+
+        var declaration = findDefinition(PrimitiveBackedTypeDeclaration.class, "foo_bar", module.functional());
+        assertThat(declaration.backingType()).isEqualTo(PrimitiveType.INT);
+        assertThat(declaration.constructor()).isEmpty();
+
+        var identity = findFunction("identity", module.functional());
+        assertThat(identity.parameters().getFirst().type()).isEqualTo(new DataType("foo_bar"));
+        assertThat(identity.returnType()).contains(new DataType("foo_bar"));
+    }
+
+    @Test
+    @DisplayName("should parse primitive-backed type constructors and unwrap expressions")
+    void parsePrimitiveBackedTypeConstructorAndUnwrap() {
+        var module = parseSuccess(new RawModule("Test", "/parser", """
+                type user_id -> int with constructor {
+                    if value > 0 then value else 1
+                }
+
+                fun unwrap(id: user_id): int = @id
+                """));
+
+        var declaration = findDefinition(PrimitiveBackedTypeDeclaration.class, "user_id", module.functional());
+        assertThat(declaration.constructor()).hasValueSatisfying(constructor ->
+                assertThat(constructor).isInstanceOf(IfExpression.class));
+
+        var unwrap = findFunction("unwrap", module.functional());
+        assertThat(unwrap.expression()).isInstanceOfSatisfying(UnwrapExpression.class, expression ->
+                assertThat(expression.expression()).isInstanceOfSatisfying(Value.class, value ->
+                        assertThat(value.name()).isEqualTo("id")));
+    }
+
+    @Test
+    @DisplayName("should parse primitive-backed type methods")
+    void parsePrimitiveBackedTypeMethods() {
+        var module = parseSuccess(new RawModule("Test", "/parser", """
+                type user_id -> int
+
+                fun user_id.plus(id: user_id): user_id = user_id! { @this + @id }
+                fun user_id.`+`(id: user_id): user_id = user_id! { @this + @id }
+                """));
+
+        var plus = findFunction("__method__user_id__plus", module.functional());
+        var operator = findFunction("__method__user_id__+", module.functional());
+
+        assertThat(plus.parameters()).extracting(Parameter::name).containsExactly("this", "id");
+        assertThat(operator.parameters()).extracting(Parameter::name).containsExactly("this", "id");
+        assertThat(plus.parameters()).extracting(Parameter::type)
+                .containsExactly(new DataType("user_id"), new DataType("user_id"));
+        assertThat(operator.returnType()).contains(new DataType("user_id"));
     }
 
     @Test
