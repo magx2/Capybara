@@ -32,6 +32,29 @@ class PrimitiveBackedTypeGeneratorTest {
     }
 
     @Test
+    void shouldKeepImportedPrimitiveBackedJavaAnnotationsFullyQualified() {
+        var program = compileProgram(List.of(
+                new RawModule("UserIds", "/foo/users", """
+                        type user_id -> int
+                        """),
+                new RawModule("OrderIds", "/foo/orders", """
+                        type user_id -> long
+                        """),
+                new RawModule("Consumer", "/foo/app", """
+                        from /foo/users/UserIds import { user_id }
+
+                        fun echo(id: user_id): user_id = id
+                        """)
+        ));
+
+        var code = generatedCode(new JavaGenerator(), program, Path.of("foo", "app", "Consumer.java"));
+
+        assertThat(code)
+                .contains("public static @dev.capylang.PrimitiveType(cfunType = \"/foo/users/UserIds.user_id\") int echo(@dev.capylang.PrimitiveType(cfunType = \"/foo/users/UserIds.user_id\") int id)")
+                .doesNotContain("cfunType = \"user_id\"");
+    }
+
+    @Test
     void shouldErasePrimitiveBackedTypesInJavaScript() {
         var code = generatedCode(new JavaScriptGenerator(), Path.of("foo", "Ids.js"));
 
@@ -66,7 +89,11 @@ class PrimitiveBackedTypeGeneratorTest {
     }
 
     private static String generatedCode(Generator generator, Path modulePath) {
-        return generator.generate(program()).modules().stream()
+        return generatedCode(generator, program(), modulePath);
+    }
+
+    private static String generatedCode(Generator generator, CompiledProgram program, Path modulePath) {
+        return generator.generate(program).modules().stream()
                 .filter(module -> module.relativePath().equals(modulePath))
                 .map(GeneratedModule::code)
                 .findFirst()
@@ -74,14 +101,18 @@ class PrimitiveBackedTypeGeneratorTest {
     }
 
     private static CompiledProgram program() {
-        var result = CapybaraCompiler.INSTANCE.compile(List.of(new RawModule("Ids", "/foo", """
+        return compileProgram(List.of(new RawModule("Ids", "/foo", """
                 type user_id -> int
 
                 fun make(value: int): user_id = user_id { value }
                 fun unwrap(value: user_id): int = @value
                 fun user_id.plus(other: user_id): user_id = user_id! { @this + @other }
                 fun plus(left: user_id, right: user_id): user_id = left.plus(right)
-                """)), new TreeSet<>());
+                """)));
+    }
+
+    private static CompiledProgram compileProgram(List<RawModule> modules) {
+        var result = CapybaraCompiler.INSTANCE.compile(modules, new TreeSet<>());
         if (result instanceof Result.Error<CompiledProgram> error) {
             fail(error.errors().toString());
         }
