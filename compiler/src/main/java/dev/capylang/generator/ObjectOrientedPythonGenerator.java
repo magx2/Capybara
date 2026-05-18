@@ -629,6 +629,10 @@ final class ObjectOrientedPythonGenerator {
             return Optional.empty();
         }
         var body = expression.substring(braceIndex + 1, expression.length() - 1).trim();
+        var primitiveBackedType = programContext.primitiveBackedType(type);
+        if (primitiveBackedType.isPresent()) {
+            return renderPrimitiveBackedDataCreation(context, type, body, scope, parentNames, primitiveBackedType.orElseThrow());
+        }
         var typeName = PythonGenerator.simpleTypeName(type);
         var constructor = typeReference(context, typeName);
         if ("None_".equals(typeName) && body.isBlank()) {
@@ -653,6 +657,27 @@ final class ObjectOrientedPythonGenerator {
             position++;
         }
         return Optional.of(constructor + "({ " + String.join(", ", assignments) + " })");
+    }
+
+    private Optional<String> renderPrimitiveBackedDataCreation(
+            RenderContext context,
+            String type,
+            String body,
+            ExpressionScope scope,
+            Set<String> parentNames,
+            PythonGenerator.ProgramContext.PrimitiveBackedTypeInfo primitiveBackedType
+    ) {
+        if (type.trim().endsWith("!")) {
+            throw unsupported(context.module(), "Constructor bypass for primitive-backed type `" + primitiveBackedType.name() + "` is not supported in `.coo`");
+        }
+        if (!primitiveBackedType.directConstructionAllowed()) {
+            throw unsupported(context.module(), "Primitive-backed type `" + primitiveBackedType.name() + "` has a custom constructor; call an exported functional factory from `.coo`");
+        }
+        var values = splitTopLevel(body);
+        if (values.size() != 1 || findTopLevelChar(values.getFirst(), ':') >= 0) {
+            throw unsupported(context.module(), "Primitive-backed type `" + primitiveBackedType.name() + "` requires exactly one positional value");
+        }
+        return Optional.of(renderExpression(context, values.getFirst(), scope, parentNames));
     }
 
     private Optional<String> renderCollectionLiteral(RenderContext context, String expression, ExpressionScope scope, Set<String> parentNames) {
@@ -1313,6 +1338,9 @@ final class ObjectOrientedPythonGenerator {
     }
 
     private boolean isTypeLikePrefix(String value) {
+        if (programContext.primitiveBackedType(value).isPresent()) {
+            return true;
+        }
         return switch (value) {
             case "byte", "int", "long", "double", "float", "bool", "String", "any", "data", "void" -> true;
             default -> value.startsWith("/") || Character.isUpperCase(value.charAt(0)) || value.startsWith("_");

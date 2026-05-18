@@ -24,8 +24,8 @@ import static dev.capylang.generator.java.JavaExpressionEvaluator.evaluateTailRe
 
 public final class JavaGenerator implements Generator {
     private static final Logger log = Logger.getLogger(JavaGenerator.class.getName());
-    private final ObjectOrientedJavaGenerator objectOrientedJavaGenerator = new ObjectOrientedJavaGenerator();
     private static final String METHOD_DECL_PREFIX = "__method__";
+    private static final String PRIMITIVE_BACKED_TYPE_CONSTRUCTOR_FUNCTION_PREFIX = "__constructor__primitive__";
 
     @Override
     public GeneratedProgram generate(CompiledProgram program) {
@@ -40,6 +40,7 @@ public final class JavaGenerator implements Generator {
         for (var module : program.modules()) {
             modules.addAll(modules(module, timings, astBuilder, enumValueOwnerOverrides));
         }
+        var objectOrientedJavaGenerator = new ObjectOrientedJavaGenerator(primitiveBackedTypeInfo(program));
         modules.addAll(time(timings::addSourceRenderNanos, () -> objectOrientedJavaGenerator.generate(program.objectOrientedModules())));
         log.info(() -> "Java generation timings: AST build="
                        + Duration.ofNanos(timings.astBuildNanos())
@@ -124,6 +125,40 @@ public final class JavaGenerator implements Generator {
             }
         }
         return java.util.Map.copyOf(overrides);
+    }
+
+    private java.util.Map<String, ObjectOrientedJavaGenerator.PrimitiveBackedTypeInfo> primitiveBackedTypeInfo(CompiledProgram program) {
+        var constructorTypes = program.modules().stream()
+                .flatMap(module -> module.functions().stream())
+                .map(dev.capylang.compiler.CompiledFunction::name)
+                .filter(name -> name.startsWith(PRIMITIVE_BACKED_TYPE_CONSTRUCTOR_FUNCTION_PREFIX))
+                .map(name -> name.substring(PRIMITIVE_BACKED_TYPE_CONSTRUCTOR_FUNCTION_PREFIX.length()))
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+        var result = new java.util.LinkedHashMap<String, ObjectOrientedJavaGenerator.PrimitiveBackedTypeInfo>();
+        program.modules().stream()
+                .flatMap(module -> module.types().values().stream())
+                .filter(dev.capylang.compiler.CompiledPrimitiveBackedType.class::isInstance)
+                .map(dev.capylang.compiler.CompiledPrimitiveBackedType.class::cast)
+                .forEach(type -> {
+                    var info = new ObjectOrientedJavaGenerator.PrimitiveBackedTypeInfo(
+                            type.name(),
+                            type.backingType(),
+                            !constructorTypes.contains(type.name())
+                    );
+                    result.putIfAbsent(type.name(), info);
+                    result.putIfAbsent(simpleTypeName(type.name()), info);
+                });
+        return java.util.Map.copyOf(result);
+    }
+
+    private static String simpleTypeName(String name) {
+        var normalized = name.replace('\\', '/');
+        var slash = normalized.lastIndexOf('/');
+        if (slash >= 0) {
+            return normalized.substring(slash + 1);
+        }
+        var dot = normalized.lastIndexOf('.');
+        return dot >= 0 ? normalized.substring(dot + 1) : normalized;
     }
 
 

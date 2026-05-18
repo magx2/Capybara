@@ -38,6 +38,7 @@ import static java.util.stream.Collectors.joining;
 
 public final class PythonGenerator implements Generator {
     private static final String METHOD_DECL_PREFIX = "__method__";
+    private static final String PRIMITIVE_BACKED_TYPE_CONSTRUCTOR_FUNCTION_PREFIX = "__constructor__primitive__";
     private static final String DICT_PIPE_ARGS_SEPARATOR = "::";
     private static final String TUPLE_PIPE_ARGS_SEPARATOR = ";;";
     static final Path RUNTIME_PATH = Path.of("dev", "capylang", "capybara.py");
@@ -1331,6 +1332,7 @@ public final class PythonGenerator implements Generator {
             Map<String, Map<String, String>> importedOwnersByClassName,
             Map<String, List<String>> fieldsByType,
             Map<String, List<String>> parentTypesByType,
+            Map<String, PrimitiveBackedTypeInfo> primitiveBackedTypesByName,
             Map<String, String> functionNameOverrides
     ) {
         static ProgramContext build(List<ModuleInfo> modules, Map<String, String> functionNameOverrides) {
@@ -1445,6 +1447,7 @@ public final class PythonGenerator implements Generator {
                 }
                 importedOwners.put(module.className(), Map.copyOf(imported));
             }
+            var primitiveBackedTypes = primitiveBackedTypes(modules);
 
             return new ProgramContext(
                     Map.copyOf(paths),
@@ -1453,8 +1456,59 @@ public final class PythonGenerator implements Generator {
                     Map.copyOf(importedOwners),
                     Map.copyOf(fields),
                     Map.copyOf(parentTypes),
+                    Map.copyOf(primitiveBackedTypes),
                     Map.copyOf(functionNameOverrides)
             );
+        }
+
+        private static Map<String, PrimitiveBackedTypeInfo> primitiveBackedTypes(List<ModuleInfo> modules) {
+            var constructorTypes = modules.stream()
+                    .flatMap(module -> module.module().functions().stream())
+                    .map(CompiledFunction::name)
+                    .filter(name -> name.startsWith(PRIMITIVE_BACKED_TYPE_CONSTRUCTOR_FUNCTION_PREFIX))
+                    .map(name -> name.substring(PRIMITIVE_BACKED_TYPE_CONSTRUCTOR_FUNCTION_PREFIX.length()))
+                    .collect(java.util.stream.Collectors.toUnmodifiableSet());
+            var result = new LinkedHashMap<String, PrimitiveBackedTypeInfo>();
+            modules.stream()
+                    .flatMap(module -> module.module().types().values().stream())
+                    .filter(CompiledPrimitiveBackedType.class::isInstance)
+                    .map(CompiledPrimitiveBackedType.class::cast)
+                    .forEach(type -> {
+                        var info = new PrimitiveBackedTypeInfo(
+                                type.name(),
+                                primitiveTypeName(type.backingType()),
+                                !constructorTypes.contains(type.name())
+                        );
+                        result.putIfAbsent(type.name(), info);
+                        result.putIfAbsent(simpleTypeName(type.name()), info);
+                    });
+            return result;
+        }
+
+        private static String primitiveTypeName(PrimitiveLinkedType type) {
+            return switch (type) {
+                case BYTE -> "byte";
+                case INT -> "int";
+                case LONG -> "long";
+                case FLOAT -> "float";
+                case DOUBLE -> "double";
+                default -> throw new IllegalArgumentException("Unsupported primitive-backed type `" + type + "`");
+            };
+        }
+
+        Optional<PrimitiveBackedTypeInfo> primitiveBackedType(String rawType) {
+            var normalized = rawType.trim();
+            if (normalized.endsWith("!")) {
+                normalized = normalized.substring(0, normalized.length() - 1).trim();
+            }
+            var direct = primitiveBackedTypesByName.get(normalized);
+            if (direct != null) {
+                return Optional.of(direct);
+            }
+            return Optional.ofNullable(primitiveBackedTypesByName.get(simpleTypeName(normalized)));
+        }
+
+        record PrimitiveBackedTypeInfo(String name, String backingType, boolean directConstructionAllowed) {
         }
 
         Optional<Path> pathForClassName(String className) {

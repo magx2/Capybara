@@ -1,5 +1,6 @@
 package dev.capylang.generator;
 
+import dev.capylang.compiler.PrimitiveLinkedType;
 import dev.capylang.compiler.parser.ObjectOriented;
 import dev.capylang.compiler.parser.ObjectOrientedModule;
 
@@ -21,7 +22,16 @@ public final class ObjectOrientedJavaGenerator {
             "throw", "throws", "transient", "try", "void", "volatile", "while", "true", "false",
             "null", "record", "sealed", "permits", "var", "yield"
     );
+    private final Map<String, PrimitiveBackedTypeInfo> primitiveBackedTypes;
     private int syntheticCounter = 0;
+
+    public ObjectOrientedJavaGenerator() {
+        this(Map.of());
+    }
+
+    public ObjectOrientedJavaGenerator(Map<String, PrimitiveBackedTypeInfo> primitiveBackedTypes) {
+        this.primitiveBackedTypes = Map.copyOf(primitiveBackedTypes);
+    }
 
     public List<GeneratedModule> generate(List<ObjectOrientedModule> modules) {
         return modules.stream()
@@ -689,6 +699,10 @@ public final class ObjectOrientedJavaGenerator {
                    + javaString(trimmed) + ", "
                    + renderEmptyReflectionPackage()
                    + ")";
+        }
+        var primitiveBackedType = primitiveBackedType(trimmed);
+        if (primitiveBackedType.isPresent()) {
+            return renderReflectionTypeInfo(module, primitiveBackedType.orElseThrow().backingType().name().toLowerCase(Locale.ROOT), definitionsByName);
         }
         var declaration = definitionsByName.get(simpleTypeName(trimmed));
         if (declaration != null) {
@@ -1391,10 +1405,35 @@ public final class ObjectOrientedJavaGenerator {
             return Optional.empty();
         }
         var body = expression.substring(braceIndex + 1, expression.length() - 1).trim();
+        var primitiveBackedType = primitiveBackedType(type);
+        if (primitiveBackedType.isPresent()) {
+            return renderPrimitiveBackedDataCreation(module, type, body, parentNames, localMethodBindings, primitiveBackedType.orElseThrow());
+        }
         var arguments = splitTopLevel(body).stream()
                 .map(assignment -> renderDataCreationArgument(module, assignment, parentNames, localMethodBindings))
                 .collect(Collectors.joining(", "));
         return Optional.of("new " + renderType(type, false) + "(" + arguments + ")");
+    }
+
+    private Optional<String> renderPrimitiveBackedDataCreation(
+            ObjectOrientedModule module,
+            String type,
+            String body,
+            Set<String> parentNames,
+            LocalMethodBindings localMethodBindings,
+            PrimitiveBackedTypeInfo primitiveBackedType
+    ) {
+        if (type.trim().endsWith("!")) {
+            throw unsupported(module, "Constructor bypass for primitive-backed type `" + primitiveBackedType.name() + "` is not supported in `.coo`");
+        }
+        if (!primitiveBackedType.directConstructionAllowed()) {
+            throw unsupported(module, "Primitive-backed type `" + primitiveBackedType.name() + "` has a custom constructor; call an exported functional factory from `.coo`");
+        }
+        var values = splitTopLevel(body);
+        if (values.size() != 1 || findTopLevelChar(values.getFirst(), ':') >= 0) {
+            throw unsupported(module, "Primitive-backed type `" + primitiveBackedType.name() + "` requires exactly one positional value");
+        }
+        return Optional.of(renderExpression(module, values.getFirst(), parentNames, localMethodBindings));
     }
 
     private String renderDataCreationArgument(ObjectOrientedModule module, String assignment, Set<String> parentNames, LocalMethodBindings localMethodBindings) {
@@ -1776,6 +1815,9 @@ public final class ObjectOrientedJavaGenerator {
     }
 
     private boolean isTypeLikePrefix(String value) {
+        if (primitiveBackedType(value).isPresent()) {
+            return true;
+        }
         return switch (value) {
             case "byte", "int", "long", "double", "float", "bool", "String", "any", "data", "void" -> true;
             default -> value.startsWith("/") || Character.isUpperCase(value.charAt(0)) || value.startsWith("_");
@@ -1796,18 +1838,45 @@ public final class ObjectOrientedJavaGenerator {
         if (trimmed.startsWith("Dict[") && trimmed.endsWith("]")) {
             return "java.util.Map<String, " + renderType(innerType(trimmed), true) + ">";
         }
+        var primitiveBackedType = primitiveBackedType(trimmed);
+        if (primitiveBackedType.isPresent()) {
+            return renderPrimitiveType(primitiveBackedType.orElseThrow().backingType(), boxed);
+        }
         return switch (trimmed) {
-            case "byte" -> boxed ? "Byte" : "byte";
-            case "int" -> boxed ? "Integer" : "int";
-            case "long" -> boxed ? "Long" : "long";
-            case "double" -> boxed ? "Double" : "double";
-            case "float" -> boxed ? "Float" : "float";
+            case "byte" -> renderPrimitiveType(PrimitiveLinkedType.BYTE, boxed);
+            case "int" -> renderPrimitiveType(PrimitiveLinkedType.INT, boxed);
+            case "long" -> renderPrimitiveType(PrimitiveLinkedType.LONG, boxed);
+            case "double" -> renderPrimitiveType(PrimitiveLinkedType.DOUBLE, boxed);
+            case "float" -> renderPrimitiveType(PrimitiveLinkedType.FLOAT, boxed);
             case "bool" -> boxed ? "Boolean" : "boolean";
             case "String" -> "String";
             case "any" -> "Object";
             case "void" -> "void";
             default -> renderTypeReference(trimmed);
         };
+    }
+
+    private String renderPrimitiveType(PrimitiveLinkedType type, boolean boxed) {
+        return switch (type) {
+            case BYTE -> boxed ? "Byte" : "byte";
+            case INT -> boxed ? "Integer" : "int";
+            case LONG -> boxed ? "Long" : "long";
+            case DOUBLE -> boxed ? "Double" : "double";
+            case FLOAT -> boxed ? "Float" : "float";
+            default -> throw new IllegalArgumentException("Unsupported primitive-backed OO type `" + type + "`");
+        };
+    }
+
+    private Optional<PrimitiveBackedTypeInfo> primitiveBackedType(String rawType) {
+        var normalized = rawType.trim();
+        if (normalized.endsWith("!")) {
+            normalized = normalized.substring(0, normalized.length() - 1).trim();
+        }
+        var direct = primitiveBackedTypes.get(normalized);
+        if (direct != null) {
+            return Optional.of(direct);
+        }
+        return Optional.ofNullable(primitiveBackedTypes.get(simpleTypeName(normalized)));
     }
 
     private String innerType(String collectionType) {
@@ -1900,5 +1969,12 @@ public final class ObjectOrientedJavaGenerator {
     }
 
     private record ParentKinds(Optional<String> classParent, List<String> interfaceParents) {
+    }
+
+    public record PrimitiveBackedTypeInfo(
+            String name,
+            PrimitiveLinkedType backingType,
+            boolean directConstructionAllowed
+    ) {
     }
 }
