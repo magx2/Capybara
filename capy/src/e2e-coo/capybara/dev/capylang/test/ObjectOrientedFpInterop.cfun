@@ -2,8 +2,15 @@ union InteropPet = InteropDog | InteropCat
 data InteropDog { name: String }
 data InteropCat { age: int }
 data RecInteropValue { value: int }
+type user_id -> int
 
 fun make_dog(name: String): InteropDog = InteropDog { name: name }
+
+fun make_user_id(value: int): user_id = user_id { value }
+
+fun unwrap_user_id(id: user_id): int = @id
+
+fun add_user_ids(left: user_id, right: user_id): user_id = user_id! { @left + @right }
 
 fun pet_text(pet: InteropPet): String =
     match pet with

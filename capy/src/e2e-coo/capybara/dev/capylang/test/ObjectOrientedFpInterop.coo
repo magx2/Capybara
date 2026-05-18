@@ -1,4 +1,4 @@
-from ObjectOrientedFpInterop import { InteropPet, InteropDog, InteropCat, RecInteropValue }
+from ObjectOrientedFpInterop import { InteropPet, InteropDog, InteropCat, RecInteropValue, user_id }
 
 class PetInteractor {
     def invoke_fp_function(name: String): String =
@@ -17,5 +17,21 @@ class PetInteractor {
     def invoke_rec_function(seed: int): int {
         let value: RecInteropValue = RecInteropValue { value: seed }
         return ObjectOrientedFpInterop.step(3, value, 0)
+    }
+
+    def echo_user_id(id: user_id): user_id = id
+
+    def construct_user_id(value: int): user_id = user_id { value }
+
+    def make_user_id(value: int): user_id = ObjectOrientedFpInterop.makeUserId(value)
+
+    def unwrap_user_id(id: user_id): int = ObjectOrientedFpInterop.unwrapUserId(id)
+
+    def add_user_ids(left: user_id, right: user_id): user_id =
+        ObjectOrientedFpInterop.addUserIds(left, right)
+
+    def local_user_id(value: int): int {
+        let id: user_id = user_id { value }
+        return ObjectOrientedFpInterop.unwrapUserId(id)
     }
 }

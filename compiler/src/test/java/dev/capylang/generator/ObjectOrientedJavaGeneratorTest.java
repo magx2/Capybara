@@ -288,6 +288,128 @@ class ObjectOrientedJavaGeneratorTest {
     }
 
     @Test
+    void shouldGeneratePrimitiveBackedFunctionalTypesAsJavaPrimitivesInObjectOrientedCode() throws Exception {
+        var program = compileProgram(List.of(
+                new RawModule(
+                        "Ids",
+                        "/foo/boo",
+                        """
+                                type user_id -> int
+
+                                fun make_user_id(value: int): user_id = user_id { value }
+                                fun unwrap_user_id(id: user_id): int = @id
+                                """,
+                        SourceKind.FUNCTIONAL
+                ),
+                new RawModule(
+                        "IdConsumer",
+                        "/foo/boo",
+                        """
+                                from Ids import { user_id }
+
+                                class IdConsumer(seed: user_id) {
+                                    private field seed: user_id = seed
+
+                                    def echo(id: user_id): user_id = id
+
+                                    def construct(value: int): user_id = user_id { value }
+
+                                    def unwrap(id: user_id): int = Ids.unwrapUserId(id)
+
+                                    def local_id(value: int): int {
+                                        let id: user_id = user_id { value }
+                                        return Ids.unwrapUserId(id)
+                                    }
+                                }
+                                """,
+                        SourceKind.OBJECT_ORIENTED
+                )
+        ));
+
+        var generatedProgram = new JavaGenerator().generate(program);
+        var consumerModule = generatedProgram.modules().stream()
+                .filter(module -> module.relativePath().endsWith("IdConsumer.java"))
+                .findFirst()
+                .orElseThrow();
+
+        assertThat(consumerModule.code())
+                .contains("private int seed;")
+                .contains("public IdConsumer(int seed)")
+                .contains("public int echo(int id)")
+                .contains("public int construct(int value)")
+                .contains("final int id = value;")
+                .doesNotContain("user_id")
+                .doesNotContain("new UserId")
+                .doesNotContain("class UserId");
+
+        var classesDir = compileGeneratedJava(generatedProgram);
+        try (var classLoader = new URLClassLoader(new URL[]{classesDir.toUri().toURL()})) {
+            var consumerType = classLoader.loadClass("foo.boo.IdConsumer");
+            var consumer = consumerType.getConstructor(int.class).newInstance(3);
+
+            assertThat(consumerType.getMethod("echo", int.class).invoke(consumer, 7)).isEqualTo(7);
+            assertThat(consumerType.getMethod("construct", int.class).invoke(consumer, 11)).isEqualTo(11);
+            assertThat(consumerType.getMethod("unwrap", int.class).invoke(consumer, 13)).isEqualTo(13);
+            assertThat(consumerType.getMethod("local_id", int.class).invoke(consumer, 17)).isEqualTo(17);
+        }
+    }
+
+    @Test
+    void shouldRejectUnsafePrimitiveBackedConstructionFromObjectOrientedCode() {
+        var customConstructorProgram = compileProgram(List.of(
+                new RawModule(
+                        "Ids",
+                        "/foo/boo",
+                        """
+                                type user_id -> int with constructor {
+                                    value
+                                }
+                                """,
+                        SourceKind.FUNCTIONAL
+                ),
+                new RawModule(
+                        "IdConsumer",
+                        "/foo/boo",
+                        """
+                                from Ids import { user_id }
+
+                                class IdConsumer {
+                                    def construct(value: int): user_id = user_id { value }
+                                }
+                                """,
+                        SourceKind.OBJECT_ORIENTED
+                )
+        ));
+        assertThatThrownBy(() -> new JavaGenerator().generate(customConstructorProgram))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Primitive-backed type `user_id` has a custom constructor");
+
+        var rawConstructorProgram = compileProgram(List.of(
+                new RawModule(
+                        "Ids",
+                        "/foo/boo",
+                        "type user_id -> int",
+                        SourceKind.FUNCTIONAL
+                ),
+                new RawModule(
+                        "IdConsumer",
+                        "/foo/boo",
+                        """
+                                from Ids import { user_id }
+
+                                class IdConsumer {
+                                    def construct(value: int): user_id = user_id! { value }
+                                }
+                                """,
+                        SourceKind.OBJECT_ORIENTED
+                )
+        ));
+        assertThatThrownBy(() -> new JavaGenerator().generate(rawConstructorProgram))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Constructor bypass for primitive-backed type `user_id` is not supported in `.coo`");
+    }
+
+    @Test
     void shouldRejectTraitStateInJavaBackendV1() {
         var program = compileProgram("""
                 trait Named {
