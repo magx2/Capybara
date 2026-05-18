@@ -248,6 +248,8 @@ class CapybaraParserTest {
     @DisplayName("should parse primitive-backed type declarations")
     void parsePrimitiveBackedTypeDeclaration() {
         var module = parseSuccess(new RawModule("Test", "/parser", """
+                /// Domain-specific identifier
+                /// Erases to int
                 type foo_bar -> int
                 fun identity(value: foo_bar): foo_bar = value
                 """));
@@ -255,6 +257,7 @@ class CapybaraParserTest {
         var declaration = findDefinition(PrimitiveBackedTypeDeclaration.class, "foo_bar", module.functional());
         assertThat(declaration.backingType()).isEqualTo(PrimitiveType.INT);
         assertThat(declaration.constructor()).isEmpty();
+        assertThat(declaration.comments()).containsExactly("Domain-specific identifier", "Erases to int");
 
         var identity = findFunction("identity", module.functional());
         assertThat(identity.parameters().getFirst().type()).isEqualTo(new DataType("foo_bar"));

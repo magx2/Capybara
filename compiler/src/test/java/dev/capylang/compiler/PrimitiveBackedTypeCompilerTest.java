@@ -16,6 +16,7 @@ class PrimitiveBackedTypeCompilerTest {
     @Test
     void shouldConstructUnwrapAndCallPrimitiveBackedTypeMethods() {
         var compiled = compileSuccess(new RawModule("Ids", "/foo/app", """
+                /// User identifier
                 type user_id -> int
                 type order_id -> int
 
@@ -30,8 +31,10 @@ class PrimitiveBackedTypeCompilerTest {
                 """));
 
         var module = compiled.modules().first();
-        assertThat(module.types().get("user_id")).isInstanceOfSatisfying(CompiledPrimitiveBackedType.class, type ->
-                assertThat(type.backingType()).isEqualTo(PrimitiveLinkedType.INT));
+        assertThat(module.types().get("user_id")).isInstanceOfSatisfying(CompiledPrimitiveBackedType.class, type -> {
+            assertThat(type.backingType()).isEqualTo(PrimitiveLinkedType.INT);
+            assertThat(type.comments()).containsExactly("User identifier");
+        });
         assertThat(module.types().get("order_id")).isInstanceOfSatisfying(CompiledPrimitiveBackedType.class, type ->
                 assertThat(type.backingType()).isEqualTo(PrimitiveLinkedType.INT));
 
