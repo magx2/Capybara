@@ -14,5 +14,11 @@ class ObjectOrientedFpInteropTest {
         assertThat(((ObjectOrientedFpInterop.InteropDog) interactor.create_fp_data("Bara")).name()).isEqualTo("Bara");
         assertThat(interactor.match_fp_type("Mochi")).isEqualTo("dog:Mochi");
         assertThat(interactor.invoke_rec_function(10)).isEqualTo(36);
+        assertThat(interactor.echo_user_id(7)).isEqualTo(7);
+        assertThat(interactor.construct_user_id(11)).isEqualTo(11);
+        assertThat(interactor.make_user_id(13)).isEqualTo(13);
+        assertThat(interactor.unwrap_user_id(17)).isEqualTo(17);
+        assertThat(interactor.add_user_ids(19, 23)).isEqualTo(42);
+        assertThat(interactor.local_user_id(29)).isEqualTo(29);
     }
 }

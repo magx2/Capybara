@@ -12,4 +12,10 @@ test('object-oriented code can invoke FP functions, create FP data, and match FP
     assert.equal(dog.name, 'Bara');
     assert.equal(interactor.match_fp_type('Mochi'), 'dog:Mochi');
     assert.equal(interactor.invoke_rec_function(10), 36);
+    assert.equal(interactor.echo_user_id(7), 7);
+    assert.equal(interactor.construct_user_id(11), 11);
+    assert.equal(interactor.make_user_id(13), 13);
+    assert.equal(interactor.unwrap_user_id(17), 17);
+    assert.equal(interactor.add_user_ids(19, 23), 42);
+    assert.equal(interactor.local_user_id(29), 29);
 });

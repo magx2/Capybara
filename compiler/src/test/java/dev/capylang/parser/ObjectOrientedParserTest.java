@@ -87,6 +87,49 @@ class ObjectOrientedParserTest {
     }
 
     @Test
+    @DisplayName("should parse primitive-backed functional type references")
+    void parsePrimitiveBackedFunctionalTypeReferences() {
+        var result = ObjectOrientedParser.INSTANCE.parseModule(new RawModule(
+                "Ids",
+                "/parser",
+                """
+                        from Ids import { user_id }
+
+                        class Ids(seed: user_id) {
+                            field seed: user_id = seed
+
+                            def echo(id: user_id): user_id = id
+
+                            def construct(value: int): user_id = user_id { value }
+
+                            def local_id(value: int): int {
+                                let id: user_id = user_id { value }
+                                return value
+                            }
+                        }
+                        """,
+                SourceKind.OBJECT_ORIENTED
+        ));
+
+        assertThat(result).isInstanceOf(Result.Success.class);
+        var module = ((Result.Success<ObjectOrientedModule>) result).value();
+        var ids = (ObjectOriented.ClassDeclaration) module.objectOriented().definitions().getFirst();
+        assertThat(ids.constructorParameters()).extracting(ObjectOriented.Parameter::type).containsExactly("user_id");
+        assertThat(ids.members().stream()
+                .filter(ObjectOriented.FieldDeclaration.class::isInstance)
+                .map(ObjectOriented.FieldDeclaration.class::cast)
+                .map(ObjectOriented.FieldDeclaration::type)
+                .toList())
+                .containsExactly("user_id");
+        assertThat(ids.members().stream()
+                .filter(ObjectOriented.MethodDeclaration.class::isInstance)
+                .map(ObjectOriented.MethodDeclaration.class::cast)
+                .map(ObjectOriented.MethodDeclaration::returnType)
+                .toList())
+                .containsExactly("user_id", "user_id", "int");
+    }
+
+    @Test
     @DisplayName("should parse doc comments for types methods and local methods")
     void parseDocComments() {
         var result = ObjectOrientedParser.INSTANCE.parseModule(new RawModule(
