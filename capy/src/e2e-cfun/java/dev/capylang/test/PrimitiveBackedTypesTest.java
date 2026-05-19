@@ -14,6 +14,9 @@ class PrimitiveBackedTypesTest {
         assertThat(PrimitiveBackedTypes.unwrapRawUserId(7)).isEqualTo(7);
         assertThat(PrimitiveBackedTypes.plusUserIds(2, 3)).isEqualTo(5);
         assertThat(PrimitiveBackedTypes.addUserIds(4, 5)).isEqualTo(9);
+        assertThat(PrimitiveBackedTypes.incrementUserId(6)).isEqualTo(7);
+        assertThat(PrimitiveBackedTypes.stringAt("abc", 1)).isEqualTo("b");
+        assertThat(PrimitiveBackedTypes.stringGet("abc", 2)).isEqualTo("c");
         assertThat(PrimitiveBackedTypes.unwrapScore(PrimitiveBackedTypes.scoreOf(11))).isEqualTo(11);
     }
 

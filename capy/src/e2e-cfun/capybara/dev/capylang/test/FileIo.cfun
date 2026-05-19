@@ -1,4 +1,5 @@
 from /capy/io/IO import { * }
+from /capy/io/ByteSize import { * }
 from /capy/io/Path import { * }
 from /capy/lang/Effect import { * }
 from /capy/lang/Result import { * }
@@ -27,7 +28,7 @@ fun is_file_path(path: Path): Effect[bool] = is_file(path)
 
 fun is_directory_path(path: Path): Effect[bool] = is_directory(path)
 
-fun file_size(path: Path): Effect[Result[long]] = size(path)
+fun file_size(path: Path): Effect[Result[byte_count]] = size(path)
 
 fun create_file_at(path: Path): Effect[Result[Path]] = create_file(path)
 

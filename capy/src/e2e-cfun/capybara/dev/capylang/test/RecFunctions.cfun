@@ -52,7 +52,7 @@ fun rec sum_present_values(values: List[int], acc: int): int =
 private fun parse_length(value: String): Result[int] =
     if value == "bad"
     then Error { message: "bad length" }
-    else Success { value: value.length() }
+    else Success { value: @(value.length()) }
 
 fun rec sum_lengths_until_error(values: List[String], acc: int): String =
     match values[0] with

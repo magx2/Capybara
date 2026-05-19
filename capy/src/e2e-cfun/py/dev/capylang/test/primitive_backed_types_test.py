@@ -17,6 +17,9 @@ class PrimitiveBackedTypesPythonE2ETest(unittest.TestCase):
         self.assertEqual(primitive_backed_types.unwrapRawUserId(7), 7)
         self.assertEqual(primitive_backed_types.plusUserIds(2, 3), 5)
         self.assertEqual(primitive_backed_types.addUserIds(4, 5), 9)
+        self.assertEqual(primitive_backed_types.incrementUserId(6), 7)
+        self.assertEqual(primitive_backed_types.stringAt("abc", 1), "b")
+        self.assertEqual(primitive_backed_types.stringGet("abc", 2), "c")
         self.assertEqual(primitive_backed_types.unwrapScore(primitive_backed_types.scoreOf(11)), 11)
         primitive_types = getattr(primitive_backed_types, "__capybaraPrimitiveTypes")
         self.assertEqual(

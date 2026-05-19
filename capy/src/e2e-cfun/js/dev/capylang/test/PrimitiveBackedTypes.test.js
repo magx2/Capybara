@@ -8,6 +8,9 @@ test('PrimitiveBackedTypes', () => {
     assert.equal(primitiveBackedTypes.unwrapRawUserId(7), 7);
     assert.equal(primitiveBackedTypes.plusUserIds(2, 3), 5);
     assert.equal(primitiveBackedTypes.addUserIds(4, 5), 9);
+    assert.equal(primitiveBackedTypes.incrementUserId(6), 7);
+    assert.equal(primitiveBackedTypes.stringAt('abc', 1), 'b');
+    assert.equal(primitiveBackedTypes.stringGet('abc', 2), 'c');
     assert.equal(primitiveBackedTypes.unwrapScore(primitiveBackedTypes.scoreOf(11)), 11);
     assert.equal(assertSuccess(primitiveBackedTypes.newUserId(7)), 7);
     assert.equal(assertError(primitiveBackedTypes.newUserId(0)), 'bad user id');
