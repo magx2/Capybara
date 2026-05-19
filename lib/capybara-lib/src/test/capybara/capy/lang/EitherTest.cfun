@@ -77,7 +77,7 @@ fun should_reduce_branches(): Assert =
     let left = _left("missing")
     let right = _right(42)
     let left_reduced: String = left.reduce(:_left_text, :_right_text)
-    let right_reduced: String = right |> (:_left_text, :_right_text)
+    let right_reduced: String = right.`|>`(:_left_text, :_right_text)
     assert_all([
         assert_that(left_reduced).is_equal_to("left:missing"),
         assert_that(right_reduced).is_equal_to("right:42"),

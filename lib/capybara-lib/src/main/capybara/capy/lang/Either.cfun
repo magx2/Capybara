@@ -49,7 +49,7 @@ fun Either[L, R].reduce(on_left: L => Y, on_right: R => Y): Y =
     case Right { value } -> on_right(value)
 
 /// Reduces this value by applying the function for the current branch.
-fun Either[L, R].`|>`(reduce: Tuple[L => Y, R => Y]): Y = this.reduce(reduce[0], reduce[1])
+fun Either[L, R].`|>`(on_left: L => Y, on_right: R => Y): Y = this.reduce(on_left, on_right)
 
 /// Converts this `Either` into a string-error `Result`.
 fun Either[L, R].to_result(left_to_message: L => String): Result[R] =
