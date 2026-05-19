@@ -8,6 +8,7 @@ fun tests(): Effect[TestFile] =
         test("should map right", () => should_map_right()),
         test("should keep left when mapping right", () => should_keep_left_when_mapping_right()),
         test("should flat map right", () => should_flat_map_right()),
+        test("should flat map left", () => should_flat_map_left()),
         test("should map left", () => should_map_left()),
         test("should swap branches", () => should_swap_branches()),
         test("should reduce branches", () => should_reduce_branches()),
@@ -34,9 +35,24 @@ fun _left_bad(value: int): Either[String, int] = Left { "bad " + value }
 
 fun should_flat_map_right(): Assert =
     let either = _right(10)
+    let left = _left("missing")
     assert_all([
-        assert_that(either.flat_map(:_right_plus_5)).is_equal_to(Right { 15 }),
-        assert_that(either.flat_map(:_left_bad)).is_equal_to(Left { "bad 10" }),
+        assert_that(either.flat_map_right(:_right_plus_5)).is_equal_to(Right { 15 }),
+        assert_that(either.flat_map_right(:_left_bad)).is_equal_to(Left { "bad 10" }),
+        assert_that(left.flat_map_right(:_right_plus_5)).is_equal_to(Left { "missing" }),
+    ])
+
+fun _left_prefixed(message: String): Either[String, int] = Left { "handled " + message }
+
+fun _left_recovered(message: String): Either[String, int] = Right { 99 }
+
+fun should_flat_map_left(): Assert =
+    let either = _left("missing")
+    let right = _right(10)
+    assert_all([
+        assert_that(either.flat_map_left(:_left_prefixed)).is_equal_to(Left { "handled missing" }),
+        assert_that(either.flat_map_left(:_left_recovered)).is_equal_to(Right { 99 }),
+        assert_that(right.flat_map_left(:_left_prefixed)).is_equal_to(Right { 10 }),
     ])
 
 fun _prefix_error(message: String): String = "error: " + message
