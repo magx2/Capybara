@@ -286,12 +286,19 @@ public class JavaAstBuilder {
 
     private JavaConst buildStaticConst(CompiledFunction function) {
         return new JavaConst(
-                emittedFunctionName(function),
+                emittedConstName(function),
                 function.name().startsWith("_") || function.visibility() == Visibility.PRIVATE,
                 buildJavaType(function.returnType()),
                 function.expression(),
                 function.comments()
         );
+    }
+
+    private String emittedConstName(CompiledFunction function) {
+        if (isTopLevelConstName(function.name())) {
+            return function.name();
+        }
+        return emittedFunctionName(function);
     }
 
     private JavaMethod buildStaticMethod(CompiledFunction function, List<String> qualifiedJavaClassNames) {
@@ -402,7 +409,7 @@ public class JavaAstBuilder {
             return memberName;
         }
         if (isUpperSnakeConstName(memberName)) {
-            return buildMethodName(memberName);
+            return memberName;
         }
         if (isTypeLikeIdentifier(memberName)) {
             return buildClassName(memberName).toString();

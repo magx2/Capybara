@@ -15,7 +15,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.Optional;
 
 public final class DateTimeUtil {
-    private static final int JAVA_MAX_OFFSET_MINUTES = 18 * TimeModule.mINUTESINHOUR;
+    private static final int JAVA_MAX_OFFSET_MINUTES = 18 * TimeModule.MINUTES_IN_HOUR;
 
     private DateTimeUtil() {
     }
@@ -61,12 +61,12 @@ public final class DateTimeUtil {
      */
     public static Time fromJavaOffsetTime(OffsetTime time) {
         var totalSeconds = time.getOffset().getTotalSeconds();
-        if (Math.floorMod(totalSeconds, TimeModule.sECONDSINMINUTE) != 0) {
+        if (Math.floorMod(totalSeconds, TimeModule.SECONDS_IN_MINUTE) != 0) {
             throw new IllegalArgumentException(
                     "Java offset with second precision is unsupported: " + time.getOffset()
             );
         }
-        var offsetMinutes = Math.floorDiv(totalSeconds, TimeModule.sECONDSINMINUTE);
+        var offsetMinutes = Math.floorDiv(totalSeconds, TimeModule.SECONDS_IN_MINUTE);
         var truncated = time.toLocalTime().truncatedTo(ChronoUnit.SECONDS);
         return new Time(truncated.getHour(), truncated.getMinute(), truncated.getSecond(), Optional.of(offsetMinutes));
     }
@@ -97,7 +97,7 @@ public final class DateTimeUtil {
         if (minutes < -JAVA_MAX_OFFSET_MINUTES || minutes > JAVA_MAX_OFFSET_MINUTES) {
             throw new IllegalArgumentException("Capy offset out of Java ZoneOffset range: " + minutes + " minutes");
         }
-        return ZoneOffset.ofTotalSeconds(Math.multiplyExact(minutes, TimeModule.sECONDSINMINUTE));
+        return ZoneOffset.ofTotalSeconds(Math.multiplyExact(minutes, TimeModule.SECONDS_IN_MINUTE));
     }
 
     private static Optional<Integer> offsetMinutes(Time time) {
