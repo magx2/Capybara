@@ -40,10 +40,10 @@ fun from_string(path_string: String): Path =
     Path {
         root:
             if path_string.starts_with('/')
-            then PathRoot.ABSOLUTE {}
+            then PathRoot.ABSOLUTE
             else if path_string.starts_with('~')
-            then PathRoot.HOME {}
-            else PathRoot.RELATIVE {},
+            then PathRoot.HOME
+            else PathRoot.RELATIVE,
         prefix: None {},
         segments: __segments(value, "", [])
     }.normalize()

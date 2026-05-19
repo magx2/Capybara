@@ -1006,14 +1006,10 @@ public class CapybaraExpressionCompiler {
                         enumParent = Optional.ofNullable(findEnumParentForValue(singletonType.type().name()));
                     }
                     if (enumParent.isPresent()) {
-                        return linkNewData(new NewData(
-                                new DataType(functionCall.name()),
-                                false,
-                                List.of(),
-                                List.of(),
-                                List.of(),
-                                functionCall.position()
-                        ), scope);
+                        return Result.success(new CompiledNewData(
+                                singletonConstructionType(new SingletonDataType(singletonType.type(), enumParent)),
+                                List.of()
+                        ));
                     }
                     return withPosition(
                             Result.error("Singleton data value `" + functionCall.name() + "` must be constructed with `"
@@ -8256,6 +8252,10 @@ public class CapybaraExpressionCompiler {
             Scope scope,
             CompiledDataType expectedType
     ) {
+        var enumValueConstructionError = enumValueConstructionWithBracesError(newData);
+        if (enumValueConstructionError.isPresent()) {
+            return enumValueConstructionError.orElseThrow();
+        }
         return rawLinkNewDataWithType(newData, scope, expectedType)
                 .flatMap(expression -> {
                     if (!(expression instanceof CompiledNewData compiledNewData)) {
@@ -8306,8 +8306,34 @@ public class CapybaraExpressionCompiler {
     }
 
     private Result<CompiledExpression> rawLinkNewData(NewData newData, Scope scope) {
+        var enumValueConstructionError = enumValueConstructionWithBracesError(newData);
+        if (enumValueConstructionError.isPresent()) {
+            return enumValueConstructionError.orElseThrow();
+        }
         return linkNewDataType(newData.type(), scope)
                 .flatMap(type -> rawLinkNewDataWithType(newData, scope, type));
+    }
+
+    private Optional<Result<CompiledExpression>> enumValueConstructionWithBracesError(NewData newData) {
+        if (!(newData.type() instanceof DataType dataType)) {
+            return Optional.empty();
+        }
+        var singleton = findSingletonDataType(dataType.name());
+        if (singleton.isEmpty()) {
+            return Optional.empty();
+        }
+        var singletonType = singleton.orElseThrow();
+        var enumParent = singletonType.enumParent();
+        if (enumParent.isEmpty() && singletonType.type().enumValue()) {
+            enumParent = Optional.ofNullable(findEnumParentForValue(singletonType.type().name()));
+        }
+        if (enumParent.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(withPosition(
+                Result.error("Enum value `" + dataType.name() + "` must be used without `{}`"),
+                newData.position()
+        ));
     }
 
     private Result<CompiledExpression> rawLinkNewDataWithType(

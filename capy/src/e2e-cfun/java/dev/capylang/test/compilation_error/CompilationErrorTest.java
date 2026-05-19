@@ -94,6 +94,19 @@ public class CompilationErrorTest {
     }
 
     @Test
+    void shouldRejectEnumValueConstructionWithBraces() {
+        var errors = compileProgram("""
+                        enum Color { RED, BLUE }
+                        fun red(): Color = RED {}
+                        """,
+                "enum_value_with_braces");
+
+        assertThat(errors).hasSize(1);
+        assertThat(errors.first().message())
+                .contains("Enum value `RED` must be used without `{}`");
+    }
+
+    @Test
     void shouldRejectEmptyIndexAccess() {
         var errors = compileProgram("""
                         data Box { value: String }

@@ -5,17 +5,17 @@ enum Ordering { LESS, EQUAL, GREATER }
 /// `Ordering`.
 fun from_int(value: int): Ordering =
     if value < 0
-    then LESS {}
+    then LESS
     else if value > 0
-    then GREATER {}
-    else EQUAL {}
+    then GREATER
+    else EQUAL
 
 /// Reverses an ordering.
 fun reverse(ordering: Ordering): Ordering =
     match ordering with
-    case LESS -> GREATER {}
-    case EQUAL -> EQUAL {}
-    case GREATER -> LESS {}
+    case LESS -> GREATER
+    case EQUAL -> EQUAL
+    case GREATER -> LESS
 
 /// Uses `other` only when `ordering` is `EQUAL`.
 fun then_ordering(ordering: Ordering, other: Ordering): Ordering =
