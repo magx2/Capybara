@@ -303,6 +303,35 @@ class PythonGeneratorTest {
         assertThat(output).isEqualTo("int");
     }
 
+    @Test
+    void shouldEmitConstsBeforeDependentConsts() throws Exception {
+        var program = compileProgram("""
+                const Z_BASE: long = 21L
+                const A_DERIVED: long = Z_BASE * 2L
+
+                fun derived(): long = A_DERIVED
+                """);
+
+        var generated = new PythonGenerator().generate(program);
+        writeGenerated(generated);
+
+        var main = generated.modules().stream()
+                .filter(module -> module.relativePath().equals(Path.of("foo", "Main.py")))
+                .findFirst()
+                .orElseThrow();
+        assertThat(main.code()).containsSubsequence(
+                "zBASE = 21",
+                "aDERIVED = capy.long_mul(zBASE, 2)"
+        );
+
+        var output = runPython("""
+                import foo.Main as m
+                print(str(m.derived()))
+                """);
+
+        assertThat(output).isEqualTo("42");
+    }
+
     private static CompiledProgram compileProgram(String source) {
         return compileProgram(List.of(new RawModule("Main", "/foo", source)));
     }

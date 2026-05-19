@@ -8027,7 +8027,7 @@ public class CapybaraExpressionCompiler {
             case CompiledDataParentType linkedDataParentType -> linkedDataParentType.typeParameters().isEmpty()
                     ? linkedDataParentType.name()
                     : linkedDataParentType.name() + "[" + String.join(", ", linkedDataParentType.typeParameters()) + "]";
-            case CompiledPrimitiveBackedType primitiveBackedType -> primitiveBackedType.name();
+            case CompiledPrimitiveBackedType primitiveBackedType -> primitiveBackedType.cfunType();
             case CompiledGenericTypeParameter linkedGenericTypeParameter -> linkedGenericTypeParameter.name();
         };
     }
@@ -8647,15 +8647,7 @@ public class CapybaraExpressionCompiler {
     }
 
     private ProtectedConstructorRef directConstructorFor(CompiledPrimitiveBackedType primitiveBackedType) {
-        var direct = constructorRegistry.constructorsByType().get(primitiveBackedType.name());
-        if (direct != null) {
-            return direct;
-        }
-        return constructorRegistry.constructorsByType().entrySet().stream()
-                .filter(entry -> sameRawTypeName(entry.getKey(), primitiveBackedType.name()))
-                .map(Map.Entry::getValue)
-                .findFirst()
-                .orElse(null);
+        return constructorRegistry.constructorsByType().get(primitiveBackedType.name());
     }
 
     private List<ProtectedConstructorRef> parentConstructorsFor(CompiledDataType dataType) {

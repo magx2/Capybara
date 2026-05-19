@@ -98,7 +98,7 @@ class PrimitiveBackedTypeCompilerTest {
                     assertThat(call.name()).endsWith(".Ids.__constructor__primitive__user_id");
                     assertThat(call.returnType()).isInstanceOfSatisfying(CompiledDataParentType.class, result -> {
                         assertThat(result.name()).isEqualTo("Result");
-                        assertThat(result.typeParameters()).containsExactly("user_id");
+                        assertThat(result.typeParameters()).containsExactly("/foo/app/Ids.user_id");
                     });
                 }
         );

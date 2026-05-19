@@ -2327,6 +2327,8 @@ public class JavaExpressionEvaluator {
                     parentType.typeParameters().isEmpty()
                             ? parentType.name()
                             : parentType.name() + "[" + String.join(", ", parentType.typeParameters()) + "]";
+            case dev.capylang.compiler.CompiledPrimitiveBackedType primitiveBackedType ->
+                    primitiveBackedType.cfunType();
             default -> type.name();
         };
     }
