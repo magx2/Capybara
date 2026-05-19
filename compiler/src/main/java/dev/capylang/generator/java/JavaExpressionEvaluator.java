@@ -27,6 +27,8 @@ public class JavaExpressionEvaluator {
             ThreadLocal.withInitial(java.util.Map::of);
     private static final ThreadLocal<java.util.Map<String, String>> ENUM_VALUE_OWNER_OVERRIDES =
             ThreadLocal.withInitial(java.util.Map::of);
+    private static final ThreadLocal<java.util.Map<String, dev.capylang.compiler.PrimitiveLinkedType>> PRIMITIVE_BACKED_TYPES =
+            ThreadLocal.withInitial(java.util.Map::of);
 
     public static void setFunctionNameOverrides(java.util.Map<String, String> functionNameOverrides) {
         FUNCTION_NAME_OVERRIDES.set(java.util.Map.copyOf(functionNameOverrides));
@@ -38,6 +40,14 @@ public class JavaExpressionEvaluator {
 
     public static void setEnumValueOwnerOverrides(java.util.Map<String, String> enumValueOwnerOverrides) {
         ENUM_VALUE_OWNER_OVERRIDES.set(java.util.Map.copyOf(enumValueOwnerOverrides));
+    }
+
+    public static void setPrimitiveBackedTypes(
+            java.util.Map<String, dev.capylang.compiler.PrimitiveLinkedType> primitiveBackedTypes
+    ) {
+        PRIMITIVE_BACKED_TYPES.set(java.util.Map.copyOf(primitiveBackedTypes));
+        JAVA_CAST_TYPE_CACHE.clear();
+        NORMALIZED_TYPE_REFERENCE_CACHE.clear();
     }
 
     private static java.util.Map<String, String> standardStaticExtensionMethodOwners() {
@@ -474,11 +484,14 @@ public class JavaExpressionEvaluator {
                     ? functionCall.name().substring(idx + 2)
                     : functionCall.name();
             var normalizedMethodName = emittedMethodName(functionCall);
-            if (isStaticExtensionMethod(functionCall)) {
+            var primitiveBackedMethodCall = isPrimitiveBackedMethodCall(functionCall);
+            if (isStaticExtensionMethod(functionCall) || primitiveBackedMethodCall) {
                 var invokeArgs = java.util.stream.IntStream.range(0, args.size())
                         .mapToObj(i -> coercePrimitiveCallArgument(functionCall.arguments().get(i).type(), args.get(i)))
                         .collect(java.util.stream.Collectors.joining(", "));
-                return current.addExpression(staticExtensionMethodOwner(functionCall) + "." + normalizedMethodName + "(" + invokeArgs + ")");
+                var owner = staticExtensionMethodOwner(functionCall);
+                var target = owner == null ? normalizedMethodName : owner + "." + normalizedMethodName;
+                return current.addExpression(target + "(" + invokeArgs + ")");
             }
             var receiver = args.get(0);
             var typedReceiver = maybeCastGenericMethodReceiver(functionCall, receiver, normalizedMethodName);
@@ -1904,19 +1917,25 @@ public class JavaExpressionEvaluator {
         return "((" + indexExpression + ") < 0 ? (" + sizeExpression + " + (" + indexExpression + ")) : (" + indexExpression + "))";
     }
 
+    private static String javaBoxedPrimitiveType(dev.capylang.compiler.PrimitiveLinkedType primitive) {
+        return switch (primitive) {
+            case BYTE -> "java.lang.Byte";
+            case INT -> "java.lang.Integer";
+            case LONG -> "java.lang.Long";
+            case DOUBLE -> "java.lang.Double";
+            case STRING -> "java.lang.String";
+            case BOOL -> "java.lang.Boolean";
+            case FLOAT -> "java.lang.Float";
+            case ENUM -> "java.lang.Enum<?>";
+            case NOTHING, ANY, DATA -> "java.lang.Object";
+        };
+    }
+
     private static String javaCastType(dev.capylang.compiler.CompiledType type) {
         return switch (type) {
-            case dev.capylang.compiler.PrimitiveLinkedType primitive -> switch (primitive) {
-                case BYTE -> "java.lang.Byte";
-                case INT -> "java.lang.Integer";
-                case LONG -> "java.lang.Long";
-                case DOUBLE -> "java.lang.Double";
-                case STRING -> "java.lang.String";
-                case BOOL -> "java.lang.Boolean";
-                case FLOAT -> "java.lang.Float";
-                case ENUM -> "java.lang.Enum<?>";
-                case NOTHING, ANY, DATA -> "java.lang.Object";
-            };
+            case dev.capylang.compiler.CompiledPrimitiveBackedType primitiveBackedType ->
+                    javaBoxedPrimitiveType(primitiveBackedType.backingType());
+            case dev.capylang.compiler.PrimitiveLinkedType primitive -> javaBoxedPrimitiveType(primitive);
             case dev.capylang.compiler.CollectionLinkedType.CompiledList linkedList ->
                     "java.util.List<" + javaCastType(linkedList.elementType()) + ">";
             case dev.capylang.compiler.CollectionLinkedType.CompiledSet linkedSet ->
@@ -2414,6 +2433,10 @@ public class JavaExpressionEvaluator {
     }
 
     private static String computeJavaCastTypeFromDescriptor(String normalized) {
+        var primitiveBackedType = primitiveBackedType(normalized);
+        if (primitiveBackedType.isPresent()) {
+            return javaBoxedPrimitiveType(primitiveBackedType.orElseThrow());
+        }
         return switch (normalized) {
             case "byte" -> "java.lang.Byte";
             case "int" -> "java.lang.Integer";
@@ -3110,6 +3133,8 @@ public class JavaExpressionEvaluator {
 
     private static String javaPatternType(dev.capylang.compiler.CompiledType type) {
         return switch (type) {
+            case dev.capylang.compiler.CompiledPrimitiveBackedType primitiveBackedType ->
+                    javaBoxedPrimitiveType(primitiveBackedType.backingType());
             case dev.capylang.compiler.PrimitiveLinkedType primitiveType -> switch (primitiveType) {
                 case BYTE -> "java.lang.Byte";
                 case INT -> "java.lang.Integer";
@@ -3532,6 +3557,9 @@ public class JavaExpressionEvaluator {
         if (overrideBySimpleName.isPresent()) {
             return overrideBySimpleName.get();
         }
+        if (isPrimitiveBackedMethodCall(functionCall)) {
+            return primitiveBackedMethodName(functionCall);
+        }
         var methodName = simpleMethodName;
         if (methodName.contains("__compiled")) {
             return methodName;
@@ -3581,6 +3609,76 @@ public class JavaExpressionEvaluator {
                 functionCall.name(),
                 STANDARD_STATIC_EXTENSION_METHOD_OWNERS.get(functionCall.name())
         );
+    }
+
+    private static boolean isPrimitiveBackedMethodCall(CompiledFunctionCall functionCall) {
+        return functionCall.name().startsWith(METHOD_DECL_PREFIX)
+               && !functionCall.arguments().isEmpty()
+               && functionCall.arguments().getFirst().type() instanceof dev.capylang.compiler.CompiledPrimitiveBackedType;
+    }
+
+    private static String primitiveBackedMethodName(CompiledFunctionCall functionCall) {
+        var rawBaseName = simpleMethodName(functionCall.name());
+        return normalizeJavaMethodName(rawBaseName)
+               + "__"
+               + methodVariantSuffix(rawBaseName)
+               + overloadSuffix(functionCall.arguments().stream().map(CompiledExpression::type).toList());
+    }
+
+    private static String overloadSuffix(java.util.List<dev.capylang.compiler.CompiledType> parameterTypes) {
+        var suffix = parameterTypes.stream()
+                .map(type -> sanitizeOverloadSuffix(overloadTypeName(type)))
+                .collect(java.util.stream.Collectors.joining("__"));
+        return suffix.isBlank() ? "" : "__" + suffix;
+    }
+
+    private static String overloadTypeName(dev.capylang.compiler.CompiledType type) {
+        if (type instanceof dev.capylang.compiler.CompiledPrimitiveBackedType primitiveBackedType) {
+            return primitiveBackedType.name();
+        }
+        return String.valueOf(type);
+    }
+
+    private static String methodVariantSuffix(String rawBaseName) {
+        var prefix = rawBaseName.chars().allMatch(ch -> Character.isLetterOrDigit(ch) || ch == '_') ? "name" : "op";
+        return prefix + "_" + sanitizeMethodNameVariant(rawBaseName);
+    }
+
+    private static String sanitizeMethodNameVariant(String rawName) {
+        var builder = new StringBuilder();
+        for (var i = 0; i < rawName.length(); i++) {
+            var ch = rawName.charAt(i);
+            if (Character.isLetterOrDigit(ch)) {
+                builder.append(Character.toLowerCase(ch));
+            } else if (ch == '_') {
+                builder.append('_');
+            } else {
+                if (!builder.isEmpty() && builder.charAt(builder.length() - 1) != '_') {
+                    builder.append('_');
+                }
+                builder.append(symbolName(ch));
+                builder.append('_');
+            }
+        }
+        var sanitized = builder.toString().replaceAll("_+", "_");
+        if (sanitized.startsWith("_")) {
+            sanitized = sanitized.substring(1);
+        }
+        if (sanitized.endsWith("_")) {
+            sanitized = sanitized.substring(0, sanitized.length() - 1);
+        }
+        return sanitized.isBlank() ? "generated" : sanitized;
+    }
+
+    private static String sanitizeOverloadSuffix(String typeName) {
+        var sanitized = typeName.replaceAll("[^A-Za-z0-9]+", "_").replaceAll("_+", "_");
+        if (sanitized.startsWith("_")) {
+            sanitized = sanitized.substring(1);
+        }
+        if (sanitized.endsWith("_")) {
+            sanitized = sanitized.substring(0, sanitized.length() - 1);
+        }
+        return sanitized.toLowerCase();
     }
 
     private static String keyName(String signatureKey) {
@@ -3694,6 +3792,10 @@ public class JavaExpressionEvaluator {
 
     private static String computeNormalizedJavaTypeReference(String typeName) {
         var rawTypeName = stripGenericSuffix(typeName);
+        var primitiveBackedType = primitiveBackedType(rawTypeName);
+        if (primitiveBackedType.isPresent()) {
+            return javaBoxedPrimitiveType(primitiveBackedType.orElseThrow());
+        }
         var normalizedTypeName = normalizeQualifiedTypeName(rawTypeName);
         if ("Option".equals(rawTypeName)
             || normalizedTypeName.endsWith("/Option.Option")
@@ -3741,6 +3843,33 @@ public class JavaExpressionEvaluator {
             normalized.add(normalizeJavaClassName(part));
         }
         return String.join(".", normalized);
+    }
+
+    private static Optional<dev.capylang.compiler.PrimitiveLinkedType> primitiveBackedType(String typeName) {
+        var primitiveBackedTypes = PRIMITIVE_BACKED_TYPES.get();
+        var direct = primitiveBackedTypes.get(typeName);
+        if (direct != null) {
+            return Optional.of(direct);
+        }
+        if (typeName.startsWith("/")) {
+            var withoutLeadingSlash = typeName.substring(1);
+            var withoutSlash = primitiveBackedTypes.get(withoutLeadingSlash);
+            if (withoutSlash != null) {
+                return Optional.of(withoutSlash);
+            }
+        }
+        var normalized = normalizeQualifiedTypeName(typeName);
+        var normalizedDirect = primitiveBackedTypes.get(normalized);
+        if (normalizedDirect != null) {
+            return Optional.of(normalizedDirect);
+        }
+        if (normalized.startsWith("/")) {
+            var withoutLeadingSlash = primitiveBackedTypes.get(normalized.substring(1));
+            if (withoutLeadingSlash != null) {
+                return Optional.of(withoutLeadingSlash);
+            }
+        }
+        return Optional.empty();
     }
 
     private static String normalizeJavaPackagePath(String path) {

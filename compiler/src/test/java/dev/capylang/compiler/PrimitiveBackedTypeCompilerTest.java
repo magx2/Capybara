@@ -128,15 +128,25 @@ class PrimitiveBackedTypeCompilerTest {
 
         assertThat(compileFailure(new RawModule("Ids", "/foo/app", """
                 type user_id -> int
-                fun takes_int(id: int): int = id
-                fun bad(): int = takes_int(user_id { 1 })
-                """)).message()).contains("Expected `int`, got `user_id`");
-
-        assertThat(compileFailure(new RawModule("Ids", "/foo/app", """
-                type user_id -> int
                 type order_id -> int
                 fun bad(id: user_id): order_id = id
                 """)).message()).contains("Expected `order_id`, got `user_id`");
+    }
+
+    @Test
+    void shouldPassPrimitiveBackedValuesToBackingPrimitivePositions() {
+        compileSuccess(List.of(optionModule(), new RawModule("Indexes", "/foo/app", """
+                type index -> int with constructor {
+                    if value >= 0
+                    then value
+                    else 0
+                }
+
+                fun foo(i: int): int = i + 1
+                fun boo(idx: index): int = foo(idx)
+                fun baz(s: String, idx: index): Option[String] = s[idx]
+                fun widened(idx: index): long = idx
+                """)));
     }
 
     @Test
@@ -188,6 +198,14 @@ class PrimitiveBackedTypeCompilerTest {
                 union Result[T] = Success[T] | Error
                 data Success[T] { value: T }
                 data Error { message: String }
+                """);
+    }
+
+    private static RawModule optionModule() {
+        return new RawModule("Option", "/capy/lang", """
+                union Option[T] = Some[T] | None
+                data Some[T] { value: T }
+                single None
                 """);
     }
 }
