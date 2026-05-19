@@ -412,6 +412,9 @@ public final class JavaScriptGenerator implements Generator {
             }
             var exportAliases = new LinkedHashMap<String, List<String>>();
             for (var exportName : exportNames) {
+                if (isPrimitiveBackedMethodExportName(exportName)) {
+                    continue;
+                }
                 var overloadSeparator = exportName.indexOf("__");
                 if (overloadSeparator > 0) {
                     exportAliases.computeIfAbsent(exportName.substring(0, overloadSeparator), ignored -> new ArrayList<>())
@@ -445,6 +448,10 @@ public final class JavaScriptGenerator implements Generator {
                            .map(name -> "    " + name + ",")
                            .collect(joining("\n"))
                    + "\n};\n";
+        }
+
+        private boolean isPrimitiveBackedMethodExportName(String exportName) {
+            return exportName.contains("__name_") || exportName.contains("__op_");
         }
 
         private String renderProgramMain() {
@@ -707,11 +714,30 @@ public final class JavaScriptGenerator implements Generator {
                 return renderConversion(methodName, receiver, receiverType, functionCall.type());
             }
             if (receiverType instanceof CompiledPrimitiveBackedType) {
-                var target = resolveFunctionTarget(functionCall);
+                var target = primitiveBackedMethodTarget(functionCall)
+                        .orElseGet(() -> resolveFunctionTarget(functionCall));
                 return target + "(" + String.join(", ", args) + ")";
             }
             var emittedName = emittedMethodName(functionCall);
             return "(" + receiver + ")." + emittedName + "(" + String.join(", ", tailArgs) + ")";
+        }
+
+        private Optional<String> primitiveBackedMethodTarget(CompiledFunctionCall functionCall) {
+            if (!(functionCall.arguments().getFirst().type() instanceof CompiledPrimitiveBackedType primitiveBackedType)) {
+                return Optional.empty();
+            }
+            var dotIndex = primitiveBackedType.cfunType().lastIndexOf('.');
+            if (dotIndex < 0) {
+                return Optional.empty();
+            }
+            var moduleName = primitiveBackedType.cfunType().substring(0, dotIndex);
+            var ownerClassName = programContext.resolveClassName(moduleName).orElse(moduleName);
+            var emittedName = emittedMethodName(functionCall);
+            if (isCurrentClassReference(ownerClassName)) {
+                return Optional.of(emittedName);
+            }
+            require(ownerClassName);
+            return Optional.of(moduleVar(ownerClassName) + "." + emittedName);
         }
 
         private Optional<String> renderNativeSetMethod(String methodName, String receiver, List<String> tailArgs) {
@@ -1552,6 +1578,21 @@ public final class JavaScriptGenerator implements Generator {
                         );
                         putPrimitiveBackedTypeAliases(result, info, module.module());
                     }));
+            modules.forEach(module -> module.module().visiblePrimitiveBackedTypes().forEach((alias, type) -> {
+                var info = result.values().stream()
+                        .filter(existing -> existing.cfunType().equals(type.cfunType()))
+                        .findFirst()
+                        .orElseGet(() -> new PrimitiveBackedTypeInfo(
+                                type.name(),
+                                type.cfunType(),
+                                primitiveTypeName(type.backingType()),
+                                false
+                        ));
+                if (alias.contains("/") || alias.contains(".")) {
+                    result.putIfAbsent(alias, info);
+                }
+                putPrimitiveBackedTypeAliases(result, info);
+            }));
             putUniqueSimplePrimitiveBackedTypeAliases(result);
             return result;
         }
@@ -1575,6 +1616,17 @@ public final class JavaScriptGenerator implements Generator {
             result.putIfAbsent(info.cfunType(), info);
             result.putIfAbsent(withoutLeadingSlash(info.cfunType()), info);
             result.putIfAbsent(module.name() + "." + info.name(), info);
+        }
+
+        private static void putPrimitiveBackedTypeAliases(
+                Map<String, PrimitiveBackedTypeInfo> result,
+                PrimitiveBackedTypeInfo info
+        ) {
+            if (info.name().contains("/") || info.name().contains(".")) {
+                result.putIfAbsent(info.name(), info);
+            }
+            result.putIfAbsent(info.cfunType(), info);
+            result.putIfAbsent(withoutLeadingSlash(info.cfunType()), info);
         }
 
         private static void putUniqueSimplePrimitiveBackedTypeAliases(Map<String, PrimitiveBackedTypeInfo> result) {
@@ -2647,6 +2699,52 @@ public final class JavaScriptGenerator implements Generator {
                         return success(new DateValue({ day, month, year }));
                     }
 
+                    function __constructor__primitive__month(value) {
+                        return value >= 1 && value <= 12
+                            ? success(value)
+                            : failure('month must be between 1 and 12');
+                    }
+
+                    function greater__month__month(this_, other) {
+                        return this_ > other;
+                    }
+
+                    function greater_op3d__month__month(this_, other) {
+                        return this_ >= other;
+                    }
+
+                    function less__month__month(this_, other) {
+                        return this_ < other;
+                    }
+
+                    function less_op3d__month__month(this_, other) {
+                        return this_ <= other;
+                    }
+
+                    function op3d_op3d__month__month(this_, other) {
+                        return this_ === other;
+                    }
+
+                    function greater(...args) {
+                        return greater__month__month(...args);
+                    }
+
+                    function greater_op3d(...args) {
+                        return greater_op3d__month__month(...args);
+                    }
+
+                    function less(...args) {
+                        return less__month__month(...args);
+                    }
+
+                    function less_op3d(...args) {
+                        return less_op3d__month__month(...args);
+                    }
+
+                    function op3d_op3d(...args) {
+                        return op3d_op3d__month__month(...args);
+                    }
+
                     function parseInteger(text, label) {
                         if (!/^[0-9]+$/.test(text)) {
                             return failure(`Invalid ISO 8601 date format: expected digits for ${label}, got \\`${text}\\``);
@@ -2676,7 +2774,9 @@ public final class JavaScriptGenerator implements Generator {
                     function parseDate(yearPart, monthPart, dayPart) {
                         const year = parseYear(yearPart);
                         if (!capy.isType(year, 'Success')) return year;
-                        const month = parseInteger(monthPart, 'month');
+                        const monthValue = parseInteger(monthPart, 'month');
+                        if (!capy.isType(monthValue, 'Success')) return monthValue;
+                        const month = __constructor__primitive__month(monthValue.value);
                         if (!capy.isType(month, 'Success')) return month;
                         const day = parseInteger(dayPart, 'day');
                         if (!capy.isType(day, 'Success')) return day;
@@ -2703,13 +2803,27 @@ public final class JavaScriptGenerator implements Generator {
 
                     const uNIXDATE = new DateValue({ day: 1, month: 1, year: 1970 });
                     const UNIX_DATE = uNIXDATE;
+                    const __capybaraPrimitiveTypes = Object.freeze({
+                        month: Object.freeze({ cfunType: '/capy/date_time/Date.month', backingType: 'int' }),
+                    });
 
                     module.exports = {
                         Date: DateValue,
                         __constructor__data__Date,
+                        __constructor__primitive__month,
                         _days30Month,
                         _days31Month,
                         _leapYear,
+                        greater__month__month,
+                        greater_op3d__month__month,
+                        less__month__month,
+                        less_op3d__month__month,
+                        op3d_op3d__month__month,
+                        greater,
+                        greater_op3d,
+                        less,
+                        less_op3d,
+                        op3d_op3d,
                         jANUARY,
                         JANUARY: jANUARY,
                         fEBRUARY,
@@ -2744,6 +2858,7 @@ public final class JavaScriptGenerator implements Generator {
                         __MONTH_TO_DAY_BIAS,
                         uNIXDATE,
                         UNIX_DATE,
+                        __capybaraPrimitiveTypes,
                         fromDaysSinceUnixEpoch,
                         from_days_since_unix_epoch: fromDaysSinceUnixEpoch,
                         fromIso8601,
@@ -5122,10 +5237,18 @@ public final class JavaScriptGenerator implements Generator {
         var overrides = new LinkedHashMap<String, String>();
         var collisions = new LinkedHashMap<String, List<CompiledFunction>>();
         var ownerModuleNames = new java.util.IdentityHashMap<CompiledFunction, String>();
+        var primitiveBackedTypeNames = primitiveBackedTypeNames(program);
+        var primitiveBackedMethods = new ArrayList<CompiledFunction>();
         for (var module : program.modules()) {
             for (var function : module.functions()) {
                 ownerModuleNames.put(function, module.name());
-                var ownerKey = function.name().startsWith(METHOD_DECL_PREFIX)
+                var primitiveBackedMethod = methodOwnerType(function.name())
+                        .filter(primitiveBackedTypeNames::contains)
+                        .isPresent();
+                if (primitiveBackedMethod) {
+                    primitiveBackedMethods.add(function);
+                }
+                var ownerKey = function.name().startsWith(METHOD_DECL_PREFIX) && !primitiveBackedMethod
                         ? function.name().substring(0, Math.max(function.name().lastIndexOf("__"), METHOD_DECL_PREFIX.length()))
                         : module.name();
                 var normalizedBaseName = normalizeJsIdentifier(baseMethodName(function.name()));
@@ -5166,7 +5289,38 @@ public final class JavaScriptGenerator implements Generator {
                 }
             }
         }
+        for (var function : primitiveBackedMethods) {
+            var emittedName = primitiveBackedMethodName(function);
+            var parameterTypes = function.parameters().stream().map(CompiledFunction.CompiledFunctionParameter::type).toList();
+            overrides.put(signatureKey(function.name(), parameterTypes), emittedName);
+            overrides.put(signatureKey(ownerModuleNames.get(function) + "." + function.name(), parameterTypes), emittedName);
+        }
         return Map.copyOf(overrides);
+    }
+
+    private static String primitiveBackedMethodName(CompiledFunction function) {
+        var rawBaseName = baseMethodName(function.name());
+        return normalizeJsIdentifier(rawBaseName) + "__" + methodVariantSuffix(rawBaseName) + overloadSuffix(function);
+    }
+
+    private static Set<String> primitiveBackedTypeNames(CompiledProgram program) {
+        return program.modules().stream()
+                .flatMap(module -> module.types().values().stream())
+                .filter(CompiledPrimitiveBackedType.class::isInstance)
+                .map(CompiledPrimitiveBackedType.class::cast)
+                .map(CompiledPrimitiveBackedType::name)
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+    }
+
+    private static Optional<String> methodOwnerType(String functionName) {
+        if (!functionName.startsWith(METHOD_DECL_PREFIX)) {
+            return Optional.empty();
+        }
+        var separatorIndex = functionName.indexOf("__", METHOD_DECL_PREFIX.length());
+        if (separatorIndex < 0) {
+            return Optional.empty();
+        }
+        return Optional.of(functionName.substring(METHOD_DECL_PREFIX.length(), separatorIndex));
     }
 
         private static Optional<String> findOverrideBySimpleName(Map<String, String> functionNameOverrides, String targetName, String parameterSignature) {

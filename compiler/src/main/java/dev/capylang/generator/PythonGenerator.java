@@ -429,6 +429,9 @@ public final class PythonGenerator implements Generator {
         private String renderExportAliases() {
             var exportAliases = new LinkedHashMap<String, List<String>>();
             for (var exportName : exportNames) {
+                if (isPrimitiveBackedMethodExportName(exportName)) {
+                    continue;
+                }
                 var overloadSeparator = exportName.indexOf("__");
                 if (overloadSeparator > 0) {
                     exportAliases.computeIfAbsent(exportName.substring(0, overloadSeparator), ignored -> new ArrayList<>())
@@ -454,6 +457,10 @@ public final class PythonGenerator implements Generator {
                 aliases.append("    ], args)\n\n");
             }
             return aliases.toString();
+        }
+
+        private boolean isPrimitiveBackedMethodExportName(String exportName) {
+            return exportName.contains("__name_") || exportName.contains("__op_");
         }
 
         private String renderProgramMain() {
@@ -708,7 +715,8 @@ public final class PythonGenerator implements Generator {
                 return renderConversion(methodName, receiver, receiverType, functionCall.type());
             }
             if (receiverType instanceof CompiledPrimitiveBackedType) {
-                var target = resolveFunctionTarget(functionCall);
+                var target = primitiveBackedMethodTarget(functionCall)
+                        .orElseGet(() -> resolveFunctionTarget(functionCall));
                 return target + "(" + String.join(", ", args) + ")";
             }
             var emittedName = pyIdentifier(emittedMethodName(functionCall));
@@ -716,6 +724,24 @@ public final class PythonGenerator implements Generator {
                 emittedName = "with_";
             }
             return "(" + receiver + ")." + emittedName + "(" + String.join(", ", tailArgs) + ")";
+        }
+
+        private Optional<String> primitiveBackedMethodTarget(CompiledFunctionCall functionCall) {
+            if (!(functionCall.arguments().getFirst().type() instanceof CompiledPrimitiveBackedType primitiveBackedType)) {
+                return Optional.empty();
+            }
+            var dotIndex = primitiveBackedType.cfunType().lastIndexOf('.');
+            if (dotIndex < 0) {
+                return Optional.empty();
+            }
+            var moduleName = primitiveBackedType.cfunType().substring(0, dotIndex);
+            var ownerClassName = programContext.resolveClassName(moduleName).orElse(moduleName);
+            var emittedName = emittedMethodName(functionCall);
+            if (isCurrentClassReference(ownerClassName)) {
+                return Optional.of(emittedName);
+            }
+            require(ownerClassName);
+            return Optional.of(moduleVar(ownerClassName) + "." + emittedName);
         }
 
         private Optional<String> renderNativeSetMethod(String methodName, String receiver, List<String> tailArgs) {
@@ -1513,6 +1539,21 @@ public final class PythonGenerator implements Generator {
                         );
                         putPrimitiveBackedTypeAliases(result, info, module.module());
                     }));
+            modules.forEach(module -> module.module().visiblePrimitiveBackedTypes().forEach((alias, type) -> {
+                var info = result.values().stream()
+                        .filter(existing -> existing.cfunType().equals(type.cfunType()))
+                        .findFirst()
+                        .orElseGet(() -> new PrimitiveBackedTypeInfo(
+                                type.name(),
+                                type.cfunType(),
+                                primitiveTypeName(type.backingType()),
+                                false
+                        ));
+                if (alias.contains("/") || alias.contains(".")) {
+                    result.putIfAbsent(alias, info);
+                }
+                putPrimitiveBackedTypeAliases(result, info);
+            }));
             putUniqueSimplePrimitiveBackedTypeAliases(result);
             return result;
         }
@@ -1536,6 +1577,17 @@ public final class PythonGenerator implements Generator {
             result.putIfAbsent(info.cfunType(), info);
             result.putIfAbsent(withoutLeadingSlash(info.cfunType()), info);
             result.putIfAbsent(module.name() + "." + info.name(), info);
+        }
+
+        private static void putPrimitiveBackedTypeAliases(
+                Map<String, PrimitiveBackedTypeInfo> result,
+                PrimitiveBackedTypeInfo info
+        ) {
+            if (info.name().contains("/") || info.name().contains(".")) {
+                result.putIfAbsent(info.name(), info);
+            }
+            result.putIfAbsent(info.cfunType(), info);
+            result.putIfAbsent(withoutLeadingSlash(info.cfunType()), info);
         }
 
         private static void putUniqueSimplePrimitiveBackedTypeAliases(Map<String, PrimitiveBackedTypeInfo> result) {
@@ -1780,7 +1832,13 @@ public final class PythonGenerator implements Generator {
                     "exists", "is_file", "isFile", "is_directory", "isDirectory", "size", "create_file", "createFile",
                     "create_directory", "createDirectory", "create_directories", "createDirectories", "list_entries",
                     "listEntries", "delete", "delete_", "copy", "copy_replace", "copyReplace", "move", "move_replace", "moveReplace"));
-            exports.put("capy.date_time.DateModule", Set.of("Date", "__constructor__data__Date", "capy__constructorDataDate", "UNIX_DATE", "fromIso8601", "from_iso_8601"));
+            exports.put("capy.date_time.DateModule", Set.of(
+                    "Date", "__constructor__data__Date", "capy__constructorDataDate",
+                    "__constructor__primitive__month", "capy__constructorPrimitiveMonth",
+                    "greater", "greater_op3d", "less", "less_op3d", "op3d_op3d",
+                    "greater__month__month", "greater_op3d__month__month", "less__month__month",
+                    "less_op3d__month__month", "op3d_op3d__month__month",
+                    "UNIX_DATE", "fromIso8601", "from_iso_8601", "__capybaraPrimitiveTypes"));
             exports.put("capy.date_time.TimeModule", Set.of("Time", "__constructor__data__Time", "capy__constructorDataTime", "fromIso8601", "from_iso_8601"));
             exports.put("capy.date_time.DurationModule", Set.of("DateDuration", "WeekDuration", "ZERO", "fromIso8601", "from_iso_8601"));
             exports.put("capy.date_time.DateTimeModule", Set.of("DateTime", "UNIX_EPOCH", "fromTimestamp", "from_timestamp", "fromIso8601", "from_iso_8601"));
@@ -2163,6 +2221,19 @@ public final class PythonGenerator implements Generator {
                     Date = capy.Date
                     __constructor__data__Date = capy.make_date
                     capy__constructorDataDate = capy.make_date
+                    def __constructor__primitive__month(value):
+                        return capy.Success({'value': value}) if value >= 1 and value <= 12 else capy.Error({'message': 'month must be between 1 and 12'})
+                    capy__constructorPrimitiveMonth = __constructor__primitive__month
+                    def greater(this_, other): return this_ > other
+                    def greater_op3d(this_, other): return this_ >= other
+                    def less(this_, other): return this_ < other
+                    def less_op3d(this_, other): return this_ <= other
+                    def op3d_op3d(this_, other): return this_ == other
+                    greater__month__month = greater
+                    greater_op3d__month__month = greater_op3d
+                    less__month__month = less
+                    less_op3d__month__month = less_op3d
+                    op3d_op3d__month__month = op3d_op3d
                     JANUARY = jANUARY = 1
                     FEBRUARY = fEBRUARY = 2
                     MARCH = mARCH = 3
@@ -2176,6 +2247,7 @@ public final class PythonGenerator implements Generator {
                     NOVEMBER = nOVEMBER = 11
                     DECEMBER = dECEMBER = 12
                     UNIX_DATE = uNIXDATE = Date({'day': 1, 'month': 1, 'year': 1970})
+                    __capybaraPrimitiveTypes = {'month': {'cfunType': '/capy/date_time/Date.month', 'backingType': 'int'}}
                     fromIso8601 = capy.date_from_iso
                     from_iso_8601 = fromIso8601
                     """;
@@ -3582,10 +3654,18 @@ public final class PythonGenerator implements Generator {
         var overrides = new LinkedHashMap<String, String>();
         var collisions = new LinkedHashMap<String, List<CompiledFunction>>();
         var ownerModuleNames = new java.util.IdentityHashMap<CompiledFunction, String>();
+        var primitiveBackedTypeNames = primitiveBackedTypeNames(program);
+        var primitiveBackedMethods = new ArrayList<CompiledFunction>();
         for (var module : program.modules()) {
             for (var function : module.functions()) {
                 ownerModuleNames.put(function, module.name());
-                var ownerKey = function.name().startsWith(METHOD_DECL_PREFIX)
+                var primitiveBackedMethod = methodOwnerType(function.name())
+                        .filter(primitiveBackedTypeNames::contains)
+                        .isPresent();
+                if (primitiveBackedMethod) {
+                    primitiveBackedMethods.add(function);
+                }
+                var ownerKey = function.name().startsWith(METHOD_DECL_PREFIX) && !primitiveBackedMethod
                         ? function.name().substring(0, Math.max(function.name().lastIndexOf("__"), METHOD_DECL_PREFIX.length()))
                         : module.name();
                 var normalizedBaseName = pyIdentifier(baseMethodName(function.name()));
@@ -3624,7 +3704,38 @@ public final class PythonGenerator implements Generator {
                 }
             }
         }
+        for (var function : primitiveBackedMethods) {
+            var emittedName = primitiveBackedMethodName(function);
+            var parameterTypes = function.parameters().stream().map(CompiledFunction.CompiledFunctionParameter::type).toList();
+            overrides.put(signatureKey(function.name(), parameterTypes), emittedName);
+            overrides.put(signatureKey(ownerModuleNames.get(function) + "." + function.name(), parameterTypes), emittedName);
+        }
         return Map.copyOf(overrides);
+    }
+
+    private static String primitiveBackedMethodName(CompiledFunction function) {
+        var rawBaseName = baseMethodName(function.name());
+        return pyIdentifier(rawBaseName) + "__" + methodVariantSuffix(rawBaseName) + overloadSuffix(function);
+    }
+
+    private static Set<String> primitiveBackedTypeNames(CompiledProgram program) {
+        return program.modules().stream()
+                .flatMap(module -> module.types().values().stream())
+                .filter(CompiledPrimitiveBackedType.class::isInstance)
+                .map(CompiledPrimitiveBackedType.class::cast)
+                .map(CompiledPrimitiveBackedType::name)
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+    }
+
+    private static Optional<String> methodOwnerType(String functionName) {
+        if (!functionName.startsWith(METHOD_DECL_PREFIX)) {
+            return Optional.empty();
+        }
+        var separatorIndex = functionName.indexOf("__", METHOD_DECL_PREFIX.length());
+        if (separatorIndex < 0) {
+            return Optional.empty();
+        }
+        return Optional.of(functionName.substring(METHOD_DECL_PREFIX.length(), separatorIndex));
     }
 
     private static Optional<String> findOverrideBySimpleName(Map<String, String> functionNameOverrides, String targetName, String parameterSignature) {

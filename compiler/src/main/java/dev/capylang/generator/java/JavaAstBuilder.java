@@ -17,6 +17,7 @@ public class JavaAstBuilder {
     private static final String PRIMITIVE_BACKED_TYPE_CONSTRUCTOR_FUNCTION_PREFIX = "__constructor__primitive__";
     private final Map<String, String> functionNameOverrides;
     private final Map<String, String> enumValueOwnerOverrides;
+    private final Map<String, PrimitiveBackedTypeInfo> globalPrimitiveBackedTypes;
 
     public JavaAstBuilder() {
         this(Map.of(), Map.of());
@@ -27,8 +28,25 @@ public class JavaAstBuilder {
     }
 
     public JavaAstBuilder(Map<String, String> functionNameOverrides, Map<String, String> enumValueOwnerOverrides) {
+        this(functionNameOverrides, enumValueOwnerOverrides, Map.of());
+    }
+
+    public JavaAstBuilder(
+            Map<String, String> functionNameOverrides,
+            Map<String, String> enumValueOwnerOverrides,
+            CompiledProgram program
+    ) {
+        this(functionNameOverrides, enumValueOwnerOverrides, primitiveBackedTypes(program));
+    }
+
+    private JavaAstBuilder(
+            Map<String, String> functionNameOverrides,
+            Map<String, String> enumValueOwnerOverrides,
+            Map<String, PrimitiveBackedTypeInfo> globalPrimitiveBackedTypes
+    ) {
         this.functionNameOverrides = Map.copyOf(functionNameOverrides);
         this.enumValueOwnerOverrides = Map.copyOf(enumValueOwnerOverrides);
+        this.globalPrimitiveBackedTypes = Map.copyOf(globalPrimitiveBackedTypes);
     }
     private static final java.util.regex.Pattern CONST_NAME_PATTERN = java.util.regex.Pattern.compile("^_?[A-Z_][A-Z0-9_]*$");
     private final Map<String, String> normalizedJavaClassReferenceCache = new HashMap<>();
@@ -62,7 +80,9 @@ public class JavaAstBuilder {
         localTypeNames = module.types().keySet().stream()
                 .map(JavaAstBuilder::simpleTypeName)
                 .collect(toUnmodifiableSet());
-        primitiveBackedTypes = primitiveBackedTypes(module);
+        var mergedPrimitiveBackedTypes = new LinkedHashMap<>(globalPrimitiveBackedTypes);
+        mergedPrimitiveBackedTypes.putAll(primitiveBackedTypes(module));
+        primitiveBackedTypes = Map.copyOf(mergedPrimitiveBackedTypes);
         try {
             normalizedRawTypeReferenceCache.clear();
             mappedTypeParameterDescriptorCache.clear();
@@ -170,6 +190,8 @@ public class JavaAstBuilder {
 
     private Map<String, PrimitiveBackedTypeInfo> primitiveBackedTypes(CompiledModule module) {
         var result = new LinkedHashMap<String, PrimitiveBackedTypeInfo>();
+        module.visiblePrimitiveBackedTypes()
+                .forEach((alias, type) -> putPrimitiveBackedTypeAlias(result, alias, type, true));
         for (var type : module.types().values()) {
             if (type instanceof CompiledPrimitiveBackedType primitiveBackedType) {
                 var info = new PrimitiveBackedTypeInfo(
@@ -181,6 +203,109 @@ public class JavaAstBuilder {
             }
         }
         return Map.copyOf(result);
+    }
+
+    private static Map<String, PrimitiveBackedTypeInfo> primitiveBackedTypes(CompiledProgram program) {
+        var result = new LinkedHashMap<String, PrimitiveBackedTypeInfo>();
+        for (var module : program.modules()) {
+            module.visiblePrimitiveBackedTypes()
+                    .forEach((alias, type) -> putPrimitiveBackedTypeAlias(result, alias, type, false));
+            for (var type : module.types().values()) {
+                if (type instanceof CompiledPrimitiveBackedType primitiveBackedType) {
+                    var info = new PrimitiveBackedTypeInfo(
+                            primitiveBackedType.cfunType(),
+                            primitiveBackedType.backingType()
+                    );
+                    putPrimitiveBackedTypeAliases(result, info, primitiveBackedType, module);
+                }
+            }
+            for (var function : module.functions()) {
+                function.parameters().stream()
+                        .flatMap(parameter -> primitiveBackedTypes(parameter.type()))
+                        .forEach(type -> putPrimitiveBackedTypeAliases(result, type));
+                primitiveBackedTypes(function.returnType())
+                        .forEach(type -> putPrimitiveBackedTypeAliases(result, type));
+            }
+        }
+        putUniqueSimplePrimitiveBackedTypeAliases(result);
+        return Map.copyOf(result);
+    }
+
+    private static void putPrimitiveBackedTypeAlias(
+            Map<String, PrimitiveBackedTypeInfo> result,
+            String alias,
+            CompiledPrimitiveBackedType type,
+            boolean includeUnqualifiedAlias
+    ) {
+        var info = new PrimitiveBackedTypeInfo(type.cfunType(), type.backingType());
+        if (includeUnqualifiedAlias || alias.contains("/") || alias.contains(".")) {
+            result.putIfAbsent(alias, info);
+        }
+        putPrimitiveBackedTypeAliases(result, type);
+    }
+
+    private static Stream<CompiledPrimitiveBackedType> primitiveBackedTypes(CompiledType type) {
+        return switch (type) {
+            case CompiledPrimitiveBackedType primitiveBackedType -> Stream.of(primitiveBackedType);
+            case CollectionLinkedType.CompiledList listType -> primitiveBackedTypes(listType.elementType());
+            case CollectionLinkedType.CompiledSet setType -> primitiveBackedTypes(setType.elementType());
+            case CollectionLinkedType.CompiledDict dictType -> primitiveBackedTypes(dictType.valueType());
+            case CompiledTupleType tupleType -> tupleType.elementTypes().stream().flatMap(JavaAstBuilder::primitiveBackedTypes);
+            case CompiledFunctionType functionType -> Stream.concat(
+                    primitiveBackedTypes(functionType.argumentType()),
+                    primitiveBackedTypes(functionType.returnType())
+            );
+            case CompiledDataType dataType -> dataType.fields().stream().flatMap(field -> primitiveBackedTypes(field.type()));
+            case CompiledDataParentType parentType -> parentType.subTypes().stream()
+                    .flatMap(dataType -> dataType.fields().stream())
+                    .flatMap(field -> primitiveBackedTypes(field.type()));
+            default -> Stream.empty();
+        };
+    }
+
+    private static void putPrimitiveBackedTypeAliases(
+            Map<String, PrimitiveBackedTypeInfo> result,
+            PrimitiveBackedTypeInfo info,
+            CompiledPrimitiveBackedType type,
+            CompiledModule module
+    ) {
+        if (type.name().contains("/") || type.name().contains(".")) {
+            result.putIfAbsent(type.name(), info);
+        }
+        result.putIfAbsent(type.cfunType(), info);
+        result.putIfAbsent(withoutLeadingSlash(type.cfunType()), info);
+        result.putIfAbsent(module.name() + "." + type.name(), info);
+    }
+
+    private static void putPrimitiveBackedTypeAliases(
+            Map<String, PrimitiveBackedTypeInfo> result,
+            CompiledPrimitiveBackedType type
+    ) {
+        var info = new PrimitiveBackedTypeInfo(type.cfunType(), type.backingType());
+        if (type.name().contains("/") || type.name().contains(".")) {
+            result.putIfAbsent(type.name(), info);
+        }
+        result.putIfAbsent(type.cfunType(), info);
+        result.putIfAbsent(withoutLeadingSlash(type.cfunType()), info);
+    }
+
+    private static void putUniqueSimplePrimitiveBackedTypeAliases(Map<String, PrimitiveBackedTypeInfo> result) {
+        var bySimpleName = result.entrySet().stream()
+                .collect(groupingBy(
+                        entry -> simpleTypeName(entry.getKey()),
+                        LinkedHashMap::new,
+                        mapping(Map.Entry::getValue, toList())
+                ));
+        bySimpleName.forEach((simpleName, infos) -> {
+            var distinctInfos = infos.stream().distinct().toList();
+            if (distinctInfos.size() == 1) {
+                result.putIfAbsent(simpleName, distinctInfos.getFirst());
+            }
+        });
+    }
+
+    private static String withoutLeadingSlash(String value) {
+        return value.startsWith("/") ? value.substring(1) : value;
     }
 
     private Map<String, String> enumValueOwnerOverrides(ModuleTypeIndex typeIndex) {

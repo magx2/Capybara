@@ -15,6 +15,7 @@ public record CompiledModule(
         String name,
         String path,
         SortedMap<String, GenericDataType> types,
+        SortedMap<String, CompiledPrimitiveBackedType> visiblePrimitiveBackedTypes,
         SortedSet<CompiledFunction> functions,
         SortedMap<String, DeriverDeclaration> derivers,
         SortedSet<StaticImport> staticImports) implements Comparable<CompiledModule> {
@@ -28,7 +29,7 @@ public record CompiledModule(
             Collection<CompiledFunction> functions,
             Collection<StaticImport> staticImports
     ) {
-        this(name, path, types, functions, Map.of(), staticImports);
+        this(name, path, types, functions, Map.of(), Map.of(), staticImports);
     }
 
     public CompiledModule(
@@ -39,10 +40,23 @@ public record CompiledModule(
             Map<String, DeriverDeclaration> derivers,
             Collection<StaticImport> staticImports
     ) {
+        this(name, path, types, functions, derivers, Map.of(), staticImports);
+    }
+
+    public CompiledModule(
+            String name,
+            String path,
+            Map<String, GenericDataType> types,
+            Collection<CompiledFunction> functions,
+            Map<String, DeriverDeclaration> derivers,
+            Map<String, CompiledPrimitiveBackedType> visiblePrimitiveBackedTypes,
+            Collection<StaticImport> staticImports
+    ) {
         this(
                 name,
                 path,
                 new TreeMap<>(types),
+                new TreeMap<>(visiblePrimitiveBackedTypes),
                 new TreeSet<>(functions),
                 new TreeMap<>(derivers),
                 new TreeSet<>(staticImports)
@@ -51,6 +65,7 @@ public record CompiledModule(
 
     public CompiledModule {
         types = new TreeMap<>(types);
+        visiblePrimitiveBackedTypes = visiblePrimitiveBackedTypes == null ? new TreeMap<>() : new TreeMap<>(visiblePrimitiveBackedTypes);
         functions = new TreeSet<>(functions);
         derivers = derivers == null ? new TreeMap<>() : new TreeMap<>(derivers);
         staticImports = new TreeSet<>(staticImports);

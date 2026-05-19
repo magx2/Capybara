@@ -686,6 +686,7 @@ public class CapybaraCompiler {
                                 localTypes,
                                 deduplicateFunctions(firstPassFunctions),
                                 getModuleEntry(deriversByModule, new ModuleRef(module.name(), module.path())),
+                                visiblePrimitiveBackedTypes(visibleTypes),
                                 staticImports(module, moduleLinkIndex, linkedTypesByModule, signaturesByModule, deriversByModule, staticImportsByModule, compileCache)
                         ));
                     }
@@ -697,10 +698,23 @@ public class CapybaraCompiler {
                                     localTypes,
                                     deduplicateFunctions(linkedFunctions),
                                     getModuleEntry(deriversByModule, new ModuleRef(module.name(), module.path())),
+                                    visiblePrimitiveBackedTypes(visibleTypes),
                                     staticImports(module, moduleLinkIndex, linkedTypesByModule, signaturesByModule, deriversByModule, staticImportsByModule, compileCache)
                             ));
                 }), moduleSourceFile);
     }
+
+    private SortedMap<String, CompiledPrimitiveBackedType> visiblePrimitiveBackedTypes(Map<String, GenericDataType> visibleTypes) {
+        return visibleTypes.entrySet().stream()
+                .filter(entry -> entry.getValue() instanceof CompiledPrimitiveBackedType)
+                .collect(toMap(
+                        Map.Entry::getKey,
+                        entry -> (CompiledPrimitiveBackedType) entry.getValue(),
+                        (first, second) -> first,
+                        TreeMap::new
+                ));
+    }
+
     private Result<List<CapybaraExpressionCompiler.FunctionSignature>> availableSignatures(
             Module module,
             ModuleLinkIndex moduleLinkIndex,

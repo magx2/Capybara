@@ -33,20 +33,30 @@ public final class JavaGenerator implements Generator {
         var functionNameOverrides = buildFunctionNameOverrides(program);
         var staticExtensionMethodOwners = buildStaticExtensionMethodOwners(program);
         var enumValueOwnerOverrides = buildEnumValueOwnerOverrides(program);
-        var astBuilder = new JavaAstBuilder(functionNameOverrides, enumValueOwnerOverrides);
+        var primitiveBackedTypeInfo = primitiveBackedTypeInfo(program);
+        var astBuilder = new JavaAstBuilder(functionNameOverrides, enumValueOwnerOverrides, program);
         JavaExpressionEvaluator.setFunctionNameOverrides(functionNameOverrides);
         JavaExpressionEvaluator.setStaticExtensionMethodOwners(staticExtensionMethodOwners);
+        JavaExpressionEvaluator.setPrimitiveBackedTypes(primitiveBackedEvaluatorTypes(primitiveBackedTypeInfo));
         var modules = new ArrayList<GeneratedModule>();
         for (var module : program.modules()) {
             modules.addAll(modules(module, timings, astBuilder, enumValueOwnerOverrides));
         }
-        var objectOrientedJavaGenerator = new ObjectOrientedJavaGenerator(primitiveBackedTypeInfo(program));
+        var objectOrientedJavaGenerator = new ObjectOrientedJavaGenerator(primitiveBackedTypeInfo);
         modules.addAll(time(timings::addSourceRenderNanos, () -> objectOrientedJavaGenerator.generate(program.objectOrientedModules())));
         log.info(() -> "Java generation timings: AST build="
                        + Duration.ofNanos(timings.astBuildNanos())
                        + ", Java source rendering="
                        + Duration.ofNanos(timings.sourceRenderNanos()));
         return new GeneratedProgram(modules);
+    }
+
+    private java.util.Map<String, PrimitiveLinkedType> primitiveBackedEvaluatorTypes(
+            java.util.Map<String, ObjectOrientedJavaGenerator.PrimitiveBackedTypeInfo> primitiveBackedTypes
+    ) {
+        var result = new java.util.LinkedHashMap<String, PrimitiveLinkedType>();
+        primitiveBackedTypes.forEach((alias, info) -> result.put(alias, info.backingType()));
+        return java.util.Map.copyOf(result);
     }
 
     private List<GeneratedModule> modules(
@@ -141,8 +151,65 @@ public final class JavaGenerator implements Generator {
                     );
                     putPrimitiveBackedTypeAliases(result, info, module);
                 }));
+        program.modules().forEach(module -> module.visiblePrimitiveBackedTypes().forEach((alias, type) -> {
+            var info = result.values().stream()
+                    .filter(existing -> existing.cfunType().equals(type.cfunType()))
+                    .findFirst()
+                    .orElseGet(() -> primitiveBackedTypeInfo(type));
+            if (alias.contains("/") || alias.contains(".")) {
+                result.putIfAbsent(alias, info);
+            }
+            putPrimitiveBackedTypeAliases(result, info);
+        }));
+        program.modules().forEach(module -> module.functions().forEach(function -> {
+            function.parameters().stream()
+                    .flatMap(parameter -> primitiveBackedTypes(parameter.type()))
+                    .forEach(type -> putPrimitiveBackedTypeAliases(result, primitiveBackedTypeInfo(type)));
+            primitiveBackedTypes(function.returnType())
+                    .forEach(type -> putPrimitiveBackedTypeAliases(result, primitiveBackedTypeInfo(type)));
+        }));
         putUniqueSimplePrimitiveBackedTypeAliases(result);
         return java.util.Map.copyOf(result);
+    }
+
+    private static java.util.stream.Stream<dev.capylang.compiler.CompiledPrimitiveBackedType> primitiveBackedTypes(
+            dev.capylang.compiler.CompiledType type
+    ) {
+        return switch (type) {
+            case dev.capylang.compiler.CompiledPrimitiveBackedType primitiveBackedType ->
+                    java.util.stream.Stream.of(primitiveBackedType);
+            case dev.capylang.compiler.CollectionLinkedType.CompiledList listType ->
+                    primitiveBackedTypes(listType.elementType());
+            case dev.capylang.compiler.CollectionLinkedType.CompiledSet setType ->
+                    primitiveBackedTypes(setType.elementType());
+            case dev.capylang.compiler.CollectionLinkedType.CompiledDict dictType ->
+                    primitiveBackedTypes(dictType.valueType());
+            case dev.capylang.compiler.CompiledTupleType tupleType ->
+                    tupleType.elementTypes().stream().flatMap(JavaGenerator::primitiveBackedTypes);
+            case dev.capylang.compiler.CompiledFunctionType functionType ->
+                    java.util.stream.Stream.concat(
+                            primitiveBackedTypes(functionType.argumentType()),
+                            primitiveBackedTypes(functionType.returnType())
+                    );
+            case dev.capylang.compiler.CompiledDataType dataType ->
+                    dataType.fields().stream().flatMap(field -> primitiveBackedTypes(field.type()));
+            case dev.capylang.compiler.CompiledDataParentType parentType ->
+                    parentType.subTypes().stream()
+                            .flatMap(dataType -> dataType.fields().stream())
+                            .flatMap(field -> primitiveBackedTypes(field.type()));
+            default -> java.util.stream.Stream.empty();
+        };
+    }
+
+    private static ObjectOrientedJavaGenerator.PrimitiveBackedTypeInfo primitiveBackedTypeInfo(
+            dev.capylang.compiler.CompiledPrimitiveBackedType type
+    ) {
+        return new ObjectOrientedJavaGenerator.PrimitiveBackedTypeInfo(
+                type.name(),
+                type.cfunType(),
+                type.backingType(),
+                false
+        );
     }
 
     private static Set<String> constructorTypes(CompiledModule module) {
@@ -164,6 +231,17 @@ public final class JavaGenerator implements Generator {
         result.putIfAbsent(info.cfunType(), info);
         result.putIfAbsent(withoutLeadingSlash(info.cfunType()), info);
         result.putIfAbsent(module.name() + "." + info.name(), info);
+    }
+
+    private static void putPrimitiveBackedTypeAliases(
+            java.util.Map<String, ObjectOrientedJavaGenerator.PrimitiveBackedTypeInfo> result,
+            ObjectOrientedJavaGenerator.PrimitiveBackedTypeInfo info
+    ) {
+        if (info.name().contains("/") || info.name().contains(".")) {
+            result.putIfAbsent(info.name(), info);
+        }
+        result.putIfAbsent(info.cfunType(), info);
+        result.putIfAbsent(withoutLeadingSlash(info.cfunType()), info);
     }
 
     private static void putUniqueSimplePrimitiveBackedTypeAliases(
@@ -340,10 +418,18 @@ public final class JavaGenerator implements Generator {
         var overrides = new java.util.LinkedHashMap<String, String>();
         var collisions = new java.util.LinkedHashMap<String, java.util.List<dev.capylang.compiler.CompiledFunction>>();
         var ownerModuleNames = new java.util.IdentityHashMap<dev.capylang.compiler.CompiledFunction, String>();
+        var primitiveBackedTypeNames = primitiveBackedTypeNames(program);
+        var primitiveBackedMethods = new java.util.ArrayList<dev.capylang.compiler.CompiledFunction>();
         for (var module : program.modules()) {
             for (var function : module.functions()) {
                 ownerModuleNames.put(function, module.name());
-                var ownerKey = function.name().startsWith(METHOD_DECL_PREFIX)
+                var primitiveBackedMethod = methodOwnerType(function.name())
+                        .filter(primitiveBackedTypeNames::contains)
+                        .isPresent();
+                if (primitiveBackedMethod) {
+                    primitiveBackedMethods.add(function);
+                }
+                var ownerKey = function.name().startsWith(METHOD_DECL_PREFIX) && !primitiveBackedMethod
                         ? function.name().substring(0, Math.max(function.name().lastIndexOf("__"), METHOD_DECL_PREFIX.length()))
                         : module.name();
                 var normalizedBaseName = normalizeJavaMethodIdentifier(baseMethodName(function.name()));
@@ -387,7 +473,27 @@ public final class JavaGenerator implements Generator {
                 }
             }
         }
+        for (var function : primitiveBackedMethods) {
+            var emittedName = primitiveBackedMethodName(function);
+            var parameterTypes = function.parameters().stream().map(dev.capylang.compiler.CompiledFunction.CompiledFunctionParameter::type).toList();
+            overrides.put(signatureKey(function.name(), parameterTypes), emittedName);
+            overrides.put(signatureKey(moduleQualifiedName(ownerModuleNames, function), parameterTypes), emittedName);
+        }
         return java.util.Map.copyOf(overrides);
+    }
+
+    private static String primitiveBackedMethodName(dev.capylang.compiler.CompiledFunction function) {
+        var rawBaseName = baseMethodName(function.name());
+        return normalizeJavaMethodIdentifier(rawBaseName) + "__" + methodVariantSuffix(rawBaseName) + overloadSuffix(function);
+    }
+
+    private static java.util.Set<String> primitiveBackedTypeNames(CompiledProgram program) {
+        return program.modules().stream()
+                .flatMap(module -> module.types().values().stream())
+                .filter(dev.capylang.compiler.CompiledPrimitiveBackedType.class::isInstance)
+                .map(dev.capylang.compiler.CompiledPrimitiveBackedType.class::cast)
+                .map(dev.capylang.compiler.CompiledPrimitiveBackedType::name)
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
     }
 
     private String moduleQualifiedName(

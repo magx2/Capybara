@@ -21,7 +21,9 @@ class PrimitiveBackedTypeGeneratorTest {
         assertThat(code)
                 .contains("public static @dev.capylang.PrimitiveType(cfunType = \"/foo/Ids.user_id\") int make(int value)")
                 .contains("public static int unwrap(@dev.capylang.PrimitiveType(cfunType = \"/foo/Ids.user_id\") int value)")
-                .contains("public static @dev.capylang.PrimitiveType(cfunType = \"/foo/Ids.user_id\") int plus(@dev.capylang.PrimitiveType(cfunType = \"/foo/Ids.user_id\") int left, @dev.capylang.PrimitiveType(cfunType = \"/foo/Ids.user_id\") int right)")
+                .contains("public static @dev.capylang.PrimitiveType(cfunType = \"/foo/Ids.user_id\") int plus__name_plus__user_id__user_id(@dev.capylang.PrimitiveType(cfunType = \"/foo/Ids.user_id\") int this_, @dev.capylang.PrimitiveType(cfunType = \"/foo/Ids.user_id\") int other)")
+                .contains("public static @dev.capylang.PrimitiveType(cfunType = \"/foo/Ids.user_id\") int plus__user_id__user_id(@dev.capylang.PrimitiveType(cfunType = \"/foo/Ids.user_id\") int left, @dev.capylang.PrimitiveType(cfunType = \"/foo/Ids.user_id\") int right)")
+                .contains("return foo.Ids.plus__name_plus__user_id__user_id(left, right);")
                 .contains("return value;");
         assertThat(code)
                 .doesNotContain("record UserId")
@@ -102,7 +104,8 @@ class PrimitiveBackedTypeGeneratorTest {
                 .doesNotContain("class UserId")
                 .doesNotContain("class user_id")
                 .doesNotContain("UserId(")
-                .doesNotContain("user_id(")
+                .doesNotContain("return user_id(")
+                .doesNotContain("= user_id(")
                 .doesNotContain("compiledprimitive");
     }
 

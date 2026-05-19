@@ -331,14 +331,9 @@ public class CapybaraExpressionCompiler {
                     if (expression.arguments().size() != 1 || !isBuiltinIndexSource(source.type())) {
                         return linkCustomIndexExpression(expression, scope, source);
                     }
-                    return linkExpression(expression.arguments().getFirst(), scope)
+                    return linkArgumentForExpectedType(expression.arguments().getFirst(), scope, INT)
+                            .map(CoercedArgument::expression)
                             .flatMap(index -> {
-                                if (index.type() != PrimitiveLinkedType.INT) {
-                                    return withPosition(
-                                            Result.error("Index has to be `int`, was `" + index.type() + "`"),
-                                            expression.arguments().getFirst().position()
-                                    );
-                                }
                                 var elementType = switch (source.type()) {
                                     case CompiledList linkedList -> Result.success(linkedList.elementType());
                                     case PrimitiveLinkedType primitive when primitive == STRING -> Result.<CompiledType>success(STRING);
@@ -451,16 +446,9 @@ public class CapybaraExpressionCompiler {
         if (bound.isEmpty()) {
             return Result.success(Optional.empty());
         }
-        return linkExpression(bound.get(), scope)
-                .flatMap(linked -> {
-                    if (linked.type() != PrimitiveLinkedType.INT) {
-                        return withPosition(
-                                Result.error("Slice " + name + " index has to be `int`, was `" + linked.type() + "`"),
-                                bound.get().position()
-                        );
-                    }
-                    return Result.success(Optional.of(linked));
-                });
+        return linkArgumentForExpectedType(bound.get(), scope, INT)
+                .map(CoercedArgument::expression)
+                .map(Optional::of);
     }
 
     private Result<CompiledExpression> linkBooleanValue(BooleanValue booleanValue, Scope scope) {
@@ -2417,36 +2405,38 @@ public class CapybaraExpressionCompiler {
             || (functionCall.arguments().size() != 2 && functionCall.arguments().size() != 3)) {
             return Optional.empty();
         }
-        var linkedArguments = functionCall.arguments().stream()
-                .map(argument -> linkExpression(argument, scope))
-                .collect(new ResultCollectionCollector<>());
-        if (!(linkedArguments instanceof Result.Success<java.util.List<CompiledExpression>> value)) {
-            if (linkedArguments instanceof Result.Error<java.util.List<CompiledExpression>> error) {
+        var linkedSource = linkExpression(functionCall.arguments().getFirst(), scope);
+        if (linkedSource instanceof Result.Error<CompiledExpression> error) {
+            return Optional.of(new Result.Error<>(error.errors()));
+        }
+        var source = ((Result.Success<CompiledExpression>) linkedSource).value();
+        var sourceType = source.type();
+        if ((sourceType instanceof CompiledList || sourceType == STRING) && functionCall.arguments().size() == 3) {
+            var linkedIndex = linkArgumentForExpectedType(functionCall.arguments().get(1), scope, INT);
+            if (linkedIndex instanceof Result.Error<CoercedArgument> error) {
                 return Optional.of(new Result.Error<>(error.errors()));
             }
-            return Optional.empty();
-        }
-        var args = value.value();
-        var source = args.get(0);
-        var index = args.get(1);
-        var sourceType = source.type();
-        if (functionCall.arguments().size() == 3) {
-            var end = args.get(2);
-            if ((sourceType instanceof CompiledList || sourceType == STRING)
-                && index.type() == INT
-                && end.type() == INT) {
-                return Optional.of(Result.success(new CompiledFunctionCall(
-                        METHOD_DECL_PREFIX + (sourceType == STRING ? "String" : "List") + "__get",
-                        args,
-                        sourceType
-                )));
+            var linkedEnd = linkArgumentForExpectedType(functionCall.arguments().get(2), scope, INT);
+            if (linkedEnd instanceof Result.Error<CoercedArgument> error) {
+                return Optional.of(new Result.Error<>(error.errors()));
             }
-            return Optional.empty();
+            var args = List.of(
+                    source,
+                    ((Result.Success<CoercedArgument>) linkedIndex).value().expression(),
+                    ((Result.Success<CoercedArgument>) linkedEnd).value().expression()
+            );
+            return Optional.of(Result.success(new CompiledFunctionCall(
+                    METHOD_DECL_PREFIX + (sourceType == STRING ? "String" : "List") + "__get",
+                    args,
+                    sourceType
+            )));
         }
         if (sourceType instanceof CompiledList || sourceType == STRING) {
-            if (index.type() != INT) {
-                return Optional.empty();
+            var linkedIndex = linkArgumentForExpectedType(functionCall.arguments().get(1), scope, INT);
+            if (linkedIndex instanceof Result.Error<CoercedArgument> error) {
+                return Optional.of(new Result.Error<>(error.errors()));
             }
+            var index = ((Result.Success<CoercedArgument>) linkedIndex).value().expression();
             var elementType = sourceType instanceof CompiledList linkedListType ? linkedListType.elementType() : STRING;
             var optionType = optionTypeFor(elementType);
             if (optionType == null) {
@@ -2454,6 +2444,19 @@ public class CapybaraExpressionCompiler {
             }
             return Optional.of(Result.success(new CompiledIndexExpression(source, index, elementType, optionType)));
         }
+        var tailArguments = functionCall.arguments().subList(1, functionCall.arguments().size()).stream()
+                .map(argument -> linkExpression(argument, scope))
+                .collect(new ResultCollectionCollector<>());
+        if (!(tailArguments instanceof Result.Success<java.util.List<CompiledExpression>> value)) {
+            if (tailArguments instanceof Result.Error<java.util.List<CompiledExpression>> error) {
+                return Optional.of(new Result.Error<>(error.errors()));
+            }
+            return Optional.empty();
+        }
+        var args = new java.util.ArrayList<CompiledExpression>();
+        args.add(source);
+        args.addAll(value.value());
+        var index = args.get(1);
         if (sourceType instanceof CompiledTupleType tupleType) {
             if (index.type() != INT) {
                 return Optional.empty();
@@ -3620,6 +3623,16 @@ public class CapybaraExpressionCompiler {
             && argument.type() instanceof PrimitiveLinkedType actualPrimitive
             && isImplicitNumericWidening(expectedPrimitive, actualPrimitive)) {
             return new CoercedArgument(widenNumericExpression(argument, expectedPrimitive), 1);
+        }
+        if (expected instanceof PrimitiveLinkedType expectedPrimitive
+            && argument.type() instanceof CompiledPrimitiveBackedType actualPrimitiveBacked) {
+            var unwrapped = new CompiledUnwrapExpression(argument, actualPrimitiveBacked.backingType());
+            if (expectedPrimitive.equals(actualPrimitiveBacked.backingType())) {
+                return new CoercedArgument(unwrapped, 1);
+            }
+            if (isImplicitNumericWidening(expectedPrimitive, actualPrimitiveBacked.backingType())) {
+                return new CoercedArgument(widenNumericExpression(unwrapped, expectedPrimitive), 2);
+            }
         }
         if (expected instanceof CompiledGenericTypeParameter) {
             return new CoercedArgument(argument, 1);
