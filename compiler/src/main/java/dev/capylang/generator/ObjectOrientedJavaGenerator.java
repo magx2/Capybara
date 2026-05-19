@@ -1867,6 +1867,7 @@ public final class ObjectOrientedJavaGenerator {
             case LONG -> boxed ? "Long" : "long";
             case DOUBLE -> boxed ? "Double" : "double";
             case FLOAT -> boxed ? "Float" : "float";
+            case STRING -> "String";
             default -> throw new IllegalArgumentException("Unsupported primitive-backed OO type `" + type + "`");
         };
     }

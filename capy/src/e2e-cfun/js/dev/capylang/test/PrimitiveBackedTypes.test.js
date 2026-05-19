@@ -12,6 +12,9 @@ test('PrimitiveBackedTypes', () => {
     assert.equal(primitiveBackedTypes.stringAt('abc', 1), 'b');
     assert.equal(primitiveBackedTypes.stringGet('abc', 2), 'c');
     assert.equal(primitiveBackedTypes.unwrapScore(primitiveBackedTypes.scoreOf(11)), 11);
+    assert.equal(primitiveBackedTypes.rawToken('abc'), 'abc');
+    assert.equal(primitiveBackedTypes.unwrapToken('abc'), 'abc');
+    assert.equal(primitiveBackedTypes.passTokenToString('abc'), 'abc_suffix');
     assert.equal(assertSuccess(primitiveBackedTypes.newUserId(7)), 7);
     assert.equal(assertError(primitiveBackedTypes.newUserId(0)), 'bad user id');
     assert.deepEqual(primitiveBackedTypes.__capybaraPrimitiveTypes.user_id, {
@@ -22,7 +25,12 @@ test('PrimitiveBackedTypes', () => {
         cfunType: '/dev/capylang/test/PrimitiveBackedTypes.score',
         backingType: 'int',
     });
+    assert.deepEqual(primitiveBackedTypes.__capybaraPrimitiveTypes.token, {
+        cfunType: '/dev/capylang/test/PrimitiveBackedTypes.token',
+        backingType: 'String',
+    });
 
     const generated = fs.readFileSync(modulePath('dev/capylang/test/PrimitiveBackedTypes.js'), 'utf8');
     assert.match(generated, /function addUserIds\(left, right\) \{\s+return plus__op_plus__user_id__user_id\(left, right\);/);
+    assert.doesNotMatch(generated, /class Token/);
 });

@@ -21,6 +21,9 @@ class PrimitiveBackedTypesPythonE2ETest(unittest.TestCase):
         self.assertEqual(primitive_backed_types.stringAt("abc", 1), "b")
         self.assertEqual(primitive_backed_types.stringGet("abc", 2), "c")
         self.assertEqual(primitive_backed_types.unwrapScore(primitive_backed_types.scoreOf(11)), 11)
+        self.assertEqual(primitive_backed_types.rawToken("abc"), "abc")
+        self.assertEqual(primitive_backed_types.unwrapToken("abc"), "abc")
+        self.assertEqual(primitive_backed_types.passTokenToString("abc"), "abc_suffix")
         primitive_types = getattr(primitive_backed_types, "__capybaraPrimitiveTypes")
         self.assertEqual(
             primitive_types["user_id"],
@@ -29,4 +32,8 @@ class PrimitiveBackedTypesPythonE2ETest(unittest.TestCase):
         self.assertEqual(
             primitive_types["score"],
             {"cfunType": "/dev/capylang/test/PrimitiveBackedTypes.score", "backingType": "int"},
+        )
+        self.assertEqual(
+            primitive_types["token"],
+            {"cfunType": "/dev/capylang/test/PrimitiveBackedTypes.token", "backingType": "String"},
         )

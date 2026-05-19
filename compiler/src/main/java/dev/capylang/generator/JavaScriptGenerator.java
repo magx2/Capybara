@@ -414,6 +414,7 @@ public final class JavaScriptGenerator implements Generator {
                 case LONG -> "long";
                 case FLOAT -> "float";
                 case DOUBLE -> "double";
+                case STRING -> "String";
                 default -> throw new IllegalArgumentException("Unsupported primitive-backed type `" + type + "`");
             };
         }
@@ -1664,6 +1665,7 @@ public final class JavaScriptGenerator implements Generator {
                 case LONG -> "long";
                 case FLOAT -> "float";
                 case DOUBLE -> "double";
+                case STRING -> "String";
                 default -> throw new IllegalArgumentException("Unsupported primitive-backed type `" + type + "`");
             };
         }

@@ -251,6 +251,7 @@ class CapybaraParserTest {
                 /// Domain-specific identifier
                 /// Erases to int
                 type foo_bar -> int
+                type token -> String
                 fun identity(value: foo_bar): foo_bar = value
                 """));
 
@@ -259,9 +260,23 @@ class CapybaraParserTest {
         assertThat(declaration.constructor()).isEmpty();
         assertThat(declaration.comments()).containsExactly("Domain-specific identifier", "Erases to int");
 
+        var tokenDeclaration = findDefinition(PrimitiveBackedTypeDeclaration.class, "token", module.functional());
+        assertThat(tokenDeclaration.backingType()).isEqualTo(PrimitiveType.STRING);
+
         var identity = findFunction("identity", module.functional());
         assertThat(identity.parameters().getFirst().type()).isEqualTo(new DataType("foo_bar"));
         assertThat(identity.returnType()).contains(new DataType("foo_bar"));
+    }
+
+    @Test
+    @DisplayName("should reject non-String named primitive-backed backing types")
+    void rejectNonStringNamedPrimitiveBackedBackingType() {
+        var result = new CapybaraParser().parseModule(new RawModule("Test", "/parser", """
+                type token -> User
+                data User { value: String }
+                """));
+
+        assertThat(result).isInstanceOf(Result.Error.class);
     }
 
     @Test

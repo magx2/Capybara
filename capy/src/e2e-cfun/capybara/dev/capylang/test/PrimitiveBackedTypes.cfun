@@ -11,6 +11,7 @@ type user_id -> int with constructor {
 
 type order_id -> int
 type score -> int
+type token -> String
 
 const FIRST_USER_ID = user_id! { 1 }
 
@@ -20,6 +21,10 @@ fun unwrap_user_id(id: user_id): int = @id
 fun unwrap_raw_user_id(value: int): int = unwrap_user_id(raw_user_id(value))
 fun score_of(value: int): score = score { value }
 fun unwrap_score(score: score): int = @score
+fun raw_token(value: String): token = token { value }
+fun unwrap_token(value: token): String = @value
+fun append_token_suffix(value: String): String = value + "_suffix"
+fun pass_token_to_string(value: token): String = append_token_suffix(value)
 
 fun user_id.plus(other: user_id): user_id = user_id! { @this + @other }
 fun user_id.`+`(other: user_id): user_id = user_id! { @this + @other }

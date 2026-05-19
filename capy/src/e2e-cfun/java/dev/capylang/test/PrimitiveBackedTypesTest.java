@@ -18,6 +18,9 @@ class PrimitiveBackedTypesTest {
         assertThat(PrimitiveBackedTypes.stringAt("abc", 1)).isEqualTo("b");
         assertThat(PrimitiveBackedTypes.stringGet("abc", 2)).isEqualTo("c");
         assertThat(PrimitiveBackedTypes.unwrapScore(PrimitiveBackedTypes.scoreOf(11))).isEqualTo(11);
+        assertThat(PrimitiveBackedTypes.rawToken("abc")).isEqualTo("abc");
+        assertThat(PrimitiveBackedTypes.unwrapToken("abc")).isEqualTo("abc");
+        assertThat(PrimitiveBackedTypes.passTokenToString("abc")).isEqualTo("abc_suffix");
     }
 
     @Test
@@ -33,6 +36,14 @@ class PrimitiveBackedTypesTest {
         var scoreOf = PrimitiveBackedTypes.class.getMethod("scoreOf", int.class);
         assertThat(scoreOf.getAnnotatedReturnType().getAnnotation(PrimitiveType.class).cfunType())
                 .isEqualTo("/dev/capylang/test/PrimitiveBackedTypes.score");
+
+        var rawToken = PrimitiveBackedTypes.class.getMethod("rawToken", String.class);
+        assertThat(rawToken.getAnnotatedReturnType().getAnnotation(PrimitiveType.class).cfunType())
+                .isEqualTo("/dev/capylang/test/PrimitiveBackedTypes.token");
+
+        var unwrapToken = PrimitiveBackedTypes.class.getMethod("unwrapToken", String.class);
+        assertThat(unwrapToken.getAnnotatedParameterTypes()[0].getAnnotation(PrimitiveType.class).cfunType())
+                .isEqualTo("/dev/capylang/test/PrimitiveBackedTypes.token");
     }
 
     @Test

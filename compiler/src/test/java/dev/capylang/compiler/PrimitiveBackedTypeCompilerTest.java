@@ -150,6 +150,28 @@ class PrimitiveBackedTypeCompilerTest {
     }
 
     @Test
+    void shouldSupportStringBackedTypes() {
+        var compiled = compileSuccess(new RawModule("Tokens", "/foo/app", """
+                type token -> String
+
+                fun make(value: String): token = token { value }
+                fun unwrap(value: token): String = @value
+                fun append_suffix(value: String): String = value + "-suffix"
+                fun pass_to_string(value: token): String = append_suffix(value)
+                """));
+
+        assertThat(compiled.modules().first().types().get("token")).isInstanceOfSatisfying(
+                CompiledPrimitiveBackedType.class,
+                type -> assertThat(type.backingType()).isEqualTo(PrimitiveLinkedType.STRING)
+        );
+        assertThat(function(compiled, "Tokens", "make").returnType()).isInstanceOfSatisfying(
+                CompiledPrimitiveBackedType.class,
+                type -> assertThat(type.name()).isEqualTo("token")
+        );
+        assertThat(function(compiled, "Tokens", "unwrap").returnType()).isEqualTo(PrimitiveLinkedType.STRING);
+    }
+
+    @Test
     void shouldUsePrimitiveBackedValuesWhereBackingPrimitiveIsExpectedAcrossExpressionShapes() {
         compileSuccess(List.of(optionModule(), new RawModule("Indexes", "/foo/app", """
                 type index -> int with constructor {
