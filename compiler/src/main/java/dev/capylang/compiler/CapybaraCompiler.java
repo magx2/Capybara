@@ -32,7 +32,7 @@ public class CapybaraCompiler {
     private static final String PRIMITIVE_BACKED_TYPE_CONSTRUCTOR_FUNCTION_PREFIX = "__constructor__primitive__";
     private static final String CONSTRUCTOR_STATE_TYPE_PREFIX = "__constructor_state__";
     private static final java.util.regex.Pattern IDENTIFIER_PATTERN = java.util.regex.Pattern.compile("[A-Za-z_][A-Za-z0-9_]*");
-    private static final java.util.regex.Pattern PRIMITIVE_BACKED_TYPE_NAME_PATTERN = java.util.regex.Pattern.compile("[a-z][a-z0-9_]*");
+    private static final java.util.regex.Pattern PRIMITIVE_BACKED_TYPE_NAME_PATTERN = java.util.regex.Pattern.compile("[a-z][a-z_]*");
     private static final ObjectMapper OBJECT_MAPPER = objectMapper();
     private static final Logger log = Logger.getLogger(CapybaraCompiler.class.getName());
     private static final Object BUNDLED_LIBRARIES_LOCK = new Object();
@@ -6267,7 +6267,7 @@ public class CapybaraCompiler {
     ) {
         if (!PRIMITIVE_BACKED_TYPE_NAME_PATTERN.matcher(declaration.name()).matches()) {
             return withPosition(
-                    Result.error("Primitive-backed type name `" + declaration.name() + "` must be lower snake_case"),
+                    Result.error("Primitive-backed type name `" + declaration.name() + "` must start with a lowercase letter and contain only lowercase letters and underscores"),
                     declaration.position(),
                     normalizedFile
             );
