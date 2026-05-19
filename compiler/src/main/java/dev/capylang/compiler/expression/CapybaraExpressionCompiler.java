@@ -3627,10 +3627,11 @@ public class CapybaraExpressionCompiler {
         if (expected instanceof PrimitiveLinkedType expectedPrimitive
             && argument.type() instanceof CompiledPrimitiveBackedType actualPrimitiveBacked) {
             var unwrapped = new CompiledUnwrapExpression(argument, actualPrimitiveBacked.backingType());
-            if (expectedPrimitive.equals(actualPrimitiveBacked.backingType())) {
+            if (isPrimitiveBackedAssignableToPrimitive(actualPrimitiveBacked, expectedPrimitive)
+                && expectedPrimitive.equals(actualPrimitiveBacked.backingType())) {
                 return new CoercedArgument(unwrapped, 1);
             }
-            if (isImplicitNumericWidening(expectedPrimitive, actualPrimitiveBacked.backingType())) {
+            if (isPrimitiveBackedAssignableToPrimitive(actualPrimitiveBacked, expectedPrimitive)) {
                 return new CoercedArgument(widenNumericExpression(unwrapped, expectedPrimitive), 2);
             }
         }
@@ -4018,6 +4019,11 @@ public class CapybaraExpressionCompiler {
             && isImplicitNumericWidening(expectedPrimitive, actualPrimitive)) {
             return true;
         }
+        if (actual instanceof CompiledPrimitiveBackedType actualPrimitiveBacked
+            && expected instanceof PrimitiveLinkedType expectedPrimitive
+            && isPrimitiveBackedAssignableToPrimitive(actualPrimitiveBacked, expectedPrimitive)) {
+            return true;
+        }
         if (expected instanceof CompiledList expectedList && actual instanceof CompiledList actualList) {
             if (actualList.elementType() == ANY
                 && expectedList.elementType() != ANY
@@ -4143,6 +4149,14 @@ public class CapybaraExpressionCompiler {
             return isTypeCompatible(parsedActual.get(), parsedExpected.get());
         }
         return sameRawTypeName(actual, expected);
+    }
+
+    private static boolean isPrimitiveBackedAssignableToPrimitive(
+            CompiledPrimitiveBackedType actualPrimitiveBacked,
+            PrimitiveLinkedType expectedPrimitive
+    ) {
+        return expectedPrimitive.equals(actualPrimitiveBacked.backingType())
+               || isImplicitNumericWidening(expectedPrimitive, actualPrimitiveBacked.backingType());
     }
 
     private String normalizeTypeDescriptor(String descriptor) {
