@@ -130,7 +130,7 @@
       "patterns": [
         {
           "name": "keyword.control.capybara",
-          "match": "\\b(fun|rec|def|union|enum|data|single|const|derive|deriver|local|match|with|constructor|case|when|if|then|else|let|return|throw|try|catch|this|receiver|from|import|except|class|trait|interface|field|open|abstract|override|final|private|public|init|super|while|do|for|foreach|in)\\b"
+          "match": "\\b(fun|rec|def|type|union|enum|data|single|const|derive|deriver|local|match|with|constructor|case|when|if|then|else|let|return|throw|try|catch|this|receiver|from|import|except|class|trait|interface|field|open|abstract|override|final|private|public|init|super|while|do|for|foreach|in)\\b"
         },
         {
           "name": "keyword.operator.constructor.capybara",
@@ -197,6 +197,24 @@
         {
           "name": "meta.type.constructor.capybara",
           "match": "\\b(union)\\s+(_*[A-Z][A-Za-z0-9_]*(?:\\[[^\\]]+\\])?)(?:\\s*\\{[^{}\\n]*\\})?\\s+(with)\\s+(constructor)\\s*\\{"
+        },
+        {
+          "name": "meta.primitive-backed-type.capybara",
+          "match": "\\b(type)\\s+([a-z][a-z0-9_]*)(\\s*->\\s*)(byte|int|long|float|double)\\b",
+          "captures": {
+            "1": {
+              "name": "keyword.control.capybara"
+            },
+            "2": {
+              "name": "entity.name.type.capybara"
+            },
+            "3": {
+              "name": "keyword.operator.pipe.capybara"
+            },
+            "4": {
+              "name": "support.type.primitive.capybara"
+            }
+          }
         },
         {
           "name": "meta.data.constructor-bypass.capybara",
