@@ -5,7 +5,7 @@ from /capy/collection/Set import { * }
 from /capy/collection/Dict import { * }
 from /capy/collection/Tuple import { * }
 
-fun string_length(value: String): int = value.length()
+fun string_length(value: String): int = @(value.length())
 
 fun string_trim(value: String): String = value.trim()
 
@@ -13,7 +13,7 @@ fun string_get(value: String, idx: int): Option[String] = value.get(idx)
 
 fun string_get_range(value: String, from: int, to: int): String = value.get(from, to)
 
-fun list_size(values: List[int]): int = values.size()
+fun list_size(values: List[int]): int = @(values.size())
 
 fun list_contains(values: List[int], value: int): bool = values.contains(value)
 
@@ -27,7 +27,7 @@ fun set_is_empty(values: Set[int]): bool = values.is_empty()
 
 fun set_contains(values: Set[int], value: int): bool = values.contains(value)
 
-fun dict_size(values: Dict[int]): int = values.size()
+fun dict_size(values: Dict[int]): int = @(values.size())
 
 fun dict_contains_key(values: Dict[int], key: String): bool = values.contains_key(key)
 
