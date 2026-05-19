@@ -2,25 +2,38 @@ from /capy/lang/Result import {*}
 from /capy/lang/Math import { * }
 from /capy/lang/String import { * }
 
-/// Checks whether a year is a leap year in the Gregorian calendar.
-fun _leap_year(year: int): bool = (year % 4 == 0 & year % 100 != 0) | year % 400 == 0
-/// Returns `true` when the month has 31 days.
-fun _days_31_month(month: int): bool = month == JANUARY | month == MARCH | month == MAY | month == JULY | month == AUGUST | month == OCTOBER | month == DECEMBER
-/// Returns `true` when the month has 30 days.
-fun _days_30_month(month: int): bool = month == APRIL | month == JUNE | month == SEPTEMBER | month == NOVEMBER
+/// Calendar month number in the range 1..12.
+type month -> int with constructor {
+    if value >= 1 & value <= 12
+    then Success { value }
+    else Error { message: "month must be between 1 and 12" }
+}
 
-const JANUARY: int = 1
-const FEBRUARY: int = 2
-const MARCH: int = 3
-const APRIL: int = 4
-const MAY: int = 5
-const JUNE: int = 6
-const JULY: int = 7
-const AUGUST: int = 8
-const SEPTEMBER: int = 9
-const OCTOBER: int = 10
-const NOVEMBER: int = 11
-const DECEMBER: int = 12
+const JANUARY: month = month! { 1 }
+const FEBRUARY: month = month! { 2 }
+const MARCH: month = month! { 3 }
+const APRIL: month = month! { 4 }
+const MAY: month = month! { 5 }
+const JUNE: month = month! { 6 }
+const JULY: month = month! { 7 }
+const AUGUST: month = month! { 8 }
+const SEPTEMBER: month = month! { 9 }
+const OCTOBER: month = month! { 10 }
+const NOVEMBER: month = month! { 11 }
+const DECEMBER: month = month! { 12 }
+
+fun month.`>`(other: month): bool = @this > @other
+fun month.`>=`(other: month): bool = @this >= @other
+fun month.`<`(other: month): bool = @this < @other
+fun month.`<=`(other: month): bool = @this <= @other
+fun month.`==`(other: month): bool = @this == @other
+
+/// Checks whether a year is a leap year in the Gregorian calendar.
+private fun leap_year_value(year: int): bool = (year % 4 == 0 & year % 100 != 0) | year % 400 == 0
+/// Returns `true` when the month has 31 days.
+private fun days_31_month(value: month): bool = value == JANUARY | value == MARCH | value == MAY | value == JULY | value == AUGUST | value == OCTOBER | value == DECEMBER
+/// Returns `true` when the month has 30 days.
+private fun days_30_month(value: month): bool = value == APRIL | value == JUNE | value == SEPTEMBER | value == NOVEMBER
 
 const __DAYS_PER_400_YEARS: int = 146097
 const __DAYS_PER_YEAR: int = 365
@@ -37,14 +50,13 @@ const __MONTH_TO_DAY_BIAS: int = 2
 /// impossible dates.
 data Date {
     day: int,
-    month: int,
+    month: month,
     year: int
 } with constructor {
-    if month < JANUARY | month > DECEMBER
-        | day < 1
-        | (_days_31_month(month) & day > 31)
-        | (_days_30_month(month) & day > 30)
-        | (month == FEBRUARY & ( (_leap_year(year) & day > 29) | (!_leap_year(year) & day > 28) ))
+    if day < 1
+        | (days_31_month(month) & day > 31)
+        | (days_30_month(month) & day > 30)
+        | (month == FEBRUARY & ( (leap_year_value(year) & day > 29) | (!leap_year_value(year) & day > 28) ))
     then Error { "Invalid date `{day}/{month}/{year}`!" }
     else Success {* { day, month, year }}
 }
@@ -52,25 +64,26 @@ data Date {
 const UNIX_DATE: Date = Date! { day: 1, month: JANUARY, year: 1970 }
 
 /// Returns `true` when this date is in a leap year.
-fun Date.leap_year(): bool = _leap_year(this.year)
+fun Date.leap_year(): bool = leap_year_value(this.year)
 /// Returns the first day of this date's month.
 fun Date.first_day_of_month(): Date = Date! { day: 1, month: this.month, year: this.year }
 /// Returns the last valid day of this date's month.
 fun Date.last_day_of_month(): Date =
     if this.month == FEBRUARY
-    then if _leap_year(this.year)
+    then if leap_year_value(this.year)
         then Date! { day: 29, month: this.month, year: this.year }
         else Date! { day: 28, month: this.month, year: this.year }
-    else if _days_31_month(this.month)
+    else if days_31_month(this.month)
         then Date! { day: 31, month: this.month, year: this.year }
         else Date! { day: 30, month: this.month, year: this.year }
 
 /// Converts this date to days since Unix epoch (`1970-01-01`).
 fun Date.to_days_since_unix_epoch(): int =
-    let y = if this.month <= 2 then this.year - 1 else this.year
+    let month_value = @(this.month)
+    let y = if month_value <= 2 then this.year - 1 else this.year
     let era = floor_div(y, 400)
     let yoe = y - era * 400
-    let mp = if this.month > FEBRUARY then this.month - 3 else this.month + 9
+    let mp = if this.month > FEBRUARY then month_value - 3 else month_value + 9
     let doy = floor_div(__MONTH_TO_DAY_NUMERATOR * mp + __MONTH_TO_DAY_BIAS, 5) + this.day - 1
     let doe = yoe * __DAYS_PER_YEAR + floor_div(yoe, 4) - floor_div(yoe, 100) + doy
     era * __DAYS_PER_400_YEARS + doe - __UNIX_EPOCH_CIVIL_OFFSET_DAYS
@@ -85,9 +98,9 @@ fun from_days_since_unix_epoch(days_since_epoch: int): Date =
     let doy: int = doe - (__DAYS_PER_YEAR * yoe + floor_div(yoe, 4) - floor_div(yoe, 100))
     let mp: int = floor_div(5 * doy + __MONTH_TO_DAY_BIAS, __MONTH_TO_DAY_NUMERATOR)
     let day: int = doy - floor_div(__MONTH_TO_DAY_NUMERATOR * mp + __MONTH_TO_DAY_BIAS, 5) + 1
-    let month: int = if mp < 10 then mp + 3 else mp - 9
-    let year: int = if month <= FEBRUARY then y + 1 else y
-    Date! { day, month, year }
+    let month_value: int = if mp < 10 then mp + 3 else mp - 9
+    let year: int = if month_value <= @(FEBRUARY) then y + 1 else y
+    Date! { day, month: month! { month_value }, year }
 
 /// Adds days to this date.
 fun Date.add_days(days: int): Date = from_days_since_unix_epoch(this.to_days_since_unix_epoch() + days)
@@ -95,18 +108,19 @@ fun Date.add_days(days: int): Date = from_days_since_unix_epoch(this.to_days_sin
 /// Adds years and months to this date, clamping the day to target month length.
 fun Date.add_years_months(years: int, months: int): Date =
     fun __floor_mod(a: int, b: int): int = a - floor_div(a, b) * b
-    fun __days_in_month(year: int, month: int): int =
-        if month == APRIL | month == JUNE | month == SEPTEMBER | month == NOVEMBER
+    fun days_in_month(year: int, value: month): int =
+        if value == APRIL | value == JUNE | value == SEPTEMBER | value == NOVEMBER
         then 30
-        else if month == FEBRUARY
-            then if _leap_year(year) then 29 else 28
+        else if value == FEBRUARY
+            then if leap_year_value(year) then 29 else 28
             else 31
     ---
-    let total_months = (this.year + years) * 12 + (this.month + months - 1)
+    let total_months = (this.year + years) * 12 + (@(this.month) + months - 1)
     let normalized_year = floor_div(total_months, 12)
-    let normalized_month = __floor_mod(total_months, 12) + 1
+    let normalized_month_value = __floor_mod(total_months, 12) + 1
+    let normalized_month = month! { normalized_month_value }
     Date! {
-        day: min(this.day, __days_in_month(normalized_year, normalized_month)),
+        day: min(this.day, days_in_month(normalized_year, normalized_month)),
         month: normalized_month,
         year: normalized_year
     }
@@ -114,7 +128,7 @@ fun Date.add_years_months(years: int, months: int): Date =
 /// Formats this date as an ISO 8601 calendar date.
 fun Date.to_iso_8601(): String =
     fun rec __pad_left(value: String, size: int): String =
-        if value.length() >= size
+        if @(value.length()) >= size
         then value
         else __pad_left("0" + value, size)
     fun __year_to_iso_8601(year: int): String =
@@ -126,7 +140,7 @@ fun Date.to_iso_8601(): String =
     ---
     __year_to_iso_8601(this.year)
     + "-"
-    + __pad_left("" + this.month, 2)
+    + __pad_left("" + @(this.month), 2)
     + "-"
     + __pad_left("" + this.day, 2)
 
@@ -139,7 +153,7 @@ fun from_iso_8601(iso: String): Result[Date] =
         case None -> Error { __invalid("unexpected end of string while parsing digits") }
         case Some { char } ->
             match ("" + char).to_int() with
-            case Success { digit } -> Success { __Parse { buffer: value[1, value.length()], value: digit } }
+            case Success { digit } -> Success { __Parse { buffer: value[1, @(value.length())], value: digit } }
             case Error -> Error { __invalid("expected digit, got `" + char + "`") }
     fun rec __parse_rest_digits(value: String, parsed: int): Result[__Parse[int]] =
         if value.is_empty()
@@ -162,56 +176,57 @@ fun from_iso_8601(iso: String): Result[Date] =
         else
             match value[0] with
             case None -> ""
-            case Some { _ } -> __drop_prefix(value[1, value.length()], size - 1)
+            case Some { _ } -> __drop_prefix(value[1, @(value.length())], size - 1)
     fun rec __take_prefix(value: String, size: int, acc: String): String =
         if size <= 0
         then acc
         else
             match value[0] with
             case None -> acc
-            case Some { char } -> __take_prefix(value[1, value.length()], size - 1, acc + char)
+            case Some { char } -> __take_prefix(value[1, @(value.length())], size - 1, acc + char)
     fun __slice(value: String, start: int, size: int): String = __take_prefix(__drop_prefix(value, start), size, "")
     fun __parse_year(value: String): Result[int] =
         if value.is_empty()
         then Error { __invalid("expected year") }
         else if value.starts_with("+")
-            then if value.length() < 5
+            then if @(value.length()) < 5
                 then Error { __invalid("expected expanded year, got `" + value + "`") }
                 else {
-                    let year <- __parse_exact_digits(value[1, value.length()], "year")
+                    let year <- __parse_exact_digits(value[1, @(value.length())], "year")
                     Success { year }
                 }
             else if value.starts_with("-")
-                then if value.length() < 5
+                then if @(value.length()) < 5
                     then Error { __invalid("expected expanded year, got `" + value + "`") }
                     else {
-                        let year <- __parse_exact_digits(value[1, value.length()], "year")
+                        let year <- __parse_exact_digits(value[1, @(value.length())], "year")
                         Success { 0 - year }
                     }
-                else if value.length() < 4
+                else if @(value.length()) < 4
                     then Error { __invalid("expected four-digit year, got `" + value + "`") }
                     else __parse_exact_digits(value, "year")
     fun __parse_date(year_part: String, month_part: String, day_part: String): Result[Date] = {
         let year <- __parse_year(year_part)
-        let month <- __parse_exact_digits(month_part, "month")
+        let month_value <- __parse_exact_digits(month_part, "month")
+        let parsed_month <- month { month_value }
         let day <- __parse_exact_digits(day_part, "day")
-        match Date { day, month, year } with
+        match Date { day, month: parsed_month, year } with
         case Success { date } -> Success { date }
         case Error { message } -> Error { __invalid(message) }
     }
     ---
-    let extended_year_end = iso.length() - 6
-    let extended_month_start = iso.length() - 5
-    let extended_month_end = iso.length() - 3
-    let extended_day_start = iso.length() - 2
-    let basic_year_end = iso.length() - 4
-    let basic_month_start = iso.length() - 4
-    let basic_month_end = iso.length() - 2
-    let basic_day_start = iso.length() - 2
-    let is_extended = iso.length() >= 10
+    let extended_year_end = @(iso.length()) - 6
+    let extended_month_start = @(iso.length()) - 5
+    let extended_month_end = @(iso.length()) - 3
+    let extended_day_start = @(iso.length()) - 2
+    let basic_year_end = @(iso.length()) - 4
+    let basic_month_start = @(iso.length()) - 4
+    let basic_month_end = @(iso.length()) - 2
+    let basic_day_start = @(iso.length()) - 2
+    let is_extended = @(iso.length()) >= 10
         & __slice(iso, extended_year_end, 1) == "-"
         & __slice(iso, extended_month_end, 1) == "-"
-    let is_basic = iso.length() >= 8
+    let is_basic = @(iso.length()) >= 8
     if is_extended
     then __parse_date(__take_prefix(iso, extended_year_end, ""), __slice(iso, extended_month_start, 2), __slice(iso, extended_day_start, 2))
     else if is_basic

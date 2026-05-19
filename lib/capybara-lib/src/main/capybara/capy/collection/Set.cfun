@@ -1,4 +1,5 @@
 from /capy/collection/List import { * }
+from /capy/collection/CollectionTypes import { * }
 from /capy/lang/Seq import { * }
 
 /// Native unique-value collection type backed by the runtime Set implementation.
@@ -9,10 +10,10 @@ from /capy/lang/Seq import { * }
 data Set[T] { <native> }
 
 /// Returns the number of values in this Set.
-fun Set[T].size(): int = <native>
+fun Set[T].size(): size = <native>
 
 /// Returns true when this Set has no values.
-fun Set[T].is_empty(): bool = this.size() == 0
+fun Set[T].is_empty(): bool = this.size() == EMPTY
 
 /// Returns the Set values as a List.
 fun Set[T].to_list(): List[T] = <native>
@@ -50,9 +51,9 @@ fun Set[T].any(predicate: T => bool): bool = this.to_list().any(predicate)
 fun Set[T].all(predicate: T => bool): bool = this.to_list().all(predicate)
 
 /// Returns true when this Set contains the given value.
-fun Set[T].contains(value: T): bool = this._contains_native(value)
+fun Set[T].contains(value: T): bool = this.contains_native(value)
 
-private fun Set[T]._contains_native(value: T): bool = <native>
+private fun Set[T].contains_native(value: T): bool = <native>
 
 /// Returns true when this Set contains the given value.
 fun Set[T].`?`(value: T): bool = this.contains(value)

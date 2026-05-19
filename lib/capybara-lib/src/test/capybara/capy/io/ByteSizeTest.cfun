@@ -20,6 +20,7 @@ fun tests(): Effect[TestFile] =
         test("byte_count converts to kib", () => should_convert_to_kib(2048L, 2.0)),
         test("byte_count converts to mib", () => should_convert_to_mib(1048576L, 1.0)),
         test("byte_count converts to gib", () => should_convert_to_gib(1073741824L, 1.0)),
+        test("byte_count comparison operators compare byte counts", () => should_compare_byte_counts()),
     ])
 
 private fun should_construct_byte_count(value: long, expected: long): Assert =
@@ -29,7 +30,7 @@ private fun should_add_byte_count(left: long, right: long, expected: long): Asse
     assert_that(
         (byte_count { left }).reduce(
             left_value => (byte_count { right }).reduce(
-                right_value => add_byte_count(left_value, right_value).reduce(actual => @actual, _ => -1L),
+                right_value => left_value.plus(right_value).reduce(actual => @actual, _ => -1L),
                 _ => -1L
             ),
             _ => -1L
@@ -40,7 +41,7 @@ private fun should_reject_byte_count_addition(left: long, right: long): Assert =
     let message: String =
         (byte_count { left }).reduce(
             left_value => (byte_count { right }).reduce(
-                right_value => add_byte_count(left_value, right_value).reduce(_ => "unexpected success", message => message),
+                right_value => left_value.plus(right_value).reduce(_ => "unexpected success", message => message),
                 _ => "unexpected constructor failure"
             ),
             _ => "unexpected constructor failure"
@@ -51,7 +52,7 @@ private fun should_subtract_byte_count(left: long, right: long, expected: long):
     assert_that(
         (byte_count { left }).reduce(
             left_value => (byte_count { right }).reduce(
-                right_value => subtract_byte_count(left_value, right_value).reduce(actual => @actual, _ => -1L),
+                right_value => left_value.minus(right_value).reduce(actual => @actual, _ => -1L),
                 _ => -1L
             ),
             _ => -1L
@@ -62,7 +63,7 @@ private fun should_reject_byte_count_subtraction(left: long, right: long): Asser
     let message: String =
         (byte_count { left }).reduce(
             left_value => (byte_count { right }).reduce(
-                right_value => subtract_byte_count(left_value, right_value).reduce(_ => "unexpected success", message => message),
+                right_value => left_value.minus(right_value).reduce(_ => "unexpected success", message => message),
                 _ => "unexpected constructor failure"
             ),
             _ => "unexpected constructor failure"
@@ -70,10 +71,21 @@ private fun should_reject_byte_count_subtraction(left: long, right: long): Asser
     assert_that(message).is_equal_to("byte_count must be greater than or equal to 0")
 
 private fun should_convert_to_kib(value: long, expected: double): Assert =
-    assert_that((byte_count { value }).reduce(actual => byte_count_to_kib(actual), _ => -1.0)).is_equal_to(expected)
+    assert_that((byte_count { value }).reduce(actual => actual.to_kib(), _ => -1.0)).is_equal_to(expected)
 
 private fun should_convert_to_mib(value: long, expected: double): Assert =
-    assert_that((byte_count { value }).reduce(actual => byte_count_to_mib(actual), _ => -1.0)).is_equal_to(expected)
+    assert_that((byte_count { value }).reduce(actual => actual.to_mib(), _ => -1.0)).is_equal_to(expected)
 
 private fun should_convert_to_gib(value: long, expected: double): Assert =
-    assert_that((byte_count { value }).reduce(actual => byte_count_to_gib(actual), _ => -1.0)).is_equal_to(expected)
+    assert_that((byte_count { value }).reduce(actual => actual.to_gib(), _ => -1.0)).is_equal_to(expected)
+
+private fun should_compare_byte_counts(): Assert =
+    let zero = ZERO_BYTES
+    let kib = ONE_KIB
+    assert_all([
+        assert_that(kib > zero).is_true(),
+        assert_that(kib >= zero).is_true(),
+        assert_that(zero < kib).is_true(),
+        assert_that(zero <= kib).is_true(),
+        assert_that(zero == ZERO_BYTES).is_true(),
+    ])

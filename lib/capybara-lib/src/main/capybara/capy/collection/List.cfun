@@ -1,15 +1,16 @@
 from /capy/lang/Option import { * }
 from /capy/lang/Seq import { * }
+from /capy/collection/CollectionTypes import { * }
 
 /// Native ordered collection type backed by the runtime List implementation.
 /// List literals use square brackets: [1, 2, 3].
 data List[T] { <native> }
 
 /// Returns the number of values in this List.
-fun List[T].size(): int = <native>
+fun List[T].size(): size = <native>
 
 /// Returns true when this List has no values.
-fun List[T].is_empty(): bool = this.size() == 0
+fun List[T].is_empty(): bool = this.size() == EMPTY
 
 /// Returns a new List with `value` appended.
 fun List[T].`+`(value: T): List[T] = <native>
@@ -126,7 +127,7 @@ fun List[T].flat_map(map: T => List[Y]): Seq[Y] = to_seq(this.reduce([], (acc, v
 fun List[T].`|*`(map: T => List[Y]): Seq[Y] = this.flat_map(map)
 
 /// Returns the value at idx using the same bounds and negative-index rules as list[idx].
-fun List[T].get(idx: int): Option[T] = <native>
+fun List[T].get(idx: index): Option[T] = <native>
 
 /// Returns the values in the half-open range [from, to) using the same bounds and negative-index rules as list[from:to].
 fun List[T].get(from: int, to: int): List[T] = <native>

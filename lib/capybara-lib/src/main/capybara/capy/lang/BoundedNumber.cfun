@@ -28,14 +28,40 @@ const FULL_PERCENTAGE: percentage = percentage! { 100.0 }
 const IMPOSSIBLE_PROBABILITY: probability = probability! { 0.0 }
 const CERTAIN_PROBABILITY: probability = probability! { 1.0 }
 
-fun ratio_to_percentage(value: ratio): percentage =
-    percentage! { @value * 100.0 }
+fun ratio.to_percentage(): percentage =
+    percentage! { @this * 100.0 }
 
-fun ratio_to_probability(value: ratio): probability =
-    probability! { @value }
+fun ratio.to_probability(): probability =
+    probability! { @this }
 
-fun percentage_to_ratio(value: percentage): ratio =
-    ratio! { @value / 100.0 }
+fun percentage.to_ratio(): ratio =
+    ratio! { @this / 100.0 }
 
-fun probability_to_ratio(value: probability): ratio =
-    ratio! { @value }
+fun probability.to_ratio(): ratio =
+    ratio! { @this }
+
+fun ratio.`>`(other: ratio): bool = @this > @other
+fun ratio.`>=`(other: ratio): bool = @this >= @other
+fun ratio.`<`(other: ratio): bool = @this < @other
+fun ratio.`<=`(other: ratio): bool = @this <= @other
+fun ratio.`==`(other: ratio): bool = @this == @other
+
+fun percentage.`>`(other: percentage): bool = @this > @other
+fun percentage.`>=`(other: percentage): bool = @this >= @other
+fun percentage.`<`(other: percentage): bool = @this < @other
+fun percentage.`<=`(other: percentage): bool = @this <= @other
+fun percentage.`==`(other: percentage): bool = @this == @other
+
+fun probability.`>`(other: probability): bool = @this > @other
+fun probability.`>=`(other: probability): bool = @this >= @other
+fun probability.`<`(other: probability): bool = @this < @other
+fun probability.`<=`(other: probability): bool = @this <= @other
+fun probability.`==`(other: probability): bool = @this == @other
+
+fun ratio_to_percentage(value: ratio): percentage = value.to_percentage()
+
+fun ratio_to_probability(value: ratio): probability = value.to_probability()
+
+fun percentage_to_ratio(value: percentage): ratio = value.to_ratio()
+
+fun probability_to_ratio(value: probability): ratio = value.to_ratio()

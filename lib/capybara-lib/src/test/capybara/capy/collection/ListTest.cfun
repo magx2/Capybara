@@ -1,5 +1,7 @@
 from /capy/test/Assert import { * }
+from /capy/collection/CollectionTypes import { * }
 from /capy/lang/Effect import { * }
+from /capy/lang/Result import { * }
 from /capy/lang/Seq import { * }
 from /capy/collection/List import { * }
 from /capy/test/CapyTest import { * }
@@ -93,7 +95,7 @@ fun list_should_get_values_by_index(): Assert =
     let values = [10, 20, 30, 40]
     assert_all([
         assert_that(values[0]).contains(10),
-        assert_that(values.get(2)).contains(30),
+        assert_that(values.get(list_test_index(2))).contains(30),
         assert_that(values[-1]).contains(40),
         assert_that(values[10]).is_empty(),
         assert_that(values[-10]).is_empty(),
@@ -106,3 +108,8 @@ fun list_should_get_values_by_range(): Assert =
         assert_that(values.get(0, 2)).is_equal_to([10, 20]),
         assert_that(values[-3, -1]).is_equal_to([20, 30]),
     ])
+
+private fun list_test_index(value: int): index =
+    match index { value } with
+    case Success { parsed } -> parsed
+    case Error -> FIRST_ELEMENT

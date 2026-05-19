@@ -1,5 +1,7 @@
 from /capy/test/Assert import { * }
+from /capy/collection/CollectionTypes import { * }
 from /capy/lang/Effect import { * }
+from /capy/lang/Result import { * }
 from /capy/lang/Seq import { * }
 from /capy/test/CapyTest import { * }
 
@@ -36,15 +38,15 @@ fun should_assert_empty_sequence(): Assert =
         .is_equal_to(End {})
 
 fun should_take_from_infinite_sequence(): Assert =
-    let l = natural_seq().take(5)
+    let l = natural_seq().take(seq_test_size(5))
     assert_that(to_seq(l)).has_size(5)
 
 fun should_convert_sequence_to_list(): Assert =
-    let seq = natural_seq().drop(1).until(x => x > 2)
+    let seq = natural_seq().drop(seq_test_size(1)).until(x => x > 2)
     assert_that(seq).has_size(2)
 
 fun should_drop_and_until(): Assert =
-    let seq = natural_seq().drop(2).until(x => x > 5)
+    let seq = natural_seq().drop(seq_test_size(2)).until(x => x > 5)
     assert_that(seq).has_size(4)
 
 fun should_filter_and_reject_values(): Assert =
@@ -56,11 +58,11 @@ fun should_filter_and_reject_values(): Assert =
     ])
 
 fun should_zip_two_sequences(): Assert =
-    let zipped = natural_seq().drop(1).zip(ones_seq()).take(3)
+    let zipped = natural_seq().drop(seq_test_size(1)).zip(ones_seq()).take(seq_test_size(3))
     assert_that(to_seq(zipped)).has_size(3)
 
 fun should_generate_powers_of_two(): Assert =
-    let l = powers_of_2_seq().take(5)
+    let l = powers_of_2_seq().take(seq_test_size(5))
     assert_that(to_seq(l)).has_size(5)
 
 fun should_return_first_element(): Assert =
@@ -86,3 +88,8 @@ fun should_detect_any_matching_element(): Assert =
 fun should_detect_no_matching_element(): Assert =
     let seq = to_seq([1, 2, 3])
     assert_that(seq.any(x => x > 10)).is_equal_to(false)
+
+private fun seq_test_size(value: int): size =
+    match size { value } with
+    case Success { parsed } -> parsed
+    case Error -> EMPTY

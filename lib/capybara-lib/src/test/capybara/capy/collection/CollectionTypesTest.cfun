@@ -9,50 +9,44 @@ fun tests(): Effect[TestFile] =
     test_file("/capy/collection/CollectionTypes.cfun", [
         test("index accepts zero", () => should_construct_index(0, 0)),
         test("index rejects negative values", () => assert_that(index { -1 }).fails("index must be greater than or equal to 0")),
-        test("count accepts zero", () => should_construct_count(0, 0)),
-        test("count rejects negative values", () => assert_that(count { -1 }).fails("count must be greater than or equal to 0")),
         test("size accepts zero", () => should_construct_size(0, 0)),
         test("size rejects negative values", () => assert_that(size { -1 }).fails("size must be greater than or equal to 0")),
         test("FIRST_ELEMENT is zero index", () => assert_that(@FIRST_ELEMENT).is_equal_to(0)),
-        test("EMPTY_COUNT is zero count", () => assert_that(@EMPTY_COUNT).is_equal_to(0)),
         test("EMPTY is zero size", () => assert_that(@EMPTY).is_equal_to(0)),
         test("index can advance by one", () => should_advance_index(4, 5)),
         test("index advance rejects overflow", () => should_reject_index_advance(MAX_INT_VALUE)),
-        test("index can advance by count", () => should_add_count_to_index(4, 3, 7)),
+        test("index can advance by size", () => should_add_size_to_index(4, 3, 7)),
         test("index addition rejects overflow", () => should_reject_index_addition(MAX_INT_VALUE, 1)),
-        test("count addition returns count", () => should_add_count(2, 3, 5)),
-        test("count addition rejects overflow", () => should_reject_count_addition(MAX_INT_VALUE, 1)),
         test("size addition returns size", () => should_add_size(2, 3, 5)),
         test("size addition rejects overflow", () => should_reject_size_addition(MAX_INT_VALUE, 1)),
         test("size subtraction validates result", () => should_subtract_size(7, 2, 5)),
         test("size subtraction rejects negative result", () => should_reject_size_subtraction(2, 7)),
+        test("index comparison operators compare indexes", () => should_compare_indexes()),
+        test("size comparison operators compare sizes", () => should_compare_sizes()),
     ])
 
 private fun should_construct_index(value: int, expected: int): Assert =
     assert_that((index { value }).reduce(actual => @actual, _ => -1)).is_equal_to(expected)
 
-private fun should_construct_count(value: int, expected: int): Assert =
-    assert_that((count { value }).reduce(actual => @actual, _ => -1)).is_equal_to(expected)
-
 private fun should_construct_size(value: int, expected: int): Assert =
     assert_that((size { value }).reduce(actual => @actual, _ => -1)).is_equal_to(expected)
 
 private fun should_advance_index(value: int, expected: int): Assert =
-    assert_that((index { value }).reduce(actual => next_index(actual).reduce(next => @next, _ => -1), _ => -1)).is_equal_to(expected)
+    assert_that((index { value }).reduce(actual => actual.next().reduce(next => @next, _ => -1), _ => -1)).is_equal_to(expected)
 
 private fun should_reject_index_advance(value: int): Assert =
     let message: String =
         (index { value }).reduce(
-            actual => next_index(actual).reduce(_ => "unexpected success", message => message),
+            actual => actual.next().reduce(_ => "unexpected success", message => message),
             _ => "unexpected constructor failure"
         )
     assert_that(message).is_equal_to("index increment overflow")
 
-private fun should_add_count_to_index(value: int, offset: int, expected: int): Assert =
+private fun should_add_size_to_index(value: int, offset: int, expected: int): Assert =
     assert_that(
         (index { value }).reduce(
-            index_value => (count { offset }).reduce(
-                count_value => add_count_to_index(index_value, count_value).reduce(actual => @actual, _ => -1),
+            index_value => (size { offset }).reduce(
+                size_value => index_value.plus(size_value).reduce(actual => @actual, _ => -1),
                 _ => -1
             ),
             _ => -1
@@ -62,41 +56,19 @@ private fun should_add_count_to_index(value: int, offset: int, expected: int): A
 private fun should_reject_index_addition(value: int, offset: int): Assert =
     let message: String =
         (index { value }).reduce(
-            index_value => (count { offset }).reduce(
-                count_value => add_count_to_index(index_value, count_value).reduce(_ => "unexpected success", message => message),
+            index_value => (size { offset }).reduce(
+                size_value => index_value.plus(size_value).reduce(_ => "unexpected success", message => message),
                 _ => "unexpected constructor failure"
             ),
             _ => "unexpected constructor failure"
         )
     assert_that(message).is_equal_to("index addition overflow")
 
-private fun should_add_count(left: int, right: int, expected: int): Assert =
-    assert_that(
-        (count { left }).reduce(
-            left_value => (count { right }).reduce(
-                right_value => add_count(left_value, right_value).reduce(actual => @actual, _ => -1),
-                _ => -1
-            ),
-            _ => -1
-        )
-    ).is_equal_to(expected)
-
-private fun should_reject_count_addition(left: int, right: int): Assert =
-    let message: String =
-        (count { left }).reduce(
-            left_value => (count { right }).reduce(
-                right_value => add_count(left_value, right_value).reduce(_ => "unexpected success", message => message),
-                _ => "unexpected constructor failure"
-            ),
-            _ => "unexpected constructor failure"
-        )
-    assert_that(message).is_equal_to("count addition overflow")
-
 private fun should_add_size(left: int, right: int, expected: int): Assert =
     assert_that(
         (size { left }).reduce(
-            size_value => (count { right }).reduce(
-                count_value => add_size(size_value, count_value).reduce(actual => @actual, _ => -1),
+            left_value => (size { right }).reduce(
+                right_value => left_value.plus(right_value).reduce(actual => @actual, _ => -1),
                 _ => -1
             ),
             _ => -1
@@ -106,8 +78,8 @@ private fun should_add_size(left: int, right: int, expected: int): Assert =
 private fun should_reject_size_addition(left: int, right: int): Assert =
     let message: String =
         (size { left }).reduce(
-            size_value => (count { right }).reduce(
-                count_value => add_size(size_value, count_value).reduce(_ => "unexpected success", message => message),
+            left_value => (size { right }).reduce(
+                right_value => left_value.plus(right_value).reduce(_ => "unexpected success", message => message),
                 _ => "unexpected constructor failure"
             ),
             _ => "unexpected constructor failure"
@@ -117,8 +89,8 @@ private fun should_reject_size_addition(left: int, right: int): Assert =
 private fun should_subtract_size(left: int, right: int, expected: int): Assert =
     assert_that(
         (size { left }).reduce(
-            size_value => (count { right }).reduce(
-                count_value => subtract_size(size_value, count_value).reduce(actual => @actual, _ => -1),
+            left_value => (size { right }).reduce(
+                right_value => left_value.minus(right_value).reduce(actual => @actual, _ => -1),
                 _ => -1
             ),
             _ => -1
@@ -128,10 +100,42 @@ private fun should_subtract_size(left: int, right: int, expected: int): Assert =
 private fun should_reject_size_subtraction(left: int, right: int): Assert =
     let message: String =
         (size { left }).reduce(
-            size_value => (count { right }).reduce(
-                count_value => subtract_size(size_value, count_value).reduce(_ => "unexpected success", message => message),
+            left_value => (size { right }).reduce(
+                right_value => left_value.minus(right_value).reduce(_ => "unexpected success", message => message),
                 _ => "unexpected constructor failure"
             ),
             _ => "unexpected constructor failure"
         )
     assert_that(message).is_equal_to("size must be greater than or equal to 0")
+
+private fun should_compare_indexes(): Assert =
+    let first = FIRST_ELEMENT
+    let second = collection_types_test_index(1)
+    assert_all([
+        assert_that(second > first).is_true(),
+        assert_that(second >= first).is_true(),
+        assert_that(first < second).is_true(),
+        assert_that(first <= second).is_true(),
+        assert_that(first == FIRST_ELEMENT).is_true(),
+    ])
+
+private fun should_compare_sizes(): Assert =
+    let empty = EMPTY
+    let one = collection_types_test_size(1)
+    assert_all([
+        assert_that(one > empty).is_true(),
+        assert_that(one >= empty).is_true(),
+        assert_that(empty < one).is_true(),
+        assert_that(empty <= one).is_true(),
+        assert_that(empty == EMPTY).is_true(),
+    ])
+
+private fun collection_types_test_index(value: int): index =
+    match index { value } with
+    case Success { parsed } -> parsed
+    case Error -> FIRST_ELEMENT
+
+private fun collection_types_test_size(value: int): size =
+    match size { value } with
+    case Success { parsed } -> parsed
+    case Error -> EMPTY

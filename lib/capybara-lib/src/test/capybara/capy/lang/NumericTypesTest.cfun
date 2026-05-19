@@ -35,6 +35,7 @@ fun tests(): Effect[TestFile] =
         test("positive_long addition rejects overflow", () => should_reject_positive_long_addition(MAX_LONG_VALUE, 1L)),
         test("non_negative_long subtraction validates result", () => should_subtract_non_negative_long(7L, 2L, 5L)),
         test("non_negative_long subtraction rejects negative result", () => should_reject_non_negative_long_subtraction(2L, 7L)),
+        test("integer-backed comparison operators compare values", () => should_compare_integer_backed_values()),
     ])
 
 private fun should_construct_non_negative_int(value: int, expected: int): Assert =
@@ -59,7 +60,7 @@ private fun should_add_non_negative_int(left: int, right: int, expected: int): A
     assert_that(
         (non_negative_int { left }).reduce(
             left_value => (non_negative_int { right }).reduce(
-                right_value => add_non_negative_int(left_value, right_value).reduce(actual => @actual, _ => -1),
+                right_value => left_value.plus(right_value).reduce(actual => @actual, _ => -1),
                 _ => -1
             ),
             _ => -1
@@ -70,7 +71,7 @@ private fun should_add_positive_int(left: int, right: int, expected: int): Asser
     assert_that(
         (positive_int { left }).reduce(
             left_value => (positive_int { right }).reduce(
-                right_value => add_positive_int(left_value, right_value).reduce(actual => @actual, _ => -1),
+                right_value => left_value.plus(right_value).reduce(actual => @actual, _ => -1),
                 _ => -1
             ),
             _ => -1
@@ -81,7 +82,7 @@ private fun should_reject_non_negative_int_addition(left: int, right: int): Asse
     let message: String =
         (non_negative_int { left }).reduce(
             left_value => (non_negative_int { right }).reduce(
-                right_value => add_non_negative_int(left_value, right_value).reduce(_ => "unexpected success", message => message),
+                right_value => left_value.plus(right_value).reduce(_ => "unexpected success", message => message),
                 _ => "unexpected constructor failure"
             ),
             _ => "unexpected constructor failure"
@@ -92,7 +93,7 @@ private fun should_reject_positive_int_addition(left: int, right: int): Assert =
     let message: String =
         (positive_int { left }).reduce(
             left_value => (positive_int { right }).reduce(
-                right_value => add_positive_int(left_value, right_value).reduce(_ => "unexpected success", message => message),
+                right_value => left_value.plus(right_value).reduce(_ => "unexpected success", message => message),
                 _ => "unexpected constructor failure"
             ),
             _ => "unexpected constructor failure"
@@ -103,7 +104,7 @@ private fun should_add_non_negative_long(left: long, right: long, expected: long
     assert_that(
         (non_negative_long { left }).reduce(
             left_value => (non_negative_long { right }).reduce(
-                right_value => add_non_negative_long(left_value, right_value).reduce(actual => @actual, _ => -1L),
+                right_value => left_value.plus(right_value).reduce(actual => @actual, _ => -1L),
                 _ => -1L
             ),
             _ => -1L
@@ -114,7 +115,7 @@ private fun should_reject_non_negative_long_addition(left: long, right: long): A
     let message: String =
         (non_negative_long { left }).reduce(
             left_value => (non_negative_long { right }).reduce(
-                right_value => add_non_negative_long(left_value, right_value).reduce(_ => "unexpected success", message => message),
+                right_value => left_value.plus(right_value).reduce(_ => "unexpected success", message => message),
                 _ => "unexpected constructor failure"
             ),
             _ => "unexpected constructor failure"
@@ -125,7 +126,7 @@ private fun should_add_positive_long(left: long, right: long, expected: long): A
     assert_that(
         (positive_long { left }).reduce(
             left_value => (positive_long { right }).reduce(
-                right_value => add_positive_long(left_value, right_value).reduce(actual => @actual, _ => -1L),
+                right_value => left_value.plus(right_value).reduce(actual => @actual, _ => -1L),
                 _ => -1L
             ),
             _ => -1L
@@ -136,7 +137,7 @@ private fun should_reject_positive_long_addition(left: long, right: long): Asser
     let message: String =
         (positive_long { left }).reduce(
             left_value => (positive_long { right }).reduce(
-                right_value => add_positive_long(left_value, right_value).reduce(_ => "unexpected success", message => message),
+                right_value => left_value.plus(right_value).reduce(_ => "unexpected success", message => message),
                 _ => "unexpected constructor failure"
             ),
             _ => "unexpected constructor failure"
@@ -147,7 +148,7 @@ private fun should_subtract_non_negative_long(left: long, right: long, expected:
     assert_that(
         (non_negative_long { left }).reduce(
             left_value => (non_negative_long { right }).reduce(
-                right_value => subtract_non_negative_long(left_value, right_value).reduce(actual => @actual, _ => -1L),
+                right_value => left_value.minus(right_value).reduce(actual => @actual, _ => -1L),
                 _ => -1L
             ),
             _ => -1L
@@ -158,9 +159,41 @@ private fun should_reject_non_negative_long_subtraction(left: long, right: long)
     let message: String =
         (non_negative_long { left }).reduce(
             left_value => (non_negative_long { right }).reduce(
-                right_value => subtract_non_negative_long(left_value, right_value).reduce(_ => "unexpected success", message => message),
+                right_value => left_value.minus(right_value).reduce(_ => "unexpected success", message => message),
                 _ => "unexpected constructor failure"
             ),
             _ => "unexpected constructor failure"
         )
     assert_that(message).is_equal_to("non_negative_long must be greater than or equal to 0")
+
+private fun should_compare_integer_backed_values(): Assert =
+    let zero = NON_NEGATIVE_INT_ZERO
+    let one = non_negative_int_value(1)
+    let long_zero = NON_NEGATIVE_LONG_ZERO
+    let long_one = non_negative_long_value(1L)
+    assert_all([
+        assert_that(one > zero).is_true(),
+        assert_that(one >= zero).is_true(),
+        assert_that(zero < one).is_true(),
+        assert_that(zero <= one).is_true(),
+        assert_that(zero == NON_NEGATIVE_INT_ZERO).is_true(),
+        assert_that(long_one > long_zero).is_true(),
+        assert_that(long_one >= long_zero).is_true(),
+        assert_that(long_zero < long_one).is_true(),
+        assert_that(long_zero <= long_one).is_true(),
+        assert_that(long_zero == NON_NEGATIVE_LONG_ZERO).is_true(),
+        assert_that(POSITIVE_INT_ONE == POSITIVE_INT_ONE).is_true(),
+        assert_that(POSITIVE_LONG_ONE == POSITIVE_LONG_ONE).is_true(),
+        assert_that(NON_ZERO_INT_ONE == NON_ZERO_INT_ONE).is_true(),
+        assert_that(NON_ZERO_LONG_ONE == NON_ZERO_LONG_ONE).is_true(),
+    ])
+
+private fun non_negative_int_value(value: int): non_negative_int =
+    match non_negative_int { value } with
+    case Success { parsed } -> parsed
+    case Error -> NON_NEGATIVE_INT_ZERO
+
+private fun non_negative_long_value(value: long): non_negative_long =
+    match non_negative_long { value } with
+    case Success { parsed } -> parsed
+    case Error -> NON_NEGATIVE_LONG_ZERO

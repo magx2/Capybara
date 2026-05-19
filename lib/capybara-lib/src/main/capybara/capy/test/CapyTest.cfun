@@ -81,7 +81,7 @@ private fun execute_test_case(log_type: LogType, test_case: TestCase): Effect[Te
     let executed_test_case = TestCase {
         name: test_case.name,
         result: result,
-        assertions_count: assert.assertions.size(),
+        assertions_count: @(assert.assertions.size()),
         execution_time: (end - start) / 1000000000.0,
         assert_supplier: test_case.assert_supplier
     }
@@ -367,13 +367,13 @@ fun team_city_escape(value: String): String =
     fun rec __team_city_escape(value: String, acc: String): String =
         match value[0] with
         case None -> acc
-        case Some { '\'' } -> __team_city_escape(value[1, value.length()], acc + "|'")
-        case Some { '\n' } -> __team_city_escape(value[1, value.length()], acc + '|n')
-        case Some { '\r' } -> __team_city_escape(value[1, value.length()], acc + '|r')
-        case Some { '|' } -> __team_city_escape(value[1, value.length()], acc + '||')
-        case Some { '[' } -> __team_city_escape(value[1, value.length()], acc + '|[')
-        case Some { ']' } -> __team_city_escape(value[1, value.length()], acc + '|]')
-        case Some { c } -> __team_city_escape(value[1, value.length()], acc + c)
+        case Some { '\'' } -> __team_city_escape(value[1, @(value.length())], acc + "|'")
+        case Some { '\n' } -> __team_city_escape(value[1, @(value.length())], acc + '|n')
+        case Some { '\r' } -> __team_city_escape(value[1, @(value.length())], acc + '|r')
+        case Some { '|' } -> __team_city_escape(value[1, @(value.length())], acc + '||')
+        case Some { '[' } -> __team_city_escape(value[1, @(value.length())], acc + '|[')
+        case Some { ']' } -> __team_city_escape(value[1, @(value.length())], acc + '|]')
+        case Some { c } -> __team_city_escape(value[1, @(value.length())], acc + c)
     ---
     __team_city_escape(value, '')
 
@@ -472,12 +472,12 @@ private fun manifest_paths(content: String): List[Path] =
             if current.is_empty()
             then acc
             else acc + current
-        case Some { '\r' } -> lines(value[1, value.length()], current, acc)
+        case Some { '\r' } -> lines(value[1, @(value.length())], current, acc)
         case Some { '\n' } ->
             if current.is_empty()
-            then lines(value[1, value.length()], '', acc)
-            else lines(value[1, value.length()], '', acc + current)
-        case Some { c } -> lines(value[1, value.length()], current + c, acc)
+            then lines(value[1, @(value.length())], '', acc)
+            else lines(value[1, @(value.length())], '', acc + current)
+        case Some { c } -> lines(value[1, @(value.length())], current + c, acc)
     ---
     (lines(content, '', []) | line => from_string(line)).as_list()
 
@@ -555,7 +555,7 @@ const CTRF_SPEC_VERSION = '0.0.0'
 private fun junit_run_tests(test_files: List[TestFile]): List[TestOutput] = (test_files | :junit_run_test).as_list()
 
 private fun junit_run_test(test_file: TestFile): TestOutput =
-    let tests = test_file.test_cases.size()
+    let tests = @(test_file.test_cases.size())
     let failures = test_file.test_cases |> 0, (acc, tc) => if tc.failed() then acc + 1 else acc
     let assertions = test_file.test_cases |> 0, (acc, tc) => acc + tc.assertions_count
     let suite_name = junit_escape_xml_attribute(test_file.file_name)
@@ -565,7 +565,7 @@ private fun junit_run_test(test_file: TestFile): TestOutput =
     + (test_file.test_cases |> '', (acc, tc) => acc + junit_run_test_case(test_file.file_name, tc))
     + '</testsuite>'
     TestOutput {
-        path: from_string(JUNIT_PREFIX + test_file.file_name[1, test_file.file_name.length()].replace('/', '.') + '.xml'),
+        path: from_string(JUNIT_PREFIX + test_file.file_name[1, @(test_file.file_name.length())].replace('/', '.') + '.xml'),
         content: content,
         failed: failures > 0
     }
@@ -621,7 +621,7 @@ fun ctrf_report(test_files: List[TestFile]): String =
     + '"skipped":0,'
     + '"pending":0,'
     + '"other":0,'
-    + '"suites":' + test_files.size() + ','
+    + '"suites":' + @(test_files.size()) + ','
     + '"start":' + start + ','
     + '"stop":' + (start + duration) + ','
     + '"duration":' + duration
@@ -691,7 +691,7 @@ private fun ctrf_duration_millis(test_case: TestCase): long =
     Second { value: round(test_case.execution_time, HALF_EVEN) }.to_milli_seconds().value
 
 private fun ctrf_tests_count(test_files: List[TestFile]): int =
-    test_files |> 0, (acc, test_file) => acc + test_file.test_cases.size()
+    test_files |> 0, (acc, test_file) => acc + @(test_file.test_cases.size())
 
 private fun ctrf_passed_count(test_files: List[TestFile]): int =
     test_files |> 0, (acc, test_file) =>
@@ -718,7 +718,7 @@ fun jest_report(test_files: List[TestFile]): String =
     let failed_count = ctrf_failed_count(test_files)
     "{"
     + '"success":' + jest_json_bool(failed_count == 0) + ','
-    + '"numTotalTestSuites":' + test_files.size() + ','
+    + '"numTotalTestSuites":' + @(test_files.size()) + ','
     + '"numPassedTestSuites":' + jest_passed_suite_count(test_files) + ','
     + '"numFailedTestSuites":' + jest_failed_suite_count(test_files) + ','
     + '"numPendingTestSuites":0,'

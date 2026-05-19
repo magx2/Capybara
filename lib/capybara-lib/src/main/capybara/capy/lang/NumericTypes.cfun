@@ -50,28 +50,88 @@ const POSITIVE_LONG_ONE: positive_long = positive_long! { 1L }
 const NON_ZERO_INT_ONE: non_zero_int = non_zero_int! { 1 }
 const NON_ZERO_LONG_ONE: non_zero_long = non_zero_long! { 1L }
 
-fun add_non_negative_int(left: non_negative_int, right: non_negative_int): Result[non_negative_int] =
-    if @left > MAX_INT_VALUE - @right
+fun non_negative_int.plus(other: non_negative_int): Result[non_negative_int] =
+    if @this > MAX_INT_VALUE - @other
     then Error { message: "non_negative_int addition overflow" }
-    else Success { non_negative_int! { @left + @right } }
+    else Success { non_negative_int! { @this + @other } }
 
-fun subtract_non_negative_int(left: non_negative_int, right: non_negative_int): Result[non_negative_int] =
-    non_negative_int { @left - @right }
+fun non_negative_int.`+`(other: non_negative_int): Result[non_negative_int] = this.plus(other)
 
-fun add_positive_int(left: positive_int, right: positive_int): Result[positive_int] =
-    if @left > MAX_INT_VALUE - @right
+fun non_negative_int.minus(other: non_negative_int): Result[non_negative_int] =
+    non_negative_int { @this - @other }
+
+fun non_negative_int.`-`(other: non_negative_int): Result[non_negative_int] = this.minus(other)
+
+fun positive_int.plus(other: positive_int): Result[positive_int] =
+    if @this > MAX_INT_VALUE - @other
     then Error { message: "positive_int addition overflow" }
-    else Success { positive_int! { @left + @right } }
+    else Success { positive_int! { @this + @other } }
 
-fun add_non_negative_long(left: non_negative_long, right: non_negative_long): Result[non_negative_long] =
-    if @left > MAX_LONG_VALUE - @right
+fun positive_int.`+`(other: positive_int): Result[positive_int] = this.plus(other)
+
+fun non_negative_long.plus(other: non_negative_long): Result[non_negative_long] =
+    if @this > MAX_LONG_VALUE - @other
     then Error { message: "non_negative_long addition overflow" }
-    else Success { non_negative_long! { @left + @right } }
+    else Success { non_negative_long! { @this + @other } }
 
-fun subtract_non_negative_long(left: non_negative_long, right: non_negative_long): Result[non_negative_long] =
-    non_negative_long { @left - @right }
+fun non_negative_long.`+`(other: non_negative_long): Result[non_negative_long] = this.plus(other)
 
-fun add_positive_long(left: positive_long, right: positive_long): Result[positive_long] =
-    if @left > MAX_LONG_VALUE - @right
+fun non_negative_long.minus(other: non_negative_long): Result[non_negative_long] =
+    non_negative_long { @this - @other }
+
+fun non_negative_long.`-`(other: non_negative_long): Result[non_negative_long] = this.minus(other)
+
+fun positive_long.plus(other: positive_long): Result[positive_long] =
+    if @this > MAX_LONG_VALUE - @other
     then Error { message: "positive_long addition overflow" }
-    else Success { positive_long! { @left + @right } }
+    else Success { positive_long! { @this + @other } }
+
+fun positive_long.`+`(other: positive_long): Result[positive_long] = this.plus(other)
+
+fun non_negative_int.`>`(other: non_negative_int): bool = @this > @other
+fun non_negative_int.`>=`(other: non_negative_int): bool = @this >= @other
+fun non_negative_int.`<`(other: non_negative_int): bool = @this < @other
+fun non_negative_int.`<=`(other: non_negative_int): bool = @this <= @other
+fun non_negative_int.`==`(other: non_negative_int): bool = @this == @other
+
+fun positive_int.`>`(other: positive_int): bool = @this > @other
+fun positive_int.`>=`(other: positive_int): bool = @this >= @other
+fun positive_int.`<`(other: positive_int): bool = @this < @other
+fun positive_int.`<=`(other: positive_int): bool = @this <= @other
+fun positive_int.`==`(other: positive_int): bool = @this == @other
+
+fun non_negative_long.`>`(other: non_negative_long): bool = @this > @other
+fun non_negative_long.`>=`(other: non_negative_long): bool = @this >= @other
+fun non_negative_long.`<`(other: non_negative_long): bool = @this < @other
+fun non_negative_long.`<=`(other: non_negative_long): bool = @this <= @other
+fun non_negative_long.`==`(other: non_negative_long): bool = @this == @other
+
+fun positive_long.`>`(other: positive_long): bool = @this > @other
+fun positive_long.`>=`(other: positive_long): bool = @this >= @other
+fun positive_long.`<`(other: positive_long): bool = @this < @other
+fun positive_long.`<=`(other: positive_long): bool = @this <= @other
+fun positive_long.`==`(other: positive_long): bool = @this == @other
+
+fun non_zero_int.`>`(other: non_zero_int): bool = @this > @other
+fun non_zero_int.`>=`(other: non_zero_int): bool = @this >= @other
+fun non_zero_int.`<`(other: non_zero_int): bool = @this < @other
+fun non_zero_int.`<=`(other: non_zero_int): bool = @this <= @other
+fun non_zero_int.`==`(other: non_zero_int): bool = @this == @other
+
+fun non_zero_long.`>`(other: non_zero_long): bool = @this > @other
+fun non_zero_long.`>=`(other: non_zero_long): bool = @this >= @other
+fun non_zero_long.`<`(other: non_zero_long): bool = @this < @other
+fun non_zero_long.`<=`(other: non_zero_long): bool = @this <= @other
+fun non_zero_long.`==`(other: non_zero_long): bool = @this == @other
+
+fun add_non_negative_int(left: non_negative_int, right: non_negative_int): Result[non_negative_int] = left.plus(right)
+
+fun subtract_non_negative_int(left: non_negative_int, right: non_negative_int): Result[non_negative_int] = left.minus(right)
+
+fun add_positive_int(left: positive_int, right: positive_int): Result[positive_int] = left.plus(right)
+
+fun add_non_negative_long(left: non_negative_long, right: non_negative_long): Result[non_negative_long] = left.plus(right)
+
+fun subtract_non_negative_long(left: non_negative_long, right: non_negative_long): Result[non_negative_long] = left.minus(right)
+
+fun add_positive_long(left: positive_long, right: positive_long): Result[positive_long] = left.plus(right)
