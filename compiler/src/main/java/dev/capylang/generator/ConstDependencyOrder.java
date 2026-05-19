@@ -42,7 +42,11 @@ final class ConstDependencyOrder {
             return false;
         }
         var name = simpleMethodName(functionCall.name());
-        return name.contains("__local_const_") || CONST_NAME_PATTERN.matcher(name).matches();
+        return name.contains("__local_const_") || isTopLevelConstName(name);
+    }
+
+    static boolean isTopLevelConstName(String name) {
+        return CONST_NAME_PATTERN.matcher(name).matches();
     }
 
     private static void visit(
