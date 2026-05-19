@@ -55,6 +55,24 @@ class PrimitiveBackedTypeGeneratorTest {
     }
 
     @Test
+    void shouldExposeGeneratedPrimitiveBackedConstructorHelpersInJava() {
+        var program = compileProgram(List.of(new RawModule("Numbers", "/foo", """
+                from /capy/lang/Result import { * }
+
+                type count -> int with constructor {
+                    if value >= 0
+                    then Success { value }
+                    else Error { "bad count" }
+                }
+                """)));
+
+        var code = generatedCode(new JavaGenerator(), program, Path.of("foo", "Numbers.java"));
+
+        assertThat(code)
+                .contains("public static capy.lang.Result<java.lang.Integer> __constructorPrimitiveCount(int value)");
+    }
+
+    @Test
     void shouldErasePrimitiveBackedTypesInJavaScript() {
         var code = generatedCode(new JavaScriptGenerator(), Path.of("foo", "Ids.js"));
 
@@ -86,6 +104,34 @@ class PrimitiveBackedTypeGeneratorTest {
                 .doesNotContain("UserId(")
                 .doesNotContain("user_id(")
                 .doesNotContain("compiledprimitive");
+    }
+
+    @Test
+    void shouldNotShadowPythonRuntimeWithPrimitiveBackedConstructorAliases() {
+        var program = compileProgram(List.of(new RawModule("Numbers", "/foo", """
+                from /capy/lang/Result import { * }
+
+                type count -> int with constructor {
+                    if value >= 0
+                    then Success { value }
+                    else Error { "bad count" }
+                }
+
+                type index -> int with constructor {
+                    if value >= 0
+                    then Success { value }
+                    else Error { "bad index" }
+                }
+
+                fun next(value: index): index = index! { @value + 1 }
+                """)));
+
+        var code = generatedCode(new PythonGenerator(), program, Path.of("foo", "Numbers.py"));
+
+        assertThat(code)
+                .contains("import dev.capylang.capybara as capy")
+                .contains("capy.int_add")
+                .doesNotContain("def capy(*args):");
     }
 
     private static String generatedCode(Generator generator, Path modulePath) {

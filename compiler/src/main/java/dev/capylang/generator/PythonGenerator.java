@@ -379,7 +379,7 @@ public final class PythonGenerator implements Generator {
                 code.append("    def ").append(name).append("(").append(String.join(", ", allParams)).append("):\n");
                 code.append("        return ").append(body).append("\n\n");
             }
-            if (topLevel && !method.isPrivate()) {
+            if (topLevel && !method.isPrivate() && !isGeneratedConstructorName(name)) {
                 exportNames.add(name);
                 var alias = pyIdentifier(method.name());
                 if (!alias.equals(name)) {
@@ -388,6 +388,10 @@ public final class PythonGenerator implements Generator {
                 }
             }
             return code.toString();
+        }
+
+        private boolean isGeneratedConstructorName(String name) {
+            return name.startsWith("capy__constructor");
         }
 
         private String renderPrimitiveTypeMetadata() {

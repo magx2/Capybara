@@ -14,6 +14,7 @@ import static java.util.stream.Collectors.*;
 import static dev.capylang.generator.java.JavaAnnotation.generatedAnnotation;
 
 public class JavaAstBuilder {
+    private static final String PRIMITIVE_BACKED_TYPE_CONSTRUCTOR_FUNCTION_PREFIX = "__constructor__primitive__";
     private final Map<String, String> functionNameOverrides;
     private final Map<String, String> enumValueOwnerOverrides;
 
@@ -351,6 +352,9 @@ public class JavaAstBuilder {
     }
 
     private boolean isPrivateFunction(CompiledFunction function) {
+        if (function.name().startsWith(PRIMITIVE_BACKED_TYPE_CONSTRUCTOR_FUNCTION_PREFIX)) {
+            return function.visibility() == Visibility.PRIVATE;
+        }
         var userVisibleName = baseMethodName(function.name());
         return userVisibleName.startsWith("_") || function.visibility() == Visibility.PRIVATE;
     }
