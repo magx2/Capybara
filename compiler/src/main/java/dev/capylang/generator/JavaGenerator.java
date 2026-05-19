@@ -900,12 +900,14 @@ public final class JavaGenerator implements Generator {
         var body = String.join(", ", values);
         var dataValueInfoMethod = mapJavaEnumDataValueInfoMethod(javaEnum, values);
         if (values.size() == 1 && "INSTANCE".equals(values.getFirst())) {
-            return "public enum " + javaEnum.name() + implementInterfaces + "{"
+            return mapJavaDoc(javaEnum.comments())
+                   + "public enum " + javaEnum.name() + implementInterfaces + "{"
                    + body + ";\n"
                    + dataValueInfoMethod
                    + "}\n";
         }
-        return "public enum " + javaEnum.name() + implementInterfaces + "{"
+        return mapJavaDoc(javaEnum.comments())
+               + "public enum " + javaEnum.name() + implementInterfaces + "{"
                + body + ";\n"
                + dataValueInfoMethod
                + "public static java.util.Set<" + javaEnum.name() + "> valuesSet() {\n"

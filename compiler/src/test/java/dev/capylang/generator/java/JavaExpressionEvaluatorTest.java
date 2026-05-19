@@ -252,7 +252,7 @@ class JavaExpressionEvaluatorTest {
     }
 
     @Test
-    void shouldGenerateCommentsForDataAndTypeDeclarations() {
+    void shouldGenerateCommentsForDataTypeAndEnumDeclarations() {
         var program = compileProgram("""
                 /// Complete report
                 data JUnitTestSuite { name: String }
@@ -262,6 +262,9 @@ class JavaExpressionEvaluatorTest {
 
                 /// Node type
                 union JUnitNode = JUnitReport
+
+                /// The result of comparing two values.
+                enum Ordering { LESS, EQUAL, GREATER }
                 """);
 
         var generated = new JavaGenerator().generate(program).modules().stream()
@@ -272,8 +275,10 @@ class JavaExpressionEvaluatorTest {
         assertThat(generated).contains("JUnitReport");
         assertThat(generated).contains("Node type");
         assertThat(generated).contains("JUnitNode");
+        assertThat(generated).contains("Ordering");
         assertThat(generated).contains("/// Complete report");
         assertThat(generated).contains("/// Node type");
+        assertThat(generated).contains("/// The result of comparing two values.");
     }
 
     @Test
@@ -984,6 +989,56 @@ class JavaExpressionEvaluatorTest {
                 .collect(joining("\n"));
 
         assertThat(generated).contains("assert_.apply(((T) __capybaraMatchBinding");
+    }
+
+    @Test
+    void shouldCompileImportedConstructorPatternsNestedInOwnerInterface() {
+        var generatedProgram = new JavaGenerator().generate(compileProgram(List.of(
+                new RawModule("EitherLike", "/foo/types", """
+                        union EitherLike[L, R] = Left[L, R] | Right[L, R]
+                        data Left[L, R] { value: L }
+                        data Right[L, R] { value: R }
+                        """),
+                new RawModule("Consumer", "/foo/app", """
+                        from /foo/types/EitherLike import { * }
+
+                        fun describe(value: EitherLike[String, int]): String =
+                            match value with
+                            case Left { message } -> message
+                            case Right { number } -> "ok:" + number
+                        """)
+        )));
+        var generated = generatedProgram.modules().stream()
+                .map(dev.capylang.generator.GeneratedModule::code)
+                .collect(joining("\n"));
+
+        assertThat(generated).contains("import static foo.types.EitherLike.*;");
+        assertThat(generated).contains("case Left(var");
+        assertThat(generated).contains("case Right(var");
+        assertGeneratedJavaCompiles(generatedProgram);
+    }
+
+    @Test
+    void shouldKeepModuleLocalUnionConstructorPatternsUnqualified() {
+        var generatedProgram = new JavaGenerator().generate(compileProgram("LocalUnionPattern", "/foo/bar", """
+                union Outcome = Passed | Failed
+                data Passed { message: String }
+                data Failed { message: String }
+
+                fun describe(value: Outcome): String =
+                    match value with
+                    case Passed { message } -> "passed:" + message
+                    case Failed { message } -> "failed:" + message
+                """));
+        var generated = generatedProgram.modules().stream()
+                .map(dev.capylang.generator.GeneratedModule::code)
+                .collect(joining("\n"));
+
+        assertThat(generated).contains("case Passed(var");
+        assertThat(generated).contains("case Failed(var");
+        assertThat(generated).doesNotContain("case Outcome.Passed");
+        assertThat(generated).doesNotContain("case Outcome.Failed");
+        assertGeneratedJavaCompiles(generatedProgram);
     }
 
     @Test
