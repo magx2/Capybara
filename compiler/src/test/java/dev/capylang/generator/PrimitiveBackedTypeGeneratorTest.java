@@ -137,6 +137,30 @@ class PrimitiveBackedTypeGeneratorTest {
                 .doesNotContain("def capy(*args):");
     }
 
+    @Test
+    void shouldUseLocalPrimitiveBackedConstructorsInJavaScriptModuleWithMatchingDataName() {
+        var program = compileProgram(List.of(semVerModule()));
+
+        var code = generatedCode(new JavaScriptGenerator(), program, Path.of("foo", "SemVer.js"));
+
+        assertThat(code)
+                .contains("__constructor__primitive__major(value)")
+                .doesNotContain("require('./SemVer.js')")
+                .doesNotContain("__module_foo_SemVerModule.__constructor__primitive__major");
+    }
+
+    @Test
+    void shouldUseLocalPrimitiveBackedConstructorsInPythonModuleWithMatchingDataName() {
+        var program = compileProgram(List.of(semVerModule()));
+
+        var code = generatedCode(new PythonGenerator(), program, Path.of("foo", "SemVer.py"));
+
+        assertThat(code)
+                .contains("capy__constructorPrimitiveMajor(value)")
+                .doesNotContain("import foo.SemVer as capy_module_foo_SemVerModule")
+                .doesNotContain("capy_module_foo_SemVerModule.__constructor__primitive__major");
+    }
+
     private static String generatedCode(Generator generator, Path modulePath) {
         return generatedCode(generator, program(), modulePath);
     }
@@ -158,6 +182,24 @@ class PrimitiveBackedTypeGeneratorTest {
                 fun user_id.plus(other: user_id): user_id = user_id! { @this + @other }
                 fun plus(left: user_id, right: user_id): user_id = left.plus(right)
                 """)));
+    }
+
+    private static RawModule semVerModule() {
+        return new RawModule("SemVer", "/foo", """
+                from /capy/lang/Result import { * }
+
+                type major -> int with constructor {
+                    if value >= 0
+                    then Success { value }
+                    else Error { "bad major" }
+                }
+
+                data SemVer { major: major }
+
+                fun sem_ver(value: int): Result[SemVer] =
+                    let major_value <- major { value }
+                    Success { SemVer { major_value } }
+                """);
     }
 
     private static CompiledProgram compileProgram(List<RawModule> modules) {
