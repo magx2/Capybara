@@ -2,6 +2,45 @@ from /capy/lang/Option import { Option, Some, None }
 from /capy/lang/Result import {*}
 from /capy/lang/String import { * }
 
+/// Semantic version major component, greater than or equal to zero.
+type major -> int with constructor {
+    if value >= 0
+    then Success { value }
+    else Error { message: "major must be greater than or equal to 0" }
+}
+
+/// Semantic version minor component, greater than or equal to zero.
+type minor -> int with constructor {
+    if value >= 0
+    then Success { value }
+    else Error { message: "minor must be greater than or equal to 0" }
+}
+
+/// Semantic version patch component, greater than or equal to zero.
+type patch -> int with constructor {
+    if value >= 0
+    then Success { value }
+    else Error { message: "patch must be greater than or equal to 0" }
+}
+
+fun major.`>`(other: major): bool = @this > @other
+fun major.`>=`(other: major): bool = @this >= @other
+fun major.`<`(other: major): bool = @this < @other
+fun major.`<=`(other: major): bool = @this <= @other
+fun major.`==`(other: major): bool = @this == @other
+
+fun minor.`>`(other: minor): bool = @this > @other
+fun minor.`>=`(other: minor): bool = @this >= @other
+fun minor.`<`(other: minor): bool = @this < @other
+fun minor.`<=`(other: minor): bool = @this <= @other
+fun minor.`==`(other: minor): bool = @this == @other
+
+fun patch.`>`(other: patch): bool = @this > @other
+fun patch.`>=`(other: patch): bool = @this >= @other
+fun patch.`<`(other: patch): bool = @this < @other
+fun patch.`<=`(other: patch): bool = @this <= @other
+fun patch.`==`(other: patch): bool = @this == @other
+
 /// Given a version number MAJOR.MINOR.PATCH, increment the:
 ///
 /// 1. MAJOR version when you make incompatible API changes
@@ -11,12 +50,25 @@ from /capy/lang/String import { * }
 /// Additional labels for pre-release and build metadata are available as extensions to the MAJOR.MINOR.PATCH format.
 /// Full specification: https://semver.org/
 data SemVer {
-    major: int,
-    minor: int,
-    patch: int,
+    major: major,
+    minor: minor,
+    patch: patch,
     pre_release: Option[String],
     build_metadata: Option[String]
 }
+
+/// Creates a semantic version after validating the numeric components.
+fun sem_ver(
+    major_value: int,
+    minor_value: int,
+    patch_value: int,
+    pre_release: Option[String],
+    build_metadata: Option[String]
+): Result[SemVer] =
+    let major_component <- major { major_value }
+    let minor_component <- minor { minor_value }
+    let patch_component <- patch { patch_value }
+    Success { SemVer { major_component, minor_component, patch_component, pre_release, build_metadata } }
 
 /// [Backus–Naur Form Grammar for Valid SemVer Versions](https://semver.org/#backusnaur-form-grammar-for-valid-semver-versions)
 ///
@@ -33,21 +85,21 @@ fun parse_semver(version: String): Result[SemVer] =
     /// <version core> ::= <major> "." <minor> "." <patch>
     /// ```
     fun __parse_version_core(version: String): Result[__Parse[SemVer]] =
-        let parse_major: __Parse[int] <- __parse_major(version)
+        let parse_major: __Parse[major] <- __parse_major(version)
         match parse_major.buffer[0] with
         case None ->  Error { 'Unexpected end of version string!' }
         case Some { dot1 } ->
             if dot1 != '.'
             then Error { 'Expected `.` after major version, but got `' + dot1 + '`!' }
             else {
-                let parse_minor: __Parse[int] <- __parse_minor(__tail(parse_major.buffer))
+                let parse_minor: __Parse[minor] <- __parse_minor(__tail(parse_major.buffer))
                 match parse_minor.buffer[0] with
                 case None -> Error { 'Unexpected end of version string!' }
                 case Some { dot2 } ->
                     if dot2 != '.'
                     then Error { 'Expected `.` after minor version, but got `' + dot2 + '`!' }
                     else {
-                        let parse_patch: __Parse[int] <- __parse_patch(__tail(parse_minor.buffer))
+                        let parse_patch: __Parse[patch] <- __parse_patch(__tail(parse_minor.buffer))
                         let raw_sem_ver =
                             __Parse {
                                 buffer: parse_patch.buffer,
@@ -93,15 +145,24 @@ fun parse_semver(version: String): Result[SemVer] =
     /// ```
     /// <major> ::= <numeric identifier>
     /// ```
-    fun __parse_major(version: String): Result[__Parse[int]] = __parse_numeric_identifier(version)
+    fun __parse_major(version: String): Result[__Parse[major]] =
+        let parse <- __parse_numeric_identifier(version)
+        let value <- major { parse.value }
+        Success { __Parse { buffer: parse.buffer, value: value } }
     /// ```
     /// <minor> ::= <numeric identifier>
     /// ```
-    fun __parse_minor(version: String): Result[__Parse[int]] = __parse_numeric_identifier(version)
+    fun __parse_minor(version: String): Result[__Parse[minor]] =
+        let parse <- __parse_numeric_identifier(version)
+        let value <- minor { parse.value }
+        Success { __Parse { buffer: parse.buffer, value: value } }
     /// ```
     /// <patch> ::= <numeric identifier>
     /// ```
-    fun __parse_patch(version: String): Result[__Parse[int]] = __parse_numeric_identifier(version)
+    fun __parse_patch(version: String): Result[__Parse[patch]] =
+        let parse <- __parse_numeric_identifier(version)
+        let value <- patch { parse.value }
+        Success { __Parse { buffer: parse.buffer, value: value } }
     /// ```
     /// <numeric identifier> ::= "0"
     ///                        | <positive digit>
@@ -325,4 +386,4 @@ fun SemVer.to_string(): String =
     let build_metadata_str = match this.build_metadata with
         case Some { value } -> "+" + value
         case None -> ""
-    this.major + "." + this.minor + "." + this.patch + pre_release_str + build_metadata_str
+    @(this.major) + "." + @(this.minor) + "." + @(this.patch) + pre_release_str + build_metadata_str
