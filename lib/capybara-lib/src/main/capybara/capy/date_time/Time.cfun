@@ -2,27 +2,6 @@ from /capy/lang/Result import {*}
 from /capy/lang/Option import { * }
 from /capy/lang/String import { * }
 
-/// Clock time represented in 24-hour format.
-/// The constructor validates `hour`, `minute`, `second`, and optional UTC offset.
-data Time {
-    hour: int,
-    minute: int,
-    second: int,
-    offset_minutes: Option[int]
-} with constructor {
-    if hour < 0 | hour > HOURS_IN_DAY - 1
-        | minute < 0 | minute > MINUTES_IN_HOUR - 1
-        | second < 0 | second > SECONDS_IN_MINUTE - 1
-    then Error { "Invalid time `{hour}:{minute}:{second}`!" }
-    else
-        match offset_minutes with
-        case None -> Success {* { hour, minute, second, offset_minutes }}
-        case Some { value } ->
-            if value < 0 - MAX_OFFSET_MINUTES | value > MAX_OFFSET_MINUTES
-            then Error { "Invalid UTC offset `{value}` minutes!" }
-            else Success {* { hour, minute, second, offset_minutes }}
-}
-
 const HOURS_IN_DAY: int = 24
 const MINUTES_IN_HOUR: int = 60
 const SECONDS_IN_MINUTE: int = 60
@@ -31,19 +10,79 @@ const MINUTES_IN_DAY: int = HOURS_IN_DAY * MINUTES_IN_HOUR
 const SECONDS_IN_DAY: int = HOURS_IN_DAY * SECONDS_IN_HOUR
 const MAX_OFFSET_MINUTES: int = 23 * MINUTES_IN_HOUR + 59
 
-const MIDNIGHT: Time = Time! { hour: 0, minute: 0, second: 0, offset_minutes: None {} }
-const NOON: Time = Time! { hour: 12, minute: 0, second: 0, offset_minutes: None {} }
+/// Hour of day in 24-hour clock, in the range 0..23.
+type hour -> int with constructor {
+    if value >= 0 & value < HOURS_IN_DAY
+    then Success { value }
+    else Error { message: "hour must be between 0 and 23" }
+}
+
+/// Minute of hour, in the range 0..59.
+type minute -> int with constructor {
+    if value >= 0 & value < MINUTES_IN_HOUR
+    then Success { value }
+    else Error { message: "minute must be between 0 and 59" }
+}
+
+/// Second of minute, in the range 0..59.
+type second -> int with constructor {
+    if value >= 0 & value < SECONDS_IN_MINUTE
+    then Success { value }
+    else Error { message: "second must be between 0 and 59" }
+}
+
+const ZERO_HOUR: hour = hour! { 0 }
+const NOON_HOUR: hour = hour! { 12 }
+const ZERO_MINUTE: minute = minute! { 0 }
+const ZERO_SECOND: second = second! { 0 }
+
+fun hour.`>`(other: hour): bool = @this > @other
+fun hour.`>=`(other: hour): bool = @this >= @other
+fun hour.`<`(other: hour): bool = @this < @other
+fun hour.`<=`(other: hour): bool = @this <= @other
+fun hour.`==`(other: hour): bool = @this == @other
+
+fun minute.`>`(other: minute): bool = @this > @other
+fun minute.`>=`(other: minute): bool = @this >= @other
+fun minute.`<`(other: minute): bool = @this < @other
+fun minute.`<=`(other: minute): bool = @this <= @other
+fun minute.`==`(other: minute): bool = @this == @other
+
+fun second.`>`(other: second): bool = @this > @other
+fun second.`>=`(other: second): bool = @this >= @other
+fun second.`<`(other: second): bool = @this < @other
+fun second.`<=`(other: second): bool = @this <= @other
+fun second.`==`(other: second): bool = @this == @other
+
+/// Clock time represented in 24-hour format.
+/// Component types validate `hour`, `minute`, and `second`; the constructor validates optional UTC offset.
+data Time {
+    hour: hour,
+    minute: minute,
+    second: second,
+    offset_minutes: Option[int]
+} with constructor {
+    match offset_minutes with
+    case None -> Success {* { hour, minute, second, offset_minutes }}
+    case Some { value } ->
+        if value < 0 - MAX_OFFSET_MINUTES | value > MAX_OFFSET_MINUTES
+        then Error { "Invalid UTC offset `{value}` minutes!" }
+        else Success {* { hour, minute, second, offset_minutes }}
+}
+
+const MIDNIGHT: Time = Time! { hour: ZERO_HOUR, minute: ZERO_MINUTE, second: ZERO_SECOND, offset_minutes: None {} }
+const NOON: Time = Time! { hour: NOON_HOUR, minute: ZERO_MINUTE, second: ZERO_SECOND, offset_minutes: None {} }
 
 /// Converts this time to seconds since midnight.
-fun Time.to_seconds(): int = this.hour * SECONDS_IN_HOUR + this.minute * SECONDS_IN_MINUTE + this.second
+fun Time.to_seconds(): int = @(this.hour) * SECONDS_IN_HOUR + @(this.minute) * SECONDS_IN_MINUTE + @(this.second)
 /// Converts this time to minutes since midnight, truncating seconds.
-fun Time.to_minutes(): int = this.hour * MINUTES_IN_HOUR + this.minute
+fun Time.to_minutes(): int = @(this.hour) * MINUTES_IN_HOUR + @(this.minute)
 /// Returns the hour component.
-fun Time.to_hours(): int = this.hour
+fun Time.to_hours(): int = @(this.hour)
 /// Returns a new time with seconds set to `0`.
-fun Time.round_to_minutes(): Time = Time! { hour: this.hour, minute: this.minute, second: 0, offset_minutes: this.offset_minutes }
+fun Time.round_to_minutes(): Time = Time! { hour: this.hour, minute: this.minute, second: ZERO_SECOND, offset_minutes: this.offset_minutes }
 /// Returns a new time with minutes and seconds set to `0`.
-fun Time.round_to_hours(): Time = Time! { hour: this.hour, minute: 0, second: 0, offset_minutes: this.offset_minutes }
+fun Time.round_to_hours(): Time = Time! { hour: this.hour, minute: ZERO_MINUTE, second: ZERO_SECOND, offset_minutes: this.offset_minutes }
 /// Adds seconds and wraps around a 24-hour day.
 fun Time.add_seconds(seconds: int): Time =
     fun __normalize_day_seconds(total_seconds: int): int = /capy/lang/Math.floor_mod(total_seconds, SECONDS_IN_DAY)
@@ -52,7 +91,7 @@ fun Time.add_seconds(seconds: int): Time =
     let new_hour = (total_seconds / SECONDS_IN_HOUR) % HOURS_IN_DAY
     let new_minute = (total_seconds / SECONDS_IN_MINUTE) % MINUTES_IN_HOUR
     let new_second = total_seconds % SECONDS_IN_MINUTE
-    Time! { hour: new_hour, minute: new_minute, second: new_second, offset_minutes: this.offset_minutes }
+    Time! { hour: hour! { new_hour }, minute: minute! { new_minute }, second: second! { new_second }, offset_minutes: this.offset_minutes }
 /// Adds minutes and wraps around a 24-hour day.
 fun Time.add_minutes(minutes: int): Time = this.add_seconds(minutes * SECONDS_IN_MINUTE)
 /// Adds hours and wraps around a 24-hour day.
@@ -76,11 +115,11 @@ fun Time.to_iso_8601(): String =
                 + ":"
                 + __pad_left("" + offset_remaining_minutes, 2)
     ---
-    __pad_left("" + this.hour, 2)
+    __pad_left("" + @(this.hour), 2)
     + ":"
-    + __pad_left("" + this.minute, 2)
+    + __pad_left("" + @(this.minute), 2)
     + ":"
-    + __pad_left("" + this.second, 2)
+    + __pad_left("" + @(this.second), 2)
     + match this.offset_minutes with
       case None -> ""
       case Some { value } -> __format_offset(value)
@@ -127,6 +166,18 @@ fun from_iso_8601(iso: String): Result[Time] =
         if parse.buffer.is_empty()
         then Success { parse.value }
         else Error { __invalid("expected digits for " + label + ", got `" + value + "`") }
+    fun parse_hour_value(value: int): Result[hour] =
+        match hour { value } with
+        case Success { parsed } -> Success { parsed }
+        case Error { message } -> Error { __invalid(message) }
+    fun parse_minute_value(value: int): Result[minute] =
+        match minute { value } with
+        case Success { parsed } -> Success { parsed }
+        case Error { message } -> Error { __invalid(message) }
+    fun parse_second_value(value: int): Result[second] =
+        match second { value } with
+        case Success { parsed } -> Success { parsed }
+        case Error { message } -> Error { __invalid(message) }
     fun __parse_offset(sign: String, hour_part: String, minute_part: String): Result[int] = {
         let hours <- __parse_exact_digits(hour_part, "offset hour")
         let minutes <- __parse_exact_digits(minute_part, "offset minute")
@@ -167,10 +218,13 @@ fun from_iso_8601(iso: String): Result[Time] =
                         }
                         else Success { __ZoneParse { buffer: value, offset_minutes: None {} } }
     fun __parse_parts(hour_part: String, minute_part: String, second_part: String, offset_minutes: Option[int]): Result[Time] = {
-        let hour <- __parse_exact_digits(hour_part, "hour")
-        let minute <- __parse_exact_digits(minute_part, "minute")
-        let second <- __parse_exact_digits(second_part, "second")
-        match Time { hour, minute, second, offset_minutes } with
+        let hour_value <- __parse_exact_digits(hour_part, "hour")
+        let minute_value <- __parse_exact_digits(minute_part, "minute")
+        let second_value <- __parse_exact_digits(second_part, "second")
+        let parsed_hour <- parse_hour_value(hour_value)
+        let parsed_minute <- parse_minute_value(minute_value)
+        let parsed_second <- parse_second_value(second_value)
+        match Time { hour: parsed_hour, minute: parsed_minute, second: parsed_second, offset_minutes } with
         case Success { time } -> Success { time }
         case Error { message } -> Error { __invalid(message) }
     }

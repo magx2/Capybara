@@ -1879,11 +1879,20 @@ public final class JavaScriptGenerator implements Generator {
                     "sEPTEMBER", "SEPTEMBER", "oCTOBER", "OCTOBER", "nOVEMBER", "NOVEMBER",
                     "dECEMBER", "DECEMBER"));
             exports.put("capy.date_time.TimeModule", Set.of(
-                    "Time", "__constructor__data__Time", "fromIso8601", "from_iso_8601",
+                    "Time", "__constructor__data__Time",
+                    "__constructor__primitive__hour", "__constructor__primitive__minute", "__constructor__primitive__second",
+                    "greater__op_greater__hour__hour", "greater__op_greater__minute__minute", "greater__op_greater__second__second",
+                    "greater_op3d__op_greater_op3d__hour__hour", "greater_op3d__op_greater_op3d__minute__minute", "greater_op3d__op_greater_op3d__second__second",
+                    "less__op_less__hour__hour", "less__op_less__minute__minute", "less__op_less__second__second",
+                    "less_op3d__op_less_op3d__hour__hour", "less_op3d__op_less_op3d__minute__minute", "less_op3d__op_less_op3d__second__second",
+                    "op3d_op3d__op_op3d_op3d__hour__hour", "op3d_op3d__op_op3d_op3d__minute__minute", "op3d_op3d__op_op3d_op3d__second__second",
+                    "__capybaraPrimitiveTypes", "fromIso8601", "from_iso_8601",
                     "hOURSINDAY", "HOURS_IN_DAY", "mINUTESINHOUR", "MINUTES_IN_HOUR",
                     "sECONDSINMINUTE", "SECONDS_IN_MINUTE", "sECONDSINHOUR", "SECONDS_IN_HOUR",
                     "mINUTESINDAY", "MINUTES_IN_DAY", "sECONDSINDAY", "SECONDS_IN_DAY",
-                    "mAXOFFSETMINUTES", "MAX_OFFSET_MINUTES", "mIDNIGHT", "MIDNIGHT", "nOON", "NOON"));
+                    "mAXOFFSETMINUTES", "MAX_OFFSET_MINUTES",
+                    "zEROHOUR", "ZERO_HOUR", "nOONHOUR", "NOON_HOUR", "zEROMINUTE", "ZERO_MINUTE", "zEROSECOND", "ZERO_SECOND",
+                    "mIDNIGHT", "MIDNIGHT", "nOON", "NOON"));
             exports.put("capy.date_time.DurationModule", Set.of(
                     "DateDuration", "WeekDuration", "zERO", "ZERO", "fromIso8601", "from_iso_8601"));
             exports.put("capy.date_time.DateTimeModule", Set.of(
@@ -2997,6 +3006,40 @@ public final class JavaScriptGenerator implements Generator {
                         return success(new Time({ hour, minute, second, offset_minutes }));
                     }
 
+                    function __constructor__primitive__hour(value) {
+                        return value >= 0 && value <= hOURSINDAY - 1
+                            ? success(value)
+                            : failure('hour must be between 0 and 23');
+                    }
+
+                    function __constructor__primitive__minute(value) {
+                        return value >= 0 && value <= mINUTESINHOUR - 1
+                            ? success(value)
+                            : failure('minute must be between 0 and 59');
+                    }
+
+                    function __constructor__primitive__second(value) {
+                        return value >= 0 && value <= sECONDSINMINUTE - 1
+                            ? success(value)
+                            : failure('second must be between 0 and 59');
+                    }
+
+                    const greater__op_greater__hour__hour = (this_, other) => this_ > other;
+                    const greater__op_greater__minute__minute = (this_, other) => this_ > other;
+                    const greater__op_greater__second__second = (this_, other) => this_ > other;
+                    const greater_op3d__op_greater_op3d__hour__hour = (this_, other) => this_ >= other;
+                    const greater_op3d__op_greater_op3d__minute__minute = (this_, other) => this_ >= other;
+                    const greater_op3d__op_greater_op3d__second__second = (this_, other) => this_ >= other;
+                    const less__op_less__hour__hour = (this_, other) => this_ < other;
+                    const less__op_less__minute__minute = (this_, other) => this_ < other;
+                    const less__op_less__second__second = (this_, other) => this_ < other;
+                    const less_op3d__op_less_op3d__hour__hour = (this_, other) => this_ <= other;
+                    const less_op3d__op_less_op3d__minute__minute = (this_, other) => this_ <= other;
+                    const less_op3d__op_less_op3d__second__second = (this_, other) => this_ <= other;
+                    const op3d_op3d__op_op3d_op3d__hour__hour = (this_, other) => capy.equals(this_, other);
+                    const op3d_op3d__op_op3d_op3d__minute__minute = (this_, other) => capy.equals(this_, other);
+                    const op3d_op3d__op_op3d_op3d__second__second = (this_, other) => capy.equals(this_, other);
+
                     function parseInteger(text, label) {
                         if (!/^[0-9]+$/.test(text)) {
                             return failure(`Invalid ISO 8601 time format: expected digits for ${label}, got \\`${text}\\``);
@@ -3054,11 +3097,17 @@ public final class JavaScriptGenerator implements Generator {
                     }
 
                     function parseParts(hourPart, minutePart, secondPart, offset_minutes) {
-                        const hour = parseInteger(hourPart, 'hour');
+                        const hourValue = parseInteger(hourPart, 'hour');
+                        if (!capy.isType(hourValue, 'Success')) return hourValue;
+                        const hour = __constructor__primitive__hour(hourValue.value);
                         if (!capy.isType(hour, 'Success')) return hour;
-                        const minute = parseInteger(minutePart, 'minute');
+                        const minuteValue = parseInteger(minutePart, 'minute');
+                        if (!capy.isType(minuteValue, 'Success')) return minuteValue;
+                        const minute = __constructor__primitive__minute(minuteValue.value);
                         if (!capy.isType(minute, 'Success')) return minute;
-                        const second = parseInteger(secondPart, 'second');
+                        const secondValue = parseInteger(secondPart, 'second');
+                        if (!capy.isType(secondValue, 'Success')) return secondValue;
+                        const second = __constructor__primitive__second(secondValue.value);
                         if (!capy.isType(second, 'Success')) return second;
                         const constructed = __constructor__data__Time(hour.value, minute.value, second.value, offset_minutes);
                         return capy.isType(constructed, 'Success')
@@ -3080,14 +3129,45 @@ public final class JavaScriptGenerator implements Generator {
                         return failure(`Invalid ISO 8601 time format: expected time in \\`HH:MM:SS\\`, \\`HHMMSS\\`, \\`THH:MM:SS\\`, or \\`THHMMSS\\` format, got \\`${iso}\\``);
                     }
 
-                    const mIDNIGHT = new Time({ hour: 0, minute: 0, second: 0, offset_minutes: capy.None });
+                    const zEROHOUR = 0;
+                    const ZERO_HOUR = zEROHOUR;
+                    const nOONHOUR = 12;
+                    const NOON_HOUR = nOONHOUR;
+                    const zEROMINUTE = 0;
+                    const ZERO_MINUTE = zEROMINUTE;
+                    const zEROSECOND = 0;
+                    const ZERO_SECOND = zEROSECOND;
+                    const mIDNIGHT = new Time({ hour: zEROHOUR, minute: zEROMINUTE, second: zEROSECOND, offset_minutes: capy.None });
                     const MIDNIGHT = mIDNIGHT;
-                    const nOON = new Time({ hour: 12, minute: 0, second: 0, offset_minutes: capy.None });
+                    const nOON = new Time({ hour: nOONHOUR, minute: zEROMINUTE, second: zEROSECOND, offset_minutes: capy.None });
                     const NOON = nOON;
+                    const __capybaraPrimitiveTypes = Object.freeze({
+                        hour: Object.freeze({ cfunType: '/capy/date_time/Time.hour', backingType: 'int' }),
+                        minute: Object.freeze({ cfunType: '/capy/date_time/Time.minute', backingType: 'int' }),
+                        second: Object.freeze({ cfunType: '/capy/date_time/Time.second', backingType: 'int' }),
+                    });
 
                     module.exports = {
                         Time,
                         __constructor__data__Time,
+                        __constructor__primitive__hour,
+                        __constructor__primitive__minute,
+                        __constructor__primitive__second,
+                        greater__op_greater__hour__hour,
+                        greater__op_greater__minute__minute,
+                        greater__op_greater__second__second,
+                        greater_op3d__op_greater_op3d__hour__hour,
+                        greater_op3d__op_greater_op3d__minute__minute,
+                        greater_op3d__op_greater_op3d__second__second,
+                        less__op_less__hour__hour,
+                        less__op_less__minute__minute,
+                        less__op_less__second__second,
+                        less_op3d__op_less_op3d__hour__hour,
+                        less_op3d__op_less_op3d__minute__minute,
+                        less_op3d__op_less_op3d__second__second,
+                        op3d_op3d__op_op3d_op3d__hour__hour,
+                        op3d_op3d__op_op3d_op3d__minute__minute,
+                        op3d_op3d__op_op3d_op3d__second__second,
                         hOURSINDAY,
                         HOURS_IN_DAY: hOURSINDAY,
                         mINUTESINHOUR,
@@ -3102,10 +3182,19 @@ public final class JavaScriptGenerator implements Generator {
                         SECONDS_IN_DAY: sECONDSINDAY,
                         mAXOFFSETMINUTES,
                         MAX_OFFSET_MINUTES: mAXOFFSETMINUTES,
+                        zEROHOUR,
+                        ZERO_HOUR,
+                        nOONHOUR,
+                        NOON_HOUR,
+                        zEROMINUTE,
+                        ZERO_MINUTE,
+                        zEROSECOND,
+                        ZERO_SECOND,
                         mIDNIGHT,
                         MIDNIGHT,
                         nOON,
                         NOON,
+                        __capybaraPrimitiveTypes,
                         fromIso8601,
                         from_iso_8601: fromIso8601,
                     };

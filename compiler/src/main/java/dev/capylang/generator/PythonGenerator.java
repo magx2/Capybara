@@ -1839,7 +1839,19 @@ public final class PythonGenerator implements Generator {
                     "greater__month__month", "greater_op3d__month__month", "less__month__month",
                     "less_op3d__month__month", "op3d_op3d__month__month",
                     "UNIX_DATE", "fromIso8601", "from_iso_8601", "__capybaraPrimitiveTypes"));
-            exports.put("capy.date_time.TimeModule", Set.of("Time", "__constructor__data__Time", "capy__constructorDataTime", "fromIso8601", "from_iso_8601"));
+            exports.put("capy.date_time.TimeModule", Set.of(
+                    "Time", "__constructor__data__Time", "capy__constructorDataTime",
+                    "__constructor__primitive__hour", "capy__constructorPrimitiveHour",
+                    "__constructor__primitive__minute", "capy__constructorPrimitiveMinute",
+                    "__constructor__primitive__second", "capy__constructorPrimitiveSecond",
+                    "greater__op_greater__hour__hour", "greater__op_greater__minute__minute", "greater__op_greater__second__second",
+                    "greater_op3d__op_greater_op3d__hour__hour", "greater_op3d__op_greater_op3d__minute__minute", "greater_op3d__op_greater_op3d__second__second",
+                    "less__op_less__hour__hour", "less__op_less__minute__minute", "less__op_less__second__second",
+                    "less_op3d__op_less_op3d__hour__hour", "less_op3d__op_less_op3d__minute__minute", "less_op3d__op_less_op3d__second__second",
+                    "op3d_op3d__op_op3d_op3d__hour__hour", "op3d_op3d__op_op3d_op3d__minute__minute", "op3d_op3d__op_op3d_op3d__second__second",
+                    "ZERO_HOUR", "NOON_HOUR", "ZERO_MINUTE", "ZERO_SECOND",
+                    "zEROHOUR", "nOONHOUR", "zEROMINUTE", "zEROSECOND",
+                    "fromIso8601", "from_iso_8601", "__capybaraPrimitiveTypes"));
             exports.put("capy.date_time.DurationModule", Set.of("DateDuration", "WeekDuration", "ZERO", "fromIso8601", "from_iso_8601"));
             exports.put("capy.date_time.DateTimeModule", Set.of("DateTime", "UNIX_EPOCH", "fromTimestamp", "from_timestamp", "fromIso8601", "from_iso_8601"));
             exports.put("capy.date_time.Interval", Set.of("DateTimeDurationEnd", "DateTimeStartDuration", "DateTimeStartEnd", "fromIso8601", "from_iso_8601"));
@@ -2260,8 +2272,41 @@ public final class PythonGenerator implements Generator {
                     Time = capy.Time
                     __constructor__data__Time = capy.make_time
                     capy__constructorDataTime = capy.make_time
-                    MIDNIGHT = mIDNIGHT = Time({'hour': 0, 'minute': 0, 'second': 0, 'offset_minutes': capy.None_})
-                    NOON = nOON = Time({'hour': 12, 'minute': 0, 'second': 0, 'offset_minutes': capy.None_})
+                    def __constructor__primitive__hour(value):
+                        return capy.Success({'value': value}) if value >= 0 and value <= 23 else capy.Error({'message': 'hour must be between 0 and 23'})
+                    capy__constructorPrimitiveHour = __constructor__primitive__hour
+                    def __constructor__primitive__minute(value):
+                        return capy.Success({'value': value}) if value >= 0 and value <= 59 else capy.Error({'message': 'minute must be between 0 and 59'})
+                    capy__constructorPrimitiveMinute = __constructor__primitive__minute
+                    def __constructor__primitive__second(value):
+                        return capy.Success({'value': value}) if value >= 0 and value <= 59 else capy.Error({'message': 'second must be between 0 and 59'})
+                    capy__constructorPrimitiveSecond = __constructor__primitive__second
+                    def greater__op_greater__hour__hour(this_, other): return this_ > other
+                    def greater__op_greater__minute__minute(this_, other): return this_ > other
+                    def greater__op_greater__second__second(this_, other): return this_ > other
+                    def greater_op3d__op_greater_op3d__hour__hour(this_, other): return this_ >= other
+                    def greater_op3d__op_greater_op3d__minute__minute(this_, other): return this_ >= other
+                    def greater_op3d__op_greater_op3d__second__second(this_, other): return this_ >= other
+                    def less__op_less__hour__hour(this_, other): return this_ < other
+                    def less__op_less__minute__minute(this_, other): return this_ < other
+                    def less__op_less__second__second(this_, other): return this_ < other
+                    def less_op3d__op_less_op3d__hour__hour(this_, other): return this_ <= other
+                    def less_op3d__op_less_op3d__minute__minute(this_, other): return this_ <= other
+                    def less_op3d__op_less_op3d__second__second(this_, other): return this_ <= other
+                    def op3d_op3d__op_op3d_op3d__hour__hour(this_, other): return capy.equals(this_, other)
+                    def op3d_op3d__op_op3d_op3d__minute__minute(this_, other): return capy.equals(this_, other)
+                    def op3d_op3d__op_op3d_op3d__second__second(this_, other): return capy.equals(this_, other)
+                    ZERO_HOUR = zEROHOUR = 0
+                    NOON_HOUR = nOONHOUR = 12
+                    ZERO_MINUTE = zEROMINUTE = 0
+                    ZERO_SECOND = zEROSECOND = 0
+                    MIDNIGHT = mIDNIGHT = Time({'hour': zEROHOUR, 'minute': zEROMINUTE, 'second': zEROSECOND, 'offset_minutes': capy.None_})
+                    NOON = nOON = Time({'hour': nOONHOUR, 'minute': zEROMINUTE, 'second': zEROSECOND, 'offset_minutes': capy.None_})
+                    __capybaraPrimitiveTypes = {
+                        'hour': {'cfunType': '/capy/date_time/Time.hour', 'backingType': 'int'},
+                        'minute': {'cfunType': '/capy/date_time/Time.minute', 'backingType': 'int'},
+                        'second': {'cfunType': '/capy/date_time/Time.second', 'backingType': 'int'}
+                    }
                     fromIso8601 = capy.time_from_iso
                     from_iso_8601 = fromIso8601
                     """;
