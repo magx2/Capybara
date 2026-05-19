@@ -8,28 +8,49 @@ from /capy/collection/Set import { * }
 from /capy/collection/Dict import { * }
 from /capy/lang/Seq import { * }
 
+data ExpectedSemVer {
+    major: int,
+    minor: int,
+    patch: int,
+    pre_release: Option[String],
+    build_metadata: Option[String]
+}
+
 fun tests(): Effect[TestFile] =
     let test_cases = {
-        "1.2.3" : SemVer { 1, 2, 3, None {}, None {} },
-        "0.0.0" : SemVer { 0, 0, 0, None {}, None {} },
-        "10.20.30" : SemVer { 10, 20, 30, None {}, None {} },
-        "100.200.300" : SemVer { 100, 200, 300, None {}, None {} },
+        "1.2.3" : ExpectedSemVer { 1, 2, 3, None {}, None {} },
+        "0.0.0" : ExpectedSemVer { 0, 0, 0, None {}, None {} },
+        "10.20.30" : ExpectedSemVer { 10, 20, 30, None {}, None {} },
+        "100.200.300" : ExpectedSemVer { 100, 200, 300, None {}, None {} },
         // pre-release
-        "1.2.3-prerelease" : SemVer { 1, 2, 3, Some {'prerelease'}, None {} },
-        "1.2.3-p.r.e.r.e.l.e.a.s.e" : SemVer { 1, 2, 3, Some {'p.r.e.r.e.l.e.a.s.e'}, None {} },
-        "1.2.3-pre.1.RELEASE-100" : SemVer { 1, 2, 3, Some {'pre.1.RELEASE-100'}, None {} },
+        "1.2.3-prerelease" : ExpectedSemVer { 1, 2, 3, Some {'prerelease'}, None {} },
+        "1.2.3-p.r.e.r.e.l.e.a.s.e" : ExpectedSemVer { 1, 2, 3, Some {'p.r.e.r.e.l.e.a.s.e'}, None {} },
+        "1.2.3-pre.1.RELEASE-100" : ExpectedSemVer { 1, 2, 3, Some {'pre.1.RELEASE-100'}, None {} },
         // build
-        "1.2.3+build" : SemVer { 1, 2, 3, None {}, Some { 'build' } },
-        "1.2.3+123456789" : SemVer { 1, 2, 3, None {}, Some { '123456789' } },
-        "1.2.3+a1b2c3" : SemVer { 1, 2, 3, None {}, Some { 'a1b2c3' } },
-        "1.2.3+a1b2c3.1.a.rc" : SemVer { 1, 2, 3, None {}, Some { 'a1b2c3.1.a.rc' } },
+        "1.2.3+build" : ExpectedSemVer { 1, 2, 3, None {}, Some { 'build' } },
+        "1.2.3+123456789" : ExpectedSemVer { 1, 2, 3, None {}, Some { '123456789' } },
+        "1.2.3+a1b2c3" : ExpectedSemVer { 1, 2, 3, None {}, Some { 'a1b2c3' } },
+        "1.2.3+a1b2c3.1.a.rc" : ExpectedSemVer { 1, 2, 3, None {}, Some { 'a1b2c3.1.a.rc' } },
         // pre-release + build
-        "1.2.3-pre-release+build" : SemVer { 1, 2, 3, Some { 'pre-release' }, Some { 'build' } },
+        "1.2.3-pre-release+build" : ExpectedSemVer { 1, 2, 3, Some { 'pre-release' }, Some { 'build' } },
         // "0" prefix in  build
-        "1.2.3+007.build.008" : SemVer { 1, 2, 3, None {}, Some { '007.build.008' } },
+        "1.2.3+007.build.008" : ExpectedSemVer { 1, 2, 3, None {}, Some { '007.build.008' } },
     }
     let parse_test_cases = (test_cases.entries() | (str, expected) => test("should parse {str} to {expected}", () => should_parse_sem_ver(str, expected))).as_list()
-    let to_string_test_cases = (test_cases.entries() | (expected, sem_ver) => test("{sem_ver}.to_string() is equal to {expected}", () => should_stringify_sem_ver(sem_ver, expected))).as_list()
+    let to_string_test_cases = (test_cases.entries() | (expected, sem_ver_case) => test("{expected}.to_string() is equal to {expected}", () => should_stringify_sem_ver(expected))).as_list()
+    let component_test_cases = [
+        test("major accepts zero", () => assert_that(major { 0 }).succeeds(value => assert_that(@value).is_equal_to(0))),
+        test("minor accepts zero", () => assert_that(minor { 0 }).succeeds(value => assert_that(@value).is_equal_to(0))),
+        test("patch accepts zero", () => assert_that(patch { 0 }).succeeds(value => assert_that(@value).is_equal_to(0))),
+        test("sem_ver accepts zero components", () => assert_that(sem_ver(0, 0, 0, None {}, None {})).succeeds(value => assert_all([
+            assert_that(@(value.major)).is_equal_to(0),
+            assert_that(@(value.minor)).is_equal_to(0),
+            assert_that(@(value.patch)).is_equal_to(0)
+        ]))),
+        test("sem_ver rejects negative major", () => assert_that(sem_ver(-1, 0, 0, None {}, None {})).fails("major must be greater than or equal to 0")),
+        test("sem_ver rejects negative minor", () => assert_that(sem_ver(0, -1, 0, None {}, None {})).fails("minor must be greater than or equal to 0")),
+        test("sem_ver rejects negative patch", () => assert_that(sem_ver(0, 0, -1, None {}, None {})).fails("patch must be greater than or equal to 0")),
+    ]
 
     let failed_test_cases = ({
         "1" : "Unexpected end of version string!",
@@ -50,10 +71,18 @@ fun tests(): Effect[TestFile] =
         "1.2.3-asd+QĘT" : "Expected end of version string or `.` for next build identifier, but got `Ę`!", }
         .entries() | (sem_ver, expected_message) => test("should fail parsing {sem_ver}", () => should_fail_parse_with_message(sem_ver, expected_message))).as_list()
 
-    test_file("/capy/util/SemVer.cfun", parse_test_cases + to_string_test_cases + failed_test_cases)
+    test_file("/capy/util/SemVer.cfun", component_test_cases + parse_test_cases + to_string_test_cases + failed_test_cases)
 
-fun should_parse_sem_ver(str: String, expected: SemVer) = assert_that(parse_semver(str)).succeeds(expected)
+fun should_parse_sem_ver(str: String, expected: ExpectedSemVer) =
+    assert_that(parse_semver(str)).succeeds(value => assert_all([
+        assert_that(@(value.major)).is_equal_to(expected.major),
+        assert_that(@(value.minor)).is_equal_to(expected.minor),
+        assert_that(@(value.patch)).is_equal_to(expected.patch),
+        assert_that(value.pre_release).is_equal_to(expected.pre_release),
+        assert_that(value.build_metadata).is_equal_to(expected.build_metadata),
+    ]))
 
-fun should_stringify_sem_ver(sem_ver: SemVer, expected: String) = assert_that(sem_ver.to_string()).is_equal_to(expected)
+fun should_stringify_sem_ver(version: String) =
+    assert_that(parse_semver(version)).succeeds(value => assert_that(value.to_string()).is_equal_to(version))
 
 fun should_fail_parse_with_message(sem_ver: String, expected_message: String) = assert_that(parse_semver(sem_ver)).fails(expected_message)
