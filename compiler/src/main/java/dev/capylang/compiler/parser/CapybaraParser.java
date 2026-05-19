@@ -528,6 +528,9 @@ public class CapybaraParser {
         return new EnumDeclaration(
                 context.TYPE(0).getText(),
                 values,
+                context.docComment().stream()
+                        .map(comment -> stripDocComment(comment.getText()))
+                        .toList(),
                 position(context)
         );
     }

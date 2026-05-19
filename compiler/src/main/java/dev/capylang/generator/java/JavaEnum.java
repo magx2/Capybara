@@ -4,6 +4,7 @@ import java.util.Set;
 
 public record JavaEnum(
         JavaType name,
+        java.util.List<String> comments,
         Set<JavaType> implementInterfaces,
         java.util.List<String> values,
         java.util.List<JavaDataValueInfo> dataValueInfos

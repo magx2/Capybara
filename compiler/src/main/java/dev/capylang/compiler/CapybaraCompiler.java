@@ -1386,7 +1386,7 @@ public class CapybaraCompiler {
             return className;
         }
         var ownerType = linkedTypes.get(module.name());
-        if (ownerType instanceof CompiledDataParentType) {
+        if (ownerType instanceof CompiledDataParentType parentType && !parentType.enumType()) {
             return className;
         }
         if (ownerType instanceof CompiledDataType dataType && dataType.nativeType()) {
@@ -6171,6 +6171,7 @@ public class CapybaraCompiler {
                 List.of(),
                 values,
                 List.of(),
+                enumDeclaration.comments(),
                 true
         );
     }

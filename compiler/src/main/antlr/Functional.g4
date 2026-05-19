@@ -57,7 +57,7 @@ docComment: DOC_COMMENT;
 
 typeDeclaration: docComment* VISIBILITY? 'union' genericTypeDeclaration constructorClause? '=' genericTypeDeclaration (PIPE genericTypeDeclaration)* deriveClause?
                | docComment* VISIBILITY? 'union' genericTypeDeclaration '{' fieldDeclarationList? '}' constructorClause? '=' genericTypeDeclaration (PIPE genericTypeDeclaration)* deriveClause?;
-enumDeclaration: 'enum' TYPE '{' TYPE (COMMA TYPE)* COMMA? '}';
+enumDeclaration: docComment* 'enum' TYPE '{' TYPE (COMMA TYPE)* COMMA? '}';
 dataDeclaration: docComment* VISIBILITY? 'data' genericTypeDeclaration '{' dataBody? '}' constructorClause? deriveClause?
                | docComment* VISIBILITY? 'data' genericTypeDeclaration '=' '{' dataBody? '}' constructorClause? deriveClause?;
 constructorClause: 'with' 'constructor' '{' expression '}';

@@ -1399,6 +1399,7 @@ public class JavaAstBuilder {
         implementInterfaces.add(CAPYBARA_DATA_VALUE);
         return new JavaEnum(
                 buildClassName(type.name()),
+                List.of(),
                 implementInterfaces,
                 List.of("INSTANCE"),
                 List.of(ReflectionValueInfoJava.dataValueInfo(type.name(), reflectionFallbackPackagePath, List.of()))
@@ -1410,6 +1411,7 @@ public class JavaAstBuilder {
         implementInterfaces.add(CAPYBARA_DATA_VALUE);
         return new JavaEnum(
                 buildClassName(enumType.name()),
+                enumType.comments(),
                 implementInterfaces,
                 enumType.subTypes().stream().map(CompiledDataType::name).toList(),
                 enumType.subTypes().stream()

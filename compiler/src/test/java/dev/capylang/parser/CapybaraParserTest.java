@@ -43,6 +43,7 @@ class CapybaraParserTest {
                 .filter(definition -> switch (definition) {
                     case DataDeclaration dataDeclaration -> dataDeclaration.name().equals(name);
                     case TypeDeclaration typeDeclaration -> typeDeclaration.name().equals(name);
+                    case EnumDeclaration enumDeclaration -> enumDeclaration.name().equals(name);
                     default -> false;
                 })
                 .findAny()
@@ -615,21 +616,26 @@ class CapybaraParserTest {
     }
 
     @Test
-    @DisplayName("should parse doc comments for data and type declarations")
-    void parseDataAndTypeComments() {
+    @DisplayName("should parse doc comments for data type and enum declarations")
+    void parseDataTypeAndEnumComments() {
         var module = parseSuccess(new RawModule("Test", "/parser", """
                 /// See: [Complete JUnit XML example](https://github.com/testmoapp/junitxml?tab=readme-ov-file#complete-junit-xml-example)
                 data JUnitReport { suites: List[JUnitTestSuite] }
 
                 /// Represents a single suite
                 union JUnitNode = JUnitTestSuite
+
+                /// The result of comparing two values.
+                enum Ordering { LESS, EQUAL, GREATER }
                 """));
 
         var data = findDefinition(DataDeclaration.class, "JUnitReport", module.functional());
         var type = findDefinition(TypeDeclaration.class, "JUnitNode", module.functional());
+        var enumType = findDefinition(EnumDeclaration.class, "Ordering", module.functional());
 
         assertThat(data.comments()).containsExactly("See: [Complete JUnit XML example](https://github.com/testmoapp/junitxml?tab=readme-ov-file#complete-junit-xml-example)");
         assertThat(type.comments()).containsExactly("Represents a single suite");
+        assertThat(enumType.comments()).containsExactly("The result of comparing two values.");
     }
 
     @Test

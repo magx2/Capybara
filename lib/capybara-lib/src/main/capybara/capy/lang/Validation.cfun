@@ -1,0 +1,91 @@
+from /capy/collection/List import { * }
+from /capy/lang/Result import { * }
+
+/// A list with at least one value.
+data NonEmptyList[T] { head: T, tail: List[T] }
+
+/// Creates a `NonEmptyList` with one value.
+fun non_empty_list(head: T): NonEmptyList[T] = NonEmptyList { head, [] }
+
+/// Creates a `NonEmptyList` from a head value and remaining tail values.
+fun non_empty_list_with_tail(head: T, tail: List[T]): NonEmptyList[T] = NonEmptyList { head, tail }
+
+/// Converts this `NonEmptyList` to a regular `List`.
+fun NonEmptyList[T].as_list(): List[T] = [this.head] + this.tail
+
+/// Appends one value to this `NonEmptyList`.
+fun NonEmptyList[T].append(value: T): NonEmptyList[T] = NonEmptyList { this.head, this.tail + value }
+
+/// Concatenates two `NonEmptyList` values.
+fun NonEmptyList[T].`+`(other: NonEmptyList[T]): NonEmptyList[T] =
+    NonEmptyList { this.head, this.tail + other.as_list() }
+
+/// Concatenates two `NonEmptyList` values.
+fun NonEmptyList[T].plus(other: NonEmptyList[T]): NonEmptyList[T] = this + other
+
+/// Transforms every value in this `NonEmptyList`.
+fun NonEmptyList[T].map(map: T => Y): NonEmptyList[Y] =
+    let mapped_tail: List[Y] = this.tail.reduce([], (acc, value) => acc + map(value))
+    NonEmptyList { map(this.head), mapped_tail }
+
+/// Represents either a valid value or one or more validation errors.
+///
+/// `zip` and `map2` are preferred for independent validations because they
+/// accumulate errors. `flat_map` is available for dependent validations and is
+/// necessarily fail-fast.
+union Validation[E, T] = Valid[E, T] | Invalid[E, T]
+
+/// A successful validation value.
+data Valid[E, T] { value: T }
+
+/// A failed validation value with one or more errors.
+data Invalid[E, T] { errors: NonEmptyList[E] }
+
+/// Transforms a valid value and leaves invalid errors unchanged.
+fun Validation[E, T].map(map: T => Y): Validation[E, Y] =
+    match this with
+    case Invalid { errors } -> Invalid { errors }
+    case Valid { value } -> Valid { map(value) }
+
+/// Transforms invalid errors and leaves valid values unchanged.
+fun Validation[E, T].map_error(map: E => F): Validation[F, T] =
+    match this with
+    case Invalid { errors } -> Invalid { errors.map(map) }
+    case Valid { value } -> Valid { value }
+
+/// Transforms a valid value into another `Validation`.
+///
+/// Prefer `zip` or `map2` for independent validations so all errors can be
+/// accumulated.
+fun Validation[E, T].flat_map(map: T => Validation[E, Y]): Validation[E, Y] =
+    match this with
+    case Invalid { errors } -> Invalid { errors }
+    case Valid { value } -> map(value)
+
+/// Combines two independent validations, accumulating both error lists when
+/// both inputs are invalid.
+fun Validation[E, T].zip(other: Validation[E, U]): Validation[E, Tuple[T, U]] =
+    match this with
+    case Invalid { left_errors } -> {
+        match other with
+        case Invalid { right_errors } -> Invalid { left_errors + right_errors }
+        case Valid { _ } -> Invalid { left_errors }
+    }
+    case Valid { left } -> {
+        match other with
+        case Invalid { errors } -> Invalid { errors }
+        case Valid { right } -> Valid { (left, right) }
+    }
+
+/// Combines two independent validations and maps both valid values when both
+/// inputs are valid.
+fun Validation[E, T].map2(other: Validation[E, U], map: (T, U) => V): Validation[E, V] =
+    match this.zip(other) with
+    case Invalid { errors } -> Invalid { errors }
+    case Valid { values } -> Valid { map(values[0], values[1]) }
+
+/// Converts this `Validation` into a string-error `Result`.
+fun Validation[E, T].to_result(errors_to_message: NonEmptyList[E] => String): Result[T] =
+    match this with
+    case Invalid { errors } -> Error { errors_to_message(errors) }
+    case Valid { value } -> Success { value }

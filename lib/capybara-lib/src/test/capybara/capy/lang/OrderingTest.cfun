@@ -1,0 +1,31 @@
+from /capy/test/Assert import { * }
+from /capy/lang/Effect import { * }
+from /capy/lang/Ordering import { * }
+from /capy/test/CapyTest import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/capy/lang/Ordering.cfun", [
+        test("should create ordering from int", () => should_create_ordering_from_int()),
+        test("should reverse ordering", () => should_reverse_ordering()),
+        test("should chain ordering", () => should_chain_ordering()),
+    ])
+
+fun should_create_ordering_from_int(): Assert =
+    assert_all([
+        assert_that(from_int(-10) == LESS {}).is_true(),
+        assert_that(from_int(0) == EQUAL {}).is_true(),
+        assert_that(from_int(10) == GREATER {}).is_true(),
+    ])
+
+fun should_reverse_ordering(): Assert =
+    assert_all([
+        assert_that(reverse(LESS {}) == GREATER {}).is_true(),
+        assert_that(reverse(EQUAL {}) == EQUAL {}).is_true(),
+        assert_that(reverse(GREATER {}) == LESS {}).is_true(),
+    ])
+
+fun should_chain_ordering(): Assert =
+    assert_all([
+        assert_that(then_ordering(LESS {}, GREATER {}) == LESS {}).is_true(),
+        assert_that(then_ordering(EQUAL {}, GREATER {}) == GREATER {}).is_true(),
+    ])

@@ -1,0 +1,58 @@
+from /capy/lang/Result import { * }
+
+/// Represents one of two possible values.
+///
+/// `Left` is commonly used for the alternate or error branch, and `Right` for
+/// the primary success branch.
+union Either[L, R] = Left[L, R] | Right[L, R]
+
+/// The left branch of `Either`.
+data Left[L, R] { value: L }
+
+/// The right branch of `Either`.
+data Right[L, R] { value: R }
+
+/// Transforms the `Right` value and leaves `Left` unchanged.
+fun Either[L, R].map(map: R => Y): Either[L, Y] =
+    match this with
+    case Left { value } -> Left { value }
+    case Right { value } -> Right { map(value) }
+
+/// Transforms the `Right` value and leaves `Left` unchanged.
+fun Either[L, R].`|`(map: R => Y): Either[L, Y] = this.map(map)
+
+/// Transforms the `Right` value into another `Either`.
+fun Either[L, R].flat_map(map: R => Either[L, Y]): Either[L, Y] =
+    match this with
+    case Left { value } -> Left { value }
+    case Right { value } -> map(value)
+
+/// Transforms the `Right` value into another `Either`.
+fun Either[L, R].`|*`(map: R => Either[L, Y]): Either[L, Y] = this.flat_map(map)
+
+/// Transforms the `Left` value and leaves `Right` unchanged.
+fun Either[L, R].map_left(map: L => Y): Either[Y, R] =
+    match this with
+    case Left { value } -> Left { map(value) }
+    case Right { value } -> Right { value }
+
+/// Swaps `Left` and `Right`.
+fun Either[L, R].swap(): Either[R, L] =
+    match this with
+    case Left { value } -> Right { value }
+    case Right { value } -> Left { value }
+
+/// Reduces this value by applying the function for the current branch.
+fun Either[L, R].reduce(on_left: L => Y, on_right: R => Y): Y =
+    match this with
+    case Left { value } -> on_left(value)
+    case Right { value } -> on_right(value)
+
+/// Reduces this value by applying the function for the current branch.
+fun Either[L, R].`|>`(reduce: Tuple[L => Y, R => Y]): Y = this.reduce(reduce[0], reduce[1])
+
+/// Converts this `Either` into a string-error `Result`.
+fun Either[L, R].to_result(left_to_message: L => String): Result[R] =
+    match this with
+    case Left { value } -> Error { left_to_message(value) }
+    case Right { value } -> Success { value }

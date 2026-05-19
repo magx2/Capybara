@@ -2205,7 +2205,13 @@ public class JavaExpressionEvaluator {
                     .addLocalValue(wildcardBindingPattern.name())
                     .addValueOverride(wildcardBindingPattern.name(), generatedName);
         }
-        var casePattern = matchCasePattern(matchCase.pattern(), matchExpression.matchWith().type(), optionCaseVar, caseBindingNames);
+        var casePattern = matchCasePattern(
+                matchCase.pattern(),
+                matchExpression.matchWith().type(),
+                current.moduleHelperClass(),
+                optionCaseVar,
+                caseBindingNames
+        );
         if (matchCase.guard().isPresent()) {
             var guardScope = evaluateExpression(matchCase.guard().orElseThrow(), branchScope).popExpression();
             var guardStatements = guardScope.scope().getStatements()
@@ -2573,6 +2579,7 @@ public class JavaExpressionEvaluator {
     private static String matchCasePattern(
             CompiledMatchExpression.Pattern pattern,
             dev.capylang.compiler.CompiledType matchType,
+            Optional<String> ownerInterfaceName,
             String optionCaseVar,
             java.util.Map<String, String> caseBindingNames
     ) {
@@ -2621,7 +2628,7 @@ public class JavaExpressionEvaluator {
                 }
                 if (typedPattern.type() instanceof CompiledDataType typedDataType) {
                     var resolvedTypedType = resolveConstructorType(matchType, typedDataType.name());
-                    var patternType = constructorPatternTypeName(matchType, resolvedTypedType, typedDataType.name());
+                    var patternType = constructorPatternTypeName(matchType, resolvedTypedType, typedDataType.name(), ownerInterfaceName);
                     var casePattern = "case " + patternType + " " + patternBindingName;
                     yield typedPatternRuntimeGuard(typedPattern.type(), patternBindingName)
                             .map(guard -> casePattern + " when " + guard)
@@ -2639,7 +2646,7 @@ public class JavaExpressionEvaluator {
                 if (matchType instanceof CompiledDataParentType) {
                     var constructorType = resolveConstructorType(matchType, variablePattern.name());
                     if (constructorType != null) {
-                        yield "case " + constructorPatternTypeName(matchType, constructorType, variablePattern.name()) + " __ignored";
+                        yield "case " + constructorPatternTypeName(matchType, constructorType, variablePattern.name(), ownerInterfaceName) + " __ignored";
                     }
                 }
                 yield "case " + variablePattern.name() + " __ignored";
@@ -2649,7 +2656,7 @@ public class JavaExpressionEvaluator {
                     "case " + javaPatternType(matchType) + " " + caseBindingNames.getOrDefault(wildcardBindingPattern.name(), wildcardBindingPattern.name());
             case CompiledMatchExpression.ConstructorPattern constructorPattern -> {
                 var constructorType = resolveConstructorType(matchType, constructorPattern.constructorName());
-                var patternType = constructorPatternTypeName(matchType, constructorType, constructorPattern.constructorName());
+                var patternType = constructorPatternTypeName(matchType, constructorType, constructorPattern.constructorName(), ownerInterfaceName);
                 if (constructorType != null && constructorType.singleton() && constructorPattern.fieldPatterns().isEmpty()) {
                     if (matchType instanceof CompiledDataParentType parentType && parentType.enumType()) {
                         yield "case " + enumValuePatternName(constructorType.name());
@@ -2898,7 +2905,8 @@ public class JavaExpressionEvaluator {
     private static String constructorPatternTypeName(
             dev.capylang.compiler.CompiledType matchType,
             CompiledDataType constructorType,
-            String constructorName
+            String constructorName,
+            Optional<String> ownerInterfaceName
     ) {
         if (constructorType == null) {
             return unresolvedConstructorPatternType(constructorName);
@@ -2917,8 +2925,27 @@ public class JavaExpressionEvaluator {
                        + "."
                        + normalizeJavaClassName(constructorType.name());
             }
+            if (ownerInterfaceName
+                    .map(owner -> simpleJavaTypeName(owner).equals(simpleJavaTypeName(normalizeJavaTypeReference(stripGenericSuffix(parentType.name())))))
+                    .orElse(false)
+                && !parentType.enumType()
+                && parentType.subTypes().stream().anyMatch(subType -> subType.name().equals(constructorType.name()))) {
+                return normalizeJavaTypeReference(stripGenericSuffix(parentType.name()))
+                       + "."
+                       + normalizeJavaClassName(constructorType.name());
+            }
         }
         return normalizeJavaClassName(constructorType.name());
+    }
+
+    private static String simpleJavaTypeName(String typeName) {
+        var normalized = typeName.replace('\\', '.').replace('/', '.');
+        var genericStart = normalized.indexOf('<');
+        if (genericStart >= 0) {
+            normalized = normalized.substring(0, genericStart);
+        }
+        var separator = normalized.lastIndexOf('.');
+        return separator >= 0 ? normalized.substring(separator + 1) : normalized;
     }
 
     private static String unresolvedConstructorPatternType(String constructorName) {
