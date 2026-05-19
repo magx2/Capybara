@@ -86,7 +86,7 @@ public class JavaExpressionEvaluator {
                 java.util.List.of("String"),
                 "is_empty", "plus", "any", "all", "contains", "?", "reduce", "|>",
                 "reduce_left", "|l>", "map", "|", "filter", "reject", "|-", "flat_map", "flatMap", "|*",
-                "starts_with", "end_with", "trim"
+                "starts_with", "end_with", "trim", "to_char", "toChar", "get_char", "getChar"
         );
         return java.util.Map.copyOf(owners);
     }

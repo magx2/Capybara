@@ -653,6 +653,18 @@ public final class JavaScriptGenerator implements Generator {
             if ("length".equals(methodName) && receiverType == PrimitiveLinkedType.STRING) {
                 return "(" + receiver + ").length";
             }
+            if (("to_char".equals(methodName) || "toChar".equals(methodName))
+                && receiverType == PrimitiveLinkedType.STRING
+                && tailArgs.isEmpty()) {
+                require("capy.lang.String");
+                return moduleVar("capy.lang.String") + ".toChar(" + receiver + ")";
+            }
+            if (("get_char".equals(methodName) || "getChar".equals(methodName))
+                && receiverType == PrimitiveLinkedType.STRING
+                && tailArgs.size() == 1) {
+                require("capy.lang.String");
+                return moduleVar("capy.lang.String") + ".getChar(" + receiver + ", " + tailArgs.getFirst() + ")";
+            }
             if (("starts_with".equals(methodName) || "startsWith".equals(methodName))
                 && receiverType == PrimitiveLinkedType.STRING
                 && tailArgs.size() == 1) {
@@ -1862,7 +1874,12 @@ public final class JavaScriptGenerator implements Generator {
                     "fLOATBOUNDASFLOAT", "FLOAT_BOUND_AS_FLOAT", "dOUBLEBOUNDASDOUBLE", "DOUBLE_BOUND_AS_DOUBLE",
                     "clamp_long_to_int", "clampLongToInt", "safe_long_to_int", "safeLongToInt"
             ));
-            exports.put("capy.lang.String", Set.of("length", "get", "replace", "is_empty", "plus", "contains", "starts_with", "end_with", "trim"));
+            exports.put("capy.lang.String", Set.of(
+                    "length", "get", "replace", "is_empty", "plus", "contains", "starts_with", "end_with", "trim",
+                    "__constructor__primitive__char", "char_from", "charFrom", "to_char", "toChar", "char_at", "charAt",
+                    "get_char", "getChar", "to_string", "toString", "toString__name_to_string__char", "length__name_length__char",
+                    "op3d_op3d__op_op3d_op3d__char__char", "__capybaraPrimitiveTypes"
+            ));
             exports.put("capy.lang.RegexModule", Set.of("fromLiteral"));
             exports.put("capy.lang.Seq", Set.of("to_seq", "toSeq"));
             exports.put("capy.lang.System", Set.of("current_millis", "currentMillis", "nano_time", "nanoTime"));
@@ -2096,6 +2113,17 @@ public final class JavaScriptGenerator implements Generator {
         private static String stringRuntime() {
             return "'use strict';\n"
                    + "const capy = require('../../dev/capylang/capybara.js');\n"
+                   + "function __constructor__primitive__char(value) {\n"
+                   + "    const text = String(value);\n"
+                   + "    return text.length === 1 ? new capy.Success({ value: text }) : new capy.Error({ message: 'char must contain exactly one character' });\n"
+                   + "}\n"
+                   + "const charFrom = __constructor__primitive__char;\n"
+                   + "const toChar = __constructor__primitive__char;\n"
+                   + "const charAt = (value, idx) => capy.getIndex(value, idx);\n"
+                   + "const toStringChar = value => String(value);\n"
+                   + "const lengthChar = value => String(value).length;\n"
+                   + "const equalsChar = (left, right) => String(left) === String(right);\n"
+                   + "const __capybaraPrimitiveTypes = Object.freeze({ char: Object.freeze({ cfunType: '/capy/lang/String.char', backingType: 'String' }) });\n"
                    + "module.exports = {\n"
                    + "    length: value => String(value).length,\n"
                    + "    get: (value, start, end) => end === undefined ? capy.getIndex(value, start) : capy.slice(value, start, end),\n"
@@ -2106,6 +2134,21 @@ public final class JavaScriptGenerator implements Generator {
                    + "    starts_with: (value, part) => String(value).startsWith(part),\n"
                    + "    end_with: (value, part) => String(value).endsWith(part),\n"
                    + "    trim: value => String(value).trim(),\n"
+                   + "    __constructor__primitive__char,\n"
+                   + "    char_from: charFrom,\n"
+                   + "    charFrom,\n"
+                   + "    to_char: toChar,\n"
+                   + "    toChar,\n"
+                   + "    char_at: charAt,\n"
+                   + "    charAt,\n"
+                   + "    get_char: charAt,\n"
+                   + "    getChar: charAt,\n"
+                   + "    to_string: toStringChar,\n"
+                   + "    toString: toStringChar,\n"
+                   + "    toString__name_to_string__char: toStringChar,\n"
+                   + "    length__name_length__char: lengthChar,\n"
+                   + "    op3d_op3d__op_op3d_op3d__char__char: equalsChar,\n"
+                   + "    __capybaraPrimitiveTypes,\n"
                    + "};\n";
         }
 
