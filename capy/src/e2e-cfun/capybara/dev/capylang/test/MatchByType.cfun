@@ -49,11 +49,11 @@ fun exhaustive_enum_type_match(value: enum): String =
     case enum e -> e.name()
 
 fun merged_enum_name(flag: bool, current_enum: enum): String =
-    let v = if flag then current_enum else READY {}
+    let v = if flag then current_enum else READY
     v.name()
 
 fun merged_enum_list_names(current_enum: enum): List[String] =
-    ([current_enum, READY {}] | value => value.name()).as_list()
+    ([current_enum, READY] | value => value.name()).as_list()
 
 fun classify_json_char(first_char: String): String =
     match first_char with

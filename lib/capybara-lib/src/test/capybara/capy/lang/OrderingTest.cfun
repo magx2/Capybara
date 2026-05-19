@@ -12,20 +12,20 @@ fun tests(): Effect[TestFile] =
 
 fun should_create_ordering_from_int(): Assert =
     assert_all([
-        assert_that(from_int(-10) == LESS {}).is_true(),
-        assert_that(from_int(0) == EQUAL {}).is_true(),
-        assert_that(from_int(10) == GREATER {}).is_true(),
+        assert_that(from_int(-10) == LESS).is_true(),
+        assert_that(from_int(0) == EQUAL).is_true(),
+        assert_that(from_int(10) == GREATER).is_true(),
     ])
 
 fun should_reverse_ordering(): Assert =
     assert_all([
-        assert_that(reverse(LESS {}) == GREATER {}).is_true(),
-        assert_that(reverse(EQUAL {}) == EQUAL {}).is_true(),
-        assert_that(reverse(GREATER {}) == LESS {}).is_true(),
+        assert_that(reverse(LESS) == GREATER).is_true(),
+        assert_that(reverse(EQUAL) == EQUAL).is_true(),
+        assert_that(reverse(GREATER) == LESS).is_true(),
     ])
 
 fun should_chain_ordering(): Assert =
     assert_all([
-        assert_that(then_ordering(LESS {}, GREATER {}) == LESS {}).is_true(),
-        assert_that(then_ordering(EQUAL {}, GREATER {}) == GREATER {}).is_true(),
+        assert_that(then_ordering(LESS, GREATER) == LESS).is_true(),
+        assert_that(then_ordering(EQUAL, GREATER) == GREATER).is_true(),
     ])
