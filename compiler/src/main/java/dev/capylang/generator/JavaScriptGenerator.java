@@ -67,7 +67,6 @@ public final class JavaScriptGenerator implements Generator {
             "capy/test/Assert",
             "capy/test/CapyTest"
     );
-    private static final java.util.regex.Pattern CONST_NAME_PATTERN = java.util.regex.Pattern.compile("^_?[A-Z_][A-Z0-9_]*$");
     private static final java.util.regex.Pattern MODULE_VAR_PATTERN = java.util.regex.Pattern.compile("\\b__module_[A-Za-z0-9_]+\\b");
     private static final Set<String> JS_KEYWORDS = Set.of(
             "await", "break", "case", "catch", "class", "const", "continue", "debugger", "default",
@@ -136,7 +135,7 @@ public final class JavaScriptGenerator implements Generator {
             for (var javaEnum : javaClass.enums()) {
                 body.append(renderEnum(javaEnum)).append('\n');
             }
-            for (var javaConst : javaClass.staticConsts()) {
+            for (var javaConst : ConstDependencyOrder.order(javaClass.staticConsts(), programContext::emittedFunctionName)) {
                 body.append(renderConst(javaConst)).append('\n');
             }
             for (var method : javaClass.staticMethods()) {
@@ -591,7 +590,7 @@ public final class JavaScriptGenerator implements Generator {
                 return nativeCall.orElseThrow();
             }
             var target = resolveFunctionTarget(functionCall);
-            if (isConstCall(functionCall)) {
+            if (ConstDependencyOrder.isConstCall(functionCall)) {
                 return target;
             }
             return target + "(" + String.join(", ", args) + ")";
@@ -1374,14 +1373,6 @@ public final class JavaScriptGenerator implements Generator {
 
         private String emittedMethodName(CompiledFunctionCall functionCall) {
             return programContext.emittedFunctionName(functionCall.name(), functionCall.arguments().stream().map(CompiledExpression::type).toList());
-        }
-
-        private static boolean isConstCall(CompiledFunctionCall functionCall) {
-            if (!functionCall.arguments().isEmpty()) {
-                return false;
-            }
-            var name = simpleMethodName(functionCall.name());
-            return name.contains("__local_const_") || isTopLevelConstName(name);
         }
     }
 

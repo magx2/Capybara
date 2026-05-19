@@ -376,6 +376,35 @@ class JavaScriptGeneratorTest {
     }
 
     @Test
+    void shouldEmitConstsBeforeDependentConsts() throws Exception {
+        var program = compileProgram("""
+                const Z_BASE: long = 21L
+                const A_DERIVED: long = Z_BASE * 2L
+
+                fun derived(): long = A_DERIVED
+                """);
+
+        var generated = new JavaScriptGenerator().generate(program);
+        writeGenerated(generated);
+
+        var main = generated.modules().stream()
+                .filter(module -> module.relativePath().equals(Path.of("foo", "Main.js")))
+                .findFirst()
+                .orElseThrow();
+        assertThat(main.code()).containsSubsequence(
+                "const zBASE = 21n;",
+                "const aDERIVED = capy.longMul(zBASE, 2n);"
+        );
+
+        var output = runNode("""
+                const m = require('./foo/Main.js');
+                console.log(String(m.derived()));
+                """);
+
+        assertThat(output).isEqualTo("42");
+    }
+
+    @Test
     void shouldSkipRuntimeProvidedStdlibSources() {
         var generated = new JavaScriptGenerator().generate(new CompiledProgram(List.of(
                 runtimeModule("List", "/capy/collection"),
