@@ -124,15 +124,14 @@ fun _should_parse_interval(
                         .has_duration(duration),
                 ])))
 
-fun _interval_date(year: int, month: int, day: int): Date =
-    match Date { day: day, month: month, year: year } with
-    case Success { value } -> value
-    case Error -> UNIX_DATE
+fun _interval_date(year: int, month_value: int, day: int): Date =
+    let parsed_month = (month { month_value }).or_else(JANUARY)
+    let parsed_date = Date { day: day, month: parsed_month, year: year }
+    parsed_date.or_else(UNIX_DATE)
 
 fun _interval_time(hour: int, minute: int, second: int): Time =
-    match Time { hour: hour, minute: minute, second: second, offset_minutes: None {} } with
-    case Success { value } -> value
-    case Error -> MIDNIGHT
+    let parsed_time = Time { hour: hour, minute: minute, second: second, offset_minutes: None {} }
+    parsed_time.or_else(MIDNIGHT)
 
 fun _interval_datetime(year: int, month: int, day: int, hour: int, minute: int, second: int): DateTime =
     DateTime {

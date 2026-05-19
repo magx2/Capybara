@@ -1,3 +1,4 @@
+from /capy/collection/CollectionTypes import { * }
 from /capy/collection/List import { * }
 from /capy/collection/Set import { * }
 from /capy/collection/Dict import { * }
@@ -8,10 +9,7 @@ single End
 
 /// Returns an infinite sequence of natural numbers starting at `0`.
 ///
-/// To start at `1`, drop the first element:
-/// ```cfun
-/// natural_seq().drop(1)
-/// ```
+/// To start at `1`, drop the first element.
 fun natural_seq(): Seq[int] =
     fun __next(i: int): Seq[int] = Cons { i, () => __next(i+1) }
     ---
@@ -48,7 +46,7 @@ fun powers_of_2_seq() = powers_seq(2)
 /// Collects the first `n` elements into a `List`.
 ///
 /// This method is safe to use with infinite sequences.
-fun Seq[T].take(n: int): List[T] =
+fun Seq[T].take(n: size): List[T] =
     fun rec __take(seq: Seq[T], n: int, list: List[T]): List[T] =
         if n <=0
         then list
@@ -88,8 +86,8 @@ fun to_seq(list: Dict[T]): Seq[Tuple[String, T]] =
 /// Collects the last `n` elements into a `List`.
 ///
 /// Important: calling this on an infinite sequence does not terminate.
-fun Seq[T].take_last(n: int): List[T] =
-    fun __add_to_list(max: int, list: List[T], value: T) = (if list.size() >= max then list[1:] else list) + value
+fun Seq[T].take_last(n: size): List[T] =
+    fun __add_to_list(max: int, list: List[T], value: T) = (if @(list.size()) >= max then list[1:] else list) + value
     fun __take_last(seq: Seq[T], max: int, n: int, list: List[T]) =
         if n <= 0
         then list
@@ -132,7 +130,7 @@ fun Seq[T].reject(pred: T => bool): Seq[T] =
     __reject(this, pred)
 
 /// Skips the first `n` elements of the sequence.
-fun Seq[T].drop(n: int): Seq[T] =
+fun Seq[T].drop(n: size): Seq[T] =
     fun rec __drop(seq: Seq[T], n: int) =
         if n <= 0
         then seq

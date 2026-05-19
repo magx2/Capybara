@@ -1,4 +1,5 @@
 from /capy/collection/List import { * }
+from /capy/collection/CollectionTypes import { * }
 from /capy/lang/Option import { * }
 
 /// Native String-keyed map type backed by the runtime Dict implementation.
@@ -6,10 +7,10 @@ from /capy/lang/Option import { * }
 data Dict[T] { <native> }
 
 /// Returns the number of entries in this Dict.
-fun Dict[T].size(): int = <native>
+fun Dict[T].size(): size = <native>
 
 /// Returns true when this Dict has no entries.
-fun Dict[T].is_empty(): bool = this.size() == 0
+fun Dict[T].is_empty(): bool = this.size() == EMPTY
 
 /// Returns this Dict as a List of `(key, value)` tuples.
 fun Dict[T].entries(): List[Tuple[String, T]] = <native>

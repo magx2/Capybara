@@ -1,4 +1,5 @@
 from /capy/lang/Option import { * }
+from /capy/collection/CollectionTypes import { * }
 from /capy/collection/List import { * }
 from /capy/collection/Set import { * }
 from /capy/collection/Dict import { * }
@@ -10,7 +11,7 @@ data Match { group_value: String }
 
 fun from_literal(pattern: String, flags: String): Regex = Regex { pattern, flags }
 
-fun _drop_prefix(value: String, size: int): String =
+private fun drop_prefix(value: String, size: int): String =
     fun rec __drop_prefix(value: String, size: int): String =
         if size <= 0
         then value
@@ -21,7 +22,7 @@ fun _drop_prefix(value: String, size: int): String =
     ---
     __drop_prefix(value, size)
 
-fun _find_all(pattern: String, input: String, acc: List[Match]): List[Match] =
+private fun find_all(pattern: String, input: String, acc: List[Match]): List[Match] =
     fun rec __find_all(pattern: String, input: String, acc: List[Match]): List[Match] =
         if pattern == ""
         then acc
@@ -30,12 +31,12 @@ fun _find_all(pattern: String, input: String, acc: List[Match]): List[Match] =
             case None -> acc
             case Some { _ } ->
                 if input.starts_with(pattern)
-                then __find_all(pattern, _drop_prefix(input, pattern.length()), acc + Match { group_value: pattern })
+                then __find_all(pattern, drop_prefix(input, pattern.length()), acc + Match { group_value: pattern })
                 else __find_all(pattern, input[1, input.length()], acc)
     ---
     __find_all(pattern, input, acc)
 
-fun _split(pattern: String, input: String, current: String, acc: List[String]): List[String] =
+private fun split(pattern: String, input: String, current: String, acc: List[String]): List[String] =
     fun rec __split(pattern: String, input: String, current: String, acc: List[String]): List[String] =
         if pattern == ""
         then [input]
@@ -44,7 +45,7 @@ fun _split(pattern: String, input: String, current: String, acc: List[String]): 
             case None -> acc + current
             case Some { c } ->
                 if input.starts_with(pattern)
-                then __split(pattern, _drop_prefix(input, pattern.length()), "", acc + current)
+                then __split(pattern, drop_prefix(input, pattern.length()), "", acc + current)
                 else __split(pattern, input[1, input.length()], current + c, acc)
     ---
     __split(pattern, input, current, acc)
@@ -52,17 +53,17 @@ fun _split(pattern: String, input: String, current: String, acc: List[String]): 
 fun Regex.matches(input: String): bool = input ? this.pattern
 
 fun Regex.find(input: String): Option[Match] =
-    match _find_all(this.pattern, input, [])[0] with
+    match find_all(this.pattern, input, [])[0] with
     case Some { value } -> Some { value }
     case None -> None {}
 
 fun Regex.find_all(input: String): /capy/lang/Seq[Match] =
-    /capy/lang/Seq.to_seq(_find_all(this.pattern, input, []))
+    /capy/lang/Seq.to_seq(find_all(this.pattern, input, []))
 
 fun Regex.replace(replacement: String): String => String = value => value.replace(this.pattern, replacement)
 
 fun Regex.split(input: String): List[String] =
-    _split(this.pattern, input, "", [])
+    split(this.pattern, input, "", [])
 
 fun Regex.`?`(input: String): bool = this.matches(input)
 fun Regex.`~`(input: String): Option[Match] = this.find(input)
@@ -70,6 +71,6 @@ fun Regex.`~~`(input: String): /capy/lang/Seq[Match] = this.find_all(input)
 fun Regex.`~>`(replacement: String): String => String = this.replace(replacement)
 fun Regex.`/>`(input: String): List[String] = this.split(input)
 
-fun Match.group(index: int): Option[String] = if index == 0 then Some { value: this.group_value } else None {}
+fun Match.group(idx: index): Option[String] = if idx == FIRST_ELEMENT then Some { value: this.group_value } else None {}
 
 fun Match.groups(): List[Option[String]] = [Some { value: this.group_value }]

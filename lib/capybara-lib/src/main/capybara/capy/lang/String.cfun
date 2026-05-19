@@ -1,4 +1,5 @@
 from /capy/lang/Option import { * }
+from /capy/collection/CollectionTypes import { * }
 from /capy/collection/List import { * }
 from /capy/collection/Set import { * }
 from /capy/collection/Dict import { * }
@@ -9,16 +10,16 @@ from /capy/lang/Seq import { * }
 data String { <native> }
 
 /// Returns the number of characters in this String.
-fun String.length(): int = <native>
+fun String.length(): size = <native>
 
 /// Returns the character at idx as a String using the same bounds and negative-index rules as string[idx].
-fun String.get(idx: int): Option[String] = <native>
+fun String.get(idx: index): Option[String] = <native>
 
 /// Returns the substring in the half-open range [from, to) using negative-index rules.
 fun String.get(from: int, to: int): String = <native>
 
 /// Returns true when this String has no characters.
-fun String.is_empty(): bool = this.length() == 0
+fun String.is_empty(): bool = this.length() == EMPTY
 
 /// Returns this String with `value` appended.
 fun String.`+`(value: any): String = <native>
@@ -80,11 +81,11 @@ fun String.all(predicate: (String, int) => bool): bool =
 
 /// Returns true when this String contains the given substring.
 fun String.contains(part: String): bool =
-    if part.length() == 0
+    if part.length() == EMPTY
     then true
     else this.any((_, idx) =>
-        if idx + part.length() <= this.length()
-        then this[idx, idx + part.length()] == part
+        if idx + @(part.length()) <= @(this.length())
+        then this[idx, idx + @(part.length())] == part
         else false)
 
 /// Returns true when this String contains the given substring.
@@ -157,23 +158,23 @@ fun String.starts_with(part: String): bool =
 fun String.end_with(part: String): bool =
     if this.length() < part.length()
     then false
-    else this[this.length() - part.length(), this.length()] == part
+    else this[@(this.length()) - @(part.length()), this.length()] == part
 
 /// Returns this String without leading and trailing whitespace.
 fun String.trim(): String =
-    fun _is_trim_whitespace(char: String): bool =
+    fun is_trim_whitespace(char: String): bool =
         char == " " | char == '\t' | char == '\n' | char == '\r' | char == '\f'
     fun rec __trim_left(value: String): String =
-        if value.length() == 0
+        if value.length() == EMPTY
         then ""
-        else if _is_trim_whitespace(value[0, 1])
+        else if is_trim_whitespace(value[0, 1])
             then __trim_left(value[1, value.length()])
             else value
     fun rec __trim_right(value: String): String =
-        if value.length() == 0
+        if value.length() == EMPTY
         then ""
-        else if _is_trim_whitespace(value[value.length() - 1, value.length()])
-            then __trim_right(value[0, value.length() - 1])
+        else if is_trim_whitespace(value[@(value.length()) - 1, value.length()])
+            then __trim_right(value[0, @(value.length()) - 1])
             else value
     ---
     __trim_right(__trim_left(this))

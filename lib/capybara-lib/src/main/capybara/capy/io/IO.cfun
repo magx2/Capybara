@@ -1,4 +1,5 @@
 from /capy/io/Path import { * }
+from /capy/io/ByteSize import { * }
 from /capy/lang/Effect import { * }
 from /capy/lang/Result import { * }
 
@@ -39,7 +40,7 @@ fun is_file(path: Path): Effect[bool] = <native>
 fun is_directory(path: Path): Effect[bool] = <native>
 
 /// Returns the size of a file in bytes.
-fun size(path: Path): Effect[Result[long]] = <native>
+fun size(path: Path): Effect[Result[byte_count]] = <native>
 
 /// Creates a new empty file and returns the created path.
 fun create_file(path: Path): Effect[Result[Path]] = <native>

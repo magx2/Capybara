@@ -153,28 +153,28 @@ fun from_iso_8601(iso: String): Result[DateTime] =
         else if value[0, 1] == "T"
             then if scan.seen_separator
                 then Error { __invalid("expected exactly one `T` separator") }
-                else __scan_split(value[1, value.length()], __SplitScan {
+                else __scan_split(value[1, @(value.length())], __SplitScan {
                     left: scan.left,
                     right: "",
                     seen_separator: true
                 })
             else if scan.seen_separator
-                then __scan_split(value[1, value.length()], __SplitScan {
+                then __scan_split(value[1, @(value.length())], __SplitScan {
                     left: scan.left,
                     right: scan.right + value[0, 1],
                     seen_separator: true
                 })
-                else __scan_split(value[1, value.length()], __SplitScan {
+                else __scan_split(value[1, @(value.length())], __SplitScan {
                     left: scan.left + value[0, 1],
                     right: scan.right,
                     seen_separator: false
                 })
     fun __is_extended_date(value: String): bool =
-        if value.length() == 10
+        if @(value.length()) == 10
         then value[4, 5] == "-" & value[7, 8] == "-"
         else false
     fun __is_extended_time(value: String): bool =
-        if value.length() >= 8
+        if @(value.length()) >= 8
         then value[2, 3] == ":" & value[5, 6] == ":"
         else false
     ---
