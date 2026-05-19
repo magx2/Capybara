@@ -15,6 +15,14 @@ test('StringCollection', () => {
     assert.equal(strings.replaceMethod('aaaa', 'a', 'b'), 'bbbb');
     assert.equal(strings.notNestedIsEmpty(new strings.BufferHolder({ buffer: 'capybara' })), true);
     assert.equal(strings.notTrimmedIsEmpty('   '), false);
+    assert.equal(assertSuccess(strings.makeChar('c')), 'c');
+    assert.equal(assertSuccess(strings.makeCharMethod('z')), 'z');
+    assert.match(assertError(strings.makeChar('')), /char must contain exactly one character/);
+    assert.match(assertError(strings.makeChar('ab')), /char must contain exactly one character/);
+    assert.equal(strings.charToString('x'), 'x');
+    assert.equal(strings.charLength('x'), 1);
+    assert.equal(strings.charAtOrQuestion('abc', 1), 'b');
+    assert.equal(strings.charAtOrQuestion('abc', 10), '?');
     assert.equal(assertSuccess(strings.toIntMethod('123')), 123);
     assert.match(assertError(strings.toIntMethod('abc')), /Cannot parse string to int: abc/);
     assert.equal(assertSuccess(strings.toLongMethod('12345678901')), 12345678901n);

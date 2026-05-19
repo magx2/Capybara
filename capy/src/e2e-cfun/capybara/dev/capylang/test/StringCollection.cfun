@@ -1,5 +1,7 @@
 from /capy/lang/Result import { * }
 from /capy/lang/String import { * }
+from /capy/lang/Option import { * }
+from /capy/collection/CollectionTypes import { * }
 
 fun contains(s: String, part: String): bool = s ? part
 
@@ -32,6 +34,19 @@ fun not_nested_is_empty(holder: BufferHolder): bool = !holder.buffer.is_empty()
 fun not_trimmed_is_empty(s: String): bool = !s.trim().is_empty()
 
 fun length(s: String): int = @(s.length())
+
+fun make_char(value: String): Result[char] = char_from(value)
+
+fun make_char_method(value: String): Result[char] = value.to_char()
+
+fun char_to_string(value: char): String = value.to_string()
+
+fun char_length(value: char): int = @(value.length())
+
+fun char_at_or_question(value: String, idx: index): String =
+    match value.get_char(idx) with
+    case Some { char } -> char.to_string()
+    case None -> "?"
 
 fun to_int_method(s: String): Result[int] = s.to_int()
 

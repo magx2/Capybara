@@ -9,6 +9,7 @@ from /capy/test/CapyTest import { * }
 fun tests(): Effect[TestFile] =
     test_file("/capy/lang/String.cfun", [
         test("should report length and emptiness", () => should_report_length_and_emptiness()),
+        test("should create chars", () => should_create_chars()),
         test("should get characters by index", () => should_get_characters_by_index()),
         test("should get substrings by range", () => should_get_substrings_by_range()),
         test("should concatenate values", () => should_concatenate_values()),
@@ -29,6 +30,20 @@ fun should_report_length_and_emptiness(): Assert =
         assert_that("capy".length()).is_equal_to(4),
         assert_that("".is_empty()).is_equal_to(true),
         assert_that("capy".is_empty()).is_equal_to(false),
+    ])
+
+fun should_create_chars(): Assert =
+    assert_all([
+        assert_that(char_from("c")).succeeds(value => assert_that(value.to_string()).is_equal_to("c")),
+        assert_that(char_from("z")).succeeds(value => assert_that(value.to_string()).is_equal_to("z")),
+        assert_that(char_from("")).fails("char must contain exactly one character"),
+        assert_that(char_from("ab")).fails("char must contain exactly one character"),
+        assert_that(char_from("x")).succeeds(value => assert_that(value.length()).is_equal_to(1)),
+        assert_that(
+            match char_at("abc", string_test_index(1)) with
+            case Some { value } -> value.to_string()
+            case None -> ""
+        ).is_equal_to("b"),
     ])
 
 fun should_get_characters_by_index(): Assert =

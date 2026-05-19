@@ -1,4 +1,5 @@
 from /capy/lang/Option import { * }
+from /capy/lang/Result import { * }
 from /capy/collection/CollectionTypes import { * }
 from /capy/collection/List import { * }
 from /capy/collection/Set import { * }
@@ -12,8 +13,41 @@ data String { <native> }
 /// Returns the number of characters in this String.
 fun String.length(): size = <native>
 
+/// Single-character String value.
+type char -> String with constructor {
+    if @(value.length()) == 1
+    then Success { value }
+    else Error { message: "char must contain exactly one character" }
+}
+
+/// Creates a `char` from a one-character String.
+fun char_from(value: String): Result[char] = char { value }
+
+/// Creates a `char` from this one-character String.
+fun String.to_char(): Result[char] = char { this }
+
+/// Returns the underlying one-character String.
+fun char.to_string(): String = @this
+
+/// Returns the length of this `char`.
+fun char.length(): size = this.to_string().length()
+
+/// Returns true when both chars contain the same character.
+fun char.`==`(other: char): bool = @this == @other
+
+private fun raw_char(value: String): char = char! { value }
+
 /// Returns the character at idx as a String using the same bounds and negative-index rules as string[idx].
 fun String.get(idx: index): Option[String] = <native>
+
+/// Returns the character at idx as a validated `char` using the same bounds and negative-index rules as string[idx].
+fun char_at(value: String, idx: index): Option[char] =
+    match value.get(idx) with
+    case Some { value } -> Some { value: raw_char(value) }
+    case None -> None {}
+
+/// Returns the character at idx as a validated `char` using the same bounds and negative-index rules as string[idx].
+fun String.get_char(idx: index): Option[char] = char_at(this, idx)
 
 /// Returns the substring in the half-open range [from, to) using negative-index rules.
 fun String.get(from: int, to: int): String = <native>

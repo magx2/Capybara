@@ -106,6 +106,34 @@ class StringCollectionTest {
     }
 
     @Test
+    void charHelpers() {
+        var success = StringCollection.makeChar("c");
+        assertThat(success).isInstanceOf(Result.Success.class);
+        assertThat(((Result.Success<String>) success).value()).isEqualTo("c");
+
+        var methodSuccess = StringCollection.makeCharMethod("z");
+        assertThat(methodSuccess).isInstanceOf(Result.Success.class);
+        assertThat(((Result.Success<String>) methodSuccess).value()).isEqualTo("z");
+
+        var emptyError = StringCollection.makeChar("");
+        assertThat(emptyError).isInstanceOf(Result.Error.class);
+        assertThat(((Result.Error) emptyError).ex())
+                .isInstanceOf(CapybaraException.class)
+                .hasMessage("char must contain exactly one character");
+
+        var longError = StringCollection.makeChar("ab");
+        assertThat(longError).isInstanceOf(Result.Error.class);
+        assertThat(((Result.Error) longError).ex())
+                .isInstanceOf(CapybaraException.class)
+                .hasMessage("char must contain exactly one character");
+
+        assertThat(StringCollection.charToString("x")).isEqualTo("x");
+        assertThat(StringCollection.charLength("x")).isEqualTo(1);
+        assertThat(StringCollection.charAtOrQuestion("abc", 1)).isEqualTo("b");
+        assertThat(StringCollection.charAtOrQuestion("abc", 10)).isEqualTo("?");
+    }
+
+    @Test
     void toIntMethod() {
         var success = StringCollection.toIntMethod("123");
         assertThat(success).isInstanceOf(Result.Success.class);

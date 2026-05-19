@@ -654,6 +654,18 @@ public final class PythonGenerator implements Generator {
             if ("length".equals(methodName) && receiverType == PrimitiveLinkedType.STRING) {
                 return "len(" + receiver + ")";
             }
+            if (("to_char".equals(methodName) || "toChar".equals(methodName))
+                && receiverType == PrimitiveLinkedType.STRING
+                && tailArgs.isEmpty()) {
+                require("capy.lang.String");
+                return moduleVar("capy.lang.String") + ".toChar(" + receiver + ")";
+            }
+            if (("get_char".equals(methodName) || "getChar".equals(methodName))
+                && receiverType == PrimitiveLinkedType.STRING
+                && tailArgs.size() == 1) {
+                require("capy.lang.String");
+                return moduleVar("capy.lang.String") + ".getChar(" + receiver + ", " + tailArgs.getFirst() + ")";
+            }
             if (("starts_with".equals(methodName) || "startsWith".equals(methodName))
                 && receiverType == PrimitiveLinkedType.STRING
                 && tailArgs.size() == 1) {
@@ -1823,7 +1835,12 @@ public final class PythonGenerator implements Generator {
                     "fLOATBOUNDASFLOAT", "FLOAT_BOUND_AS_FLOAT", "dOUBLEBOUNDASDOUBLE", "DOUBLE_BOUND_AS_DOUBLE",
                     "clamp_long_to_int", "clampLongToInt", "safe_long_to_int", "safeLongToInt"
             ));
-            exports.put("capy.lang.String", Set.of("length", "get", "replace", "is_empty", "plus", "contains", "starts_with", "end_with", "trim"));
+            exports.put("capy.lang.String", Set.of(
+                    "length", "get", "replace", "is_empty", "plus", "contains", "starts_with", "end_with", "trim",
+                    "__constructor__primitive__char", "char_from", "charFrom", "to_char", "toChar", "char_at", "charAt",
+                    "get_char", "getChar", "to_string", "toString", "toString__name_to_string__char", "length__name_length__char",
+                    "op3d_op3d__op_op3d_op3d__char__char", "__capybaraPrimitiveTypes"
+            ));
             exports.put("capy.lang.RegexModule", Set.of("fromLiteral"));
             exports.put("capy.lang.Seq", Set.of("to_seq", "toSeq"));
             exports.put("capy.lang.System", Set.of("current_millis", "currentMillis", "nano_time", "nanoTime"));
@@ -2035,6 +2052,23 @@ public final class PythonGenerator implements Generator {
                     starts_with = lambda value, part: str(value).startswith(part)
                     end_with = lambda value, part: str(value).endswith(part)
                     trim = lambda value: str(value).strip()
+                    def __constructor__primitive__char(value):
+                        text = str(value)
+                        return capy.Success({'value': text}) if len(text) == 1 else capy.Error({'message': 'char must contain exactly one character'})
+                    char_from = __constructor__primitive__char
+                    charFrom = char_from
+                    to_char = __constructor__primitive__char
+                    toChar = to_char
+                    char_at = lambda value, idx: capy.get_index(value, idx)
+                    charAt = char_at
+                    get_char = char_at
+                    getChar = char_at
+                    to_string = lambda value: str(value)
+                    toString = to_string
+                    toString__name_to_string__char = lambda value: str(value)
+                    length__name_length__char = lambda value: len(str(value))
+                    op3d_op3d__op_op3d_op3d__char__char = lambda left, right: str(left) == str(right)
+                    __capybaraPrimitiveTypes = {'char': {"cfunType": '/capy/lang/String.char', "backingType": 'String'}}
                     """;
         }
 
