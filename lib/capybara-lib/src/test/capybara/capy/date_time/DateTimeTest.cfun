@@ -46,7 +46,7 @@ fun _test_unix_epoch(): TestCase =
 
 fun _datetime_test_to_iso_8601(): List[TestCase] =
     let offset_time =
-        match Time { hour: 13, minute: 0, second: 0, offset_minutes: Some { 60 } } with
+        match /capy/date_time/Time.from_iso_8601("13:00:00+01:00") with
         case Success { time } -> time
         case Error -> MIDNIGHT
     [

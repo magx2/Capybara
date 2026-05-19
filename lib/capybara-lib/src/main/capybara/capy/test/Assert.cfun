@@ -561,7 +561,7 @@ fun TimeAssert.is_equal_to(hour: int, minute: int, second: int): TimeAssert =
 
 fun TimeAssert.has_hour(other: int): TimeAssert =
     let assertion = Assertion {
-        result: this.value.hour == other,
+        result: @(this.value.hour) == other,
         message: "Expected time hour:\n" + this.value.hour + "\nto be equal to:\n" + other,
         type: 'TimeAssert.has_hour'
     }
@@ -572,7 +572,7 @@ fun TimeAssert.has_hour(other: int): TimeAssert =
 
 fun TimeAssert.has_minute(other: int): TimeAssert =
     let assertion = Assertion {
-        result: this.value.minute == other,
+        result: @(this.value.minute) == other,
         message: "Expected time minute:\n" + this.value.minute + "\nto be equal to:\n" + other,
         type: 'TimeAssert.has_minute'
     }
@@ -583,7 +583,7 @@ fun TimeAssert.has_minute(other: int): TimeAssert =
 
 fun TimeAssert.has_second(other: int): TimeAssert =
     let assertion = Assertion {
-        result: this.value.second == other,
+        result: @(this.value.second) == other,
         message: "Expected time second:\n" + this.value.second + "\nto be equal to:\n" + other,
         type: 'TimeAssert.has_second'
     }
@@ -680,7 +680,7 @@ fun DateTimeAssert.has_day(other: int): DateTimeAssert =
 
 fun DateTimeAssert.has_hour(other: int): DateTimeAssert =
     let assertion = Assertion {
-        result: this.value.time.hour == other,
+        result: @(this.value.time.hour) == other,
         message: "Expected date-time hour:\n" + this.value.time.hour + "\nto be equal to:\n" + other,
         type: 'DateTimeAssert.has_hour'
     }
@@ -691,7 +691,7 @@ fun DateTimeAssert.has_hour(other: int): DateTimeAssert =
 
 fun DateTimeAssert.has_minute(other: int): DateTimeAssert =
     let assertion = Assertion {
-        result: this.value.time.minute == other,
+        result: @(this.value.time.minute) == other,
         message: "Expected date-time minute:\n" + this.value.time.minute + "\nto be equal to:\n" + other,
         type: 'DateTimeAssert.has_minute'
     }
@@ -702,7 +702,7 @@ fun DateTimeAssert.has_minute(other: int): DateTimeAssert =
 
 fun DateTimeAssert.has_second(other: int): DateTimeAssert =
     let assertion = Assertion {
-        result: this.value.time.second == other,
+        result: @(this.value.time.second) == other,
         message: "Expected date-time second:\n" + this.value.time.second + "\nto be equal to:\n" + other,
         type: 'DateTimeAssert.has_second'
     }
