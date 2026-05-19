@@ -110,6 +110,28 @@ class PrimitiveBackedTypeGeneratorTest {
     }
 
     @Test
+    void shouldEraseStringBackedTypesInJavaScriptAndPython() {
+        var program = compileProgram(List.of(new RawModule("Tokens", "/foo", """
+                type token -> String
+
+                fun make(value: String): token = token { value }
+                fun unwrap(value: token): String = @value
+                """)));
+
+        var js = generatedCode(new JavaScriptGenerator(), program, Path.of("foo", "Tokens.js"));
+        var python = generatedCode(new PythonGenerator(), program, Path.of("foo", "Tokens.py"));
+
+        assertThat(js)
+                .contains("token: Object.freeze({ cfunType: '/foo/Tokens.token', backingType: 'String' })")
+                .doesNotContain("class Token")
+                .doesNotContain("new Token");
+        assertThat(python)
+                .contains("'token': {\"cfunType\": '/foo/Tokens.token', \"backingType\": 'String'}")
+                .doesNotContain("class Token")
+                .doesNotContain("Token(");
+    }
+
+    @Test
     void shouldNotShadowPythonRuntimeWithPrimitiveBackedConstructorAliases() {
         var program = compileProgram(List.of(new RawModule("Numbers", "/foo", """
                 from /capy/lang/Result import { * }

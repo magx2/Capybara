@@ -6278,11 +6278,12 @@ public class CapybaraCompiler {
             case LONG -> PrimitiveLinkedType.LONG;
             case FLOAT -> PrimitiveLinkedType.FLOAT;
             case DOUBLE -> PrimitiveLinkedType.DOUBLE;
+            case STRING -> PrimitiveLinkedType.STRING;
             default -> null;
         };
         if (backingType == null) {
             return withPosition(
-                    Result.error("Primitive-backed type `" + declaration.name() + "` must be backed by byte, int, long, float, or double"),
+                    Result.error("Primitive-backed type `" + declaration.name() + "` must be backed by byte, int, long, float, double, or String"),
                     declaration.position(),
                     normalizedFile
             );

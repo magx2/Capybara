@@ -58,7 +58,8 @@ docComment: DOC_COMMENT;
 
 primitiveBackedTypeDeclaration: docComment* VISIBILITY? 'type' primitiveBackedTypeName MATCH_ARROW primitiveBackingType constructorClause?;
 primitiveBackedTypeName: NAME;
-primitiveBackingType: 'byte' | 'int' | 'long' | 'float' | 'double';
+primitiveBackingType: 'byte' | 'int' | 'long' | 'float' | 'double' | stringBackingType;
+stringBackingType: { "String".equals(_input.LT(1).getText()) }? TYPE;
 typeDeclaration: docComment* VISIBILITY? 'union' genericTypeDeclaration constructorClause? '=' genericTypeDeclaration (PIPE genericTypeDeclaration)* deriveClause?
                | docComment* VISIBILITY? 'union' genericTypeDeclaration '{' fieldDeclarationList? '}' constructorClause? '=' genericTypeDeclaration (PIPE genericTypeDeclaration)* deriveClause?;
 enumDeclaration: docComment* 'enum' TYPE '{' TYPE (COMMA TYPE)* COMMA? '}';
