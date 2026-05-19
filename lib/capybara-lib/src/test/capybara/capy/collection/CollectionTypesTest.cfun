@@ -7,37 +7,37 @@ from /capy/test/CapyTest import { * }
 
 fun tests(): Effect[TestFile] =
     test_file("/capy/collection/CollectionTypes.cfun", [
-        test("index accepts zero", () => _should_construct_index(0, 0)),
+        test("index accepts zero", () => should_construct_index(0, 0)),
         test("index rejects negative values", () => assert_that(index { -1 }).fails("index must be greater than or equal to 0")),
-        test("count accepts zero", () => _should_construct_count(0, 0)),
+        test("count accepts zero", () => should_construct_count(0, 0)),
         test("count rejects negative values", () => assert_that(count { -1 }).fails("count must be greater than or equal to 0")),
-        test("size accepts zero", () => _should_construct_size(0, 0)),
+        test("size accepts zero", () => should_construct_size(0, 0)),
         test("size rejects negative values", () => assert_that(size { -1 }).fails("size must be greater than or equal to 0")),
-        test("index can advance by one", () => _should_advance_index(4, 5)),
-        test("index advance rejects overflow", () => _should_reject_index_advance(MAX_INT_VALUE)),
-        test("index can advance by count", () => _should_add_count_to_index(4, 3, 7)),
-        test("index addition rejects overflow", () => _should_reject_index_addition(MAX_INT_VALUE, 1)),
-        test("count addition returns count", () => _should_add_count(2, 3, 5)),
-        test("count addition rejects overflow", () => _should_reject_count_addition(MAX_INT_VALUE, 1)),
-        test("size addition returns size", () => _should_add_size(2, 3, 5)),
-        test("size addition rejects overflow", () => _should_reject_size_addition(MAX_INT_VALUE, 1)),
-        test("size subtraction validates result", () => _should_subtract_size(7, 2, 5)),
-        test("size subtraction rejects negative result", () => _should_reject_size_subtraction(2, 7)),
+        test("index can advance by one", () => should_advance_index(4, 5)),
+        test("index advance rejects overflow", () => should_reject_index_advance(MAX_INT_VALUE)),
+        test("index can advance by count", () => should_add_count_to_index(4, 3, 7)),
+        test("index addition rejects overflow", () => should_reject_index_addition(MAX_INT_VALUE, 1)),
+        test("count addition returns count", () => should_add_count(2, 3, 5)),
+        test("count addition rejects overflow", () => should_reject_count_addition(MAX_INT_VALUE, 1)),
+        test("size addition returns size", () => should_add_size(2, 3, 5)),
+        test("size addition rejects overflow", () => should_reject_size_addition(MAX_INT_VALUE, 1)),
+        test("size subtraction validates result", () => should_subtract_size(7, 2, 5)),
+        test("size subtraction rejects negative result", () => should_reject_size_subtraction(2, 7)),
     ])
 
-fun _should_construct_index(value: int, expected: int): Assert =
+private fun should_construct_index(value: int, expected: int): Assert =
     assert_that((index { value }).reduce(actual => @actual, _ => -1)).is_equal_to(expected)
 
-fun _should_construct_count(value: int, expected: int): Assert =
+private fun should_construct_count(value: int, expected: int): Assert =
     assert_that((count { value }).reduce(actual => @actual, _ => -1)).is_equal_to(expected)
 
-fun _should_construct_size(value: int, expected: int): Assert =
+private fun should_construct_size(value: int, expected: int): Assert =
     assert_that((size { value }).reduce(actual => @actual, _ => -1)).is_equal_to(expected)
 
-fun _should_advance_index(value: int, expected: int): Assert =
+private fun should_advance_index(value: int, expected: int): Assert =
     assert_that((index { value }).reduce(actual => next_index(actual).reduce(next => @next, _ => -1), _ => -1)).is_equal_to(expected)
 
-fun _should_reject_index_advance(value: int): Assert =
+private fun should_reject_index_advance(value: int): Assert =
     let message: String =
         (index { value }).reduce(
             actual => next_index(actual).reduce(_ => "unexpected success", message => message),
@@ -45,7 +45,7 @@ fun _should_reject_index_advance(value: int): Assert =
         )
     assert_that(message).is_equal_to("index increment overflow")
 
-fun _should_add_count_to_index(value: int, offset: int, expected: int): Assert =
+private fun should_add_count_to_index(value: int, offset: int, expected: int): Assert =
     assert_that(
         (index { value }).reduce(
             index_value => (count { offset }).reduce(
@@ -56,7 +56,7 @@ fun _should_add_count_to_index(value: int, offset: int, expected: int): Assert =
         )
     ).is_equal_to(expected)
 
-fun _should_reject_index_addition(value: int, offset: int): Assert =
+private fun should_reject_index_addition(value: int, offset: int): Assert =
     let message: String =
         (index { value }).reduce(
             index_value => (count { offset }).reduce(
@@ -67,7 +67,7 @@ fun _should_reject_index_addition(value: int, offset: int): Assert =
         )
     assert_that(message).is_equal_to("index addition overflow")
 
-fun _should_add_count(left: int, right: int, expected: int): Assert =
+private fun should_add_count(left: int, right: int, expected: int): Assert =
     assert_that(
         (count { left }).reduce(
             left_value => (count { right }).reduce(
@@ -78,7 +78,7 @@ fun _should_add_count(left: int, right: int, expected: int): Assert =
         )
     ).is_equal_to(expected)
 
-fun _should_reject_count_addition(left: int, right: int): Assert =
+private fun should_reject_count_addition(left: int, right: int): Assert =
     let message: String =
         (count { left }).reduce(
             left_value => (count { right }).reduce(
@@ -89,7 +89,7 @@ fun _should_reject_count_addition(left: int, right: int): Assert =
         )
     assert_that(message).is_equal_to("count addition overflow")
 
-fun _should_add_size(left: int, right: int, expected: int): Assert =
+private fun should_add_size(left: int, right: int, expected: int): Assert =
     assert_that(
         (size { left }).reduce(
             size_value => (count { right }).reduce(
@@ -100,7 +100,7 @@ fun _should_add_size(left: int, right: int, expected: int): Assert =
         )
     ).is_equal_to(expected)
 
-fun _should_reject_size_addition(left: int, right: int): Assert =
+private fun should_reject_size_addition(left: int, right: int): Assert =
     let message: String =
         (size { left }).reduce(
             size_value => (count { right }).reduce(
@@ -111,7 +111,7 @@ fun _should_reject_size_addition(left: int, right: int): Assert =
         )
     assert_that(message).is_equal_to("size addition overflow")
 
-fun _should_subtract_size(left: int, right: int, expected: int): Assert =
+private fun should_subtract_size(left: int, right: int, expected: int): Assert =
     assert_that(
         (size { left }).reduce(
             size_value => (count { right }).reduce(
@@ -122,7 +122,7 @@ fun _should_subtract_size(left: int, right: int, expected: int): Assert =
         )
     ).is_equal_to(expected)
 
-fun _should_reject_size_subtraction(left: int, right: int): Assert =
+private fun should_reject_size_subtraction(left: int, right: int): Assert =
     let message: String =
         (size { left }).reduce(
             size_value => (count { right }).reduce(
