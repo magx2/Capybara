@@ -21,6 +21,13 @@ type probability -> double with constructor {
     else Error { message: "probability must be between 0.0 and 1.0" }
 }
 
+const ZERO_RATIO: ratio = ratio! { 0.0 }
+const WHOLE_RATIO: ratio = ratio! { 1.0 }
+const ZERO_PERCENTAGE: percentage = percentage! { 0.0 }
+const FULL_PERCENTAGE: percentage = percentage! { 100.0 }
+const IMPOSSIBLE_PROBABILITY: probability = probability! { 0.0 }
+const CERTAIN_PROBABILITY: probability = probability! { 1.0 }
+
 fun ratio_to_percentage(value: ratio): percentage =
     percentage! { @value * 100.0 }
 
