@@ -4000,7 +4000,7 @@ public final class PythonGenerator implements Generator {
     }
 
     private static boolean isTopLevelConstName(String name) {
-        return CONST_NAME_PATTERN.matcher(name).matches();
+        return ConstDependencyOrder.isTopLevelConstName(name);
     }
 
     static boolean isValidPyIdentifier(String value) {

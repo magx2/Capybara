@@ -392,8 +392,8 @@ class JavaScriptGeneratorTest {
                 .findFirst()
                 .orElseThrow();
         assertThat(main.code()).containsSubsequence(
-                "const zBASE = 21n;",
-                "const aDERIVED = capy.longMul(zBASE, 2n);"
+                "const Z_BASE = 21n;",
+                "const A_DERIVED = capy.longMul(Z_BASE, 2n);"
         );
 
         var output = runNode("""

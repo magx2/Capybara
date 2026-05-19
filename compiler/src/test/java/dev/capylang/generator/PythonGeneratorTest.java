@@ -320,8 +320,8 @@ class PythonGeneratorTest {
                 .findFirst()
                 .orElseThrow();
         assertThat(main.code()).containsSubsequence(
-                "zBASE = 21",
-                "aDERIVED = capy.long_mul(zBASE, 2)"
+                "Z_BASE = 21",
+                "A_DERIVED = capy.long_mul(Z_BASE, 2)"
         );
 
         var output = runPython("""
