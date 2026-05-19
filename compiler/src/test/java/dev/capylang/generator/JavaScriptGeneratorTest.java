@@ -349,6 +349,33 @@ class JavaScriptGeneratorTest {
     }
 
     @Test
+    void shouldGenerateExecutableNativeRandomSeedExport() throws Exception {
+        var program = compileProgram(List.of(new RawModule("Random", "/capy/lang", """
+                type seed -> long
+
+                fun seed(): seed = <native>
+                """)));
+
+        var generated = new JavaScriptGenerator().generate(program);
+        writeGenerated(generated);
+
+        var random = generated.modules().stream()
+                .filter(module -> module.relativePath().equals(Path.of("capy", "lang", "Random.js")))
+                .findFirst()
+                .orElseThrow();
+        assertThat(random.code())
+                .contains("return capy.toLong(Date.now());")
+                .doesNotContain("unsupported");
+
+        var output = runNode("""
+                const random = require('./capy/lang/Random.js');
+                console.log(typeof random.seed());
+                """);
+
+        assertThat(output).isEqualTo("bigint");
+    }
+
+    @Test
     void shouldSkipRuntimeProvidedStdlibSources() {
         var generated = new JavaScriptGenerator().generate(new CompiledProgram(List.of(
                 runtimeModule("List", "/capy/collection"),

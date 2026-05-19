@@ -662,16 +662,16 @@ class JavaExpressionEvaluatorTest {
     @Test
     void shouldGenerateNativeRandomSeedMethod() {
         var program = compileProgram("Random", "/capy/lang", """
-                data Seed { value: long }
+                type seed -> long
 
-                fun seed(): Seed = <native>
+                fun seed(): seed = <native>
                 """);
 
         var generated = new JavaGenerator().generate(program).modules().stream()
                 .map(dev.capylang.generator.GeneratedModule::code)
                 .collect(joining("\n"));
 
-        assertThat(generated).contains("return new Seed(java.util.concurrent.ThreadLocalRandom.current().nextLong());");
+        assertThat(generated).contains("return java.util.concurrent.ThreadLocalRandom.current().nextLong();");
         assertThat(generated).doesNotContain("__capybaraUnsupported");
     }
 

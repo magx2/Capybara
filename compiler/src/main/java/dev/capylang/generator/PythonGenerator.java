@@ -367,7 +367,9 @@ public final class PythonGenerator implements Generator {
             for (var parameter : method.parameters()) {
                 scope = scope.bind(parameter.sourceName(), pyIdentifier(parameter.generatedName()));
             }
-            var body = expressions.render(method.expression(), scope);
+            var body = isCapyLangRandomSeedMethod(method)
+                    ? "capy.current_millis()"
+                    : expressions.render(method.expression(), scope);
             var code = new StringBuilder();
             if (topLevel) {
                 code.append("def ").append(name).append("(").append(String.join(", ", params)).append("):\n");
@@ -388,6 +390,17 @@ public final class PythonGenerator implements Generator {
                 }
             }
             return code.toString();
+        }
+
+        private boolean isCapyLangRandomSeedMethod(JavaMethod method) {
+            return "capy.lang.Random".equals(moduleInfo.className())
+                   && "seed".equals(method.sourceName())
+                   && method.parameters().isEmpty()
+                   && method.sourceReturnType() instanceof CompiledPrimitiveBackedType primitiveBackedType
+                   && "seed".equals(primitiveBackedType.name())
+                   && method.expression() instanceof CompiledNothingValue nothingValue
+                   && (nothingValue.message().contains("`<native>`")
+                       || nothingValue.message().contains("native expression in function"));
         }
 
         private boolean isGeneratedConstructorName(String name) {
@@ -602,7 +615,7 @@ public final class PythonGenerator implements Generator {
             }
             if (owner.filter("capy.lang.Random"::equals).isPresent() && "seed".equals(methodName) && args.isEmpty()) {
                 require("capy.lang.Random");
-                return Optional.of(moduleVar("capy.lang.Random") + ".Seed({ 'value': capy.current_millis() })");
+                return Optional.of("capy.current_millis()");
             }
             return Optional.empty();
         }

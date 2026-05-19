@@ -276,6 +276,33 @@ class PythonGeneratorTest {
         assertThat(output).isEqualTo("parsed");
     }
 
+    @Test
+    void shouldGenerateExecutableNativeRandomSeedExport() throws Exception {
+        var program = compileProgram(List.of(new RawModule("Random", "/capy/lang", """
+                type seed -> long
+
+                fun seed(): seed = <native>
+                """)));
+
+        var generated = new PythonGenerator().generate(program);
+        writeGenerated(generated);
+
+        var random = generated.modules().stream()
+                .filter(module -> module.relativePath().equals(Path.of("capy", "lang", "Random.py")))
+                .findFirst()
+                .orElseThrow();
+        assertThat(random.code())
+                .contains("return capy.current_millis()")
+                .doesNotContain("unsupported");
+
+        var output = runPython("""
+                import capy.lang.Random as random
+                print(type(random.seed()).__name__)
+                """);
+
+        assertThat(output).isEqualTo("int");
+    }
+
     private static CompiledProgram compileProgram(String source) {
         return compileProgram(List.of(new RawModule("Main", "/foo", source)));
     }
