@@ -1,98 +1,112 @@
-union TimeUnit = NanoSecond | MicroSecond | MilliSecond | Second | Minute | Hour | Day | Week
+/// Time duration measured in nanoseconds.
+type nano_second -> long
 
-data NanoSecond { value: long } 
-data MicroSecond { value: long } 
-data MilliSecond { value: long } 
-data Second { value: long } 
-data Minute { value: long } 
-data Hour { value: long } 
-data Day { value: long } 
-data Week { value: long }
+/// Time duration measured in microseconds.
+type micro_second -> long
 
-fun TimeUnit.to_nano_seconds(): NanoSecond =
-    match this with
-    case NanoSecond { value } -> NanoSecond { value }
-    case MicroSecond { value } -> NanoSecond { value: value * 1_000 }
-    case MilliSecond { value } -> NanoSecond { value: value * 1_000_000 }
-    case Second { value } -> NanoSecond { value: value * 1_000_000_000 }
-    case Minute { value } -> NanoSecond { value: value * 60 * 1_000_000_000 }
-    case Hour { value } -> NanoSecond { value: value * 60 * 60 * 1_000_000_000 }
-    case Day { value } -> NanoSecond { value: value * 24 * 60 * 60 * 1_000_000_000 }
-    case Week { value } -> NanoSecond { value: value * 7 * 24 * 60 * 60 * 1_000_000_000 }
+/// Time duration measured in milliseconds.
+type milli_second -> long
 
-fun TimeUnit.to_micro_seconds(): MicroSecond =
-    match this with
-    case NanoSecond { value } -> MicroSecond { value: value / 1_000 }
-    case MicroSecond { value } -> MicroSecond { value }
-    case MilliSecond { value } -> MicroSecond { value: value * 1_000 }
-    case Second { value } -> MicroSecond { value: value * 1_000_000 }
-    case Minute { value } -> MicroSecond { value: value * 60 * 1_000_000 }
-    case Hour { value } -> MicroSecond { value: value * 60 * 60 * 1_000_000 }
-    case Day { value } -> MicroSecond { value: value * 24 * 60 * 60 * 1_000_000 }
-    case Week { value } -> MicroSecond { value: value * 7 * 24 * 60 * 60 * 1_000_000 }
+/// Time duration measured in seconds.
+type second -> long
 
-fun TimeUnit.to_milli_seconds():  MilliSecond =
-    match this with
-    case NanoSecond { value } -> MilliSecond { value: value / 1_000_000 }
-    case MicroSecond { value } -> MilliSecond { value: value / 1_000 }
-    case MilliSecond { value } -> MilliSecond { value }
-    case Second { value } -> MilliSecond { value: value * 1_000 }
-    case Minute { value } -> MilliSecond { value: value * 60 * 1_000 }
-    case Hour { value } -> MilliSecond { value: value * 60 * 60 * 1_000 }
-    case Day { value } -> MilliSecond { value: value * 24 * 60 * 60 * 1_000 }
-    case Week { value } -> MilliSecond { value: value * 7 * 24 * 60 * 60 * 1_000 }
+/// Time duration measured in minutes.
+type minute -> long
 
-fun TimeUnit.to_seconds(): Second =
-    match this with
-    case NanoSecond { value } -> Second { value: value / 1_000_000_000 }
-    case MicroSecond { value } -> Second { value: value / 1_000_000 }
-    case MilliSecond { value } -> Second { value: value / 1_000 }
-    case Second { value } -> Second { value }
-    case Minute { value } -> Second { value: value * 60 }
-    case Hour { value } -> Second { value: value * 60 * 60 }
-    case Day { value } -> Second { value: value * 24 * 60 * 60 }
-    case Week { value } -> Second { value: value * 7 *  24 * 60 * 60 }
+/// Time duration measured in hours.
+type hour -> long
 
-fun TimeUnit.to_minutes(): Minute =
-    match this with
-    case NanoSecond { value } -> Minute { value: value / (60 * 1_000_000_000) }
-    case MicroSecond { value } -> Minute { value: value / (60 * 1_000_000) }
-    case MilliSecond { value } -> Minute { value: value / (60 * 1_000) }
-    case Second { value } -> Minute { value: value / 60 }
-    case Minute { value } -> Minute { value }
-    case Hour { value } -> Minute { value: value * 60 }
-    case Day { value } -> Minute { value: value * 24 * 60 }
-    case Week { value } -> Minute { value: value * 7 * 24 * 60 }
+/// Time duration measured in days.
+type day -> long
 
-fun TimeUnit.to_hours(): Hour =
-    match this with
-    case NanoSecond { value } -> Hour { value: value / (60 * 60 * 1_000_000_000) }
-    case MicroSecond { value } -> Hour { value: value / (60 * 60 * 1_000_000) }
-    case MilliSecond { value } -> Hour { value: value / (60 * 60 * 1_000) }
-    case Second { value } -> Hour { value: value / (60 * 60) }
-    case Minute { value } -> Hour { value: value / 60 }
-    case Hour { value } -> Hour { value }
-    case Day { value } -> Hour { value: value * 24 }
-    case Week { value } -> Hour { value: value * 7 * 24 }
+/// Time duration measured in weeks.
+type week -> long
 
-fun TimeUnit.to_days(): Day =
-    match this with
-    case NanoSecond { value } -> Day { value: value / (24 * 60 * 60 * 1_000_000_000) }
-    case MicroSecond { value } -> Day { value: value / (24 * 60 * 60 * 1_000_000) }
-    case MilliSecond { value } -> Day { value: value / (24 * 60 * 60 * 1_000) }
-    case Second { value } -> Day { value: value / (24 * 60 * 60) }
-    case Minute { value } -> Day { value: value / (24 * 60) }
-    case Hour { value } -> Day { value: value / 24 }
-    case Day { value } -> Day { value }
-    case Week { value } -> Day { value: value * 7 }
+private const NANO_SECONDS_PER_MICRO_SECOND: long = 1_000L
+private const NANO_SECONDS_PER_MILLI_SECOND: long = 1_000_000L
+private const NANO_SECONDS_PER_SECOND: long = 1_000_000_000L
+private const MICRO_SECONDS_PER_MILLI_SECOND: long = 1_000L
+private const MICRO_SECONDS_PER_SECOND: long = 1_000_000L
+private const MILLI_SECONDS_PER_SECOND: long = 1_000L
+private const SECONDS_PER_MINUTE: long = 60L
+private const MINUTES_PER_HOUR: long = 60L
+private const HOURS_PER_DAY: long = 24L
+private const DAYS_PER_WEEK: long = 7L
+private const SECONDS_PER_HOUR: long = SECONDS_PER_MINUTE * MINUTES_PER_HOUR
+private const SECONDS_PER_DAY: long = SECONDS_PER_HOUR * HOURS_PER_DAY
+private const SECONDS_PER_WEEK: long = SECONDS_PER_DAY * DAYS_PER_WEEK
+private const MINUTES_PER_DAY: long = MINUTES_PER_HOUR * HOURS_PER_DAY
+private const MINUTES_PER_WEEK: long = MINUTES_PER_DAY * DAYS_PER_WEEK
+private const HOURS_PER_WEEK: long = HOURS_PER_DAY * DAYS_PER_WEEK
 
-fun TimeUnit.to_weeks(): Week =
-    match this with
-    case NanoSecond { value } -> Week { value: value / (7 * 24 * 60 * 60 * 1_000_000_000) }
-    case MicroSecond { value } -> Week { value: value / (7 * 24 * 60 * 60 * 1_000_000) }
-    case MilliSecond { value } -> Week { value: value / (7 * 24 * 60 * 60 * 1_000) }
-    case Second { value } -> Week { value: value / (7 * 24 * 60 * 60) }
-    case Minute { value } -> Week { value: value / (7 * 24 * 60) }
-    case Hour { value } -> Week { value: value / (7 * 24) }
-    case Day { value } -> Week { value: value / 7 }
-    case Week { value } -> Week { value }
+fun nano_second.to_nano_seconds(): nano_second = this
+fun micro_second.to_nano_seconds(): nano_second = nano_second { @this * NANO_SECONDS_PER_MICRO_SECOND }
+fun milli_second.to_nano_seconds(): nano_second = nano_second { @this * NANO_SECONDS_PER_MILLI_SECOND }
+fun second.to_nano_seconds(): nano_second = nano_second { @this * NANO_SECONDS_PER_SECOND }
+fun minute.to_nano_seconds(): nano_second = nano_second { @this * SECONDS_PER_MINUTE * NANO_SECONDS_PER_SECOND }
+fun hour.to_nano_seconds(): nano_second = nano_second { @this * SECONDS_PER_HOUR * NANO_SECONDS_PER_SECOND }
+fun day.to_nano_seconds(): nano_second = nano_second { @this * SECONDS_PER_DAY * NANO_SECONDS_PER_SECOND }
+fun week.to_nano_seconds(): nano_second = nano_second { @this * SECONDS_PER_WEEK * NANO_SECONDS_PER_SECOND }
+
+fun nano_second.to_micro_seconds(): micro_second = micro_second { @this / NANO_SECONDS_PER_MICRO_SECOND }
+fun micro_second.to_micro_seconds(): micro_second = this
+fun milli_second.to_micro_seconds(): micro_second = micro_second { @this * MICRO_SECONDS_PER_MILLI_SECOND }
+fun second.to_micro_seconds(): micro_second = micro_second { @this * MICRO_SECONDS_PER_SECOND }
+fun minute.to_micro_seconds(): micro_second = micro_second { @this * SECONDS_PER_MINUTE * MICRO_SECONDS_PER_SECOND }
+fun hour.to_micro_seconds(): micro_second = micro_second { @this * SECONDS_PER_HOUR * MICRO_SECONDS_PER_SECOND }
+fun day.to_micro_seconds(): micro_second = micro_second { @this * SECONDS_PER_DAY * MICRO_SECONDS_PER_SECOND }
+fun week.to_micro_seconds(): micro_second = micro_second { @this * SECONDS_PER_WEEK * MICRO_SECONDS_PER_SECOND }
+
+fun nano_second.to_milli_seconds(): milli_second = milli_second { @this / NANO_SECONDS_PER_MILLI_SECOND }
+fun micro_second.to_milli_seconds(): milli_second = milli_second { @this / MICRO_SECONDS_PER_MILLI_SECOND }
+fun milli_second.to_milli_seconds(): milli_second = this
+fun second.to_milli_seconds(): milli_second = milli_second { @this * MILLI_SECONDS_PER_SECOND }
+fun minute.to_milli_seconds(): milli_second = milli_second { @this * SECONDS_PER_MINUTE * MILLI_SECONDS_PER_SECOND }
+fun hour.to_milli_seconds(): milli_second = milli_second { @this * SECONDS_PER_HOUR * MILLI_SECONDS_PER_SECOND }
+fun day.to_milli_seconds(): milli_second = milli_second { @this * SECONDS_PER_DAY * MILLI_SECONDS_PER_SECOND }
+fun week.to_milli_seconds(): milli_second = milli_second { @this * SECONDS_PER_WEEK * MILLI_SECONDS_PER_SECOND }
+
+fun nano_second.to_seconds(): second = second { @this / NANO_SECONDS_PER_SECOND }
+fun micro_second.to_seconds(): second = second { @this / MICRO_SECONDS_PER_SECOND }
+fun milli_second.to_seconds(): second = second { @this / MILLI_SECONDS_PER_SECOND }
+fun second.to_seconds(): second = this
+fun minute.to_seconds(): second = second { @this * SECONDS_PER_MINUTE }
+fun hour.to_seconds(): second = second { @this * SECONDS_PER_HOUR }
+fun day.to_seconds(): second = second { @this * SECONDS_PER_DAY }
+fun week.to_seconds(): second = second { @this * SECONDS_PER_WEEK }
+
+fun nano_second.to_minutes(): minute = minute { @this / (SECONDS_PER_MINUTE * NANO_SECONDS_PER_SECOND) }
+fun micro_second.to_minutes(): minute = minute { @this / (SECONDS_PER_MINUTE * MICRO_SECONDS_PER_SECOND) }
+fun milli_second.to_minutes(): minute = minute { @this / (SECONDS_PER_MINUTE * MILLI_SECONDS_PER_SECOND) }
+fun second.to_minutes(): minute = minute { @this / SECONDS_PER_MINUTE }
+fun minute.to_minutes(): minute = this
+fun hour.to_minutes(): minute = minute { @this * MINUTES_PER_HOUR }
+fun day.to_minutes(): minute = minute { @this * MINUTES_PER_DAY }
+fun week.to_minutes(): minute = minute { @this * MINUTES_PER_WEEK }
+
+fun nano_second.to_hours(): hour = hour { @this / (SECONDS_PER_HOUR * NANO_SECONDS_PER_SECOND) }
+fun micro_second.to_hours(): hour = hour { @this / (SECONDS_PER_HOUR * MICRO_SECONDS_PER_SECOND) }
+fun milli_second.to_hours(): hour = hour { @this / (SECONDS_PER_HOUR * MILLI_SECONDS_PER_SECOND) }
+fun second.to_hours(): hour = hour { @this / SECONDS_PER_HOUR }
+fun minute.to_hours(): hour = hour { @this / MINUTES_PER_HOUR }
+fun hour.to_hours(): hour = this
+fun day.to_hours(): hour = hour { @this * HOURS_PER_DAY }
+fun week.to_hours(): hour = hour { @this * HOURS_PER_WEEK }
+
+fun nano_second.to_days(): day = day { @this / (SECONDS_PER_DAY * NANO_SECONDS_PER_SECOND) }
+fun micro_second.to_days(): day = day { @this / (SECONDS_PER_DAY * MICRO_SECONDS_PER_SECOND) }
+fun milli_second.to_days(): day = day { @this / (SECONDS_PER_DAY * MILLI_SECONDS_PER_SECOND) }
+fun second.to_days(): day = day { @this / SECONDS_PER_DAY }
+fun minute.to_days(): day = day { @this / MINUTES_PER_DAY }
+fun hour.to_days(): day = day { @this / HOURS_PER_DAY }
+fun day.to_days(): day = this
+fun week.to_days(): day = day { @this * DAYS_PER_WEEK }
+
+fun nano_second.to_weeks(): week = week { @this / (SECONDS_PER_WEEK * NANO_SECONDS_PER_SECOND) }
+fun micro_second.to_weeks(): week = week { @this / (SECONDS_PER_WEEK * MICRO_SECONDS_PER_SECOND) }
+fun milli_second.to_weeks(): week = week { @this / (SECONDS_PER_WEEK * MILLI_SECONDS_PER_SECOND) }
+fun second.to_weeks(): week = week { @this / SECONDS_PER_WEEK }
+fun minute.to_weeks(): week = week { @this / MINUTES_PER_WEEK }
+fun hour.to_weeks(): week = week { @this / HOURS_PER_WEEK }
+fun day.to_weeks(): week = week { @this / DAYS_PER_WEEK }
+fun week.to_weeks(): week = this
