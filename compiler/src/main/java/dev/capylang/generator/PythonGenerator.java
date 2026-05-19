@@ -1272,7 +1272,7 @@ public final class PythonGenerator implements Generator {
 
         private void require(String className) {
             var resolvedClassName = programContext.resolveClassName(className).orElse(className);
-            if (resolvedClassName.equals(moduleInfo.className())) {
+            if (isCurrentClassReference(className) || isCurrentClassReference(resolvedClassName)) {
                 return;
             }
             programContext.pathForClassName(resolvedClassName)
@@ -1283,7 +1283,12 @@ public final class PythonGenerator implements Generator {
             if (className.equals(moduleInfo.className())) {
                 return true;
             }
-            return classNameCandidates(className).contains(moduleInfo.className());
+            var currentClassAliases = classNameCandidates(moduleInfo.className());
+            if (currentClassAliases.contains(className)) {
+                return true;
+            }
+            return classNameCandidates(className).stream()
+                    .anyMatch(candidate -> candidate.equals(moduleInfo.className()) || currentClassAliases.contains(candidate));
         }
 
         private String dataConstructorReference(CompiledDataType dataType) {
