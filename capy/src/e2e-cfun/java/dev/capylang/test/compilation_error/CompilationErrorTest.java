@@ -107,6 +107,13 @@ public class CompilationErrorTest {
     }
 
     @Test
+    void shouldRejectPrimitiveBackedTypeNamesOutsideLowercaseLettersAndUnderscores() {
+        assertInvalidPrimitiveBackedTypeName("primitive_backed_type_uppercase_name", "Token");
+        assertInvalidPrimitiveBackedTypeName("primitive_backed_type_digit_name", "token1");
+        assertInvalidPrimitiveBackedTypeName("primitive_backed_type_leading_underscore_name", "_token");
+    }
+
+    @Test
     void shouldRejectEmptyIndexAccess() {
         var errors = compileProgram("""
                         data Box { value: String }
@@ -1771,6 +1778,18 @@ public class CompilationErrorTest {
         return compileProgram(fun, moduleName, List.of());
     }
 
+    private static void assertInvalidPrimitiveBackedTypeName(String moduleName, String typeName) {
+        var errors = compileProgram("type %s -> int".formatted(typeName), moduleName);
+
+        assertThat(errors)
+                .singleElement()
+                .satisfies(error -> {
+                    assertThat(error.file()).isEqualTo("/foo/boo/%s.cfun".formatted(moduleName));
+                    assertThat(error.message())
+                            .contains("Primitive-backed type name `%s` must start with a lowercase letter".formatted(typeName))
+                            .contains("contain only lowercase letters and underscores");
+                });
+    }
 
     private static final List<RawModule> DEFAULT_MODULES = List.of(
             new RawModule("String", "/capy/lang", """

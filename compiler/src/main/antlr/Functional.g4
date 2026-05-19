@@ -57,7 +57,7 @@ infixMethodLiteral: BACKTICKED_INFIX_METHOD_LITERAL | INFIX_METHOD_LITERAL;
 docComment: DOC_COMMENT;
 
 primitiveBackedTypeDeclaration: docComment* VISIBILITY? 'type' primitiveBackedTypeName MATCH_ARROW primitiveBackingType constructorClause?;
-primitiveBackedTypeName: NAME;
+primitiveBackedTypeName: NAME | TYPE;
 primitiveBackingType: 'byte' | 'int' | 'long' | 'float' | 'double' | stringBackingType;
 stringBackingType: { "String".equals(_input.LT(1).getText()) }? TYPE;
 typeDeclaration: docComment* VISIBILITY? 'union' genericTypeDeclaration constructorClause? '=' genericTypeDeclaration (PIPE genericTypeDeclaration)* deriveClause?
