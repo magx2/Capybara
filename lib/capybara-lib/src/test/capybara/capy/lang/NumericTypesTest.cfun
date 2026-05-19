@@ -1,0 +1,160 @@
+from /capy/test/Assert import { * }
+from /capy/lang/Effect import { * }
+from /capy/lang/NumericTypes import { * }
+from /capy/lang/Primitives import { * }
+from /capy/lang/Result import { * }
+from /capy/test/CapyTest import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/capy/lang/NumericTypes.cfun", [
+        test("non_negative_int accepts zero", () => _should_construct_non_negative_int(0, 0)),
+        test("non_negative_int rejects negative values", () => assert_that(non_negative_int { -1 }).fails("non_negative_int must be greater than or equal to 0")),
+        test("positive_int accepts positive values", () => _should_construct_positive_int(1, 1)),
+        test("positive_int rejects zero", () => assert_that(positive_int { 0 }).fails("positive_int must be greater than 0")),
+        test("non_negative_long accepts zero", () => _should_construct_non_negative_long(0L, 0L)),
+        test("non_negative_long rejects negative values", () => assert_that(non_negative_long { -1L }).fails("non_negative_long must be greater than or equal to 0")),
+        test("positive_long accepts positive values", () => _should_construct_positive_long(1L, 1L)),
+        test("positive_long rejects zero", () => assert_that(positive_long { 0L }).fails("positive_long must be greater than 0")),
+        test("non_zero_int accepts non-zero values", () => _should_construct_non_zero_int(-1, -1)),
+        test("non_zero_int rejects zero", () => assert_that(non_zero_int { 0 }).fails("non_zero_int must not be 0")),
+        test("non_zero_long accepts non-zero values", () => _should_construct_non_zero_long(-1L, -1L)),
+        test("non_zero_long rejects zero", () => assert_that(non_zero_long { 0L }).fails("non_zero_long must not be 0")),
+        test("non_negative_int addition returns non_negative_int", () => _should_add_non_negative_int(2, 3, 5)),
+        test("non_negative_int addition rejects overflow", () => _should_reject_non_negative_int_addition(MAX_INT_VALUE, 1)),
+        test("positive_int addition returns positive_int", () => _should_add_positive_int(2, 3, 5)),
+        test("positive_int addition rejects overflow", () => _should_reject_positive_int_addition(MAX_INT_VALUE, 1)),
+        test("non_negative_long addition returns non_negative_long", () => _should_add_non_negative_long(2L, 3L, 5L)),
+        test("non_negative_long addition rejects overflow", () => _should_reject_non_negative_long_addition(MAX_LONG_VALUE, 1L)),
+        test("positive_long addition returns positive_long", () => _should_add_positive_long(2L, 3L, 5L)),
+        test("positive_long addition rejects overflow", () => _should_reject_positive_long_addition(MAX_LONG_VALUE, 1L)),
+        test("non_negative_long subtraction validates result", () => _should_subtract_non_negative_long(7L, 2L, 5L)),
+        test("non_negative_long subtraction rejects negative result", () => _should_reject_non_negative_long_subtraction(2L, 7L)),
+    ])
+
+fun _should_construct_non_negative_int(value: int, expected: int): Assert =
+    assert_that((non_negative_int { value }).reduce(actual => @actual, _ => -1)).is_equal_to(expected)
+
+fun _should_construct_positive_int(value: int, expected: int): Assert =
+    assert_that((positive_int { value }).reduce(actual => @actual, _ => -1)).is_equal_to(expected)
+
+fun _should_construct_non_negative_long(value: long, expected: long): Assert =
+    assert_that((non_negative_long { value }).reduce(actual => @actual, _ => -1L)).is_equal_to(expected)
+
+fun _should_construct_positive_long(value: long, expected: long): Assert =
+    assert_that((positive_long { value }).reduce(actual => @actual, _ => -1L)).is_equal_to(expected)
+
+fun _should_construct_non_zero_int(value: int, expected: int): Assert =
+    assert_that((non_zero_int { value }).reduce(actual => @actual, _ => 0)).is_equal_to(expected)
+
+fun _should_construct_non_zero_long(value: long, expected: long): Assert =
+    assert_that((non_zero_long { value }).reduce(actual => @actual, _ => 0L)).is_equal_to(expected)
+
+fun _should_add_non_negative_int(left: int, right: int, expected: int): Assert =
+    assert_that(
+        (non_negative_int { left }).reduce(
+            left_value => (non_negative_int { right }).reduce(
+                right_value => add_non_negative_int(left_value, right_value).reduce(actual => @actual, _ => -1),
+                _ => -1
+            ),
+            _ => -1
+        )
+    ).is_equal_to(expected)
+
+fun _should_add_positive_int(left: int, right: int, expected: int): Assert =
+    assert_that(
+        (positive_int { left }).reduce(
+            left_value => (positive_int { right }).reduce(
+                right_value => add_positive_int(left_value, right_value).reduce(actual => @actual, _ => -1),
+                _ => -1
+            ),
+            _ => -1
+        )
+    ).is_equal_to(expected)
+
+fun _should_reject_non_negative_int_addition(left: int, right: int): Assert =
+    let message: String =
+        (non_negative_int { left }).reduce(
+            left_value => (non_negative_int { right }).reduce(
+                right_value => add_non_negative_int(left_value, right_value).reduce(_ => "unexpected success", message => message),
+                _ => "unexpected constructor failure"
+            ),
+            _ => "unexpected constructor failure"
+        )
+    assert_that(message).is_equal_to("non_negative_int addition overflow")
+
+fun _should_reject_positive_int_addition(left: int, right: int): Assert =
+    let message: String =
+        (positive_int { left }).reduce(
+            left_value => (positive_int { right }).reduce(
+                right_value => add_positive_int(left_value, right_value).reduce(_ => "unexpected success", message => message),
+                _ => "unexpected constructor failure"
+            ),
+            _ => "unexpected constructor failure"
+        )
+    assert_that(message).is_equal_to("positive_int addition overflow")
+
+fun _should_add_non_negative_long(left: long, right: long, expected: long): Assert =
+    assert_that(
+        (non_negative_long { left }).reduce(
+            left_value => (non_negative_long { right }).reduce(
+                right_value => add_non_negative_long(left_value, right_value).reduce(actual => @actual, _ => -1L),
+                _ => -1L
+            ),
+            _ => -1L
+        )
+    ).is_equal_to(expected)
+
+fun _should_reject_non_negative_long_addition(left: long, right: long): Assert =
+    let message: String =
+        (non_negative_long { left }).reduce(
+            left_value => (non_negative_long { right }).reduce(
+                right_value => add_non_negative_long(left_value, right_value).reduce(_ => "unexpected success", message => message),
+                _ => "unexpected constructor failure"
+            ),
+            _ => "unexpected constructor failure"
+        )
+    assert_that(message).is_equal_to("non_negative_long addition overflow")
+
+fun _should_add_positive_long(left: long, right: long, expected: long): Assert =
+    assert_that(
+        (positive_long { left }).reduce(
+            left_value => (positive_long { right }).reduce(
+                right_value => add_positive_long(left_value, right_value).reduce(actual => @actual, _ => -1L),
+                _ => -1L
+            ),
+            _ => -1L
+        )
+    ).is_equal_to(expected)
+
+fun _should_reject_positive_long_addition(left: long, right: long): Assert =
+    let message: String =
+        (positive_long { left }).reduce(
+            left_value => (positive_long { right }).reduce(
+                right_value => add_positive_long(left_value, right_value).reduce(_ => "unexpected success", message => message),
+                _ => "unexpected constructor failure"
+            ),
+            _ => "unexpected constructor failure"
+        )
+    assert_that(message).is_equal_to("positive_long addition overflow")
+
+fun _should_subtract_non_negative_long(left: long, right: long, expected: long): Assert =
+    assert_that(
+        (non_negative_long { left }).reduce(
+            left_value => (non_negative_long { right }).reduce(
+                right_value => subtract_non_negative_long(left_value, right_value).reduce(actual => @actual, _ => -1L),
+                _ => -1L
+            ),
+            _ => -1L
+        )
+    ).is_equal_to(expected)
+
+fun _should_reject_non_negative_long_subtraction(left: long, right: long): Assert =
+    let message: String =
+        (non_negative_long { left }).reduce(
+            left_value => (non_negative_long { right }).reduce(
+                right_value => subtract_non_negative_long(left_value, right_value).reduce(_ => "unexpected success", message => message),
+                _ => "unexpected constructor failure"
+            ),
+            _ => "unexpected constructor failure"
+        )
+    assert_that(message).is_equal_to("non_negative_long must be greater than or equal to 0")

@@ -1,0 +1,30 @@
+from /capy/lang/Primitives import { * }
+from /capy/lang/Result import { * }
+
+const BYTES_IN_KIB: double = 1024.0
+const BYTES_IN_MIB: double = 1048576.0
+const BYTES_IN_GIB: double = 1073741824.0
+
+/// Non-negative number of bytes.
+type byte_count -> long with constructor {
+    if value >= 0L
+    then Success { value }
+    else Error { message: "byte_count must be greater than or equal to 0" }
+}
+
+fun add_byte_count(left: byte_count, right: byte_count): Result[byte_count] =
+    if @left > MAX_LONG_VALUE - @right
+    then Error { message: "byte_count addition overflow" }
+    else Success { byte_count! { @left + @right } }
+
+fun subtract_byte_count(left: byte_count, right: byte_count): Result[byte_count] =
+    byte_count { @left - @right }
+
+fun byte_count_to_kib(value: byte_count): double =
+    @value / BYTES_IN_KIB
+
+fun byte_count_to_mib(value: byte_count): double =
+    @value / BYTES_IN_MIB
+
+fun byte_count_to_gib(value: byte_count): double =
+    @value / BYTES_IN_GIB

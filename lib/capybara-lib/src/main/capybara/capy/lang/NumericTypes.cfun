@@ -1,0 +1,70 @@
+from /capy/lang/Primitives import { * }
+from /capy/lang/Result import { * }
+
+/// Integer value greater than or equal to zero.
+type non_negative_int -> int with constructor {
+    if value >= 0
+    then Success { value }
+    else Error { message: "non_negative_int must be greater than or equal to 0" }
+}
+
+/// Integer value greater than zero.
+type positive_int -> int with constructor {
+    if value > 0
+    then Success { value }
+    else Error { message: "positive_int must be greater than 0" }
+}
+
+/// Long value greater than or equal to zero.
+type non_negative_long -> long with constructor {
+    if value >= 0L
+    then Success { value }
+    else Error { message: "non_negative_long must be greater than or equal to 0" }
+}
+
+/// Long value greater than zero.
+type positive_long -> long with constructor {
+    if value > 0L
+    then Success { value }
+    else Error { message: "positive_long must be greater than 0" }
+}
+
+/// Integer value that cannot be zero.
+type non_zero_int -> int with constructor {
+    if value != 0
+    then Success { value }
+    else Error { message: "non_zero_int must not be 0" }
+}
+
+/// Long value that cannot be zero.
+type non_zero_long -> long with constructor {
+    if value != 0L
+    then Success { value }
+    else Error { message: "non_zero_long must not be 0" }
+}
+
+fun add_non_negative_int(left: non_negative_int, right: non_negative_int): Result[non_negative_int] =
+    if @left > MAX_INT_VALUE - @right
+    then Error { message: "non_negative_int addition overflow" }
+    else Success { non_negative_int! { @left + @right } }
+
+fun subtract_non_negative_int(left: non_negative_int, right: non_negative_int): Result[non_negative_int] =
+    non_negative_int { @left - @right }
+
+fun add_positive_int(left: positive_int, right: positive_int): Result[positive_int] =
+    if @left > MAX_INT_VALUE - @right
+    then Error { message: "positive_int addition overflow" }
+    else Success { positive_int! { @left + @right } }
+
+fun add_non_negative_long(left: non_negative_long, right: non_negative_long): Result[non_negative_long] =
+    if @left > MAX_LONG_VALUE - @right
+    then Error { message: "non_negative_long addition overflow" }
+    else Success { non_negative_long! { @left + @right } }
+
+fun subtract_non_negative_long(left: non_negative_long, right: non_negative_long): Result[non_negative_long] =
+    non_negative_long { @left - @right }
+
+fun add_positive_long(left: positive_long, right: positive_long): Result[positive_long] =
+    if @left > MAX_LONG_VALUE - @right
+    then Error { message: "positive_long addition overflow" }
+    else Success { positive_long! { @left + @right } }
