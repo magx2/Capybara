@@ -1,0 +1,75 @@
+from /capy/test/Assert import { * }
+from /capy/lang/Effect import { * }
+from /capy/lang/Primitives import { * }
+from /capy/lang/Result import { * }
+from /capy/io/ByteSize import { * }
+from /capy/test/CapyTest import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/capy/io/ByteSize.cfun", [
+        test("byte_count accepts zero", () => _should_construct_byte_count(0L, 0L)),
+        test("byte_count rejects negative values", () => assert_that(byte_count { -1L }).fails("byte_count must be greater than or equal to 0")),
+        test("byte_count addition returns byte_count", () => _should_add_byte_count(1024L, 512L, 1536L)),
+        test("byte_count addition rejects overflow", () => _should_reject_byte_count_addition(MAX_LONG_VALUE, 1L)),
+        test("byte_count subtraction validates result", () => _should_subtract_byte_count(1024L, 512L, 512L)),
+        test("byte_count subtraction rejects negative result", () => _should_reject_byte_count_subtraction(512L, 1024L)),
+        test("byte_count converts to kib", () => _should_convert_to_kib(2048L, 2.0)),
+        test("byte_count converts to mib", () => _should_convert_to_mib(1048576L, 1.0)),
+        test("byte_count converts to gib", () => _should_convert_to_gib(1073741824L, 1.0)),
+    ])
+
+fun _should_construct_byte_count(value: long, expected: long): Assert =
+    assert_that((byte_count { value }).reduce(actual => @actual, _ => -1L)).is_equal_to(expected)
+
+fun _should_add_byte_count(left: long, right: long, expected: long): Assert =
+    assert_that(
+        (byte_count { left }).reduce(
+            left_value => (byte_count { right }).reduce(
+                right_value => add_byte_count(left_value, right_value).reduce(actual => @actual, _ => -1L),
+                _ => -1L
+            ),
+            _ => -1L
+        )
+    ).is_equal_to(expected)
+
+fun _should_reject_byte_count_addition(left: long, right: long): Assert =
+    let message: String =
+        (byte_count { left }).reduce(
+            left_value => (byte_count { right }).reduce(
+                right_value => add_byte_count(left_value, right_value).reduce(_ => "unexpected success", message => message),
+                _ => "unexpected constructor failure"
+            ),
+            _ => "unexpected constructor failure"
+        )
+    assert_that(message).is_equal_to("byte_count addition overflow")
+
+fun _should_subtract_byte_count(left: long, right: long, expected: long): Assert =
+    assert_that(
+        (byte_count { left }).reduce(
+            left_value => (byte_count { right }).reduce(
+                right_value => subtract_byte_count(left_value, right_value).reduce(actual => @actual, _ => -1L),
+                _ => -1L
+            ),
+            _ => -1L
+        )
+    ).is_equal_to(expected)
+
+fun _should_reject_byte_count_subtraction(left: long, right: long): Assert =
+    let message: String =
+        (byte_count { left }).reduce(
+            left_value => (byte_count { right }).reduce(
+                right_value => subtract_byte_count(left_value, right_value).reduce(_ => "unexpected success", message => message),
+                _ => "unexpected constructor failure"
+            ),
+            _ => "unexpected constructor failure"
+        )
+    assert_that(message).is_equal_to("byte_count must be greater than or equal to 0")
+
+fun _should_convert_to_kib(value: long, expected: double): Assert =
+    assert_that((byte_count { value }).reduce(actual => byte_count_to_kib(actual), _ => -1.0)).is_equal_to(expected)
+
+fun _should_convert_to_mib(value: long, expected: double): Assert =
+    assert_that((byte_count { value }).reduce(actual => byte_count_to_mib(actual), _ => -1.0)).is_equal_to(expected)
+
+fun _should_convert_to_gib(value: long, expected: double): Assert =
+    assert_that((byte_count { value }).reduce(actual => byte_count_to_gib(actual), _ => -1.0)).is_equal_to(expected)

@@ -1,0 +1,46 @@
+from /capy/lang/Primitives import { * }
+from /capy/lang/Result import { * }
+
+/// Zero-based collection position.
+type index -> int with constructor {
+    if value >= 0
+    then Success { value }
+    else Error { message: "index must be greater than or equal to 0" }
+}
+
+/// Number of items in a collection or iterable result.
+type count -> int with constructor {
+    if value >= 0
+    then Success { value }
+    else Error { message: "count must be greater than or equal to 0" }
+}
+
+/// Collection size value.
+type size -> int with constructor {
+    if value >= 0
+    then Success { value }
+    else Error { message: "size must be greater than or equal to 0" }
+}
+
+fun next_index(value: index): Result[index] =
+    if @value == MAX_INT_VALUE
+    then Error { message: "index increment overflow" }
+    else Success { index! { @value + 1 } }
+
+fun add_count_to_index(value: index, offset: count): Result[index] =
+    if @value > MAX_INT_VALUE - @offset
+    then Error { message: "index addition overflow" }
+    else Success { index! { @value + @offset } }
+
+fun add_count(left: count, right: count): Result[count] =
+    if @left > MAX_INT_VALUE - @right
+    then Error { message: "count addition overflow" }
+    else Success { count! { @left + @right } }
+
+fun add_size(value: size, amount: count): Result[size] =
+    if @value > MAX_INT_VALUE - @amount
+    then Error { message: "size addition overflow" }
+    else Success { size! { @value + @amount } }
+
+fun subtract_size(value: size, amount: count): Result[size] =
+    size { @value - @amount }
