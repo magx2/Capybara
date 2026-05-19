@@ -479,6 +479,52 @@ class JavaExpressionEvaluatorTest {
     }
 
     @Test
+    void shouldCompileStarImportFromEnumOnlyOwnerModule() {
+        var generatedProgram = new JavaGenerator().generate(compileProgram(List.of(
+                new RawModule("Color", "/foo", """
+                        enum Color { RED, BLUE }
+                        """),
+                new RawModule("Consumer", "/foo/app", """
+                        from /foo/Color import { * }
+
+                        fun selected(): Color = RED
+                        """)
+        )));
+        var generated = generatedProgram.modules().stream()
+                .map(dev.capylang.generator.GeneratedModule::code)
+                .collect(joining("\n"));
+
+        assertThat(generated).contains("import static foo.Color.*;");
+        assertThat(generated).doesNotContain("ColorModule");
+        assertGeneratedJavaCompiles(generatedProgram);
+    }
+
+    @Test
+    void shouldCompileStarImportFromEnumOwnerModuleWithHelpers() {
+        var generatedProgram = new JavaGenerator().generate(compileProgram(List.of(
+                new RawModule("Ordering", "/foo", """
+                        enum Ordering { LESS, EQUAL, GREATER }
+
+                        fun from_int(value: int): Ordering =
+                            if value < 0 then LESS
+                            else if value > 0 then GREATER
+                            else EQUAL
+                        """),
+                new RawModule("Consumer", "/foo/app", """
+                        from /foo/Ordering import { * }
+
+                        fun selected(): Ordering = from_int(1)
+                        """)
+        )));
+        var generated = generatedProgram.modules().stream()
+                .map(dev.capylang.generator.GeneratedModule::code)
+                .collect(joining("\n"));
+
+        assertThat(generated).contains("import static foo.OrderingModule.*;");
+        assertGeneratedJavaCompiles(generatedProgram);
+    }
+
+    @Test
     void shouldStillRequireBracesForSingleValues() {
         var programResult = CapybaraCompiler.INSTANCE.compile(List.of(new RawModule("test", "/foo/boo", """
                 single Done

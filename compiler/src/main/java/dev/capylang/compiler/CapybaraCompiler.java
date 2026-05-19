@@ -208,6 +208,21 @@ public class CapybaraCompiler {
         var programModuleRefs = program.modules().stream().map(module -> new ModuleRef(module.name(), module.path())).toList();
         var libraryModuleRefs = libraries.stream().map(module -> new ModuleRef(module.name(), module.path())).toList();
         var allModuleRefs = Stream.concat(programModuleRefs.stream(), libraryModuleRefs.stream()).toList();
+        var moduleHelperClassRequiredByModule = new HashMap<String, Boolean>();
+        for (var library : libraries) {
+            putImportedModuleEntry(
+                    moduleHelperClassRequiredByModule,
+                    new ModuleRef(library.name(), library.path()),
+                    moduleHelperClassRequired(library)
+            );
+        }
+        for (var module : program.modules()) {
+            putOwnedModuleEntry(
+                    moduleHelperClassRequiredByModule,
+                    new ModuleRef(module.name(), module.path()),
+                    moduleHelperClassRequired(module)
+            );
+        }
 
         var linkedTypesByModule = new HashMap<String, SortedMap<String, GenericDataType>>();
         for (var library : libraries) {
@@ -226,7 +241,7 @@ public class CapybaraCompiler {
             );
         }
 
-        var moduleLinkIndex = buildModuleLinkIndex(allModuleRefs, linkedTypesByModule);
+        var moduleLinkIndex = buildModuleLinkIndex(allModuleRefs, linkedTypesByModule, moduleHelperClassRequiredByModule);
         var moduleClassNameByModuleName = moduleLinkIndex.moduleJavaClassNameByModuleName();
         var staticImportsByModule = new HashMap<String, SortedSet<CompiledModule.StaticImport>>();
         for (var library : libraries) {
@@ -463,7 +478,8 @@ public class CapybaraCompiler {
 
     private ModuleLinkIndex buildModuleLinkIndex(
             List<ModuleRef> allModuleRefs,
-            Map<String, SortedMap<String, GenericDataType>> linkedTypesByModule
+            Map<String, SortedMap<String, GenericDataType>> linkedTypesByModule,
+            Map<String, Boolean> moduleHelperClassRequiredByModule
     ) {
         var modulesByExactName = new LinkedHashMap<String, ModuleRef>();
         var modulesByQualifiedName = new LinkedHashMap<String, ModuleRef>();
@@ -478,7 +494,8 @@ public class CapybaraCompiler {
 
             var linkedTypes = getModuleEntry(linkedTypesByModule, module);
             putImportedModuleEntry(linkedTypesByModuleName, module, linkedTypes);
-            putImportedModuleEntry(moduleJavaClassNameByModuleName, module, moduleJavaClassName(module, linkedTypes));
+            var moduleHelperClassRequired = Boolean.TRUE.equals(getModuleEntry(moduleHelperClassRequiredByModule, module));
+            putImportedModuleEntry(moduleJavaClassNameByModuleName, module, moduleJavaClassName(module, linkedTypes, moduleHelperClassRequired));
 
             var tailName = moduleTailName(module);
             if (tailName == null || ambiguousTailNames.contains(tailName)) {
@@ -1380,7 +1397,26 @@ public class CapybaraCompiler {
         return null;
     }
 
-    private String moduleJavaClassName(ModuleRef module, SortedMap<String, GenericDataType> linkedTypes) {
+    private boolean moduleHelperClassRequired(Module module) {
+        return module.functional().definitions().stream()
+                .filter(Function.class::isInstance)
+                .map(Function.class::cast)
+                .anyMatch(this::isStaticModuleMember);
+    }
+
+    private boolean moduleHelperClassRequired(CompiledModule module) {
+        return module.functions().stream().anyMatch(this::isStaticModuleMember);
+    }
+
+    private boolean isStaticModuleMember(Function function) {
+        return !function.name().startsWith(METHOD_DECL_PREFIX);
+    }
+
+    private boolean isStaticModuleMember(CompiledFunction function) {
+        return !function.name().startsWith(METHOD_DECL_PREFIX);
+    }
+
+    private String moduleJavaClassName(ModuleRef module, SortedMap<String, GenericDataType> linkedTypes, boolean moduleHelperClassRequired) {
         var className = module.path().replace('/', '.').replace('\\', '.') + "." + module.name();
         if (linkedTypes == null) {
             return className;
@@ -1392,7 +1428,7 @@ public class CapybaraCompiler {
         if (ownerType instanceof CompiledDataType dataType && dataType.nativeType()) {
             return className;
         }
-        if (ownerType != null) {
+        if (ownerType != null && moduleHelperClassRequired) {
             return className + "Module";
         }
         return className;
