@@ -22,11 +22,11 @@ fun _plus_5(value: int): int = value + 5
 
 fun should_map_right(): Assert =
     let either = _right(10)
-    assert_that(either.map(:_plus_5)).is_equal_to(Right { 15 })
+    assert_that(either.map_right(:_plus_5)).is_equal_to(Right { 15 })
 
 fun should_keep_left_when_mapping_right(): Assert =
     let either = _left("missing")
-    assert_that(either.map(:_plus_5)).is_equal_to(Left { "missing" })
+    assert_that(either.map_right(:_plus_5)).is_equal_to(Left { "missing" })
 
 fun _right_plus_5(value: int): Either[String, int] = Right { value + 5 }
 
