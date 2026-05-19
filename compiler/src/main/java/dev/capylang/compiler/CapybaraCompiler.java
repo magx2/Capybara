@@ -4430,6 +4430,10 @@ public class CapybaraCompiler {
             && actual instanceof PrimitiveLinkedType actualPrimitive) {
             return isAssignablePrimitiveReturnType(expectedPrimitive, actualPrimitive);
         }
+        if (expected instanceof PrimitiveLinkedType expectedPrimitive
+            && actual instanceof CompiledPrimitiveBackedType actualPrimitiveBacked) {
+            return isAssignablePrimitiveBackedReturnType(expectedPrimitive, actualPrimitiveBacked);
+        }
         if (expected instanceof CollectionLinkedType.CompiledList expectedList
             && actual instanceof CollectionLinkedType.CompiledList actualList) {
             return isAssignableReturnType(expectedList.elementType(), actualList.elementType(), dataTypes);
@@ -4608,6 +4612,13 @@ public class CapybaraCompiler {
                    && (expected == PrimitiveLinkedType.FLOAT
                        || expected == PrimitiveLinkedType.DOUBLE))
                || (actual == PrimitiveLinkedType.FLOAT && expected == PrimitiveLinkedType.DOUBLE);
+    }
+
+    private boolean isAssignablePrimitiveBackedReturnType(
+            PrimitiveLinkedType expected,
+            CompiledPrimitiveBackedType actual
+    ) {
+        return isAssignablePrimitiveReturnType(expected, actual.backingType());
     }
 
     private boolean sameTypeName(String left, String right) {
@@ -5065,6 +5076,12 @@ public class CapybaraCompiler {
         if (expectedPrimitive.isPresent() && actualPrimitive.isPresent()) {
             return isAssignablePrimitiveReturnType(expectedPrimitive.get(), actualPrimitive.get());
         }
+        if (expectedPrimitive.isPresent()) {
+            var actualPrimitiveBacked = primitiveBackedTypeDescriptor(actual, dataTypes);
+            if (actualPrimitiveBacked.isPresent()) {
+                return isAssignablePrimitiveBackedReturnType(expectedPrimitive.get(), actualPrimitiveBacked.orElseThrow());
+            }
+        }
         if (expected.startsWith("List[") && expected.endsWith("]")
             && actual.startsWith("List[") && actual.endsWith("]")) {
             return isAssignableTypeDescriptor(
@@ -5122,6 +5139,22 @@ public class CapybaraCompiler {
             }
         }
         return true;
+    }
+
+    private Optional<CompiledPrimitiveBackedType> primitiveBackedTypeDescriptor(
+            String descriptor,
+            Map<String, GenericDataType> dataTypes
+    ) {
+        var normalized = normalizeDescriptor(descriptor);
+        return dataTypes.values().stream()
+                .filter(CompiledPrimitiveBackedType.class::isInstance)
+                .map(CompiledPrimitiveBackedType.class::cast)
+                .filter(type -> normalized.equals(normalizeDescriptor(type.name()))
+                                || normalized.equals(normalizeDescriptor(type.cfunType()))
+                                || normalizeQualifiedTypeName(normalized).equals(normalizeQualifiedTypeName(type.cfunType()))
+                                || sameTypeName(normalized, type.name())
+                                || sameTypeName(normalized, type.cfunType()))
+                .findFirst();
     }
 
     private boolean isSubtypeDescriptorAssignable(ParsedGenericTypeName actual, ParsedGenericTypeName expected, Map<String, GenericDataType> dataTypes) {

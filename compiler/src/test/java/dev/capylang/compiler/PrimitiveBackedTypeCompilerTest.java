@@ -150,6 +150,47 @@ class PrimitiveBackedTypeCompilerTest {
     }
 
     @Test
+    void shouldUsePrimitiveBackedValuesWhereBackingPrimitiveIsExpectedAcrossExpressionShapes() {
+        compileSuccess(List.of(optionModule(), new RawModule("Indexes", "/foo/app", """
+                type index -> int with constructor {
+                    if value >= 0
+                    then value
+                    else 0
+                }
+
+                data Box { value: int }
+
+                fun takes_int(value: int): int = value
+                fun takes_list(values: List[int]): List[int] = values
+                fun takes_set(values: Set[int]): Set[int] = values
+                fun takes_dict(values: Dict[int]): Dict[int] = values
+                fun takes_tuple(value: Tuple[int, long]): Tuple[int, long] = value
+                fun return_int(idx: index): int = idx
+                fun return_long(idx: index): long = idx
+                fun call_parameter(idx: index): int = takes_int(idx)
+                fun list_parameter(values: List[index]): List[int] = takes_list(values)
+                fun set_parameter(values: Set[index]): Set[int] = takes_set(values)
+                fun dict_parameter(values: Dict[index]): Dict[int] = takes_dict(values)
+                fun tuple_parameter(value: Tuple[index, index]): Tuple[int, long] = takes_tuple(value)
+                fun typed_let(idx: index): int =
+                    let value: int = idx
+                    value
+                fun data_field(idx: index): Box = Box { idx }
+                fun tuple_literal(idx: index): Tuple[int, long] = (idx, idx)
+                fun list_literal(idx: index): List[int] = [idx, 1]
+                fun set_literal(idx: index): Set[int] = {idx, 1}
+                fun dict_literal(idx: index): Dict[int] = {"idx": idx}
+                fun lambda_return(idx: index): int => int = value => idx
+                fun function_invoke(fn: int => int, idx: index): int = fn(idx)
+                fun if_branch(flag: bool, idx: index): int = if flag then idx else 0
+                fun match_branch(value: Option[index]): int =
+                    match value with
+                    case Some { idx } -> idx
+                    case None -> 0
+                """)));
+    }
+
+    @Test
     void shouldRejectUnwrapForNonPrimitiveBackedValues() {
         var error = compileFailure(new RawModule("Ids", "/foo/app", """
                 fun bad(id: int): int = @id
