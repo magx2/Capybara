@@ -6,41 +6,41 @@ from /capy/test/CapyTest import { * }
 
 fun tests(): Effect[TestFile] =
     test_file("/capy/lang/BoundedNumber.cfun", [
-        test("ratio accepts zero", () => _should_construct_ratio(0.0, 0.0)),
-        test("ratio accepts one", () => _should_construct_ratio(1.0, 1.0)),
+        test("ratio accepts zero", () => should_construct_ratio(0.0, 0.0)),
+        test("ratio accepts one", () => should_construct_ratio(1.0, 1.0)),
         test("ratio rejects values below zero", () => assert_that(ratio { -0.1 }).fails("ratio must be between 0.0 and 1.0")),
         test("ratio rejects values above one", () => assert_that(ratio { 1.1 }).fails("ratio must be between 0.0 and 1.0")),
-        test("percentage accepts zero", () => _should_construct_percentage(0.0, 0.0)),
-        test("percentage accepts one hundred", () => _should_construct_percentage(100.0, 100.0)),
+        test("percentage accepts zero", () => should_construct_percentage(0.0, 0.0)),
+        test("percentage accepts one hundred", () => should_construct_percentage(100.0, 100.0)),
         test("percentage rejects values below zero", () => assert_that(percentage { -0.1 }).fails("percentage must be between 0.0 and 100.0")),
         test("percentage rejects values above one hundred", () => assert_that(percentage { 100.1 }).fails("percentage must be between 0.0 and 100.0")),
-        test("probability accepts zero", () => _should_construct_probability(0.0, 0.0)),
-        test("probability accepts one", () => _should_construct_probability(1.0, 1.0)),
+        test("probability accepts zero", () => should_construct_probability(0.0, 0.0)),
+        test("probability accepts one", () => should_construct_probability(1.0, 1.0)),
         test("probability rejects values below zero", () => assert_that(probability { -0.1 }).fails("probability must be between 0.0 and 1.0")),
         test("probability rejects values above one", () => assert_that(probability { 1.1 }).fails("probability must be between 0.0 and 1.0")),
-        test("ratio converts to percentage", () => _should_convert_ratio_to_percentage(0.25, 25.0)),
-        test("ratio converts to probability", () => _should_convert_ratio_to_probability(0.25, 0.25)),
-        test("percentage converts to ratio", () => _should_convert_percentage_to_ratio(25.0, 0.25)),
-        test("probability converts to ratio", () => _should_convert_probability_to_ratio(0.25, 0.25)),
+        test("ratio converts to percentage", () => should_convert_ratio_to_percentage(0.25, 25.0)),
+        test("ratio converts to probability", () => should_convert_ratio_to_probability(0.25, 0.25)),
+        test("percentage converts to ratio", () => should_convert_percentage_to_ratio(25.0, 0.25)),
+        test("probability converts to ratio", () => should_convert_probability_to_ratio(0.25, 0.25)),
     ])
 
-fun _should_construct_ratio(value: double, expected: double): Assert =
+private fun should_construct_ratio(value: double, expected: double): Assert =
     assert_that((ratio { value }).reduce(actual => @actual, _ => -1.0)).is_equal_to(expected)
 
-fun _should_construct_percentage(value: double, expected: double): Assert =
+private fun should_construct_percentage(value: double, expected: double): Assert =
     assert_that((percentage { value }).reduce(actual => @actual, _ => -1.0)).is_equal_to(expected)
 
-fun _should_construct_probability(value: double, expected: double): Assert =
+private fun should_construct_probability(value: double, expected: double): Assert =
     assert_that((probability { value }).reduce(actual => @actual, _ => -1.0)).is_equal_to(expected)
 
-fun _should_convert_ratio_to_percentage(value: double, expected: double): Assert =
+private fun should_convert_ratio_to_percentage(value: double, expected: double): Assert =
     assert_that((ratio { value }).reduce(actual => @(ratio_to_percentage(actual)), _ => -1.0)).is_equal_to(expected)
 
-fun _should_convert_ratio_to_probability(value: double, expected: double): Assert =
+private fun should_convert_ratio_to_probability(value: double, expected: double): Assert =
     assert_that((ratio { value }).reduce(actual => @(ratio_to_probability(actual)), _ => -1.0)).is_equal_to(expected)
 
-fun _should_convert_percentage_to_ratio(value: double, expected: double): Assert =
+private fun should_convert_percentage_to_ratio(value: double, expected: double): Assert =
     assert_that((percentage { value }).reduce(actual => @(percentage_to_ratio(actual)), _ => -1.0)).is_equal_to(expected)
 
-fun _should_convert_probability_to_ratio(value: double, expected: double): Assert =
+private fun should_convert_probability_to_ratio(value: double, expected: double): Assert =
     assert_that((probability { value }).reduce(actual => @(probability_to_ratio(actual)), _ => -1.0)).is_equal_to(expected)
