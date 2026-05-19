@@ -329,10 +329,11 @@ public final class JavaScriptGenerator implements Generator {
 
         private String renderConst(JavaConst javaConst) {
             var expression = expressions.render(javaConst.expression(), Scope.root());
+            var name = jsConstIdentifier(javaConst.name());
             if (!javaConst.isPrivate()) {
-                exportNames.add(javaConst.name());
+                exportNames.add(name);
             }
-            return "const " + javaConst.name() + " = " + expression + ";\n";
+            return "const " + name + " = " + expression + ";\n";
         }
 
         private String renderFunction(JavaMethod method, boolean topLevel) {
@@ -1292,7 +1293,7 @@ public final class JavaScriptGenerator implements Generator {
                 return false;
             }
             var name = simpleMethodName(functionCall.name());
-            return name.contains("__local_const_") || CONST_NAME_PATTERN.matcher(name).matches();
+            return name.contains("__local_const_") || isTopLevelConstName(name);
         }
     }
 
@@ -1415,6 +1416,7 @@ public final class JavaScriptGenerator implements Generator {
                 module.javaClass().staticConsts().stream()
                         .filter(javaConst -> !javaConst.isPrivate())
                         .map(JavaConst::name)
+                        .map(JavaScriptGenerator::jsConstIdentifier)
                         .forEach(moduleExports::add);
                 module.javaClass().staticMethods().stream()
                         .filter(method -> !method.isPrivate())
@@ -1574,12 +1576,15 @@ public final class JavaScriptGenerator implements Generator {
         }
 
         String emittedFunctionName(String name, List<CompiledType> parameterTypes) {
+            var simple = simpleMethodName(name);
+            if (parameterTypes.isEmpty() && isTopLevelConstName(simple)) {
+                return jsConstIdentifier(simple);
+            }
             var key = signatureKey(name, parameterTypes);
             if (functionNameOverrides.containsKey(key)) {
                 return functionNameOverrides.get(key);
             }
             var parameterSignature = parameterTypes.stream().map(String::valueOf).collect(joining(","));
-            var simple = simpleMethodName(name);
             if (simple.contains("__local_const_")) {
                 return normalizeJsIdentifier(simple);
             }
@@ -5220,6 +5225,17 @@ public final class JavaScriptGenerator implements Generator {
             return identifier + "_";
         }
         return identifier;
+    }
+
+    static String jsConstIdentifier(String rawName) {
+        if (isTopLevelConstName(rawName) && isValidJsIdentifier(rawName) && !JS_KEYWORDS.contains(rawName)) {
+            return rawName;
+        }
+        return normalizeJsIdentifier(rawName);
+    }
+
+    private static boolean isTopLevelConstName(String name) {
+        return CONST_NAME_PATTERN.matcher(name).matches();
     }
 
     private static String encodeSymbolicIdentifier(String raw) {

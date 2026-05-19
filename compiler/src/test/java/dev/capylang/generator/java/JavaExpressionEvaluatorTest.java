@@ -301,6 +301,25 @@ class JavaExpressionEvaluatorTest {
     }
 
     @Test
+    void shouldPreserveUpperSnakeConstNames() {
+        var program = compileProgram("ConstNames", "/foo", """
+                const FOO_BOO_X_Y: String = "foo"
+
+                fun read(): String = FOO_BOO_X_Y
+                """);
+
+        var generatedProgram = new JavaGenerator().generate(program);
+        var generated = generatedProgram.modules().stream()
+                .map(dev.capylang.generator.GeneratedModule::code)
+                .collect(joining("\n"));
+
+        assertThat(generated).contains("public static final java.lang.String FOO_BOO_X_Y = \"foo\";");
+        assertThat(generated).contains("return foo.ConstNames.FOO_BOO_X_Y;");
+        assertThat(generated).doesNotContain("fOOBOOXY");
+        assertGeneratedJavaCompiles(generatedProgram);
+    }
+
+    @Test
     void shouldGenerateCapyTestMethodFromSourceForCapyTestModule() {
         var program = compileProgram(List.of(collectionsModule(), new RawModule("CapyTest", "/capy/test", """
                 from /capy/collection/List import { * }
@@ -629,8 +648,8 @@ class JavaExpressionEvaluatorTest {
                 .findFirst()
                 .orElseThrow();
 
-        assertThat(generated).contains("import static foo.Bounds.fLOATBOUND;");
-        assertThat(generated).doesNotContain("import foo.Bounds.FLOATBOUND;");
+        assertThat(generated).contains("import static foo.Bounds.FLOAT_BOUND;");
+        assertThat(generated).doesNotContain("import static foo.Bounds.fLOATBOUND;");
         assertGeneratedJavaCompiles(generatedProgram);
     }
 

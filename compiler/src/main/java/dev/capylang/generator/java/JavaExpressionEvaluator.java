@@ -685,7 +685,7 @@ public class JavaExpressionEvaluator {
         }
         var lastDot = name.lastIndexOf('.');
         var simpleName = lastDot >= 0 ? name.substring(lastDot + 1) : name;
-        return CONST_NAME_PATTERN.matcher(simpleName).matches();
+        return isTopLevelConstName(simpleName);
     }
 
     private static Scope evaluateFunctionInvoke(CompiledFunctionInvoke functionInvoke, Scope scope) {
@@ -3477,6 +3477,10 @@ public class JavaExpressionEvaluator {
 
     private static String emittedMethodName(CompiledFunctionCall functionCall) {
         var parameterTypes = functionCall.arguments().stream().map(CompiledExpression::type).toList();
+        var simpleMethodName = simpleMethodName(functionCall.name());
+        if (parameterTypes.isEmpty() && isTopLevelConstName(simpleMethodName)) {
+            return simpleMethodName;
+        }
         var key = signatureKey(functionCall.name(), parameterTypes);
         var functionNameOverrides = functionNameOverrides();
         if (functionNameOverrides.containsKey(key)) {
@@ -3489,7 +3493,6 @@ public class JavaExpressionEvaluator {
         var parameterSignature = parameterTypes.stream()
                 .map(type -> String.valueOf(type))
                 .collect(java.util.stream.Collectors.joining(","));
-        var simpleMethodName = simpleMethodName(functionCall.name());
         var overrideBySimpleName = findOverrideBySimpleName(functionCall.name(), parameterSignature);
         if (overrideBySimpleName.isPresent()) {
             return overrideBySimpleName.get();
@@ -3499,6 +3502,10 @@ public class JavaExpressionEvaluator {
             return methodName;
         }
         return normalizeJavaMethodName(methodName);
+    }
+
+    private static boolean isTopLevelConstName(String name) {
+        return CONST_NAME_PATTERN.matcher(name).matches();
     }
 
     private static Optional<String> standardEmittedMethodName(

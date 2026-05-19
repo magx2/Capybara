@@ -215,6 +215,34 @@ class PythonGeneratorTest {
     }
 
     @Test
+    void shouldPreserveUpperSnakeConstNames() throws Exception {
+        var program = compileProgram("""
+                const FOO_BOO_X_Y: String = "foo"
+
+                fun read(): String = FOO_BOO_X_Y
+                """);
+
+        var generated = new PythonGenerator().generate(program);
+        var main = generated.modules().stream()
+                .filter(module -> module.relativePath().equals(Path.of("foo", "Main.py")))
+                .map(GeneratedModule::code)
+                .findFirst()
+                .orElseThrow();
+        assertThat(main).contains("FOO_BOO_X_Y = \"foo\"");
+        assertThat(main).contains("return FOO_BOO_X_Y");
+        assertThat(main).doesNotContain("fOOBOOXY");
+
+        writeGenerated(generated);
+
+        var output = runPython("""
+                import foo.Main as m
+                print('|'.join([m.FOO_BOO_X_Y, m.read()]))
+                """);
+
+        assertThat(output).isEqualTo("foo|foo");
+    }
+
+    @Test
     void shouldResolveImportedEnumQualifierStaticCall() throws Exception {
         var program = compileProgram(List.of(
                 new RawModule("Modes", "/foo/lib", """

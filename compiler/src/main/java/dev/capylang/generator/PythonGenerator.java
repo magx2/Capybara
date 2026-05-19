@@ -341,7 +341,7 @@ public final class PythonGenerator implements Generator {
 
         private String renderConst(JavaConst javaConst) {
             var expression = expressions.render(javaConst.expression(), Scope.root());
-            var name = pyIdentifier(javaConst.name());
+            var name = pyConstIdentifier(javaConst.name());
             if (!javaConst.isPrivate()) {
                 exportNames.add(name);
             }
@@ -1248,7 +1248,7 @@ public final class PythonGenerator implements Generator {
                 return false;
             }
             var name = simpleMethodName(functionCall.name());
-            return name.contains("__local_const_") || CONST_NAME_PATTERN.matcher(name).matches();
+            return name.contains("__local_const_") || isTopLevelConstName(name);
         }
     }
 
@@ -1373,7 +1373,7 @@ public final class PythonGenerator implements Generator {
                 }
                 module.javaClass().staticConsts().stream()
                         .filter(javaConst -> !javaConst.isPrivate())
-                        .map(javaConst -> pyIdentifier(javaConst.name()))
+                        .map(javaConst -> pyConstIdentifier(javaConst.name()))
                         .forEach(moduleExports::add);
                 module.javaClass().staticMethods().stream()
                         .filter(method -> !method.isPrivate())
@@ -1534,12 +1534,15 @@ public final class PythonGenerator implements Generator {
         }
 
         String emittedFunctionName(String name, List<CompiledType> parameterTypes) {
+            var simple = simpleMethodName(name);
+            if (parameterTypes.isEmpty() && isTopLevelConstName(simple)) {
+                return pyConstIdentifier(simple);
+            }
             var key = signatureKey(name, parameterTypes);
             if (functionNameOverrides.containsKey(key)) {
                 return functionNameOverrides.get(key);
             }
             var parameterSignature = parameterTypes.stream().map(String::valueOf).collect(joining(","));
-            var simple = simpleMethodName(name);
             if (simple.contains("__local_const_")) {
                 return pyIdentifier(simple);
             }
@@ -3586,6 +3589,17 @@ public final class PythonGenerator implements Generator {
             return "capy" + js;
         }
         return js;
+    }
+
+    static String pyConstIdentifier(String rawName) {
+        if (isTopLevelConstName(rawName) && isValidPyIdentifier(rawName) && !PY_KEYWORDS.contains(rawName)) {
+            return rawName;
+        }
+        return pyIdentifier(rawName);
+    }
+
+    private static boolean isTopLevelConstName(String name) {
+        return CONST_NAME_PATTERN.matcher(name).matches();
     }
 
     static boolean isValidPyIdentifier(String value) {
