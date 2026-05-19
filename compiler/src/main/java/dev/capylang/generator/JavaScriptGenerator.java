@@ -355,7 +355,9 @@ public final class JavaScriptGenerator implements Generator {
             for (var parameter : method.parameters()) {
                 scope = scope.bind(parameter.sourceName(), normalizeJsIdentifier(parameter.generatedName()));
             }
-            var body = expressions.render(method.expression(), scope);
+            var body = isCapyLangRandomSeedMethod(method)
+                    ? "capy.toLong(Date.now())"
+                    : expressions.render(method.expression(), scope);
             var code = new StringBuilder();
             if (topLevel) {
                 code.append("function ").append(name).append("(").append(String.join(", ", params)).append(") {\n");
@@ -371,6 +373,17 @@ public final class JavaScriptGenerator implements Generator {
                 exportNames.add(name);
             }
             return code.toString();
+        }
+
+        private boolean isCapyLangRandomSeedMethod(JavaMethod method) {
+            return "capy.lang.Random".equals(moduleInfo.className())
+                   && "seed".equals(method.sourceName())
+                   && method.parameters().isEmpty()
+                   && method.sourceReturnType() instanceof CompiledPrimitiveBackedType primitiveBackedType
+                   && "seed".equals(primitiveBackedType.name())
+                   && method.expression() instanceof CompiledNothingValue nothingValue
+                   && (nothingValue.message().contains("`<native>`")
+                       || nothingValue.message().contains("native expression in function"));
         }
 
         private String renderPrimitiveTypeMetadata() {
@@ -601,7 +614,7 @@ public final class JavaScriptGenerator implements Generator {
             }
             if (owner.filter("capy.lang.Random"::equals).isPresent() && "seed".equals(methodName) && args.isEmpty()) {
                 require("capy.lang.Random");
-                return Optional.of("new " + moduleVar("capy.lang.Random") + ".Seed({ value: BigInt(Date.now()) })");
+                return Optional.of("capy.toLong(Date.now())");
             }
             return Optional.empty();
         }

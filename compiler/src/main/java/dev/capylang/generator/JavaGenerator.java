@@ -1283,15 +1283,15 @@ public final class JavaGenerator implements Generator {
                && "Random".equals(ownerName)
                && "seed".equals(mapMethodName(method.name()))
                && method.parameters().isEmpty()
-               && method.sourceReturnType() instanceof dev.capylang.compiler.CompiledDataType dataType
-               && "Seed".equals(dataType.name())
+               && method.sourceReturnType() instanceof dev.capylang.compiler.CompiledPrimitiveBackedType primitiveBackedType
+               && "seed".equals(primitiveBackedType.name())
                && isNativeExpression(method);
     }
 
     private String mapCapyLangRandomSeedMethod(JavaMethod method, String visibility, String methodTypeParameters) {
         return mapJavaDoc(method.comments())
                + visibility + "static " + methodTypeParameters + method.returnType() + " " + mapMethodName(method.name()) + "() {\n"
-               + "return new Seed(java.util.concurrent.ThreadLocalRandom.current().nextLong());\n"
+               + "return java.util.concurrent.ThreadLocalRandom.current().nextLong();\n"
                + "}\n";
     }
 
