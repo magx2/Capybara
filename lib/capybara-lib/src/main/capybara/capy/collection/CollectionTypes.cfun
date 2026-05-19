@@ -22,6 +22,10 @@ type size -> int with constructor {
     else Error { message: "size must be greater than or equal to 0" }
 }
 
+const FIRST_ELEMENT: index = index! { 0 }
+const EMPTY_COUNT: count = count! { 0 }
+const EMPTY: size = size! { 0 }
+
 fun next_index(value: index): Result[index] =
     if @value == MAX_INT_VALUE
     then Error { message: "index increment overflow" }

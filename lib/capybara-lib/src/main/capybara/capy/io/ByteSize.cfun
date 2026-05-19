@@ -12,6 +12,11 @@ type byte_count -> long with constructor {
     else Error { message: "byte_count must be greater than or equal to 0" }
 }
 
+const ZERO_BYTES: byte_count = byte_count! { 0L }
+const ONE_KIB: byte_count = byte_count! { 1024L }
+const ONE_MIB: byte_count = byte_count! { 1048576L }
+const ONE_GIB: byte_count = byte_count! { 1073741824L }
+
 fun add_byte_count(left: byte_count, right: byte_count): Result[byte_count] =
     if @left > MAX_LONG_VALUE - @right
     then Error { message: "byte_count addition overflow" }
